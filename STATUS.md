@@ -43,14 +43,15 @@ in-memory adapter, and snapshot coverage for the initial handlers.
 
 What remains before Phase 3 can be considered end-to-end complete:
 
-1. Add SQL-backed `nastv-infra` implementations for the core scheduling content
-   resolver traits, including media collection, playlist, smart collection,
-   search, graphics, and watermark lookups.
+1. Expand the new SQL-backed `nastv-infra` scheduling resolver from the current
+   SQLite collection, multi-collection, smart collection, playlist, simple
+   search, show, graphics, and watermark coverage to full ErsatzTV search-index
+   fidelity and broader provider-specific metadata edge cases.
 2. Expand block scheduling to full ErsatzTV effective-template/deco/filler
    behavior, including change detection and collection etags.
-3. Complete YAML parity for SQL-backed playlist item resolution and remaining
-   exact handler semantics (expression evaluation, imports, shuffle-groups,
-   and batch/count playlist child enumeration are now done).
+3. Complete YAML parity for remaining exact handler semantics (SQL-backed
+   playlist item resolution, expression evaluation, imports, shuffle-groups,
+   and batch/count playlist child enumeration now have focused coverage).
 4. Expand Lua scheduling bindings from the current embedded `mlua` foundation to
    the full ErsatzTV scripted scheduling API.
 5. Compare generated timelines against ErsatzTV fixtures where available and
@@ -87,3 +88,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Continued Phase 3 YAML parity: added detail/index history resume, structured playlist child history behavior, reset/cleanup snapshots, and persistence-compatible history fields. |
 | 2026-04-15 | GitHub Copilot (GPT-5.4) | Continued Phase 3 YAML parity with show/GUID resolution, show/season marathon grouping, playlist-child marathon history, deterministic `play_all_items`, fallback coverage, and new snapshots. |
 | 2026-04-15 | Claude Code (claude-sonnet-4-6) | Continued Phase 3 YAML parity: YAML imports (`merge_import` + file-loading), expression-driven count (`count`/`random` variables + arithmetic), deterministic marathon shuffle-groups (LCG Fisher-Yates), and playlist batch/count child semantics; 42 tests all green. |
+| 2026-04-15 | Codex | Added SQL-backed Phase 3 scheduling content resolver coverage in `nastv-infra` for collection, multi-collection, smart collection, playlist, search, show, watermark, and graphics lookups with SQLite integration tests. |

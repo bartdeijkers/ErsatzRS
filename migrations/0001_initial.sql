@@ -930,6 +930,8 @@ CREATE TABLE playlist_items (
     multi_collection_id INTEGER,
     smart_collection_id INTEGER,
     playback_order TEXT NOT NULL,
+    count INTEGER,
+    play_all INTEGER NOT NULL DEFAULT 0 CHECK (play_all IN (0, 1)),
     sort_order INTEGER NOT NULL,
     FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
     FOREIGN KEY (playlist_group_id) REFERENCES playlist_groups(id) ON DELETE SET NULL

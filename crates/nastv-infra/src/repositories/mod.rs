@@ -13,6 +13,7 @@ mod media_source;
 mod metadata;
 mod playout;
 mod program_schedule;
+mod scheduling;
 mod template;
 
 pub use block::SqliteBlockRepository;
@@ -29,6 +30,7 @@ pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;
 pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
+pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::{Pool, Sqlite};
 pub use template::SqliteTemplateRepository;
 
@@ -49,6 +51,7 @@ pub struct Repositories {
     pub graphics: SqliteGraphicsRepository,
     pub metadata: SqliteMetadataRepository,
     pub config: SqliteConfigRepository,
+    pub scheduling: SqliteSchedulingContentRepository,
 }
 
 #[must_use]
@@ -68,6 +71,7 @@ pub fn make_repositories(pool: Pool<Sqlite>) -> Repositories {
         filler: SqliteFillerRepository(pool.clone()),
         graphics: SqliteGraphicsRepository(pool.clone()),
         metadata: SqliteMetadataRepository(pool.clone()),
-        config: SqliteConfigRepository(pool),
+        config: SqliteConfigRepository(pool.clone()),
+        scheduling: SqliteSchedulingContentRepository(pool),
     }
 }

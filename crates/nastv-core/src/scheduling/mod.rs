@@ -4,12 +4,15 @@ mod yaml;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use nastv_domain::{
     CollectionType, EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory,
     PlayoutItem,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::repositories::Result as RepositoryResult;
 
 pub use block::{BlockSchedulingEngine, EffectiveBlock, EffectiveBlockItem};
 pub use scripted::ScriptedSchedulingEngine;
@@ -142,6 +145,23 @@ pub trait SchedulingContentResolver {
         let _ = source;
         None
     }
+}
+
+#[async_trait]
+pub trait SchedulingContentRepository: Send + Sync {
+    async fn media_items_for_source(
+        &self,
+        source: &SchedulingContentSource,
+    ) -> RepositoryResult<Vec<SchedulingMediaItem>>;
+
+    async fn playlist_items_for_source(
+        &self,
+        source: &SchedulingContentSource,
+    ) -> RepositoryResult<Option<Vec<SchedulingPlaylistItem>>>;
+
+    async fn watermark_id_by_name(&self, name: &str) -> RepositoryResult<Option<EntityId>>;
+
+    async fn graphics_element_id_by_path(&self, path: &str) -> RepositoryResult<Option<EntityId>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

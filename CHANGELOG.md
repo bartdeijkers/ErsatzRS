@@ -10,6 +10,12 @@ for commit messages.
 
 ### Added
 
+- Phase 3 SQL-backed scheduling content resolver repository for SQLite,
+  covering collection expansion, multi-collection union/de-duplication, smart
+  collection/search query matching, playlist child metadata (`collection_key`,
+  `playback_order`, `play_all`, and `count`), show name/GUID resolution,
+  watermark lookup, graphics path lookup, and in-memory SQLite integration
+  tests.
 - Phase 3 YAML scheduling parity for YAML imports (`import:` key merges
   content/sequence definitions from external files with case-insensitive
   key deduplication), expression-driven count behavior (variables `count`
