@@ -36,7 +36,6 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy static FFmpeg binaries (no shared-library dependencies needed)
@@ -59,9 +58,10 @@ ENV DATABASE_URL=sqlite:///data/nastv.db
 # HTTP port exposed by the axum server
 EXPOSE 8080
 
-# Liveness probe using the /healthz endpoint provided by nastv-web
+# Liveness probe: TCP connect to port 8080 via bash /dev/tcp (no extra tools needed).
+# TODO: replace with a purpose-built nastv-healthcheck binary in a later phase.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://localhost:8080/healthz || exit 1
+    CMD bash -c '</dev/tcp/localhost/8080' || exit 1
 
 USER nastv
 
