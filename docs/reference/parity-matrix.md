@@ -9,9 +9,9 @@ This is the living map from ErsatzTV behavior to NasTv implementation.
 | FFmpeg command generation | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/CommandGenerator.cs` | `crates/nastv-ffmpeg` | In progress | [ADR 0003](../adr/0003-ffmpeg-cli-spawn.md) |
 | FFmpeg filter graph | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs` | `crates/nastv-ffmpeg` | In progress | [ADR 0003](../adr/0003-ffmpeg-cli-spawn.md) |
 | Drawvg graphics engine | ErsatzTV external graphics renderer flow | `crates/nastv-ffmpeg`, `assets/` | In progress | [ADR 0005](../adr/0005-drawvg-graphics-engine.md) |
-| Block scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/BlockScheduling/` | `crates/nastv-core` | Not started | |
-| YAML scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/YamlScheduling/` | `crates/nastv-core` | Not started | |
-| Scripted scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/ScriptedScheduling/` | `crates/nastv-core` | Not started | |
+| Block scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/BlockScheduling/` | `crates/nastv-core` | In progress | |
+| YAML scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/YamlScheduling/` | `crates/nastv-core` | In progress | |
+| Scripted scheduling | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/ScriptedScheduling/` | `crates/nastv-core` | In progress | |
 | IPTV playlist | `/home/bart/ErsatzTV/ErsatzTV/Controllers/` | `crates/nastv-web` | Not started | |
 | HDHomeRun endpoints | `/home/bart/ErsatzTV/hdhr.md` | `crates/nastv-web` | Not started | |
 | Scanner | `/home/bart/ErsatzTV/ErsatzTV.Scanner/` | `crates/nastv-scanner` | Not started | |

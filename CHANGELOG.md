@@ -10,6 +10,9 @@ for commit messages.
 
 ### Added
 
+- Phase 3 scheduling parity foundation for resolver-backed YAML content sources,
+  deterministic in-memory scheduling adapters, and history application/cleanup
+  snapshots.
 - Phase 2 FFmpeg foundation with typed inputs, command generation, complex
   filter routing, software/NVENC/VAAPI pipeline builders, drawvg SVG template
   rendering, ffconcat v1.0 playlist writing, and snapshot coverage.

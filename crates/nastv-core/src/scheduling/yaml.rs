@@ -4,13 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use chrono::{DateTime, Duration, Timelike, Utc};
-use nastv_domain::{EntityId, FillerKind, Playout, PlayoutAnchor};
+use nastv_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    history, lookup_media, parse_duration, parse_hhmm, playout_item, MediaEnumerator,
-    PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingError, SchedulingMediaItem,
-    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    cleanup_history, history, history_key_for_content, lookup_media_source, parse_duration,
+    parse_hhmm, playout_item, MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine,
+    SchedulingContentSource, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
+    SchedulingRequest, SchedulingResult,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -33,6 +34,8 @@ pub struct YamlContentItem {
     #[serde(default)]
     pub order: Option<String>,
     #[serde(default)]
+    pub multi_part: bool,
+    #[serde(default)]
     pub collection: Option<String>,
     #[serde(default)]
     pub multi_collection: Option<String>,
@@ -41,9 +44,51 @@ pub struct YamlContentItem {
     #[serde(default)]
     pub playlist: Option<String>,
     #[serde(default)]
+    pub playlist_group: Option<String>,
+    #[serde(default)]
     pub search: Option<String>,
     #[serde(default)]
     pub show: Option<String>,
+    #[serde(default)]
+    pub media_item: Option<EntityId>,
+    #[serde(default)]
+    pub item: Option<EntityId>,
+}
+
+impl YamlContentItem {
+    fn playback_order(&self) -> PlaybackOrder {
+        self.order.as_deref().map_or_else(
+            || {
+                if self.playlist.is_some() {
+                    PlaybackOrder::None
+                } else {
+                    PlaybackOrder::Shuffle
+                }
+            },
+            parse_playback_order,
+        )
+    }
+
+    fn source(&self) -> SchedulingContentSource {
+        if let Some(collection) = &self.collection {
+            SchedulingContentSource::Collection(collection.clone())
+        } else if let Some(multi_collection) = &self.multi_collection {
+            SchedulingContentSource::MultiCollection(multi_collection.clone())
+        } else if let Some(smart_collection) = &self.smart_collection {
+            SchedulingContentSource::SmartCollection(smart_collection.clone())
+        } else if let Some(playlist) = &self.playlist {
+            SchedulingContentSource::Playlist {
+                group: self.playlist_group.clone(),
+                name: playlist.clone(),
+            }
+        } else if let Some(search) = &self.search {
+            SchedulingContentSource::Search(search.clone())
+        } else if let Some(media_item) = self.media_item.or(self.item) {
+            SchedulingContentSource::MediaItem(media_item)
+        } else {
+            SchedulingContentSource::direct(&self.key)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -185,17 +230,32 @@ impl YamlPlayoutEngine {
             clear_items: request.mode == PlayoutBuildMode::Reset,
             ..SchedulingResult::default()
         };
+        if request.mode == PlayoutBuildMode::Reset {
+            result.history_to_remove.extend(
+                request
+                    .reference_data
+                    .existing_history
+                    .iter()
+                    .filter(|history| {
+                        history.when > request.start
+                            || history.finish.is_some_and(|finish| finish >= request.start)
+                    })
+                    .map(|history| history.id),
+            );
+        }
 
         let mut context = YamlContext::new(
             request.playout.clone(),
             request.reference_data.clone(),
             request.start,
+            content_sources(&definition),
         );
         if request.mode != PlayoutBuildMode::Reset {
             if let Some(anchor) = &request.playout.anchor {
                 context.restore(anchor)?;
             }
         }
+        context.apply_history(&definition, &result.history_to_remove);
 
         if request.mode == PlayoutBuildMode::Reset {
             for instruction in &definition.reset {
@@ -241,6 +301,13 @@ impl YamlPlayoutEngine {
         result.added_items = context.added_items;
         result.added_history = context.added_history;
         result.added_gaps = context.gaps;
+        result.history_to_remove.extend(cleanup_history(
+            &request.reference_data.existing_history,
+            request.start,
+            request.reference_data.max_playout_offset,
+        ));
+        result.history_to_remove.sort_unstable();
+        result.history_to_remove.dedup();
         Ok(result)
     }
 }
@@ -280,6 +347,7 @@ struct YamlContext {
     added_history: Vec<nastv_domain::PlayoutHistory>,
     gaps: Vec<nastv_domain::PlayoutGap>,
     enumerators: BTreeMap<String, MediaEnumerator>,
+    content_sources: BTreeMap<String, (SchedulingContentSource, PlaybackOrder)>,
 }
 
 impl YamlContext {
@@ -287,6 +355,7 @@ impl YamlContext {
         playout: Playout,
         reference_data: SchedulingReferenceData,
         current_time: DateTime<Utc>,
+        content_sources: BTreeMap<String, (SchedulingContentSource, PlaybackOrder)>,
     ) -> Self {
         Self {
             playout,
@@ -306,6 +375,7 @@ impl YamlContext {
             added_history: Vec::new(),
             gaps: Vec::new(),
             enumerators: BTreeMap::new(),
+            content_sources,
         }
     }
 
@@ -338,9 +408,49 @@ impl YamlContext {
     }
 
     fn enumerator(&mut self, content: &str) -> &mut MediaEnumerator {
+        let (source, _) = self
+            .content_sources
+            .get(content)
+            .cloned()
+            .unwrap_or_else(|| {
+                (
+                    SchedulingContentSource::direct(content),
+                    PlaybackOrder::None,
+                )
+            });
         self.enumerators
             .entry(content.to_owned())
-            .or_insert_with(|| lookup_media(&self.reference_data, content))
+            .or_insert_with(|| lookup_media_source(&self.reference_data, content, &source))
+    }
+
+    fn history_key(&self, content: &str) -> String {
+        let playback_order = self
+            .content_sources
+            .get(content)
+            .map_or(PlaybackOrder::None, |(_, order)| *order);
+        history_key_for_content(content, playback_order)
+    }
+
+    fn apply_history(
+        &mut self,
+        definition: &YamlPlayoutDefinition,
+        history_to_remove: &[EntityId],
+    ) {
+        let ignored = history_to_remove.iter().copied().collect::<BTreeSet<_>>();
+        for content in &definition.content {
+            let history_key = history_key_for_content(&content.key, content.playback_order());
+            let prior_entries = self
+                .reference_data
+                .existing_history
+                .iter()
+                .filter(|history| !ignored.contains(&history.id))
+                .filter(|history| history.key == history_key)
+                .filter(|history| history.when < self.current_time)
+                .count();
+            if prior_entries > 0 {
+                self.enumerator(&content.key).set_index(prior_entries);
+            }
+        }
     }
 
     fn peek_guide_group(&self) -> i32 {
@@ -797,12 +907,44 @@ fn add_media_item(
             content, context.instruction_index
         )),
     );
-    context
-        .added_history
-        .push(history(context.playout.id, content, &item, None));
+    context.added_history.push(history(
+        context.playout.id,
+        context.history_key(content),
+        &item,
+        None,
+    ));
     context.current_time = item.finish;
     context.added_items.push(item);
     context.advance_guide_group();
+}
+
+fn content_sources(
+    definition: &YamlPlayoutDefinition,
+) -> BTreeMap<String, (SchedulingContentSource, PlaybackOrder)> {
+    definition
+        .content
+        .iter()
+        .map(|content| {
+            (
+                content.key.clone(),
+                (content.source(), content.playback_order()),
+            )
+        })
+        .collect()
+}
+
+fn parse_playback_order(value: &str) -> PlaybackOrder {
+    match value.to_ascii_lowercase().as_str() {
+        "chronological" => PlaybackOrder::Chronological,
+        "random" => PlaybackOrder::Random,
+        "shuffle" => PlaybackOrder::Shuffle,
+        "shuffleinorder" | "shuffle_in_order" => PlaybackOrder::ShuffleInOrder,
+        "multiepisodeshuffle" | "multi_episode_shuffle" => PlaybackOrder::MultiEpisodeShuffle,
+        "seasonepisode" | "season_episode" => PlaybackOrder::SeasonEpisode,
+        "randomrotation" | "random_rotation" => PlaybackOrder::RandomRotation,
+        "marathon" => PlaybackOrder::Marathon,
+        _ => PlaybackOrder::None,
+    }
 }
 
 fn parse_filler_kind(value: &str) -> FillerKind {
@@ -999,6 +1141,96 @@ playout:
   - all: main
 "#
         ));
+    }
+
+    #[test]
+    fn yaml_content_sources_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.collections_by_name.insert(
+            "Movies".to_owned(),
+            vec![SchedulingMediaItem::new(10, Duration::minutes(10))],
+        );
+        reference_data.multi_collections_by_name.insert(
+            "Saturday".to_owned(),
+            vec![SchedulingMediaItem::new(20, Duration::minutes(10))],
+        );
+        reference_data.smart_collections_by_name.insert(
+            "Unwatched".to_owned(),
+            vec![SchedulingMediaItem::new(30, Duration::minutes(10))],
+        );
+        reference_data.playlists_by_group_and_name.insert(
+            (Some("Prime".to_owned()), "Block A".to_owned()),
+            vec![SchedulingMediaItem::new(40, Duration::minutes(10))],
+        );
+        reference_data.searches_by_query.insert(
+            "genre = horror".to_owned(),
+            vec![SchedulingMediaItem::new(50, Duration::minutes(10))],
+        );
+        reference_data
+            .media_items_by_id
+            .insert(60, SchedulingMediaItem::new(60, Duration::minutes(10)));
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: collection
+    collection: Movies
+    order: chronological
+  - key: multi
+    multi_collection: Saturday
+    order: shuffle
+  - key: smart
+    smart_collection: Unwatched
+    order: shuffle
+  - key: playlist
+    playlist_group: Prime
+    playlist: Block A
+  - key: search
+    search: genre = horror
+    order: shuffle
+  - key: single
+    media_item: 60
+    order: none
+playout:
+  - count: "1"
+    content: collection
+  - count: "1"
+    content: multi
+  - count: "1"
+    content: smart
+  - count: "1"
+    content: playlist
+  - count: "1"
+    content: search
+  - count: "1"
+    content: single
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history": result.added_history.iter().map(|history| &history.key).collect::<Vec<_>>(),
+        }));
     }
 
     #[test]
@@ -1201,6 +1433,82 @@ playout:
             .expect("schedule builds");
         insta::assert_json_snapshot!(serde_json::json!({
             "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>()
+        }));
+    }
+
+    #[test]
+    fn yaml_apply_history_and_cleanup_snapshot() {
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let history_key = history_key_for_content("collection", PlaybackOrder::Chronological);
+        let mut reference_data = SchedulingReferenceData {
+            max_playout_offset: Duration::zero(),
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.collections_by_name.insert(
+            "Movies".to_owned(),
+            vec![
+                SchedulingMediaItem::new(1, Duration::minutes(10)),
+                SchedulingMediaItem::new(2, Duration::minutes(10)),
+                SchedulingMediaItem::new(3, Duration::minutes(10)),
+            ],
+        );
+        reference_data.existing_history = vec![
+            nastv_domain::PlayoutHistory {
+                id: 10,
+                key: history_key.clone(),
+                when: start - Duration::hours(3),
+                finish: Some(start - Duration::hours(3) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 11,
+                key: history_key.clone(),
+                when: start - Duration::hours(2),
+                finish: Some(start - Duration::hours(2) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 12,
+                key: history_key,
+                when: start,
+                finish: Some(start + Duration::minutes(5)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+        ];
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: collection
+    collection: Movies
+    order: chronological
+playout:
+  - count: "1"
+    content: collection
+"#,
+        )
+        .expect("valid yaml");
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history_to_remove": result.history_to_remove,
         }));
     }
 

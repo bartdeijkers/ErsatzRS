@@ -31,22 +31,24 @@ pipeline builders, watermark/subtitle/song-progress filters, drawvg SVG
 template rendering, ffconcat v1.0 playlist writing, snapshot tests, and a
 development MPEG-TS streaming route at `/dev/stream/bbb.ts` using local Big
 Buck Bunny fixtures when present. Phase 3 now has a `nastv-core` scheduling
-foundation with a shared `PlayoutSchedulingEngine` trait, in-memory scheduling
-reference data, block scheduling, sequential YAML instruction dispatch, Lua 5.4
-scripted scheduling, playout anchors, gaps, pre-roll/post-roll/mid-roll,
-watermark and graphics state, filler kinds, and snapshot coverage for the
-initial handlers.
+foundation with a shared `PlayoutSchedulingEngine` trait, deterministic
+in-memory scheduling adapters behind content resolver traits, block scheduling,
+sequential YAML instruction dispatch, Lua 5.4 scripted scheduling, playout
+anchors, gaps, pre-roll/post-roll/mid-roll, watermark and graphics state, filler
+kinds, YAML content source resolution for collection, multi_collection,
+smart_collection, playlist, search, and single media item references, practical
+history application/cleanup, and snapshot coverage for the initial handlers.
 
 What remains before Phase 3 can be considered end-to-end complete:
 
-1. Replace the in-memory `SchedulingReferenceData` adapter with repository-backed
-   media collection, playlist, smart collection, search, graphics, and watermark
-   lookups.
+1. Add SQL-backed `nastv-infra` implementations for the core scheduling content
+   resolver traits, including media collection, playlist, smart collection,
+   search, graphics, and watermark lookups.
 2. Expand block scheduling to full ErsatzTV effective-template/deco/filler
    behavior, including change detection and collection etags.
-3. Complete YAML parity for expression evaluation, imports, content source
-   variants, playlist/marathon helpers, history cleanup, and exact handler
-   semantics.
+3. Complete YAML parity for expression evaluation, imports, show/GUID content,
+   playlist/marathon helper semantics, exact history detail/index seeking, and
+   exact handler semantics.
 4. Expand Lua scheduling bindings from the current embedded `mlua` foundation to
    the full ErsatzTV scripted scheduling API.
 5. Compare generated timelines against ErsatzTV fixtures where available and
@@ -79,3 +81,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Implemented Phase 2 FFmpeg foundation: command generator, complex filter routing, software/NVENC/VAAPI builders, drawvg templates, ffconcat writing, and snapshot coverage. |
 | 2026-04-15 | Codex | Wired the Phase 2 FFmpeg foundation into `/dev/stream/bbb.ts`, streaming local Big Buck Bunny MP4 fixtures as MPEG-TS for development verification. |
 | 2026-04-15 | Codex | Started Phase 3 scheduling: added shared scheduling trait, block/YAML/Lua engines in `nastv-core`, YAML handler snapshots, Lua scripted scheduling tests, and block timeline snapshots. |
+| 2026-04-15 | Codex | Continued Phase 3 scheduling parity: added core content resolver traits/adapters, YAML content source resolution, practical history application/cleanup, and new snapshots. |

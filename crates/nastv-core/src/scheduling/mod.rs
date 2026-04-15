@@ -5,7 +5,9 @@ mod yaml;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, Utc};
-use nastv_domain::{EntityId, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory, PlayoutItem};
+use nastv_domain::{
+    EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory, PlayoutItem,
+};
 use serde::{Deserialize, Serialize};
 
 pub use block::{BlockSchedulingEngine, EffectiveBlock, EffectiveBlockItem};
@@ -44,12 +46,84 @@ impl SchedulingMediaItem {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum SchedulingContentSource {
+    DirectKey(String),
+    Collection(String),
+    MultiCollection(String),
+    SmartCollection(String),
+    Playlist { group: Option<String>, name: String },
+    Search(String),
+    MediaItem(EntityId),
+}
+
+impl SchedulingContentSource {
+    #[must_use]
+    pub fn direct(key: impl Into<String>) -> Self {
+        Self::DirectKey(key.into())
+    }
+}
+
+pub trait SchedulingContentResolver {
+    fn media_items_for_source(&self, source: &SchedulingContentSource) -> Vec<SchedulingMediaItem>;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SchedulingReferenceData {
     pub media_by_key: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub multi_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub smart_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub playlists_by_group_and_name: BTreeMap<(Option<String>, String), Vec<SchedulingMediaItem>>,
+    pub searches_by_query: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub media_items_by_id: BTreeMap<EntityId, SchedulingMediaItem>,
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
     pub graphics_ids_by_path: BTreeMap<String, EntityId>,
     pub effective_blocks: Vec<EffectiveBlock>,
+    pub existing_history: Vec<PlayoutHistory>,
+    pub max_playout_offset: Duration,
+}
+
+impl SchedulingContentResolver for SchedulingReferenceData {
+    fn media_items_for_source(&self, source: &SchedulingContentSource) -> Vec<SchedulingMediaItem> {
+        match source {
+            SchedulingContentSource::DirectKey(key) => {
+                self.media_by_key.get(key).cloned().unwrap_or_default()
+            }
+            SchedulingContentSource::Collection(name) => self
+                .collections_by_name
+                .get(name)
+                .cloned()
+                .unwrap_or_default(),
+            SchedulingContentSource::MultiCollection(name) => self
+                .multi_collections_by_name
+                .get(name)
+                .cloned()
+                .unwrap_or_default(),
+            SchedulingContentSource::SmartCollection(name) => self
+                .smart_collections_by_name
+                .get(name)
+                .cloned()
+                .unwrap_or_default(),
+            SchedulingContentSource::Playlist { group, name } => self
+                .playlists_by_group_and_name
+                .get(&(group.clone(), name.clone()))
+                .or_else(|| self.playlists_by_group_and_name.get(&(None, name.clone())))
+                .cloned()
+                .unwrap_or_default(),
+            SchedulingContentSource::Search(query) => self
+                .searches_by_query
+                .get(query)
+                .cloned()
+                .unwrap_or_default(),
+            SchedulingContentSource::MediaItem(id) => self
+                .media_items_by_id
+                .get(id)
+                .cloned()
+                .into_iter()
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -138,6 +212,14 @@ impl MediaEnumerator {
         }
     }
 
+    fn set_index(&mut self, index: usize) {
+        self.index = if self.items.is_empty() {
+            0
+        } else {
+            index % self.items.len()
+        };
+    }
+
     fn advance(&mut self) {
         if !self.items.is_empty() {
             self.index = (self.index + 1) % self.items.len();
@@ -146,14 +228,62 @@ impl MediaEnumerator {
 }
 
 fn lookup_media(reference_data: &SchedulingReferenceData, key: &str) -> MediaEnumerator {
-    MediaEnumerator::new(
-        key,
-        reference_data
-            .media_by_key
-            .get(key)
-            .cloned()
-            .unwrap_or_default(),
-    )
+    lookup_media_source(reference_data, key, &SchedulingContentSource::direct(key))
+}
+
+fn lookup_media_source(
+    reference_data: &SchedulingReferenceData,
+    key: &str,
+    source: &SchedulingContentSource,
+) -> MediaEnumerator {
+    MediaEnumerator::new(key, reference_data.media_items_for_source(source))
+}
+
+fn history_key_for_content(key: &str, playback_order: PlaybackOrder) -> String {
+    if playback_order == PlaybackOrder::None {
+        key.to_owned()
+    } else {
+        serde_json::json!({
+            "Key": key,
+            "Order": format!("{:?}", playback_order),
+        })
+        .to_string()
+    }
+}
+
+fn cleanup_history(
+    existing_history: &[PlayoutHistory],
+    start: DateTime<Utc>,
+    max_playout_offset: Duration,
+) -> Vec<EntityId> {
+    let mut groups = BTreeMap::<&str, Vec<&PlayoutHistory>>::new();
+    for history in existing_history {
+        groups.entry(&history.key).or_default().push(history);
+    }
+
+    let cutoff = start - max_playout_offset;
+    let mut remove = Vec::new();
+    for group in groups.values() {
+        let keep_when = group
+            .iter()
+            .filter(|history| history.finish.is_some_and(|finish| finish < cutoff))
+            .map(|history| history.when)
+            .max();
+
+        if let Some(keep_when) = keep_when {
+            remove.extend(
+                group
+                    .iter()
+                    .filter(|history| history.finish.is_some_and(|finish| finish < cutoff))
+                    .filter(|history| history.when != keep_when)
+                    .map(|history| history.id),
+            );
+        }
+    }
+
+    remove.sort_unstable();
+    remove.dedup();
+    remove
 }
 
 #[allow(clippy::too_many_arguments)]

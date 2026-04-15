@@ -3,7 +3,7 @@ use nastv_domain::{BlockStopScheduling, EntityId, FillerKind};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    history, lookup_media, playout_item, PlayoutSchedulingEngine, SchedulingError,
+    cleanup_history, history, lookup_media, playout_item, PlayoutSchedulingEngine, SchedulingError,
     SchedulingRequest, SchedulingResult,
 };
 
@@ -189,6 +189,11 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             }
         }
 
+        result.history_to_remove.extend(cleanup_history(
+            &request.reference_data.existing_history,
+            request.start,
+            request.reference_data.max_playout_offset,
+        ));
         Ok(result)
     }
 }
