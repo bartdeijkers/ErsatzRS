@@ -1,0 +1,10 @@
+---
+source: crates/nastv-core/src/scheduling/yaml.rs
+expression: "serde_json::json!({\n    \"media\":\n    result.added_items.iter().map(|item|\n    item.media_item_id).collect::<Vec<_>>(),\n})"
+---
+{
+  "media": [
+    11,
+    12
+  ]
+}

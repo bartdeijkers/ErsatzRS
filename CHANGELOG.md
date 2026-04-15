@@ -10,6 +10,14 @@ for commit messages.
 
 ### Added
 
+- Phase 3 YAML scheduling parity for YAML imports (`import:` key merges
+  content/sequence definitions from external files with case-insensitive
+  key deduplication), expression-driven count behavior (variables `count`
+  and `random`, full arithmetic with `+`, `-`, `*`, `/`, `%`, and
+  parentheses), deterministic shuffle-groups for Marathon playout children
+  (Fisher-Yates with LCG seeded from playout-id + instruction-index +
+  day-of-year), and focused tests covering playlist batch/count and
+  play-all child enumeration semantics.
 - Phase 3 YAML scheduling parity for show-name/show-GUID content resolution,
   show/season marathon grouping, marathon child history keys/details,
   deterministic `play_all_items` playlist behavior, and empty-source fallback

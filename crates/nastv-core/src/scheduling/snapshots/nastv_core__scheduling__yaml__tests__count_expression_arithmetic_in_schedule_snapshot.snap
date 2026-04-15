@@ -1,0 +1,20 @@
+---
+source: crates/nastv-core/src/scheduling/yaml.rs
+expression: "snapshot(r#\"\nplayout:\n  - count: \"count / 2\"\n    content: main\n\"#)"
+---
+{
+  "anchor": "2026-04-15T10:17:00+00:00",
+  "gaps": [],
+  "items": [
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:17:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 1,
+      "start": "2026-04-15T10:07:00+00:00",
+      "title": null,
+      "watermarks": []
+    }
+  ]
+}

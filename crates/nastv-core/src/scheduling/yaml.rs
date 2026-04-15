@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use chrono::{DateTime, Duration, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use nastv_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor};
 use serde::{Deserialize, Serialize};
 
@@ -266,6 +266,33 @@ impl YamlPlayoutEngine {
         serde_yaml::from_str(yaml).map_err(|error| SchedulingError::InvalidYaml(error.to_string()))
     }
 
+    /// Merge an imported YAML definition into `base`.
+    ///
+    /// Content and sequence items from `imported` are appended only when the
+    /// `base` does not already contain an item with the same key
+    /// (case-insensitive), matching `ErsatzTV`'s
+    /// `SequentialPlayoutBuilder.Build` import logic.
+    pub fn merge_import(base: &mut YamlPlayoutDefinition, imported: YamlPlayoutDefinition) {
+        for content in imported.content {
+            if base
+                .content
+                .iter()
+                .all(|c| !c.key.eq_ignore_ascii_case(&content.key))
+            {
+                base.content.push(content);
+            }
+        }
+        for sequence in imported.sequence {
+            if base
+                .sequence
+                .iter()
+                .all(|s| !s.key.eq_ignore_ascii_case(&sequence.key))
+            {
+                base.sequence.push(sequence);
+            }
+        }
+    }
+
     fn definition_for_playout(playout: &Playout) -> Result<YamlPlayoutDefinition, SchedulingError> {
         let path = playout
             .schedule_file
@@ -273,7 +300,33 @@ impl YamlPlayoutEngine {
             .ok_or(SchedulingError::MissingScheduleFile)?;
         let yaml = fs::read_to_string(path)
             .map_err(|_| SchedulingError::ScheduleFileMissing(path.clone()))?;
-        Self::definition_from_str(&yaml)
+        let mut definition = Self::definition_from_str(&yaml)?;
+        Self::load_imports(&mut definition, path)?;
+        Ok(definition)
+    }
+
+    fn load_imports(
+        definition: &mut YamlPlayoutDefinition,
+        schedule_file: &str,
+    ) -> Result<(), SchedulingError> {
+        let import_paths: Vec<String> = definition.import.clone();
+        for import_path in import_paths {
+            let resolved = if fs::metadata(&import_path).is_ok() {
+                import_path.clone()
+            } else {
+                let parent = std::path::Path::new(schedule_file)
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or("");
+                format!("{parent}/{import_path}")
+            };
+            let yaml = fs::read_to_string(&resolved)
+                .map_err(|_| SchedulingError::ScheduleFileMissing(resolved.clone()))?;
+            let imported = Self::definition_from_str(&yaml)
+                .map_err(|_| SchedulingError::InvalidYaml(format!("import {import_path}")))?;
+            Self::merge_import(definition, imported);
+        }
+        Ok(())
     }
 
     /// Build a timeline from an already loaded YAML definition.
@@ -502,7 +555,29 @@ impl YamlContext {
 
     fn playlist_enumerator(&mut self, content: &str) -> Option<&mut PlaylistEnumerator> {
         if !self.playlist_enumerators.contains_key(content) {
-            let items = self.playlist_items(content)?;
+            let mut items = self.playlist_items(content)?;
+
+            // Shuffle groups deterministically when requested (Marathon only).
+            // Seed mirrors ErsatzTV: playout-seed + instruction-index + day-of-year.
+            let should_shuffle = self.content_sources.get(content).is_some_and(|resolved| {
+                matches!(
+                    &resolved.source,
+                    SchedulingContentSource::Marathon {
+                        shuffle_groups: true,
+                        ..
+                    }
+                )
+            });
+            if should_shuffle {
+                let seed = self
+                    .playout
+                    .id
+                    .cast_unsigned()
+                    .wrapping_add(self.instruction_index as u64)
+                    .wrapping_add(u64::from(self.current_time.ordinal()));
+                shuffle_with_seed(&mut items, seed);
+            }
+
             self.playlist_enumerators
                 .insert(content.to_owned(), PlaylistEnumerator::new(items));
         }
@@ -1089,10 +1164,17 @@ fn handle_count(
     let Some(content) = instruction.content.as_deref() else {
         return Ok(());
     };
+    let enumerator_len = context.content_len(content);
+    let seed = context
+        .playout
+        .id
+        .cast_unsigned()
+        .wrapping_add(context.instruction_index as u64)
+        .wrapping_add(u64::from(context.current_time.ordinal()));
     let count = instruction
         .count
         .as_deref()
-        .and_then(|value| value.parse::<usize>().ok())
+        .map(|expr| eval_count_expression(expr, enumerator_len, seed))
         .unwrap_or_default();
     for _ in 0..count {
         schedule_next_with_rolls(context, instruction, definition, content)?;
@@ -1385,6 +1467,140 @@ fn parse_filler_kind(value: &str) -> FillerKind {
         "fallback" => FillerKind::Fallback,
         "guidemode" | "guide_mode" => FillerKind::GuideMode,
         _ => FillerKind::None,
+    }
+}
+
+// ── count expression evaluator ────────────────────────────────────────────────
+//
+// Mirrors `ErsatzTV`'s `CountExpression.Evaluate` (NCalc-based).
+// Supported: integer literals, `count` (enumerator length), `random`
+// (deterministic value mod count), and `+`, `-`, `*`, `/`, `%` operators with
+// parentheses. Returns `0` on any parse failure.
+
+fn expr_skip_ws(chars: &[u8], pos: usize) -> usize {
+    let mut p = pos;
+    while p < chars.len() && chars[p] == b' ' {
+        p += 1;
+    }
+    p
+}
+
+fn expr_parse_expr(chars: &[u8], pos: usize, count: i64, random: i64) -> (i64, usize) {
+    let (mut left, mut pos) = expr_parse_term(chars, pos, count, random);
+    loop {
+        let p = expr_skip_ws(chars, pos);
+        if p >= chars.len() {
+            break;
+        }
+        match chars[p] {
+            b'+' => {
+                let (right, next) = expr_parse_term(chars, p + 1, count, random);
+                left = left.saturating_add(right);
+                pos = next;
+            }
+            b'-' => {
+                let (right, next) = expr_parse_term(chars, p + 1, count, random);
+                left = left.saturating_sub(right);
+                pos = next;
+            }
+            _ => break,
+        }
+    }
+    (left, pos)
+}
+
+fn expr_parse_term(chars: &[u8], pos: usize, count: i64, random: i64) -> (i64, usize) {
+    let (mut left, mut pos) = expr_parse_factor(chars, pos, count, random);
+    loop {
+        let p = expr_skip_ws(chars, pos);
+        if p >= chars.len() {
+            break;
+        }
+        match chars[p] {
+            b'*' => {
+                let (right, next) = expr_parse_factor(chars, p + 1, count, random);
+                left = left.saturating_mul(right);
+                pos = next;
+            }
+            b'/' => {
+                let (right, next) = expr_parse_factor(chars, p + 1, count, random);
+                left = if right != 0 { left / right } else { 0 };
+                pos = next;
+            }
+            b'%' => {
+                let (right, next) = expr_parse_factor(chars, p + 1, count, random);
+                left = if right != 0 { left % right } else { 0 };
+                pos = next;
+            }
+            _ => break,
+        }
+    }
+    (left, pos)
+}
+
+fn expr_parse_factor(chars: &[u8], pos: usize, count: i64, random: i64) -> (i64, usize) {
+    let p = expr_skip_ws(chars, pos);
+    if p >= chars.len() {
+        return (0, p);
+    }
+    if chars[p] == b'(' {
+        let (val, mut next) = expr_parse_expr(chars, p + 1, count, random);
+        next = expr_skip_ws(chars, next);
+        if next < chars.len() && chars[next] == b')' {
+            next += 1;
+        }
+        return (val, next);
+    }
+    let rest = &chars[p..];
+    let is_not_ident = |c: &u8| !c.is_ascii_alphanumeric() && *c != b'_';
+    if rest.starts_with(b"count") && rest.get(5).is_none_or(is_not_ident) {
+        return (count, p + 5);
+    }
+    if rest.starts_with(b"random") && rest.get(6).is_none_or(is_not_ident) {
+        return (random, p + 6);
+    }
+    // Integer literal (optional leading minus handled by term subtraction)
+    let start = p;
+    let mut end = p;
+    while end < chars.len() && chars[end].is_ascii_digit() {
+        end += 1;
+    }
+    if end > start {
+        let s = std::str::from_utf8(&chars[start..end]).unwrap_or("0");
+        return (s.parse::<i64>().unwrap_or(0), end);
+    }
+    (0, p)
+}
+
+/// Evaluate a count expression (see module-level helpers above).
+fn eval_count_expression(expr: &str, enumerator_len: usize, seed: u64) -> usize {
+    let count = i64::try_from(enumerator_len).unwrap_or(i64::MAX);
+    let random: i64 = if enumerator_len > 0 {
+        let r = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        i64::try_from(r % u64::try_from(enumerator_len).unwrap_or(u64::MAX)).unwrap_or(0)
+    } else {
+        0
+    };
+    let chars = expr.as_bytes();
+    let (result, _) = expr_parse_expr(chars, 0, count, random);
+    usize::try_from(result.max(0)).unwrap_or(0)
+}
+
+/// Fisher-Yates shuffle with a simple LCG for deterministic ordering.
+fn shuffle_with_seed<T>(items: &mut [T], seed: u64) {
+    let len = items.len();
+    if len <= 1 {
+        return;
+    }
+    let mut state = seed;
+    for i in (1..len).rev() {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let j = (state >> 33) as usize % (i + 1);
+        items.swap(i, j);
     }
 }
 
@@ -2577,5 +2793,414 @@ playout:
         );
         let result = YamlPlayoutEngine.schedule_definition(definition, request);
         assert!(result.is_err());
+    }
+
+    // ── count expression tests ────────────────────────────────────────────────
+
+    #[test]
+    fn count_expression_literal() {
+        // Plain integer literals still work (must not break existing snapshots).
+        assert_eq!(eval_count_expression("3", 10, 0), 3);
+        assert_eq!(eval_count_expression("0", 10, 0), 0);
+    }
+
+    #[test]
+    fn count_expression_count_variable() {
+        // "count" expands to the enumerator length.
+        assert_eq!(eval_count_expression("count", 4, 0), 4);
+        assert_eq!(eval_count_expression("count", 0, 0), 0);
+    }
+
+    #[test]
+    fn count_expression_arithmetic() {
+        assert_eq!(eval_count_expression("count / 2", 8, 0), 4);
+        assert_eq!(eval_count_expression("count + 1", 3, 0), 4);
+        assert_eq!(eval_count_expression("count * 2", 3, 0), 6);
+        assert_eq!(eval_count_expression("2 + 3", 0, 0), 5);
+    }
+
+    #[test]
+    fn count_expression_random_variable() {
+        // "random" must be in [0, count). Same seed + same enumerator length ⇒
+        // same result (determinism).
+        let v1 = eval_count_expression("random", 10, 42);
+        let v2 = eval_count_expression("random", 10, 42);
+        assert_eq!(v1, v2);
+        assert!(v1 < 10);
+    }
+
+    #[test]
+    fn count_expression_zero_for_invalid() {
+        // Non-parseable input falls back to 0.
+        assert_eq!(eval_count_expression("bogus_var", 5, 0), 0);
+        assert_eq!(eval_count_expression("", 5, 0), 0);
+    }
+
+    #[test]
+    fn count_expression_in_schedule_uses_enumerator_length() {
+        // count: "count" schedules all items in the enumerator.
+        insta::assert_json_snapshot!(snapshot(
+            r#"
+playout:
+  - count: "count"
+    content: main
+"#
+        ));
+    }
+
+    #[test]
+    fn count_expression_arithmetic_in_schedule_snapshot() {
+        // count: "count / 2" with 2 items → schedules 1 item.
+        insta::assert_json_snapshot!(snapshot(
+            r#"
+playout:
+  - count: "count / 2"
+    content: main
+"#
+        ));
+    }
+
+    // ── import merge tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn yaml_import_merge_adds_content_from_imported_definition() {
+        let mut base = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: main
+    collection: Movies
+"#,
+        )
+        .unwrap();
+        let imported = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: bumpers
+    collection: Bumpers
+  - key: main
+    collection: Ignored
+"#,
+        )
+        .unwrap();
+
+        YamlPlayoutEngine::merge_import(&mut base, imported);
+
+        // "bumpers" must be added; "main" must NOT be overridden.
+        assert_eq!(base.content.len(), 2);
+        let main = base.content.iter().find(|c| c.key == "main").unwrap();
+        assert_eq!(main.collection.as_deref(), Some("Movies"));
+        let bumpers = base.content.iter().find(|c| c.key == "bumpers").unwrap();
+        assert_eq!(bumpers.collection.as_deref(), Some("Bumpers"));
+    }
+
+    #[test]
+    fn yaml_import_merge_adds_sequences_from_imported_definition() {
+        let mut base = YamlPlayoutEngine::definition_from_str(
+            r#"
+sequence:
+  - key: intro
+    items:
+      - count: "1"
+        content: main
+"#,
+        )
+        .unwrap();
+        let imported = YamlPlayoutEngine::definition_from_str(
+            r#"
+sequence:
+  - key: outro
+    items:
+      - count: "1"
+        content: bumpers
+  - key: intro
+    items:
+      - count: "99"
+        content: ignored
+"#,
+        )
+        .unwrap();
+
+        YamlPlayoutEngine::merge_import(&mut base, imported);
+
+        // "outro" is added; "intro" is kept from base.
+        assert_eq!(base.sequence.len(), 2);
+        let intro = base.sequence.iter().find(|s| s.key == "intro").unwrap();
+        assert_eq!(
+            intro.items[0].count.as_deref(),
+            Some("1"),
+            "base intro must not be overridden"
+        );
+    }
+
+    #[test]
+    fn yaml_import_merge_case_insensitive_key_comparison() {
+        let mut base = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: Main
+    collection: Movies
+"#,
+        )
+        .unwrap();
+        let imported = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: main
+    collection: ShouldBeIgnored
+"#,
+        )
+        .unwrap();
+
+        YamlPlayoutEngine::merge_import(&mut base, imported);
+
+        assert_eq!(
+            base.content.len(),
+            1,
+            "duplicate key (different case) must not be added"
+        );
+    }
+
+    #[test]
+    fn yaml_import_merged_content_used_in_schedule_snapshot() {
+        // Build a base definition manually and merge imported content into it,
+        // then schedule to verify the merged content is used.
+        let mut definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+playout:
+  - count: "2"
+    content: imported
+"#,
+        )
+        .unwrap();
+        let imported_content = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: imported
+    collection: Movies
+"#,
+        )
+        .unwrap();
+        YamlPlayoutEngine::merge_import(&mut definition, imported_content);
+
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.collections_by_name.insert(
+            "Movies".to_owned(),
+            vec![
+                SchedulingMediaItem::new(11, Duration::minutes(10)),
+                SchedulingMediaItem::new(12, Duration::minutes(10)),
+            ],
+        );
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
+    }
+
+    // ── shuffle_groups tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn yaml_marathon_shuffle_groups_produces_deterministic_order_snapshot() {
+        // With shuffle_groups: true the children (groups) are reordered by seed.
+        // The test verifies the ordering is stable across runs and distinct
+        // from the insertion order of the groups when seed is non-trivial.
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.searches_by_query.insert(
+            "sitcom".to_owned(),
+            vec![
+                episode_item(1, 10, 1001, 1, 1),
+                episode_item(2, 20, 2001, 1, 1),
+                episode_item(3, 30, 3001, 1, 1),
+            ],
+        );
+
+        let yaml = r#"
+content:
+  - key: by_show_shuffled
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: show
+    item_order: season_episode
+    shuffle_groups: true
+playout:
+  - all: by_show_shuffled
+"#;
+        let definition = YamlPlayoutEngine::definition_from_str(yaml).expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
+    }
+
+    // ── playlist batch/count child semantics tests ────────────────────────────
+
+    #[test]
+    fn yaml_playlist_count_child_takes_n_items_before_switching_snapshot() {
+        // A playlist child with count=2 takes 2 items before moving to the
+        // next child, matching ErsatzTV's PlaylistEnumerator batch semantics.
+        let child_0_key = SchedulingCollectionKey::fake_playlist_item(0);
+        let child_1_key = SchedulingCollectionKey::fake_playlist_item(1);
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.playlist_items_by_group_and_name.insert(
+            (None, "MyPlaylist".to_owned()),
+            vec![
+                SchedulingPlaylistItem {
+                    collection_key: child_0_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: Some(2),
+                    media_items: vec![
+                        SchedulingMediaItem::new(1, Duration::minutes(5)),
+                        SchedulingMediaItem::new(2, Duration::minutes(5)),
+                        SchedulingMediaItem::new(3, Duration::minutes(5)),
+                    ],
+                },
+                SchedulingPlaylistItem {
+                    collection_key: child_1_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: Some(1),
+                    media_items: vec![SchedulingMediaItem::new(10, Duration::minutes(5))],
+                },
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: pl
+    playlist: MyPlaylist
+playout:
+  - count: "6"
+    content: pl
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        // Expected interleaving: child0(1), child0(2), child1(10), child0(3),
+        // child0(1), child1(10) — child0 wraps, count=2 each time.
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_playlist_play_all_child_exhausts_items_snapshot() {
+        // A child with play_all=true exhausts its full enumerator before moving
+        // to the next child (mirrors ErsatzTV play_all_items behavior).
+        let child_0_key = SchedulingCollectionKey::fake_playlist_item(0);
+        let child_1_key = SchedulingCollectionKey::fake_playlist_item(1);
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.playlist_items_by_group_and_name.insert(
+            (None, "AllPlaylist".to_owned()),
+            vec![
+                SchedulingPlaylistItem {
+                    collection_key: child_0_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: true,
+                    count: None,
+                    media_items: vec![
+                        SchedulingMediaItem::new(1, Duration::minutes(5)),
+                        SchedulingMediaItem::new(2, Duration::minutes(5)),
+                    ],
+                },
+                SchedulingPlaylistItem {
+                    collection_key: child_1_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: Some(1),
+                    media_items: vec![SchedulingMediaItem::new(10, Duration::minutes(5))],
+                },
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: pl
+    playlist: AllPlaylist
+playout:
+  - count: "4"
+    content: pl
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        // Expected: child0(1), child0(2) [play_all exhausts 2], child1(10), child0(1)
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
     }
 }
