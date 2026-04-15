@@ -1,6 +1,6 @@
 ---
 name: verify-phase
-description: Run or plan the verification checks for a phase from the NasTv implementation plan. Use when asked to validate phase 0, phase 1, or later roadmap progress.
+description: Run or plan the verification checks for a phase from the ErsatzRS implementation plan. Use when asked to validate phase 0, phase 1, or later roadmap progress.
 ---
 
 # Verify Phase

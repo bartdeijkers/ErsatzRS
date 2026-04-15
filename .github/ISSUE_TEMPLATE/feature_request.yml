@@ -16,8 +16,8 @@ body:
       label: Relation to ErsatzTV
       options:
         - ErsatzTV parity
-        - Deliberate NasTv deviation
-        - New NasTv-only feature
+        - Deliberate ErsatzRS deviation
+        - New ErsatzRS-only feature
     validations:
       required: true
   - type: textarea

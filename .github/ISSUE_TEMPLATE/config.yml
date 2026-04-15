@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/bartdeijkers/nastv/security/advisories/new
+    url: https://github.com/bartdeijkers/ErsatzRS/security/advisories/new
     about: Use private vulnerability reporting for security issues.
   - name: Questions and support
-    url: https://github.com/bartdeijkers/nastv/discussions
+    url: https://github.com/bartdeijkers/ErsatzRS/discussions
     about: Use discussions for setup help and general questions.

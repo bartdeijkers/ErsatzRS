@@ -1,6 +1,6 @@
 # Documentation
 
-NasTv documentation follows Diataxis. Every document should fit one of four
+ErsatzRS documentation follows Diataxis. Every document should fit one of four
 purposes.
 
 ## Tutorials

@@ -25,7 +25,7 @@ See [snapshot-tests.md](snapshot-tests.md).
 
 ## End-to-End Tests
 
-Put cross-crate HTTP and streaming tests under `nastv-web/tests/` once the web
+Put cross-crate HTTP and streaming tests under `ersatzrs-web/tests/` once the web
 crate exists. E2E tests may be slower and should focus on critical user flows.
 
 ## Database Tests

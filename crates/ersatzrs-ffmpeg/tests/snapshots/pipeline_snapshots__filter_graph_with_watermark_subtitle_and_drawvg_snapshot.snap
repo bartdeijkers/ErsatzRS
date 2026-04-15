@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: "filter.options.join(\" \")"
+---
+-filter_complex [1:0]format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.75[wm];[0:0][2:0]overlay=x=(W-w)/2:y=(H-h)/2:format=0[vst];[vst][wm]overlay=x=W-w-38:y=32:format=0[vwm];[vwm][3:0]drawvg=file='/tmp/ErsatzRS/lower-third.svg':x=0:y=810:w=1920:h=270:enable='between(t,5,12)'[vge] -map [vge] -map 0:1

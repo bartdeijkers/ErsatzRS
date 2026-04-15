@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NasTv needs a changelog and release process that can scale from solo development
+ErsatzRS needs a changelog and release process that can scale from solo development
 to public open-source collaboration.
 
 ## Decision

@@ -1,8 +1,8 @@
-# NasTv Long-Term Project Contracts
+# ErsatzRS Long-Term Project Contracts
 
 ## Purpose
 
-NasTv is a multi-year Rust and FFmpeg 8.1 reimplementation of ErsatzTV. This
+ErsatzRS is a multi-year Rust and FFmpeg 8.1 reimplementation of ErsatzTV. This
 plan records the contract layer that must exist before substantial code is
 written: governance, style, architecture, documentation, porting, testing,
 operations, release process, CI, and repeatable AI-agent workflows.

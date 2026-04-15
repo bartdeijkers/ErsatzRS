@@ -1,5 +1,5 @@
 name: Porting task
-description: Track porting work from ErsatzTV to NasTv.
+description: Track porting work from ErsatzTV to ErsatzRS.
 title: "feat: port "
 labels: ["porting"]
 body:
@@ -13,7 +13,7 @@ body:
   - type: input
     id: target
     attributes:
-      label: NasTv target
+      label: ErsatzRS target
       description: Planned crate and module.
     validations:
       required: true

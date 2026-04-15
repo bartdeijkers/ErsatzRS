@@ -1,6 +1,6 @@
-# NasTv
+# ErsatzRS
 
-NasTv is a from-scratch Rust reimplementation of
+ErsatzRS is a from-scratch Rust reimplementation of
 [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV): a media server that turns
 personal media libraries into linear TV channels served through IPTV, HLS, and
 HDHomeRun-compatible endpoints.
@@ -54,4 +54,4 @@ long-term baseline is:
 
 ## License
 
-NasTv is licensed under the zlib license. See [LICENSE](LICENSE).
+ErsatzRS is licensed under the zlib license. See [LICENSE](LICENSE).

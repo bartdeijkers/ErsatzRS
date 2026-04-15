@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible NasTv bug.
+description: Report a reproducible ErsatzRS bug.
 title: "fix: "
 labels: ["bug"]
 body:
@@ -18,9 +18,9 @@ body:
     validations:
       required: true
   - type: input
-    id: nastv-version
+    id: ErsatzRS-version
     attributes:
-      label: NasTv version or commit
+      label: ErsatzRS version or commit
     validations:
       required: true
   - type: input

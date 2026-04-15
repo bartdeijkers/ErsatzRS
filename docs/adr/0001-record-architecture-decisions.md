@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NasTv is a long-running port of ErsatzTV. Without written decisions, crate
+ErsatzRS is a long-running port of ErsatzTV. Without written decisions, crate
 boundaries, dependency choices, and deliberate deviations will drift over time.
 
 ## Decision

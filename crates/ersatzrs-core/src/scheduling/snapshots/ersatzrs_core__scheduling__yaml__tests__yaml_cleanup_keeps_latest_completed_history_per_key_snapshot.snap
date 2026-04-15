@@ -1,0 +1,10 @@
+---
+source: crates/ersatzrs-core/src/scheduling/yaml.rs
+expression: "serde_json::json!({ \"history_to_remove\": result.history_to_remove, })"
+---
+{
+  "history_to_remove": [
+    50,
+    52
+  ]
+}

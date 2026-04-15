@@ -6,13 +6,13 @@ Accepted
 
 ## Context
 
-NasTv needs a Rust-native web UI that can start server-rendered and gain
+ErsatzRS needs a Rust-native web UI that can start server-rendered and gain
 interactivity where needed.
 
 ## Decision
 
 Use Leptos with SSR and selective hydration. Mount it through `leptos_axum` in
-the `nastv-web` crate.
+the `ersatzrs-web` crate.
 
 ## Consequences
 
@@ -22,7 +22,7 @@ components must be built or adapted.
 
 ## Alternatives Considered
 
-- Blazor: rejected because NasTv intentionally leaves the .NET stack.
+- Blazor: rejected because ErsatzRS intentionally leaves the .NET stack.
 - Yew: rejected because SSR and full-stack routing are less aligned with the
   desired host model.
 - Server-only HTML: rejected because later admin workflows need interactivity.

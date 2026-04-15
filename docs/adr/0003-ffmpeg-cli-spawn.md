@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-ErsatzTV builds FFmpeg command lines and runs FFmpeg as a child process. NasTv
+ErsatzTV builds FFmpeg command lines and runs FFmpeg as a child process. ErsatzRS
 needs to preserve those pipeline patterns while using FFmpeg 8.1 features.
 
 ## Decision
@@ -15,7 +15,7 @@ Use `tokio::process::Command` to spawn FFmpeg. Do not use libav bindings.
 
 ## Consequences
 
-NasTv can mirror ErsatzTV's argv and filter-graph structure closely and can move
+ErsatzRS can mirror ErsatzTV's argv and filter-graph structure closely and can move
 between FFmpeg builds without binding churn. Process supervision, logging, and
 argument escaping must be handled carefully.
 

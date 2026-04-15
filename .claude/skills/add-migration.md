@@ -1,6 +1,6 @@
 ---
 name: add-migration
-description: Add a sqlx migration following NasTv naming and review rules. Use when creating or changing database schema migrations.
+description: Add a sqlx migration following ErsatzRS naming and review rules. Use when creating or changing database schema migrations.
 ---
 
 # Add Migration

@@ -19,7 +19,7 @@ Example:
 ## Policy
 
 - The initial schema is collapsed from the final ErsatzTV model.
-- Later migrations are normal incremental NasTv migrations.
+- Later migrations are normal incremental ErsatzRS migrations.
 - Prefer additive changes.
 - Do not drop columns or tables without an ADR.
 - Destructive changes need a manual rollback note in the pull request.

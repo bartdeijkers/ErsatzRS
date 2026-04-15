@@ -13,9 +13,9 @@ Use this pattern:
 Examples:
 
 ```text
-nastv_ffmpeg::pipeline::build
-nastv_core::scheduling::generate
-nastv_web::iptv::playlist
+ersatzrs_ffmpeg::pipeline::build
+ersatzrs_core::scheduling::generate
+ersatzrs_web::iptv::playlist
 ```
 
 ## Fields

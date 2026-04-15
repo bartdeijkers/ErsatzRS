@@ -1,6 +1,6 @@
 # Contributing
 
-NasTv starts as a solo-maintainer project, but the repository is structured as a
+ErsatzRS starts as a solo-maintainer project, but the repository is structured as a
 future public open-source project from day one. Contributions should leave a
 clear trail: what changed, why it changed, how it was tested, and whether it
 changes the ErsatzTV parity contract.
@@ -27,7 +27,7 @@ cargo test --workspace --all-features
 cargo deny check
 ```
 
-FFmpeg 8.1 or newer is required at runtime because NasTv uses the `drawvg`
+FFmpeg 8.1 or newer is required at runtime because ErsatzRS uses the `drawvg`
 filter. Startup code must fail fast when an older FFmpeg is detected.
 
 ## Workflow

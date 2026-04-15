@@ -1,0 +1,21 @@
+---
+source: crates/ersatzrs-core/src/scheduling/yaml.rs
+assertion_line: 1107
+expression: "snapshot(r#\"\nplayout:\n  - skip_items: \"1\"\n    content: main\n  - count: \"1\"\n    content: main\n\"#)"
+---
+{
+  "anchor": "2026-04-15T10:22:00+00:00",
+  "gaps": [],
+  "items": [
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:22:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 2,
+      "start": "2026-04-15T10:07:00+00:00",
+      "title": null,
+      "watermarks": []
+    }
+  ]
+}

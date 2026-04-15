@@ -1,6 +1,6 @@
 # Code of Conduct
 
-NasTv is intended to become a public open-source project. Participation is
+ErsatzRS is intended to become a public open-source project. Participation is
 expected to be respectful, focused, and constructive.
 
 ## Expected Behavior

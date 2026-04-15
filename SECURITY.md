@@ -1,6 +1,6 @@
 # Security Policy
 
-NasTv is pre-alpha. There are no supported production releases yet.
+ErsatzRS is pre-alpha. There are no supported production releases yet.
 
 ## Supported Versions
 
@@ -11,7 +11,7 @@ NasTv is pre-alpha. There are no supported production releases yet.
 
 ## Threat Model
 
-NasTv will expose HTTP endpoints, HLS streams, IPTV playlists, HDHomeRun
+ErsatzRS will expose HTTP endpoints, HLS streams, IPTV playlists, HDHomeRun
 discovery on the local network, FFmpeg process execution, media-library
 connectors, and database access. Security-sensitive areas include:
 

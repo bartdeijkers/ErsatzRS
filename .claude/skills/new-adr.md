@@ -1,6 +1,6 @@
 ---
 name: new-adr
-description: Create the next numbered Architecture Decision Record for NasTv. Use when a change affects architecture, crate boundaries, dependencies across crates, or deliberate ErsatzTV deviations.
+description: Create the next numbered Architecture Decision Record for ErsatzRS. Use when a change affects architecture, crate boundaries, dependencies across crates, or deliberate ErsatzTV deviations.
 ---
 
 # New ADR

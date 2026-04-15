@@ -1,0 +1,22 @@
+---
+source: crates/ersatzrs-core/src/scheduling/yaml.rs
+expression: "serde_json::json!({\n    \"media\":\n    result.added_items.iter().map(|item|\n    item.media_item_id).collect::<Vec<_>>(), \"history\":\n    result.added_history.iter().map(|history|\n    &history.key).collect::<Vec<_>>(),\n})"
+---
+{
+  "history": [
+    "{\"Key\":\"collection\",\"Order\":\"Chronological\"}",
+    "{\"Key\":\"multi\",\"Order\":\"Shuffle\"}",
+    "{\"Key\":\"smart\",\"Order\":\"Shuffle\"}",
+    "{\"Key\":\"playlist\",\"Order\":\"None\"}",
+    "{\"Key\":\"search\",\"Order\":\"Shuffle\"}",
+    "{\"Key\":\"single\",\"Order\":\"None\"}"
+  ],
+  "media": [
+    10,
+    20,
+    30,
+    40,
+    50,
+    60
+  ]
+}

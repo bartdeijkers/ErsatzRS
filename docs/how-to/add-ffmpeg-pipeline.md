@@ -5,7 +5,7 @@ Use this guide when adding a new software or hardware FFmpeg path.
 ## Steps
 
 1. Read the matching ErsatzTV `*PipelineBuilder.cs` source.
-2. Identify the NasTv target module in `nastv-ffmpeg`.
+2. Identify the ErsatzRS target module in `ersatzrs-ffmpeg`.
 3. Preserve the command-generation structure unless an ADR records a deviation.
 4. Add unit tests for builder invariants.
 5. Add `insta` snapshots for generated argv and filter graphs.

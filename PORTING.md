@@ -1,17 +1,17 @@
 # Porting Contract
 
-NasTv ports ErsatzTV behavior from C# to Rust. Preserve behavior unless an ADR
+ErsatzRS ports ErsatzTV behavior from C# to Rust. Preserve behavior unless an ADR
 records a deliberate deviation.
 
 ## Procedure
 
 1. Find and read the relevant ErsatzTV source under `/home/bart/ErsatzTV/`.
-2. Identify the NasTv target crate from [ARCHITECTURE.md](ARCHITECTURE.md).
+2. Identify the ErsatzRS target crate from [ARCHITECTURE.md](ARCHITECTURE.md).
 3. Map C# concepts to Rust idioms using the table below.
-4. Define or reuse a trait in `nastv-core` when behavior crosses infrastructure
+4. Define or reuse a trait in `ersatzrs-core` when behavior crosses infrastructure
    boundaries.
-5. Implement concrete storage, provider, or process behavior in `nastv-infra`,
-   `nastv-ffmpeg`, `nastv-web`, or `nastv-scanner` as appropriate.
+5. Implement concrete storage, provider, or process behavior in `ersatzrs-infra`,
+   `ersatzrs-ffmpeg`, `ersatzrs-web`, or `ersatzrs-scanner` as appropriate.
 6. Add tests at the narrowest useful level.
 7. Add `insta` snapshots for generated FFmpeg argv, filter graphs, YAML
    scheduling output, and generated SVG/drawvg fragments.
@@ -20,14 +20,14 @@ records a deliberate deviation.
 
 ## C# to Rust Mapping
 
-| ErsatzTV / C# | NasTv / Rust |
+| ErsatzTV / C# | ErsatzRS / Rust |
 | --- | --- |
 | `Option<T>` from LanguageExt | `Option<T>` |
 | `Either<L, R>` | `Result<R, L>` |
 | `Validation<Error, T>` | `Result<T, Vec<Error>>` or typed `thiserror` variants |
 | `Task<T>` | `async fn -> T` |
 | `CancellationToken` | explicit cancellation handle or Tokio-aware shutdown signal |
-| MediatR request handler | plain async use-case function in `nastv-app` |
+| MediatR request handler | plain async use-case function in `ersatzrs-app` |
 | Dependency injection container | constructor-injected traits and concrete composition at the edge |
 | EF `DbSet<T>` | sqlx queries plus repository trait |
 | EF migration history | one collapsed initial sqlx schema, then normal migrations |

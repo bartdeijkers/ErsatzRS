@@ -5,29 +5,29 @@ Status: Approved
 
 ## Context
 
-Phase 0 is complete. `nastv-domain` is fully populated with all domain entity
+Phase 0 is complete. `ersatzrs-domain` is fully populated with all domain entity
 modules (channel, media, scheduling, playout, library, collection, config,
 ffmpeg, filler, graphics, metadata, media_source, common). Phase 1 now has a
 normalized SQLite baseline in `migrations/0001_initial.sql`, scalar/join-table
-repository mappings in `nastv-infra`, and repository integration tests that
+repository mappings in `ersatzrs-infra`, and repository integration tests that
 exercise the expanded schema.
 
 This spec records the Phase 1 persistence baseline that unblocks Phase 2/3:
 
 1. Initial sqlx schema (migrations)
-2. Repository traits in `nastv-core`
-3. sqlx implementations in `nastv-infra`
+2. Repository traits in `ersatzrs-core`
+3. sqlx implementations in `ersatzrs-infra`
 4. Entity-mapping tests (round-trip + query-method verification)
 
 ## Scope decisions
 
 - **Breadth:** All repository traits are defined up front, covering every
-  aggregate in `nastv-domain`. Nothing is deferred to a later phase.
+  aggregate in `ersatzrs-domain`. Nothing is deferred to a later phase.
 - **Trait style:** Query-driven methods — each method matches a real use case
   rather than generic CRUD. No dead methods. Mirrors ErsatzTV's actual
   repository query patterns.
 - **Trait granularity:** One trait per aggregate root, mirroring the
-  `nastv-domain` module structure.
+  `ersatzrs-domain` module structure.
 - **Test depth:** Round-trip tests plus query-method behavioral verification.
   No `insta` snapshots (those are reserved for Phase 2 FFmpeg argv tests).
 
@@ -81,12 +81,12 @@ Domain structs carry `Vec<EntityId>` navigation fields (e.g., `playout_ids`
 on `Channel`). These map to child or join tables in the schema. They are
 never serialized into a single column.
 
-## Section 2: Repository Traits (`nastv-core`)
+## Section 2: Repository Traits (`ersatzrs-core`)
 
 ### File layout
 
 ```
-nastv-core/src/repositories/
+ersatzrs-core/src/repositories/
   mod.rs         — re-exports all traits and error type
   error.rs       — RepositoryError
   channel.rs
@@ -109,7 +109,7 @@ nastv-core/src/repositories/
 ### Error type
 
 ```rust
-// nastv-core/src/repositories/error.rs
+// ersatzrs-core/src/repositories/error.rs
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryError {
     #[error("{kind} with id {id} not found")]
@@ -125,7 +125,7 @@ pub type Result<T> = std::result::Result<T, RepositoryError>;
 
 ### Dependency note
 
-`nastv-core` adds `sqlx` and `async-trait` as dependencies. `sqlx` is needed
+`ersatzrs-core` adds `sqlx` and `async-trait` as dependencies. `sqlx` is needed
 solely for the `Database` variant in `RepositoryError`. This is a deliberate
 pragmatic coupling — the alternative (wrapping sqlx errors into a generic
 `Box<dyn Error>`) adds ceremony without benefit in a single-binary project.
@@ -167,12 +167,12 @@ Implementations use `#[async_trait::async_trait]` on the `impl` block.
   relations call `get_with_*` per item.
 - `upsert` uses `INSERT OR REPLACE` in SQLite.
 
-## Section 3: sqlx Implementation (`nastv-infra`)
+## Section 3: sqlx Implementation (`ersatzrs-infra`)
 
 ### File layout
 
 ```
-nastv-infra/src/repositories/
+ersatzrs-infra/src/repositories/
   mod.rs         — Repositories bundle struct + make_repositories()
   channel.rs     — SqliteChannelRepository(Pool<Sqlite>)
   playout.rs
@@ -240,14 +240,14 @@ pub struct Repositories {
 pub fn make_repositories(pool: Pool<Sqlite>) -> Repositories { … }
 ```
 
-Called once at startup in `nastv-web/main.rs`, passed into axum state.
+Called once at startup in `ersatzrs-web/main.rs`, passed into axum state.
 
 ## Section 4: Testing
 
 ### Location
 
 ```
-nastv-infra/tests/
+ersatzrs-infra/tests/
   channel_repository.rs
   playout_repository.rs
   program_schedule_repository.rs
@@ -269,7 +269,7 @@ nastv-infra/tests/
 ### Test database setup
 
 ```rust
-// nastv-infra/tests/common.rs
+// ersatzrs-infra/tests/common.rs
 pub async fn test_db() -> Pool<Sqlite> {
     let pool = SqlitePoolOptions::new()
         .connect("sqlite::memory:")
@@ -306,6 +306,6 @@ Each test file contains:
 
 ## Phase 1 Verification Criteria (from plan)
 
-- `cargo test -p nastv-domain -p nastv-infra` passes.
+- `cargo test -p ersatzrs-domain -p ersatzrs-infra` passes.
 - Migrations run idempotently on an empty database.
 - Domain entities have sqlx round-trip tests where persistence exists.

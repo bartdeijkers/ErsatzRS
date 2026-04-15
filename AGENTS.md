@@ -5,9 +5,9 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ## Project
 
-NasTv is a from-scratch Rust reimplementation of [ErsatzTV](/home/bart/ErsatzTV/) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
+ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](/home/bart/ErsatzTV/) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
 
-The authoritative implementation plan lives at **[/home/bart/nastv/plans/sequential-dancing-valiant.md](/home/bart/nastv/plans/sequential-dancing-valiant.md)** - read it before starting non-trivial work. It contains the phase breakdown, crate layout, risks, and per-phase verification criteria.
+The authoritative implementation plan lives at **[/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md](/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md)** - read it before starting non-trivial work. It contains the phase breakdown, crate layout, risks, and per-phase verification criteria.
 
 ## Current status
 
@@ -94,9 +94,9 @@ Read the relevant contract before changing that area:
 - **Graphics engine:** use FFmpeg 8.1's `drawvg` filter with SVG templates in `assets/` as the replacement for ErsatzTV's `ScriptGraphicsElement` + external renderer pipe. This is the main "why Rust rewrite" win - do not reintroduce an external graphics process.
 - **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of [TvContext.cs](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs) (99 DbSets) and evolve from there.
 - **Web host:** `axum` + `tower` + `tokio`. Leptos mounts via `leptos_axum`.
-- **CQRS:** no MediatR equivalent - plain `async fn` handlers in `nastv-app`, repository traits in `nastv-core`, sqlx impls in `nastv-infra`.
+- **CQRS:** no MediatR equivalent - plain `async fn` handlers in `ersatzrs-app`, repository traits in `ersatzrs-core`, sqlx impls in `ersatzrs-infra`.
 - **Scheduling:** three engines to port from [ErsatzTV.Core/Scheduling/](/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/) behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), and Scripted (`mlua` for Lua 5.4).
-- **Binaries:** `nastv-web` (server) and `nastv-scanner` (library scanner) - two binaries sharing the core crates.
+- **Binaries:** `ersatzrs-web` (server) and `ersatzrs-scanner` (library scanner) - two binaries sharing the core crates.
 
 ## Porting workflow
 
@@ -105,12 +105,12 @@ This is primarily a porting project, not greenfield design. When implementing a 
 1. **Find the ErsatzTV source first.** The plan's critical-file table maps features to the authoritative C# files under `/home/bart/ErsatzTV/`. Read the C# before writing Rust.
 2. **Preserve patterns, not syntax.** ErsatzTV's FFmpeg pipeline builders, filter label routing (`ComplexFilter.cs`), and `ffconcat`/`resetpts` concat handling are version-agnostic and should be mirrored closely in structure. LanguageExt `Option`/`Either` map to native `Option`/`Result`; `anyhow`/`thiserror` for errors.
 3. **Snapshot-test generated FFmpeg argv** the way ErsatzTV's `ErsatzTV.FFmpeg.Tests` does - use `insta`. This is the primary regression gate for the pipeline crate.
-4. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, NasTv should emit a `drawvg` filter node instead.
+4. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, ErsatzRS should emit a `drawvg` filter node instead.
 
 ## Reference paths (on this machine)
 
 - ErsatzTV source tree: `/home/bart/ErsatzTV/`
-- Implementation plan: `/home/bart/nastv/plans/sequential-dancing-valiant.md`
+- Implementation plan: `/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md`
 - HDHR protocol notes (internal to ErsatzTV repo): `/home/bart/ErsatzTV/hdhr.md`
 
 ## Session Handoff

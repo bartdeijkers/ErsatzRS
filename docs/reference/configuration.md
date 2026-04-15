@@ -1,6 +1,6 @@
 # Configuration Reference
 
-NasTv configuration will be layered through `figment` or an equivalent
+ErsatzRS configuration will be layered through `figment` or an equivalent
 structured configuration crate.
 
 ## Layer Order
@@ -14,14 +14,14 @@ Later layers override earlier layers:
 
 ## Environment Prefix
 
-Use the `NASTV_` prefix for environment variables.
+Use the `ErsatzRS_` prefix for environment variables.
 
 Examples:
 
 ```text
-NASTV_DATABASE__URL=sqlite://nastv.db
-NASTV_HTTP__BIND=0.0.0.0:8080
-NASTV_FFMPEG__PATH=/usr/local/bin/ffmpeg
+ErsatzRS_DATABASE__URL=sqlite://ErsatzRS.db
+ErsatzRS_HTTP__BIND=0.0.0.0:8080
+ErsatzRS_FFMPEG__PATH=/usr/local/bin/ffmpeg
 ```
 
 ## Secrets

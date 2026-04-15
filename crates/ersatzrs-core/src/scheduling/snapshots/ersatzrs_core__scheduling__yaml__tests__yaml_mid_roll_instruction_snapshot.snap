@@ -1,0 +1,31 @@
+---
+source: crates/ersatzrs-core/src/scheduling/yaml.rs
+assertion_line: 1040
+expression: "snapshot(r#\"\nsequence:\n  - key: bumper\n    items:\n      - count: \"1\"\n        content: bumpers\nplayout:\n  - mid_roll: true\n    sequence: bumper\n  - count: \"1\"\n    content: main\n\"#)"
+---
+{
+  "anchor": "2026-04-15T10:18:00+00:00",
+  "gaps": [],
+  "items": [
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:17:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 1,
+      "start": "2026-04-15T10:07:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "MidRoll",
+      "finish": "2026-04-15T10:18:00+00:00",
+      "graphics": [],
+      "guide_group": 3,
+      "media": 9,
+      "start": "2026-04-15T10:17:00+00:00",
+      "title": null,
+      "watermarks": []
+    }
+  ]
+}

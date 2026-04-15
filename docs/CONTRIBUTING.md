@@ -24,7 +24,7 @@ code and commit messages.
 
 ## Rustdoc
 
-Public items in `nastv-core`, `nastv-ffmpeg`, and `nastv-app` need rustdoc.
+Public items in `ersatzrs-core`, `ersatzrs-ffmpeg`, and `ersatzrs-app` need rustdoc.
 Examples are expected when an API is stable enough to demonstrate safely.
 
 ## Links

@@ -1,6 +1,6 @@
 # Governance
 
-NasTv starts as a single-maintainer project and is designed to become a public
+ErsatzRS starts as a single-maintainer project and is designed to become a public
 open-source project over time.
 
 ## Decision Model
@@ -24,7 +24,7 @@ lacks tests for risky behavior, or bypasses an ADR requirement.
 
 ## Scope Changes
 
-NasTv targets long-term feature parity with ErsatzTV. New behavior that is not
+ErsatzRS targets long-term feature parity with ErsatzTV. New behavior that is not
 parity work should be marked as one of:
 
 - A deliberate divergence documented in an ADR.

@@ -1,6 +1,6 @@
 ---
 name: new-crate
-description: Scaffold a new NasTv workspace crate according to the architecture contract. Use when adding crates under crates/ and wiring them into the Cargo workspace.
+description: Scaffold a new ErsatzRS workspace crate according to the architecture contract. Use when adding crates under crates/ and wiring them into the Cargo workspace.
 ---
 
 # New Crate
@@ -22,5 +22,5 @@ Use this only after the root Cargo workspace exists.
 ## Constraints
 
 - Do not create dependency cycles.
-- Do not put infrastructure concerns in `nastv-core`.
-- Do not put domain types outside `nastv-domain` without a clear reason.
+- Do not put infrastructure concerns in `ErsatzRS-core`.
+- Do not put domain types outside `ErsatzRS-domain` without a clear reason.

@@ -59,21 +59,23 @@ for commit messages.
 - FFmpeg 8.1 runtime version detection and test coverage.
 - Minimal `axum` + Leptos SSR web host with `/healthz`.
 - SQLite startup bootstrap with sqlx migrations.
-- Multi-stage Docker image with FFmpeg 8.1 and the `nastv-web` binary.
+- Multi-stage Docker image with FFmpeg 8.1 and the `ersatzrs-web` binary.
 - Initial documentation contracts for long-term solo development and future
   public open-source collaboration.
 - Diataxis documentation structure.
 - ADR process and initial architecture decisions.
 - Porting contract for translating ErsatzTV behavior into Rust.
 - GitHub issue, pull request, CI, release, and dependency-update scaffolding.
-- Repo-local Claude skills for recurring NasTv workflows.
+- Repo-local Claude skills for recurring ErsatzRS workflows.
 - Rust-oriented `.gitignore`.
 - Project license.
 
 ### Changed
 
-- FFmpeg 8.1 runtime detection now lives in `nastv-ffmpeg` and is reused by
-  `nastv-web`.
+- Project branding, workspace crates, binaries, Docker wiring, docs, and
+  snapshots were renamed from NasTv/`nastv-*` to ErsatzRS/`ersatzrs-*`.
+- FFmpeg 8.1 runtime detection now lives in `ersatzrs-ffmpeg` and is reused by
+  `ersatzrs-web`.
 - Phase 1 persistence now uses an expanded normalized SQLite schema derived
   from the final ErsatzTV model instead of the earlier hybrid JSON/scalar
   mapping, and the active infra repositories now map scalar columns and join
@@ -98,4 +100,4 @@ for commit messages.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/nastv
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS

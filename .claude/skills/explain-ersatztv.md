@@ -12,8 +12,8 @@ This is a read-only workflow.
 1. Read the requested source file or directory under `/home/bart/ErsatzTV/`.
 2. Identify public types, methods, dependencies, and collaborators.
 3. Explain where the code sits in ErsatzTV's architecture.
-4. Call out behavior that matters for NasTv parity.
-5. Link to relevant NasTv contracts when useful.
+4. Call out behavior that matters for ErsatzRS parity.
+5. Link to relevant ErsatzRS contracts when useful.
 
 ## Output
 
@@ -23,4 +23,4 @@ Keep the explanation practical:
 - What it depends on.
 - What depends on it.
 - Key invariants or edge cases.
-- Porting notes for NasTv.
+- Porting notes for ErsatzRS.

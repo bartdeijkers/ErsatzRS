@@ -6,18 +6,18 @@ Accepted
 
 ## Context
 
-ErsatzTV has hundreds of Entity Framework migrations. NasTv starts from an empty
+ErsatzTV has hundreds of Entity Framework migrations. ErsatzRS starts from an empty
 Rust project and does not need to replay historic .NET schema evolution.
 
 ## Decision
 
 Create one initial sqlx schema derived from the final ErsatzTV model, then add
-normal NasTv migrations from that point forward.
+normal ErsatzRS migrations from that point forward.
 
 ## Consequences
 
 The initial migration is larger, but the migration history is understandable and
-starts from the intended NasTv baseline.
+starts from the intended ErsatzRS baseline.
 
 ## Alternatives Considered
 

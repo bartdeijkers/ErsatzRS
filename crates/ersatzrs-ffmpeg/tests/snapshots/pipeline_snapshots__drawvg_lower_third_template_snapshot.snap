@@ -1,0 +1,9 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: template.render(&variables)
+---
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 270">
+  <rect x="0" y="0" width="1920" height="270" fill="black" fill-opacity="0.58"/>
+  <text x="120" y="116" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="700" fill="white">Big Buck Bunny</text>
+  <text x="120" y="188" font-family="Inter, Arial, sans-serif" font-size="36" fill="#d6d6d6">Now Playing</text>
+</svg>

@@ -1,6 +1,6 @@
 # Support
 
-NasTv is pre-alpha and does not have user support guarantees yet.
+ErsatzRS is pre-alpha and does not have user support guarantees yet.
 
 Use these channels once the public repository is active:
 
@@ -13,7 +13,7 @@ Do not use security reporting channels for general help. Use
 
 When asking for help, include:
 
-- NasTv version or commit.
+- ErsatzRS version or commit.
 - FFmpeg version.
 - Operating system and deployment method.
 - Relevant configuration with secrets removed.

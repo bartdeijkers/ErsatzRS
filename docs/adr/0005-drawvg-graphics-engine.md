@@ -12,7 +12,7 @@ directly inside the filter graph.
 
 ## Decision
 
-Use FFmpeg 8.1 `drawvg` with SVG templates in `assets/` as the NasTv graphics
+Use FFmpeg 8.1 `drawvg` with SVG templates in `assets/` as the ErsatzRS graphics
 engine. Do not reintroduce an external graphics process.
 
 ## Consequences

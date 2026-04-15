@@ -1,11 +1,11 @@
 # Releasing
 
-NasTv has no releases yet. This policy applies once release automation is
+ErsatzRS has no releases yet. This policy applies once release automation is
 enabled.
 
 ## Versioning
 
-Before `1.0.0`, NasTv uses semver with this convention:
+Before `1.0.0`, ErsatzRS uses semver with this convention:
 
 - Breaking changes increment the minor version.
 - Compatible features increment the minor version.

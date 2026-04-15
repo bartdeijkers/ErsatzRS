@@ -1,6 +1,6 @@
 # Code Style
 
-This file defines the Rust style contract for NasTv. It is intentionally stricter
+This file defines the Rust style contract for ErsatzRS. It is intentionally stricter
 than the current codebase requires because most code has not been written yet.
 
 ## Baseline
@@ -13,7 +13,7 @@ than the current codebase requires because most code has not been written yet.
 
 ## Naming
 
-- Crates use `nastv-*`.
+- Crates use `ErsatzRS-*`.
 - Modules, functions, variables, and fields use `snake_case`.
 - Types, traits, and enum variants use `PascalCase`.
 - Constants use `SCREAMING_SNAKE_CASE`.
@@ -46,7 +46,7 @@ than the current codebase requires because most code has not been written yet.
 
 ## Public API Documentation
 
-Public items in `nastv-core`, `nastv-ffmpeg`, and `nastv-app` must include
+Public items in `ersatzrs-core`, `ersatzrs-ffmpeg`, and `ersatzrs-app` must include
 rustdoc. Prefer examples for stable APIs and explain invariants for builders,
 state machines, and generated FFmpeg arguments.
 

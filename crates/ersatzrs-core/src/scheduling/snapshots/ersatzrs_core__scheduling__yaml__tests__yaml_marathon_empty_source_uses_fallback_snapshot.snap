@@ -1,0 +1,21 @@
+---
+source: crates/ersatzrs-core/src/scheduling/yaml.rs
+expression: "serde_json::json!({\n    \"items\":\n    result.added_items.iter().map(|item|\n    serde_json::json!({\n        \"media\": item.media_item_id, \"start\": item.start.to_rfc3339(),\n        \"finish\": item.finish.to_rfc3339(), \"filler\":\n        format!(\"{:?}\", item.filler_kind),\n    })).collect::<Vec<_>>(), \"history\":\n    result.added_history.iter().map(|history|\n    serde_json::json!({\n        \"key\": history.key, \"index\": history.index, \"details\":\n        history.details,\n    })).collect::<Vec<_>>(),\n})"
+---
+{
+  "history": [
+    {
+      "details": "{\"MediaItemId\":900}",
+      "index": 0,
+      "key": "{\"Key\":\"fallback\",\"Order\":\"Chronological\"}"
+    }
+  ],
+  "items": [
+    {
+      "filler": "Fallback",
+      "finish": "2026-04-15T10:05:00+00:00",
+      "media": 900,
+      "start": "2026-04-15T10:00:00+00:00"
+    }
+  ]
+}

@@ -1,19 +1,19 @@
 # Architecture
 
-NasTv is a Rust workspace that ports ErsatzTV behavior while keeping crate
+ErsatzRS is a Rust workspace that ports ErsatzTV behavior while keeping crate
 boundaries explicit.
 
 ## Planned Workspace
 
 ```text
 crates/
-  nastv-domain/   entities, enums, value objects
-  nastv-core/     business logic, scheduling traits, repository traits
-  nastv-ffmpeg/   FFmpeg argument and filter-graph builders
-  nastv-infra/    sqlx repositories, migrations, provider clients
-  nastv-app/      use-case handlers
-  nastv-web/      axum + Leptos host, IPTV, HLS, HDHR, API routes
-  nastv-scanner/  scanner binary
+  ersatzrs-domain/   entities, enums, value objects
+  ersatzrs-core/     business logic, scheduling traits, repository traits
+  ersatzrs-ffmpeg/   FFmpeg argument and filter-graph builders
+  ersatzrs-infra/    sqlx repositories, migrations, provider clients
+  ersatzrs-app/      use-case handlers
+  ersatzrs-web/      axum + Leptos host, IPTV, HLS, HDHR, API routes
+  ersatzrs-scanner/  scanner binary
 migrations/       sqlx migrations
 assets/           drawvg SVG templates and related assets
 ```
@@ -21,31 +21,31 @@ assets/           drawvg SVG templates and related assets
 ## Dependency Rules
 
 ```text
-nastv-domain
-  <- nastv-core
-  <- nastv-app
-  <- nastv-web
-  <- nastv-scanner
+ersatzrs-domain
+  <- ersatzrs-core
+  <- ersatzrs-app
+  <- ersatzrs-web
+  <- ersatzrs-scanner
 
-nastv-core <- nastv-infra
-nastv-ffmpeg <- nastv-core
-nastv-ffmpeg <- nastv-web
+ersatzrs-core <- ersatzrs-infra
+ersatzrs-ffmpeg <- ersatzrs-core
+ersatzrs-ffmpeg <- ersatzrs-web
 ```
 
 Rules:
 
-- `nastv-domain` depends on no other NasTv crate.
-- `nastv-core` owns traits and business rules, not sqlx or HTTP clients.
-- `nastv-infra` implements repository and provider traits from `nastv-core`.
-- `nastv-app` coordinates use cases and depends on traits, not concrete storage.
-- `nastv-web` owns HTTP, Leptos, IPTV, HLS, and HDHomeRun endpoints.
-- `nastv-scanner` owns scanner CLI concerns.
-- `nastv-ffmpeg` owns FFmpeg argv and filter-graph construction.
+- `ersatzrs-domain` depends on no other ErsatzRS crate.
+- `ersatzrs-core` owns traits and business rules, not sqlx or HTTP clients.
+- `ersatzrs-infra` implements repository and provider traits from `ersatzrs-core`.
+- `ersatzrs-app` coordinates use cases and depends on traits, not concrete storage.
+- `ersatzrs-web` owns HTTP, Leptos, IPTV, HLS, and HDHomeRun endpoints.
+- `ersatzrs-scanner` owns scanner CLI concerns.
+- `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction.
 - Cycles are forbidden.
 
 ## Porting Rule
 
-NasTv is a port, not a greenfield redesign. Read the ErsatzTV source first,
+ErsatzRS is a port, not a greenfield redesign. Read the ErsatzTV source first,
 preserve behavior by default, and document deliberate deviations through ADRs.
 
 ## Runtime Boundaries

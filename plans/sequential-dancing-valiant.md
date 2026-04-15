@@ -1,8 +1,8 @@
-# NasTv - Rust/FFmpeg 8.1 Reimplementation of ErsatzTV
+# ErsatzRS - Rust/FFmpeg 8.1 Reimplementation of ErsatzTV
 
 ## Context
 
-NasTv is a from-scratch Rust reimplementation of
+ErsatzRS is a from-scratch Rust reimplementation of
 [ErsatzTV](/home/bart/ErsatzTV/). ErsatzTV is a .NET media server that turns
 personal media libraries from Plex, Jellyfin, Emby, and local folders into
 linear TV channels served through IPTV, HLS, and HDHomeRun-compatible endpoints.
@@ -17,13 +17,13 @@ Locked decisions:
 - UI: Leptos with SSR first and hydration only where needed.
 - FFmpeg: spawn the CLI through `tokio::process::Command`; no libav bindings.
 - Scope: long-term parity, broad foundation from the start.
-- Repository: `/home/bart/nastv`.
+- Repository: `/home/bart/ErsatzRS`.
 
 ## Tech Stack
 
 ### FFmpeg 8.1
 
-| Feature | Relevance to NasTv |
+| Feature | Relevance to ErsatzRS |
 | --- | --- |
 | `drawvg` filter | Core win: channel logos, progress bars, lower thirds, and EPG-style overlays inside the filter graph. |
 | Vulkan-accelerated scale/color conversion | Useful acceleration without tying the whole pipeline to one vendor path. |
@@ -41,17 +41,17 @@ subtitle overlay, concat/resetpts handling, tonemapping, and output muxing.
 | --- | --- | --- |
 | Web host | `axum`, `tower`, `tokio` | Server runtime and routing. |
 | Admin UI | `leptos`, `leptos_axum`, `leptos_router` | Start SSR-only; hydrate interactive islands later. |
-| CQRS handlers | Plain `async fn` handlers | Repository traits in `nastv-core`, use cases in `nastv-app`. |
+| CQRS handlers | Plain `async fn` handlers | Repository traits in `ersatzrs-core`, use cases in `ersatzrs-app`. |
 | Persistence | `sqlx` | SQLite first, MySQL later behind a feature flag. |
 | Errors | `thiserror`, `anyhow` | `thiserror` in libraries, `anyhow` at binary edges. |
 | FFmpeg process | `tokio::process::Command` | Same process model as ErsatzTV's `CliWrap` usage. |
-| FFmpeg builder | NasTv builder modules | Port structure from `ErsatzTV.FFmpeg`. |
+| FFmpeg builder | ErsatzRS builder modules | Port structure from `ErsatzTV.FFmpeg`. |
 | Lua scheduling | `mlua` | Lua 5.4 for scripted scheduling. |
 | YAML scheduling | `serde_yaml` or maintained equivalent | Per-instruction dispatch. |
 | Provider clients | `reqwest`, `serde` | Port DTOs and sync behavior from ErsatzTV infrastructure. |
 | HLS output | FFmpeg | Do not implement an HLS muxer in Rust. |
 | HDHomeRun UDP | `tokio::net::UdpSocket` | Discovery on port 65001. |
-| Scanner | `nastv-scanner` binary | Shares domain, core, and infrastructure crates. |
+| Scanner | `ersatzrs-scanner` binary | Shares domain, core, and infrastructure crates. |
 | Logging | `tracing`, `tracing-subscriber` | Structured diagnostics. |
 | Configuration | `figment` or `config` | Defaults, file, env, CLI layering. |
 | Testing | `tokio::test`, `rstest`, `insta` | Snapshot generated FFmpeg argv and timelines. |
@@ -64,32 +64,32 @@ subtitle overlay, concat/resetpts handling, tonemapping, and output muxing.
    layer or evaluate Rust UI component libraries before committing to one.
 3. SQLite and MySQL support require careful feature-gated repository design.
 4. ErsatzTV's Entity Framework migration history must not be ported one-to-one.
-   NasTv starts with a collapsed initial schema based on the final model.
+   ErsatzRS starts with a collapsed initial schema based on the final model.
 
 ## Architecture: Crate Layout
 
 ```text
-NasTv/
+ErsatzRS/
   Cargo.toml
   crates/
-    nastv-domain/   entities, enums, value objects
-    nastv-core/     business logic, scheduling engines, repository traits
-    nastv-ffmpeg/   FFmpeg command builders and pipeline builders
-    nastv-infra/    sqlx repositories, migrations, provider HTTP clients
-    nastv-app/      use-case handlers
-    nastv-web/      axum + Leptos host, API, IPTV, HLS, HDHR endpoints
-    nastv-scanner/  scanner binary
+    ersatzrs-domain/   entities, enums, value objects
+    ersatzrs-core/     business logic, scheduling engines, repository traits
+    ersatzrs-ffmpeg/   FFmpeg command builders and pipeline builders
+    ersatzrs-infra/    sqlx repositories, migrations, provider HTTP clients
+    ersatzrs-app/      use-case handlers
+    ersatzrs-web/      axum + Leptos host, API, IPTV, HLS, HDHR endpoints
+    ersatzrs-scanner/  scanner binary
   migrations/       shared sqlx migrations where practical
   assets/           SVG templates and drawvg overlay assets
 ```
 
 Binaries:
 
-- `nastv-web`: server.
-- `nastv-scanner`: media scanner.
+- `ersatzrs-web`: server.
+- `ersatzrs-scanner`: media scanner.
 
-The largest and riskiest crates are expected to be `nastv-core` and
-`nastv-ffmpeg`.
+The largest and riskiest crates are expected to be `ersatzrs-core` and
+`ersatzrs-ffmpeg`.
 
 ## Phases
 
@@ -98,7 +98,7 @@ The largest and riskiest crates are expected to be `nastv-core` and
 - Create the Cargo workspace and empty crate stubs.
 - Add `rustfmt`, clippy, cargo-deny, and GitHub Actions.
 - Add FFmpeg 8.1 runtime detection and fail fast on older versions.
-- Add a Docker image with FFmpeg 8.1 and the `nastv-web` binary.
+- Add a Docker image with FFmpeg 8.1 and the `ersatzrs-web` binary.
 - Add minimal `axum` + Leptos SSR page.
 - Add SQLite bootstrap.
 
@@ -109,8 +109,8 @@ The largest and riskiest crates are expected to be `nastv-core` and
   library, media-source, FFmpeg profile, watermark, graphics, artwork, and
   filler concepts.
 - Create the initial sqlx schema from the final `TvContext.cs` model.
-- Add repository traits in `nastv-core`.
-- Add sqlx implementations in `nastv-infra`.
+- Add repository traits in `ersatzrs-core`.
+- Add sqlx implementations in `ersatzrs-infra`.
 - Add entity-mapping tests.
 
 ### Phase 2 - FFmpeg Pipeline and drawvg Graphics
@@ -180,7 +180,7 @@ unit tests without the large downloads.
 - Add path replacement logic for local and container paths.
 - Add incremental sync where the upstream provider supports it.
 - Invoke `ffprobe` for media metadata.
-- Implement scanner behavior in `nastv-scanner`.
+- Implement scanner behavior in `ersatzrs-scanner`.
 
 ### Phase 5 - Protocol Endpoints
 
@@ -247,7 +247,7 @@ Start server-rendered and add islands hydration where the workflow requires it.
 
 - Domain entities have sqlx round-trip tests where persistence exists.
 - Migrations run idempotently on an empty database and a started database.
-- `cargo test -p nastv-domain -p nastv-infra` passes.
+- `cargo test -p ersatzrs-domain -p ersatzrs-infra` passes.
 
 ### Phase 2
 
@@ -282,13 +282,13 @@ Start server-rendered and add islands hydration where the workflow requires it.
 
 ### Phase 7
 
-- Side-by-side benchmarks compare NasTv and ErsatzTV on the same channel config.
+- Side-by-side benchmarks compare ErsatzRS and ErsatzTV on the same channel config.
 - A 24-hour single-channel soak test runs without crash or memory leak.
 
 ## References
 
 - ErsatzTV source tree: `/home/bart/ErsatzTV/`.
 - HDHomeRun notes: `/home/bart/ErsatzTV/hdhr.md`.
-- NasTv contracts: [../CONTRIBUTING.md](../CONTRIBUTING.md),
+- ErsatzRS contracts: [../CONTRIBUTING.md](../CONTRIBUTING.md),
   [../STYLE.md](../STYLE.md), [../ARCHITECTURE.md](../ARCHITECTURE.md), and
   [../PORTING.md](../PORTING.md).

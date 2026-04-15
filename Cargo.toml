@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/nastv-domain",
-    "crates/nastv-core",
-    "crates/nastv-ffmpeg",
-    "crates/nastv-infra",
-    "crates/nastv-app",
-    "crates/nastv-web",
-    "crates/nastv-scanner",
+    "crates/ersatzrs-domain",
+    "crates/ersatzrs-core",
+    "crates/ersatzrs-ffmpeg",
+    "crates/ersatzrs-infra",
+    "crates/ersatzrs-app",
+    "crates/ersatzrs-web",
+    "crates/ersatzrs-scanner",
 ]
 
 [workspace.lints.rust]
@@ -23,7 +23,7 @@ edition = "2021"
 rust-version = "1.85"
 authors = ["Bart Deijkers <bartdeijkers@gmail.com>"]
 license = "GPL-3.0-or-later"
-repository = "https://github.com/bart/nastv"
+repository = "https://github.com/bart/ErsatzRS"
 
 [profile.release]
 opt-level = 3

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-NasTv needs SQLite first and MySQL later. The project also wants explicit SQL
+ErsatzRS needs SQLite first and MySQL later. The project also wants explicit SQL
 and predictable migrations instead of an ORM model port.
 
 ## Decision
@@ -21,7 +21,7 @@ from database details.
 
 ## Alternatives Considered
 
-- SeaORM: rejected because NasTv prefers explicit SQL and compile-time query
+- SeaORM: rejected because ErsatzRS prefers explicit SQL and compile-time query
   checking where practical.
 - Diesel: rejected because async support and the planned multi-backend model are
   less aligned with the rest of the stack.

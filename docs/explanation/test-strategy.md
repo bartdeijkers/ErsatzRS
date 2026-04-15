@@ -1,6 +1,6 @@
 # Test Strategy
 
-NasTv relies on a layered test strategy because the highest-risk behavior is not
+ErsatzRS relies on a layered test strategy because the highest-risk behavior is not
 only pure Rust logic. Generated FFmpeg arguments, filter graphs, scheduling
 timelines, migrations, and protocol output are all project contracts.
 

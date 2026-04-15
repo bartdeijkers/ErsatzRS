@@ -16,13 +16,13 @@ COPY . .
 # SQLX_OFFLINE=true skips the live database check during compilation.
 # A checked-in .sqlx/ directory with query metadata must exist; it is
 # produced by running `cargo sqlx prepare --workspace` locally.
-RUN SQLX_OFFLINE=true cargo build --release -p nastv-web
+RUN SQLX_OFFLINE=true cargo build --release -p ersatzrs-web
 
 # ─── Stage 2: FFmpeg static binary source ────────────────────────────────────
 # mwader/static-ffmpeg ships a statically-linked ffmpeg/ffprobe built from
 # the FFmpeg master branch. The "latest" tag tracks the most recent release.
 #
-# NOTE: nastv-web checks the detected FFmpeg version at startup and refuses
+# NOTE: ersatzrs-web checks the detected FFmpeg version at startup and refuses
 # to start if it is older than 8.1 (required for the `drawvg` filter).
 # Verify the exact version shipped by `mwader/static-ffmpeg:latest` before
 # deploying to production. If a specific 8.x tag is available (e.g. :8.1)
@@ -42,27 +42,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ffmpeg-src /ffmpeg  /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-src /ffprobe /usr/local/bin/ffprobe
 
-# Copy the nastv-web server binary
-COPY --from=builder /workspace/target/release/nastv-web /usr/local/bin/nastv-web
+# Copy the ersatzrs-web server binary
+COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 
 # Run as a dedicated non-root service account
-RUN useradd -r -s /bin/false nastv
+RUN useradd -r -s /bin/false ersatzrs
 
 # Persistent data directory (SQLite database, channel config, etc.)
 VOLUME ["/data"]
 WORKDIR /data
 
 # Default database location; override with -e DATABASE_URL=... at runtime
-ENV DATABASE_URL=sqlite:///data/nastv.db
+ENV DATABASE_URL=sqlite:///data/ErsatzRS.db
 
 # HTTP port exposed by the axum server
 EXPOSE 8080
 
 # Liveness probe: TCP connect to port 8080 via bash /dev/tcp (no extra tools needed).
-# TODO: replace with a purpose-built nastv-healthcheck binary in a later phase.
+# TODO: replace with a purpose-built ersatzrs-healthcheck binary in a later phase.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD bash -c '</dev/tcp/localhost/8080' || exit 1
 
-USER nastv
+USER ersatzrs
 
-ENTRYPOINT ["/usr/local/bin/nastv-web"]
+ENTRYPOINT ["/usr/local/bin/ersatzrs-web"]
