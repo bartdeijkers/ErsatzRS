@@ -1,0 +1,4 @@
+[package]
+name = "nastv-ffmpeg"
+version.workspace = true
+edition.workspace = true

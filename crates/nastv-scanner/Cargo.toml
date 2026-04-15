@@ -1,0 +1,4 @@
+[package]
+name = "nastv-scanner"
+version.workspace = true
+edition.workspace = true

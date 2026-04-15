@@ -1,0 +1,4 @@
+[package]
+name = "nastv-infra"
+version.workspace = true
+edition.workspace = true

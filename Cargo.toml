@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/nastv-domain",
+    "crates/nastv-core",
+    "crates/nastv-ffmpeg",
+    "crates/nastv-infra",
+    "crates/nastv-app",
+    "crates/nastv-web",
+    "crates/nastv-scanner",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Bart Deijkers <bartdeijkers@gmail.com>"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/bart/nastv"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

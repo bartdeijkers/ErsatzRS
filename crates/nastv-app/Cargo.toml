@@ -1,0 +1,4 @@
+[package]
+name = "nastv-app"
+version.workspace = true
+edition.workspace = true

@@ -1,0 +1,4 @@
+[package]
+name = "nastv-domain"
+version.workspace = true
+edition.workspace = true
