@@ -49,11 +49,11 @@ What remains before Phase 3 can be considered end-to-end complete:
    add a real index/analyzer when needed, cover language/subtitle/codec/dimensions
    and other Lucene fields, add director/writer joins when the schema represents
    them, and broaden provider-specific metadata edge cases.
-2. Continue block scheduling parity beyond the current core slice: wire
-   SQL-backed template/deco/block item loading into the effective-template
-   structures, complete alternate/deco-template selection, broaden change
-   detection removal/update handling, and compare collection etags with the
-   persisted playout item rows.
+2. Continue block scheduling parity beyond the current SQL-backed reference-data
+   slice: add real block/template/playout-template updated timestamps to the
+   schema, complete alternate/deco-template selection, persist and load default
+   filler/deco-template fields, and broaden change-detection removal/update
+   handling beyond collection-etag comparison against persisted playout rows.
 3. Complete YAML parity for remaining exact handler semantics (SQL-backed
    playlist item resolution, expression evaluation, imports, shuffle-groups,
    and batch/count playlist child enumeration now have focused coverage).
@@ -98,3 +98,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Committed the project rename from NasTv/`nastv-*` to ErsatzRS/`ersatzrs-*`, including crate directories, package names, docs, Docker references, and snapshot names. |
 | 2026-04-15 | Codex | Added a Diataxis reference glossary and linked it from the documentation index. |
 | 2026-04-15 | Codex | Continued Phase 3 block scheduling parity with core effective-template derivation structs, block keys, collection etags, guide windows, change-detection scaffolding, deco block-start/default filler behavior, and focused snapshots. |
+| 2026-04-15 | Codex | Wired block scheduling reference-data preparation to SQLite for playout templates, blocks, block items, deco break content, existing playout items/history, and collection-etag comparison coverage. |

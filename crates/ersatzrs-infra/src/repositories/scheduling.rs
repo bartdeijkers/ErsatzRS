@@ -1,18 +1,25 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_core::scheduling::{
-    SchedulingCollectionKey, SchedulingContentRepository, SchedulingContentSource,
-    SchedulingMediaItem, SchedulingPlaylistItem,
+    BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
+    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, SchedulingCollectionKey,
+    SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
+    SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
-use ersatzrs_domain::{CollectionType, EntityId};
+use ersatzrs_domain::{
+    ChannelSubtitleMode, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
+};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, decode_message};
+use super::common::{
+    decode_datetime, decode_duration, decode_enum, decode_message, decode_optional_datetime,
+    load_ids,
+};
 
 #[derive(Clone)]
 pub struct SqliteSchedulingContentRepository(pub Pool<Sqlite>);
@@ -43,6 +50,39 @@ impl SchedulingContentRepository for SqliteSchedulingContentRepository {
 }
 
 impl SqliteSchedulingContentRepository {
+    /// Prepare SQL-backed reference data for block scheduling.
+    ///
+    /// Business rules stay in `ersatzrs-core`: this method only hydrates the
+    /// template/block/deco rows, collection media items, existing playout rows,
+    /// and history rows needed by the block engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a `SQLite` query fails or a persisted enum/date
+    /// value cannot be decoded.
+    pub async fn block_reference_data(
+        &self,
+        playout_id: EntityId,
+        start: DateTime<Utc>,
+        days_to_build: i64,
+        max_playout_offset: Duration,
+    ) -> Result<SchedulingReferenceData> {
+        let mut media_by_key = BTreeMap::new();
+        let schedules = self
+            .block_template_schedules(playout_id, &mut media_by_key)
+            .await?;
+        let effective_blocks = EffectiveBlock::from_templates(&schedules, start, days_to_build);
+
+        Ok(SchedulingReferenceData {
+            media_by_key,
+            effective_blocks,
+            existing_items: self.playout_items(playout_id).await?,
+            existing_history: self.playout_history(playout_id).await?,
+            max_playout_offset,
+            ..SchedulingReferenceData::default()
+        })
+    }
+
     /// Resolve playable media items for a scheduling content source.
     ///
     /// # Errors
@@ -848,6 +888,330 @@ impl SqliteSchedulingContentRepository {
 
         row.map(|row| map_scheduling_media_item(&row)).transpose()
     }
+
+    async fn block_template_schedules(
+        &self,
+        playout_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<Vec<BlockTemplateSchedule>> {
+        let template_ids = sqlx::query_scalar::<_, EntityId>(
+            "SELECT template_id
+             FROM playout_templates
+             WHERE playout_id = ?
+             ORDER BY template_id",
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let deco = self
+            .effective_deco_for_playout(playout_id, media_by_key)
+            .await?;
+        let mut schedules = Vec::with_capacity(template_ids.len());
+        for template_id in template_ids {
+            let template = self.block_template(template_id).await?;
+            let mut blocks = BTreeMap::new();
+            for item in &template.items {
+                if let std::collections::btree_map::Entry::Vacant(entry) =
+                    blocks.entry(item.block_id)
+                {
+                    entry.insert(self.block_definition(item.block_id, media_by_key).await?);
+                }
+            }
+
+            schedules.push(BlockTemplateSchedule {
+                id: template_id,
+                updated_ticks: 0,
+                start: None,
+                finish: None,
+                template,
+                blocks,
+                deco: deco.clone(),
+            });
+        }
+
+        Ok(schedules)
+    }
+
+    async fn block_template(&self, template_id: EntityId) -> Result<BlockTemplate> {
+        let rows = sqlx::query(
+            "SELECT id, block_id, sort_order
+             FROM template_items
+             WHERE template_id = ?
+             ORDER BY sort_order, id",
+        )
+        .bind(template_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let items = rows
+            .iter()
+            .map(|row| {
+                Ok(BlockTemplateItem {
+                    id: row.try_get("id")?,
+                    block_id: row.try_get("block_id")?,
+                    start_time: None,
+                    sort_order: row.try_get("sort_order")?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(BlockTemplate {
+            id: template_id,
+            updated_ticks: 0,
+            items,
+        })
+    }
+
+    async fn block_definition(
+        &self,
+        block_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<BlockDefinition> {
+        let row = sqlx::query(
+            "SELECT id, name, duration_ms, stop_scheduling
+             FROM blocks
+             WHERE id = ?",
+        )
+        .bind(block_id)
+        .fetch_one(&self.0)
+        .await?;
+
+        Ok(BlockDefinition {
+            id: row.try_get("id")?,
+            updated_ticks: 0,
+            name: row.try_get("name")?,
+            duration: decode_duration(row.try_get("duration_ms")?),
+            stop_scheduling: decode_enum(
+                "block stop_scheduling",
+                &row.try_get::<String, _>("stop_scheduling")?,
+            )?,
+            items: self.effective_block_items(block_id, media_by_key).await?,
+        })
+    }
+
+    async fn effective_block_items(
+        &self,
+        block_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<Vec<EffectiveBlockItem>> {
+        let rows = sqlx::query(
+            "SELECT *
+             FROM block_items
+             WHERE block_id = ?
+             ORDER BY sort_order, id",
+        )
+        .bind(block_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.try_get::<EntityId, _>("id")?;
+            let content = block_item_content_key(id);
+            media_by_key.insert(
+                content.clone(),
+                Box::pin(self.items_for_collection_key_row(&row, 0)).await?,
+            );
+            items.push(EffectiveBlockItem {
+                id,
+                block_id,
+                content,
+                collection_key: collection_key_from_row(&row)?,
+                playback_order: decode_enum(
+                    "block item playback_order",
+                    &row.try_get::<String, _>("playback_order")?,
+                )?,
+                include_in_program_guide: true,
+                disable_watermarks: false,
+                watermark_ids: load_ids(
+                    &self.0,
+                    "SELECT watermark_id
+                     FROM block_item_watermarks
+                     WHERE block_item_id = ?
+                     ORDER BY watermark_id",
+                    id,
+                )
+                .await?,
+                graphics_element_ids: load_ids(
+                    &self.0,
+                    "SELECT graphics_element_id
+                     FROM block_item_graphics_elements
+                     WHERE block_item_id = ?
+                     ORDER BY graphics_element_id",
+                    id,
+                )
+                .await?,
+            });
+        }
+
+        Ok(items)
+    }
+
+    async fn effective_deco_for_playout(
+        &self,
+        playout_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<Option<EffectiveDeco>> {
+        let deco_id = sqlx::query_scalar::<_, EntityId>(
+            "SELECT deco_id FROM playouts WHERE id = ? AND deco_id IS NOT NULL",
+        )
+        .bind(playout_id)
+        .fetch_optional(&self.0)
+        .await?;
+
+        let Some(deco_id) = deco_id else {
+            return Ok(None);
+        };
+
+        self.effective_deco(deco_id, media_by_key).await
+    }
+
+    async fn effective_deco(
+        &self,
+        deco_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<Option<EffectiveDeco>> {
+        let mode = sqlx::query_scalar::<_, String>("SELECT mode FROM decos WHERE id = ?")
+            .bind(deco_id)
+            .fetch_one(&self.0)
+            .await?;
+        let mode: DecoMode = decode_enum("deco mode", &mode)?;
+        if mode == DecoMode::Disable {
+            return Ok(None);
+        }
+
+        let rows = sqlx::query(
+            "SELECT *
+             FROM deco_break_contents
+             WHERE deco_id = ?
+             ORDER BY id",
+        )
+        .bind(deco_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let mut break_content = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.try_get::<EntityId, _>("id")?;
+            let content = deco_break_content_key(id);
+            media_by_key.insert(
+                content.clone(),
+                self.items_for_deco_break_content_row(&row).await?,
+            );
+            break_content.push(EffectiveBreakContent {
+                id,
+                placement: decode_enum(
+                    "deco break placement",
+                    &row.try_get::<String, _>("placement")?,
+                )?,
+                content,
+                collection_key: collection_key_from_deco_break_content_row(&row)?,
+            });
+        }
+
+        Ok(Some(EffectiveDeco {
+            id: deco_id,
+            default_filler_content: None,
+            default_filler_collection_key: None,
+            default_filler_trim_to_fit: false,
+            break_content,
+        }))
+    }
+
+    async fn items_for_deco_break_content_row(
+        &self,
+        row: &SqliteRow,
+    ) -> Result<Vec<SchedulingMediaItem>> {
+        let collection_type: CollectionType = decode_enum(
+            "deco break content collection type",
+            &row.try_get::<String, _>("collection_type")?,
+        )?;
+
+        match collection_type {
+            CollectionType::Collection => match optional_id(row, "collection_id")? {
+                Some(id) => self.items_for_collection_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::Playlist => match optional_id(row, "playlist_id")? {
+                Some(id) => Box::pin(self.playlist_media_items_by_id(id)).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::Movie
+            | CollectionType::Episode
+            | CollectionType::MusicVideo
+            | CollectionType::OtherVideo
+            | CollectionType::Song
+            | CollectionType::Image
+            | CollectionType::RemoteStream
+            | CollectionType::TelevisionShow
+            | CollectionType::TelevisionSeason
+            | CollectionType::Artist => match optional_id(row, "media_item_id")? {
+                Some(id) => self.expand_media_ids(vec![id], 0).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::MultiCollection
+            | CollectionType::SmartCollection
+            | CollectionType::RerunFirstRun
+            | CollectionType::RerunRerun
+            | CollectionType::SearchQuery
+            | CollectionType::FakeCollection
+            | CollectionType::FakePlaylistItem => Ok(Vec::new()),
+        }
+    }
+
+    async fn playout_items(&self, playout_id: EntityId) -> Result<Vec<PlayoutItem>> {
+        let rows = sqlx::query(
+            "SELECT *
+             FROM playout_items
+             WHERE playout_id = ?
+             ORDER BY start, id",
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.try_get::<EntityId, _>("id")?;
+            let mut item = map_playout_item(&row)?;
+            item.watermark_ids = load_ids(
+                &self.0,
+                "SELECT watermark_id
+                 FROM playout_item_watermarks
+                 WHERE playout_item_id = ?
+                 ORDER BY watermark_id",
+                id,
+            )
+            .await?;
+            item.graphics_element_ids = load_ids(
+                &self.0,
+                "SELECT graphics_element_id
+                 FROM playout_item_graphics_elements
+                 WHERE playout_item_id = ?
+                 ORDER BY graphics_element_id",
+                id,
+            )
+            .await?;
+            items.push(item);
+        }
+
+        Ok(items)
+    }
+
+    async fn playout_history(&self, playout_id: EntityId) -> Result<Vec<PlayoutHistory>> {
+        let rows = sqlx::query(
+            "SELECT *
+             FROM playout_history
+             WHERE playout_id = ?
+             ORDER BY history_when, id",
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter().map(map_playout_history).collect()
+    }
 }
 
 const SEARCH_DOCUMENT_SQL: &str = "
@@ -1038,6 +1402,19 @@ fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     })
 }
 
+fn collection_key_from_deco_break_content_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
+    Ok(SchedulingCollectionKey {
+        collection_type: decode_enum(
+            "deco break content collection type",
+            &row.try_get::<String, _>("collection_type")?,
+        )?,
+        collection_id: optional_id(row, "collection_id")?,
+        media_item_id: optional_id(row, "media_item_id")?,
+        playlist_id: optional_id(row, "playlist_id")?,
+        ..SchedulingCollectionKey::default()
+    })
+}
+
 fn optional_id(row: &SqliteRow, column: &str) -> Result<Option<EntityId>> {
     row.try_get::<Option<EntityId>, _>(column)
         .map_err(Into::into)
@@ -1057,6 +1434,73 @@ fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
             .map(|value| parse_datetime("media item release_date", &value))
             .transpose()?,
     })
+}
+
+fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
+    Ok(PlayoutItem {
+        id: row.try_get("id")?,
+        media_item_id: row.try_get("media_item_id")?,
+        start: decode_datetime("playout item start", &row.try_get::<String, _>("start")?)?,
+        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("finish")?)?,
+        guide_start: decode_optional_datetime(
+            "playout item guide_start",
+            row.try_get("guide_start")?,
+        )?,
+        guide_finish: decode_optional_datetime(
+            "playout item guide_finish",
+            row.try_get("guide_finish")?,
+        )?,
+        custom_title: row.try_get("custom_title")?,
+        guide_group: row.try_get("guide_group")?,
+        filler_kind: decode_enum(
+            "playout item filler_kind",
+            &row.try_get::<String, _>("filler_kind")?,
+        )?,
+        playout_id: row.try_get("playout_id")?,
+        in_point: decode_duration(row.try_get("in_point_ms")?),
+        out_point: decode_duration(row.try_get("out_point_ms")?),
+        chapter_title: row.try_get("chapter_title")?,
+        watermark_ids: Vec::new(),
+        disable_watermarks: row.try_get("disable_watermarks")?,
+        preferred_audio_language_code: row.try_get("preferred_audio_language_code")?,
+        preferred_audio_title: row.try_get("preferred_audio_title")?,
+        preferred_subtitle_language_code: row.try_get("preferred_subtitle_language_code")?,
+        subtitle_mode: row
+            .try_get::<Option<String>, _>("subtitle_mode")?
+            .as_deref()
+            .map(|value| decode_enum::<ChannelSubtitleMode>("playout item subtitle_mode", value))
+            .transpose()?,
+        block_key: row.try_get("block_key")?,
+        collection_key: row.try_get("collection_key")?,
+        collection_etag: row.try_get("collection_etag")?,
+        graphics_element_ids: Vec::new(),
+        scheduling_context: row.try_get("scheduling_context")?,
+    })
+}
+
+fn map_playout_history(row: &SqliteRow) -> Result<PlayoutHistory> {
+    Ok(PlayoutHistory {
+        id: row.try_get("id")?,
+        playout_id: row.try_get("playout_id")?,
+        key: row.try_get("history_key")?,
+        child_key: row.try_get("child_key")?,
+        when: decode_datetime(
+            "playout history history_when",
+            &row.try_get::<String, _>("history_when")?,
+        )?,
+        finish: decode_optional_datetime("playout history finish", row.try_get("finish")?)?,
+        index: row.try_get("history_index")?,
+        details: row.try_get("details")?,
+        is_current_child: row.try_get("is_current_child")?,
+    })
+}
+
+fn block_item_content_key(id: EntityId) -> String {
+    format!("block-item:{id}")
+}
+
+fn deco_break_content_key(id: EntityId) -> String {
+    format!("deco-break-content:{id}")
 }
 
 fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {

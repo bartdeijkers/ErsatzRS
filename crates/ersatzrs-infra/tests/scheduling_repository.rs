@@ -1,7 +1,11 @@
 mod common;
 
-use ersatzrs_core::scheduling::{SchedulingContentGuid, SchedulingContentSource};
-use ersatzrs_domain::{CollectionType, PlaybackOrder};
+use chrono::{Duration, TimeZone, Utc};
+use ersatzrs_core::scheduling::{
+    BlockSchedulingEngine, PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
+    SchedulingContentSource, SchedulingRequest,
+};
+use ersatzrs_domain::{CollectionType, PlaybackOrder, Playout};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
 
@@ -243,6 +247,124 @@ async fn scheduling_repository_smart_collection_uses_fielded_search_query() {
     );
 }
 
+#[tokio::test]
+async fn scheduling_repository_loads_block_reference_data_from_sql() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 900).await;
+    seed_block_scheduling_fixture(&pool).await;
+
+    let reference_data = repos
+        .scheduling
+        .block_reference_data(
+            900,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            1,
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(reference_data.effective_blocks.len(), 2);
+    let block = &reference_data.effective_blocks[0];
+    assert_eq!(block.block_id, 700);
+    assert_eq!(block.template_item_id, 801);
+    assert_eq!(
+        block.start,
+        Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap()
+    );
+    assert_eq!(block.items.len(), 1);
+    assert_eq!(block.items[0].content, "block-item:701");
+    assert_eq!(block.items[0].watermark_ids, vec![501]);
+    assert_eq!(block.items[0].graphics_element_ids, vec![601]);
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get("block-item:701")
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
+    );
+
+    let deco = block.deco.as_ref().unwrap();
+    assert_eq!(deco.id, 750);
+    assert_eq!(deco.break_content.len(), 1);
+    assert_eq!(deco.break_content[0].content, "deco-break-content:751");
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get("deco-break-content:751")
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20, 21]
+    );
+
+    assert_eq!(reference_data.existing_items.len(), 1);
+    assert_eq!(reference_data.existing_items[0].id, 9901);
+    assert_eq!(
+        reference_data.existing_items[0].block_key.as_deref(),
+        Some(sql_block_key().as_str())
+    );
+    assert_eq!(reference_data.existing_history.len(), 1);
+    assert_eq!(
+        reference_data.existing_history[0].key,
+        "persisted-block-history"
+    );
+}
+
+#[tokio::test]
+async fn sql_block_reference_data_feeds_block_change_detection() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 900).await;
+    seed_block_scheduling_fixture(&pool).await;
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let reference_data = repos
+        .scheduling
+        .block_reference_data(900, start, 1, Duration::hours(1))
+        .await
+        .unwrap();
+
+    let result = BlockSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 900,
+                seed: 123,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(2),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>(),
+        vec![12, 21]
+    );
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .filter_map(|item| item.collection_etag.as_deref())
+            .collect::<Vec<_>>()
+            .len(),
+        1
+    );
+}
+
 async fn seed_scheduling_fixture(pool: &SqlitePool) {
     seed_media_fixture(pool).await;
     seed_collection_fixture(pool).await;
@@ -468,6 +590,113 @@ async fn seed_overlay_fixture(pool: &SqlitePool) {
     )
     .await
     .unwrap();
+}
+
+async fn seed_block_scheduling_fixture(pool: &SqlitePool) {
+    pool.execute("INSERT INTO decos (id, name, mode) VALUES (750, 'default deco', 'Inherit')")
+        .await
+        .unwrap();
+    pool.execute(
+        "INSERT INTO deco_break_contents (
+            id, deco_id, placement, collection_type, playlist_id
+         ) VALUES (751, 750, 'BlockStart', 'Playlist', 4)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO playouts (
+            id, channel_id, schedule_kind, seed, deco_id
+         ) VALUES (900, 900, 'Block', 123, 750)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO blocks (id, name, duration_ms, stop_scheduling)
+         VALUES (700, 'Morning', 3600000, 'BeforeDurationEnd')",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO block_items (
+            id, block_id, collection_type, collection_id, playback_order, sort_order
+         ) VALUES (701, 700, 'Collection', 1, 'Chronological', 0)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO block_item_watermarks (block_item_id, watermark_id) VALUES (701, 501)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO block_item_graphics_elements (block_item_id, graphics_element_id)
+         VALUES (701, 601)",
+    )
+    .await
+    .unwrap();
+    pool.execute("INSERT INTO templates (id, name) VALUES (800, 'weekday')")
+        .await
+        .unwrap();
+    pool.execute(
+        "INSERT INTO template_items (id, template_id, block_id, sort_order)
+         VALUES (801, 800, 700, 480)",
+    )
+    .await
+    .unwrap();
+    pool.execute("INSERT INTO playout_templates (playout_id, template_id) VALUES (900, 800)")
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO playout_items (
+            id, playout_id, media_item_id, start, finish, guide_start, guide_finish,
+            guide_group, filler_kind, in_point_ms, out_point_ms, disable_watermarks,
+            block_key, collection_key, collection_etag
+         ) VALUES (
+            9901, 900, 12, ?, ?, ?, ?, 801, 'None', 0, 1800000, 0, ?, ?, 'stale'
+         )",
+    )
+    .bind("2026-04-15T08:00:00+00:00")
+    .bind("2026-04-15T08:30:00+00:00")
+    .bind("2026-04-15T08:00:00+00:00")
+    .bind("2026-04-15T09:00:00+00:00")
+    .bind(sql_block_key())
+    .bind(sql_collection_key())
+    .execute(pool)
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO playout_history (
+            id, playout_id, history_key, history_when, finish, history_index, details,
+            is_current_child
+         ) VALUES (
+            9801, 900, 'persisted-block-history', '2026-04-15T08:00:00+00:00',
+            '2026-04-15T08:30:00+00:00', 0, '{}', 0
+         )",
+    )
+    .await
+    .unwrap();
+}
+
+fn sql_block_key() -> String {
+    serde_json::json!({
+        "b": 700,
+        "bt": 0,
+        "t": 800,
+        "tt": 0,
+        "pt": 800,
+        "ptt": 0
+    })
+    .to_string()
+}
+
+fn sql_collection_key() -> String {
+    serde_json::to_string(&SchedulingCollectionKey {
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        ..SchedulingCollectionKey::default()
+    })
+    .unwrap()
 }
 
 async fn insert_episode(
