@@ -24,6 +24,12 @@ stable.
 
 Location: [reference/](reference/)
 
+Current reference pages:
+
+- [Configuration](reference/configuration.md)
+- [Glossary](reference/glossary.md)
+- [Parity matrix](reference/parity-matrix.md)
+
 ## Explanation
 
 Explanation pages discuss background, tradeoffs, and reasons.

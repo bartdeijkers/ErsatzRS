@@ -10,6 +10,7 @@ for commit messages.
 
 ### Added
 
+- Diataxis reference glossary for project and porting vocabulary.
 - Phase 3 SQL-backed search-query parity slice for scheduling: a core-owned
   Lucene-like query parser/evaluator, SQLite search-document projection from
   normalized metadata, fielded smart collection/direct search support for
