@@ -1,0 +1,63 @@
+---
+source: crates/ersatzrs-core/src/scheduling/block.rs
+assertion_line: 884
+expression: "serde_json::json!({\n    \"blocks\":\n    blocks.iter().map(|block|\n    serde_json::json!({\n        \"id\": block.block_id, \"key\": block.block_key, \"template_item\":\n        block.template_item_id, \"start\": block.start.to_rfc3339(), \"finish\":\n        (block.start + block.duration).to_rfc3339(), \"deco\":\n        block.deco.as_ref().map(|deco| deco.id), \"include_in_guide\":\n        block.items.iter().map(|item|\n        item.include_in_program_guide).collect::<Vec<_>>(),\n    })).collect::<Vec<_>>(),\n})"
+---
+{
+  "blocks": [
+    {
+      "deco": 50,
+      "finish": "2026-04-15T08:15:00+00:00",
+      "id": 4000,
+      "include_in_guide": [
+        true
+      ],
+      "key": {
+        "b": 4000,
+        "bt": 44,
+        "pt": 1000,
+        "ptt": 11,
+        "t": 2000,
+        "tt": 22
+      },
+      "start": "2026-04-15T07:30:00+00:00",
+      "template_item": 3000
+    },
+    {
+      "deco": 50,
+      "finish": "2026-04-16T08:15:00+00:00",
+      "id": 4000,
+      "include_in_guide": [
+        true
+      ],
+      "key": {
+        "b": 4000,
+        "bt": 44,
+        "pt": 1000,
+        "ptt": 11,
+        "t": 2000,
+        "tt": 22
+      },
+      "start": "2026-04-16T07:30:00+00:00",
+      "template_item": 3000
+    },
+    {
+      "deco": 50,
+      "finish": "2026-04-17T08:15:00+00:00",
+      "id": 4000,
+      "include_in_guide": [
+        true
+      ],
+      "key": {
+        "b": 4000,
+        "bt": 44,
+        "pt": 1000,
+        "ptt": 11,
+        "t": 2000,
+        "tt": 22
+      },
+      "start": "2026-04-17T07:30:00+00:00",
+      "template_item": 3000
+    }
+  ]
+}

@@ -14,7 +14,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::repositories::Result as RepositoryResult;
 
-pub use block::{BlockSchedulingEngine, EffectiveBlock, EffectiveBlockItem};
+pub use block::{
+    BlockDefinition, BlockKey, BlockSchedulingEngine, BlockTemplate, BlockTemplateItem,
+    BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
+    EffectiveDeco,
+};
 pub use scripted::ScriptedSchedulingEngine;
 pub use yaml::{
     YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
@@ -164,7 +168,7 @@ pub trait SchedulingContentRepository: Send + Sync {
     async fn graphics_element_id_by_path(&self, path: &str) -> RepositoryResult<Option<EntityId>>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchedulingReferenceData {
     pub media_by_key: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
@@ -180,6 +184,7 @@ pub struct SchedulingReferenceData {
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
     pub graphics_ids_by_path: BTreeMap<String, EntityId>,
     pub effective_blocks: Vec<EffectiveBlock>,
+    pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
     pub max_playout_offset: Duration,
 }

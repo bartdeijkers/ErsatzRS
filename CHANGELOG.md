@@ -10,6 +10,10 @@ for commit messages.
 
 ### Added
 
+- Phase 3 block scheduling parity slice for core effective-template derivation
+  data, ErsatzTV-style block keys, collection key/etag scheduling metadata,
+  guide windows, change-detection scaffolding, deco block-start/default filler
+  behavior, and focused insta snapshots.
 - Diataxis reference glossary for project and porting vocabulary.
 - Phase 3 SQL-backed search-query parity slice for scheduling: a core-owned
   Lucene-like query parser/evaluator, SQLite search-document projection from
