@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use nastv_core::repositories::{MediaItemRepository, Result};
 use nastv_domain::{EntityId, MediaItem};
-use sqlx::{Pool, Sqlite};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{fetch_data, from_json, to_json};
+use super::common::{decode_enum, not_found};
 
 #[derive(Clone)]
 pub struct SqliteMediaItemRepository(pub Pool<Sqlite>);
@@ -11,28 +12,25 @@ pub struct SqliteMediaItemRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl MediaItemRepository for SqliteMediaItemRepository {
     async fn get_with_version(&self, id: EntityId) -> Result<MediaItem> {
-        from_json(
-            "media item",
-            id,
-            fetch_data(&self.0, "media_items", "media item", id).await?,
-        )
+        let row = sqlx::query("SELECT * FROM media_items WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("media item", id, error))?;
+        map_media_item(&row)
     }
 
     async fn list_for_library_path(&self, path_id: EntityId) -> Result<Vec<MediaItem>> {
-        let rows = sqlx::query_as::<_, (i64, String)>(
-            "SELECT id, data FROM media_items WHERE library_path_id = ? ORDER BY id",
-        )
+        let rows = sqlx::query("SELECT * FROM media_items WHERE library_path_id = ? ORDER BY id")
         .bind(path_id)
         .fetch_all(&self.0)
         .await?;
-        rows.into_iter()
-            .map(|(id, data)| from_json("media item", id, data))
-            .collect()
+        rows.iter().map(map_media_item).collect()
     }
 
     async fn find_by_path(&self, path: &str) -> Result<MediaItem> {
-        let row = sqlx::query_as::<_, (i64, String)>(
-            "SELECT mi.id, mi.data
+        let row = sqlx::query(
+            "SELECT mi.*
              FROM media_items mi
              JOIN media_versions mv ON mv.media_item_id = mi.id
              JOIN media_files mf ON mf.media_version_id = mv.id
@@ -41,17 +39,26 @@ impl MediaItemRepository for SqliteMediaItemRepository {
         .bind(path)
         .fetch_one(&self.0)
         .await?;
-        from_json("media item", row.0, row.1)
+        map_media_item(&row)
     }
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO media_items (id, library_path_id, state, data) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT OR REPLACE INTO media_items (id, library_path_id, state) VALUES (?, ?, ?)")
             .bind(item.id)
             .bind(item.library_path_id)
             .bind(format!("{:?}", item.state))
-            .bind(to_json(item)?)
             .execute(&self.0)
             .await?;
         Ok(())
     }
+}
+
+fn map_media_item(row: &SqliteRow) -> Result<MediaItem> {
+    Ok(MediaItem {
+        id: row.try_get("id")?,
+        library_path_id: row.try_get("library_path_id")?,
+        collection_ids: Vec::new(),
+        trakt_list_item_ids: Vec::new(),
+        state: decode_enum("media item state", &row.try_get::<String, _>("state")?)?,
+    })
 }

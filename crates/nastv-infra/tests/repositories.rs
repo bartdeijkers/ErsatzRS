@@ -41,6 +41,15 @@ async fn channel_repository_round_trips_and_filters_enabled_channels() {
     enabled.artwork_ids = vec![100, 101];
     let disabled = channel(11, "11", false);
 
+    pool_for_channel_artwork(&repos)
+        .execute(
+            "INSERT INTO artwork (id, path, kind, sort_order) VALUES
+             (100, '/art/100.png', 'Poster', 0),
+             (101, '/art/101.png', 'Poster', 1)",
+        )
+        .await
+        .unwrap();
+
     repos.channel.upsert(&enabled).await.unwrap();
     repos.channel.upsert(&disabled).await.unwrap();
 
@@ -90,11 +99,15 @@ async fn source_library_and_media_item_queries_work() {
         ..MediaItem::default()
     };
     repos.media_item.upsert(&item).await.unwrap();
-    pool.execute("INSERT INTO media_versions (id, media_item_id, data) VALUES (5, 4, '{}')")
+    pool.execute(
+        "INSERT INTO media_versions (
+            id, media_item_id, name, duration_ms, video_scan_kind, date_added, date_updated, width, height
+         ) VALUES (5, 4, 'default', 0, 'Unknown', '2026-04-15T00:00:00+00:00', '2026-04-15T00:00:00+00:00', 0, 0)",
+    )
         .await
         .unwrap();
     pool.execute(
-        "INSERT INTO media_files (id, media_version_id, path, data) VALUES (6, 5, '/media/movie.mkv', '{}')",
+        "INSERT INTO media_files (id, media_version_id, path, part) VALUES (6, 5, '/media/movie.mkv', 0)",
     )
     .await
     .unwrap();
@@ -132,12 +145,12 @@ async fn collection_block_schedule_and_playout_relations_load() {
         .await
         .unwrap();
     repos.channel.upsert(&channel(1, "1", true)).await.unwrap();
-    pool.execute("INSERT OR REPLACE INTO media_sources (id, name, kind, data) VALUES (1, 'local', 'Local', '{}')")
+    pool.execute("INSERT OR REPLACE INTO media_sources (id, name, kind) VALUES (1, 'local', 'Local')")
         .await
         .unwrap();
     pool.execute(
-        "INSERT OR REPLACE INTO libraries (id, name, media_kind, media_source_id, media_source_kind, data)
-         VALUES (1, 'local', 'Movies', 1, 'Local', '{}')",
+        "INSERT OR REPLACE INTO libraries (id, name, media_kind, media_source_id, media_source_kind)
+         VALUES (1, 'local', 'Movies', 1, 'Local')",
     )
     .await
     .unwrap();
@@ -199,8 +212,8 @@ async fn collection_block_schedule_and_playout_relations_load() {
     };
     repos.program_schedule.upsert(&schedule).await.unwrap();
     pool.execute(
-        "INSERT OR REPLACE INTO playouts (id, channel_id, program_schedule_id, schedule_kind, data)
-         VALUES (1, 1, 1, 'Classic', '{\"id\":1,\"channel_id\":1,\"program_schedule_id\":1,\"schedule_file\":null,\"program_schedule_alternate_ids\":[],\"schedule_kind\":\"Classic\",\"item_ids\":[],\"gap_ids\":[],\"anchor\":null,\"program_schedule_anchor_ids\":[],\"fill_group_index_ids\":[],\"templates\":[],\"playout_history_ids\":[],\"seed\":0,\"daily_rebuild_time\":null,\"deco_id\":null,\"on_demand_checkpoint\":null,\"build_status\":null}')",
+           "INSERT OR REPLACE INTO playouts (id, channel_id, program_schedule_id, schedule_kind, seed)
+            VALUES (1, 1, 1, 'Classic', 0)",
     )
     .await
     .unwrap();
@@ -290,4 +303,10 @@ fn channel(id: i64, number: &str, is_enabled: bool) -> Channel {
         is_enabled,
         ..Channel::default()
     }
+}
+
+fn pool_for_channel_artwork(
+    repos: &nastv_infra::repositories::Repositories,
+) -> &sqlx::SqlitePool {
+    &repos.channel.0
 }

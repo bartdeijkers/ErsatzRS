@@ -1,29 +1,63 @@
+use chrono::{DateTime, Duration, Utc};
 use nastv_core::repositories::{RepositoryError, Result};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
 use sqlx::{Pool, Sqlite};
 
-pub fn to_json<T>(value: &T) -> Result<String>
-where
-    T: Serialize,
-{
-    serde_json::to_string(value).map_err(decode_error)
-}
-
-pub fn from_json<T, S>(kind: &'static str, id: i64, value: S) -> Result<T>
+pub fn decode_enum<T>(kind: &'static str, value: &str) -> Result<T>
 where
     T: DeserializeOwned,
-    S: AsRef<str>,
 {
-    serde_json::from_str(value.as_ref()).map_err(|source| {
-        RepositoryError::Database(sqlx::Error::Decode(
-            format!("failed to decode {kind} {id}: {source}").into(),
-        ))
-    })
+    serde_json::from_str(&format!("\"{value}\""))
+        .map_err(|source| decode_message(kind, source.to_string()))
 }
 
-pub fn decode_error(source: serde_json::Error) -> RepositoryError {
-    RepositoryError::Database(sqlx::Error::Decode(source.into()))
+pub fn decode_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|parsed| parsed.with_timezone(&Utc))
+        .map_err(|source| decode_message(kind, source.to_string()))
+}
+
+pub fn decode_optional_datetime(
+    kind: &'static str,
+    value: Option<String>,
+) -> Result<Option<DateTime<Utc>>> {
+    value.map(|inner| decode_datetime(kind, &inner)).transpose()
+}
+
+#[must_use]
+pub fn encode_datetime(value: DateTime<Utc>) -> String {
+    value.to_rfc3339()
+}
+
+#[must_use]
+pub fn encode_optional_datetime(value: Option<DateTime<Utc>>) -> Option<String> {
+    value.map(encode_datetime)
+}
+
+#[must_use]
+pub fn encode_duration(value: Duration) -> i64 {
+    value.num_milliseconds()
+}
+
+#[must_use]
+pub fn encode_optional_duration(value: Option<Duration>) -> Option<i64> {
+    value.map(encode_duration)
+}
+
+#[must_use]
+pub fn decode_duration(value: i64) -> Duration {
+    Duration::milliseconds(value)
+}
+
+#[must_use]
+pub fn decode_optional_duration(value: Option<i64>) -> Option<Duration> {
+    value.map(decode_duration)
+}
+
+pub fn decode_message(kind: &'static str, message: String) -> RepositoryError {
+    RepositoryError::Database(sqlx::Error::Decode(
+        format!("failed to decode {kind}: {message}").into(),
+    ))
 }
 
 pub fn not_found(kind: &'static str, id: i64, error: sqlx::Error) -> RepositoryError {
@@ -31,20 +65,6 @@ pub fn not_found(kind: &'static str, id: i64, error: sqlx::Error) -> RepositoryE
         sqlx::Error::RowNotFound => RepositoryError::NotFound { kind, id },
         other => RepositoryError::Database(other),
     }
-}
-
-pub async fn fetch_data(
-    pool: &Pool<Sqlite>,
-    table: &str,
-    kind: &'static str,
-    id: i64,
-) -> Result<String> {
-    let sql = format!("SELECT data FROM {table} WHERE id = ?");
-    sqlx::query_scalar::<_, String>(&sql)
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .map_err(|error| not_found(kind, id, error))
 }
 
 pub async fn replace_ids(

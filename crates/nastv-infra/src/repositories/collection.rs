@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use nastv_core::repositories::{CollectionRepository, Result};
 use nastv_domain::{Collection, EntityId, Playlist, SmartCollection};
-use sqlx::{Pool, Sqlite};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{fetch_data, from_json, load_ids, to_json};
+use super::common::{decode_enum, load_ids, not_found};
 
 #[derive(Clone)]
 pub struct SqliteCollectionRepository(pub Pool<Sqlite>);
@@ -11,11 +12,12 @@ pub struct SqliteCollectionRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl CollectionRepository for SqliteCollectionRepository {
     async fn get_with_items(&self, id: EntityId) -> Result<Collection> {
-        let mut collection: Collection = from_json(
-            "collection",
-            id,
-            fetch_data(&self.0, "collections", "collection", id).await?,
-        )?;
+        let row = sqlx::query("SELECT * FROM collections WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("collection", id, error))?;
+        let mut collection = map_collection(&row)?;
         collection.item_ids = load_ids(
             &self.0,
             "SELECT id FROM collection_items WHERE collection_id = ? ORDER BY sort_order, id",
@@ -32,8 +34,8 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn list_for_media_item(&self, item_id: EntityId) -> Result<Vec<Collection>> {
-        let rows = sqlx::query_as::<_, (i64, String)>(
-            "SELECT c.id, c.data
+        let rows = sqlx::query(
+            "SELECT c.*
              FROM collections c
              JOIN collection_items ci ON ci.collection_id = c.id
              WHERE ci.media_item_id = ?
@@ -42,9 +44,9 @@ impl CollectionRepository for SqliteCollectionRepository {
         .bind(item_id)
         .fetch_all(&self.0)
         .await?;
-        rows.into_iter()
-            .map(|(id, data)| {
-                let mut collection: Collection = from_json("collection", id, data)?;
+        rows.iter()
+            .map(|row| {
+                let mut collection = map_collection(row)?;
                 collection.media_item_ids.clear();
                 collection.item_ids.clear();
                 Ok(collection)
@@ -53,19 +55,35 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn get_smart(&self, id: EntityId) -> Result<SmartCollection> {
-        from_json(
-            "smart collection",
-            id,
-            fetch_data(&self.0, "smart_collections", "smart collection", id).await?,
-        )
+        let row = sqlx::query("SELECT * FROM smart_collections WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("smart collection", id, error))?;
+        Ok(SmartCollection {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            query: row.try_get("query")?,
+        })
     }
 
     async fn get_playlist_with_items(&self, id: EntityId) -> Result<Playlist> {
-        let mut playlist: Playlist = from_json(
-            "playlist",
-            id,
-            fetch_data(&self.0, "playlists", "playlist", id).await?,
-        )?;
+        let row = sqlx::query("SELECT * FROM playlists WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("playlist", id, error))?;
+        let mut playlist = Playlist {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            item_ids: Vec::new(),
+            group_ids: load_ids(
+                &self.0,
+                "SELECT id FROM playlist_groups WHERE playlist_id = ? ORDER BY sort_order, id",
+                id,
+            )
+            .await?,
+        };
         playlist.item_ids = load_ids(
             &self.0,
             "SELECT id FROM playlist_items WHERE playlist_id = ? ORDER BY sort_order, id",
@@ -77,11 +95,10 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn upsert(&self, collection: &Collection) -> Result<()> {
         let mut tx = self.0.begin().await?;
-        sqlx::query("INSERT OR REPLACE INTO collections (id, name, collection_type, data) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT OR REPLACE INTO collections (id, name, collection_type) VALUES (?, ?, ?)")
             .bind(collection.id)
             .bind(&collection.name)
             .bind(format!("{:?}", collection.collection_type))
-            .bind(to_json(collection)?)
             .execute(&mut *tx)
             .await?;
 
@@ -108,4 +125,17 @@ impl CollectionRepository for SqliteCollectionRepository {
         tx.commit().await?;
         Ok(())
     }
+}
+
+fn map_collection(row: &SqliteRow) -> Result<Collection> {
+    Ok(Collection {
+        id: row.try_get("id")?,
+        name: row.try_get("name")?,
+        collection_type: decode_enum(
+            "collection type",
+            &row.try_get::<String, _>("collection_type")?,
+        )?,
+        media_item_ids: Vec::new(),
+        item_ids: Vec::new(),
+    })
 }

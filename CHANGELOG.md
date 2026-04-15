@@ -35,6 +35,10 @@ for commit messages.
 
 ### Changed
 
+- Phase 1 persistence now uses an expanded normalized SQLite schema derived
+  from the final ErsatzTV model instead of the earlier hybrid JSON/scalar
+  mapping, and the active infra repositories now map scalar columns and join
+  tables directly.
 - Cargo deny metadata and policy now cover workspace crates and accepted
   transitive license/advisory exceptions.
 - Workspace package metadata, lints, binary declarations, and Rust version are

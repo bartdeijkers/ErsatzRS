@@ -7,10 +7,12 @@ Status: Approved
 
 Phase 0 is complete. `nastv-domain` is fully populated with all domain entity
 modules (channel, media, scheduling, playout, library, collection, config,
-ffmpeg, filler, graphics, metadata, media_source, common). `nastv-core` and
-`nastv-infra` are empty placeholders. No migrations exist yet.
+ffmpeg, filler, graphics, metadata, media_source, common). Phase 1 now has a
+normalized SQLite baseline in `migrations/0001_initial.sql`, scalar/join-table
+repository mappings in `nastv-infra`, and repository integration tests that
+exercise the expanded schema.
 
-This spec covers the three remaining pieces of Phase 1:
+This spec records the Phase 1 persistence baseline that unblocks Phase 2/3:
 
 1. Initial sqlx schema (migrations)
 2. Repository traits in `nastv-core`
@@ -203,8 +205,10 @@ impl ChannelRepository for SqliteChannelRepository {
 
 ### Query style
 
-`sqlx::query!` macro with compile-time SQL checking. Offline mode via
-`cargo sqlx prepare` produces `sqlx-data.json` for CI.
+Runtime `sqlx::query` / `query_as` calls are used for the normalized mapping
+layer. Compile-time macro metadata remains only where it still buys value;
+stale offline metadata for removed blob queries should be deleted as the query
+surface evolves.
 
 ### Enum mapping
 
