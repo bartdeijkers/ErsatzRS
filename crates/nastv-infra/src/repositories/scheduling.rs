@@ -7,6 +7,7 @@ use nastv_core::scheduling::{
     SchedulingCollectionKey, SchedulingContentRepository, SchedulingContentSource,
     SchedulingMediaItem, SchedulingPlaylistItem,
 };
+use nastv_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
 use nastv_domain::{CollectionType, EntityId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
@@ -540,7 +541,11 @@ impl SqliteSchedulingContentRepository {
 
     async fn items_for_artist_id(&self, artist_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
         let ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id FROM music_videos WHERE artist_id = ? ORDER BY id",
+            "SELECT mvm.item_id
+             FROM music_video_metadata_artists mvma
+             JOIN music_video_metadata mvm ON mvm.id = mvma.music_video_metadata_id
+             WHERE mvma.artist_id = ?
+             ORDER BY mvm.item_id",
         )
         .bind(artist_id)
         .fetch_all(&self.0)
@@ -587,34 +592,201 @@ impl SqliteSchedulingContentRepository {
     }
 
     async fn search_items(&self, query: &str) -> Result<Vec<SchedulingMediaItem>> {
-        let (operator, term) = parse_title_query(query);
-        let pattern = match operator {
-            SearchOperator::Exact => term.clone(),
-            SearchOperator::Contains => format!("%{term}%"),
-        };
-        let comparator = match operator {
-            SearchOperator::Exact => "=",
-            SearchOperator::Contains => "LIKE",
-        };
-        let sql = format!(
-            "SELECT item_id FROM (
-                SELECT item_id, title FROM movie_metadata
-                UNION ALL SELECT item_id, title FROM episode_metadata
-                UNION ALL SELECT item_id, title FROM music_video_metadata
-                UNION ALL SELECT item_id, title FROM other_video_metadata
-                UNION ALL SELECT item_id, title FROM song_metadata
-                UNION ALL SELECT item_id, title FROM image_metadata
-                UNION ALL SELECT item_id, title FROM remote_stream_metadata
-             )
-             WHERE title {comparator} ?
-             ORDER BY item_id"
-        );
+        let expression = SearchExpression::parse(query);
+        let documents = self.search_documents().await?;
+        let mut hits = documents
+            .into_iter()
+            .filter(|document| expression.matches(document))
+            .collect::<Vec<_>>();
 
-        let ids = sqlx::query_scalar::<_, EntityId>(&sql)
-            .bind(pattern)
+        hits.sort_by(|left, right| {
+            search_sort_title(left)
+                .cmp(&search_sort_title(right))
+                .then_with(|| left.media_item_id.cmp(&right.media_item_id))
+        });
+
+        let mut items = Vec::new();
+        let mut seen = BTreeSet::new();
+        for hit in hits {
+            let hit_items = match hit.media_kind.as_str() {
+                "show" => self.items_for_show_id(hit.media_item_id).await?,
+                "season" => self.items_for_season_id(hit.media_item_id).await?,
+                "artist" => self.items_for_artist_id(hit.media_item_id).await?,
+                _ => self.media_item_by_id(hit.media_item_id).await?,
+            };
+            append_unique(&mut items, &mut seen, hit_items);
+        }
+
+        Ok(items)
+    }
+
+    async fn search_documents(&self) -> Result<Vec<SearchDocument>> {
+        let rows = sqlx::query(SEARCH_DOCUMENT_SQL).fetch_all(&self.0).await?;
+
+        let mut documents = Vec::with_capacity(rows.len());
+        for row in rows {
+            documents.push(self.search_document_from_row(&row).await?);
+        }
+
+        Ok(documents)
+    }
+
+    async fn search_document_from_row(&self, row: &SqliteRow) -> Result<SearchDocument> {
+        let metadata_kind = row.try_get::<String, _>("metadata_kind")?;
+        let metadata_id = row.try_get::<EntityId, _>("metadata_id")?;
+        let show_id = row.try_get::<Option<EntityId>, _>("show_id")?;
+        let release_date = row
+            .try_get::<Option<String>, _>("release_date")?
+            .map(|value| parse_datetime("search release_date", &value))
+            .transpose()?;
+
+        Ok(SearchDocument {
+            media_item_id: row.try_get("item_id")?,
+            media_kind: row.try_get("media_kind")?,
+            metadata_kind: metadata_kind.clone(),
+            title: row.try_get("title")?,
+            sort_title: row.try_get("sort_title")?,
+            original_title: row.try_get("original_title")?,
+            year: row.try_get("year")?,
+            release_date,
+            genres: self
+                .metadata_lookup_values(
+                    "metadata_genres",
+                    "genres",
+                    "genre_id",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?,
+            tags: self
+                .metadata_lookup_values(
+                    "metadata_tags",
+                    "tags",
+                    "tag_id",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?,
+            studios: self
+                .metadata_lookup_values(
+                    "metadata_studios",
+                    "studios",
+                    "studio_id",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?,
+            actors: self
+                .metadata_actor_values(&metadata_kind, metadata_id)
+                .await?,
+            directors: Vec::new(),
+            writers: Vec::new(),
+            show_title: row.try_get("show_title")?,
+            show_genres: self
+                .show_lookup_values("metadata_genres", "genres", "genre_id", show_id)
+                .await?,
+            show_tags: self
+                .show_lookup_values("metadata_tags", "tags", "tag_id", show_id)
+                .await?,
+            show_studios: self
+                .show_lookup_values("metadata_studios", "studios", "studio_id", show_id)
+                .await?,
+            season_number: row.try_get("season_number")?,
+            episode_number: row.try_get("episode_number")?,
+            provider_guids: self.metadata_guids(&metadata_kind, metadata_id).await?,
+        })
+    }
+
+    async fn metadata_lookup_values(
+        &self,
+        join_table: &str,
+        value_table: &str,
+        id_column: &str,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+    ) -> Result<Vec<String>> {
+        let sql = format!(
+            "SELECT value.name
+             FROM {join_table} rel
+             JOIN {value_table} value ON value.id = rel.{id_column}
+             WHERE rel.metadata_kind = ? AND rel.metadata_id = ?
+             ORDER BY value.name"
+        );
+        sqlx::query_scalar::<_, String>(&sql)
+            .bind(metadata_kind)
+            .bind(metadata_id)
             .fetch_all(&self.0)
-            .await?;
-        self.expand_media_ids(ids, 0).await
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn metadata_actor_values(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+    ) -> Result<Vec<String>> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT a.name
+             FROM metadata_actors ma
+             JOIN actors a ON a.id = ma.actor_id
+             WHERE ma.metadata_kind = ? AND ma.metadata_id = ?
+             ORDER BY a.actor_order, a.id",
+        )
+        .bind(metadata_kind)
+        .bind(metadata_id)
+        .fetch_all(&self.0)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn show_lookup_values(
+        &self,
+        join_table: &str,
+        value_table: &str,
+        id_column: &str,
+        show_id: Option<EntityId>,
+    ) -> Result<Vec<String>> {
+        let Some(show_id) = show_id else {
+            return Ok(Vec::new());
+        };
+
+        let Some(metadata_id) =
+            sqlx::query_scalar::<_, EntityId>("SELECT id FROM show_metadata WHERE item_id = ?")
+                .bind(show_id)
+                .fetch_optional(&self.0)
+                .await?
+        else {
+            return Ok(Vec::new());
+        };
+
+        self.metadata_lookup_values(join_table, value_table, id_column, "Show", metadata_id)
+            .await
+    }
+
+    async fn metadata_guids(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+    ) -> Result<Vec<SearchProviderGuid>> {
+        let rows = sqlx::query(
+            "SELECT source, guid
+             FROM metadata_guids
+             WHERE metadata_kind = ? AND metadata_id = ?
+             ORDER BY source, guid",
+        )
+        .bind(metadata_kind)
+        .bind(metadata_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(SearchProviderGuid {
+                    source: row.try_get("source")?,
+                    value: row.try_get("guid")?,
+                })
+            })
+            .collect()
     }
 
     async fn load_media_items(&self, ids: Vec<EntityId>) -> Result<Vec<SchedulingMediaItem>> {
@@ -677,6 +849,175 @@ impl SqliteSchedulingContentRepository {
         row.map(|row| map_scheduling_media_item(&row)).transpose()
     }
 }
+
+const SEARCH_DOCUMENT_SQL: &str = "
+SELECT *
+FROM (
+    SELECT
+        mm.item_id,
+        'movie' AS media_kind,
+        mm.metadata_kind,
+        mm.id AS metadata_id,
+        mm.title,
+        mm.original_title,
+        mm.sort_title,
+        mm.year,
+        mm.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM movie_metadata mm
+    UNION ALL
+    SELECT
+        sm.item_id,
+        'show' AS media_kind,
+        sm.metadata_kind,
+        sm.id AS metadata_id,
+        sm.title,
+        sm.original_title,
+        sm.sort_title,
+        sm.year,
+        sm.release_date,
+        sm.item_id AS show_id,
+        sm.title AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM show_metadata sm
+    UNION ALL
+    SELECT
+        sem.item_id,
+        'season' AS media_kind,
+        sem.metadata_kind,
+        sem.id AS metadata_id,
+        sem.title,
+        sem.original_title,
+        sem.sort_title,
+        sem.year,
+        sem.release_date,
+        se.show_id,
+        shm.title AS show_title,
+        sem.season_number,
+        NULL AS episode_number
+    FROM season_metadata sem
+    JOIN seasons se ON se.id = sem.item_id
+    LEFT JOIN show_metadata shm ON shm.item_id = se.show_id
+    UNION ALL
+    SELECT
+        em.item_id,
+        'episode' AS media_kind,
+        em.metadata_kind,
+        em.id AS metadata_id,
+        em.title,
+        em.original_title,
+        em.sort_title,
+        em.year,
+        em.release_date,
+        e.show_id,
+        shm.title AS show_title,
+        em.season_number,
+        em.episode_number
+    FROM episode_metadata em
+    JOIN episodes e ON e.id = em.item_id
+    LEFT JOIN show_metadata shm ON shm.item_id = e.show_id
+    UNION ALL
+    SELECT
+        mvm.item_id,
+        'music_video' AS media_kind,
+        mvm.metadata_kind,
+        mvm.id AS metadata_id,
+        mvm.title,
+        mvm.original_title,
+        mvm.sort_title,
+        mvm.year,
+        mvm.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM music_video_metadata mvm
+    UNION ALL
+    SELECT
+        am.item_id,
+        'artist' AS media_kind,
+        am.metadata_kind,
+        am.id AS metadata_id,
+        am.title,
+        am.original_title,
+        am.sort_title,
+        am.year,
+        am.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM artist_metadata am
+    UNION ALL
+    SELECT
+        ovm.item_id,
+        'other_video' AS media_kind,
+        ovm.metadata_kind,
+        ovm.id AS metadata_id,
+        ovm.title,
+        ovm.original_title,
+        ovm.sort_title,
+        ovm.year,
+        ovm.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM other_video_metadata ovm
+    UNION ALL
+    SELECT
+        som.item_id,
+        'song' AS media_kind,
+        som.metadata_kind,
+        som.id AS metadata_id,
+        som.title,
+        som.original_title,
+        som.sort_title,
+        som.year,
+        som.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM song_metadata som
+    UNION ALL
+    SELECT
+        im.item_id,
+        'image' AS media_kind,
+        im.metadata_kind,
+        im.id AS metadata_id,
+        im.title,
+        im.original_title,
+        im.sort_title,
+        im.year,
+        im.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM image_metadata im
+    UNION ALL
+    SELECT
+        rsm.item_id,
+        'remote_stream' AS media_kind,
+        rsm.metadata_kind,
+        rsm.id AS metadata_id,
+        rsm.title,
+        rsm.original_title,
+        rsm.sort_title,
+        rsm.year,
+        rsm.release_date,
+        NULL AS show_id,
+        NULL AS show_title,
+        NULL AS season_number,
+        NULL AS episode_number
+    FROM remote_stream_metadata rsm
+)
+ORDER BY COALESCE(sort_title, title), item_id";
 
 fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
@@ -745,27 +1086,13 @@ fn append_unique(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SearchOperator {
-    Exact,
-    Contains,
-}
-
-fn parse_title_query(query: &str) -> (SearchOperator, String) {
-    let trimmed = query.trim();
-    for marker in ["title = ", "title == ", "title:"] {
-        if let Some(value) = trimmed.strip_prefix(marker) {
-            return (SearchOperator::Exact, unquote(value.trim()));
-        }
-    }
-    if let Some(value) = trimmed.strip_prefix("title contains ") {
-        return (SearchOperator::Contains, unquote(value.trim()));
-    }
-    (SearchOperator::Contains, unquote(trimmed))
-}
-
-fn unquote(value: &str) -> String {
-    value.trim_matches('"').trim_matches('\'').trim().to_owned()
+fn search_sort_title(document: &SearchDocument) -> String {
+    document
+        .sort_title
+        .as_deref()
+        .or(document.title.as_deref())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
 }
 
 fn normalize_graphics_path(path: &str) -> String {

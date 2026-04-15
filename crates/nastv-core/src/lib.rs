@@ -2,3 +2,4 @@
 
 pub mod repositories;
 pub mod scheduling;
+pub mod search;

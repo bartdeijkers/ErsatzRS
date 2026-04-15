@@ -10,6 +10,13 @@ for commit messages.
 
 ### Added
 
+- Phase 3 SQL-backed search-query parity slice for scheduling: a core-owned
+  Lucene-like query parser/evaluator, SQLite search-document projection from
+  normalized metadata, fielded smart collection/direct search support for
+  represented title, sort/original title, year, release date, genre, tag,
+  studio, actor, media kind, show/season/episode metadata, and provider GUIDs,
+  plus show/season/artist container expansion and focused in-memory SQLite
+  integration tests.
 - Phase 3 SQL-backed scheduling content resolver repository for SQLite,
   covering collection expansion, multi-collection union/de-duplication, smart
   collection/search query matching, playlist child metadata (`collection_key`,

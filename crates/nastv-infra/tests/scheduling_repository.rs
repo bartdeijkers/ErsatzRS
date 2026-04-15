@@ -140,6 +140,109 @@ async fn scheduling_repository_resolves_playlist_children_and_overlays() {
     );
 }
 
+#[tokio::test]
+async fn scheduling_repository_searches_metadata_fields_and_expands_containers() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    let movie = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "genre:Adventure AND tag:Festival AND studio:\"Studio One\" AND year:[2025 TO 2025]"
+                .to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        movie
+            .iter()
+            .map(|item| (item.id, item.title.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![(20, Some("Feature"))]
+    );
+
+    let episode = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "show_title:\"The Show\" AND episode_number:2 AND actor:\"Lead Actor\"".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        episode.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![13]
+    );
+
+    let show = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:show AND tvdb:show-guid".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        show.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![12, 13]
+    );
+
+    let season = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:season AND season_number:1".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        season.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![12, 13]
+    );
+
+    let artist = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:artist AND title:\"The Band\"".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        artist.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![31]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_smart_collection_uses_fielded_search_query() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    pool.execute(
+        "INSERT INTO smart_collections (id, name, query)
+         VALUES (
+            5,
+            'fielded-smart',
+            'show_title:\"The Show\" AND release_date:[20260101 TO 20260131]'
+         )",
+    )
+    .await
+    .unwrap();
+
+    let smart = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::SmartCollection(
+            "fielded-smart".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        smart.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![13, 12]
+    );
+}
+
 async fn seed_scheduling_fixture(pool: &SqlitePool) {
     seed_media_fixture(pool).await;
     seed_collection_fixture(pool).await;
@@ -185,6 +288,106 @@ async fn seed_media_fixture(pool: &SqlitePool) {
     insert_episode(pool, 13, 130, "Finale", 2, "2026-01-08T00:00:00Z").await;
     insert_movie(pool, 20, 200, "Feature", "2025-12-24T00:00:00Z").await;
     insert_movie(pool, 21, 210, "Bonus", "2026-02-01T00:00:00Z").await;
+}
+
+async fn seed_search_enrichment(pool: &SqlitePool) {
+    pool.execute("UPDATE movie_metadata SET year = 2025, sort_title = 'feature', original_title = 'Original Feature' WHERE id = 200")
+        .await
+        .unwrap();
+    pool.execute("UPDATE episode_metadata SET sort_title = 'finale' WHERE id = 130")
+        .await
+        .unwrap();
+
+    pool.execute(
+        "INSERT INTO genres (id, name) VALUES (1, 'Adventure'), (2, 'Drama')
+         ON CONFLICT(id) DO NOTHING",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO tags (id, name) VALUES (1, 'Festival'), (2, 'Network')
+         ON CONFLICT(id) DO NOTHING",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO studios (id, name) VALUES (1, 'Studio One'), (2, 'Show Studio')
+         ON CONFLICT(id) DO NOTHING",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO actors (id, name, role, actor_order)
+         VALUES (1, 'Lead Actor', 'Lead', 0)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO metadata_genres (metadata_kind, metadata_id, genre_id)
+         VALUES ('Movie', 200, 1), ('Show', 100, 2)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO metadata_tags (metadata_kind, metadata_id, tag_id)
+         VALUES ('Movie', 200, 1), ('Show', 100, 2)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO metadata_studios (metadata_kind, metadata_id, studio_id)
+         VALUES ('Movie', 200, 1), ('Show', 100, 2)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO metadata_actors (metadata_kind, metadata_id, actor_id)
+         VALUES ('Episode', 130, 1)",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO metadata_guids (id, metadata_kind, metadata_id, source, guid)
+         VALUES (2000, 'Movie', 200, 'tmdb', 'feature-guid')",
+    )
+    .await
+    .unwrap();
+
+    common::seed_media_item(pool, 30, 1).await;
+    common::seed_media_item(pool, 31, 1).await;
+    pool.execute("INSERT INTO artists (id, metadata_id) VALUES (30, 300)")
+        .await
+        .unwrap();
+    pool.execute(
+        "INSERT INTO artist_metadata (
+            id, item_id, metadata_kind, title, sort_title, date_added, date_updated
+         ) VALUES (
+            300, 30, 'Artist', 'The Band', 'band', '2026-04-15T00:00:00Z',
+            '2026-04-15T00:00:00Z'
+         )",
+    )
+    .await
+    .unwrap();
+    pool.execute("INSERT INTO music_videos (id, metadata_id) VALUES (31, 310)")
+        .await
+        .unwrap();
+    pool.execute(
+        "INSERT INTO music_video_metadata (
+            id, item_id, metadata_kind, title, sort_title, date_added, date_updated
+         ) VALUES (
+            310, 31, 'MusicVideo', 'The Hit', 'hit', '2026-04-15T00:00:00Z',
+            '2026-04-15T00:00:00Z'
+         )",
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        "INSERT INTO music_video_metadata_artists (music_video_metadata_id, artist_id)
+         VALUES (310, 30)",
+    )
+    .await
+    .unwrap();
+    insert_version(pool, 31, 240_000).await;
 }
 
 async fn seed_collection_fixture(pool: &SqlitePool) {
