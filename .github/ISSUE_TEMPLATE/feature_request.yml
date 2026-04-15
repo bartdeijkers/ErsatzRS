@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a feature or ErsatzTV parity item.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: dropdown
+    id: relation
+    attributes:
+      label: Relation to ErsatzTV
+      options:
+        - ErsatzTV parity
+        - Deliberate NasTv deviation
+        - New NasTv-only feature
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Include relevant ErsatzTV links or source files when known.

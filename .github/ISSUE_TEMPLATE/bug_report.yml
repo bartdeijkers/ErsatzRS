@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible NasTv bug.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List the smallest steps that reproduce the issue.
+    validations:
+      required: true
+  - type: input
+    id: nastv-version
+    attributes:
+      label: NasTv version or commit
+    validations:
+      required: true
+  - type: input
+    id: ffmpeg-version
+    attributes:
+      label: FFmpeg version
+      description: Paste `ffmpeg -version` first line.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove secrets, private paths, tokens, and personal media data.
+      render: text

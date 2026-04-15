@@ -1,235 +1,258 @@
-# NasTv — Rust/FFmpeg 8.1 herimplementatie van ErsatzTV
+# NasTv - Rust/FFmpeg 8.1 Reimplementation of ErsatzTV
 
 ## Context
 
-De gebruiker wil [ErsatzTV](/home/bart/ErsatzTV/) nabouwen in Rust met FFmpeg 8.1 als fundament voor de graphics engine. ErsatzTV is een ~131K LOC .NET 10 mediaserver die persoonlijke media (Plex/Jellyfin/Emby) omzet in lineaire TV-kanalen met IPTV/HDHR streaming en hardware-accelerated transcoding. Doel is volledige feature-parity op termijn, beginnend breed (alle pijlers vanaf dag 1), in nieuwe lege map [/home/bart/NasTv](/home/bart/nastv/).
+NasTv is a from-scratch Rust reimplementation of
+[ErsatzTV](/home/bart/ErsatzTV/). ErsatzTV is a .NET media server that turns
+personal media libraries from Plex, Jellyfin, Emby, and local folders into
+linear TV channels served through IPTV, HLS, and HDHomeRun-compatible endpoints.
 
-**Waarom:** .NET/Blazor stack vervangen door één statisch Rust-binary + moderne FFmpeg 8.1 features (m.n. `drawvg` vector graphics filter) voor een eenvoudiger deployment en rijkere in-stream graphics dan ErsatzTV zelf biedt.
+The long-term goal is feature parity with ErsatzTV while simplifying deployment
+to a static Rust server binary plus a scanner binary. The main technical
+divergence is the use of FFmpeg 8.1, especially the `drawvg` filter, to replace
+ErsatzTV's external graphics-renderer pipe.
 
-**Beslissingen (uit vragen):**
-- UI: **Leptos** (full-stack Rust, SSR + hydration)
-- FFmpeg: **CLI spawn** via `tokio::process`, net als ErsatzTV (geen libav bindings)
-- Scope: **volledige parity op termijn, breed beginnen**
-- Directory: `/home/bart/NasTv`
+Locked decisions:
 
----
+- UI: Leptos with SSR first and hydration only where needed.
+- FFmpeg: spawn the CLI through `tokio::process::Command`; no libav bindings.
+- Scope: long-term parity, broad foundation from the start.
+- Repository: `/home/bart/nastv`.
 
-## Tech stack: is dit goed genoeg?
+## Tech Stack
 
-**Conclusie: ja, compleet en geschikt — met één kanttekening over de UI-leercurve.**
+### FFmpeg 8.1
 
-### FFmpeg 8.1 specifiek
+| Feature | Relevance to NasTv |
+| --- | --- |
+| `drawvg` filter | Core win: channel logos, progress bars, lower thirds, and EPG-style overlays inside the filter graph. |
+| Vulkan-accelerated scale/color conversion | Useful acceleration without tying the whole pipeline to one vendor path. |
+| D3D12 filters | Windows hardware path alongside NVENC, QSV, and AMF. |
+| JPEG-XS, xHE-AAC, MPEG-H 3D audio | Future-facing codec support, not MVP-critical. |
+| EXIF parsing | Useful for still-image channels and slideshows. |
 
-| Feature | Relevantie voor NasTv |
-|---|---|
-| `drawvg` filter (libcairo, SVG-achtige vectors) | **Kernwinst**: vervangt custom graphics engine van ErsatzTV (`ScriptGraphicsElement` + `OverlayGraphicsEngineFilter`). Channel logos, progress bars, lower thirds, EPG-style overlays direct in filter graph. |
-| Vulkan-accelerated swscale | Gratis speed-up voor scale/color conversion, zonder NVENC/VAAPI vendor lock-in. |
-| D3D12 filters (`scale_d3d12`, `deinterlace_d3d12`, `mestimate_d3d12`) | Windows hardware pad naast bestaande NVENC/QSV/AMF. |
-| JPEG-XS encode/decode, xHE-AAC, MPEG-H 3D audio | Niet MVP-kritiek, wel future-proof. |
-| EXIF parsing | Handig voor still-image kanalen (foto-slideshows). |
+ErsatzTV's FFmpeg pipeline patterns are version-agnostic and should be mirrored
+closely where they remain valid: filter-label routing, watermark fade,
+subtitle overlay, concat/resetpts handling, tonemapping, and output muxing.
 
-ErsatzTV's FFmpeg-pipeline is versie-agnostisch en hergebruik van hun filter-patronen (watermark fade, subtitle overlay, concat/resetpts, tonemap) is direct bruikbaar — FFmpeg 8.1 breekt hier niets.
+### Rust Ecosystem
 
-### Rust ecosystem — alle gaten gedekt
+| Need | Rust choice | Notes |
+| --- | --- | --- |
+| Web host | `axum`, `tower`, `tokio` | Server runtime and routing. |
+| Admin UI | `leptos`, `leptos_axum`, `leptos_router` | Start SSR-only; hydrate interactive islands later. |
+| CQRS handlers | Plain `async fn` handlers | Repository traits in `nastv-core`, use cases in `nastv-app`. |
+| Persistence | `sqlx` | SQLite first, MySQL later behind a feature flag. |
+| Errors | `thiserror`, `anyhow` | `thiserror` in libraries, `anyhow` at binary edges. |
+| FFmpeg process | `tokio::process::Command` | Same process model as ErsatzTV's `CliWrap` usage. |
+| FFmpeg builder | NasTv builder modules | Port structure from `ErsatzTV.FFmpeg`. |
+| Lua scheduling | `mlua` | Lua 5.4 for scripted scheduling. |
+| YAML scheduling | `serde_yaml` or maintained equivalent | Per-instruction dispatch. |
+| Provider clients | `reqwest`, `serde` | Port DTOs and sync behavior from ErsatzTV infrastructure. |
+| HLS output | FFmpeg | Do not implement an HLS muxer in Rust. |
+| HDHomeRun UDP | `tokio::net::UdpSocket` | Discovery on port 65001. |
+| Scanner | `nastv-scanner` binary | Shares domain, core, and infrastructure crates. |
+| Logging | `tracing`, `tracing-subscriber` | Structured diagnostics. |
+| Configuration | `figment` or `config` | Defaults, file, env, CLI layering. |
+| Testing | `tokio::test`, `rstest`, `insta` | Snapshot generated FFmpeg argv and timelines. |
 
-| Behoefte (ErsatzTV component) | Rust crate | Notitie |
-|---|---|---|
-| ASP.NET Core host | `axum` + `tower` + `tokio` | |
-| Blazor/MudBlazor UI | `leptos` + `leptos_axum` + `leptos_router` | SSR+hydration; MudBlazor componenten zelf bouwen of [thaw-ui](https://github.com/thaw-ui/thaw) overwegen |
-| MediatR (CQRS) | geen crate nodig — plain `async fn` handlers per use-case, traits voor repositories | |
-| EF Core (SQLite + MySQL) | `sqlx` met runtime-feature selectie | `sqlx migrate` voor schema; ondersteunt beide backends in één crate |
-| LanguageExt `Option<T>`/`Either<L,R>` | `Option`/`Result` is native; `anyhow`/`thiserror` voor errors | |
-| FFmpeg CLI spawn (`CliWrap`) | `tokio::process::Command` | |
-| CLI argument builder | eigen builder module (port van `ErsatzTV.FFmpeg/CommandGenerator.cs`) | |
-| Lua scripting (`ScriptedScheduling`) | `mlua` (Lua 5.4) | volwassen, async-ondersteuning |
-| YAML parsing (`YamlScheduling`) | `serde_yaml` of `serde_yml` | |
-| Plex/Jellyfin/Emby HTTP clients | `reqwest` + `serde` DTOs | handmatig porten uit [ErsatzTV.Infrastructure](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/) |
-| HLS muxer/segmentatie | delegeren aan FFmpeg (geen eigen code) | |
-| HDHR UDP discovery (port 65001) | `tokio::net::UdpSocket` | |
-| Background scanner (`ErsatzTV.Scanner`) | aparte binary in werkspace, deelt `core` crate | |
-| Health/logging | `tracing` + `tracing-subscriber` | |
-| Config | `figment` of `config` + `serde` | |
-| Testing | `tokio::test` + `rstest` + `insta` (snapshot) | |
+## Risks
 
-### Openstaande risico's
-1. **Leptos-leercurve** — signals/reactive model is anders dan Blazor. Tip: begin UI als server-rendered Leptos (`ssr`-feature) zonder hydratie en voeg interactiviteit pas toe waar nodig.
-2. **MudBlazor component library** heeft geen 1:1 equivalent. Plan extra tijd voor eigen component-laag (forms, tables, datepickers) of adopteer `thaw`/`leptonic`.
-3. **MySQL + SQLite dual-support** vereist óf runtime-dispatch óf compile-time feature flags in `sqlx`. ErsatzTV lost dit met twee Infrastructure-projecten op — in Rust kan het met features in één crate.
-4. **393 EF migraties** zijn niet 1:1 over te nemen. Start met een gecondenseerd initieel schema afgeleid uit [TvContext.cs](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs) (99 DbSets). Migraties vanaf daar.
+1. Leptos has a different reactive model than Blazor. Start server-rendered and
+   add hydration only where it pays for itself.
+2. MudBlazor has no direct Rust replacement. Budget time for a small component
+   layer or evaluate Rust UI component libraries before committing to one.
+3. SQLite and MySQL support require careful feature-gated repository design.
+4. ErsatzTV's Entity Framework migration history must not be ported one-to-one.
+   NasTv starts with a collapsed initial schema based on the final model.
 
----
+## Architecture: Crate Layout
 
-## Architectuur: crate-indeling
-
-Cargo workspace in `/home/bart/nastv/`:
-
-```
+```text
 NasTv/
-├── Cargo.toml              # workspace root
-├── crates/
-│   ├── nastv-domain/       # entities, enums, value objects (port ErsatzTV.Core/Domain)
-│   ├── nastv-core/         # business logic, scheduling engines, FFmpeg pipeline abstractie
-│   │                       # (port ErsatzTV.Core zonder Domain)
-│   ├── nastv-ffmpeg/       # FFmpeg command builder, pipeline builders per HW-pad
-│   │                       # (port ErsatzTV.FFmpeg)
-│   ├── nastv-infra/        # sqlx repositories, migrations, HTTP clients
-│   │                       # (port ErsatzTV.Infrastructure)
-│   ├── nastv-app/          # use-case handlers (port ErsatzTV.Application)
-│   ├── nastv-web/          # axum + leptos host, API routes, IPTV/HDHR endpoints
-│   │                       # (port ErsatzTV/)
-│   └── nastv-scanner/      # scanner binary (port ErsatzTV.Scanner)
-├── migrations/             # sqlx migrations (shared tussen SQLite/MySQL waar mogelijk)
-└── assets/                 # templates, SVG assets voor drawvg overlays
+  Cargo.toml
+  crates/
+    nastv-domain/   entities, enums, value objects
+    nastv-core/     business logic, scheduling engines, repository traits
+    nastv-ffmpeg/   FFmpeg command builders and pipeline builders
+    nastv-infra/    sqlx repositories, migrations, provider HTTP clients
+    nastv-app/      use-case handlers
+    nastv-web/      axum + Leptos host, API, IPTV, HLS, HDHR endpoints
+    nastv-scanner/  scanner binary
+  migrations/       shared sqlx migrations where practical
+  assets/           SVG templates and drawvg overlay assets
 ```
 
-Binaries: `nastv-web` (server) en `nastv-scanner` (CLI). `nastv-core` / `nastv-ffmpeg` zijn de zwaarste crates.
+Binaries:
 
----
+- `nastv-web`: server.
+- `nastv-scanner`: media scanner.
 
-## Fase-indeling (breed beginnen, parity als eindpunt)
+The largest and riskiest crates are expected to be `nastv-core` and
+`nastv-ffmpeg`.
 
-### Fase 0 — Bootstrap (week 1)
-- Cargo workspace opzetten met alle crates als lege stubs
-- `rustfmt.toml`, `clippy` config, `cargo-deny`, CI via GitHub Actions
-- FFmpeg 8.1 runtime check: detecteer versie, fail fast bij <8.1 (voor `drawvg`)
-- Docker image met `ffmpeg:8.1` + nastv-web binary
-- Minimale `axum` + `leptos` hello-world met 1 SSR pagina
-- `sqlx` database bootstrap (SQLite eerst, MySQL feature-flag later)
+## Phases
 
-### Fase 1 — Domein + persistentie (week 2–4)
-- Port entities uit [ErsatzTV.Core/Domain/](/home/bart/ErsatzTV/ErsatzTV.Core/Domain/) naar `nastv-domain`:
-  - `Channel`, `Playout`, `PlayoutItem`, `ProgramSchedule`, `ProgramScheduleItem` (varianten)
-  - `MediaItem` hierarchie: Movie, Episode, Show, Season, Song, MusicVideo, OtherVideo, Image, RemoteStream
-  - `MediaVersion`, `MediaFile`, `MediaStream`, `MediaChapter`
-  - `Collection` (+ Smart/Multi/Rerun varianten), `Playlist`, `Block`, `BlockItem`
-  - `Library` + `MediaSource` (Plex/Jellyfin/Emby/Local)
-  - `FFmpegProfile`, `Watermark`, `GraphicsElement`, `Deco*`, `Artwork`, `FillerPreset`
-- Eerste sqlx schema migratie — geen 1:1 kopie van 393 EF-migraties; één schema samengevoegd uit de finale state van [TvContext.cs](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs)
-- Repository traits in `nastv-core`, sqlx implementaties in `nastv-infra`
-- Unit tests voor entity-mapping
+### Phase 0 - Bootstrap
 
-### Fase 2 — FFmpeg pipeline + drawvg graphics engine (week 4–8)
-- Port [ErsatzTV.FFmpeg/Pipeline/PipelineBuilderBase.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Pipeline/PipelineBuilderBase.cs) en [CommandGenerator.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/CommandGenerator.cs) als Rust builder pattern
-- Begin met `SoftwarePipelineBuilder` (referentie-implementatie), dan NVENC en VAAPI
-- Port [ComplexFilter.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs): label-routing voor video/audio/watermark/subtitle/graphics
-- Port watermark/subtitle/song-progress filters
-- **Nieuw**: `drawvg`-gebaseerde graphics engine met SVG-templates (vervangt ErsatzTV's `ScriptGraphicsElement` + externe renderer pipe)
-  - SVG templates in `assets/` met `{{variables}}` voor dynamische content (titels, tijd, progress %)
-  - Renderer die template → SVG string → `drawvg=source=...` filter genereert
-- Port `ConcatPlaylist.cs` → ffconcat v1.0 writer, `resetpts` handling
-- Snapshot-tests op gegenereerde FFmpeg-argumenten (zoals ErsatzTV.FFmpeg.Tests doet)
+- Create the Cargo workspace and empty crate stubs.
+- Add `rustfmt`, clippy, cargo-deny, and GitHub Actions.
+- Add FFmpeg 8.1 runtime detection and fail fast on older versions.
+- Add a Docker image with FFmpeg 8.1 and the `nastv-web` binary.
+- Add minimal `axum` + Leptos SSR page.
+- Add SQLite bootstrap.
 
-### Fase 3 — Scheduling engines (week 6–10, deels parallel met fase 2)
-Alle drie engines porten uit [ErsatzTV.Core/Scheduling/](/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/):
-1. **Block scheduling** — `BlockPlayoutBuilder.cs`, `BlockPlayoutEnumerator.cs`
-2. **YAML scheduling** — 50+ instruction handlers (Duration, Count, PadToNext, PreRoll, PostRoll, GraphicsOn/Off, Watermark, etc.); `serde_yaml` deserialisatie + trait-dispatch per instruction
-3. **Scripted scheduling** — Lua runtime via `mlua`; expose scheduling API aan scripts
+### Phase 1 - Domain and Persistence
 
-Gedeelde `ISchedulingEngine`-trait (fluent builder) naar Rust trait + struct. Playout state machine met tijd-anchors en gap-handling.
+- Port domain entities from `/home/bart/ErsatzTV/ErsatzTV.Core/Domain/`.
+- Include channel, playout, schedule, media, collection, playlist, block,
+  library, media-source, FFmpeg profile, watermark, graphics, artwork, and
+  filler concepts.
+- Create the initial sqlx schema from the final `TvContext.cs` model.
+- Add repository traits in `nastv-core`.
+- Add sqlx implementations in `nastv-infra`.
+- Add entity-mapping tests.
 
-### Fase 4 — Media source integraties (week 8–12)
-Port HTTP clients uit [ErsatzTV.Infrastructure/Plex/](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Plex/), `Jellyfin/`, `Emby/`:
-- `reqwest::Client` + `serde` DTOs per provider
-- Path-replacement logica (lokaal vs. remote paden)
-- Incremental sync via etags
-- `nastv-scanner` binary die deze clients aanroept, lokale filesystem scant, `ffprobe` invoked voor metadata
+### Phase 2 - FFmpeg Pipeline and drawvg Graphics
 
-### Fase 5 — Protocol endpoints (week 10–13)
-- `/iptv/channels.m3u` — M3U playlist generator
-- `/iptv/video` — HLS proxy endpoint met auth filters
-- HDHR: `/discover.json`, `/device.xml`, `/lineup.json`, `/lineup_status.json` + UDP discovery broadcaster op port 65001
-- `/guide` — EPG/XMLTV output
-- Port [ErsatzTV/Controllers/](/home/bart/ErsatzTV/ErsatzTV/) als axum routers
+- Port pipeline-builder structure from `PipelineBuilderBase.cs` and
+  `SoftwarePipelineBuilder.cs`.
+- Port `CommandGenerator.cs`.
+- Port `ComplexFilter.cs` label routing.
+- Start with the software pipeline, then add NVENC and VAAPI.
+- Port watermark, subtitle, and song-progress filters.
+- Add a drawvg-based graphics engine with SVG templates in `assets/`.
+- Port ffconcat v1.0 playlist writing and resetpts handling.
+- Snapshot generated FFmpeg argv and filter graphs with `insta`.
 
-### Fase 6 — Leptos admin UI (week 12–20, zwaarste fase)
-Port de 132 Razor componenten stapsgewijs; prioriteit:
-1. Channel lijst/editor
-2. Media source config (Plex/Jellyfin/Emby/Local)
-3. Library browser + collections
-4. Block editor
-5. YAML playout editor (met schema-validatie)
-6. FFmpeg profile editor
-7. Graphics/watermark editor (met live drawvg preview!)
-8. Playout visualizer/timeline
+### Phase 3 - Scheduling Engines
 
-Start server-rendered, voeg islands-hydratie toe waar interactiviteit nodig is.
+Port the three scheduling engines from
+`/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/` behind a shared Rust trait:
 
-### Fase 7 — Hardening & parity-completering (lopend)
-- Hardware acceleratie: QSV, AMF, VideoToolbox, RKMPP, V4L2M2M (na NVENC/VAAPI in fase 2)
-- MySQL backend activeren naast SQLite
-- Trakt integratie, GitHub version check
-- Docker multi-arch images
-- Performance-tests tegen ErsatzTV baseline
+1. Block scheduling.
+2. YAML scheduling with per-instruction dispatch.
+3. Scripted scheduling through Lua 5.4 with `mlua`.
 
----
+The playout state machine must handle time anchors, gaps, pre-roll, post-roll,
+graphics, watermarks, and filler behavior.
 
-## Kritieke bestanden om te raadplegen bij het porten
+### Phase 4 - Media Source Integrations
 
-| Doel | ErsatzTV bron |
-|---|---|
-| Pipeline builder patroon | [ErsatzTV.FFmpeg/Pipeline/PipelineBuilderBase.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Pipeline/PipelineBuilderBase.cs), [SoftwarePipelineBuilder.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Pipeline/SoftwarePipelineBuilder.cs) |
-| Filter complex generatie | [ErsatzTV.FFmpeg/Filter/ComplexFilter.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs) |
-| Watermark/overlay filters | [ErsatzTV.FFmpeg/Filter/OverlayWatermarkFilter.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/OverlayWatermarkFilter.cs), [SongProgressFilter.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/SongProgressFilter.cs) |
-| FFmpeg argv assemblage | [ErsatzTV.FFmpeg/CommandGenerator.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/CommandGenerator.cs) |
-| Process spawning | [ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs](/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs) |
-| Seamless concat | [ErsatzTV.Core/FFmpeg/ConcatPlaylist.cs](/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/ConcatPlaylist.cs) |
-| DB schema (99 DbSets) | [ErsatzTV.Infrastructure/Data/TvContext.cs](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs) |
-| Scheduling engines | [ErsatzTV.Core/Scheduling/](/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/) (BlockScheduling/, YamlScheduling/, ScriptedScheduling/, Engine/) |
-| HLS output config | [ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs](/home/bart/ErsatzTV/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs) |
-| HDHR markdown spec (intern) | [/home/bart/ErsatzTV/hdhr.md](/home/bart/ErsatzTV/hdhr.md) |
-| Plex/Jellyfin/Emby clients | [ErsatzTV.Infrastructure/Plex/](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Plex/), `Jellyfin/`, `Emby/` |
-| Domein referentie | [ErsatzTV.Core/Domain/](/home/bart/ErsatzTV/ErsatzTV.Core/Domain/) |
+- Port Plex, Jellyfin, and Emby HTTP clients.
+- Add local filesystem scanning.
+- Add path replacement logic for local and container paths.
+- Add incremental sync where the upstream provider supports it.
+- Invoke `ffprobe` for media metadata.
+- Implement scanner behavior in `nastv-scanner`.
 
----
+### Phase 5 - Protocol Endpoints
 
-## Verificatie
+- Add `/iptv/channels.m3u`.
+- Add HLS video endpoints.
+- Add HDHomeRun discovery and lineup endpoints.
+- Add UDP discovery on port 65001.
+- Add XMLTV guide output.
+- Port relevant ErsatzTV controller behavior into axum routers.
 
-**Fase 0:**
-- `cargo build --workspace` groen
-- `curl localhost:8080/healthz` → 200
-- `ffmpeg -version` in container toont 8.1.x
-- SQLite DB file wordt aangemaakt op startup
+### Phase 6 - Leptos Admin UI
 
-**Fase 1:**
-- Alle entities hebben een sqlx-roundtrip test (insert → select → equals)
-- Schema-migratie draait idempotent op lege DB en op gestarte DB
-- `cargo test -p nastv-domain -p nastv-infra` groen
+Port the admin UI incrementally. Priority order:
 
-**Fase 2:**
-- Snapshot-tests op FFmpeg argv output voor software + NVENC paden
-- End-to-end: voer `nastv-web` lokaal uit, speel een lokaal MP4-bestand af via `/iptv/video/<channel>`, open in VLC, controleer seamless afspelen
-- `drawvg` overlay: render een SVG-template op video, verifieer visueel in VLC
-- Watermark fade-in/out: verifieer in VLC
+1. Channel list and editor.
+2. Media source configuration.
+3. Library browser and collections.
+4. Block editor.
+5. YAML playout editor with schema validation.
+6. FFmpeg profile editor.
+7. Graphics and watermark editor with drawvg preview.
+8. Playout timeline visualizer.
 
-**Fase 3:**
-- Unit tests per YAML instruction handler (input YAML → verwachte playout timeline)
-- Block scheduling: vergelijk gegenereerde timeline met ErsatzTV output voor identieke input (als mogelijk)
-- Lua script: draai een scripted playout die media roteert, verifieer correcte volgorde
+Start server-rendered and add islands hydration where the workflow requires it.
 
-**Fase 4:**
-- Integration test: spin up Jellyfin container, scan library, verifieer dat items in DB staan
-- Pad-replacement werkt voor lokaal/docker scenario
-- Idem Plex en Emby
+### Phase 7 - Hardening and Parity Completion
 
-**Fase 5:**
-- `/iptv/channels.m3u` laden in VLC → kanalen verschijnen
-- HDHR: Plex DVR kan device discovery doen (UDP 65001)
-- `/guide` → geldige XMLTV die Jellyfin/Plex EPG kan parsen
+- Add additional hardware paths: QSV, AMF, VideoToolbox, RKMPP, V4L2M2M.
+- Enable MySQL backend support.
+- Add Trakt integration and version checks.
+- Add Docker multi-arch images.
+- Benchmark side by side against ErsatzTV.
+- Run long soak tests.
 
-**Fase 6:**
-- Handmatige UI-doorloop: maak kanaal aan, configureer mediabron, bouw playout, start stream — allemaal via Leptos UI
-- Geen browser-console errors op kritieke paden
+## Critical Source Files for Porting
 
-**Fase 7 / doorlopend:**
-- Side-by-side benchmark tegen ErsatzTV: dezelfde channel config, meet CPU/memory/startup-time
-- 24-uurs soak test op één kanaal zonder crash of memory leak
+| Goal | ErsatzTV source |
+| --- | --- |
+| Pipeline builder pattern | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Pipeline/PipelineBuilderBase.cs` |
+| Software pipeline | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Pipeline/SoftwarePipelineBuilder.cs` |
+| Filter complex generation | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs` |
+| Watermark overlays | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/OverlayWatermarkFilter.cs` |
+| Song progress filter | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/Filter/SongProgressFilter.cs` |
+| FFmpeg argv assembly | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/CommandGenerator.cs` |
+| Process spawning | `/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs` |
+| Seamless concat | `/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/ConcatPlaylist.cs` |
+| Database model | `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs` |
+| Scheduling engines | `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/` |
+| HLS output config | `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs` |
+| HDHomeRun protocol notes | `/home/bart/ErsatzTV/hdhr.md` |
+| Provider clients | `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Plex/`, `Jellyfin/`, `Emby/` |
+| Domain reference | `/home/bart/ErsatzTV/ErsatzTV.Core/Domain/` |
 
----
+## Verification
 
-## Bronnen
+### Phase 0
 
-- [FFmpeg 8.1 release notes (Phoronix)](https://www.phoronix.com/news/FFmpeg-8.0-Released)
-- [FFmpeg 8.1 Feature Highlights](https://www.the-automator.com/ffmpeg-8-1-feature-highlights-and-implications-to-our-wrappers/)
-- [FFmpeg 8.1 Ubuntu PPA + Rockchip/JPEG-XS](https://ubuntuhandbook.org/index.php/2026/03/ffmpeg-8-1-rockchip-jpeg-xs/)
-- [rusty_ffmpeg 0.17.0+ffmpeg.8.1](https://crates.io/crates/rsmpeg) (voor eventuele toekomstige libav-hybride)
-- [rsmpeg on lib.rs](https://lib.rs/crates/rsmpeg)
+- `cargo build --workspace` passes.
+- `curl localhost:8080/healthz` returns `200`.
+- `ffmpeg -version` in the container reports 8.1.x or newer.
+- A SQLite database file is created at startup.
+
+### Phase 1
+
+- Domain entities have sqlx round-trip tests where persistence exists.
+- Migrations run idempotently on an empty database and a started database.
+- `cargo test -p nastv-domain -p nastv-infra` passes.
+
+### Phase 2
+
+- Snapshot tests cover FFmpeg argv output for software and NVENC paths.
+- A local MP4 can stream through `/iptv/video/<channel>` and play in VLC.
+- A drawvg overlay renders on video.
+- Watermark fade-in and fade-out can be verified in VLC.
+
+### Phase 3
+
+- Unit tests cover each YAML instruction handler.
+- Block scheduling output is compared with ErsatzTV output where possible.
+- A Lua scripted playout rotates media in the expected order.
+
+### Phase 4
+
+- A Jellyfin container integration test can scan a library into the database.
+- Path replacement works for local and container scenarios.
+- Plex and Emby clients have equivalent coverage once implemented.
+
+### Phase 5
+
+- VLC can load `/iptv/channels.m3u`.
+- Plex DVR can discover the HDHomeRun-compatible device.
+- `/guide` returns XMLTV that Plex or Jellyfin can parse.
+
+### Phase 6
+
+- A user can create a channel, configure a media source, build a playout, and
+  start a stream from the UI.
+- Critical UI paths have no browser-console errors.
+
+### Phase 7
+
+- Side-by-side benchmarks compare NasTv and ErsatzTV on the same channel config.
+- A 24-hour single-channel soak test runs without crash or memory leak.
+
+## References
+
+- ErsatzTV source tree: `/home/bart/ErsatzTV/`.
+- HDHomeRun notes: `/home/bart/ErsatzTV/hdhr.md`.
+- NasTv contracts: [../CONTRIBUTING.md](../CONTRIBUTING.md),
+  [../STYLE.md](../STYLE.md), [../ARCHITECTURE.md](../ARCHITECTURE.md), and
+  [../PORTING.md](../PORTING.md).
