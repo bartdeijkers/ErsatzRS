@@ -8,9 +8,7 @@ use nastv_domain::{
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{
-    decode_enum, decode_optional_datetime, encode_optional_datetime, not_found,
-};
+use super::common::{decode_enum, decode_optional_datetime, encode_optional_datetime, not_found};
 
 #[derive(Clone)]
 pub struct SqliteMediaSourceRepository(pub Pool<Sqlite>);
@@ -19,11 +17,13 @@ pub struct SqliteMediaSourceRepository(pub Pool<Sqlite>);
 impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_plex(&self, id: EntityId) -> Result<PlexMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Plex).await?;
-        let row = sqlx::query("SELECT server_name, machine_identifier FROM plex_media_sources WHERE id = ?")
-            .bind(id)
-            .fetch_one(&self.0)
-            .await
-            .map_err(|error| not_found("plex media source", id, error))?;
+        let row = sqlx::query(
+            "SELECT server_name, machine_identifier FROM plex_media_sources WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_one(&self.0)
+        .await
+        .map_err(|error| not_found("plex media source", id, error))?;
 
         let connection_rows = sqlx::query(
             "SELECT id, is_active, uri, plex_media_source_id
@@ -68,9 +68,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                         .try_get("plex_media_source_id")
                         .unwrap_or_default(),
                     path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement
-                        .try_get("replacement_path")
-                        .unwrap_or_default(),
+                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
                 })
                 .collect(),
         })
@@ -130,9 +128,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                         .try_get("jellyfin_media_source_id")
                         .unwrap_or_default(),
                     path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement
-                        .try_get("replacement_path")
-                        .unwrap_or_default(),
+                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
                 })
                 .collect(),
             last_collections_scan: decode_optional_datetime(
@@ -196,9 +192,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
                         .try_get("emby_media_source_id")
                         .unwrap_or_default(),
                     path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement
-                        .try_get("replacement_path")
-                        .unwrap_or_default(),
+                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
                 })
                 .collect(),
             last_collections_scan: decode_optional_datetime(
@@ -210,8 +204,8 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn list_all(&self) -> Result<Vec<MediaSource>> {
         let rows = sqlx::query("SELECT * FROM media_sources ORDER BY name, id")
-        .fetch_all(&self.0)
-        .await?;
+            .fetch_all(&self.0)
+            .await?;
         rows.iter().map(map_media_source).collect()
     }
 
@@ -220,7 +214,13 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 
     async fn upsert_jellyfin(&self, source: &JellyfinMediaSource) -> Result<()> {
-        upsert_source(&self.0, &source.media_source, MediaSourceKind::Jellyfin, source).await
+        upsert_source(
+            &self.0,
+            &source.media_source,
+            MediaSourceKind::Jellyfin,
+            source,
+        )
+        .await
     }
 
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()> {
@@ -354,10 +354,12 @@ impl ProviderUpsert for JellyfinMediaSource {
                 .await?;
             }
 
-            sqlx::query("DELETE FROM jellyfin_path_replacements WHERE jellyfin_media_source_id = ?")
-                .bind(self.media_source.id)
-                .execute(&mut **tx)
-                .await?;
+            sqlx::query(
+                "DELETE FROM jellyfin_path_replacements WHERE jellyfin_media_source_id = ?",
+            )
+            .bind(self.media_source.id)
+            .execute(&mut **tx)
+            .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
                     "INSERT OR REPLACE INTO jellyfin_path_replacements (

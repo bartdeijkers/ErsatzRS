@@ -4,7 +4,9 @@ use nastv_domain::{EntityId, EpisodeMetadata, MovieMetadata, MusicVideoMetadata}
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_datetime, decode_optional_datetime, encode_datetime, encode_optional_datetime};
+use super::common::{
+    decode_datetime, decode_optional_datetime, encode_datetime, encode_optional_datetime,
+};
 
 #[derive(Clone)]
 pub struct SqliteMetadataRepository(pub Pool<Sqlite>);
@@ -13,25 +15,25 @@ pub struct SqliteMetadataRepository(pub Pool<Sqlite>);
 impl MetadataRepository for SqliteMetadataRepository {
     async fn get_movie_metadata(&self, item_id: EntityId) -> Result<MovieMetadata> {
         let row = sqlx::query("SELECT * FROM movie_metadata WHERE item_id = ?")
-        .bind(item_id)
-        .fetch_one(&self.0)
-        .await?;
+            .bind(item_id)
+            .fetch_one(&self.0)
+            .await?;
         map_movie_metadata(&row)
     }
 
     async fn get_episode_metadata(&self, item_id: EntityId) -> Result<EpisodeMetadata> {
         let row = sqlx::query("SELECT * FROM episode_metadata WHERE item_id = ?")
-        .bind(item_id)
-        .fetch_one(&self.0)
-        .await?;
+            .bind(item_id)
+            .fetch_one(&self.0)
+            .await?;
         map_episode_metadata(&row)
     }
 
     async fn get_music_video_metadata(&self, item_id: EntityId) -> Result<MusicVideoMetadata> {
         let row = sqlx::query("SELECT * FROM music_video_metadata WHERE item_id = ?")
-        .bind(item_id)
-        .fetch_one(&self.0)
-        .await?;
+            .bind(item_id)
+            .fetch_one(&self.0)
+            .await?;
         map_music_video_metadata(&row)
     }
 
@@ -68,22 +70,22 @@ impl MetadataRepository for SqliteMetadataRepository {
                 outline, plot
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-            .bind(metadata.metadata.id)
-            .bind(metadata.metadata.id)
-            .bind(format!("{:?}", metadata.metadata.metadata_kind))
-            .bind(&metadata.metadata.title)
-            .bind(&metadata.metadata.original_title)
-            .bind(&metadata.metadata.sort_title)
-            .bind(metadata.metadata.year)
-            .bind(encode_optional_datetime(metadata.metadata.release_date))
-            .bind(encode_datetime(metadata.metadata.date_added))
-            .bind(encode_datetime(metadata.metadata.date_updated))
-            .bind(metadata.season_number)
-            .bind(metadata.episode_number)
-            .bind(&metadata.outline)
-            .bind(&metadata.plot)
-            .execute(&self.0)
-            .await?;
+        .bind(metadata.metadata.id)
+        .bind(metadata.metadata.id)
+        .bind(format!("{:?}", metadata.metadata.metadata_kind))
+        .bind(&metadata.metadata.title)
+        .bind(&metadata.metadata.original_title)
+        .bind(&metadata.metadata.sort_title)
+        .bind(metadata.metadata.year)
+        .bind(encode_optional_datetime(metadata.metadata.release_date))
+        .bind(encode_datetime(metadata.metadata.date_added))
+        .bind(encode_datetime(metadata.metadata.date_updated))
+        .bind(metadata.season_number)
+        .bind(metadata.episode_number)
+        .bind(&metadata.outline)
+        .bind(&metadata.plot)
+        .execute(&self.0)
+        .await?;
         Ok(())
     }
 }
@@ -141,8 +143,14 @@ fn map_common_metadata(row: &SqliteRow) -> Result<nastv_domain::Metadata> {
         original_title: row.try_get("original_title")?,
         sort_title: row.try_get("sort_title")?,
         year: row.try_get("year")?,
-        release_date: decode_optional_datetime("metadata release_date", row.try_get("release_date")?)?,
-        date_added: decode_datetime("metadata date_added", &row.try_get::<String, _>("date_added")?)?,
+        release_date: decode_optional_datetime(
+            "metadata release_date",
+            row.try_get("release_date")?,
+        )?,
+        date_added: decode_datetime(
+            "metadata date_added",
+            &row.try_get::<String, _>("date_added")?,
+        )?,
         date_updated: decode_datetime(
             "metadata date_updated",
             &row.try_get::<String, _>("date_updated")?,

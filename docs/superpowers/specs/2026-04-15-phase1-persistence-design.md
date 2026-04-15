@@ -189,7 +189,7 @@ nastv-infra/src/repositories/
   graphics.rs
   metadata.rs
   config.rs
-  enum_types.rs  — sqlx::Type impls for all domain enums
+  common.rs      — enum/date/duration mapping helpers
 ```
 
 ### Repository newtype pattern
@@ -212,9 +212,11 @@ surface evolves.
 
 ### Enum mapping
 
-Domain enums implement `sqlx::Type<Sqlite>`, `sqlx::Encode<Sqlite>`, and
-`sqlx::Decode<Sqlite>` via a TEXT representation. A local macro reduces this
-to one line per enum. Variants map to their `Debug` string representation.
+Domain enums are stored as TEXT using their `Debug` string representation and
+decoded through the repository mapping helpers. Direct `sqlx::Type`,
+`sqlx::Encode`, and `sqlx::Decode` impls are intentionally not used for domain
+enums because the traits and enum types live in different crates and would hit
+Rust's orphan rules.
 
 ### Type mappings
 

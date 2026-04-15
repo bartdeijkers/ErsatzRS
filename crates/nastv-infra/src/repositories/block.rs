@@ -29,9 +29,9 @@ impl BlockRepository for SqliteBlockRepository {
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Block>> {
         let rows = sqlx::query("SELECT * FROM blocks WHERE block_group_id = ? ORDER BY name, id")
-        .bind(group_id)
-        .fetch_all(&self.0)
-        .await?;
+            .bind(group_id)
+            .fetch_all(&self.0)
+            .await?;
         rows.iter()
             .map(|row| {
                 let mut block = map_block(row)?;

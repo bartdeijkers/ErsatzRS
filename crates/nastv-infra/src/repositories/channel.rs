@@ -47,8 +47,8 @@ impl ChannelRepository for SqliteChannelRepository {
     async fn list_enabled(&self) -> Result<Vec<Channel>> {
         let rows =
             sqlx::query("SELECT * FROM channels WHERE is_enabled = 1 ORDER BY sort_number, number")
-        .fetch_all(&self.0)
-        .await?;
+                .fetch_all(&self.0)
+                .await?;
         rows.iter()
             .map(|row| {
                 let mut channel = map_channel(row)?;
@@ -132,7 +132,7 @@ fn map_channel(row: &SqliteRow) -> Result<Channel> {
     Ok(Channel {
         id: row.try_get("id")?,
         unique_id: Uuid::parse_str(&unique_id)
-            .map_err(|source| decode_message("channel unique_id", source.to_string()))?,
+            .map_err(|source| decode_message("channel unique_id", &source.to_string()))?,
         number: row.try_get("number")?,
         sort_number: row.try_get("sort_number")?,
         name: row.try_get("name")?,

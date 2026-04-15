@@ -95,12 +95,14 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn upsert(&self, collection: &Collection) -> Result<()> {
         let mut tx = self.0.begin().await?;
-        sqlx::query("INSERT OR REPLACE INTO collections (id, name, collection_type) VALUES (?, ?, ?)")
-            .bind(collection.id)
-            .bind(&collection.name)
-            .bind(format!("{:?}", collection.collection_type))
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT OR REPLACE INTO collections (id, name, collection_type) VALUES (?, ?, ?)",
+        )
+        .bind(collection.id)
+        .bind(&collection.name)
+        .bind(format!("{:?}", collection.collection_type))
+        .execute(&mut *tx)
+        .await?;
 
         sqlx::query("DELETE FROM collection_items WHERE collection_id = ?")
             .bind(collection.id)

@@ -7,7 +7,7 @@ use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
     decode_datetime, decode_duration, decode_enum, decode_optional_datetime,
-    decode_optional_duration, encode_datetime, encode_optional_datetime, not_found, load_ids,
+    decode_optional_duration, encode_datetime, encode_optional_datetime, load_ids, not_found,
     replace_ids,
 };
 
@@ -68,9 +68,9 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .collect();
 
         let anchor = sqlx::query("SELECT * FROM playout_anchors WHERE playout_id = ?")
-        .bind(id)
-        .fetch_optional(&self.0)
-        .await?;
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await?;
         playout.anchor = anchor.as_ref().map(map_anchor).transpose()?;
 
         let status = sqlx::query("SELECT * FROM playout_build_statuses WHERE playout_id = ?")
@@ -233,7 +233,10 @@ fn map_anchor(row: &SqliteRow) -> Result<nastv_domain::PlayoutAnchor> {
             seed: row.try_get("schedule_items_seed")?,
             index: row.try_get("schedule_items_index")?,
         },
-        next_start: decode_datetime("playout anchor next_start", &row.try_get::<String, _>("next_start")?)?,
+        next_start: decode_datetime(
+            "playout anchor next_start",
+            &row.try_get::<String, _>("next_start")?,
+        )?,
         multiple_remaining: row.try_get("multiple_remaining")?,
         duration_finish: decode_optional_datetime(
             "playout anchor duration_finish",
@@ -265,7 +268,10 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
         media_item_id: row.try_get("media_item_id")?,
         start: decode_datetime("playout item start", &row.try_get::<String, _>("start")?)?,
         finish: decode_datetime("playout item finish", &row.try_get::<String, _>("finish")?)?,
-        guide_start: decode_optional_datetime("playout item guide_start", row.try_get("guide_start")?)?,
+        guide_start: decode_optional_datetime(
+            "playout item guide_start",
+            row.try_get("guide_start")?,
+        )?,
         guide_finish: decode_optional_datetime(
             "playout item guide_finish",
             row.try_get("guide_finish")?,

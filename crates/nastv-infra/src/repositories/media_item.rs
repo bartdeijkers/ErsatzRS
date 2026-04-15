@@ -22,9 +22,9 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
     async fn list_for_library_path(&self, path_id: EntityId) -> Result<Vec<MediaItem>> {
         let rows = sqlx::query("SELECT * FROM media_items WHERE library_path_id = ? ORDER BY id")
-        .bind(path_id)
-        .fetch_all(&self.0)
-        .await?;
+            .bind(path_id)
+            .fetch_all(&self.0)
+            .await?;
         rows.iter().map(map_media_item).collect()
     }
 
@@ -43,12 +43,14 @@ impl MediaItemRepository for SqliteMediaItemRepository {
     }
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO media_items (id, library_path_id, state) VALUES (?, ?, ?)")
-            .bind(item.id)
-            .bind(item.library_path_id)
-            .bind(format!("{:?}", item.state))
-            .execute(&self.0)
-            .await?;
+        sqlx::query(
+            "INSERT OR REPLACE INTO media_items (id, library_path_id, state) VALUES (?, ?, ?)",
+        )
+        .bind(item.id)
+        .bind(item.library_path_id)
+        .bind(format!("{:?}", item.state))
+        .execute(&self.0)
+        .await?;
         Ok(())
     }
 }

@@ -4,7 +4,7 @@ use nastv_domain::{EntityId, Template};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{load_ids, not_found, replace_ids};
+use super::common::{load_ids, not_found};
 
 #[derive(Clone)]
 pub struct SqliteTemplateRepository(pub Pool<Sqlite>);
@@ -28,10 +28,11 @@ impl TemplateRepository for SqliteTemplateRepository {
     }
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Template>> {
-        let rows = sqlx::query("SELECT * FROM templates WHERE template_group_id = ? ORDER BY name, id")
-        .bind(group_id)
-        .fetch_all(&self.0)
-        .await?;
+        let rows =
+            sqlx::query("SELECT * FROM templates WHERE template_group_id = ? ORDER BY name, id")
+                .bind(group_id)
+                .fetch_all(&self.0)
+                .await?;
         rows.iter()
             .map(|row| {
                 let mut template = map_template(row)?;
@@ -43,19 +44,13 @@ impl TemplateRepository for SqliteTemplateRepository {
 
     async fn upsert(&self, template: &Template) -> Result<()> {
         let mut tx = self.0.begin().await?;
-        sqlx::query("INSERT OR REPLACE INTO templates (id, template_group_id, name) VALUES (?, ?, ?)")
-            .bind(template.id)
-            .bind(template.template_group_id)
-            .bind(&template.name)
-            .execute(&mut *tx)
-            .await?;
-        replace_ids(
-            &mut tx,
-            "DELETE FROM template_items WHERE template_id = ?",
-            "INSERT OR REPLACE INTO template_items (template_id, id, block_id, sort_order) VALUES (?, ?, 0, 0)",
-            template.id,
-            &template.item_ids,
+        sqlx::query(
+            "INSERT OR REPLACE INTO templates (id, template_group_id, name) VALUES (?, ?, ?)",
         )
+        .bind(template.id)
+        .bind(template.template_group_id)
+        .bind(&template.name)
+        .execute(&mut *tx)
         .await?;
         tx.commit().await?;
         Ok(())

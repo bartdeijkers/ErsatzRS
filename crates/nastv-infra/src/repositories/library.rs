@@ -34,10 +34,11 @@ impl LibraryRepository for SqliteLibraryRepository {
     }
 
     async fn list_for_source(&self, source_id: EntityId) -> Result<Vec<Library>> {
-        let rows = sqlx::query("SELECT * FROM libraries WHERE media_source_id = ? ORDER BY name, id")
-        .bind(source_id)
-        .fetch_all(&self.0)
-        .await?;
+        let rows =
+            sqlx::query("SELECT * FROM libraries WHERE media_source_id = ? ORDER BY name, id")
+                .bind(source_id)
+                .fetch_all(&self.0)
+                .await?;
         rows.iter()
             .map(|row| {
                 let mut library = map_library(row)?;
@@ -67,7 +68,10 @@ impl LibraryRepository for SqliteLibraryRepository {
             .bind(library.id)
             .execute(&mut *tx)
             .await?;
-        if matches!(library.media_source_kind, nastv_domain::MediaSourceKind::Local) {
+        if matches!(
+            library.media_source_kind,
+            nastv_domain::MediaSourceKind::Local
+        ) {
             sqlx::query("INSERT OR REPLACE INTO local_libraries (id) VALUES (?)")
                 .bind(library.id)
                 .execute(&mut *tx)
@@ -100,7 +104,10 @@ fn map_library(row: &SqliteRow) -> Result<Library> {
     Ok(Library {
         id: row.try_get("id")?,
         name: row.try_get("name")?,
-        media_kind: decode_enum("library media_kind", &row.try_get::<String, _>("media_kind")?)?,
+        media_kind: decode_enum(
+            "library media_kind",
+            &row.try_get::<String, _>("media_kind")?,
+        )?,
         media_source_id: row.try_get("media_source_id")?,
         media_source_kind: decode_enum(
             "library media_source_kind",

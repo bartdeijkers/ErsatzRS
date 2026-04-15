@@ -8,13 +8,13 @@ where
     T: DeserializeOwned,
 {
     serde_json::from_str(&format!("\"{value}\""))
-        .map_err(|source| decode_message(kind, source.to_string()))
+        .map_err(|source| decode_message(kind, &source.to_string()))
 }
 
 pub fn decode_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|parsed| parsed.with_timezone(&Utc))
-        .map_err(|source| decode_message(kind, source.to_string()))
+        .map_err(|source| decode_message(kind, &source.to_string()))
 }
 
 pub fn decode_optional_datetime(
@@ -54,7 +54,7 @@ pub fn decode_optional_duration(value: Option<i64>) -> Option<Duration> {
     value.map(decode_duration)
 }
 
-pub fn decode_message(kind: &'static str, message: String) -> RepositoryError {
+pub fn decode_message(kind: &'static str, message: &str) -> RepositoryError {
     RepositoryError::Database(sqlx::Error::Decode(
         format!("failed to decode {kind}: {message}").into(),
     ))

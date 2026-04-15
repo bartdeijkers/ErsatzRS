@@ -48,7 +48,7 @@ impl GraphicsRepository for SqliteGraphicsRepository {
         sqlx::query(
             "INSERT OR REPLACE INTO graphics_elements (
                 id, name, kind, x, y, width, height, z_index, path, text, script, variables
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(element.id)
         .bind(&element.name)
@@ -72,10 +72,7 @@ fn map_element(row: &SqliteRow) -> Result<GraphicsElement> {
     Ok(GraphicsElement {
         id: row.try_get("id")?,
         name: row.try_get("name")?,
-        kind: decode_enum(
-            "graphics element kind",
-            &row.try_get::<String, _>("kind")?,
-        )?,
+        kind: decode_enum("graphics element kind", &row.try_get::<String, _>("kind")?)?,
         x: row.try_get("x")?,
         y: row.try_get("y")?,
         width: row.try_get("width")?,

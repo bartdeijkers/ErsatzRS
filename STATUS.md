@@ -4,7 +4,7 @@ Last updated: 2026-04-15
 
 ## Current Phase
 
-**Phase 1 — Domain and Persistence** (in progress)
+**Phase 1 — Domain and Persistence** (complete; Phase 2 ready)
 
 ### Phase 0 Checklist
 
@@ -25,14 +25,14 @@ Last updated: 2026-04-15
 
 ### What an Agent Should Do Next
 
-Phase 0 is complete. **Phase 1 — Domain and Persistence** is in progress:
+Phase 0 and Phase 1 are complete. **Phase 2 — FFmpeg Pipeline** is ready to
+start:
 
-1. Read [plans/sequential-dancing-valiant.md](plans/sequential-dancing-valiant.md) Phase 1.
-2. Read [PORTING.md](PORTING.md) and study `/home/bart/ErsatzTV/ErsatzTV.Core/Domain/`.
-3. Continue refining the `nastv-domain` port as schema details are mapped.
-4. Build out the remaining repository surface that still exposes only aggregate
-   IDs where Phase 2 and Phase 3 need richer child-row persistence.
-5. Start Phase 2/3 implementation work against the expanded normalized schema:
+1. Read [plans/sequential-dancing-valiant.md](plans/sequential-dancing-valiant.md) Phase 2.
+2. Read [PORTING.md](PORTING.md) and study the FFmpeg reference files under
+   `/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/` and
+   `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/`.
+3. Start Phase 2 implementation work against the expanded normalized schema:
    FFmpeg pipeline persistence dependencies, playout anchors, and scheduling
    child-item repositories.
 
@@ -57,3 +57,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Started Phase 1 by porting channel, playout, schedule, media, collection, playlist, block, library, media-source, FFmpeg profile, watermark, graphics, artwork, and filler domain entities into `nastv-domain`. |
 | 2026-04-15 | Codex | Added Phase 1 persistence foundation: repository traits, SQLite migration, sqlx repositories, offline metadata, tests, and cargo-deny cleanup. |
 | 2026-04-15 | GitHub Copilot (GPT-5.4) | Replaced the hybrid JSON/scalar persistence layer with an expanded normalized SQLite schema, normalized repository mappings, and updated integration tests/sqlx metadata. |
+| 2026-04-15 | Codex | Closed remaining Phase 1 persistence gaps: split repository integration tests, added missing relation coverage, fixed template child-row writes, and reconciled enum mapping docs. |

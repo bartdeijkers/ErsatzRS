@@ -10,6 +10,9 @@ for commit messages.
 
 ### Added
 
+- Repository-specific Phase 1 integration test files covering provider media
+  sources, relation-loading queries, graphics channel lookups, metadata writes,
+  and `NotFound` behavior.
 - Phase 1 persistence foundation with repository traits, SQLite migration,
   sqlx-backed repository implementations, offline sqlx metadata, and
   repository integration tests.
@@ -39,6 +42,8 @@ for commit messages.
   from the final ErsatzTV model instead of the earlier hybrid JSON/scalar
   mapping, and the active infra repositories now map scalar columns and join
   tables directly.
+- Phase 1 persistence design now documents the implemented enum mapping helper
+  approach rather than orphan-rule-impossible direct `sqlx` enum impls.
 - Cargo deny metadata and policy now cover workspace crates and accepted
   transitive license/advisory exceptions.
 - Workspace package metadata, lints, binary declarations, and Rust version are
@@ -51,6 +56,8 @@ for commit messages.
 
 ### Fixed
 
+- Template repository upsert no longer writes placeholder child rows that
+  violate normalized foreign keys.
 - Docker healthcheck no longer depends on `wget`.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.

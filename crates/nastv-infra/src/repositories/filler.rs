@@ -4,9 +4,7 @@ use nastv_domain::{EntityId, FillerPreset};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{
-    decode_enum, decode_optional_duration, encode_optional_duration, not_found,
-};
+use super::common::{decode_enum, decode_optional_duration, encode_optional_duration, not_found};
 
 #[derive(Clone)]
 pub struct SqliteFillerRepository(pub Pool<Sqlite>);
@@ -35,7 +33,7 @@ impl FillerRepository for SqliteFillerRepository {
                 id, name, filler_mode, collection_type, collection_id, media_item_id,
                 multi_collection_id, smart_collection_id, playlist_id, duration_ms, count,
                 pad_to_next_hour, allow_watermarks, playback_order
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(preset.id)
         .bind(&preset.name)

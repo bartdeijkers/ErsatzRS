@@ -66,15 +66,15 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
                 shuffle_schedule_items, random_start_point, fixed_start_time_behavior
              ) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
-            .bind(schedule.id)
-            .bind(&schedule.name)
-            .bind(schedule.keep_multi_part_episodes_together)
-            .bind(schedule.treat_collections_as_shows)
-            .bind(schedule.shuffle_schedule_items)
-            .bind(schedule.random_start_point)
-            .bind(format!("{:?}", schedule.fixed_start_time_behavior))
-            .execute(&mut *tx)
-            .await?;
+        .bind(schedule.id)
+        .bind(&schedule.name)
+        .bind(schedule.keep_multi_part_episodes_together)
+        .bind(schedule.treat_collections_as_shows)
+        .bind(schedule.shuffle_schedule_items)
+        .bind(schedule.random_start_point)
+        .bind(format!("{:?}", schedule.fixed_start_time_behavior))
+        .execute(&mut *tx)
+        .await?;
         replace_ids(
             &mut tx,
             "DELETE FROM program_schedule_items WHERE program_schedule_id = ?",
