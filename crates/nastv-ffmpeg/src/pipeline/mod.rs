@@ -36,6 +36,7 @@ pub struct FfmpegState {
     pub output_format: OutputFormat,
     pub start_seconds: Option<i64>,
     pub thread_count: Option<u32>,
+    pub report_progress: bool,
     pub do_not_map_metadata: bool,
     pub hls: Option<HlsOutput>,
 }
@@ -46,6 +47,7 @@ impl Default for FfmpegState {
             output_format: OutputFormat::MpegTs,
             start_seconds: None,
             thread_count: None,
+            report_progress: true,
             do_not_map_metadata: true,
             hls: None,
         }
@@ -174,11 +176,14 @@ fn build_transcode_pipeline(
         no_standard_input(),
         hide_banner(),
         no_stats(),
-        progress_to_stdout(),
         loglevel_error(),
         standard_format_flags(),
         fast_start(),
     ];
+
+    if request.state.report_progress {
+        steps.insert(3, progress_to_stdout());
+    }
 
     if let Some(thread_count) = request.state.thread_count {
         steps.insert(
