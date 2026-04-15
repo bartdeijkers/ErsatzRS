@@ -4,7 +4,7 @@ Last updated: 2026-04-15
 
 ## Current Phase
 
-**Phase 2 — FFmpeg Pipeline and drawvg Graphics** (foundation implemented)
+**Phase 2 — FFmpeg Pipeline and drawvg Graphics** (foundation wired to a demo stream)
 
 ### Phase 0 Checklist
 
@@ -28,15 +28,18 @@ Last updated: 2026-04-15
 Phase 0 and Phase 1 are complete. Phase 2 now has a working FFmpeg foundation:
 typed inputs, command generation, complex filter routing, software/NVENC/VAAPI
 pipeline builders, watermark/subtitle/song-progress filters, drawvg SVG
-template rendering, ffconcat v1.0 playlist writing, and snapshot tests.
+template rendering, ffconcat v1.0 playlist writing, snapshot tests, and a
+development MPEG-TS streaming route at `/dev/stream/bbb.ts` using local Big
+Buck Bunny fixtures when present.
 
 What remains before Phase 2 can be considered end-to-end complete:
 
 1. Wire generated pipelines into a real streaming route once channel playout
-   selection exists.
+   selection exists, replacing the development Big Buck Bunny route.
 2. Expand builder coverage from the initial software/NVENC/VAAPI paths toward
    the full ErsatzTV filter/encoder matrix.
-3. Add VLC/manual streaming verification with a local MP4 after route wiring.
+3. Add VLC/manual streaming verification for the future channel/IPTV routes,
+   including longer-lived client disconnect and process-lifecycle checks.
 
 ### Known TODOs from Phase 0
 
@@ -61,3 +64,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | GitHub Copilot (GPT-5.4) | Replaced the hybrid JSON/scalar persistence layer with an expanded normalized SQLite schema, normalized repository mappings, and updated integration tests/sqlx metadata. |
 | 2026-04-15 | Codex | Closed remaining Phase 1 persistence gaps: split repository integration tests, added missing relation coverage, fixed template child-row writes, and reconciled enum mapping docs. |
 | 2026-04-15 | Codex | Implemented Phase 2 FFmpeg foundation: command generator, complex filter routing, software/NVENC/VAAPI builders, drawvg templates, ffconcat writing, and snapshot coverage. |
+| 2026-04-15 | Codex | Wired the Phase 2 FFmpeg foundation into `/dev/stream/bbb.ts`, streaming local Big Buck Bunny MP4 fixtures as MPEG-TS for development verification. |
