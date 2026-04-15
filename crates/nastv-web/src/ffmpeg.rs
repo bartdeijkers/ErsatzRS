@@ -1,54 +1,34 @@
 //! `FFmpeg` runtime version detection.
 //!
 //! `NasTv` requires `FFmpeg` >= 8.1 at runtime for the `drawvg` filter used by the
-//! graphics engine. This module provides a synchronous startup check that parses
+//! graphics engine. This module provides a startup check that parses
 //! the version string returned by `ffmpeg -version` and exits early with a clear
 //! error message if the requirement is not met.
-
-use std::process::Command;
 
 /// Minimum required `FFmpeg` version.
 const REQUIRED_MAJOR: u32 = 8;
 const REQUIRED_MINOR: u32 = 1;
 
 /// Error returned when `FFmpeg` is missing or too old.
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FfmpegCheckError {
     /// `ffmpeg` executable was not found or could not be spawned.
+    #[error("FFmpeg not found: {0}. Please install FFmpeg >= {REQUIRED_MAJOR}.{REQUIRED_MINOR}.")]
     NotFound(String),
     /// The version string could not be parsed.
+    #[error("Could not parse FFmpeg version from output: {0:?}")]
     ParseError(String),
     /// `FFmpeg` was found but is older than the required version.
+    #[error("FFmpeg {found} is too old. NasTv requires FFmpeg >= {required_major}.{required_minor} (for the `drawvg` filter).")]
     TooOld {
-        found: (u32, u32, u32),
-        required: (u32, u32),
+        found: FfmpegVersion,
+        required_major: u32,
+        required_minor: u32,
     },
 }
 
-impl std::fmt::Display for FfmpegCheckError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FfmpegCheckError::NotFound(msg) => {
-                write!(f, "FFmpeg not found: {msg}. Please install FFmpeg >= {REQUIRED_MAJOR}.{REQUIRED_MINOR}.")
-            }
-            FfmpegCheckError::ParseError(line) => {
-                write!(f, "Could not parse FFmpeg version from output: {line:?}")
-            }
-            FfmpegCheckError::TooOld {
-                found: (maj, min, patch),
-                required: (req_maj, req_min),
-            } => {
-                write!(
-                    f,
-                    "FFmpeg {maj}.{min}.{patch} is too old. NasTv requires FFmpeg >= {req_maj}.{req_min} (for the `drawvg` filter)."
-                )
-            }
-        }
-    }
-}
-
 /// Parsed `FFmpeg` version.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FfmpegVersion {
     pub major: u32,
     pub minor: u32,
@@ -119,13 +99,22 @@ fn parse_component(part: Option<&str>, line: &str) -> Result<u32, FfmpegCheckErr
 ///
 /// Returns `Err` if the binary is not found, the output cannot be parsed, or
 /// the version does not meet the `>= 8.1` requirement.
-pub fn check_ffmpeg_version() -> Result<FfmpegVersion, FfmpegCheckError> {
-    let output = Command::new("ffmpeg")
+pub async fn check_ffmpeg_version() -> Result<FfmpegVersion, FfmpegCheckError> {
+    let output = tokio::process::Command::new("ffmpeg")
         .arg("-version")
         .output()
+        .await
         .map_err(|e| FfmpegCheckError::NotFound(e.to_string()))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !output.status.success() {
+        return Err(FfmpegCheckError::NotFound(format!(
+            "ffmpeg exited with status {}",
+            output.status
+        )));
+    }
+
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|e| FfmpegCheckError::ParseError(e.to_string()))?;
     let first_line = stdout
         .lines()
         .next()
@@ -135,8 +124,9 @@ pub fn check_ffmpeg_version() -> Result<FfmpegVersion, FfmpegCheckError> {
 
     if !version.satisfies(REQUIRED_MAJOR, REQUIRED_MINOR) {
         return Err(FfmpegCheckError::TooOld {
-            found: (version.major, version.minor, version.patch),
-            required: (REQUIRED_MAJOR, REQUIRED_MINOR),
+            found: version,
+            required_major: REQUIRED_MAJOR,
+            required_minor: REQUIRED_MINOR,
         });
     }
 
@@ -256,8 +246,15 @@ mod tests {
     }
 
     #[test]
-    fn error_on_malformed_line() {
-        assert!(parse_version("not a valid ffmpeg output").is_err());
+    fn error_on_missing_version_token() {
+        // Only 2 tokens — nth(2) returns None, covering the token-not-found path.
+        assert!(parse_version("ffmpeg version").is_err());
+    }
+
+    #[test]
+    fn error_on_non_numeric_version_token() {
+        // 3 tokens but the third is not a valid version number.
+        assert!(parse_version("ffmpeg version abc").is_err());
     }
 
     #[test]
