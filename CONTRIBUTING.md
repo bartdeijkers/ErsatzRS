@@ -80,6 +80,7 @@ Preferred scopes:
 - `ci`
 - `deps`
 - `release`
+- `status`
 
 Examples:
 

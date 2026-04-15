@@ -11,11 +11,46 @@ The authoritative implementation plan lives at **[/home/bart/nastv/plans/sequent
 
 ## Current status
 
-Phase 0 (bootstrap). The repo currently contains documentation contracts,
-planning notes, `README.md`, `LICENSE`, and a Rust-oriented `.gitignore`. There
-is no `Cargo.toml`, no crates, no build/test commands yet. When adding code,
-follow the workspace layout from the plan's architecture and crate-layout
-section.
+Phase 0 (bootstrap), partially complete. Documentation contracts, ADRs,
+Diataxis docs, CI, tooling config, and Claude skills are done. **There is no
+`Cargo.toml`, no crates, and no runnable code yet.** The next step is creating
+the Cargo workspace with empty crate stubs. See [STATUS.md](STATUS.md) for the
+detailed Phase 0 checklist and session log.
+
+When adding code, follow the workspace layout from the plan's architecture and
+crate-layout section.
+
+## Commands
+
+There is no Cargo workspace yet. Once it exists, these are the baseline commands:
+
+```bash
+# Build
+cargo build --workspace
+
+# Lint
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Test
+cargo test --workspace --all-features
+
+# Dependency audit
+cargo deny check
+
+# Snapshot review (after test changes)
+cargo insta review
+```
+
+Non-Rust checks available now:
+
+```bash
+# Verify contract files exist
+test -f README.md && test -f CONTRIBUTING.md && test -f STYLE.md && test -f ARCHITECTURE.md && test -f PORTING.md
+
+# Commitlint (requires Node.js)
+npx commitlint --from HEAD~1
+```
 
 ## Language Contract
 
@@ -25,10 +60,22 @@ section.
 - When translating existing notes, preserve technical decisions and replace
   Dutch section titles with English equivalents.
 
+## Agent Entry Points
+
+This file is the single source of truth for AI agents. Symlinks ensure every
+agent framework finds it:
+
+- `AGENTS.md` — read by OpenAI Codex, GitHub Copilot, and generic agents.
+- `CLAUDE.md` → symlink to `AGENTS.md` — read by Claude Code.
+- `CODEX.md` → symlink to `AGENTS.md` — read by OpenAI Codex CLI.
+- `.github/copilot-instructions.md` — loaded by GitHub Copilot Chat (browser
+  and VS Code). Contains a short pointer to this file plus key commands.
+
 ## Contract Index
 
 Read the relevant contract before changing that area:
 
+- [STATUS.md](STATUS.md) for current phase progress and session handoff log.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
 - [STYLE.md](STYLE.md) for Rust style, errors, async, logging, and public API
   expectations.
@@ -65,3 +112,13 @@ This is primarily a porting project, not greenfield design. When implementing a 
 - ErsatzTV source tree: `/home/bart/ErsatzTV/`
 - Implementation plan: `/home/bart/nastv/plans/sequential-dancing-valiant.md`
 - HDHR protocol notes (internal to ErsatzTV repo): `/home/bart/ErsatzTV/hdhr.md`
+
+## Session Handoff
+
+When ending a work session, update [STATUS.md](STATUS.md):
+
+1. Check or uncheck Phase 0 checklist items that changed.
+2. Add a row to the session log with the date, agent name, and a one-line
+   summary of what was done.
+3. If there is unfinished work, note it in "What an Agent Should Do Next".
+4. Commit the update with `docs(status): update session log`.
