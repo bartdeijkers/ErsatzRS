@@ -1,0 +1,31 @@
+---
+source: crates/nastv-core/src/scheduling/yaml.rs
+assertion_line: 1006
+expression: "snapshot(r#\"\nplayout:\n  - count: \"1\"\n    content: main\n  - rewind: \"00:05:00\"\n  - count: \"1\"\n    content: main\n\"#)"
+---
+{
+  "anchor": "2026-04-15T10:27:00+00:00",
+  "gaps": [],
+  "items": [
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:17:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 1,
+      "start": "2026-04-15T10:07:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:27:00+00:00",
+      "graphics": [],
+      "guide_group": 3,
+      "media": 2,
+      "start": "2026-04-15T10:12:00+00:00",
+      "title": null,
+      "watermarks": []
+    }
+  ]
+}

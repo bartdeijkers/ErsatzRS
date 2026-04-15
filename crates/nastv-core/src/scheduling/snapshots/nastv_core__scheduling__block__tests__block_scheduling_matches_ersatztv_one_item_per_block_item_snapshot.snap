@@ -1,0 +1,37 @@
+---
+source: crates/nastv-core/src/scheduling/block.rs
+assertion_line: 86
+expression: "serde_json::json!({\n    \"items\":\n    result.added_items.iter().map(|item|\n    serde_json::json!({\n        \"media\": item.media_item_id, \"start\": item.start.to_rfc3339(),\n        \"finish\": item.finish.to_rfc3339(), \"filler\":\n        format!(\"{:?}\", item.filler_kind), \"guide_group\": item.guide_group,\n        \"watermarks\": item.watermark_ids, \"graphics\":\n        item.graphics_element_ids, \"disable_watermarks\":\n        item.disable_watermarks,\n    })).collect::<Vec<_>>(), \"history\":\n    result.added_history.iter().map(|history|\n    &history.key).collect::<Vec<_>>(),\n})"
+---
+{
+  "history": [
+    "movies",
+    "shorts"
+  ],
+  "items": [
+    {
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T08:30:00+00:00",
+      "graphics": [],
+      "guide_group": 20,
+      "media": 1,
+      "start": "2026-04-15T08:00:00+00:00",
+      "watermarks": [
+        42
+      ]
+    },
+    {
+      "disable_watermarks": true,
+      "filler": "GuideMode",
+      "finish": "2026-04-15T08:35:00+00:00",
+      "graphics": [
+        77
+      ],
+      "guide_group": 20,
+      "media": 9,
+      "start": "2026-04-15T08:30:00+00:00",
+      "watermarks": []
+    }
+  ]
+}

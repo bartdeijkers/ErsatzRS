@@ -1,0 +1,91 @@
+---
+source: crates/nastv-core/src/scheduling/yaml.rs
+assertion_line: 970
+expression: "snapshot(r#\"\nplayout:\n  - pad_to_next: 15\n    content: bumpers\n    trim: true\n\"#)"
+---
+{
+  "anchor": "2026-04-15T10:15:00+00:00",
+  "gaps": [],
+  "items": [
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:08:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 9,
+      "start": "2026-04-15T10:07:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:09:00+00:00",
+      "graphics": [],
+      "guide_group": 3,
+      "media": 9,
+      "start": "2026-04-15T10:08:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:10:00+00:00",
+      "graphics": [],
+      "guide_group": 4,
+      "media": 9,
+      "start": "2026-04-15T10:09:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:11:00+00:00",
+      "graphics": [],
+      "guide_group": 5,
+      "media": 9,
+      "start": "2026-04-15T10:10:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:12:00+00:00",
+      "graphics": [],
+      "guide_group": 6,
+      "media": 9,
+      "start": "2026-04-15T10:11:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:13:00+00:00",
+      "graphics": [],
+      "guide_group": 7,
+      "media": 9,
+      "start": "2026-04-15T10:12:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:14:00+00:00",
+      "graphics": [],
+      "guide_group": 8,
+      "media": 9,
+      "start": "2026-04-15T10:13:00+00:00",
+      "title": null,
+      "watermarks": []
+    },
+    {
+      "filler": "None",
+      "finish": "2026-04-15T10:15:00+00:00",
+      "graphics": [],
+      "guide_group": 9,
+      "media": 9,
+      "start": "2026-04-15T10:14:00+00:00",
+      "title": null,
+      "watermarks": []
+    }
+  ]
+}
