@@ -2,12 +2,14 @@
 name = "nastv-web"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "nastv-web"
 path = "src/main.rs"
 
 [dependencies]
+nastv-infra = { path = "../nastv-infra", version = "0.1.0" }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process"] }
 # Pinned to 0.7: leptos_axum 0.7 requires axum 0.7. Do not bump until leptos_axum is updated.

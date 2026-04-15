@@ -30,8 +30,10 @@ Phase 0 is complete. **Phase 1 — Domain and Persistence** is in progress:
 1. Read [plans/sequential-dancing-valiant.md](plans/sequential-dancing-valiant.md) Phase 1.
 2. Read [PORTING.md](PORTING.md) and study `/home/bart/ErsatzTV/ErsatzTV.Core/Domain/`.
 3. Continue refining the `nastv-domain` port as schema details are mapped.
-4. Create initial `sqlx` schema from `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs`.
-5. Add repository traits in `nastv-core`, sqlx impls in `nastv-infra`, and entity-mapping tests.
+4. Expand Phase 1 persistence from the initial hybrid JSON/scalar mapping
+   toward full scalar-column mappings where application use cases need them.
+5. Add repository methods and tests incrementally as Phase 2 and Phase 3
+   scheduling/FFmpeg workflows require richer query behavior.
 
 ### Known TODOs from Phase 0
 
@@ -52,3 +54,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Copilot (Claude) | Audited repo readiness; added CODEX.md, STATUS.md, copilot-instructions.md, Commands section in AGENTS.md. |
 | 2026-04-15 | Claude Code (claude-sonnet-4-6) | Completed Phase 0: Cargo workspace, FFmpeg 8.1 detection, axum+Leptos SSR, SQLite bootstrap, /healthz, Dockerfile. Branch: phase/0-bootstrap. |
 | 2026-04-15 | Codex | Started Phase 1 by porting channel, playout, schedule, media, collection, playlist, block, library, media-source, FFmpeg profile, watermark, graphics, artwork, and filler domain entities into `nastv-domain`. |
+| 2026-04-15 | Codex | Added Phase 1 persistence foundation: repository traits, SQLite migration, sqlx repositories, offline metadata, tests, and cargo-deny cleanup. |

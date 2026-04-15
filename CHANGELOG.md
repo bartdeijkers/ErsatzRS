@@ -10,6 +10,9 @@ for commit messages.
 
 ### Added
 
+- Phase 1 persistence foundation with repository traits, SQLite migration,
+  sqlx-backed repository implementations, offline sqlx metadata, and
+  repository integration tests.
 - Initial documentation contracts for long-term solo development and future
   public open-source collaboration.
 - Diataxis documentation structure.
@@ -22,6 +25,8 @@ for commit messages.
 
 ### Changed
 
+- Cargo deny metadata and policy now cover workspace crates and accepted
+  transitive license/advisory exceptions.
 - Expanded the README from a placeholder into an English project overview.
 - Expanded `.gitignore` for local settings, secrets, runtime databases, logs,
   generated artifacts, and editor files.

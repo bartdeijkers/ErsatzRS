@@ -35,6 +35,10 @@ config.local.toml
 *.sqlite-shm
 *.sqlite-wal
 
+# sqlx offline query metadata is generated but must be committed for CI.
+!.sqlx/
+!.sqlx/*.json
+
 # Logs and runtime output
 *.log
 /logs/

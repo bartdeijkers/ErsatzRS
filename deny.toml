@@ -1,15 +1,20 @@
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+  # Transitive through Leptos 0.7/tachys/either_of. No safe upstream upgrade is
+  # available yet; revisit when Leptos moves off paste.
+  "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2
 allow = [
   "Apache-2.0",
+  "BSL-1.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
-  "ISC",
+  "GPL-3.0-or-later",
   "MIT",
   "Unicode-3.0",
   "Zlib",
