@@ -125,6 +125,24 @@ The largest and riskiest crates are expected to be `nastv-core` and
 - Port ffconcat v1.0 playlist writing and resetpts handling.
 - Snapshot generated FFmpeg argv and filter graphs with `insta`.
 
+#### Test Fixtures
+
+Phase 2 pipeline and streaming tests use local MP4 files derived from
+**Big Buck Bunny** (Creative Commons, Blender Foundation). Before running
+Phase 2 tests, download and unzip the following archives into a local `testdata/`
+directory (not committed to the repository) if not already present:
+
+| Resolution | FPS | Archive URL |
+| --- | --- | --- |
+| 1080p | 30 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_30fps_normal.mp4.zip |
+| 1080p | 60 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_60fps_normal.mp4.zip |
+| 2160p | 30 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_30fps_normal.mp4.zip |
+| 2160p | 60 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_60fps_normal.mp4.zip |
+
+Tests that require these files should be skipped automatically (e.g., via
+`#[ignore]` or a feature flag) when the files are absent, so CI can still run
+unit tests without the large downloads.
+
 ### Phase 3 - Scheduling Engines
 
 Port the three scheduling engines from
@@ -136,6 +154,24 @@ Port the three scheduling engines from
 
 The playout state machine must handle time anchors, gaps, pre-roll, post-roll,
 graphics, watermarks, and filler behavior.
+
+#### Test Fixtures
+
+Phase 3 integration and scheduling tests use local MP4 files derived from
+**Big Buck Bunny** (Creative Commons, Blender Foundation). Before running
+Phase 3 tests, download and unzip the following archives into a local `testdata/`
+directory (not committed to the repository) if not already present:
+
+| Resolution | FPS | Archive URL |
+| --- | --- | --- |
+| 1080p | 30 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_30fps_normal.mp4.zip |
+| 1080p | 60 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_1080p_60fps_normal.mp4.zip |
+| 2160p | 30 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_30fps_normal.mp4.zip |
+| 2160p | 60 | https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_60fps_normal.mp4.zip |
+
+Tests that require these files should be skipped automatically (e.g., via
+`#[ignore]` or a feature flag) when the files are absent, so CI can still run
+unit tests without the large downloads.
 
 ### Phase 4 - Media Source Integrations
 

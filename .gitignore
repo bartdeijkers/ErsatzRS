@@ -65,6 +65,9 @@ flamegraph.svg
 # Git worktrees (local, never committed)
 .worktrees/
 
+# Large test fixture videos (download locally, see plans/sequential-dancing-valiant.md)
+testdata/
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db
