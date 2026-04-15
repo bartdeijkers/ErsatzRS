@@ -13,6 +13,16 @@ for commit messages.
 - Phase 1 persistence foundation with repository traits, SQLite migration,
   sqlx-backed repository implementations, offline sqlx metadata, and
   repository integration tests.
+- Phase 1 persistence design spec.
+- Phase 1 domain models for configuration, channels, playout, scheduling,
+  media, collections, libraries, media sources, FFmpeg profiles, filler,
+  graphics, and metadata.
+- Cargo workspace with initial crate stubs for domain, core, infra, app,
+  ffmpeg, web, and scanner crates.
+- FFmpeg 8.1 runtime version detection and test coverage.
+- Minimal `axum` + Leptos SSR web host with `/healthz`.
+- SQLite startup bootstrap with sqlx migrations.
+- Multi-stage Docker image with FFmpeg 8.1 and the `nastv-web` binary.
 - Initial documentation contracts for long-term solo development and future
   public open-source collaboration.
 - Diataxis documentation structure.
@@ -27,8 +37,18 @@ for commit messages.
 
 - Cargo deny metadata and policy now cover workspace crates and accepted
   transitive license/advisory exceptions.
+- Workspace package metadata, lints, binary declarations, and Rust version are
+  configured.
 - Expanded the README from a placeholder into an English project overview.
 - Expanded `.gitignore` for local settings, secrets, runtime databases, logs,
   generated artifacts, and editor files.
+- SQLite migration path documentation now clarifies resolution from
+  `CARGO_MANIFEST_DIR`.
+
+### Fixed
+
+- Docker healthcheck no longer depends on `wget`.
+- Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
+  and FFmpeg version test coverage were tightened.
 
 [Unreleased]: https://github.com/bartdeijkers/nastv
