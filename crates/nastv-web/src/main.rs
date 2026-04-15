@@ -1,5 +1,6 @@
 mod app;
 mod db;
+mod streaming;
 
 use app::{shell, App};
 use axum::{http::StatusCode, routing::get, Router};
@@ -46,6 +47,10 @@ async fn main() {
 
     let app: Router = Router::new()
         .route("/healthz", get(healthz))
+        .route(
+            "/dev/stream/bbb.ts",
+            get(|| async { streaming::stream_big_buck_bunny() }),
+        )
         .merge(leptos_router)
         .layer(TraceLayer::new_for_http())
         .with_state(leptos_options);
