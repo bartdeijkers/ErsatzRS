@@ -48,10 +48,9 @@ What remains before Phase 3 can be considered end-to-end complete:
    search, graphics, and watermark lookups.
 2. Expand block scheduling to full ErsatzTV effective-template/deco/filler
    behavior, including change detection and collection etags.
-3. Complete YAML parity for expression evaluation, imports, show/GUID content,
-   marathon helper semantics, SQL-backed playlist item resolution, richer
-   playlist helper behavior such as shuffle groups/batch variants, and exact
-   remaining handler semantics.
+3. Complete YAML parity for expression evaluation, imports, SQL-backed playlist
+   item resolution, richer playlist helper behavior such as shuffle
+   groups/batch variants, and exact remaining handler semantics.
 4. Expand Lua scheduling bindings from the current embedded `mlua` foundation to
    the full ErsatzTV scripted scheduling API.
 5. Compare generated timelines against ErsatzTV fixtures where available and
@@ -86,3 +85,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Started Phase 3 scheduling: added shared scheduling trait, block/YAML/Lua engines in `nastv-core`, YAML handler snapshots, Lua scripted scheduling tests, and block timeline snapshots. |
 | 2026-04-15 | Codex | Continued Phase 3 scheduling parity: added core content resolver traits/adapters, YAML content source resolution, practical history application/cleanup, and new snapshots. |
 | 2026-04-15 | Codex | Continued Phase 3 YAML parity: added detail/index history resume, structured playlist child history behavior, reset/cleanup snapshots, and persistence-compatible history fields. |
+| 2026-04-15 | GitHub Copilot (GPT-5.4) | Continued Phase 3 YAML parity with show/GUID resolution, show/season marathon grouping, playlist-child marathon history, deterministic `play_all_items`, fallback coverage, and new snapshots. |

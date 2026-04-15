@@ -10,6 +10,10 @@ for commit messages.
 
 ### Added
 
+- Phase 3 YAML scheduling parity for show-name/show-GUID content resolution,
+  show/season marathon grouping, marathon child history keys/details,
+  deterministic `play_all_items` playlist behavior, and empty-source fallback
+  coverage.
 - Phase 3 scheduling parity foundation for resolver-backed YAML content sources,
   deterministic in-memory scheduling adapters, and history application/cleanup
   snapshots.

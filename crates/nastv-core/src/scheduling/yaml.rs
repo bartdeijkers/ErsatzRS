@@ -10,10 +10,16 @@ use serde::{Deserialize, Serialize};
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
     history_key_for_content, lookup_media_source, parse_duration, parse_hhmm, playout_item,
-    MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentSource,
-    SchedulingError, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
-    SchedulingRequest, SchedulingResult,
+    MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentGuid,
+    SchedulingContentResolver, SchedulingContentSource, SchedulingError, SchedulingMediaItem,
+    SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+pub struct YamlContentGuid {
+    pub source: String,
+    pub value: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct YamlPlayoutDefinition {
@@ -51,6 +57,20 @@ pub struct YamlContentItem {
     #[serde(default)]
     pub show: Option<String>,
     #[serde(default)]
+    pub guids: Vec<YamlContentGuid>,
+    #[serde(default)]
+    pub marathon: Option<String>,
+    #[serde(default)]
+    pub searches: Vec<String>,
+    #[serde(default)]
+    pub group_by: Option<String>,
+    #[serde(default)]
+    pub shuffle_groups: bool,
+    #[serde(default)]
+    pub item_order: Option<String>,
+    #[serde(default)]
+    pub play_all_items: bool,
+    #[serde(default)]
     pub media_item: Option<EntityId>,
     #[serde(default)]
     pub item: Option<EntityId>,
@@ -60,7 +80,7 @@ impl YamlContentItem {
     fn playback_order(&self) -> PlaybackOrder {
         self.order.as_deref().map_or_else(
             || {
-                if self.playlist.is_some() {
+                if self.playlist.is_some() || self.marathon.is_some() {
                     PlaybackOrder::None
                 } else {
                     PlaybackOrder::Shuffle
@@ -68,6 +88,36 @@ impl YamlContentItem {
             },
             parse_playback_order,
         )
+    }
+
+    fn marathon_item_order(&self) -> PlaybackOrder {
+        self.item_order
+            .as_deref()
+            .map_or(PlaybackOrder::Shuffle, parse_playback_order)
+    }
+
+    fn scheduling_guids(&self) -> Vec<SchedulingContentGuid> {
+        self.guids
+            .iter()
+            .map(|guid| SchedulingContentGuid {
+                source: guid.source.clone(),
+                value: guid.value.clone(),
+            })
+            .collect()
+    }
+
+    fn history_key(&self) -> String {
+        if self.marathon.is_some() {
+            serde_json::json!({
+                "Key": self.key,
+                "Order": format!("{:?}", PlaybackOrder::None),
+                "ItemOrder": format!("{:?}", self.marathon_item_order()),
+                "GroupBy": self.group_by.clone().unwrap_or_default(),
+            })
+            .to_string()
+        } else {
+            history_key_for_content(&self.key, self.playback_order())
+        }
     }
 
     fn source(&self) -> SchedulingContentSource {
@@ -84,6 +134,21 @@ impl YamlContentItem {
             }
         } else if let Some(search) = &self.search {
             SchedulingContentSource::Search(search.clone())
+        } else if self.marathon.is_some() {
+            SchedulingContentSource::Marathon {
+                name: self.marathon.clone(),
+                guids: self.scheduling_guids(),
+                searches: self.searches.clone(),
+                group_by: self.group_by.clone().unwrap_or_default(),
+                shuffle_groups: self.shuffle_groups,
+                item_order: self.marathon_item_order(),
+                play_all_items: self.play_all_items,
+            }
+        } else if self.show.is_some() || !self.guids.is_empty() {
+            SchedulingContentSource::Show {
+                name: self.show.clone(),
+                guids: self.scheduling_guids(),
+            }
         } else if let Some(media_item) = self.media_item.or(self.item) {
             SchedulingContentSource::MediaItem(media_item)
         } else {
@@ -349,7 +414,14 @@ struct YamlContext {
     gaps: Vec<nastv_domain::PlayoutGap>,
     enumerators: BTreeMap<String, MediaEnumerator>,
     playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
-    content_sources: BTreeMap<String, (SchedulingContentSource, PlaybackOrder)>,
+    content_sources: BTreeMap<String, ResolvedYamlContent>,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedYamlContent {
+    source: SchedulingContentSource,
+    playback_order: PlaybackOrder,
+    history_key: String,
 }
 
 impl YamlContext {
@@ -357,7 +429,7 @@ impl YamlContext {
         playout: Playout,
         reference_data: SchedulingReferenceData,
         current_time: DateTime<Utc>,
-        content_sources: BTreeMap<String, (SchedulingContentSource, PlaybackOrder)>,
+        content_sources: BTreeMap<String, ResolvedYamlContent>,
     ) -> Self {
         Self {
             playout,
@@ -411,21 +483,20 @@ impl YamlContext {
     }
 
     fn enumerator(&mut self, content: &str) -> &mut MediaEnumerator {
-        let (source, playback_order) =
-            self.content_sources
-                .get(content)
-                .cloned()
-                .unwrap_or_else(|| {
-                    (
-                        SchedulingContentSource::direct(content),
-                        PlaybackOrder::None,
-                    )
-                });
+        let resolved = self
+            .content_sources
+            .get(content)
+            .cloned()
+            .unwrap_or_else(|| ResolvedYamlContent {
+                source: SchedulingContentSource::direct(content),
+                playback_order: PlaybackOrder::None,
+                history_key: history_key_for_content(content, PlaybackOrder::None),
+            });
         self.enumerators
             .entry(content.to_owned())
             .or_insert_with(|| {
-                lookup_media_source(&self.reference_data, content, &source)
-                    .with_playback_order(playback_order)
+                lookup_media_source(&self.reference_data, content, &resolved.source)
+                    .with_playback_order(resolved.playback_order)
             })
     }
 
@@ -439,28 +510,17 @@ impl YamlContext {
     }
 
     fn playlist_items(&self, content: &str) -> Option<Vec<SchedulingPlaylistItem>> {
-        let Some((SchedulingContentSource::Playlist { group, name }, _)) =
-            self.content_sources.get(content)
-        else {
-            return None;
-        };
+        let resolved = self.content_sources.get(content)?;
+
         self.reference_data
-            .playlist_items_by_group_and_name
-            .get(&(group.clone(), name.clone()))
-            .or_else(|| {
-                self.reference_data
-                    .playlist_items_by_group_and_name
-                    .get(&(None, name.clone()))
-            })
-            .cloned()
+            .playlist_items_for_source(&resolved.source)
     }
 
     fn history_key(&self, content: &str) -> String {
-        let playback_order = self
-            .content_sources
-            .get(content)
-            .map_or(PlaybackOrder::None, |(_, order)| *order);
-        history_key_for_content(content, playback_order)
+        self.content_sources.get(content).map_or_else(
+            || history_key_for_content(content, PlaybackOrder::None),
+            |resolved| resolved.history_key.clone(),
+        )
     }
 
     fn apply_history(
@@ -470,7 +530,7 @@ impl YamlContext {
     ) {
         let ignored = history_to_remove.iter().copied().collect::<BTreeSet<_>>();
         for content in &definition.content {
-            let history_key = history_key_for_content(&content.key, content.playback_order());
+            let history_key = content.history_key();
             if self.playlist_items(&content.key).is_some() {
                 self.apply_playlist_history(&content.key, &history_key, &ignored);
                 continue;
@@ -664,7 +724,13 @@ impl PlaylistEnumerator {
     fn len(&self) -> usize {
         self.children
             .iter()
-            .map(|child| child.enumerator.len().max(1))
+            .map(|child| {
+                if child.play_all {
+                    child.enumerator.len().max(1)
+                } else {
+                    child.count.unwrap_or(1)
+                }
+            })
             .sum()
     }
 
@@ -1100,6 +1166,9 @@ fn schedule_until(
     };
     while context.current_time < target {
         let Some((media_item, history_context)) = context.current_media_for_content(content) else {
+            if schedule_fallback_item(context, instruction, target) {
+                continue;
+            }
             break;
         };
         let remaining = target - context.current_time;
@@ -1117,24 +1186,7 @@ fn schedule_until(
                 history_context,
             );
             context.advance_content(content);
-        } else if let Some(fallback) = &instruction.fallback {
-            let fallback_item = context.current_media_for_content(fallback);
-            if let Some((fallback_item, fallback_history_context)) = fallback_item {
-                let duration = fallback_item.duration.min(remaining);
-                let mut fallback_instruction = instruction.clone();
-                fallback_instruction.filler_kind = Some("Fallback".to_owned());
-                add_media_item(
-                    context,
-                    &fallback_instruction,
-                    fallback,
-                    &fallback_item,
-                    duration,
-                    fallback_history_context,
-                );
-                context.advance_content(fallback);
-            }
-            context.current_time = target;
-        } else {
+        } else if !schedule_fallback_item(context, instruction, target) {
             let gap = nastv_domain::PlayoutGap {
                 playout_id: context.playout.id,
                 start: context.current_time,
@@ -1146,6 +1198,36 @@ fn schedule_until(
         }
     }
     Ok(())
+}
+
+fn schedule_fallback_item(
+    context: &mut YamlContext,
+    instruction: &YamlInstruction,
+    target: DateTime<Utc>,
+) -> bool {
+    let Some(fallback) = instruction.fallback.as_deref() else {
+        return false;
+    };
+    let remaining = target - context.current_time;
+    let Some((fallback_item, fallback_history_context)) =
+        context.current_media_for_content(fallback)
+    else {
+        return false;
+    };
+
+    let mut fallback_instruction = instruction.clone();
+    fallback_instruction.filler_kind = Some("Fallback".to_owned());
+    add_media_item(
+        context,
+        &fallback_instruction,
+        fallback,
+        &fallback_item,
+        fallback_item.duration.min(remaining),
+        fallback_history_context,
+    );
+    context.advance_content(fallback);
+    context.current_time = target;
+    true
 }
 
 fn schedule_next_with_rolls(
@@ -1263,16 +1345,18 @@ fn add_media_item(
     context.advance_guide_group();
 }
 
-fn content_sources(
-    definition: &YamlPlayoutDefinition,
-) -> BTreeMap<String, (SchedulingContentSource, PlaybackOrder)> {
+fn content_sources(definition: &YamlPlayoutDefinition) -> BTreeMap<String, ResolvedYamlContent> {
     definition
         .content
         .iter()
         .map(|content| {
             (
                 content.key.clone(),
-                (content.source(), content.playback_order()),
+                ResolvedYamlContent {
+                    source: content.source(),
+                    playback_order: content.playback_order(),
+                    history_key: content.history_key(),
+                },
             )
         })
         .collect()
@@ -1458,6 +1542,22 @@ mod tests {
         })
     }
 
+    fn episode_item(
+        id: EntityId,
+        show_id: EntityId,
+        season_id: EntityId,
+        season: i32,
+        episode: i32,
+    ) -> SchedulingMediaItem {
+        SchedulingMediaItem {
+            show_id: Some(show_id),
+            season_id: Some(season_id),
+            season: Some(season),
+            episode: Some(episode),
+            ..SchedulingMediaItem::new(id, Duration::minutes(10))
+        }
+    }
+
     #[test]
     fn yaml_count_instruction_snapshot() {
         insta::assert_json_snapshot!(snapshot(
@@ -1578,6 +1678,71 @@ playout:
         insta::assert_json_snapshot!(serde_json::json!({
             "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
             "history": result.added_history.iter().map(|history| &history.key).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_show_and_guid_content_source_resolution_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.shows_by_name.insert(
+            "Top Gear".to_owned(),
+            vec![
+                episode_item(101, 10, 1001, 1, 1),
+                episode_item(102, 10, 1001, 1, 2),
+            ],
+        );
+        reference_data.media_by_show_guid.insert(
+            "tmdb://200".to_owned(),
+            vec![
+                episode_item(201, 20, 2001, 1, 1),
+                episode_item(202, 20, 2001, 1, 2),
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: named_show
+    show: Top Gear
+    order: season_episode
+  - key: guided_show
+    guids:
+      - source: tmdb
+        value: 200
+    order: season_episode
+playout:
+  - all: named_show
+  - all: guided_show
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history": result.added_history.iter().map(|history| serde_json::json!({
+                "key": history.key,
+                "index": history.index,
+                "details": history.details,
+            })).collect::<Vec<_>>(),
         }));
     }
 
@@ -2021,6 +2186,246 @@ playout:
                 "index": history.index,
                 "details": history.details,
                 "is_current_child": history.is_current_child,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_marathon_grouping_by_show_and_season_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.searches_by_query.insert(
+            "sitcom".to_owned(),
+            vec![
+                episode_item(2, 10, 1001, 1, 2),
+                episode_item(1, 10, 1001, 1, 1),
+                episode_item(3, 20, 2001, 1, 1),
+                episode_item(4, 10, 1002, 2, 1),
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: by_show
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: show
+    item_order: season_episode
+  - key: by_season
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: season
+    item_order: season_episode
+playout:
+  - all: by_show
+  - all: by_season
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history_keys": result.added_history.iter().map(|history| history.key.clone()).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_marathon_child_collection_keys_and_history_details_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.searches_by_query.insert(
+            "sitcom".to_owned(),
+            vec![
+                episode_item(2, 10, 1001, 1, 2),
+                episode_item(1, 10, 1001, 1, 1),
+                episode_item(3, 20, 2001, 1, 1),
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: by_show
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: show
+    item_order: season_episode
+playout:
+  - count: "1"
+    content: by_show
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "history": result.added_history.iter().map(|history| serde_json::json!({
+                "key": history.key,
+                "child_key": history.child_key,
+                "index": history.index,
+                "details": history.details,
+                "is_current_child": history.is_current_child,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_marathon_play_all_items_and_item_order_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.searches_by_query.insert(
+            "sitcom".to_owned(),
+            vec![
+                episode_item(2, 10, 1001, 1, 2),
+                episode_item(1, 10, 1001, 1, 1),
+                episode_item(3, 20, 2001, 1, 1),
+                episode_item(4, 10, 1002, 2, 1),
+            ],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: by_show
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: show
+    item_order: season_episode
+  - key: by_show_all
+    marathon: Sitcom Marathon
+    searches:
+      - sitcom
+    group_by: show
+    item_order: season_episode
+    play_all_items: true
+playout:
+  - all: by_show
+  - all: by_show_all
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(2),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_marathon_empty_source_uses_fallback_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.collections_by_name.insert(
+            "Fallback".to_owned(),
+            vec![SchedulingMediaItem::new(900, Duration::minutes(10))],
+        );
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: empty_marathon
+    marathon: Missing Marathon
+    searches:
+      - missing
+    group_by: show
+    item_order: season_episode
+  - key: fallback
+    collection: Fallback
+    order: chronological
+playout:
+  - duration: "00:05:00"
+    content: empty_marathon
+    fallback: fallback
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "items": result.added_items.iter().map(|item| serde_json::json!({
+                "media": item.media_item_id,
+                "start": item.start.to_rfc3339(),
+                "finish": item.finish.to_rfc3339(),
+                "filler": format!("{:?}", item.filler_kind),
+            })).collect::<Vec<_>>(),
+            "history": result.added_history.iter().map(|history| serde_json::json!({
+                "key": history.key,
+                "index": history.index,
+                "details": history.details,
             })).collect::<Vec<_>>(),
         }));
     }

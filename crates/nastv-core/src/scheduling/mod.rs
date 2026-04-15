@@ -2,7 +2,7 @@ mod block;
 mod scripted;
 mod yaml;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Duration, Utc};
 use nastv_domain::{
@@ -30,6 +30,8 @@ pub struct SchedulingMediaItem {
     pub id: EntityId,
     pub duration: Duration,
     pub title: Option<String>,
+    pub show_id: Option<EntityId>,
+    pub season_id: Option<EntityId>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
     pub release_date: Option<DateTime<Utc>>,
@@ -42,10 +44,25 @@ impl SchedulingMediaItem {
             id,
             duration,
             title: None,
+            show_id: None,
+            season_id: None,
             season: None,
             episode: None,
             release_date: None,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SchedulingContentGuid {
+    pub source: String,
+    pub value: String,
+}
+
+impl SchedulingContentGuid {
+    #[must_use]
+    pub fn key(&self) -> String {
+        format!("{}://{}", self.source, self.value)
     }
 }
 
@@ -81,14 +98,30 @@ pub struct SchedulingPlaylistItem {
     pub media_items: Vec<SchedulingMediaItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SchedulingContentSource {
     DirectKey(String),
     Collection(String),
     MultiCollection(String),
     SmartCollection(String),
-    Playlist { group: Option<String>, name: String },
+    Playlist {
+        group: Option<String>,
+        name: String,
+    },
     Search(String),
+    Show {
+        name: Option<String>,
+        guids: Vec<SchedulingContentGuid>,
+    },
+    Marathon {
+        name: Option<String>,
+        guids: Vec<SchedulingContentGuid>,
+        searches: Vec<String>,
+        group_by: String,
+        shuffle_groups: bool,
+        item_order: PlaybackOrder,
+        play_all_items: bool,
+    },
     MediaItem(EntityId),
 }
 
@@ -101,6 +134,14 @@ impl SchedulingContentSource {
 
 pub trait SchedulingContentResolver {
     fn media_items_for_source(&self, source: &SchedulingContentSource) -> Vec<SchedulingMediaItem>;
+
+    fn playlist_items_for_source(
+        &self,
+        source: &SchedulingContentSource,
+    ) -> Option<Vec<SchedulingPlaylistItem>> {
+        let _ = source;
+        None
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -113,12 +154,92 @@ pub struct SchedulingReferenceData {
     pub playlist_items_by_group_and_name:
         BTreeMap<(Option<String>, String), Vec<SchedulingPlaylistItem>>,
     pub searches_by_query: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub shows_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
+    pub media_by_show_guid: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub media_items_by_id: BTreeMap<EntityId, SchedulingMediaItem>,
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
     pub graphics_ids_by_path: BTreeMap<String, EntityId>,
     pub effective_blocks: Vec<EffectiveBlock>,
     pub existing_history: Vec<PlayoutHistory>,
     pub max_playout_offset: Duration,
+}
+
+impl SchedulingReferenceData {
+    fn media_items_for_show(
+        &self,
+        name: Option<&String>,
+        guids: &[SchedulingContentGuid],
+    ) -> Vec<SchedulingMediaItem> {
+        let mut result = Vec::new();
+        let mut seen_ids = BTreeSet::new();
+
+        if let Some(name) = name {
+            if let Some(items) = self.shows_by_name.get(name) {
+                append_unique_items(&mut result, &mut seen_ids, items);
+            }
+        }
+
+        for guid in guids {
+            if let Some(items) = self.media_by_show_guid.get(&guid.key()) {
+                append_unique_items(&mut result, &mut seen_ids, items);
+            }
+        }
+
+        result
+    }
+
+    fn marathon_playlist_items(
+        &self,
+        name: Option<&String>,
+        guids: &[SchedulingContentGuid],
+        searches: &[String],
+        group_by: &str,
+        item_order: PlaybackOrder,
+        play_all_items: bool,
+    ) -> Vec<SchedulingPlaylistItem> {
+        let mut media_items = self.media_items_for_show(name, guids);
+        let mut seen_ids = media_items
+            .iter()
+            .map(|item| item.id)
+            .collect::<BTreeSet<_>>();
+
+        for search in searches {
+            if let Some(items) = self.searches_by_query.get(search) {
+                append_unique_items(&mut media_items, &mut seen_ids, items);
+            }
+        }
+
+        let mut groups: Vec<(SchedulingCollectionKey, Vec<SchedulingMediaItem>)> = Vec::new();
+        for media_item in media_items {
+            let Some(collection_key) = marathon_collection_key(&media_item, group_by) else {
+                continue;
+            };
+
+            if let Some((_, group_items)) = groups
+                .iter_mut()
+                .find(|(existing_key, _)| *existing_key == collection_key)
+            {
+                group_items.push(media_item);
+            } else {
+                groups.push((collection_key, vec![media_item]));
+            }
+        }
+
+        groups
+            .into_iter()
+            .map(|(collection_key, mut group_items)| {
+                sort_media_items_for_playback_order(&mut group_items, item_order);
+
+                SchedulingPlaylistItem {
+                    collection_key,
+                    playback_order: item_order,
+                    play_all: play_all_items,
+                    count: None,
+                    media_items: group_items,
+                }
+            })
+            .collect()
+    }
 }
 
 impl SchedulingContentResolver for SchedulingReferenceData {
@@ -153,6 +274,24 @@ impl SchedulingContentResolver for SchedulingReferenceData {
                 .get(query)
                 .cloned()
                 .unwrap_or_default(),
+            SchedulingContentSource::Show { name, guids } => {
+                self.media_items_for_show(name.as_ref(), guids)
+            }
+            SchedulingContentSource::Marathon {
+                name,
+                guids,
+                searches,
+                ..
+            } => self
+                .media_items_for_show(name.as_ref(), guids)
+                .into_iter()
+                .chain(
+                    searches
+                        .iter()
+                        .filter_map(|query| self.searches_by_query.get(query))
+                        .flat_map(|items| items.iter().cloned()),
+                )
+                .collect(),
             SchedulingContentSource::MediaItem(id) => self
                 .media_items_by_id
                 .get(id)
@@ -160,6 +299,95 @@ impl SchedulingContentResolver for SchedulingReferenceData {
                 .into_iter()
                 .collect(),
         }
+    }
+
+    fn playlist_items_for_source(
+        &self,
+        source: &SchedulingContentSource,
+    ) -> Option<Vec<SchedulingPlaylistItem>> {
+        match source {
+            SchedulingContentSource::Playlist { group, name } => self
+                .playlist_items_by_group_and_name
+                .get(&(group.clone(), name.clone()))
+                .or_else(|| {
+                    self.playlist_items_by_group_and_name
+                        .get(&(None, name.clone()))
+                })
+                .cloned(),
+            SchedulingContentSource::Marathon {
+                name,
+                guids,
+                searches,
+                group_by,
+                shuffle_groups: _,
+                item_order,
+                play_all_items,
+            } => Some(self.marathon_playlist_items(
+                name.as_ref(),
+                guids,
+                searches,
+                group_by,
+                *item_order,
+                *play_all_items,
+            )),
+            _ => None,
+        }
+    }
+}
+
+fn append_unique_items(
+    target: &mut Vec<SchedulingMediaItem>,
+    seen_ids: &mut BTreeSet<EntityId>,
+    items: &[SchedulingMediaItem],
+) {
+    for item in items {
+        if seen_ids.insert(item.id) {
+            target.push(item.clone());
+        }
+    }
+}
+
+fn marathon_collection_key(
+    media_item: &SchedulingMediaItem,
+    group_by: &str,
+) -> Option<SchedulingCollectionKey> {
+    match group_by.to_ascii_lowercase().as_str() {
+        "show" => media_item.show_id.map(|show_id| SchedulingCollectionKey {
+            collection_type: CollectionType::TelevisionShow,
+            media_item_id: Some(show_id),
+            ..SchedulingCollectionKey::default()
+        }),
+        "season" => media_item
+            .season_id
+            .map(|season_id| SchedulingCollectionKey {
+                collection_type: CollectionType::TelevisionSeason,
+                media_item_id: Some(season_id),
+                ..SchedulingCollectionKey::default()
+            }),
+        _ => None,
+    }
+}
+
+fn sort_media_items_for_playback_order(
+    media_items: &mut [SchedulingMediaItem],
+    playback_order: PlaybackOrder,
+) {
+    match playback_order {
+        PlaybackOrder::Chronological => media_items.sort_by(|left, right| {
+            left.release_date
+                .cmp(&right.release_date)
+                .then(left.season.cmp(&right.season))
+                .then(left.episode.cmp(&right.episode))
+                .then(left.id.cmp(&right.id))
+        }),
+        PlaybackOrder::SeasonEpisode => media_items.sort_by(|left, right| {
+            left.season
+                .cmp(&right.season)
+                .then(left.episode.cmp(&right.episode))
+                .then(left.release_date.cmp(&right.release_date))
+                .then(left.id.cmp(&right.id))
+        }),
+        _ => {}
     }
 }
 
