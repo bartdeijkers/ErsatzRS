@@ -4,7 +4,7 @@ Last updated: 2026-04-15
 
 ## Current Phase
 
-**Phase 0 — Bootstrap** (complete)
+**Phase 1 — Domain and Persistence** (in progress)
 
 ### Phase 0 Checklist
 
@@ -25,13 +25,13 @@ Last updated: 2026-04-15
 
 ### What an Agent Should Do Next
 
-Phase 0 is complete. The next step is **Phase 1 — Domain and Persistence**:
+Phase 0 is complete. **Phase 1 — Domain and Persistence** is in progress:
 
 1. Read [plans/sequential-dancing-valiant.md](plans/sequential-dancing-valiant.md) Phase 1.
 2. Read [PORTING.md](PORTING.md) and study `/home/bart/ErsatzTV/ErsatzTV.Core/Domain/`.
-3. Port domain entities to `nastv-domain`.
+3. Continue refining the `nastv-domain` port as schema details are mapped.
 4. Create initial `sqlx` schema from `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs`.
-5. Add repository traits in `nastv-core`, sqlx impls in `nastv-infra`.
+5. Add repository traits in `nastv-core`, sqlx impls in `nastv-infra`, and entity-mapping tests.
 
 ### Known TODOs from Phase 0
 
@@ -51,3 +51,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | --- | --- | --- |
 | 2026-04-15 | Copilot (Claude) | Audited repo readiness; added CODEX.md, STATUS.md, copilot-instructions.md, Commands section in AGENTS.md. |
 | 2026-04-15 | Claude Code (claude-sonnet-4-6) | Completed Phase 0: Cargo workspace, FFmpeg 8.1 detection, axum+Leptos SSR, SQLite bootstrap, /healthz, Dockerfile. Branch: phase/0-bootstrap. |
+| 2026-04-15 | Codex | Started Phase 1 by porting channel, playout, schedule, media, collection, playlist, block, library, media-source, FFmpeg profile, watermark, graphics, artwork, and filler domain entities into `nastv-domain`. |
