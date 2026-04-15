@@ -10,6 +10,9 @@ for commit messages.
 
 ### Added
 
+- Phase 2 FFmpeg foundation with typed inputs, command generation, complex
+  filter routing, software/NVENC/VAAPI pipeline builders, drawvg SVG template
+  rendering, ffconcat v1.0 playlist writing, and snapshot coverage.
 - Repository-specific Phase 1 integration test files covering provider media
   sources, relation-loading queries, graphics channel lookups, metadata writes,
   and `NotFound` behavior.
@@ -38,6 +41,8 @@ for commit messages.
 
 ### Changed
 
+- FFmpeg 8.1 runtime detection now lives in `nastv-ffmpeg` and is reused by
+  `nastv-web`.
 - Phase 1 persistence now uses an expanded normalized SQLite schema derived
   from the final ErsatzTV model instead of the earlier hybrid JSON/scalar
   mapping, and the active infra repositories now map scalar columns and join

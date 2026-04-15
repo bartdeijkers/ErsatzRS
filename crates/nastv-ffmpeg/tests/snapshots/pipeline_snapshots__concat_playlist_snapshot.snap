@@ -1,0 +1,7 @@
+---
+source: crates/nastv-ffmpeg/tests/pipeline_snapshots.rs
+expression: playlist.render()
+---
+ffconcat version 1.0
+file http://localhost:8409/ffmpeg/stream/101?mode=segmenter
+file http://localhost:8409/ffmpeg/stream/101?mode=segmenter

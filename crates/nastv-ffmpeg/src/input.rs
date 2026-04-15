@@ -1,0 +1,117 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputKind {
+    Video,
+    Audio,
+    Watermark,
+    Subtitle,
+    Concat,
+    Graphics,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubtitleMethod {
+    Burn,
+    Copy,
+    Convert,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaStream {
+    pub index: usize,
+}
+
+impl MediaStream {
+    #[must_use]
+    pub const fn new(index: usize) -> Self {
+        Self { index }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputFile {
+    pub kind: InputKind,
+    pub path: String,
+    pub streams: Vec<MediaStream>,
+    pub input_options: Vec<String>,
+    pub filter_steps: Vec<String>,
+    pub subtitle_method: Option<SubtitleMethod>,
+    pub is_image_based_subtitle: bool,
+}
+
+impl InputFile {
+    #[must_use]
+    pub fn new(kind: InputKind, path: impl Into<String>, stream_index: usize) -> Self {
+        Self {
+            kind,
+            path: path.into(),
+            streams: vec![MediaStream::new(stream_index)],
+            input_options: Vec::new(),
+            filter_steps: Vec::new(),
+            subtitle_method: None,
+            is_image_based_subtitle: false,
+        }
+    }
+
+    #[must_use]
+    pub fn video(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Video, path, 0)
+    }
+
+    #[must_use]
+    pub fn audio(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Audio, path, 1)
+    }
+
+    #[must_use]
+    pub fn watermark(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Watermark, path, 0)
+    }
+
+    #[must_use]
+    pub fn concat(path: impl Into<String>) -> Self {
+        let mut input = Self::new(InputKind::Concat, path, 0);
+        input.input_options.extend([
+            "-f".to_owned(),
+            "concat".to_owned(),
+            "-safe".to_owned(),
+            "0".to_owned(),
+        ]);
+        input
+    }
+
+    #[must_use]
+    pub fn graphics(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Graphics, path, 0)
+    }
+
+    #[must_use]
+    pub fn image_subtitle(path: impl Into<String>, method: SubtitleMethod) -> Self {
+        let mut input = Self::new(InputKind::Subtitle, path, 0);
+        input.subtitle_method = Some(method);
+        input.is_image_based_subtitle = true;
+        input
+    }
+
+    #[must_use]
+    pub fn text_subtitle(path: impl Into<String>, method: SubtitleMethod) -> Self {
+        let mut input = Self::new(InputKind::Subtitle, path, 0);
+        input.subtitle_method = Some(method);
+        input
+    }
+
+    #[must_use]
+    pub fn with_input_options(
+        mut self,
+        options: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.input_options
+            .extend(options.into_iter().map(Into::into));
+        self
+    }
+
+    #[must_use]
+    pub fn with_filter(mut self, filter: impl Into<String>) -> Self {
+        self.filter_steps.push(filter.into());
+        self
+    }
+}

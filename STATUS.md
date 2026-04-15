@@ -4,7 +4,7 @@ Last updated: 2026-04-15
 
 ## Current Phase
 
-**Phase 1 — Domain and Persistence** (complete; Phase 2 ready)
+**Phase 2 — FFmpeg Pipeline and drawvg Graphics** (foundation implemented)
 
 ### Phase 0 Checklist
 
@@ -25,16 +25,18 @@ Last updated: 2026-04-15
 
 ### What an Agent Should Do Next
 
-Phase 0 and Phase 1 are complete. **Phase 2 — FFmpeg Pipeline** is ready to
-start:
+Phase 0 and Phase 1 are complete. Phase 2 now has a working FFmpeg foundation:
+typed inputs, command generation, complex filter routing, software/NVENC/VAAPI
+pipeline builders, watermark/subtitle/song-progress filters, drawvg SVG
+template rendering, ffconcat v1.0 playlist writing, and snapshot tests.
 
-1. Read [plans/sequential-dancing-valiant.md](plans/sequential-dancing-valiant.md) Phase 2.
-2. Read [PORTING.md](PORTING.md) and study the FFmpeg reference files under
-   `/home/bart/ErsatzTV/ErsatzTV.Core/FFmpeg/` and
-   `/home/bart/ErsatzTV/ErsatzTV.FFmpeg/`.
-3. Start Phase 2 implementation work against the expanded normalized schema:
-   FFmpeg pipeline persistence dependencies, playout anchors, and scheduling
-   child-item repositories.
+What remains before Phase 2 can be considered end-to-end complete:
+
+1. Wire generated pipelines into a real streaming route once channel playout
+   selection exists.
+2. Expand builder coverage from the initial software/NVENC/VAAPI paths toward
+   the full ErsatzTV filter/encoder matrix.
+3. Add VLC/manual streaming verification with a local MP4 after route wiring.
 
 ### Known TODOs from Phase 0
 
@@ -42,7 +44,7 @@ start:
 - Replace bash `/dev/tcp` HEALTHCHECK with a purpose-built `nastv-healthcheck` binary.
 - `axum = "0.7"` pinned to match `leptos_axum 0.7` — bump both when leptos_axum upgrades to axum 0.8.
 - `std::env::var("DATABASE_URL")` in `main.rs` uses `#[allow(clippy::disallowed_methods)]` — replace with a config crate in Phase 1.
-- `ffmpeg` module in `nastv-web` — `FfmpegVersion` and `parse_version` should migrate to `nastv-ffmpeg` in Phase 2.
+- `ffmpeg` module in `nastv-web` migrated to `nastv-ffmpeg` in Phase 2.
 
 ### Blocking Decisions
 
@@ -58,3 +60,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Added Phase 1 persistence foundation: repository traits, SQLite migration, sqlx repositories, offline metadata, tests, and cargo-deny cleanup. |
 | 2026-04-15 | GitHub Copilot (GPT-5.4) | Replaced the hybrid JSON/scalar persistence layer with an expanded normalized SQLite schema, normalized repository mappings, and updated integration tests/sqlx metadata. |
 | 2026-04-15 | Codex | Closed remaining Phase 1 persistence gaps: split repository integration tests, added missing relation coverage, fixed template child-row writes, and reconciled enum mapping docs. |
+| 2026-04-15 | Codex | Implemented Phase 2 FFmpeg foundation: command generator, complex filter routing, software/NVENC/VAAPI builders, drawvg templates, ffconcat writing, and snapshot coverage. |

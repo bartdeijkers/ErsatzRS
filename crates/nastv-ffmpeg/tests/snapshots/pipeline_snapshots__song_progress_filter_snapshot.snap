@@ -1,0 +1,5 @@
+---
+source: crates/nastv-ffmpeg/tests/pipeline_snapshots.rs
+expression: filter
+---
+loop=-1:1[si],color=c=#323232:s=1728x27,format=rgba,colorchannelmixer=aa=0.4[gray];color=c=white:s=1728x27,format=rgba,colorchannelmixer=aa=0.9,scale=iw*0.2+iw*(t/120)*0.8:ih:eval=frame[sbar];[si][gray]overlay=W*0.05:H-h-H*0.05:shortest=1:enable='gt(t,0.1)'[sgray];[sgray][sbar]overlay=W*0.05:H-h-H*0.05:shortest=1:enable='gt(t,0.1)'

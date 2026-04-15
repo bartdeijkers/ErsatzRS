@@ -1,6 +1,5 @@
 mod app;
 mod db;
-mod ffmpeg;
 
 use app::{shell, App};
 use axum::{http::StatusCode, routing::get, Router};
@@ -17,7 +16,7 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    match ffmpeg::check_ffmpeg_version().await {
+    match nastv_ffmpeg::check_ffmpeg_version().await {
         Ok(version) => tracing::info!("FFmpeg 8.1+ detected (found: {version})"),
         Err(e) => {
             tracing::error!(error = %e, "FFmpeg version check failed");
