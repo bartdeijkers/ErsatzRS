@@ -58,6 +58,9 @@ tarpaulin-report.html
 *.profdata
 flamegraph.svg
 
+# Git worktrees (local, never committed)
+.worktrees/
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db
