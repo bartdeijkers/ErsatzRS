@@ -2,3 +2,10 @@
 name = "nastv-scanner"
 version.workspace = true
 edition.workspace = true
+
+[[bin]]
+name = "nastv-scanner"
+path = "src/main.rs"
+
+[lints]
+workspace = true

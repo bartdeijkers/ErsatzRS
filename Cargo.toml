@@ -10,9 +10,17 @@ members = [
     "crates/nastv-scanner",
 ]
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.85"
 authors = ["Bart Deijkers <bartdeijkers@gmail.com>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/bart/nastv"

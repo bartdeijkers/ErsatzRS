@@ -2,3 +2,10 @@
 name = "nastv-web"
 version.workspace = true
 edition.workspace = true
+
+[[bin]]
+name = "nastv-web"
+path = "src/main.rs"
+
+[lints]
+workspace = true
