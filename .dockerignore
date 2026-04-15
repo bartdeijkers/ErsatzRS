@@ -1,0 +1,6 @@
+target/
+.worktrees/
+.git/
+*.db
+*.db-shm
+*.db-wal
