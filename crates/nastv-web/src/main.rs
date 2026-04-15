@@ -1,4 +1,5 @@
 mod app;
+mod db;
 mod ffmpeg;
 
 use app::{shell, App};
@@ -23,6 +24,14 @@ async fn main() {
             std::process::exit(1);
         }
     }
+
+    #[allow(clippy::disallowed_methods)] // Phase 0: config crate not yet available
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://nastv.db".to_string());
+    #[allow(unused_variables)]
+    let _pool = db::init(&db_url)
+        .await
+        .expect("database initialisation failed");
+    tracing::info!(database_url = %db_url, "database initialised");
 
     let conf = get_configuration(None).expect("valid leptos config");
     let leptos_options = conf.leptos_options;
