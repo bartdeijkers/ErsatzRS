@@ -5,7 +5,10 @@ use app::{shell, App};
 use axum::{http::StatusCode, routing::get, Router};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
+use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
+
+const LISTEN_ADDR: &str = "0.0.0.0:8080";
 
 #[tokio::main]
 async fn main() {
@@ -16,7 +19,7 @@ async fn main() {
     match ffmpeg::check_ffmpeg_version().await {
         Ok(version) => tracing::info!("FFmpeg 8.1+ detected (found: {version})"),
         Err(e) => {
-            tracing::error!("error: {e}");
+            tracing::error!(error = %e, "FFmpeg version check failed");
             std::process::exit(1);
         }
     }
@@ -36,13 +39,14 @@ async fn main() {
     let app: Router = Router::new()
         .route("/healthz", get(healthz))
         .merge(leptos_router)
+        .layer(TraceLayer::new_for_http())
         .with_state(leptos_options);
 
-    tracing::info!("nastv-web listening on 0.0.0.0:8080");
+    tracing::info!("nastv-web listening on {LISTEN_ADDR}");
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
+    let listener = tokio::net::TcpListener::bind(LISTEN_ADDR)
         .await
-        .expect("failed to bind to 0.0.0.0:8080");
+        .unwrap_or_else(|e| panic!("failed to bind to {LISTEN_ADDR}: {e}"));
 
     axum::serve(listener, app.into_make_service())
         .await
