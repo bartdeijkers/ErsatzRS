@@ -272,6 +272,8 @@ pub struct PlayoutHistory {
     pub child_key: Option<String>,
     pub when: DateTime<Utc>,
     pub finish: Option<DateTime<Utc>>,
+    pub index: i32,
+    pub details: String,
     pub is_current_child: bool,
 }
 

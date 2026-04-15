@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, Utc};
 use nastv_domain::{
-    EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory, PlayoutItem,
+    CollectionType, EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory,
+    PlayoutItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +32,7 @@ pub struct SchedulingMediaItem {
     pub title: Option<String>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
+    pub release_date: Option<DateTime<Utc>>,
 }
 
 impl SchedulingMediaItem {
@@ -42,8 +44,41 @@ impl SchedulingMediaItem {
             title: None,
             season: None,
             episode: None,
+            release_date: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SchedulingCollectionKey {
+    pub collection_type: CollectionType,
+    pub collection_id: Option<EntityId>,
+    pub multi_collection_id: Option<EntityId>,
+    pub smart_collection_id: Option<EntityId>,
+    pub media_item_id: Option<EntityId>,
+    pub playlist_id: Option<EntityId>,
+    pub search_query: Option<String>,
+    pub fake_collection_key: Option<String>,
+}
+
+impl SchedulingCollectionKey {
+    #[must_use]
+    pub fn fake_playlist_item(collection_id: EntityId) -> Self {
+        Self {
+            collection_type: CollectionType::FakePlaylistItem,
+            collection_id: Some(collection_id),
+            ..Self::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulingPlaylistItem {
+    pub collection_key: SchedulingCollectionKey,
+    pub playback_order: PlaybackOrder,
+    pub play_all: bool,
+    pub count: Option<usize>,
+    pub media_items: Vec<SchedulingMediaItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -75,6 +110,8 @@ pub struct SchedulingReferenceData {
     pub multi_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub smart_collections_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub playlists_by_group_and_name: BTreeMap<(Option<String>, String), Vec<SchedulingMediaItem>>,
+    pub playlist_items_by_group_and_name:
+        BTreeMap<(Option<String>, String), Vec<SchedulingPlaylistItem>>,
     pub searches_by_query: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub media_items_by_id: BTreeMap<EntityId, SchedulingMediaItem>,
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
@@ -185,6 +222,7 @@ struct MediaEnumerator {
     key: String,
     items: Vec<SchedulingMediaItem>,
     index: usize,
+    playback_order: PlaybackOrder,
 }
 
 impl MediaEnumerator {
@@ -193,7 +231,13 @@ impl MediaEnumerator {
             key: key.into(),
             items,
             index: 0,
+            playback_order: PlaybackOrder::None,
         }
+    }
+
+    fn with_playback_order(mut self, playback_order: PlaybackOrder) -> Self {
+        self.playback_order = playback_order;
+        self
     }
 
     fn is_empty(&self) -> bool {
@@ -225,6 +269,60 @@ impl MediaEnumerator {
             self.index = (self.index + 1) % self.items.len();
         }
     }
+
+    fn current_index(&self) -> usize {
+        if self.items.is_empty() {
+            0
+        } else {
+            self.index % self.items.len()
+        }
+    }
+
+    fn apply_history(&mut self, history: &PlayoutHistory) {
+        if self.items.is_empty() {
+            return;
+        }
+        let next_index = history.index.saturating_add(1);
+        self.set_index(usize::try_from(next_index).unwrap_or_default());
+        if self.playback_order == PlaybackOrder::Chronological {
+            self.move_after_history_details(&history.details);
+        }
+    }
+
+    fn move_after_history_details(&mut self, details: &str) {
+        let Ok(details) = serde_json::from_str::<HistoryDetails>(details) else {
+            return;
+        };
+        if let Some(index) = self.index_for_details(&details) {
+            self.set_index(index.saturating_add(1));
+        }
+    }
+
+    fn move_to_history_details(&mut self, details: &str) {
+        let Ok(details) = serde_json::from_str::<HistoryDetails>(details) else {
+            return;
+        };
+        if let Some(index) = self.index_for_details(&details) {
+            self.set_index(index);
+        }
+    }
+
+    fn index_for_details(&self, details: &HistoryDetails) -> Option<usize> {
+        if let Some(media_item_id) = details.media_item_id {
+            return self.items.iter().position(|item| item.id == media_item_id);
+        }
+        if let (Some(season), Some(episode)) = (details.season_number, details.episode_number) {
+            return self
+                .items
+                .iter()
+                .position(|item| item.season == Some(season) && item.episode == Some(episode));
+        }
+        details.release_date.and_then(|release_date| {
+            self.items
+                .iter()
+                .position(|item| item.release_date == Some(release_date))
+        })
+    }
 }
 
 fn lookup_media(reference_data: &SchedulingReferenceData, key: &str) -> MediaEnumerator {
@@ -239,16 +337,69 @@ fn lookup_media_source(
     MediaEnumerator::new(key, reference_data.media_items_for_source(source))
 }
 
-fn history_key_for_content(key: &str, playback_order: PlaybackOrder) -> String {
-    if playback_order == PlaybackOrder::None {
-        key.to_owned()
-    } else {
-        serde_json::json!({
-            "Key": key,
-            "Order": format!("{:?}", playback_order),
-        })
-        .to_string()
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+struct HistoryDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media_item_id: Option<EntityId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    release_date: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    season_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    episode_number: Option<i32>,
+}
+
+fn history_details_for_media_item(media_item: &SchedulingMediaItem) -> String {
+    let details = HistoryDetails {
+        media_item_id: Some(media_item.id),
+        release_date: media_item.release_date,
+        season_number: media_item.season,
+        episode_number: media_item.episode,
+    };
+    serde_json::to_string(&details).unwrap_or_default()
+}
+
+fn history_key_for_collection_key(collection_key: &SchedulingCollectionKey) -> String {
+    #[derive(Serialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Key<'a> {
+        collection_type: CollectionType,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        multi_collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        smart_collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        media_item_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        playlist_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        search_query: Option<&'a str>,
+        #[serde(rename = "FakeCollectionKey", skip_serializing_if = "Option::is_none")]
+        fake_collection_token: Option<&'a str>,
     }
+
+    serde_json::to_string(&Key {
+        collection_type: collection_key.collection_type,
+        collection_id: collection_key.collection_id,
+        multi_collection_id: collection_key.multi_collection_id,
+        smart_collection_id: collection_key.smart_collection_id,
+        media_item_id: collection_key.media_item_id,
+        playlist_id: collection_key.playlist_id,
+        search_query: collection_key.search_query.as_deref(),
+        fake_collection_token: collection_key.fake_collection_key.as_deref(),
+    })
+    .unwrap_or_default()
+}
+
+fn history_key_for_content(key: &str, playback_order: PlaybackOrder) -> String {
+    serde_json::json!({
+        "Key": key,
+        "Order": format!("{:?}", playback_order),
+    })
+    .to_string()
 }
 
 fn cleanup_history(
@@ -323,6 +474,9 @@ fn history(
     key: impl Into<String>,
     item: &PlayoutItem,
     child_key: Option<String>,
+    index: usize,
+    details: String,
+    is_current_child: bool,
 ) -> PlayoutHistory {
     PlayoutHistory {
         playout_id,
@@ -330,6 +484,9 @@ fn history(
         child_key,
         when: item.start,
         finish: Some(item.finish),
+        index: i32::try_from(index).unwrap_or(i32::MAX),
+        details,
+        is_current_child,
         ..PlayoutHistory::default()
     }
 }

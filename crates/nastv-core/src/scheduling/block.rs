@@ -181,6 +181,9 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
                         &block_item.content,
                         &item,
                         None,
+                        enumerator.current_index(),
+                        super::history_details_for_media_item(&media_item),
+                        false,
                     ));
                     current_time = item.finish;
                     result.added_items.push(item);

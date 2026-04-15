@@ -37,7 +37,9 @@ sequential YAML instruction dispatch, Lua 5.4 scripted scheduling, playout
 anchors, gaps, pre-roll/post-roll/mid-roll, watermark and graphics state, filler
 kinds, YAML content source resolution for collection, multi_collection,
 smart_collection, playlist, search, and single media item references, practical
-history application/cleanup, and snapshot coverage for the initial handlers.
+history application/cleanup, exact chronological history resume by media item
+details, structured playlist child/current-child history behavior for the
+in-memory adapter, and snapshot coverage for the initial handlers.
 
 What remains before Phase 3 can be considered end-to-end complete:
 
@@ -47,8 +49,9 @@ What remains before Phase 3 can be considered end-to-end complete:
 2. Expand block scheduling to full ErsatzTV effective-template/deco/filler
    behavior, including change detection and collection etags.
 3. Complete YAML parity for expression evaluation, imports, show/GUID content,
-   playlist/marathon helper semantics, exact history detail/index seeking, and
-   exact handler semantics.
+   marathon helper semantics, SQL-backed playlist item resolution, richer
+   playlist helper behavior such as shuffle groups/batch variants, and exact
+   remaining handler semantics.
 4. Expand Lua scheduling bindings from the current embedded `mlua` foundation to
    the full ErsatzTV scripted scheduling API.
 5. Compare generated timelines against ErsatzTV fixtures where available and
@@ -82,3 +85,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Wired the Phase 2 FFmpeg foundation into `/dev/stream/bbb.ts`, streaming local Big Buck Bunny MP4 fixtures as MPEG-TS for development verification. |
 | 2026-04-15 | Codex | Started Phase 3 scheduling: added shared scheduling trait, block/YAML/Lua engines in `nastv-core`, YAML handler snapshots, Lua scripted scheduling tests, and block timeline snapshots. |
 | 2026-04-15 | Codex | Continued Phase 3 scheduling parity: added core content resolver traits/adapters, YAML content source resolution, practical history application/cleanup, and new snapshots. |
+| 2026-04-15 | Codex | Continued Phase 3 YAML parity: added detail/index history resume, structured playlist child history behavior, reset/cleanup snapshots, and persistence-compatible history fields. |

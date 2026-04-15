@@ -13,6 +13,9 @@ for commit messages.
 - Phase 3 scheduling parity foundation for resolver-backed YAML content sources,
   deterministic in-memory scheduling adapters, and history application/cleanup
   snapshots.
+- Phase 3 YAML scheduling history parity for exact media-item detail resume,
+  structured playlist child/current-child history, reset pruning, and per-key
+  cleanup snapshots.
 - Phase 2 FFmpeg foundation with typed inputs, command generation, complex
   filter routing, software/NVENC/VAAPI pipeline builders, drawvg SVG template
   rendering, ffconcat v1.0 playlist writing, and snapshot coverage.

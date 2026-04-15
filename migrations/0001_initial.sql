@@ -1239,6 +1239,8 @@ CREATE TABLE playout_history (
     child_key TEXT,
     history_when TEXT NOT NULL,
     finish TEXT,
+    history_index INTEGER NOT NULL DEFAULT 0,
+    details TEXT NOT NULL DEFAULT '',
     is_current_child INTEGER NOT NULL CHECK (is_current_child IN (0, 1)),
     FOREIGN KEY (playout_id) REFERENCES playouts(id) ON DELETE CASCADE
 );

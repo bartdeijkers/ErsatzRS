@@ -259,8 +259,16 @@ impl ScriptState {
             self.graphics_element_ids.clone(),
             Some(format!(r#"{{"scriptContent":"{content}"}}"#)),
         );
-        self.added_history
-            .push(history(self.playout_id, content, &item, None));
+        let history_index = self.enumerator(content).current_index();
+        self.added_history.push(history(
+            self.playout_id,
+            content,
+            &item,
+            None,
+            history_index,
+            super::history_details_for_media_item(&media_item),
+            false,
+        ));
         self.current_time = item.finish;
         self.added_items.push(item);
         self.enumerator(content).advance();

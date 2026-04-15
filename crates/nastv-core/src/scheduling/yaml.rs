@@ -8,9 +8,10 @@ use nastv_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    cleanup_history, history, history_key_for_content, lookup_media_source, parse_duration,
-    parse_hhmm, playout_item, MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine,
-    SchedulingContentSource, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
+    cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
+    history_key_for_content, lookup_media_source, parse_duration, parse_hhmm, playout_item,
+    MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentSource,
+    SchedulingError, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
     SchedulingRequest, SchedulingResult,
 };
 
@@ -347,6 +348,7 @@ struct YamlContext {
     added_history: Vec<nastv_domain::PlayoutHistory>,
     gaps: Vec<nastv_domain::PlayoutGap>,
     enumerators: BTreeMap<String, MediaEnumerator>,
+    playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
     content_sources: BTreeMap<String, (SchedulingContentSource, PlaybackOrder)>,
 }
 
@@ -375,6 +377,7 @@ impl YamlContext {
             added_history: Vec::new(),
             gaps: Vec::new(),
             enumerators: BTreeMap::new(),
+            playlist_enumerators: BTreeMap::new(),
             content_sources,
         }
     }
@@ -408,19 +411,48 @@ impl YamlContext {
     }
 
     fn enumerator(&mut self, content: &str) -> &mut MediaEnumerator {
-        let (source, _) = self
-            .content_sources
-            .get(content)
-            .cloned()
-            .unwrap_or_else(|| {
-                (
-                    SchedulingContentSource::direct(content),
-                    PlaybackOrder::None,
-                )
-            });
+        let (source, playback_order) =
+            self.content_sources
+                .get(content)
+                .cloned()
+                .unwrap_or_else(|| {
+                    (
+                        SchedulingContentSource::direct(content),
+                        PlaybackOrder::None,
+                    )
+                });
         self.enumerators
             .entry(content.to_owned())
-            .or_insert_with(|| lookup_media_source(&self.reference_data, content, &source))
+            .or_insert_with(|| {
+                lookup_media_source(&self.reference_data, content, &source)
+                    .with_playback_order(playback_order)
+            })
+    }
+
+    fn playlist_enumerator(&mut self, content: &str) -> Option<&mut PlaylistEnumerator> {
+        if !self.playlist_enumerators.contains_key(content) {
+            let items = self.playlist_items(content)?;
+            self.playlist_enumerators
+                .insert(content.to_owned(), PlaylistEnumerator::new(items));
+        }
+        self.playlist_enumerators.get_mut(content)
+    }
+
+    fn playlist_items(&self, content: &str) -> Option<Vec<SchedulingPlaylistItem>> {
+        let Some((SchedulingContentSource::Playlist { group, name }, _)) =
+            self.content_sources.get(content)
+        else {
+            return None;
+        };
+        self.reference_data
+            .playlist_items_by_group_and_name
+            .get(&(group.clone(), name.clone()))
+            .or_else(|| {
+                self.reference_data
+                    .playlist_items_by_group_and_name
+                    .get(&(None, name.clone()))
+            })
+            .cloned()
     }
 
     fn history_key(&self, content: &str) -> String {
@@ -439,16 +471,108 @@ impl YamlContext {
         let ignored = history_to_remove.iter().copied().collect::<BTreeSet<_>>();
         for content in &definition.content {
             let history_key = history_key_for_content(&content.key, content.playback_order());
-            let prior_entries = self
+            if self.playlist_items(&content.key).is_some() {
+                self.apply_playlist_history(&content.key, &history_key, &ignored);
+                continue;
+            }
+
+            let Some(history) = self
                 .reference_data
                 .existing_history
                 .iter()
                 .filter(|history| !ignored.contains(&history.id))
                 .filter(|history| history.key == history_key)
                 .filter(|history| history.when < self.current_time)
-                .count();
-            if prior_entries > 0 {
-                self.enumerator(&content.key).set_index(prior_entries);
+                .max_by_key(|history| history.when)
+                .cloned()
+            else {
+                continue;
+            };
+            self.enumerator(&content.key).apply_history(&history);
+        }
+    }
+
+    fn apply_playlist_history(
+        &mut self,
+        content: &str,
+        history_key: &str,
+        ignored: &BTreeSet<EntityId>,
+    ) {
+        let Some(latest_when) = self
+            .reference_data
+            .existing_history
+            .iter()
+            .filter(|history| !ignored.contains(&history.id))
+            .filter(|history| history.key == history_key)
+            .filter(|history| history.when < self.current_time)
+            .map(|history| history.when)
+            .max()
+        else {
+            return;
+        };
+        let history = self
+            .reference_data
+            .existing_history
+            .iter()
+            .filter(|history| !ignored.contains(&history.id))
+            .filter(|history| history.key == history_key)
+            .filter(|history| history.when == latest_when)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let Some(playlist) = self.playlist_enumerator(content) else {
+            return;
+        };
+        playlist.apply_history(&history);
+    }
+
+    fn current_media_for_content(
+        &mut self,
+        content: &str,
+    ) -> Option<(SchedulingMediaItem, CurrentHistoryContext)> {
+        if let Some(playlist) = self.playlist_enumerator(content) {
+            playlist
+                .current()
+                .cloned()
+                .map(|media_item| (media_item, playlist.current_history_context()))
+        } else {
+            let enumerator = self.enumerator(content);
+            enumerator.current().cloned().map(|media_item| {
+                (
+                    media_item,
+                    CurrentHistoryContext::Single {
+                        index: enumerator.current_index(),
+                    },
+                )
+            })
+        }
+    }
+
+    fn advance_content(&mut self, content: &str) {
+        if let Some(playlist) = self.playlist_enumerator(content) {
+            playlist.advance();
+        } else {
+            self.enumerator(content).advance();
+        }
+    }
+
+    fn content_len(&mut self, content: &str) -> usize {
+        if let Some(playlist) = self.playlist_enumerator(content) {
+            playlist.len()
+        } else {
+            self.enumerator(content).len()
+        }
+    }
+
+    fn skip_content(&mut self, content: &str, skip: usize) {
+        if let Some(playlist) = self.playlist_enumerator(content) {
+            for _ in 0..skip.min(playlist.len()) {
+                playlist.advance();
+            }
+        } else {
+            let enumerator = self.enumerator(content);
+            for _ in 0..skip.min(enumerator.len()) {
+                enumerator.advance();
             }
         }
     }
@@ -480,6 +604,187 @@ impl YamlContext {
         } else {
             FillerKind::None
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum CurrentHistoryContext {
+    Single {
+        index: usize,
+    },
+    Playlist {
+        index: usize,
+        child_key: String,
+        child_index: usize,
+        child_details: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct PlaylistChildEnumerator {
+    collection_key: super::SchedulingCollectionKey,
+    play_all: bool,
+    count: Option<usize>,
+    items_taken_from_current: usize,
+    enumerator: MediaEnumerator,
+}
+
+#[derive(Debug, Clone)]
+struct PlaylistEnumerator {
+    index: usize,
+    child_index: usize,
+    children: Vec<PlaylistChildEnumerator>,
+}
+
+impl PlaylistEnumerator {
+    fn new(playlist_items: Vec<SchedulingPlaylistItem>) -> Self {
+        let children = playlist_items
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| PlaylistChildEnumerator {
+                collection_key: item.collection_key,
+                play_all: item.play_all,
+                count: item.count,
+                items_taken_from_current: 0,
+                enumerator: MediaEnumerator::new(
+                    format!("playlist-child-{index}"),
+                    item.media_items,
+                )
+                .with_playback_order(item.playback_order),
+            })
+            .filter(|child| !child.enumerator.is_empty())
+            .collect();
+        Self {
+            index: 0,
+            child_index: 0,
+            children,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.children
+            .iter()
+            .map(|child| child.enumerator.len().max(1))
+            .sum()
+    }
+
+    fn current_child(&self) -> Option<&PlaylistChildEnumerator> {
+        if self.children.is_empty() {
+            None
+        } else {
+            self.children.get(self.child_index % self.children.len())
+        }
+    }
+
+    fn current_child_mut(&mut self) -> Option<&mut PlaylistChildEnumerator> {
+        if self.children.is_empty() {
+            None
+        } else {
+            let index = self.child_index % self.children.len();
+            self.children.get_mut(index)
+        }
+    }
+
+    fn current(&self) -> Option<&SchedulingMediaItem> {
+        self.current_child()
+            .and_then(|child| child.enumerator.current())
+    }
+
+    fn current_history_context(&self) -> CurrentHistoryContext {
+        let Some(child) = self.current_child() else {
+            return CurrentHistoryContext::Single { index: self.index };
+        };
+        let child_details = child
+            .enumerator
+            .current()
+            .map(history_details_for_media_item)
+            .unwrap_or_default();
+        CurrentHistoryContext::Playlist {
+            index: self.index,
+            child_key: history_key_for_collection_key(&child.collection_key),
+            child_index: child.enumerator.current_index(),
+            child_details,
+        }
+    }
+
+    fn advance(&mut self) {
+        let Some(child) = self.current_child_mut() else {
+            return;
+        };
+        child.enumerator.advance();
+        child.items_taken_from_current = child.items_taken_from_current.saturating_add(1);
+
+        let should_switch = if child.play_all {
+            child.enumerator.current_index() == 0
+        } else if let Some(count) = child.count {
+            child.items_taken_from_current >= count
+        } else {
+            true
+        };
+
+        if should_switch {
+            self.child_index = (self.child_index + 1) % self.children.len();
+            if let Some(next_child) = self.current_child_mut() {
+                next_child.items_taken_from_current = 0;
+            }
+        }
+        self.index = self.index.saturating_add(1);
+        if self.child_index == 0
+            && self
+                .children
+                .first()
+                .is_some_and(|child| child.enumerator.current_index() == 0)
+        {
+            self.index = 0;
+        }
+    }
+
+    fn apply_history(&mut self, history: &[nastv_domain::PlayoutHistory]) {
+        let Some(primary) = history.iter().find(|history| history.child_key.is_none()) else {
+            return;
+        };
+        self.index = usize::try_from(primary.index).unwrap_or_default();
+        let mut has_set_child = false;
+        for child_history in history.iter().filter(|history| history.child_key.is_some()) {
+            let Some(child_key) = child_history.child_key.as_deref() else {
+                continue;
+            };
+            let Some((child_index, child)) =
+                self.children.iter_mut().enumerate().find(|(_, child)| {
+                    history_key_for_collection_key(&child.collection_key) == child_key
+                })
+            else {
+                continue;
+            };
+            let next_index = if child_history.is_current_child {
+                child_history.index.saturating_add(1)
+            } else {
+                child_history.index
+            };
+            child
+                .enumerator
+                .set_index(usize::try_from(next_index).unwrap_or_default());
+            if child.enumerator.playback_order == PlaybackOrder::Chronological {
+                if child_history.is_current_child {
+                    child
+                        .enumerator
+                        .move_to_history_details(&child_history.details);
+                } else {
+                    child
+                        .enumerator
+                        .move_after_history_details(&child_history.details);
+                }
+            }
+            if child_history.is_current_child {
+                self.child_index = child_index;
+                has_set_child = true;
+            }
+        }
+        if !has_set_child && !self.children.is_empty() {
+            self.child_index =
+                usize::try_from(primary.index).unwrap_or_default() % self.children.len();
+        }
+        self.advance();
     }
 }
 
@@ -670,10 +975,7 @@ fn handle_skip_items(context: &mut YamlContext, instruction: &YamlInstruction) {
         .as_deref()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or_default();
-    let enumerator = context.enumerator(content);
-    for _ in 0..skip.min(enumerator.len()) {
-        enumerator.advance();
-    }
+    context.skip_content(content, skip);
 }
 
 fn handle_skip_to_item(context: &mut YamlContext, instruction: &YamlInstruction) {
@@ -706,7 +1008,7 @@ fn handle_all(
     else {
         return Ok(());
     };
-    let count = context.enumerator(content).len();
+    let count = context.content_len(content);
     for _ in 0..count {
         schedule_next_with_rolls(context, instruction, definition, content)?;
     }
@@ -797,20 +1099,27 @@ fn schedule_until(
         return Ok(());
     };
     while context.current_time < target {
-        let Some(media_item) = context.enumerator(content).current().cloned() else {
+        let Some((media_item, history_context)) = context.current_media_for_content(content) else {
             break;
         };
         let remaining = target - context.current_time;
         if media_item.duration <= remaining || !instruction.stop_before_end {
             schedule_next_with_rolls(context, instruction, definition, content)?;
         } else if instruction.discard_attempts > 0 {
-            context.enumerator(content).advance();
+            context.advance_content(content);
         } else if instruction.trim {
-            add_media_item(context, instruction, content, &media_item, remaining);
-            context.enumerator(content).advance();
+            add_media_item(
+                context,
+                instruction,
+                content,
+                &media_item,
+                remaining,
+                history_context,
+            );
+            context.advance_content(content);
         } else if let Some(fallback) = &instruction.fallback {
-            let fallback_item = context.enumerator(fallback).current().cloned();
-            if let Some(fallback_item) = fallback_item {
+            let fallback_item = context.current_media_for_content(fallback);
+            if let Some((fallback_item, fallback_history_context)) = fallback_item {
                 let duration = fallback_item.duration.min(remaining);
                 let mut fallback_instruction = instruction.clone();
                 fallback_instruction.filler_kind = Some("Fallback".to_owned());
@@ -820,8 +1129,9 @@ fn schedule_until(
                     fallback,
                     &fallback_item,
                     duration,
+                    fallback_history_context,
                 );
-                context.enumerator(fallback).advance();
+                context.advance_content(fallback);
             }
             context.current_time = target;
         } else {
@@ -852,16 +1162,17 @@ fn schedule_next_with_rolls(
         }
     }
 
-    let media_item = context.enumerator(content).current().cloned();
-    if let Some(media_item) = media_item {
+    let media_item = context.current_media_for_content(content);
+    if let Some((media_item, history_context)) = media_item {
         add_media_item(
             context,
             instruction,
             content,
             &media_item,
             media_item.duration,
+            history_context,
         );
-        context.enumerator(content).advance();
+        context.advance_content(content);
     }
 
     if context.filler_stack.is_empty() {
@@ -890,6 +1201,7 @@ fn add_media_item(
     content: &str,
     media_item: &SchedulingMediaItem,
     duration: Duration,
+    history_context: CurrentHistoryContext,
 ) {
     let item = playout_item(
         context.playout.id,
@@ -907,12 +1219,45 @@ fn add_media_item(
             content, context.instruction_index
         )),
     );
-    context.added_history.push(history(
-        context.playout.id,
-        context.history_key(content),
-        &item,
-        None,
-    ));
+    let history_key = context.history_key(content);
+    match history_context {
+        CurrentHistoryContext::Single { index } => {
+            context.added_history.push(history(
+                context.playout.id,
+                history_key,
+                &item,
+                None,
+                index,
+                history_details_for_media_item(media_item),
+                false,
+            ));
+        }
+        CurrentHistoryContext::Playlist {
+            index,
+            child_key,
+            child_index,
+            child_details,
+        } => {
+            context.added_history.push(history(
+                context.playout.id,
+                history_key.clone(),
+                &item,
+                None,
+                index,
+                history_details_for_media_item(media_item),
+                false,
+            ));
+            context.added_history.push(history(
+                context.playout.id,
+                history_key,
+                &item,
+                Some(child_key),
+                child_index,
+                child_details,
+                true,
+            ));
+        }
+    }
     context.current_time = item.finish;
     context.added_items.push(item);
     context.advance_guide_group();
@@ -1045,8 +1390,11 @@ fn is_sequence_instruction(instruction: &YamlInstruction) -> bool {
 #[allow(clippy::needless_raw_string_hashes)]
 mod tests {
     use super::*;
-    use crate::scheduling::{SchedulingMediaItem, SchedulingReferenceData};
-    use nastv_domain::Playout;
+    use crate::scheduling::{
+        SchedulingCollectionKey, SchedulingMediaItem, SchedulingPlaylistItem,
+        SchedulingReferenceData,
+    };
+    use nastv_domain::{PlaybackOrder, Playout};
 
     fn request(yaml: &str) -> (YamlPlayoutDefinition, SchedulingRequest) {
         let mut reference_data = SchedulingReferenceData::default();
@@ -1508,6 +1856,308 @@ playout:
 
         insta::assert_json_snapshot!(serde_json::json!({
             "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history_to_remove": result.history_to_remove,
+        }));
+    }
+
+    #[test]
+    fn yaml_chronological_history_resume_by_media_item_details_snapshot() {
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let history_key = history_key_for_content("collection", PlaybackOrder::Chronological);
+        let mut reference_data = SchedulingReferenceData::default();
+        let item_1 = SchedulingMediaItem::new(1, Duration::minutes(10));
+        let item_2 = SchedulingMediaItem::new(2, Duration::minutes(10));
+        let item_3 = SchedulingMediaItem::new(3, Duration::minutes(10));
+        reference_data
+            .collections_by_name
+            .insert("Movies".to_owned(), vec![item_1, item_2.clone(), item_3]);
+        reference_data.existing_history = vec![nastv_domain::PlayoutHistory {
+            id: 20,
+            key: history_key,
+            when: start - Duration::hours(1),
+            finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
+            index: 0,
+            details: history_details_for_media_item(&item_2),
+            ..nastv_domain::PlayoutHistory::default()
+        }];
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: collection
+    collection: Movies
+    order: chronological
+playout:
+  - count: "1"
+    content: collection
+"#,
+        )
+        .expect("valid yaml");
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history": result.added_history.iter().map(|history| serde_json::json!({
+                "key": history.key,
+                "index": history.index,
+                "details": history.details,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_playlist_history_keys_and_current_child_snapshot() {
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let playlist_key = history_key_for_content("playlist", PlaybackOrder::None);
+        let child_0_key = SchedulingCollectionKey::fake_playlist_item(0);
+        let child_1_key = SchedulingCollectionKey::fake_playlist_item(1);
+        let child_0_history_key = history_key_for_collection_key(&child_0_key);
+        let mut reference_data = SchedulingReferenceData::default();
+        let item_1 = SchedulingMediaItem {
+            season: Some(1),
+            episode: Some(1),
+            ..SchedulingMediaItem::new(1, Duration::minutes(10))
+        };
+        reference_data.playlist_items_by_group_and_name.insert(
+            (Some("Prime".to_owned()), "Block A".to_owned()),
+            vec![
+                SchedulingPlaylistItem {
+                    collection_key: child_0_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: None,
+                    media_items: vec![
+                        item_1.clone(),
+                        SchedulingMediaItem {
+                            season: Some(1),
+                            episode: Some(2),
+                            ..SchedulingMediaItem::new(2, Duration::minutes(10))
+                        },
+                    ],
+                },
+                SchedulingPlaylistItem {
+                    collection_key: child_1_key,
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: None,
+                    media_items: vec![SchedulingMediaItem::new(10, Duration::minutes(10))],
+                },
+            ],
+        );
+        reference_data.existing_history = vec![
+            nastv_domain::PlayoutHistory {
+                id: 30,
+                key: playlist_key.clone(),
+                when: start - Duration::hours(1),
+                finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
+                index: 0,
+                details: history_details_for_media_item(&item_1),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 31,
+                key: playlist_key,
+                child_key: Some(child_0_history_key),
+                when: start - Duration::hours(1),
+                finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
+                index: 0,
+                details: history_details_for_media_item(&item_1),
+                is_current_child: true,
+                ..nastv_domain::PlayoutHistory::default()
+            },
+        ];
+
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: playlist
+    playlist_group: Prime
+    playlist: Block A
+playout:
+  - count: "1"
+    content: playlist
+"#,
+        )
+        .expect("valid yaml");
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+            "history": result.added_history.iter().map(|history| serde_json::json!({
+                "key": history.key,
+                "child_key": history.child_key,
+                "index": history.index,
+                "details": history.details,
+                "is_current_child": history.is_current_child,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+
+    #[test]
+    fn yaml_reset_removes_future_and_current_history_snapshot() {
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let history_key = history_key_for_content("main", PlaybackOrder::None);
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.media_by_key.insert(
+            "main".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::minutes(10))],
+        );
+        reference_data.existing_history = vec![
+            nastv_domain::PlayoutHistory {
+                id: 40,
+                key: history_key.clone(),
+                when: start - Duration::hours(2),
+                finish: Some(start - Duration::hours(2) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 41,
+                key: history_key.clone(),
+                when: start - Duration::minutes(5),
+                finish: Some(start + Duration::minutes(5)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 42,
+                key: history_key,
+                when: start + Duration::minutes(5),
+                finish: Some(start + Duration::minutes(15)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+        ];
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+playout:
+  - count: "1"
+    content: main
+"#,
+        )
+        .expect("valid yaml");
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "history_to_remove": result.history_to_remove,
+        }));
+    }
+
+    #[test]
+    fn yaml_cleanup_keeps_latest_completed_history_per_key_snapshot() {
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let key_a = history_key_for_content("a", PlaybackOrder::None);
+        let key_b = history_key_for_content("b", PlaybackOrder::None);
+        let mut reference_data = SchedulingReferenceData {
+            max_playout_offset: Duration::zero(),
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            "a".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::minutes(10))],
+        );
+        reference_data.existing_history = vec![
+            nastv_domain::PlayoutHistory {
+                id: 50,
+                key: key_a.clone(),
+                when: start - Duration::hours(3),
+                finish: Some(start - Duration::hours(3) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 51,
+                key: key_a,
+                when: start - Duration::hours(2),
+                finish: Some(start - Duration::hours(2) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 52,
+                key: key_b.clone(),
+                when: start - Duration::hours(4),
+                finish: Some(start - Duration::hours(4) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+            nastv_domain::PlayoutHistory {
+                id: 53,
+                key: key_b,
+                when: start - Duration::hours(1),
+                finish: Some(start - Duration::hours(1) + Duration::minutes(10)),
+                ..nastv_domain::PlayoutHistory::default()
+            },
+        ];
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+playout:
+  - count: "1"
+    content: a
+"#,
+        )
+        .expect("valid yaml");
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
             "history_to_remove": result.history_to_remove,
         }));
     }
