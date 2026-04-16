@@ -12,6 +12,9 @@ for commit messages.
 
 - Real-world ErsatzTV SQLite compatibility coverage gated by the
   `ERSATZRS_REAL_WORLD_SQLITE` environment variable.
+- Persistence gap matrix for all 138 ErsatzTV SQLite tables, including current
+  Rust repository coverage, read/write coverage, env-gated real-world decode
+  coverage, compatibility risk, and recommended implementation order.
 - Phase 3 block scheduling parity slice for core effective-template derivation
   data, ErsatzTV-style block keys, collection key/etag scheduling metadata,
   guide windows, change-detection scaffolding, deco block-start/default filler
@@ -81,6 +84,9 @@ for commit messages.
 
 - SQLite repository decoding and writes now use ErsatzTV-compatible integer
   enum values, EF-style UTC `DateTime` text, and ErsatzTV `TimeSpan` parsing.
+- Env-gated real-world ErsatzTV SQLite compatibility coverage now exercises
+  additional repository surfaces for media sources, metadata, collections,
+  program schedules, block scheduling, deco, fillers, graphics, and config.
 - Project branding, workspace crates, binaries, Docker wiring, docs, and
   snapshots were renamed from NasTv/`nastv-*` to ErsatzRS/`ersatzrs-*`.
 - FFmpeg 8.1 runtime detection now lives in `ersatzrs-ffmpeg` and is reused by

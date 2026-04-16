@@ -2,10 +2,13 @@ use std::path::PathBuf;
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
-    ChannelRepository, FfmpegProfileRepository, LibraryRepository, MediaItemRepository,
-    PlayoutRepository,
+    BlockRepository, ChannelRepository, CollectionRepository, ConfigRepository, DecoRepository,
+    FfmpegProfileRepository, FillerRepository, GraphicsRepository, LibraryRepository,
+    MediaItemRepository, MediaSourceRepository, MetadataRepository, PlayoutRepository,
+    ProgramScheduleRepository, TemplateRepository,
 };
 use ersatzrs_core::scheduling::SchedulingContentSource;
+use ersatzrs_domain::MediaSourceKind;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
@@ -48,8 +51,15 @@ async fn real_world_ersatztv_sqlite_database_is_readable() {
     assert_profiles_decode(&pool, &repos).await;
     assert_channels_decode(&repos).await;
     assert_libraries_decode(&pool, &repos).await;
+    assert_media_sources_decode(&repos).await;
     assert_media_items_decode(&pool, &repos).await;
+    assert_metadata_decode(&pool, &repos).await;
+    assert_collections_decode(&pool, &repos).await;
     assert_playouts_decode(&pool, &repos).await;
+    assert_program_schedules_decode(&pool, &repos).await;
+    assert_block_scheduling_decode(&pool, &repos).await;
+    assert_overlays_and_fillers_decode(&pool, &repos).await;
+    assert_config_decode(&pool, &repos).await;
     assert_scheduling_sources_resolve(&pool, &repos).await;
 }
 
@@ -106,6 +116,46 @@ async fn assert_libraries_decode(pool: &SqlitePool, repos: &Repositories) {
     }
 }
 
+async fn assert_media_sources_decode(repos: &Repositories) {
+    for source in repos
+        .media_source
+        .list_all()
+        .await
+        .expect("media sources should list")
+    {
+        match source.kind {
+            MediaSourceKind::Plex => {
+                repos
+                    .media_source
+                    .get_plex(source.id)
+                    .await
+                    .unwrap_or_else(|error| {
+                        panic!("PlexMediaSource {} should decode: {error}", source.id)
+                    });
+            }
+            MediaSourceKind::Jellyfin => {
+                repos
+                    .media_source
+                    .get_jellyfin(source.id)
+                    .await
+                    .unwrap_or_else(|error| {
+                        panic!("JellyfinMediaSource {} should decode: {error}", source.id)
+                    });
+            }
+            MediaSourceKind::Emby => {
+                repos
+                    .media_source
+                    .get_emby(source.id)
+                    .await
+                    .unwrap_or_else(|error| {
+                        panic!("EmbyMediaSource {} should decode: {error}", source.id)
+                    });
+            }
+            MediaSourceKind::Local => {}
+        }
+    }
+}
+
 async fn assert_media_items_decode(pool: &SqlitePool, repos: &Repositories) {
     for id in ids(pool, "MediaItem").await.into_iter().take(25) {
         repos
@@ -115,6 +165,72 @@ async fn assert_media_items_decode(pool: &SqlitePool, repos: &Repositories) {
             .unwrap_or_else(|error| {
                 panic!("MediaItem {id} should decode from real ErsatzTV data: {error}")
             });
+    }
+}
+
+async fn assert_metadata_decode(pool: &SqlitePool, repos: &Repositories) {
+    for id in foreign_ids(pool, "MovieMetadata", "MovieId")
+        .await
+        .into_iter()
+        .take(25)
+    {
+        repos
+            .metadata
+            .get_movie_metadata(id)
+            .await
+            .unwrap_or_else(|error| panic!("MovieMetadata for Movie {id} should decode: {error}"));
+    }
+
+    for id in foreign_ids(pool, "EpisodeMetadata", "EpisodeId")
+        .await
+        .into_iter()
+        .take(25)
+    {
+        repos
+            .metadata
+            .get_episode_metadata(id)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("EpisodeMetadata for Episode {id} should decode: {error}")
+            });
+    }
+
+    for id in foreign_ids(pool, "MusicVideoMetadata", "MusicVideoId")
+        .await
+        .into_iter()
+        .take(25)
+    {
+        repos
+            .metadata
+            .get_music_video_metadata(id)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("MusicVideoMetadata for MusicVideo {id} should decode: {error}")
+            });
+    }
+}
+
+async fn assert_collections_decode(pool: &SqlitePool, repos: &Repositories) {
+    for id in ids(pool, "Collection").await.into_iter().take(25) {
+        repos
+            .collection
+            .get_with_items(id)
+            .await
+            .unwrap_or_else(|error| panic!("Collection {id} should decode: {error}"));
+    }
+    for id in ids(pool, "SmartCollection").await.into_iter().take(25) {
+        repos
+            .collection
+            .get_smart(id)
+            .await
+            .unwrap_or_else(|error| panic!("SmartCollection {id} should decode: {error}"));
+    }
+    for id in ids(pool, "Playlist").await.into_iter().take(25) {
+        repos
+            .collection
+            .get_playlist_with_items(id)
+            .await
+            .unwrap_or_else(|error| panic!("Playlist {id} should decode: {error}"));
     }
 }
 
@@ -135,6 +251,67 @@ async fn assert_playouts_decode(pool: &SqlitePool, repos: &Repositories) {
             .unwrap_or_else(|error| {
                 panic!("PlayoutItem range for playout {id} should decode: {error}")
             });
+    }
+}
+
+async fn assert_program_schedules_decode(pool: &SqlitePool, repos: &Repositories) {
+    for id in ids(pool, "ProgramSchedule").await {
+        repos
+            .program_schedule
+            .get_with_items(id)
+            .await
+            .unwrap_or_else(|error| panic!("ProgramSchedule {id} should decode: {error}"));
+    }
+}
+
+async fn assert_block_scheduling_decode(pool: &SqlitePool, repos: &Repositories) {
+    for id in ids(pool, "Block").await {
+        repos
+            .block
+            .get_with_items(id)
+            .await
+            .unwrap_or_else(|error| panic!("Block {id} should decode: {error}"));
+    }
+    for id in ids(pool, "Template").await {
+        repos
+            .template
+            .get_with_items(id)
+            .await
+            .unwrap_or_else(|error| panic!("Template {id} should decode: {error}"));
+    }
+    for id in ids(pool, "Deco").await {
+        repos
+            .deco
+            .get_with_watermarks(id)
+            .await
+            .unwrap_or_else(|error| panic!("Deco {id} should decode: {error}"));
+    }
+}
+
+async fn assert_overlays_and_fillers_decode(pool: &SqlitePool, repos: &Repositories) {
+    for id in ids(pool, "FillerPreset").await {
+        repos
+            .filler
+            .get(id)
+            .await
+            .unwrap_or_else(|error| panic!("FillerPreset {id} should decode: {error}"));
+    }
+    for id in ids(pool, "GraphicsElement").await {
+        repos
+            .graphics
+            .get_element(id)
+            .await
+            .unwrap_or_else(|error| panic!("GraphicsElement {id} should decode: {error}"));
+    }
+}
+
+async fn assert_config_decode(pool: &SqlitePool, repos: &Repositories) {
+    for key in keys(pool, "ConfigElement").await {
+        repos
+            .config
+            .get(&key)
+            .await
+            .unwrap_or_else(|error| panic!("ConfigElement {key} should decode: {error}"));
     }
 }
 
@@ -174,6 +351,22 @@ async fn ids(pool: &SqlitePool, table: &str) -> Vec<i64> {
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load ids from {table}: {error}"))
+}
+
+async fn foreign_ids(pool: &SqlitePool, table: &str, column: &str) -> Vec<i64> {
+    let sql = format!(r#"SELECT "{column}" FROM "{table}" ORDER BY "Id""#);
+    sqlx::query_scalar(&sql)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|error| panic!("load foreign ids from {table}.{column}: {error}"))
+}
+
+async fn keys(pool: &SqlitePool, table: &str) -> Vec<String> {
+    let sql = format!(r#"SELECT "Key" FROM "{table}" ORDER BY "Key""#);
+    sqlx::query_scalar(&sql)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_else(|error| panic!("load keys from {table}: {error}"))
 }
 
 async fn names(pool: &SqlitePool, table: &str) -> Vec<String> {
