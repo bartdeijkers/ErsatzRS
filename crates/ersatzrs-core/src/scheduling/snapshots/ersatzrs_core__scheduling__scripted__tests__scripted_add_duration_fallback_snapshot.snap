@@ -1,0 +1,19 @@
+---
+source: crates/ersatzrs-core/src/scheduling/scripted.rs
+expression: snapshot_items(&result)
+---
+{
+  "items": [
+    {
+      "custom_title": null,
+      "disable_watermarks": false,
+      "filler": "Fallback",
+      "finish": "2026-04-15T12:30:00+00:00",
+      "graphics": [],
+      "guide_group": 1,
+      "media": 99,
+      "start": "2026-04-15T12:00:00+00:00",
+      "watermarks": []
+    }
+  ]
+}

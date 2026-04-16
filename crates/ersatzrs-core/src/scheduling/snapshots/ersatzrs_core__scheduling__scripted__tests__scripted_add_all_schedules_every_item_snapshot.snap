@@ -1,0 +1,41 @@
+---
+source: crates/ersatzrs-core/src/scheduling/scripted.rs
+expression: snapshot_items(&result)
+---
+{
+  "items": [
+    {
+      "custom_title": null,
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T12:30:00+00:00",
+      "graphics": [],
+      "guide_group": 1,
+      "media": 10,
+      "start": "2026-04-15T12:00:00+00:00",
+      "watermarks": []
+    },
+    {
+      "custom_title": null,
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T13:15:00+00:00",
+      "graphics": [],
+      "guide_group": 2,
+      "media": 11,
+      "start": "2026-04-15T12:30:00+00:00",
+      "watermarks": []
+    },
+    {
+      "custom_title": null,
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T13:35:00+00:00",
+      "graphics": [],
+      "guide_group": 3,
+      "media": 12,
+      "start": "2026-04-15T13:15:00+00:00",
+      "watermarks": []
+    }
+  ]
+}
