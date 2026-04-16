@@ -315,6 +315,8 @@ impl Default for PlayoutTemplate {
 pub struct PlayoutHistory {
     pub id: EntityId,
     pub playout_id: EntityId,
+    pub block_id: Option<EntityId>,
+    pub playback_order: PlaybackOrder,
     pub key: String,
     pub child_key: Option<String>,
     pub when: DateTime<Utc>,

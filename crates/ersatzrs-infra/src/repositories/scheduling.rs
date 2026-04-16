@@ -1585,6 +1585,8 @@ fn map_playout_history(row: &SqliteRow) -> Result<PlayoutHistory> {
     Ok(PlayoutHistory {
         id: row.try_get("Id")?,
         playout_id: row.try_get("PlayoutId")?,
+        block_id: row.try_get("BlockId")?,
+        playback_order: decode_enum_column("playout history playback_order", row, "PlaybackOrder")?,
         key: row.try_get("Key")?,
         child_key: row.try_get("ChildKey")?,
         when: decode_datetime("playout history When", &row.try_get::<String, _>("When")?)?,

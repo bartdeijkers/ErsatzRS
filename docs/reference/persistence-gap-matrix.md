@@ -15,9 +15,9 @@ Scope:
 
 Current summary:
 
-- 36 tables have both read and write coverage.
-- 40 tables have read-only coverage.
-- 62 tables have no infra read/write coverage yet.
+- 45 tables have both read and write coverage.
+- 34 tables have read-only coverage.
+- 59 tables have no infra read/write coverage yet.
 
 Recommended order:
 
@@ -46,7 +46,7 @@ Recommended order:
 | `Channel` | Channel repository | Yes: Channel repository | Yes: Channel repository | Yes, env-gated direct decode | Low; continue edge-case decode for enum/time fields. | P0 broaden real-world cases |
 | `ChannelWatermark` | Scheduling/deco references only | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Watermark definitions cannot be round-tripped outside references. | P2 watermark repository |
 | `Collection` | Collection repository and scheduling read model | Yes: Collection repository, scheduling read model | Yes: Collection repository | Yes, env-gated direct decode | Covered basic collection rows; custom playback order semantics remain thin. | P2 collection editor parity |
-| `CollectionEnumeratorState` | Domain model only | No | No | No | Playout resume state can be lost for imported anchors. | P1 scheduler state decode/write |
+| `CollectionEnumeratorState` | Playout repository | Yes: Playout repository via `PlayoutProgramScheduleAnchor` | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; covered through parent playout state writes and env-gated decode. | P1 done in playout state slice |
 | `CollectionItem` | Collection repository and scheduling read model | Yes: Collection repository, scheduling read model | Yes: Collection repository | Yes, through collection decode | Covered, but ordering semantics are limited by ErsatzTV schema shape. | P2 collection ordering behavior |
 | `ConfigElement` | Config repository | Yes: Config repository | Yes: Config repository | Yes, env-gated direct decode | Low. | P0 retain env-gated config decode |
 | `Deco` | Deco repository, graphics repository, scheduling read model | Yes: Deco repository, graphics repository, scheduling read model | Yes: Deco repository | Yes, env-gated direct decode | Deco fallback/dead-air fields are partly defaulted on write. | P1 deco full-field round-trip |
@@ -71,7 +71,7 @@ Recommended order:
 | `Episode` | Metadata repository join and scheduling read model | Yes: metadata/scheduling read paths | No | Partial, env-gated scheduling decode if data exists | Episode container rows cannot be created by current metadata writes. | P1 media polymorphic repository |
 | `EpisodeMetadata` | Metadata repository and scheduling read model | Yes: metadata/scheduling read paths | Yes: Metadata repository | Yes, env-gated direct decode | Covered core fields; normalized joins remain incomplete. | P1 media metadata/search joins |
 | `FFmpegProfile` | FFmpeg profile repository | Yes: FFmpeg profile repository | Yes: FFmpeg profile repository | Yes, env-gated direct decode | Low; continue enum compatibility checks. | P0 broaden real-world enum cases |
-| `FillGroupEnumeratorState` | Schema only | No | No | No | Fill-group resume can be lost. | P1 scheduler state decode/write |
+| `FillGroupEnumeratorState` | Playout repository | Yes: Playout repository via `PlayoutScheduleItemFillGroupIndex` | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; covered through parent fill-group state writes and env-gated decode. | P1 done in playout state slice |
 | `FillerPreset` | Filler repository | Yes: Filler repository | Yes: Filler repository | Yes, env-gated direct decode | Low/medium; playback-order defaults need parity review. | P2 filler editor parity |
 | `Genre` | Scheduling search projection | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Search/filter metadata is read-only and incomplete across media kinds. | P1 media metadata/search joins |
 | `GraphicsElement` | Graphics repository and scheduling read model | Yes: graphics/scheduling read paths | Yes: Graphics repository | Yes, env-gated direct decode | Low/medium; ErsatzRS-only fields are not stored in ErsatzTV schema. | P2 graphics editor parity |
@@ -116,16 +116,16 @@ Recommended order:
 | `PlaylistGroup` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, through playlist decode | Playlist groups are read-only. | P2 playlist repository writes |
 | `PlaylistItem` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, through playlist decode | Playlist item order/count/play-all cannot round-trip. | P2 playlist repository writes |
 | `Playout` | Playout repository plus channel/graphics/scheduling references | Yes: playout/channel/graphics/scheduling read paths | No | Yes, env-gated direct decode | Playout root rows are not writable yet. | P1 playout state write parity |
-| `PlayoutAnchor` | Playout repository | Yes: Playout repository | No | Yes, through playout decode | Anchor resume state is read-only. | P1 playout state write parity |
+| `PlayoutAnchor` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; anchor round-trip now preserves schedule resume state. | P1 done in playout state slice |
 | `PlayoutBuildStatus` | Playout repository | Yes: Playout repository | Yes: Playout repository | Yes, through playout decode | Low. | P0 retain decode |
-| `PlayoutGap` | Playout repository | Yes: Playout repository | No | Yes, through playout decode | Gap persistence is read-only. | P1 playout state write parity |
-| `PlayoutHistory` | Playout repository and scheduling read model | Yes: playout/scheduling read paths | No | Yes, through playout decode | History resume/cleanup cannot persist parity yet. | P1 playout history writes |
+| `PlayoutGap` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; gap round-trip now matches imported playout state shape. | P1 done in playout state slice |
+| `PlayoutHistory` | Playout repository and scheduling read model | Yes: playout/scheduling read paths | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Medium; core still only uses a subset of imported history fields, but runtime history rows now round-trip. | P1 residual field-usage follow-up |
 | `PlayoutItem` | Playout, graphics, scheduling repositories | Yes: playout/graphics/scheduling read paths | Yes: Playout repository | Yes, env-gated range decode | Covered core writes; history/gap/root writes still missing. | P1 playout state write parity |
 | `PlayoutItemGraphicsElement` | Playout, graphics, scheduling repositories | Yes: playout/graphics/scheduling read paths | Yes: Playout repository | Yes, through playout item decode | Low/medium. | P1 playout overlay parity |
 | `PlayoutItemWatermark` | Playout and scheduling repositories | Yes: playout/scheduling read paths | Yes: Playout repository | Yes, through playout item decode | Low/medium. | P1 playout overlay parity |
-| `PlayoutProgramScheduleAnchor` | Playout repository | Yes: Playout repository | No | Yes, through playout decode | Schedule anchor state is read-only. | P1 playout state write parity |
-| `PlayoutScheduleItemFillGroupIndex` | Playout repository | Yes: Playout repository | No | Yes, through playout decode | Fill-group state is read-only. | P1 playout state write parity |
-| `PlayoutTemplate` | Playout and scheduling repositories | Yes: playout/scheduling read paths | No | Yes, through playout decode | Template selection is read-only. | P1 template/playout write parity |
+| `PlayoutProgramScheduleAnchor` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; schedule-anchor resume rows now round-trip. | P1 done in playout state slice |
+| `PlayoutScheduleItemFillGroupIndex` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; fill-group index rows now round-trip. | P1 done in playout state slice |
+| `PlayoutTemplate` | Playout and scheduling repositories | Yes: playout/scheduling read paths | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; template/deco-template selection now round-trips with date-window fields intact. | P1 done in playout state slice |
 | `PlexCollection` | Domain model only | No | No | No | Plex collection scanner data cannot round-trip. | P3 provider scanner tables |
 | `PlexConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `PlexEpisode` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
@@ -151,7 +151,7 @@ Recommended order:
 | `RerunCollection` | Domain model only | No | No | No | Rerun collection feature is not persisted. | P4 rerun collections |
 | `RerunHistory` | Domain model only | No | No | No | Rerun history parity is absent. | P4 rerun collections |
 | `Resolution` | Domain model only | No | No | No | Stream/dimension search and transcode decisions cannot use imported rows. | P1 media stream repository |
-| `ScheduleItemsEnumeratorState` | Playout repository | Yes: Playout repository | No | Yes, through playout anchor decode | Schedule item enumerator state is read-only. | P1 playout state write parity |
+| `ScheduleItemsEnumeratorState` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout anchor decode | Low/medium; anchor enumerator state now round-trips. | P1 done in playout state slice |
 | `Season` | Metadata repository join and scheduling read model | Yes: metadata/scheduling read paths | No | Partial, env-gated scheduling decode if data exists | Season rows cannot be created by owner repository. | P1 media polymorphic repository |
 | `SeasonMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Season metadata has no owner repository. | P1 media metadata/search joins |
 | `Show` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Show rows cannot be created by owner repository. | P1 media polymorphic repository |

@@ -4,8 +4,10 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
 use ersatzrs_domain::{
-    Channel, CollectionType, FFmpegProfile, Library, LibraryMediaKind, MediaItem, MediaSourceKind,
-    PlayoutBuildStatus, PlayoutItem, ProgramSchedule,
+    Channel, CollectionEnumeratorState, CollectionType, FFmpegProfile, Library, LibraryMediaKind,
+    MediaItem, MediaSourceKind, PlaybackOrder, Playout, PlayoutAnchor, PlayoutBuildStatus,
+    PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, PlayoutTemplate, ProgramSchedule,
 };
 use ersatzrs_infra::repositories::Repositories;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -182,6 +184,113 @@ pub fn build_status(playout_id: i64) -> PlayoutBuildStatus {
         last_build: fixed_time(),
         success: true,
         message: None,
+    }
+}
+
+pub fn playout(id: i64, channel_id: i64, schedule_id: i64) -> Playout {
+    Playout {
+        id,
+        channel_id,
+        program_schedule_id: Some(schedule_id),
+        on_demand_checkpoint: Some(fixed_time() + Duration::minutes(5)),
+        ..Playout::default()
+    }
+}
+
+pub fn playout_anchor() -> PlayoutAnchor {
+    PlayoutAnchor {
+        schedule_items_enumerator_state: CollectionEnumeratorState { seed: 77, index: 5 },
+        next_start: fixed_time() + Duration::minutes(45),
+        multiple_remaining: Some(2),
+        duration_finish: Some(fixed_time() + Duration::hours(2)),
+        in_flood: true,
+        in_duration_filler: false,
+        next_guide_group: 9,
+        next_instruction_index: 4,
+        context: Some("runtime-state".to_owned()),
+    }
+}
+
+pub fn playout_gap(id: i64, playout_id: i64) -> PlayoutGap {
+    PlayoutGap {
+        id,
+        playout_id,
+        start: fixed_time() + Duration::hours(3),
+        finish: fixed_time() + Duration::hours(3) + Duration::minutes(15),
+    }
+}
+
+pub fn playout_history(id: i64, playout_id: i64) -> PlayoutHistory {
+    PlayoutHistory {
+        id,
+        playout_id,
+        block_id: None,
+        playback_order: PlaybackOrder::Chronological,
+        key: "history-key".to_owned(),
+        child_key: Some("child-key".to_owned()),
+        when: fixed_time() + Duration::minutes(10),
+        finish: Some(fixed_time() + Duration::minutes(40)),
+        index: 3,
+        details: "{\"kind\":\"episode\"}".to_owned(),
+        is_current_child: true,
+    }
+}
+
+pub fn program_schedule_anchor(id: i64, playout_id: i64) -> PlayoutProgramScheduleAnchor {
+    PlayoutProgramScheduleAnchor {
+        id,
+        playout_id,
+        anchor_date: Some(fixed_time() + Duration::days(1)),
+        collection_type: CollectionType::Collection,
+        collection_id: Some(99),
+        multi_collection_id: None,
+        smart_collection_id: None,
+        rerun_collection_id: None,
+        media_item_id: None,
+        playlist_id: None,
+        search_query: Some("title:fixture".to_owned()),
+        fake_collection_key: Some("anchor-key".to_owned()),
+        enumerator_state: CollectionEnumeratorState { seed: 33, index: 7 },
+    }
+}
+
+pub fn fill_group_index(
+    id: i64,
+    playout_id: i64,
+    program_schedule_item_id: i64,
+) -> PlayoutScheduleItemFillGroupIndex {
+    PlayoutScheduleItemFillGroupIndex {
+        id,
+        playout_id,
+        program_schedule_item_id,
+        enumerator_state: CollectionEnumeratorState {
+            seed: 55,
+            index: 11,
+        },
+    }
+}
+
+pub fn playout_template(
+    playout_id: i64,
+    template_id: i64,
+    deco_template_id: i64,
+) -> PlayoutTemplate {
+    PlayoutTemplate {
+        playout_id,
+        template_id,
+        updated_ticks: 1234,
+        deco_template_id: Some(deco_template_id),
+        index: 2,
+        days_of_week: vec![1, 2, 3],
+        days_of_month: vec![1, 15],
+        months_of_year: vec![4],
+        limit_to_date_range: true,
+        start_month: 4,
+        start_day: 1,
+        start_year: Some(2026),
+        end_month: 4,
+        end_day: 30,
+        end_year: Some(2026),
     }
 }
 

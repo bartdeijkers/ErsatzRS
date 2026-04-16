@@ -10,6 +10,10 @@ for commit messages.
 
 ### Added
 
+- Phase 1 playout runtime-state persistence parity for SQLite: playout anchors,
+  schedule/fill-group enumerator state rows, gaps, history, program-schedule
+  anchors, playout templates, focused in-memory integration coverage, and
+  broader env-gated real-world playout decode assertions.
 - Real-world ErsatzTV SQLite compatibility coverage gated by the
   `ERSATZRS_REAL_WORLD_SQLITE` environment variable.
 - Persistence gap matrix for all 138 ErsatzTV SQLite tables, including current

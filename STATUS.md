@@ -67,10 +67,11 @@ What remains before Phase 3 can be considered end-to-end complete:
 
 Persistence parity gaps are now tracked per table in
 `docs/reference/persistence-gap-matrix.md`. The highest-risk next persistence
-slice is the `P1` group there: media polymorphic rows, media versions/files,
-streams/chapters/subtitles/language codes, metadata joins, playout state writes,
-program schedule item subtypes, template items, block item targets, and deco
-break/template rows.
+slice remains the `P1` group there, with playout runtime-state writes now
+covered; next priority is media polymorphic rows, media versions/files,
+streams/chapters/subtitles/language codes, metadata joins, program schedule
+item subtypes, template items, block item targets, and deco break/template
+rows.
 
 ### Known TODOs from Phase 0
 
@@ -112,3 +113,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-16 | Codex | Verified `0001_initial.sql` against the ErsatzTV SQLite schema reference and updated remaining infra fixtures to the real table names and FK requirements; full `ersatzrs-infra --tests` passes. |
 | 2026-04-16 | Codex | Added real-world ErsatzTV SQLite compatibility coverage and updated infra decoders for EF integer enums, DateTime, TimeSpan, and date-only values. |
 | 2026-04-16 | Codex | Added a 138-table persistence gap matrix and expanded env-gated real-world SQLite decode coverage across existing infra repositories. |
+| 2026-04-16 | GitHub Copilot (GPT-5.4) | Added SQLite playout runtime-state write parity for anchors, enumerator state rows, gaps, history, program-schedule anchors, and playout templates with focused infra tests. |

@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ersatzrs_core::repositories::{PlayoutRepository, Result};
-use ersatzrs_domain::{EntityId, Playout, PlayoutBuildStatus, PlayoutItem};
+use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
+use ersatzrs_domain::{
+    EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row, Sqlite, Transaction};
 
 use super::common::{
     decode_datetime, decode_duration_text, decode_enum_column, decode_message,
@@ -126,6 +129,28 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             items.push(item);
         }
         Ok(items)
+    }
+
+    async fn replace_runtime_state(
+        &self,
+        playout: &Playout,
+        gaps: &[PlayoutGap],
+        history: &[PlayoutHistory],
+        program_schedule_anchors: &[PlayoutProgramScheduleAnchor],
+        fill_group_indices: &[PlayoutScheduleItemFillGroupIndex],
+    ) -> Result<()> {
+        let mut tx = self.0.begin().await?;
+
+        update_playout_checkpoint(&mut tx, playout).await?;
+        replace_anchor_state(&mut tx, playout).await?;
+        replace_gaps(&mut tx, playout.id, gaps).await?;
+        replace_history(&mut tx, playout.id, history).await?;
+        replace_program_schedule_anchors(&mut tx, playout.id, program_schedule_anchors).await?;
+        replace_fill_group_indices(&mut tx, playout.id, fill_group_indices).await?;
+        replace_playout_templates(&mut tx, playout).await?;
+
+        tx.commit().await?;
+        Ok(())
     }
 
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()> {
@@ -359,4 +384,250 @@ fn decode_integer_list(kind: &'static str, value: &str) -> Result<Vec<i32>> {
         return Ok(Vec::new());
     }
     serde_json::from_str(value).map_err(|source| decode_message(kind, &source.to_string()))
+}
+
+fn encode_integer_list(value: &[i32]) -> Result<String> {
+    serde_json::to_string(value).map_err(|source| RepositoryError::Conflict(source.to_string()))
+}
+
+async fn update_playout_checkpoint(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout: &Playout,
+) -> Result<()> {
+    sqlx::query(r#"UPDATE "Playout" SET "OnDemandCheckpoint" = ? WHERE "Id" = ?"#)
+        .bind(encode_optional_datetime(playout.on_demand_checkpoint))
+        .bind(playout.id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn replace_anchor_state(tx: &mut Transaction<'_, Sqlite>, playout: &Playout) -> Result<()> {
+    if let Some(anchor) = &playout.anchor {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutAnchor" (
+                "PlayoutId", "DurationFinish", "InDurationFiller", "InFlood",
+                "MultipleRemaining", "NextGuideGroup", "NextStart",
+                "NextInstructionIndex", "Context"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(playout.id)
+        .bind(encode_optional_datetime(anchor.duration_finish))
+        .bind(anchor.in_duration_filler)
+        .bind(anchor.in_flood)
+        .bind(anchor.multiple_remaining)
+        .bind(anchor.next_guide_group)
+        .bind(encode_datetime(anchor.next_start))
+        .bind(anchor.next_instruction_index)
+        .bind(&anchor.context)
+        .execute(&mut **tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "ScheduleItemsEnumeratorState" (
+                "PlayoutAnchorPlayoutId", "Seed", "Index"
+             ) VALUES (?, ?, ?)"#,
+        )
+        .bind(playout.id)
+        .bind(anchor.schedule_items_enumerator_state.seed)
+        .bind(anchor.schedule_items_enumerator_state.index)
+        .execute(&mut **tx)
+        .await?;
+    } else {
+        sqlx::query(r#"DELETE FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#)
+            .bind(playout.id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn replace_gaps(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout_id: EntityId,
+    gaps: &[PlayoutGap],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await?;
+    for gap in gaps {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish")
+             VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(gap.id)
+        .bind(gap.playout_id)
+        .bind(encode_datetime(gap.start))
+        .bind(encode_datetime(gap.finish))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_history(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout_id: EntityId,
+    history: &[PlayoutHistory],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await?;
+    for entry in history {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutHistory" (
+                "Id", "BlockId", "Details", "Index", "Key", "PlaybackOrder",
+                "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(entry.id)
+        .bind(entry.block_id)
+        .bind(&entry.details)
+        .bind(entry.index)
+        .bind(&entry.key)
+        .bind(encode_enum(entry.playback_order))
+        .bind(entry.playout_id)
+        .bind(encode_datetime(entry.when))
+        .bind(encode_optional_datetime(entry.finish))
+        .bind(&entry.child_key)
+        .bind(entry.is_current_child)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_program_schedule_anchors(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout_id: EntityId,
+    anchors: &[PlayoutProgramScheduleAnchor],
+) -> Result<()> {
+    sqlx::query(
+        r#"DELETE FROM "CollectionEnumeratorState"
+           WHERE "PlayoutProgramScheduleAnchorId" IN (
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = ?
+           )"#,
+    )
+    .bind(playout_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await?;
+    for anchor in anchors {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutProgramScheduleAnchor" (
+                "Id", "AnchorDate", "CollectionId", "CollectionType", "FakeCollectionKey",
+                "MediaItemId", "MultiCollectionId", "PlaylistId", "PlayoutId",
+                "RerunCollectionId", "SmartCollectionId", "SearchQuery"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(anchor.id)
+        .bind(encode_optional_datetime(anchor.anchor_date))
+        .bind(anchor.collection_id)
+        .bind(encode_enum(anchor.collection_type))
+        .bind(&anchor.fake_collection_key)
+        .bind(anchor.media_item_id)
+        .bind(anchor.multi_collection_id)
+        .bind(anchor.playlist_id)
+        .bind(anchor.playout_id)
+        .bind(anchor.rerun_collection_id)
+        .bind(anchor.smart_collection_id)
+        .bind(&anchor.search_query)
+        .execute(&mut **tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "CollectionEnumeratorState" (
+                "PlayoutProgramScheduleAnchorId", "Seed", "Index"
+             ) VALUES (?, ?, ?)"#,
+        )
+        .bind(anchor.id)
+        .bind(anchor.enumerator_state.seed)
+        .bind(anchor.enumerator_state.index)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_fill_group_indices(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout_id: EntityId,
+    indices: &[PlayoutScheduleItemFillGroupIndex],
+) -> Result<()> {
+    sqlx::query(
+        r#"DELETE FROM "FillGroupEnumeratorState"
+           WHERE "PlayoutScheduleItemFillGroupIndexId" IN (
+               SELECT "Id" FROM "PlayoutScheduleItemFillGroupIndex" WHERE "PlayoutId" = ?
+           )"#,
+    )
+    .bind(playout_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(r#"DELETE FROM "PlayoutScheduleItemFillGroupIndex" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await?;
+    for index in indices {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutScheduleItemFillGroupIndex" (
+                "Id", "PlayoutId", "ProgramScheduleItemId"
+             ) VALUES (?, ?, ?)"#,
+        )
+        .bind(index.id)
+        .bind(index.playout_id)
+        .bind(index.program_schedule_item_id)
+        .execute(&mut **tx)
+        .await?;
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "FillGroupEnumeratorState" (
+                "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index"
+             ) VALUES (?, ?, ?)"#,
+        )
+        .bind(index.id)
+        .bind(index.enumerator_state.seed)
+        .bind(index.enumerator_state.index)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn replace_playout_templates(
+    tx: &mut Transaction<'_, Sqlite>,
+    playout: &Playout,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutTemplate" WHERE "PlayoutId" = ?"#)
+        .bind(playout.id)
+        .execute(&mut **tx)
+        .await?;
+    for template in &playout.templates {
+        sqlx::query(
+            r#"INSERT OR REPLACE INTO "PlayoutTemplate" (
+                "PlayoutId", "TemplateId", "DateUpdated", "DecoTemplateId", "Index",
+                "DaysOfWeek", "DaysOfMonth", "MonthsOfYear", "LimitToDateRange",
+                "StartMonth", "StartDay", "StartYear", "EndMonth", "EndDay", "EndYear"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(template.playout_id)
+        .bind(template.template_id)
+        .bind(template.updated_ticks.to_string())
+        .bind(template.deco_template_id)
+        .bind(template.index)
+        .bind(encode_integer_list(&template.days_of_week)?)
+        .bind(encode_integer_list(&template.days_of_month)?)
+        .bind(encode_integer_list(&template.months_of_year)?)
+        .bind(template.limit_to_date_range)
+        .bind(template.start_month)
+        .bind(template.start_day)
+        .bind(template.start_year)
+        .bind(template.end_month)
+        .bind(template.end_day)
+        .bind(template.end_year)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }

@@ -237,13 +237,33 @@ async fn assert_collections_decode(pool: &SqlitePool, repos: &Repositories) {
 async fn assert_playouts_decode(pool: &SqlitePool, repos: &Repositories) {
     let now = Utc::now();
     for id in ids(pool, "Playout").await {
-        repos
+        let playout = repos
             .playout
             .get_with_anchor(id)
             .await
             .unwrap_or_else(|error| {
                 panic!("Playout {id} should decode from real ErsatzTV data: {error}")
             });
+
+        let gap_count = child_count(pool, "PlayoutGap", "PlayoutId", id).await;
+        let history_count = child_count(pool, "PlayoutHistory", "PlayoutId", id).await;
+        let program_anchor_count =
+            child_count(pool, "PlayoutProgramScheduleAnchor", "PlayoutId", id).await;
+        let fill_group_count =
+            child_count(pool, "PlayoutScheduleItemFillGroupIndex", "PlayoutId", id).await;
+        let template_count = child_count(pool, "PlayoutTemplate", "PlayoutId", id).await;
+        let anchor_count = child_count(pool, "PlayoutAnchor", "PlayoutId", id).await;
+
+        assert_eq!(playout.gap_ids.len(), gap_count);
+        assert_eq!(playout.playout_history_ids.len(), history_count);
+        assert_eq!(
+            playout.program_schedule_anchor_ids.len(),
+            program_anchor_count
+        );
+        assert_eq!(playout.fill_group_index_ids.len(), fill_group_count);
+        assert_eq!(playout.templates.len(), template_count);
+        assert_eq!(usize::from(playout.anchor.is_some()), anchor_count);
+
         repos
             .playout
             .items_in_range(id, now - Duration::days(7), now + Duration::days(7))
@@ -351,6 +371,16 @@ async fn ids(pool: &SqlitePool, table: &str) -> Vec<i64> {
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load ids from {table}: {error}"))
+}
+
+async fn child_count(pool: &SqlitePool, table: &str, foreign_key: &str, id: i64) -> usize {
+    let sql = format!(r#"SELECT count(*) FROM "{table}" WHERE "{foreign_key}" = ?"#);
+    let count: i64 = sqlx::query_scalar(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|error| panic!("count rows in {table} for {foreign_key}={id}: {error}"));
+    usize::try_from(count).expect("row count should fit in usize")
 }
 
 async fn foreign_ids(pool: &SqlitePool, table: &str, column: &str) -> Vec<i64> {
