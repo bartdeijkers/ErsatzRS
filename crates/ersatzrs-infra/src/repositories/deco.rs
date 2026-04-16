@@ -4,7 +4,9 @@ use ersatzrs_domain::{Deco, EntityId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, load_ids, not_found, replace_ids};
+use super::common::{
+    decode_enum_column, decode_optional_enum_column, encode_enum, load_ids, not_found, replace_ids,
+};
 
 #[derive(Clone)]
 pub struct SqliteDecoRepository(pub Pool<Sqlite>);
@@ -31,10 +33,11 @@ impl DecoRepository for SqliteDecoRepository {
     }
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Deco>> {
-        let rows = sqlx::query(r#"SELECT * FROM "Deco" WHERE "DecoGroupId" = ? ORDER BY "Name", "Id""#)
-            .bind(group_id)
-            .fetch_all(&self.0)
-            .await?;
+        let rows =
+            sqlx::query(r#"SELECT * FROM "Deco" WHERE "DecoGroupId" = ? ORDER BY "Name", "Id""#)
+                .bind(group_id)
+                .fetch_all(&self.0)
+                .await?;
         rows.iter()
             .map(|row| {
                 let mut deco = map_deco(row)?;
@@ -61,12 +64,9 @@ impl DecoRepository for SqliteDecoRepository {
         .bind(deco.id)
         .bind(deco.deco_group_id)
         .bind(&deco.name)
-        .bind(format!("{:?}", deco.mode))
-        .bind(format!("{:?}", deco.default_filler_mode))
-        .bind(
-            deco.default_filler_collection_type
-                .map(|collection_type| format!("{collection_type:?}")),
-        )
+        .bind(encode_enum(deco.mode))
+        .bind(encode_enum(deco.default_filler_mode))
+        .bind(deco.default_filler_collection_type.map(encode_enum))
         .bind(deco.default_filler_collection_id)
         .bind(deco.default_filler_media_item_id)
         .bind(deco.default_filler_multi_collection_id)
@@ -100,19 +100,19 @@ fn map_deco(row: &SqliteRow) -> Result<Deco> {
         id: row.try_get("Id")?,
         deco_group_id: row.try_get("DecoGroupId")?,
         name: row.try_get("Name")?,
-        mode: decode_enum("deco mode", &row.try_get::<String, _>("BreakContentMode")?)?,
+        mode: decode_enum_column("deco mode", row, "BreakContentMode")?,
         break_content_id: None,
-        default_filler_mode: row
-            .try_get::<Option<String>, _>("DefaultFillerMode")?
-            .as_deref()
-            .map(|value| decode_enum("deco default_filler_mode", value))
-            .transpose()?
-            .unwrap_or_default(),
-        default_filler_collection_type: row
-            .try_get::<Option<String>, _>("DefaultFillerCollectionType")?
-            .as_deref()
-            .map(|value| decode_enum("deco default_filler_collection_type", value))
-            .transpose()?,
+        default_filler_mode: decode_optional_enum_column(
+            "deco default_filler_mode",
+            row,
+            "DefaultFillerMode",
+        )?
+        .unwrap_or_default(),
+        default_filler_collection_type: decode_optional_enum_column(
+            "deco default_filler_collection_type",
+            row,
+            "DefaultFillerCollectionType",
+        )?,
         default_filler_collection_id: row.try_get("DefaultFillerCollectionId")?,
         default_filler_media_item_id: row.try_get("DefaultFillerMediaItemId")?,
         default_filler_multi_collection_id: row.try_get("DefaultFillerMultiCollectionId")?,

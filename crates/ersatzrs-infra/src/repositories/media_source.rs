@@ -5,7 +5,6 @@ use ersatzrs_domain::{
     JellyfinMediaSource, JellyfinPathReplacement, MediaSource, MediaSourceKind, PlexConnection,
     PlexMediaSource, PlexPathReplacement,
 };
-use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{decode_optional_datetime, encode_optional_datetime, not_found};
@@ -204,31 +203,59 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
     async fn list_all(&self) -> Result<Vec<MediaSource>> {
         // MediaSource table only has "Id". Build a synthetic list from all sub-type tables.
-        let plex_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "PlexMediaSource" ORDER BY "Id""#)
-            .fetch_all(&self.0)
-            .await?;
-        let jellyfin_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "JellyfinMediaSource" ORDER BY "Id""#)
-            .fetch_all(&self.0)
-            .await?;
-        let emby_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "EmbyMediaSource" ORDER BY "Id""#)
-            .fetch_all(&self.0)
-            .await?;
-        let local_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "LocalMediaSource" ORDER BY "Id""#)
-            .fetch_all(&self.0)
-            .await?;
+        let plex_ids = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "PlexMediaSource" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
+        let jellyfin_ids = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "JellyfinMediaSource" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
+        let emby_ids = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "EmbyMediaSource" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
+        let local_ids = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "LocalMediaSource" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
 
         let mut sources = Vec::new();
         for id in plex_ids {
-            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Plex, last_scan: None });
+            sources.push(MediaSource {
+                id,
+                name: String::new(),
+                kind: MediaSourceKind::Plex,
+                last_scan: None,
+            });
         }
         for id in jellyfin_ids {
-            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Jellyfin, last_scan: None });
+            sources.push(MediaSource {
+                id,
+                name: String::new(),
+                kind: MediaSourceKind::Jellyfin,
+                last_scan: None,
+            });
         }
         for id in emby_ids {
-            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Emby, last_scan: None });
+            sources.push(MediaSource {
+                id,
+                name: String::new(),
+                kind: MediaSourceKind::Emby,
+                last_scan: None,
+            });
         }
         for id in local_ids {
-            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Local, last_scan: None });
+            sources.push(MediaSource {
+                id,
+                name: String::new(),
+                kind: MediaSourceKind::Local,
+                last_scan: None,
+            });
         }
         sources.sort_by_key(|s| s.id);
         Ok(sources)
@@ -247,11 +274,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 }
 
-async fn upsert_source<T>(
-    pool: &Pool<Sqlite>,
-    base: &MediaSource,
-    provider: &T,
-) -> Result<()>
+async fn upsert_source<T>(pool: &Pool<Sqlite>, base: &MediaSource, provider: &T) -> Result<()>
 where
     T: ProviderUpsert + Sync,
 {
@@ -461,22 +484,17 @@ async fn fetch_base_source(
     .await?;
 
     if !exists {
-        return Err(super::common::not_found("media source", id, sqlx::Error::RowNotFound));
+        return Err(super::common::not_found(
+            "media source",
+            id,
+            sqlx::Error::RowNotFound,
+        ));
     }
 
     Ok(MediaSource {
         id,
         name: String::new(),
         kind: expected_kind,
-        last_scan: None,
-    })
-}
-
-fn map_media_source(row: &SqliteRow) -> Result<MediaSource> {
-    Ok(MediaSource {
-        id: row.try_get("Id")?,
-        name: String::new(),
-        kind: MediaSourceKind::Local,
         last_scan: None,
     })
 }

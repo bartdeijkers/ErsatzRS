@@ -4,7 +4,7 @@ use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, load_ids, not_found, replace_ids};
+use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
 pub struct SqliteLibraryRepository(pub Pool<Sqlite>);
@@ -40,11 +40,12 @@ impl LibraryRepository for SqliteLibraryRepository {
     }
 
     async fn list_for_source(&self, source_id: EntityId) -> Result<Vec<Library>> {
-        let rows =
-            sqlx::query(r#"SELECT * FROM "Library" WHERE "MediaSourceId" = ? ORDER BY "Name", "Id""#)
-                .bind(source_id)
-                .fetch_all(&self.0)
-                .await?;
+        let rows = sqlx::query(
+            r#"SELECT * FROM "Library" WHERE "MediaSourceId" = ? ORDER BY "Name", "Id""#,
+        )
+        .bind(source_id)
+        .fetch_all(&self.0)
+        .await?;
         rows.iter()
             .map(|row| {
                 let mut library = map_library(row)?;
@@ -64,7 +65,7 @@ impl LibraryRepository for SqliteLibraryRepository {
         )
         .bind(library.id)
         .bind(&library.name)
-        .bind(format!("{:?}", library.media_kind))
+        .bind(encode_enum(library.media_kind))
         .bind(library.media_source_id)
         .execute(&mut *tx)
         .await?;
@@ -97,7 +98,10 @@ impl LibraryRepository for SqliteLibraryRepository {
     }
 }
 
-async fn resolve_media_source_kind(pool: &Pool<Sqlite>, library_id: EntityId) -> Result<MediaSourceKind> {
+async fn resolve_media_source_kind(
+    pool: &Pool<Sqlite>,
+    library_id: EntityId,
+) -> Result<MediaSourceKind> {
     let is_local: bool = sqlx::query_scalar::<_, bool>(
         r#"SELECT EXISTS(SELECT 1 FROM "LocalLibrary" WHERE "Id" = ?)"#,
     )
@@ -132,10 +136,7 @@ fn map_library(row: &SqliteRow) -> Result<Library> {
     Ok(Library {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,
-        media_kind: decode_enum(
-            "library media_kind",
-            &row.try_get::<String, _>("MediaKind")?,
-        )?,
+        media_kind: decode_enum_column("library media_kind", row, "MediaKind")?,
         media_source_id: row.try_get("MediaSourceId")?,
         // Kind is resolved separately via sub-type table lookup
         media_source_kind: MediaSourceKind::Local,

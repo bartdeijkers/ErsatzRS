@@ -4,7 +4,7 @@ use ersatzrs_domain::{Block, EntityId};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_duration_text, decode_enum, encode_duration, load_ids, not_found, replace_ids};
+use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
 pub struct SqliteBlockRepository(pub Pool<Sqlite>);
@@ -28,10 +28,11 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Block>> {
-        let rows = sqlx::query(r#"SELECT * FROM "Block" WHERE "BlockGroupId" = ? ORDER BY "Name", "Id""#)
-            .bind(group_id)
-            .fetch_all(&self.0)
-            .await?;
+        let rows =
+            sqlx::query(r#"SELECT * FROM "Block" WHERE "BlockGroupId" = ? ORDER BY "Name", "Id""#)
+                .bind(group_id)
+                .fetch_all(&self.0)
+                .await?;
         rows.iter()
             .map(|row| {
                 let mut block = map_block(row)?;
@@ -52,8 +53,8 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(block.block_group_id)
         .bind(&block.name)
         .bind(block.updated_ticks.to_string())
-        .bind(i64::from(block.duration.num_minutes().max(0) as i32))
-        .bind(format!("{:?}", block.stop_scheduling))
+        .bind(block.duration.num_minutes().max(0))
+        .bind(encode_enum(block.stop_scheduling))
         .execute(&mut *tx)
         .await?;
         replace_ids(
@@ -81,10 +82,7 @@ fn map_block(row: &SqliteRow) -> Result<Block> {
         name: row.try_get("Name")?,
         updated_ticks,
         duration: chrono::Duration::minutes(minutes),
-        stop_scheduling: decode_enum(
-            "block stop_scheduling",
-            &row.try_get::<String, _>("StopScheduling")?,
-        )?,
+        stop_scheduling: decode_enum_column("block stop_scheduling", row, "StopScheduling")?,
         item_ids: Vec::new(),
     })
 }

@@ -4,7 +4,7 @@ use ersatzrs_domain::{EntityId, ProgramSchedule};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, load_ids, not_found, replace_ids};
+use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
 pub struct SqliteProgramScheduleRepository(pub Pool<Sqlite>);
@@ -75,7 +75,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         .bind(schedule.treat_collections_as_shows)
         .bind(schedule.shuffle_schedule_items)
         .bind(schedule.random_start_point)
-        .bind(format!("{:?}", schedule.fixed_start_time_behavior))
+        .bind(encode_enum(schedule.fixed_start_time_behavior))
         .execute(&mut *tx)
         .await?;
         replace_ids(
@@ -103,9 +103,10 @@ fn map_program_schedule(row: &SqliteRow) -> Result<ProgramSchedule> {
         treat_collections_as_shows: row.try_get("TreatCollectionsAsShows")?,
         shuffle_schedule_items: row.try_get("ShuffleScheduleItems")?,
         random_start_point: row.try_get("RandomStartPoint")?,
-        fixed_start_time_behavior: decode_enum(
+        fixed_start_time_behavior: decode_enum_column(
             "program schedule fixed_start_time_behavior",
-            &row.try_get::<String, _>("FixedStartTimeBehavior")?,
+            row,
+            "FixedStartTimeBehavior",
         )?,
         item_ids: Vec::new(),
         playout_ids: Vec::new(),

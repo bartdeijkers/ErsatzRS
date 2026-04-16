@@ -15,11 +15,9 @@ async fn media_item_repository_lists_by_library_path_and_finds_file_path() {
         .upsert(&common::media_item(4, 3))
         .await
         .unwrap();
-    pool.execute(
-        r#"INSERT INTO "Movie" ("Id") VALUES (4)"#,
-    )
-    .await
-    .unwrap();
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (4)"#)
+        .await
+        .unwrap();
     pool.execute(
         r#"INSERT INTO "MediaVersion" (
             "Id", "MovieId", "DateAdded", "DateUpdated", "Duration",

@@ -65,8 +65,10 @@ pub enum NormalizeLoudnessMode {
 pub enum VaapiDriver {
     #[default]
     Auto,
-    I965,
     IHD,
+    I965,
+    RadeonSI,
+    Nouveau,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -8,13 +8,11 @@ pub struct SqliteConfigRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl ConfigRepository for SqliteConfigRepository {
     async fn get(&self, key: &str) -> Result<Option<String>> {
-        sqlx::query_scalar::<_, String>(
-            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
-        )
-        .bind(key)
-        .fetch_optional(&self.0)
-        .await
-        .map_err(Into::into)
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(key)
+            .fetch_optional(&self.0)
+            .await
+            .map_err(Into::into)
     }
 
     async fn set(&self, key: &str, value: &str) -> Result<()> {

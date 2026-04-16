@@ -4,7 +4,7 @@ use ersatzrs_domain::{EntityId, MediaItem};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, not_found};
+use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
 pub struct SqliteMediaItemRepository(pub Pool<Sqlite>);
@@ -21,12 +21,11 @@ impl MediaItemRepository for SqliteMediaItemRepository {
     }
 
     async fn list_for_library_path(&self, path_id: EntityId) -> Result<Vec<MediaItem>> {
-        let rows = sqlx::query(
-            r#"SELECT * FROM "MediaItem" WHERE "LibraryPathId" = ? ORDER BY "Id""#,
-        )
-        .bind(path_id)
-        .fetch_all(&self.0)
-        .await?;
+        let rows =
+            sqlx::query(r#"SELECT * FROM "MediaItem" WHERE "LibraryPathId" = ? ORDER BY "Id""#)
+                .bind(path_id)
+                .fetch_all(&self.0)
+                .await?;
         rows.iter().map(map_media_item).collect()
     }
 
@@ -58,7 +57,7 @@ impl MediaItemRepository for SqliteMediaItemRepository {
         )
         .bind(item.id)
         .bind(item.library_path_id)
-        .bind(format!("{:?}", item.state))
+        .bind(encode_enum(item.state))
         .execute(&self.0)
         .await?;
         Ok(())
@@ -71,6 +70,6 @@ fn map_media_item(row: &SqliteRow) -> Result<MediaItem> {
         library_path_id: row.try_get("LibraryPathId")?,
         collection_ids: Vec::new(),
         trakt_list_item_ids: Vec::new(),
-        state: decode_enum("media item state", &row.try_get::<String, _>("State")?)?,
+        state: decode_enum_column("media item state", row, "State")?,
     })
 }

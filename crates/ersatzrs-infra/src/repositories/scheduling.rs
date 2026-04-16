@@ -10,15 +10,13 @@ use ersatzrs_core::scheduling::{
     SchedulingContentSource, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
-use ersatzrs_domain::{
-    ChannelSubtitleMode, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
-};
+use ersatzrs_domain::{CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
-    decode_datetime, decode_duration_text, decode_enum, decode_message, decode_optional_datetime,
-    load_ids,
+    decode_datetime, decode_duration_text, decode_enum_column, decode_message,
+    decode_optional_datetime, decode_optional_enum_column, load_ids,
 };
 
 #[derive(Clone)]
@@ -385,9 +383,10 @@ impl SqliteSchedulingContentRepository {
             let media_items = Box::pin(self.items_for_collection_key_row(&row, 0)).await?;
             result.push(SchedulingPlaylistItem {
                 collection_key: collection_key_from_row(&row)?,
-                playback_order: decode_enum(
+                playback_order: decode_enum_column(
                     "playlist item playback_order",
-                    &row.try_get::<String, _>("PlaybackOrder")?,
+                    &row,
+                    "PlaybackOrder",
                 )?,
                 play_all: row.try_get::<bool, _>("PlayAll")?,
                 count: row
@@ -415,12 +414,11 @@ impl SqliteSchedulingContentRepository {
         &self,
         playlist_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let name = sqlx::query_scalar::<_, String>(
-            r#"SELECT "Name" FROM "Playlist" WHERE "Id" = ?"#,
-        )
-        .bind(playlist_id)
-        .fetch_optional(&self.0)
-        .await?;
+        let name =
+            sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Playlist" WHERE "Id" = ?"#)
+                .bind(playlist_id)
+                .fetch_optional(&self.0)
+                .await?;
 
         match name {
             Some(name) => Box::pin(self.playlist_media_items(None, &name)).await,
@@ -618,6 +616,7 @@ impl SqliteSchedulingContentRepository {
         let show_id = row.try_get::<Option<EntityId>, _>("show_id")?;
         let release_date = row
             .try_get::<Option<String>, _>("release_date")?
+            .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("search release_date", &value))
             .transpose()?;
 
@@ -631,13 +630,34 @@ impl SqliteSchedulingContentRepository {
             year: row.try_get("year")?,
             release_date,
             genres: self
-                .metadata_lookup_values_fk("Genre", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
+                .metadata_lookup_values_fk(
+                    "Genre",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
                 .await?,
             tags: self
-                .metadata_lookup_values_fk("Tag", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
+                .metadata_lookup_values_fk(
+                    "Tag",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
                 .await?,
             studios: self
-                .metadata_lookup_values_fk("Studio", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
+                .metadata_lookup_values_fk(
+                    "Studio",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
                 .await?,
             actors: self
                 .metadata_actor_values(&metadata_kind, metadata_id)
@@ -645,15 +665,9 @@ impl SqliteSchedulingContentRepository {
             directors: Vec::new(),
             writers: Vec::new(),
             show_title: row.try_get("show_title")?,
-            show_genres: self
-                .show_lookup_values("Genre", show_id)
-                .await?,
-            show_tags: self
-                .show_lookup_values("Tag", show_id)
-                .await?,
-            show_studios: self
-                .show_lookup_values("Studio", show_id)
-                .await?,
+            show_genres: self.show_lookup_values("Genre", show_id).await?,
+            show_tags: self.show_lookup_values("Tag", show_id).await?,
+            show_studios: self.show_lookup_values("Studio", show_id).await?,
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
             provider_guids: self.metadata_guids(&metadata_kind, metadata_id).await?,
@@ -661,7 +675,7 @@ impl SqliteSchedulingContentRepository {
     }
 
     /// Look up names from tables that use nullable FK columns per metadata type.
-    /// ErsatzTV uses `"Genre"."MovieMetadataId"`, `"Genre"."EpisodeMetadataId"`, etc.
+    /// `ErsatzTV` uses `"Genre"."MovieMetadataId"`, `"Genre"."EpisodeMetadataId"`, etc.
     async fn metadata_lookup_values_fk(
         &self,
         table: &str,
@@ -684,9 +698,8 @@ impl SqliteSchedulingContentRepository {
             "RemoteStream" => "RemoteStreamMetadataId",
             _ => return Ok(Vec::new()),
         };
-        let sql = format!(
-            r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#
-        );
+        let sql =
+            format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#);
         sqlx::query_scalar::<_, String>(&sql)
             .bind(metadata_id)
             .fetch_all(&self.0)
@@ -710,9 +723,8 @@ impl SqliteSchedulingContentRepository {
             "Song" => "SongMetadataId",
             _ => return Ok(Vec::new()),
         };
-        let sql = format!(
-            r#"SELECT "Name" FROM "Actor" WHERE "{fk_column}" = ? ORDER BY "Order", "Id""#
-        );
+        let sql =
+            format!(r#"SELECT "Name" FROM "Actor" WHERE "{fk_column}" = ? ORDER BY "Order", "Id""#);
         sqlx::query_scalar::<_, String>(&sql)
             .bind(metadata_id)
             .fetch_all(&self.0)
@@ -729,19 +741,25 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         };
 
-        let Some(metadata_id) =
-            sqlx::query_scalar::<_, EntityId>(
-                r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ?"#,
-            )
-                .bind(show_id)
-                .fetch_optional(&self.0)
-                .await?
+        let Some(metadata_id) = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ?"#,
+        )
+        .bind(show_id)
+        .fetch_optional(&self.0)
+        .await?
         else {
             return Ok(Vec::new());
         };
 
-        self.metadata_lookup_values_fk(table, "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", "Show", metadata_id)
-            .await
+        self.metadata_lookup_values_fk(
+            table,
+            "MovieMetadataId",
+            "EpisodeMetadataId",
+            "ShowMetadataId",
+            "Show",
+            metadata_id,
+        )
+        .await
     }
 
     async fn metadata_guids(
@@ -762,9 +780,8 @@ impl SqliteSchedulingContentRepository {
             "RemoteStream" => "RemoteStreamMetadataId",
             _ => return Ok(Vec::new()),
         };
-        let sql = format!(
-            r#"SELECT "Guid" FROM "MetadataGuid" WHERE "{fk_column}" = ? ORDER BY "Guid""#
-        );
+        let sql =
+            format!(r#"SELECT "Guid" FROM "MetadataGuid" WHERE "{fk_column}" = ? ORDER BY "Guid""#);
         let guids = sqlx::query_scalar::<_, String>(&sql)
             .bind(metadata_id)
             .fetch_all(&self.0)
@@ -773,19 +790,17 @@ impl SqliteSchedulingContentRepository {
         // ErsatzTV stores GUIDs as "source://value" or similar format
         Ok(guids
             .into_iter()
-            .filter_map(|guid| {
-                // Try to split on "://"
+            .map(|guid| {
                 if let Some((source, value)) = guid.split_once("://") {
-                    Some(SearchProviderGuid {
+                    SearchProviderGuid {
                         source: source.to_owned(),
                         value: value.to_owned(),
-                    })
+                    }
                 } else {
-                    // Fall back: use whole guid as value with empty source
-                    Some(SearchProviderGuid {
+                    SearchProviderGuid {
                         source: String::new(),
                         value: guid,
-                    })
+                    }
                 }
             })
             .collect())
@@ -872,14 +887,13 @@ impl SqliteSchedulingContentRepository {
                     entry.insert(self.block_definition(item.block_id, media_by_key).await?);
                 }
             }
-            let deco_template_items =
-                match row.try_get::<Option<EntityId>, _>("DecoTemplateId")? {
-                    Some(deco_template_id) => {
-                        self.effective_deco_template_items(deco_template_id, media_by_key)
-                            .await?
-                    }
-                    None => Vec::new(),
-                };
+            let deco_template_items = match row.try_get::<Option<EntityId>, _>("DecoTemplateId")? {
+                Some(deco_template_id) => {
+                    self.effective_deco_template_items(deco_template_id, media_by_key)
+                        .await?
+                }
+                None => Vec::new(),
+            };
 
             // DateUpdated is TEXT in ErsatzTV; parse as i64 (stored as string ticks) or 0
             let updated_ticks: i64 = row
@@ -994,10 +1008,7 @@ impl SqliteSchedulingContentRepository {
             updated_ticks,
             name: row.try_get("Name")?,
             duration,
-            stop_scheduling: decode_enum(
-                "block stop_scheduling",
-                &row.try_get::<String, _>("StopScheduling")?,
-            )?,
+            stop_scheduling: decode_enum_column("block stop_scheduling", &row, "StopScheduling")?,
             items: self.effective_block_items(block_id, media_by_key).await?,
         })
     }
@@ -1030,9 +1041,10 @@ impl SqliteSchedulingContentRepository {
                 block_id,
                 content,
                 collection_key: collection_key_from_row(&row)?,
-                playback_order: decode_enum(
+                playback_order: decode_enum_column(
                     "block item playback_order",
-                    &row.try_get::<String, _>("PlaybackOrder")?,
+                    &row,
+                    "PlaybackOrder",
                 )?,
                 include_in_program_guide: true,
                 disable_watermarks: false,
@@ -1149,7 +1161,7 @@ impl SqliteSchedulingContentRepository {
         .bind(deco_id)
         .fetch_one(&self.0)
         .await?;
-        let mode: DecoMode = decode_enum("deco mode", &row.try_get::<String, _>("BreakContentMode")?)?;
+        let mode: DecoMode = decode_enum_column("deco mode", &row, "BreakContentMode")?;
         if mode == DecoMode::Disable {
             return Ok(None);
         }
@@ -1174,10 +1186,7 @@ impl SqliteSchedulingContentRepository {
             );
             break_content.push(EffectiveBreakContent {
                 id,
-                placement: decode_enum(
-                    "deco break placement",
-                    &row.try_get::<String, _>("Placement")?,
-                )?,
+                placement: decode_enum_column("deco break placement", &row, "Placement")?,
                 content,
                 collection_key: collection_key_from_deco_break_content_row(&row)?,
             });
@@ -1215,9 +1224,10 @@ impl SqliteSchedulingContentRepository {
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
             let deco_id = row.try_get::<EntityId, _>("DecoId")?;
-            let mode: DecoMode = decode_enum(
+            let mode: DecoMode = decode_enum_column(
                 "deco template item BreakContentMode",
-                &row.try_get::<String, _>("BreakContentMode")?,
+                &row,
+                "BreakContentMode",
             )?;
             let selection = match mode {
                 DecoMode::Inherit => EffectiveDecoSelection::Inherit,
@@ -1248,11 +1258,11 @@ impl SqliteSchedulingContentRepository {
         row: &SqliteRow,
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<(Option<String>, Option<SchedulingCollectionKey>)> {
-        let collection_type = row
-            .try_get::<Option<String>, _>("DefaultFillerCollectionType")?
-            .as_deref()
-            .map(|value| decode_enum("deco default_filler_collection_type", value))
-            .transpose()?;
+        let collection_type = decode_optional_enum_column(
+            "deco default_filler_collection_type",
+            row,
+            "DefaultFillerCollectionType",
+        )?;
         let Some(collection_type) = collection_type else {
             return Ok((None, None));
         };
@@ -1477,10 +1487,7 @@ ORDER BY COALESCE(sort_title, title), item_id"#;
 
 fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
-        collection_type: decode_enum(
-            "collection type",
-            &row.try_get::<String, _>("CollectionType")?,
-        )?,
+        collection_type: decode_enum_column("collection type", row, "CollectionType")?,
         collection_id: optional_id(row, "CollectionId")?,
         multi_collection_id: optional_id(row, "MultiCollectionId")?,
         smart_collection_id: optional_id(row, "SmartCollectionId")?,
@@ -1496,9 +1503,10 @@ fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
 
 fn collection_key_from_deco_break_content_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
-        collection_type: decode_enum(
+        collection_type: decode_enum_column(
             "deco break content collection type",
-            &row.try_get::<String, _>("CollectionType")?,
+            row,
+            "CollectionType",
         )?,
         collection_id: optional_id(row, "CollectionId")?,
         media_item_id: optional_id(row, "MediaItemId")?,
@@ -1528,6 +1536,7 @@ fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
         episode: row.try_get("episode_number")?,
         release_date: row
             .try_get::<Option<String>, _>("release_date")?
+            .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("media item release_date", &value))
             .transpose()?,
     })
@@ -1549,10 +1558,7 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
         )?,
         custom_title: row.try_get("CustomTitle")?,
         guide_group: row.try_get("GuideGroup")?,
-        filler_kind: decode_enum(
-            "playout item filler_kind",
-            &row.try_get::<String, _>("FillerKind")?,
-        )?,
+        filler_kind: decode_enum_column("playout item filler_kind", row, "FillerKind")?,
         playout_id: row.try_get("PlayoutId")?,
         in_point: decode_duration_text(&row.try_get::<String, _>("InPoint")?),
         out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint")?),
@@ -1562,11 +1568,11 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
         preferred_audio_title: row.try_get("PreferredAudioTitle")?,
         preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
-        subtitle_mode: row
-            .try_get::<Option<String>, _>("SubtitleMode")?
-            .as_deref()
-            .map(|value| decode_enum::<ChannelSubtitleMode>("playout item subtitle_mode", value))
-            .transpose()?,
+        subtitle_mode: decode_optional_enum_column(
+            "playout item subtitle_mode",
+            row,
+            "SubtitleMode",
+        )?,
         block_key: row.try_get("BlockKey")?,
         collection_key: row.try_get("CollectionKey")?,
         collection_etag: row.try_get("CollectionEtag")?,
@@ -1581,14 +1587,8 @@ fn map_playout_history(row: &SqliteRow) -> Result<PlayoutHistory> {
         playout_id: row.try_get("PlayoutId")?,
         key: row.try_get("Key")?,
         child_key: row.try_get("ChildKey")?,
-        when: decode_datetime(
-            "playout history When",
-            &row.try_get::<String, _>("When")?,
-        )?,
-        finish: decode_optional_datetime(
-            "playout history Finish",
-            row.try_get("Finish")?,
-        )?,
+        when: decode_datetime("playout history When", &row.try_get::<String, _>("When")?)?,
+        finish: decode_optional_datetime("playout history Finish", row.try_get("Finish")?)?,
         index: row.try_get("Index")?,
         details: row.try_get("Details")?,
         is_current_child: row.try_get("IsCurrentChild")?,
@@ -1632,6 +1632,14 @@ fn decode_time_of_day_text(kind: &'static str, value: &str) -> Result<NaiveTime>
 fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|parsed| parsed.with_timezone(&Utc))
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+                .map(|parsed| parsed.and_utc())
+        })
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                .map(|parsed| parsed.and_hms_opt(0, 0, 0).unwrap().and_utc())
+        })
         .map_err(|source| decode_message(kind, &source.to_string()))
 }
 

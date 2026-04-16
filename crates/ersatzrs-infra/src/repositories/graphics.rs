@@ -4,7 +4,7 @@ use ersatzrs_domain::{EntityId, GraphicsElement};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, not_found};
+use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
 pub struct SqliteGraphicsRepository(pub Pool<Sqlite>);
@@ -55,7 +55,7 @@ impl GraphicsRepository for SqliteGraphicsRepository {
         )
         .bind(element.id)
         .bind(&element.name)
-        .bind(format!("{:?}", element.kind))
+        .bind(encode_enum(element.kind))
         .bind(&element.path)
         .execute(&self.0)
         .await?;
@@ -67,7 +67,7 @@ fn map_element(row: &SqliteRow) -> Result<GraphicsElement> {
     Ok(GraphicsElement {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,
-        kind: decode_enum("graphics element kind", &row.try_get::<String, _>("Kind")?)?,
+        kind: decode_enum_column("graphics element kind", row, "Kind")?,
         // These fields do not exist in the ErsatzTV schema; default to zero/None.
         x: 0,
         y: 0,

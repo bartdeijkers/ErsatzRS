@@ -5,7 +5,8 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
-    decode_datetime, decode_enum, decode_optional_datetime, encode_datetime, encode_optional_datetime,
+    decode_datetime, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
+    encode_optional_datetime,
 };
 
 #[derive(Clone)]
@@ -52,7 +53,7 @@ impl MetadataRepository for SqliteMetadataRepository {
         )
         .bind(metadata.metadata.id)
         .bind(metadata.metadata.id)
-        .bind(format!("{:?}", metadata.metadata.metadata_kind))
+        .bind(encode_enum(metadata.metadata.metadata_kind))
         .bind(&metadata.metadata.title)
         .bind(&metadata.metadata.original_title)
         .bind(&metadata.metadata.sort_title)
@@ -82,7 +83,7 @@ impl MetadataRepository for SqliteMetadataRepository {
         )
         .bind(metadata.metadata.id)
         .bind(metadata.metadata.id)
-        .bind(format!("{:?}", metadata.metadata.metadata_kind))
+        .bind(encode_enum(metadata.metadata.metadata_kind))
         .bind(&metadata.metadata.title)
         .bind(&metadata.metadata.original_title)
         .bind(&metadata.metadata.sort_title)
@@ -129,18 +130,13 @@ fn map_music_video_metadata(row: &SqliteRow) -> Result<MusicVideoMetadata> {
     })
 }
 
-fn map_common_metadata(row: &SqliteRow, item_id_column: &str) -> Result<ersatzrs_domain::Metadata> {
-    // MetadataKind may be stored as TEXT (ErsatzRS) or as INTEGER (ErsatzTV).
-    // Try TEXT first; fall back to treating 0 as Fallback.
-    let metadata_kind = if let Ok(kind_str) = row.try_get::<String, _>("MetadataKind") {
-        decode_enum("metadata kind", &kind_str)?
-    } else {
-        ersatzrs_domain::MetadataKind::Fallback
-    };
-
+fn map_common_metadata(
+    row: &SqliteRow,
+    _item_id_column: &str,
+) -> Result<ersatzrs_domain::Metadata> {
     Ok(ersatzrs_domain::Metadata {
         id: row.try_get("Id")?,
-        metadata_kind,
+        metadata_kind: decode_enum_column("metadata kind", row, "MetadataKind")?,
         title: row.try_get("Title")?,
         original_title: row.try_get("OriginalTitle")?,
         sort_title: row.try_get("SortTitle")?,

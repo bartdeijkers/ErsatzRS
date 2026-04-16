@@ -6,8 +6,8 @@ use sqlx::{Pool, Row, Sqlite};
 use uuid::Uuid;
 
 use super::common::{
-    decode_duration_text, decode_enum, decode_message, decode_optional_duration_text, encode_duration,
-    encode_optional_duration, load_ids, not_found, replace_ids,
+    decode_duration_text, decode_enum_column, decode_message, encode_duration, encode_enum,
+    load_ids, not_found,
 };
 
 #[derive(Clone)]
@@ -46,10 +46,11 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 
     async fn list_enabled(&self) -> Result<Vec<Channel>> {
-        let rows =
-            sqlx::query(r#"SELECT * FROM "Channel" WHERE "IsEnabled" = 1 ORDER BY "SortNumber", "Number""#)
-                .fetch_all(&self.0)
-                .await?;
+        let rows = sqlx::query(
+            r#"SELECT * FROM "Channel" WHERE "IsEnabled" = 1 ORDER BY "SortNumber", "Number""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
         rows.iter()
             .map(|row| {
                 let mut channel = map_channel(row)?;
@@ -85,22 +86,22 @@ impl ChannelRepository for SqliteChannelRepository {
         .bind(channel.slug_seconds)
         .bind(channel.watermark_id)
         .bind(channel.fallback_filler_id)
-        .bind(format!("{:?}", channel.streaming_mode))
-        .bind(format!("{:?}", channel.stream_selector_mode))
+        .bind(encode_enum(channel.streaming_mode))
+        .bind(encode_enum(channel.stream_selector_mode))
         .bind(&channel.stream_selector)
         .bind(&channel.preferred_audio_language_code)
         .bind(&channel.preferred_audio_title)
         .bind(&channel.preferred_subtitle_language_code)
-        .bind(format!("{:?}", channel.subtitle_mode))
-        .bind(format!("{:?}", channel.music_video_credits_mode))
+        .bind(encode_enum(channel.subtitle_mode))
+        .bind(encode_enum(channel.music_video_credits_mode))
         .bind(&channel.music_video_credits_template)
-        .bind(format!("{:?}", channel.song_video_mode))
-        .bind(format!("{:?}", channel.playout_source))
-        .bind(format!("{:?}", channel.playout_mode))
+        .bind(encode_enum(channel.song_video_mode))
+        .bind(encode_enum(channel.playout_source))
+        .bind(encode_enum(channel.playout_mode))
         .bind(channel.mirror_source_channel_id)
         .bind(channel.playout_offset.map(encode_duration))
-        .bind(format!("{:?}", channel.transcode_mode))
-        .bind(format!("{:?}", channel.idle_behavior))
+        .bind(encode_enum(channel.transcode_mode))
+        .bind(encode_enum(channel.idle_behavior))
         .bind(channel.is_enabled)
         .bind(channel.show_in_epg)
         .execute(&mut *tx)
@@ -151,54 +152,35 @@ fn map_channel(row: &SqliteRow) -> Result<Channel> {
         watermark_id: row.try_get("WatermarkId")?,
         fallback_filler_id: row.try_get("FallbackFillerId")?,
         fallback_filler: None,
-        streaming_mode: decode_enum(
-            "channel streaming_mode",
-            &row.try_get::<String, _>("StreamingMode")?,
-        )?,
+        streaming_mode: decode_enum_column("channel streaming_mode", row, "StreamingMode")?,
         playout_ids: Vec::new(),
         artwork_ids: Vec::new(),
-        stream_selector_mode: decode_enum(
+        stream_selector_mode: decode_enum_column(
             "channel stream_selector_mode",
-            &row.try_get::<String, _>("StreamSelectorMode")?,
+            row,
+            "StreamSelectorMode",
         )?,
         stream_selector: row.try_get("StreamSelector")?,
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
         preferred_audio_title: row.try_get("PreferredAudioTitle")?,
         preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
-        subtitle_mode: decode_enum(
-            "channel subtitle_mode",
-            &row.try_get::<String, _>("SubtitleMode")?,
-        )?,
-        music_video_credits_mode: decode_enum(
+        subtitle_mode: decode_enum_column("channel subtitle_mode", row, "SubtitleMode")?,
+        music_video_credits_mode: decode_enum_column(
             "channel music_video_credits_mode",
-            &row.try_get::<String, _>("MusicVideoCreditsMode")?,
+            row,
+            "MusicVideoCreditsMode",
         )?,
         music_video_credits_template: row.try_get("MusicVideoCreditsTemplate")?,
-        song_video_mode: decode_enum(
-            "channel song_video_mode",
-            &row.try_get::<String, _>("SongVideoMode")?,
-        )?,
-        playout_source: decode_enum(
-            "channel playout_source",
-            &row.try_get::<String, _>("PlayoutSource")?,
-        )?,
-        playout_mode: decode_enum(
-            "channel playout_mode",
-            &row.try_get::<String, _>("PlayoutMode")?,
-        )?,
+        song_video_mode: decode_enum_column("channel song_video_mode", row, "SongVideoMode")?,
+        playout_source: decode_enum_column("channel playout_source", row, "PlayoutSource")?,
+        playout_mode: decode_enum_column("channel playout_mode", row, "PlayoutMode")?,
         mirror_source_channel_id: row.try_get("MirrorSourceChannelId")?,
         playout_offset: row
             .try_get::<Option<String>, _>("PlayoutOffset")?
             .as_deref()
             .map(decode_duration_text),
-        transcode_mode: decode_enum(
-            "channel transcode_mode",
-            &row.try_get::<String, _>("TranscodeMode")?,
-        )?,
-        idle_behavior: decode_enum(
-            "channel idle_behavior",
-            &row.try_get::<String, _>("IdleBehavior")?,
-        )?,
+        transcode_mode: decode_enum_column("channel transcode_mode", row, "TranscodeMode")?,
+        idle_behavior: decode_enum_column("channel idle_behavior", row, "IdleBehavior")?,
         is_enabled: row.try_get("IsEnabled")?,
         show_in_epg: row.try_get("ShowInEpg")?,
     })

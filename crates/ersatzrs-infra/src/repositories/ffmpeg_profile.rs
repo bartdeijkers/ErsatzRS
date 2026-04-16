@@ -4,7 +4,7 @@ use ersatzrs_domain::{EntityId, FFmpegProfile};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, not_found};
+use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
 pub struct SqliteFfmpegProfileRepository(pub Pool<Sqlite>);
@@ -45,26 +45,26 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
         .bind(profile.thread_count)
         .bind(profile.normalize_audio)
         .bind(profile.normalize_video)
-        .bind(format!("{:?}", profile.hardware_acceleration))
+        .bind(encode_enum(profile.hardware_acceleration))
         .bind(&profile.vaapi_display)
-        .bind(format!("{:?}", profile.vaapi_driver))
+        .bind(encode_enum(profile.vaapi_driver))
         .bind(&profile.vaapi_device)
         .bind(profile.qsv_extra_hardware_frames)
         .bind(profile.resolution_id)
-        .bind(format!("{:?}", profile.scaling_behavior))
-        .bind(format!("{:?}", profile.pad_mode))
-        .bind(format!("{:?}", profile.video_format))
+        .bind(encode_enum(profile.scaling_behavior))
+        .bind(encode_enum(profile.pad_mode))
+        .bind(encode_enum(profile.video_format))
         .bind(&profile.video_profile)
         .bind(&profile.video_preset)
         .bind(profile.allow_b_frames)
-        .bind(format!("{:?}", profile.bit_depth))
+        .bind(encode_enum(profile.bit_depth))
         .bind(profile.video_bitrate)
         .bind(profile.video_buffer_size)
-        .bind(format!("{:?}", profile.tonemap_algorithm))
-        .bind(format!("{:?}", profile.audio_format))
+        .bind(encode_enum(profile.tonemap_algorithm))
+        .bind(encode_enum(profile.audio_format))
         .bind(profile.audio_bitrate)
         .bind(profile.audio_buffer_size)
-        .bind(format!("{:?}", profile.normalize_loudness_mode))
+        .bind(encode_enum(profile.normalize_loudness_mode))
         .bind(profile.target_loudness)
         .bind(profile.audio_channels)
         .bind(profile.audio_sample_rate)
@@ -92,52 +92,41 @@ fn map_profile(row: &SqliteRow) -> Result<FFmpegProfile> {
         thread_count: row.try_get("ThreadCount")?,
         normalize_audio: row.try_get("NormalizeAudio")?,
         normalize_video: row.try_get("NormalizeVideo")?,
-        hardware_acceleration: decode_enum(
+        hardware_acceleration: decode_enum_column(
             "ffmpeg profile hardware_acceleration",
-            &row.try_get::<String, _>("HardwareAcceleration")?,
+            row,
+            "HardwareAcceleration",
         )?,
         vaapi_display: row.try_get("VaapiDisplay")?,
-        vaapi_driver: decode_enum(
-            "ffmpeg profile vaapi_driver",
-            &row.try_get::<String, _>("VaapiDriver")?,
-        )?,
+        vaapi_driver: decode_enum_column("ffmpeg profile vaapi_driver", row, "VaapiDriver")?,
         vaapi_device: row.try_get("VaapiDevice")?,
         qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames")?,
         resolution_id: row.try_get("ResolutionId")?,
-        scaling_behavior: decode_enum(
+        scaling_behavior: decode_enum_column(
             "ffmpeg profile scaling_behavior",
-            &row.try_get::<String, _>("ScalingBehavior")?,
+            row,
+            "ScalingBehavior",
         )?,
-        pad_mode: decode_enum(
-            "ffmpeg profile pad_mode",
-            &row.try_get::<String, _>("PadMode")?,
-        )?,
-        video_format: decode_enum(
-            "ffmpeg profile video_format",
-            &row.try_get::<String, _>("VideoFormat")?,
-        )?,
+        pad_mode: decode_enum_column("ffmpeg profile pad_mode", row, "PadMode")?,
+        video_format: decode_enum_column("ffmpeg profile video_format", row, "VideoFormat")?,
         video_profile: row.try_get("VideoProfile")?,
         video_preset: row.try_get("VideoPreset")?,
         allow_b_frames: row.try_get("AllowBFrames")?,
-        bit_depth: decode_enum(
-            "ffmpeg profile bit_depth",
-            &row.try_get::<String, _>("BitDepth")?,
-        )?,
+        bit_depth: decode_enum_column("ffmpeg profile bit_depth", row, "BitDepth")?,
         video_bitrate: row.try_get("VideoBitrate")?,
         video_buffer_size: row.try_get("VideoBufferSize")?,
-        tonemap_algorithm: decode_enum(
+        tonemap_algorithm: decode_enum_column(
             "ffmpeg profile tonemap_algorithm",
-            &row.try_get::<String, _>("TonemapAlgorithm")?,
+            row,
+            "TonemapAlgorithm",
         )?,
-        audio_format: decode_enum(
-            "ffmpeg profile audio_format",
-            &row.try_get::<String, _>("AudioFormat")?,
-        )?,
+        audio_format: decode_enum_column("ffmpeg profile audio_format", row, "AudioFormat")?,
         audio_bitrate: row.try_get("AudioBitrate")?,
         audio_buffer_size: row.try_get("AudioBufferSize")?,
-        normalize_loudness_mode: decode_enum(
+        normalize_loudness_mode: decode_enum_column(
             "ffmpeg profile normalize_loudness_mode",
-            &row.try_get::<String, _>("NormalizeLoudnessMode")?,
+            row,
+            "NormalizeLoudnessMode",
         )?,
         target_loudness: row.try_get("TargetLoudness")?,
         audio_channels: row.try_get("AudioChannels")?,

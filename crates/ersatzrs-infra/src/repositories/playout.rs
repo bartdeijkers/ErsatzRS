@@ -6,9 +6,10 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
-    decode_datetime, decode_duration_text, decode_enum, decode_message, decode_optional_datetime,
-    decode_optional_duration_text, encode_datetime, encode_duration, encode_optional_datetime,
-    load_ids, not_found, replace_ids,
+    decode_datetime, decode_duration_text, decode_enum_column, decode_message,
+    decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column,
+    encode_datetime, encode_duration, encode_enum, encode_optional_datetime, load_ids, not_found,
+    replace_ids,
 };
 
 #[derive(Clone)]
@@ -102,8 +103,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
              ORDER BY "Start", "Id""#,
         )
         .bind(playout_id)
-        .bind(finish.to_rfc3339())
-        .bind(start.to_rfc3339())
+        .bind(encode_datetime(finish))
+        .bind(encode_datetime(start))
         .fetch_all(&self.0)
         .await?;
         let mut items = Vec::with_capacity(rows.len());
@@ -147,7 +148,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .bind(encode_optional_datetime(item.guide_finish))
         .bind(&item.custom_title)
         .bind(item.guide_group)
-        .bind(format!("{:?}", item.filler_kind))
+        .bind(encode_enum(item.filler_kind))
         .bind(encode_duration(item.in_point))
         .bind(encode_duration(item.out_point))
         .bind(&item.chapter_title)
@@ -155,7 +156,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .bind(&item.preferred_audio_language_code)
         .bind(&item.preferred_audio_title)
         .bind(&item.preferred_subtitle_language_code)
-        .bind(item.subtitle_mode.map(|mode| format!("{mode:?}")))
+        .bind(item.subtitle_mode.map(encode_enum))
         .bind(&item.block_key)
         .bind(&item.collection_key)
         .bind(&item.collection_etag)
@@ -208,7 +209,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
 fn map_playout(row: &SqliteRow) -> Result<Playout> {
     let daily_rebuild_time = decode_optional_duration_text(
-        row.try_get::<Option<String>, _>("DailyRebuildTime")?,
+        row.try_get::<Option<String>, _>("DailyRebuildTime")?
+            .as_deref(),
     );
     Ok(Playout {
         id: row.try_get("Id")?,
@@ -216,10 +218,7 @@ fn map_playout(row: &SqliteRow) -> Result<Playout> {
         program_schedule_id: row.try_get("ProgramScheduleId")?,
         schedule_file: row.try_get("ScheduleFile")?,
         program_schedule_alternate_ids: Vec::new(),
-        schedule_kind: decode_enum(
-            "playout schedule_kind",
-            &row.try_get::<String, _>("ScheduleKind")?,
-        )?,
+        schedule_kind: decode_enum_column("playout schedule_kind", row, "ScheduleKind")?,
         item_ids: Vec::new(),
         gap_ids: Vec::new(),
         anchor: None,
@@ -251,10 +250,7 @@ fn map_anchor(
         (0, 0)
     };
     Ok(ersatzrs_domain::PlayoutAnchor {
-        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState {
-            seed,
-            index,
-        },
+        schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState { seed, index },
         next_start: decode_datetime(
             "playout anchor next_start",
             &row.try_get::<String, _>("NextStart")?,
@@ -300,10 +296,7 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
         )?,
         custom_title: row.try_get("CustomTitle")?,
         guide_group: row.try_get("GuideGroup")?,
-        filler_kind: decode_enum(
-            "playout item filler_kind",
-            &row.try_get::<String, _>("FillerKind")?,
-        )?,
+        filler_kind: decode_enum_column("playout item filler_kind", row, "FillerKind")?,
         playout_id: row.try_get("PlayoutId")?,
         in_point: decode_duration_text(&row.try_get::<String, _>("InPoint")?),
         out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint")?),
@@ -313,11 +306,11 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
         preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
         preferred_audio_title: row.try_get("PreferredAudioTitle")?,
         preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
-        subtitle_mode: row
-            .try_get::<Option<String>, _>("SubtitleMode")?
-            .as_deref()
-            .map(|value| decode_enum("playout item subtitle_mode", value))
-            .transpose()?,
+        subtitle_mode: decode_optional_enum_column(
+            "playout item subtitle_mode",
+            row,
+            "SubtitleMode",
+        )?,
         block_key: row.try_get("BlockKey")?,
         collection_key: row.try_get("CollectionKey")?,
         collection_etag: row.try_get("CollectionEtag")?,

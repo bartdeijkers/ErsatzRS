@@ -4,7 +4,7 @@ use ersatzrs_domain::{Collection, EntityId, Playlist, SmartCollection};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, load_ids, not_found};
+use super::common::{load_ids, not_found};
 
 #[derive(Clone)]
 pub struct SqliteCollectionRepository(pub Pool<Sqlite>);
