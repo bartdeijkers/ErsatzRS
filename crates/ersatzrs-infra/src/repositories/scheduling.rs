@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
-    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, SchedulingCollectionKey,
-    SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
-    SchedulingPlaylistItem, SchedulingReferenceData,
+    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, EffectiveDecoSelection,
+    EffectiveDecoTemplateItem, SchedulingCollectionKey, SchedulingContentRepository,
+    SchedulingContentSource, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
 use ersatzrs_domain::{
@@ -17,7 +17,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
-    decode_datetime, decode_duration, decode_enum, decode_message, decode_optional_datetime,
+    decode_datetime, decode_duration_text, decode_enum, decode_message, decode_optional_datetime,
     load_ids,
 };
 
@@ -51,10 +51,6 @@ impl SchedulingContentRepository for SqliteSchedulingContentRepository {
 
 impl SqliteSchedulingContentRepository {
     /// Prepare SQL-backed reference data for block scheduling.
-    ///
-    /// Business rules stay in `ersatzrs-core`: this method only hydrates the
-    /// template/block/deco rows, collection media items, existing playout rows,
-    /// and history rows needed by the block engine.
     ///
     /// # Errors
     ///
@@ -174,7 +170,7 @@ impl SqliteSchedulingContentRepository {
     /// Returns an error when the `SQLite` lookup fails.
     pub async fn watermark_id_by_name(&self, name: &str) -> Result<Option<EntityId>> {
         sqlx::query_scalar::<_, EntityId>(
-            "SELECT id FROM channel_watermarks WHERE name LIKE ? ORDER BY id LIMIT 1",
+            r#"SELECT "Id" FROM "ChannelWatermark" WHERE "Name" LIKE ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(format!("%{name}%"))
         .fetch_optional(&self.0)
@@ -190,11 +186,11 @@ impl SqliteSchedulingContentRepository {
     pub async fn graphics_element_id_by_path(&self, path: &str) -> Result<Option<EntityId>> {
         let normalized = normalize_graphics_path(path);
         sqlx::query_scalar::<_, EntityId>(
-            "SELECT id
-             FROM graphics_elements
-             WHERE path = ? OR path = ? OR path LIKE ?
-             ORDER BY id
-             LIMIT 1",
+            r#"SELECT "Id"
+             FROM "GraphicsElement"
+             WHERE "Path" = ? OR "Path" = ? OR "Path" LIKE ?
+             ORDER BY "Id"
+             LIMIT 1"#,
         )
         .bind(path)
         .bind(&normalized)
@@ -206,7 +202,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn collection_items_by_name(&self, name: &str) -> Result<Vec<SchedulingMediaItem>> {
         let collection_id = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id FROM collections WHERE name = ? ORDER BY id LIMIT 1",
+            r#"SELECT "Id" FROM "Collection" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(name)
         .fetch_optional(&self.0)
@@ -223,10 +219,10 @@ impl SqliteSchedulingContentRepository {
         collection_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
         let ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT media_item_id
-             FROM collection_items
-             WHERE collection_id = ?
-             ORDER BY sort_order, id",
+            r#"SELECT "MediaItemId"
+             FROM "CollectionItem"
+             WHERE "CollectionId" = ?
+             ORDER BY "MediaItemId""#,
         )
         .bind(collection_id)
         .fetch_all(&self.0)
@@ -237,7 +233,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn multi_collection_items_by_name(&self, name: &str) -> Result<Vec<SchedulingMediaItem>> {
         let multi_collection_id = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id FROM multi_collections WHERE name = ? ORDER BY id LIMIT 1",
+            r#"SELECT "Id" FROM "MultiCollection" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(name)
         .fetch_optional(&self.0)
@@ -258,11 +254,12 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         }
 
-        let rows = sqlx::query(
-            "SELECT collection_type, collection_id, media_item_id, playlist_id
-             FROM multi_collection_items
-             WHERE multi_collection_id = ?
-             ORDER BY sort_order, id",
+        // MultiCollectionItem has composite PK (MultiCollectionId, CollectionId), no id/sort_order
+        let collection_ids = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "CollectionId"
+             FROM "MultiCollectionItem"
+             WHERE "MultiCollectionId" = ?
+             ORDER BY "CollectionId""#,
         )
         .bind(multi_collection_id)
         .fetch_all(&self.0)
@@ -270,16 +267,17 @@ impl SqliteSchedulingContentRepository {
 
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
-        for row in rows {
-            let child_items = Box::pin(self.items_for_collection_key_row(&row, depth + 1)).await?;
+        for collection_id in collection_ids {
+            let child_items = self.items_for_collection_id(collection_id).await?;
             append_unique(&mut items, &mut seen, child_items);
         }
 
+        // MultiCollectionSmartItem has composite PK (MultiCollectionId, SmartCollectionId)
         let smart_ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT smart_collection_id
-             FROM multi_collection_smart_items
-             WHERE multi_collection_id = ?
-             ORDER BY sort_order, id",
+            r#"SELECT "SmartCollectionId"
+             FROM "MultiCollectionSmartItem"
+             WHERE "MultiCollectionId" = ?
+             ORDER BY "SmartCollectionId""#,
         )
         .bind(multi_collection_id)
         .fetch_all(&self.0)
@@ -295,7 +293,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn smart_collection_items_by_name(&self, name: &str) -> Result<Vec<SchedulingMediaItem>> {
         let row = sqlx::query(
-            "SELECT id, query FROM smart_collections WHERE name = ? ORDER BY id LIMIT 1",
+            r#"SELECT "Id", "Query" FROM "SmartCollection" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(name)
         .fetch_optional(&self.0)
@@ -303,7 +301,7 @@ impl SqliteSchedulingContentRepository {
 
         match row {
             Some(row) => {
-                let query = row.try_get::<String, _>("query")?;
+                let query = row.try_get::<String, _>("Query")?;
                 self.search_items(&query).await
             }
             None => Ok(Vec::new()),
@@ -315,7 +313,7 @@ impl SqliteSchedulingContentRepository {
         smart_collection_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
         let query = sqlx::query_scalar::<_, String>(
-            "SELECT query FROM smart_collections WHERE id = ? ORDER BY id LIMIT 1",
+            r#"SELECT "Query" FROM "SmartCollection" WHERE "Id" = ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(smart_collection_id)
         .fetch_optional(&self.0)
@@ -347,7 +345,7 @@ impl SqliteSchedulingContentRepository {
         name: &str,
     ) -> Result<Vec<SchedulingPlaylistItem>> {
         let playlist_id = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id FROM playlists WHERE name = ? ORDER BY id LIMIT 1",
+            r#"SELECT "Id" FROM "Playlist" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
         )
         .bind(name)
         .fetch_optional(&self.0)
@@ -359,11 +357,12 @@ impl SqliteSchedulingContentRepository {
 
         let rows = if let Some(group) = group {
             sqlx::query(
-                "SELECT pi.*
-                 FROM playlist_items pi
-                 JOIN playlist_groups pg ON pg.id = pi.playlist_group_id
-                 WHERE pi.playlist_id = ? AND pg.name = ?
-                 ORDER BY pi.sort_order, pi.id",
+                r#"SELECT pi.*
+                 FROM "PlaylistItem" pi
+                 JOIN "Playlist" p ON p."Id" = pi."PlaylistId"
+                 JOIN "PlaylistGroup" pg ON pg."Id" = p."PlaylistGroupId"
+                 WHERE pi."PlaylistId" = ? AND pg."Name" = ?
+                 ORDER BY pi."Index", pi."Id""#,
             )
             .bind(playlist_id)
             .bind(group)
@@ -371,10 +370,10 @@ impl SqliteSchedulingContentRepository {
             .await?
         } else {
             sqlx::query(
-                "SELECT *
-                 FROM playlist_items
-                 WHERE playlist_id = ?
-                 ORDER BY sort_order, id",
+                r#"SELECT *
+                 FROM "PlaylistItem"
+                 WHERE "PlaylistId" = ?
+                 ORDER BY "Index", "Id""#,
             )
             .bind(playlist_id)
             .fetch_all(&self.0)
@@ -388,11 +387,11 @@ impl SqliteSchedulingContentRepository {
                 collection_key: collection_key_from_row(&row)?,
                 playback_order: decode_enum(
                     "playlist item playback_order",
-                    &row.try_get::<String, _>("playback_order")?,
+                    &row.try_get::<String, _>("PlaybackOrder")?,
                 )?,
-                play_all: row.try_get::<bool, _>("play_all")?,
+                play_all: row.try_get::<bool, _>("PlayAll")?,
                 count: row
-                    .try_get::<Option<i64>, _>("count")?
+                    .try_get::<Option<i64>, _>("Count")?
                     .map(usize::try_from)
                     .transpose()
                     .map_err(|error| decode_message("playlist item count", &error.to_string()))?,
@@ -408,100 +407,20 @@ impl SqliteSchedulingContentRepository {
         row: &SqliteRow,
         depth: usize,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let collection_type: CollectionType = decode_enum(
-            "collection type",
-            &row.try_get::<String, _>("collection_type")?,
-        )?;
-
-        match collection_type {
-            CollectionType::Collection => {
-                if let Some(id) = optional_id(row, "collection_id")? {
-                    self.items_for_collection_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::TelevisionShow => {
-                if let Some(id) = optional_id(row, "media_item_id")? {
-                    self.items_for_show_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::TelevisionSeason => {
-                if let Some(id) = optional_id(row, "media_item_id")? {
-                    self.items_for_season_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::Artist => {
-                if let Some(id) = optional_id(row, "media_item_id")? {
-                    self.items_for_artist_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::MultiCollection => {
-                if let Some(id) = optional_id(row, "multi_collection_id")? {
-                    Box::pin(self.items_for_multi_collection_id(id, depth)).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::SmartCollection => {
-                if let Some(id) = optional_id(row, "smart_collection_id")? {
-                    self.items_for_smart_collection_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::Playlist => {
-                if let Some(id) = optional_id(row, "playlist_id")? {
-                    Box::pin(self.playlist_media_items_by_id(id)).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::SearchQuery => {
-                if let Some(query) = row
-                    .try_get::<Option<String>, _>("search_query")
-                    .ok()
-                    .flatten()
-                {
-                    self.search_items(&query).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::Movie
-            | CollectionType::Episode
-            | CollectionType::MusicVideo
-            | CollectionType::OtherVideo
-            | CollectionType::Song
-            | CollectionType::Image
-            | CollectionType::RemoteStream => {
-                if let Some(id) = optional_id(row, "media_item_id")? {
-                    self.media_item_by_id(id).await
-                } else {
-                    Ok(Vec::new())
-                }
-            }
-            CollectionType::RerunFirstRun
-            | CollectionType::RerunRerun
-            | CollectionType::FakeCollection
-            | CollectionType::FakePlaylistItem => Ok(Vec::new()),
-        }
+        let collection_key = collection_key_from_row(row)?;
+        self.items_for_collection_key(&collection_key, depth).await
     }
 
     async fn playlist_media_items_by_id(
         &self,
         playlist_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let name = sqlx::query_scalar::<_, String>("SELECT name FROM playlists WHERE id = ?")
-            .bind(playlist_id)
-            .fetch_optional(&self.0)
-            .await?;
+        let name = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Name" FROM "Playlist" WHERE "Id" = ?"#,
+        )
+        .bind(playlist_id)
+        .fetch_optional(&self.0)
+        .await?;
 
         match name {
             Some(name) => Box::pin(self.playlist_media_items(None, &name)).await,
@@ -542,23 +461,27 @@ impl SqliteSchedulingContentRepository {
     }
 
     async fn is_show(&self, id: EntityId) -> Result<bool> {
-        exists_by_id(&self.0, "shows", id).await
+        exists_by_id(&self.0, "Show", id).await
     }
 
     async fn is_season(&self, id: EntityId) -> Result<bool> {
-        exists_by_id(&self.0, "seasons", id).await
+        exists_by_id(&self.0, "Season", id).await
     }
 
     async fn is_artist(&self, id: EntityId) -> Result<bool> {
-        exists_by_id(&self.0, "artists", id).await
+        exists_by_id(&self.0, "Artist", id).await
     }
 
     async fn items_for_show_id(&self, show_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
+        // Episodes are linked via Season -> Show. Season has SeasonNumber.
+        // EpisodeMetadata has EpisodeNumber. We need to join through Season for ordering.
         let ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id
-             FROM episodes
-             WHERE show_id = ?
-             ORDER BY season_number, episode_number, id",
+            r#"SELECT e."Id"
+             FROM "Episode" e
+             JOIN "Season" s ON s."Id" = e."SeasonId"
+             LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
+             WHERE s."ShowId" = ?
+             ORDER BY s."SeasonNumber", em."EpisodeNumber", e."Id""#,
         )
         .bind(show_id)
         .fetch_all(&self.0)
@@ -568,10 +491,11 @@ impl SqliteSchedulingContentRepository {
 
     async fn items_for_season_id(&self, season_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
         let ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT id
-             FROM episodes
-             WHERE season_id = ?
-             ORDER BY season_number, episode_number, id",
+            r#"SELECT e."Id"
+             FROM "Episode" e
+             LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
+             WHERE e."SeasonId" = ?
+             ORDER BY em."EpisodeNumber", e."Id""#,
         )
         .bind(season_id)
         .fetch_all(&self.0)
@@ -580,12 +504,12 @@ impl SqliteSchedulingContentRepository {
     }
 
     async fn items_for_artist_id(&self, artist_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
+        // MusicVideo has ArtistId FK; join through MusicVideoMetadata for ordering
         let ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT mvm.item_id
-             FROM music_video_metadata_artists mvma
-             JOIN music_video_metadata mvm ON mvm.id = mvma.music_video_metadata_id
-             WHERE mvma.artist_id = ?
-             ORDER BY mvm.item_id",
+            r#"SELECT mv."Id"
+             FROM "MusicVideo" mv
+             WHERE mv."ArtistId" = ?
+             ORDER BY mv."Id""#,
         )
         .bind(artist_id)
         .fetch_all(&self.0)
@@ -595,11 +519,11 @@ impl SqliteSchedulingContentRepository {
 
     async fn show_ids_by_name(&self, name: &str) -> Result<Vec<EntityId>> {
         sqlx::query_scalar::<_, EntityId>(
-            "SELECT s.id
-             FROM shows s
-             JOIN show_metadata sm ON sm.item_id = s.id
-             WHERE sm.title = ?
-             ORDER BY s.id",
+            r#"SELECT s."Id"
+             FROM "Show" s
+             JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+             WHERE sm."Title" = ?
+             ORDER BY s."Id""#,
         )
         .bind(name)
         .fetch_all(&self.0)
@@ -612,18 +536,35 @@ impl SqliteSchedulingContentRepository {
         source: &str,
         value: &str,
     ) -> Result<Vec<SchedulingMediaItem>> {
+        // MetadataGuid has ShowMetadataId FK (nullable); join to ShowMetadata to get ShowId
         let show_id = sqlx::query_scalar::<_, EntityId>(
-            "SELECT sm.item_id
-             FROM metadata_guids mg
-             JOIN show_metadata sm ON sm.id = mg.metadata_id
-             WHERE mg.metadata_kind = 'Show' AND mg.source = ? AND mg.guid = ?
-             ORDER BY sm.item_id
-             LIMIT 1",
+            r#"SELECT sm."ShowId"
+             FROM "MetadataGuid" mg
+             JOIN "ShowMetadata" sm ON sm."Id" = mg."ShowMetadataId"
+             WHERE mg."Guid" = ?
+             ORDER BY sm."ShowId"
+             LIMIT 1"#,
         )
-        .bind(source)
-        .bind(value)
+        .bind(format!("{source}://{value}"))
         .fetch_optional(&self.0)
         .await?;
+
+        // Also try plain guid format
+        let show_id = if show_id.is_none() {
+            sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT sm."ShowId"
+                 FROM "MetadataGuid" mg
+                 JOIN "ShowMetadata" sm ON sm."Id" = mg."ShowMetadataId"
+                 WHERE mg."Guid" LIKE ?
+                 ORDER BY sm."ShowId"
+                 LIMIT 1"#,
+            )
+            .bind(format!("%{value}%"))
+            .fetch_optional(&self.0)
+            .await?
+        } else {
+            show_id
+        };
 
         match show_id {
             Some(id) => self.items_for_show_id(id).await,
@@ -690,31 +631,13 @@ impl SqliteSchedulingContentRepository {
             year: row.try_get("year")?,
             release_date,
             genres: self
-                .metadata_lookup_values(
-                    "metadata_genres",
-                    "genres",
-                    "genre_id",
-                    &metadata_kind,
-                    metadata_id,
-                )
+                .metadata_lookup_values_fk("Genre", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
                 .await?,
             tags: self
-                .metadata_lookup_values(
-                    "metadata_tags",
-                    "tags",
-                    "tag_id",
-                    &metadata_kind,
-                    metadata_id,
-                )
+                .metadata_lookup_values_fk("Tag", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
                 .await?,
             studios: self
-                .metadata_lookup_values(
-                    "metadata_studios",
-                    "studios",
-                    "studio_id",
-                    &metadata_kind,
-                    metadata_id,
-                )
+                .metadata_lookup_values_fk("Studio", "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", &metadata_kind, metadata_id)
                 .await?,
             actors: self
                 .metadata_actor_values(&metadata_kind, metadata_id)
@@ -723,13 +646,13 @@ impl SqliteSchedulingContentRepository {
             writers: Vec::new(),
             show_title: row.try_get("show_title")?,
             show_genres: self
-                .show_lookup_values("metadata_genres", "genres", "genre_id", show_id)
+                .show_lookup_values("Genre", show_id)
                 .await?,
             show_tags: self
-                .show_lookup_values("metadata_tags", "tags", "tag_id", show_id)
+                .show_lookup_values("Tag", show_id)
                 .await?,
             show_studios: self
-                .show_lookup_values("metadata_studios", "studios", "studio_id", show_id)
+                .show_lookup_values("Studio", show_id)
                 .await?,
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
@@ -737,23 +660,34 @@ impl SqliteSchedulingContentRepository {
         })
     }
 
-    async fn metadata_lookup_values(
+    /// Look up names from tables that use nullable FK columns per metadata type.
+    /// ErsatzTV uses `"Genre"."MovieMetadataId"`, `"Genre"."EpisodeMetadataId"`, etc.
+    async fn metadata_lookup_values_fk(
         &self,
-        join_table: &str,
-        value_table: &str,
-        id_column: &str,
+        table: &str,
+        movie_fk: &str,
+        episode_fk: &str,
+        show_fk: &str,
         metadata_kind: &str,
         metadata_id: EntityId,
     ) -> Result<Vec<String>> {
+        let fk_column = match metadata_kind {
+            "Movie" => movie_fk,
+            "Episode" => episode_fk,
+            "Show" => show_fk,
+            "Season" => "SeasonMetadataId",
+            "MusicVideo" => "MusicVideoMetadataId",
+            "Artist" => "ArtistMetadataId",
+            "OtherVideo" => "OtherVideoMetadataId",
+            "Song" => "SongMetadataId",
+            "Image" => "ImageMetadataId",
+            "RemoteStream" => "RemoteStreamMetadataId",
+            _ => return Ok(Vec::new()),
+        };
         let sql = format!(
-            "SELECT value.name
-             FROM {join_table} rel
-             JOIN {value_table} value ON value.id = rel.{id_column}
-             WHERE rel.metadata_kind = ? AND rel.metadata_id = ?
-             ORDER BY value.name"
+            r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#
         );
         sqlx::query_scalar::<_, String>(&sql)
-            .bind(metadata_kind)
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
@@ -765,25 +699,30 @@ impl SqliteSchedulingContentRepository {
         metadata_kind: &str,
         metadata_id: EntityId,
     ) -> Result<Vec<String>> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT a.name
-             FROM metadata_actors ma
-             JOIN actors a ON a.id = ma.actor_id
-             WHERE ma.metadata_kind = ? AND ma.metadata_id = ?
-             ORDER BY a.actor_order, a.id",
-        )
-        .bind(metadata_kind)
-        .bind(metadata_id)
-        .fetch_all(&self.0)
-        .await
-        .map_err(Into::into)
+        let fk_column = match metadata_kind {
+            "Movie" => "MovieMetadataId",
+            "Episode" => "EpisodeMetadataId",
+            "Show" => "ShowMetadataId",
+            "Season" => "SeasonMetadataId",
+            "MusicVideo" => "MusicVideoMetadataId",
+            "Artist" => "ArtistMetadataId",
+            "OtherVideo" => "OtherVideoMetadataId",
+            "Song" => "SongMetadataId",
+            _ => return Ok(Vec::new()),
+        };
+        let sql = format!(
+            r#"SELECT "Name" FROM "Actor" WHERE "{fk_column}" = ? ORDER BY "Order", "Id""#
+        );
+        sqlx::query_scalar::<_, String>(&sql)
+            .bind(metadata_id)
+            .fetch_all(&self.0)
+            .await
+            .map_err(Into::into)
     }
 
     async fn show_lookup_values(
         &self,
-        join_table: &str,
-        value_table: &str,
-        id_column: &str,
+        table: &str,
         show_id: Option<EntityId>,
     ) -> Result<Vec<String>> {
         let Some(show_id) = show_id else {
@@ -791,7 +730,9 @@ impl SqliteSchedulingContentRepository {
         };
 
         let Some(metadata_id) =
-            sqlx::query_scalar::<_, EntityId>("SELECT id FROM show_metadata WHERE item_id = ?")
+            sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ?"#,
+            )
                 .bind(show_id)
                 .fetch_optional(&self.0)
                 .await?
@@ -799,7 +740,7 @@ impl SqliteSchedulingContentRepository {
             return Ok(Vec::new());
         };
 
-        self.metadata_lookup_values(join_table, value_table, id_column, "Show", metadata_id)
+        self.metadata_lookup_values_fk(table, "MovieMetadataId", "EpisodeMetadataId", "ShowMetadataId", "Show", metadata_id)
             .await
     }
 
@@ -808,25 +749,46 @@ impl SqliteSchedulingContentRepository {
         metadata_kind: &str,
         metadata_id: EntityId,
     ) -> Result<Vec<SearchProviderGuid>> {
-        let rows = sqlx::query(
-            "SELECT source, guid
-             FROM metadata_guids
-             WHERE metadata_kind = ? AND metadata_id = ?
-             ORDER BY source, guid",
-        )
-        .bind(metadata_kind)
-        .bind(metadata_id)
-        .fetch_all(&self.0)
-        .await?;
+        let fk_column = match metadata_kind {
+            "Movie" => "MovieMetadataId",
+            "Episode" => "EpisodeMetadataId",
+            "Show" => "ShowMetadataId",
+            "Season" => "SeasonMetadataId",
+            "MusicVideo" => "MusicVideoMetadataId",
+            "Artist" => "ArtistMetadataId",
+            "OtherVideo" => "OtherVideoMetadataId",
+            "Song" => "SongMetadataId",
+            "Image" => "ImageMetadataId",
+            "RemoteStream" => "RemoteStreamMetadataId",
+            _ => return Ok(Vec::new()),
+        };
+        let sql = format!(
+            r#"SELECT "Guid" FROM "MetadataGuid" WHERE "{fk_column}" = ? ORDER BY "Guid""#
+        );
+        let guids = sqlx::query_scalar::<_, String>(&sql)
+            .bind(metadata_id)
+            .fetch_all(&self.0)
+            .await?;
 
-        rows.into_iter()
-            .map(|row| {
-                Ok(SearchProviderGuid {
-                    source: row.try_get("source")?,
-                    value: row.try_get("guid")?,
-                })
+        // ErsatzTV stores GUIDs as "source://value" or similar format
+        Ok(guids
+            .into_iter()
+            .filter_map(|guid| {
+                // Try to split on "://"
+                if let Some((source, value)) = guid.split_once("://") {
+                    Some(SearchProviderGuid {
+                        source: source.to_owned(),
+                        value: value.to_owned(),
+                    })
+                } else {
+                    // Fall back: use whole guid as value with empty source
+                    Some(SearchProviderGuid {
+                        source: String::new(),
+                        value: guid,
+                    })
+                }
             })
-            .collect()
+            .collect())
     }
 
     async fn load_media_items(&self, ids: Vec<EntityId>) -> Result<Vec<SchedulingMediaItem>> {
@@ -841,46 +803,37 @@ impl SqliteSchedulingContentRepository {
 
     async fn load_media_item(&self, id: EntityId) -> Result<Option<SchedulingMediaItem>> {
         let row = sqlx::query(
-            "SELECT
-                mi.id,
-                COALESCE(MAX(mv.duration_ms), 0) AS duration_ms,
+            r#"SELECT
+                mi."Id",
                 COALESCE(
-                    em.title, mm.title, mvm.title, ovm.title, som.title, im.title, rsm.title,
-                    shm.title, sem.title, am.title
+                    (SELECT MAX(mv."Duration") FROM "MediaVersion" mv WHERE
+                        mv."MovieId" = mi."Id" OR mv."EpisodeId" = mi."Id" OR
+                        mv."MusicVideoId" = mi."Id" OR mv."OtherVideoId" = mi."Id" OR
+                        mv."SongId" = mi."Id" OR mv."ImageId" = mi."Id" OR
+                        mv."RemoteStreamId" = mi."Id"),
+                    '00:00:00'
+                ) AS duration_text,
+                COALESCE(
+                    (SELECT em."Title" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1),
+                    (SELECT mm."Title" FROM "MovieMetadata" mm WHERE mm."MovieId" = mi."Id" LIMIT 1),
+                    (SELECT mvm."Title" FROM "MusicVideoMetadata" mvm WHERE mvm."MusicVideoId" = mi."Id" LIMIT 1),
+                    (SELECT ovm."Title" FROM "OtherVideoMetadata" ovm WHERE ovm."OtherVideoId" = mi."Id" LIMIT 1),
+                    (SELECT som."Title" FROM "SongMetadata" som WHERE som."SongId" = mi."Id" LIMIT 1),
+                    (SELECT shm."Title" FROM "ShowMetadata" shm WHERE shm."ShowId" = mi."Id" LIMIT 1),
+                    (SELECT sem."Title" FROM "SeasonMetadata" sem WHERE sem."SeasonId" = mi."Id" LIMIT 1),
+                    (SELECT am."Title" FROM "ArtistMetadata" am WHERE am."ArtistId" = mi."Id" LIMIT 1)
                 ) AS title,
-                e.show_id,
-                e.season_id,
-                e.season_number,
-                e.episode_number,
+                (SELECT s."ShowId" FROM "Episode" e JOIN "Season" s ON s."Id" = e."SeasonId" WHERE e."Id" = mi."Id" LIMIT 1) AS show_id,
+                (SELECT e."SeasonId" FROM "Episode" e WHERE e."Id" = mi."Id" LIMIT 1) AS season_id,
+                (SELECT s."SeasonNumber" FROM "Episode" e JOIN "Season" s ON s."Id" = e."SeasonId" WHERE e."Id" = mi."Id" LIMIT 1) AS season_number,
+                (SELECT em."EpisodeNumber" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1) AS episode_number,
                 COALESCE(
-                    em.release_date, mm.release_date, mvm.release_date, ovm.release_date,
-                    som.release_date, im.release_date, rsm.release_date, shm.release_date,
-                    sem.release_date, am.release_date
+                    (SELECT em."ReleaseDate" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1),
+                    (SELECT mm."ReleaseDate" FROM "MovieMetadata" mm WHERE mm."MovieId" = mi."Id" LIMIT 1),
+                    (SELECT mvm."ReleaseDate" FROM "MusicVideoMetadata" mvm WHERE mvm."MusicVideoId" = mi."Id" LIMIT 1)
                 ) AS release_date
-             FROM media_items mi
-             LEFT JOIN media_versions mv ON mv.media_item_id = mi.id
-             LEFT JOIN movies m ON m.id = mi.id
-             LEFT JOIN movie_metadata mm ON mm.item_id = m.id
-             LEFT JOIN episodes e ON e.id = mi.id
-             LEFT JOIN episode_metadata em ON em.item_id = e.id
-             LEFT JOIN music_videos mvitem ON mvitem.id = mi.id
-             LEFT JOIN music_video_metadata mvm ON mvm.item_id = mvitem.id
-             LEFT JOIN other_videos ov ON ov.id = mi.id
-             LEFT JOIN other_video_metadata ovm ON ovm.item_id = ov.id
-             LEFT JOIN songs so ON so.id = mi.id
-             LEFT JOIN song_metadata som ON som.item_id = so.id
-             LEFT JOIN images image ON image.id = mi.id
-             LEFT JOIN image_metadata im ON im.item_id = image.id
-             LEFT JOIN remote_streams rs ON rs.id = mi.id
-             LEFT JOIN remote_stream_metadata rsm ON rsm.item_id = rs.id
-             LEFT JOIN shows sh ON sh.id = mi.id
-             LEFT JOIN show_metadata shm ON shm.item_id = sh.id
-             LEFT JOIN seasons se ON se.id = mi.id
-             LEFT JOIN season_metadata sem ON sem.item_id = se.id
-             LEFT JOIN artists a ON a.id = mi.id
-             LEFT JOIN artist_metadata am ON am.item_id = a.id
-             WHERE mi.id = ?
-             GROUP BY mi.id",
+             FROM "MediaItem" mi
+             WHERE mi."Id" = ?"#,
         )
         .bind(id)
         .fetch_optional(&self.0)
@@ -894,11 +847,11 @@ impl SqliteSchedulingContentRepository {
         playout_id: EntityId,
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<Vec<BlockTemplateSchedule>> {
-        let template_ids = sqlx::query_scalar::<_, EntityId>(
-            "SELECT template_id
-             FROM playout_templates
-             WHERE playout_id = ?
-             ORDER BY template_id",
+        let rows = sqlx::query(
+            r#"SELECT *
+             FROM "PlayoutTemplate"
+             WHERE "PlayoutId" = ?
+             ORDER BY "Index", "TemplateId""#,
         )
         .bind(playout_id)
         .fetch_all(&self.0)
@@ -907,8 +860,9 @@ impl SqliteSchedulingContentRepository {
         let deco = self
             .effective_deco_for_playout(playout_id, media_by_key)
             .await?;
-        let mut schedules = Vec::with_capacity(template_ids.len());
-        for template_id in template_ids {
+        let mut schedules = Vec::with_capacity(rows.len());
+        for row in rows {
+            let template_id = row.try_get::<EntityId, _>("TemplateId")?;
             let template = self.block_template(template_id).await?;
             let mut blocks = BTreeMap::new();
             for item in &template.items {
@@ -918,15 +872,51 @@ impl SqliteSchedulingContentRepository {
                     entry.insert(self.block_definition(item.block_id, media_by_key).await?);
                 }
             }
+            let deco_template_items =
+                match row.try_get::<Option<EntityId>, _>("DecoTemplateId")? {
+                    Some(deco_template_id) => {
+                        self.effective_deco_template_items(deco_template_id, media_by_key)
+                            .await?
+                    }
+                    None => Vec::new(),
+                };
+
+            // DateUpdated is TEXT in ErsatzTV; parse as i64 (stored as string ticks) or 0
+            let updated_ticks: i64 = row
+                .try_get::<String, _>("DateUpdated")
+                .ok()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
 
             schedules.push(BlockTemplateSchedule {
                 id: template_id,
-                updated_ticks: 0,
+                updated_ticks,
                 start: None,
                 finish: None,
+                index: row.try_get("Index")?,
+                days_of_week: decode_integer_list(
+                    "playout template DaysOfWeek",
+                    &row.try_get::<String, _>("DaysOfWeek").unwrap_or_default(),
+                )?,
+                days_of_month: decode_integer_list(
+                    "playout template DaysOfMonth",
+                    &row.try_get::<String, _>("DaysOfMonth").unwrap_or_default(),
+                )?,
+                months_of_year: decode_integer_list(
+                    "playout template MonthsOfYear",
+                    &row.try_get::<String, _>("MonthsOfYear").unwrap_or_default(),
+                )?,
+                limit_to_date_range: row.try_get("LimitToDateRange")?,
+                start_month: row.try_get("StartMonth")?,
+                start_day: row.try_get("StartDay")?,
+                start_year: row.try_get("StartYear")?,
+                end_month: row.try_get("EndMonth")?,
+                end_day: row.try_get("EndDay")?,
+                end_year: row.try_get("EndYear")?,
                 template,
                 blocks,
                 deco: deco.clone(),
+                deco_template_items,
             });
         }
 
@@ -935,10 +925,10 @@ impl SqliteSchedulingContentRepository {
 
     async fn block_template(&self, template_id: EntityId) -> Result<BlockTemplate> {
         let rows = sqlx::query(
-            "SELECT id, block_id, sort_order
-             FROM template_items
-             WHERE template_id = ?
-             ORDER BY sort_order, id",
+            r#"SELECT "Id", "BlockId", "StartTime"
+             FROM "TemplateItem"
+             WHERE "TemplateId" = ?
+             ORDER BY "StartTime", "Id""#,
         )
         .bind(template_id)
         .fetch_all(&self.0)
@@ -948,17 +938,30 @@ impl SqliteSchedulingContentRepository {
             .iter()
             .map(|row| {
                 Ok(BlockTemplateItem {
-                    id: row.try_get("id")?,
-                    block_id: row.try_get("block_id")?,
-                    start_time: None,
-                    sort_order: row.try_get("sort_order")?,
+                    id: row.try_get("Id")?,
+                    block_id: row.try_get("BlockId")?,
+                    start_time: decode_optional_time_of_day_text(
+                        "template item StartTime",
+                        row.try_get::<Option<String>, _>("StartTime")?,
+                    )?,
+                    sort_order: 0,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // DateUpdated is TEXT in ErsatzTV; parse as i64 or 0
+        let updated_ticks: i64 = sqlx::query_scalar::<_, String>(
+            r#"SELECT "DateUpdated" FROM "Template" WHERE "Id" = ?"#,
+        )
+        .bind(template_id)
+        .fetch_optional(&self.0)
+        .await?
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+
         Ok(BlockTemplate {
             id: template_id,
-            updated_ticks: 0,
+            updated_ticks,
             items,
         })
     }
@@ -969,22 +972,31 @@ impl SqliteSchedulingContentRepository {
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<BlockDefinition> {
         let row = sqlx::query(
-            "SELECT id, name, duration_ms, stop_scheduling
-             FROM blocks
-             WHERE id = ?",
+            r#"SELECT "Id", "Name", "DateUpdated", "Minutes", "StopScheduling"
+             FROM "Block"
+             WHERE "Id" = ?"#,
         )
         .bind(block_id)
         .fetch_one(&self.0)
         .await?;
 
+        // DateUpdated is TEXT; Minutes is INTEGER (minutes, not ms)
+        let updated_ticks: i64 = row
+            .try_get::<String, _>("DateUpdated")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let minutes: i64 = row.try_get("Minutes")?;
+        let duration = Duration::minutes(minutes);
+
         Ok(BlockDefinition {
-            id: row.try_get("id")?,
-            updated_ticks: 0,
-            name: row.try_get("name")?,
-            duration: decode_duration(row.try_get("duration_ms")?),
+            id: row.try_get("Id")?,
+            updated_ticks,
+            name: row.try_get("Name")?,
+            duration,
             stop_scheduling: decode_enum(
                 "block stop_scheduling",
-                &row.try_get::<String, _>("stop_scheduling")?,
+                &row.try_get::<String, _>("StopScheduling")?,
             )?,
             items: self.effective_block_items(block_id, media_by_key).await?,
         })
@@ -996,10 +1008,10 @@ impl SqliteSchedulingContentRepository {
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<Vec<EffectiveBlockItem>> {
         let rows = sqlx::query(
-            "SELECT *
-             FROM block_items
-             WHERE block_id = ?
-             ORDER BY sort_order, id",
+            r#"SELECT *
+             FROM "BlockItem"
+             WHERE "BlockId" = ?
+             ORDER BY "Index", "Id""#,
         )
         .bind(block_id)
         .fetch_all(&self.0)
@@ -1007,7 +1019,7 @@ impl SqliteSchedulingContentRepository {
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("id")?;
+            let id = row.try_get::<EntityId, _>("Id")?;
             let content = block_item_content_key(id);
             media_by_key.insert(
                 content.clone(),
@@ -1020,25 +1032,25 @@ impl SqliteSchedulingContentRepository {
                 collection_key: collection_key_from_row(&row)?,
                 playback_order: decode_enum(
                     "block item playback_order",
-                    &row.try_get::<String, _>("playback_order")?,
+                    &row.try_get::<String, _>("PlaybackOrder")?,
                 )?,
                 include_in_program_guide: true,
                 disable_watermarks: false,
                 watermark_ids: load_ids(
                     &self.0,
-                    "SELECT watermark_id
-                     FROM block_item_watermarks
-                     WHERE block_item_id = ?
-                     ORDER BY watermark_id",
+                    r#"SELECT "WatermarkId"
+                     FROM "BlockItemWatermark"
+                     WHERE "BlockItemId" = ?
+                     ORDER BY "WatermarkId""#,
                     id,
                 )
                 .await?,
                 graphics_element_ids: load_ids(
                     &self.0,
-                    "SELECT graphics_element_id
-                     FROM block_item_graphics_elements
-                     WHERE block_item_id = ?
-                     ORDER BY graphics_element_id",
+                    r#"SELECT "GraphicsElementId"
+                     FROM "BlockItemGraphicsElement"
+                     WHERE "BlockItemId" = ?
+                     ORDER BY "GraphicsElementId""#,
                     id,
                 )
                 .await?,
@@ -1048,13 +1060,68 @@ impl SqliteSchedulingContentRepository {
         Ok(items)
     }
 
+    async fn items_for_collection_key(
+        &self,
+        collection_key: &SchedulingCollectionKey,
+        depth: usize,
+    ) -> Result<Vec<SchedulingMediaItem>> {
+        match collection_key.collection_type {
+            CollectionType::Collection => match collection_key.collection_id {
+                Some(id) => self.items_for_collection_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::TelevisionShow => match collection_key.media_item_id {
+                Some(id) => self.items_for_show_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::TelevisionSeason => match collection_key.media_item_id {
+                Some(id) => self.items_for_season_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::Artist => match collection_key.media_item_id {
+                Some(id) => self.items_for_artist_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::MultiCollection => match collection_key.multi_collection_id {
+                Some(id) => Box::pin(self.items_for_multi_collection_id(id, depth)).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::SmartCollection => match collection_key.smart_collection_id {
+                Some(id) => self.items_for_smart_collection_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::Playlist => match collection_key.playlist_id {
+                Some(id) => Box::pin(self.playlist_media_items_by_id(id)).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::SearchQuery => match collection_key.search_query.as_deref() {
+                Some(query) => self.search_items(query).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::Movie
+            | CollectionType::Episode
+            | CollectionType::MusicVideo
+            | CollectionType::OtherVideo
+            | CollectionType::Song
+            | CollectionType::Image
+            | CollectionType::RemoteStream => match collection_key.media_item_id {
+                Some(id) => self.media_item_by_id(id).await,
+                None => Ok(Vec::new()),
+            },
+            CollectionType::RerunFirstRun
+            | CollectionType::RerunRerun
+            | CollectionType::FakeCollection
+            | CollectionType::FakePlaylistItem => Ok(Vec::new()),
+        }
+    }
+
     async fn effective_deco_for_playout(
         &self,
         playout_id: EntityId,
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<Option<EffectiveDeco>> {
         let deco_id = sqlx::query_scalar::<_, EntityId>(
-            "SELECT deco_id FROM playouts WHERE id = ? AND deco_id IS NOT NULL",
+            r#"SELECT "DecoId" FROM "Playout" WHERE "Id" = ? AND "DecoId" IS NOT NULL"#,
         )
         .bind(playout_id)
         .fetch_optional(&self.0)
@@ -1072,20 +1139,26 @@ impl SqliteSchedulingContentRepository {
         deco_id: EntityId,
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<Option<EffectiveDeco>> {
-        let mode = sqlx::query_scalar::<_, String>("SELECT mode FROM decos WHERE id = ?")
-            .bind(deco_id)
-            .fetch_one(&self.0)
-            .await?;
-        let mode: DecoMode = decode_enum("deco mode", &mode)?;
+        let row = sqlx::query(
+            r#"SELECT "BreakContentMode", "DefaultFillerCollectionType", "DefaultFillerCollectionId",
+                    "DefaultFillerMediaItemId", "DefaultFillerMultiCollectionId",
+                    "DefaultFillerSmartCollectionId", "DefaultFillerTrimToFit"
+             FROM "Deco"
+             WHERE "Id" = ?"#,
+        )
+        .bind(deco_id)
+        .fetch_one(&self.0)
+        .await?;
+        let mode: DecoMode = decode_enum("deco mode", &row.try_get::<String, _>("BreakContentMode")?)?;
         if mode == DecoMode::Disable {
             return Ok(None);
         }
 
         let rows = sqlx::query(
-            "SELECT *
-             FROM deco_break_contents
-             WHERE deco_id = ?
-             ORDER BY id",
+            r#"SELECT *
+             FROM "DecoBreakContent"
+             WHERE "DecoId" = ?
+             ORDER BY "Id""#,
         )
         .bind(deco_id)
         .fetch_all(&self.0)
@@ -1093,7 +1166,7 @@ impl SqliteSchedulingContentRepository {
 
         let mut break_content = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("id")?;
+            let id = row.try_get::<EntityId, _>("Id")?;
             let content = deco_break_content_key(id);
             media_by_key.insert(
                 content.clone(),
@@ -1103,69 +1176,119 @@ impl SqliteSchedulingContentRepository {
                 id,
                 placement: decode_enum(
                     "deco break placement",
-                    &row.try_get::<String, _>("placement")?,
+                    &row.try_get::<String, _>("Placement")?,
                 )?,
                 content,
                 collection_key: collection_key_from_deco_break_content_row(&row)?,
             });
         }
 
+        let (default_filler_content, default_filler_collection_key) = self
+            .effective_default_filler(deco_id, &row, media_by_key)
+            .await?;
+
         Ok(Some(EffectiveDeco {
             id: deco_id,
-            default_filler_content: None,
-            default_filler_collection_key: None,
-            default_filler_trim_to_fit: false,
+            default_filler_content,
+            default_filler_collection_key,
+            default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit")?,
             break_content,
         }))
+    }
+
+    async fn effective_deco_template_items(
+        &self,
+        deco_template_id: EntityId,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<Vec<EffectiveDecoTemplateItem>> {
+        let rows = sqlx::query(
+            r#"SELECT dti."StartTime", dti."EndTime", dti."DecoId", d."BreakContentMode"
+             FROM "DecoTemplateItem" dti
+             JOIN "Deco" d ON d."Id" = dti."DecoId"
+             WHERE dti."DecoTemplateId" = ?
+             ORDER BY dti."StartTime", dti."Id""#,
+        )
+        .bind(deco_template_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in rows {
+            let deco_id = row.try_get::<EntityId, _>("DecoId")?;
+            let mode: DecoMode = decode_enum(
+                "deco template item BreakContentMode",
+                &row.try_get::<String, _>("BreakContentMode")?,
+            )?;
+            let selection = match mode {
+                DecoMode::Inherit => EffectiveDecoSelection::Inherit,
+                DecoMode::Override => EffectiveDecoSelection::Override(
+                    self.effective_deco(deco_id, media_by_key).await?,
+                ),
+                DecoMode::Disable | DecoMode::Merge => EffectiveDecoSelection::Disable,
+            };
+            result.push(EffectiveDecoTemplateItem {
+                start_time: decode_time_of_day_text(
+                    "deco template item StartTime",
+                    &row.try_get::<String, _>("StartTime")?,
+                )?,
+                end_time: decode_time_of_day_text(
+                    "deco template item EndTime",
+                    &row.try_get::<String, _>("EndTime")?,
+                )?,
+                selection,
+            });
+        }
+
+        Ok(result)
+    }
+
+    async fn effective_default_filler(
+        &self,
+        deco_id: EntityId,
+        row: &SqliteRow,
+        media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
+    ) -> Result<(Option<String>, Option<SchedulingCollectionKey>)> {
+        let collection_type = row
+            .try_get::<Option<String>, _>("DefaultFillerCollectionType")?
+            .as_deref()
+            .map(|value| decode_enum("deco default_filler_collection_type", value))
+            .transpose()?;
+        let Some(collection_type) = collection_type else {
+            return Ok((None, None));
+        };
+
+        let collection_key = SchedulingCollectionKey {
+            collection_type,
+            collection_id: row.try_get("DefaultFillerCollectionId")?,
+            media_item_id: row.try_get("DefaultFillerMediaItemId")?,
+            multi_collection_id: row.try_get("DefaultFillerMultiCollectionId")?,
+            smart_collection_id: row.try_get("DefaultFillerSmartCollectionId")?,
+            ..SchedulingCollectionKey::default()
+        };
+        let items = self.items_for_collection_key(&collection_key, 0).await?;
+        if items.is_empty() {
+            return Ok((None, None));
+        }
+
+        let content = deco_default_filler_key(deco_id);
+        media_by_key.insert(content.clone(), items);
+        Ok((Some(content), Some(collection_key)))
     }
 
     async fn items_for_deco_break_content_row(
         &self,
         row: &SqliteRow,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let collection_type: CollectionType = decode_enum(
-            "deco break content collection type",
-            &row.try_get::<String, _>("collection_type")?,
-        )?;
-
-        match collection_type {
-            CollectionType::Collection => match optional_id(row, "collection_id")? {
-                Some(id) => self.items_for_collection_id(id).await,
-                None => Ok(Vec::new()),
-            },
-            CollectionType::Playlist => match optional_id(row, "playlist_id")? {
-                Some(id) => Box::pin(self.playlist_media_items_by_id(id)).await,
-                None => Ok(Vec::new()),
-            },
-            CollectionType::Movie
-            | CollectionType::Episode
-            | CollectionType::MusicVideo
-            | CollectionType::OtherVideo
-            | CollectionType::Song
-            | CollectionType::Image
-            | CollectionType::RemoteStream
-            | CollectionType::TelevisionShow
-            | CollectionType::TelevisionSeason
-            | CollectionType::Artist => match optional_id(row, "media_item_id")? {
-                Some(id) => self.expand_media_ids(vec![id], 0).await,
-                None => Ok(Vec::new()),
-            },
-            CollectionType::MultiCollection
-            | CollectionType::SmartCollection
-            | CollectionType::RerunFirstRun
-            | CollectionType::RerunRerun
-            | CollectionType::SearchQuery
-            | CollectionType::FakeCollection
-            | CollectionType::FakePlaylistItem => Ok(Vec::new()),
-        }
+        let collection_key = collection_key_from_deco_break_content_row(row)?;
+        self.items_for_collection_key(&collection_key, 0).await
     }
 
     async fn playout_items(&self, playout_id: EntityId) -> Result<Vec<PlayoutItem>> {
         let rows = sqlx::query(
-            "SELECT *
-             FROM playout_items
-             WHERE playout_id = ?
-             ORDER BY start, id",
+            r#"SELECT *
+             FROM "PlayoutItem"
+             WHERE "PlayoutId" = ?
+             ORDER BY "Start", "Id""#,
         )
         .bind(playout_id)
         .fetch_all(&self.0)
@@ -1173,23 +1296,23 @@ impl SqliteSchedulingContentRepository {
 
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
-            let id = row.try_get::<EntityId, _>("id")?;
+            let id = row.try_get::<EntityId, _>("Id")?;
             let mut item = map_playout_item(&row)?;
             item.watermark_ids = load_ids(
                 &self.0,
-                "SELECT watermark_id
-                 FROM playout_item_watermarks
-                 WHERE playout_item_id = ?
-                 ORDER BY watermark_id",
+                r#"SELECT "WatermarkId"
+                 FROM "PlayoutItemWatermark"
+                 WHERE "PlayoutItemId" = ?
+                 ORDER BY "WatermarkId""#,
                 id,
             )
             .await?;
             item.graphics_element_ids = load_ids(
                 &self.0,
-                "SELECT graphics_element_id
-                 FROM playout_item_graphics_elements
-                 WHERE playout_item_id = ?
-                 ORDER BY graphics_element_id",
+                r#"SELECT "GraphicsElementId"
+                 FROM "PlayoutItemGraphicsElement"
+                 WHERE "PlayoutItemId" = ?
+                 ORDER BY "GraphicsElementId""#,
                 id,
             )
             .await?;
@@ -1201,10 +1324,10 @@ impl SqliteSchedulingContentRepository {
 
     async fn playout_history(&self, playout_id: EntityId) -> Result<Vec<PlayoutHistory>> {
         let rows = sqlx::query(
-            "SELECT *
-             FROM playout_history
-             WHERE playout_id = ?
-             ORDER BY history_when, id",
+            r#"SELECT *
+             FROM "PlayoutHistory"
+             WHERE "PlayoutId" = ?
+             ORDER BY "When", "Id""#,
         )
         .bind(playout_id)
         .fetch_all(&self.0)
@@ -1214,188 +1337,157 @@ impl SqliteSchedulingContentRepository {
     }
 }
 
-const SEARCH_DOCUMENT_SQL: &str = "
+const SEARCH_DOCUMENT_SQL: &str = r#"
 SELECT *
 FROM (
     SELECT
-        mm.item_id,
+        mm."MovieId" AS item_id,
         'movie' AS media_kind,
-        mm.metadata_kind,
-        mm.id AS metadata_id,
-        mm.title,
-        mm.original_title,
-        mm.sort_title,
-        mm.year,
-        mm.release_date,
+        'Movie' AS metadata_kind,
+        mm."Id" AS metadata_id,
+        mm."Title" AS title,
+        mm."OriginalTitle" AS original_title,
+        mm."SortTitle" AS sort_title,
+        mm."Year" AS year,
+        mm."ReleaseDate" AS release_date,
         NULL AS show_id,
         NULL AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM movie_metadata mm
+    FROM "MovieMetadata" mm
     UNION ALL
     SELECT
-        sm.item_id,
+        sm."ShowId" AS item_id,
         'show' AS media_kind,
-        sm.metadata_kind,
-        sm.id AS metadata_id,
-        sm.title,
-        sm.original_title,
-        sm.sort_title,
-        sm.year,
-        sm.release_date,
-        sm.item_id AS show_id,
-        sm.title AS show_title,
+        'Show' AS metadata_kind,
+        sm."Id" AS metadata_id,
+        sm."Title" AS title,
+        sm."OriginalTitle" AS original_title,
+        sm."SortTitle" AS sort_title,
+        sm."Year" AS year,
+        sm."ReleaseDate" AS release_date,
+        sm."ShowId" AS show_id,
+        sm."Title" AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM show_metadata sm
+    FROM "ShowMetadata" sm
     UNION ALL
     SELECT
-        sem.item_id,
+        sem."SeasonId" AS item_id,
         'season' AS media_kind,
-        sem.metadata_kind,
-        sem.id AS metadata_id,
-        sem.title,
-        sem.original_title,
-        sem.sort_title,
-        sem.year,
-        sem.release_date,
-        se.show_id,
-        shm.title AS show_title,
-        sem.season_number,
+        'Season' AS metadata_kind,
+        sem."Id" AS metadata_id,
+        sem."Title" AS title,
+        sem."OriginalTitle" AS original_title,
+        sem."SortTitle" AS sort_title,
+        sem."Year" AS year,
+        sem."ReleaseDate" AS release_date,
+        se."ShowId" AS show_id,
+        shm."Title" AS show_title,
+        se."SeasonNumber" AS season_number,
         NULL AS episode_number
-    FROM season_metadata sem
-    JOIN seasons se ON se.id = sem.item_id
-    LEFT JOIN show_metadata shm ON shm.item_id = se.show_id
+    FROM "SeasonMetadata" sem
+    JOIN "Season" se ON se."Id" = sem."SeasonId"
+    LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = se."ShowId"
     UNION ALL
     SELECT
-        em.item_id,
+        em."EpisodeId" AS item_id,
         'episode' AS media_kind,
-        em.metadata_kind,
-        em.id AS metadata_id,
-        em.title,
-        em.original_title,
-        em.sort_title,
-        em.year,
-        em.release_date,
-        e.show_id,
-        shm.title AS show_title,
-        em.season_number,
-        em.episode_number
-    FROM episode_metadata em
-    JOIN episodes e ON e.id = em.item_id
-    LEFT JOIN show_metadata shm ON shm.item_id = e.show_id
+        'Episode' AS metadata_kind,
+        em."Id" AS metadata_id,
+        em."Title" AS title,
+        em."OriginalTitle" AS original_title,
+        em."SortTitle" AS sort_title,
+        em."Year" AS year,
+        em."ReleaseDate" AS release_date,
+        s."ShowId" AS show_id,
+        shm."Title" AS show_title,
+        s."SeasonNumber" AS season_number,
+        em."EpisodeNumber" AS episode_number
+    FROM "EpisodeMetadata" em
+    JOIN "Episode" e ON e."Id" = em."EpisodeId"
+    JOIN "Season" s ON s."Id" = e."SeasonId"
+    LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = s."ShowId"
     UNION ALL
     SELECT
-        mvm.item_id,
+        mvm."MusicVideoId" AS item_id,
         'music_video' AS media_kind,
-        mvm.metadata_kind,
-        mvm.id AS metadata_id,
-        mvm.title,
-        mvm.original_title,
-        mvm.sort_title,
-        mvm.year,
-        mvm.release_date,
+        'MusicVideo' AS metadata_kind,
+        mvm."Id" AS metadata_id,
+        mvm."Title" AS title,
+        mvm."OriginalTitle" AS original_title,
+        mvm."SortTitle" AS sort_title,
+        mvm."Year" AS year,
+        mvm."ReleaseDate" AS release_date,
         NULL AS show_id,
         NULL AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM music_video_metadata mvm
+    FROM "MusicVideoMetadata" mvm
     UNION ALL
     SELECT
-        am.item_id,
+        am."ArtistId" AS item_id,
         'artist' AS media_kind,
-        am.metadata_kind,
-        am.id AS metadata_id,
-        am.title,
-        am.original_title,
-        am.sort_title,
-        am.year,
-        am.release_date,
+        'Artist' AS metadata_kind,
+        am."Id" AS metadata_id,
+        am."Title" AS title,
+        am."OriginalTitle" AS original_title,
+        am."SortTitle" AS sort_title,
+        am."Year" AS year,
+        am."ReleaseDate" AS release_date,
         NULL AS show_id,
         NULL AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM artist_metadata am
+    FROM "ArtistMetadata" am
     UNION ALL
     SELECT
-        ovm.item_id,
+        ovm."OtherVideoId" AS item_id,
         'other_video' AS media_kind,
-        ovm.metadata_kind,
-        ovm.id AS metadata_id,
-        ovm.title,
-        ovm.original_title,
-        ovm.sort_title,
-        ovm.year,
-        ovm.release_date,
+        'OtherVideo' AS metadata_kind,
+        ovm."Id" AS metadata_id,
+        ovm."Title" AS title,
+        ovm."OriginalTitle" AS original_title,
+        ovm."SortTitle" AS sort_title,
+        ovm."Year" AS year,
+        ovm."ReleaseDate" AS release_date,
         NULL AS show_id,
         NULL AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM other_video_metadata ovm
+    FROM "OtherVideoMetadata" ovm
     UNION ALL
     SELECT
-        som.item_id,
+        som."SongId" AS item_id,
         'song' AS media_kind,
-        som.metadata_kind,
-        som.id AS metadata_id,
-        som.title,
-        som.original_title,
-        som.sort_title,
-        som.year,
-        som.release_date,
+        'Song' AS metadata_kind,
+        som."Id" AS metadata_id,
+        som."Title" AS title,
+        som."OriginalTitle" AS original_title,
+        som."SortTitle" AS sort_title,
+        som."Year" AS year,
+        som."ReleaseDate" AS release_date,
         NULL AS show_id,
         NULL AS show_title,
         NULL AS season_number,
         NULL AS episode_number
-    FROM song_metadata som
-    UNION ALL
-    SELECT
-        im.item_id,
-        'image' AS media_kind,
-        im.metadata_kind,
-        im.id AS metadata_id,
-        im.title,
-        im.original_title,
-        im.sort_title,
-        im.year,
-        im.release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM image_metadata im
-    UNION ALL
-    SELECT
-        rsm.item_id,
-        'remote_stream' AS media_kind,
-        rsm.metadata_kind,
-        rsm.id AS metadata_id,
-        rsm.title,
-        rsm.original_title,
-        rsm.sort_title,
-        rsm.year,
-        rsm.release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM remote_stream_metadata rsm
+    FROM "SongMetadata" som
 )
-ORDER BY COALESCE(sort_title, title), item_id";
+ORDER BY COALESCE(sort_title, title), item_id"#;
 
 fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
         collection_type: decode_enum(
             "collection type",
-            &row.try_get::<String, _>("collection_type")?,
+            &row.try_get::<String, _>("CollectionType")?,
         )?,
-        collection_id: optional_id(row, "collection_id")?,
-        multi_collection_id: optional_id(row, "multi_collection_id")?,
-        smart_collection_id: optional_id(row, "smart_collection_id")?,
-        media_item_id: optional_id(row, "media_item_id")?,
-        playlist_id: optional_id(row, "playlist_id")?,
+        collection_id: optional_id(row, "CollectionId")?,
+        multi_collection_id: optional_id(row, "MultiCollectionId")?,
+        smart_collection_id: optional_id(row, "SmartCollectionId")?,
+        media_item_id: optional_id(row, "MediaItemId")?,
+        playlist_id: optional_id(row, "PlaylistId")?,
         search_query: row
-            .try_get::<Option<String>, _>("search_query")
+            .try_get::<Option<String>, _>("SearchQuery")
             .ok()
             .flatten(),
         fake_collection_key: None,
@@ -1406,24 +1498,29 @@ fn collection_key_from_deco_break_content_row(row: &SqliteRow) -> Result<Schedul
     Ok(SchedulingCollectionKey {
         collection_type: decode_enum(
             "deco break content collection type",
-            &row.try_get::<String, _>("collection_type")?,
+            &row.try_get::<String, _>("CollectionType")?,
         )?,
-        collection_id: optional_id(row, "collection_id")?,
-        media_item_id: optional_id(row, "media_item_id")?,
-        playlist_id: optional_id(row, "playlist_id")?,
+        collection_id: optional_id(row, "CollectionId")?,
+        media_item_id: optional_id(row, "MediaItemId")?,
+        playlist_id: optional_id(row, "PlaylistId")?,
         ..SchedulingCollectionKey::default()
     })
 }
 
 fn optional_id(row: &SqliteRow, column: &str) -> Result<Option<EntityId>> {
-    row.try_get::<Option<EntityId>, _>(column)
-        .map_err(Into::into)
+    match row.try_get::<Option<EntityId>, _>(column) {
+        Ok(value) => Ok(value),
+        Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
+    let duration_text: String = row.try_get("duration_text").unwrap_or_default();
+    let duration = decode_duration_text(&duration_text);
     Ok(SchedulingMediaItem {
-        id: row.try_get("id")?,
-        duration: Duration::milliseconds(row.try_get::<i64, _>("duration_ms")?),
+        id: row.try_get("Id")?,
+        duration,
         title: row.try_get("title")?,
         show_id: row.try_get("show_id")?,
         season_id: row.try_get("season_id")?,
@@ -1438,60 +1535,63 @@ fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
 
 fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
     Ok(PlayoutItem {
-        id: row.try_get("id")?,
-        media_item_id: row.try_get("media_item_id")?,
-        start: decode_datetime("playout item start", &row.try_get::<String, _>("start")?)?,
-        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("finish")?)?,
+        id: row.try_get("Id")?,
+        media_item_id: row.try_get("MediaItemId")?,
+        start: decode_datetime("playout item start", &row.try_get::<String, _>("Start")?)?,
+        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("Finish")?)?,
         guide_start: decode_optional_datetime(
             "playout item guide_start",
-            row.try_get("guide_start")?,
+            row.try_get("GuideStart")?,
         )?,
         guide_finish: decode_optional_datetime(
             "playout item guide_finish",
-            row.try_get("guide_finish")?,
+            row.try_get("GuideFinish")?,
         )?,
-        custom_title: row.try_get("custom_title")?,
-        guide_group: row.try_get("guide_group")?,
+        custom_title: row.try_get("CustomTitle")?,
+        guide_group: row.try_get("GuideGroup")?,
         filler_kind: decode_enum(
             "playout item filler_kind",
-            &row.try_get::<String, _>("filler_kind")?,
+            &row.try_get::<String, _>("FillerKind")?,
         )?,
-        playout_id: row.try_get("playout_id")?,
-        in_point: decode_duration(row.try_get("in_point_ms")?),
-        out_point: decode_duration(row.try_get("out_point_ms")?),
-        chapter_title: row.try_get("chapter_title")?,
+        playout_id: row.try_get("PlayoutId")?,
+        in_point: decode_duration_text(&row.try_get::<String, _>("InPoint")?),
+        out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint")?),
+        chapter_title: row.try_get("ChapterTitle")?,
         watermark_ids: Vec::new(),
-        disable_watermarks: row.try_get("disable_watermarks")?,
-        preferred_audio_language_code: row.try_get("preferred_audio_language_code")?,
-        preferred_audio_title: row.try_get("preferred_audio_title")?,
-        preferred_subtitle_language_code: row.try_get("preferred_subtitle_language_code")?,
+        disable_watermarks: row.try_get("DisableWatermarks")?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle")?,
+        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
         subtitle_mode: row
-            .try_get::<Option<String>, _>("subtitle_mode")?
+            .try_get::<Option<String>, _>("SubtitleMode")?
             .as_deref()
             .map(|value| decode_enum::<ChannelSubtitleMode>("playout item subtitle_mode", value))
             .transpose()?,
-        block_key: row.try_get("block_key")?,
-        collection_key: row.try_get("collection_key")?,
-        collection_etag: row.try_get("collection_etag")?,
+        block_key: row.try_get("BlockKey")?,
+        collection_key: row.try_get("CollectionKey")?,
+        collection_etag: row.try_get("CollectionEtag")?,
         graphics_element_ids: Vec::new(),
-        scheduling_context: row.try_get("scheduling_context")?,
+        scheduling_context: row.try_get("SchedulingContext")?,
     })
 }
 
 fn map_playout_history(row: &SqliteRow) -> Result<PlayoutHistory> {
     Ok(PlayoutHistory {
-        id: row.try_get("id")?,
-        playout_id: row.try_get("playout_id")?,
-        key: row.try_get("history_key")?,
-        child_key: row.try_get("child_key")?,
+        id: row.try_get("Id")?,
+        playout_id: row.try_get("PlayoutId")?,
+        key: row.try_get("Key")?,
+        child_key: row.try_get("ChildKey")?,
         when: decode_datetime(
-            "playout history history_when",
-            &row.try_get::<String, _>("history_when")?,
+            "playout history When",
+            &row.try_get::<String, _>("When")?,
         )?,
-        finish: decode_optional_datetime("playout history finish", row.try_get("finish")?)?,
-        index: row.try_get("history_index")?,
-        details: row.try_get("details")?,
-        is_current_child: row.try_get("is_current_child")?,
+        finish: decode_optional_datetime(
+            "playout history Finish",
+            row.try_get("Finish")?,
+        )?,
+        index: row.try_get("Index")?,
+        details: row.try_get("Details")?,
+        is_current_child: row.try_get("IsCurrentChild")?,
     })
 }
 
@@ -1503,6 +1603,32 @@ fn deco_break_content_key(id: EntityId) -> String {
     format!("deco-break-content:{id}")
 }
 
+fn deco_default_filler_key(id: EntityId) -> String {
+    format!("deco-default-filler:{id}")
+}
+
+fn decode_integer_list(kind: &'static str, value: &str) -> Result<Vec<i32>> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(value).map_err(|source| decode_message(kind, &source.to_string()))
+}
+
+fn decode_optional_time_of_day_text(
+    kind: &'static str,
+    value: Option<String>,
+) -> Result<Option<NaiveTime>> {
+    value
+        .map(|inner| decode_time_of_day_text(kind, &inner))
+        .transpose()
+}
+
+fn decode_time_of_day_text(kind: &'static str, value: &str) -> Result<NaiveTime> {
+    NaiveTime::parse_from_str(value, "%H:%M:%S")
+        .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M:%S%.f"))
+        .map_err(|source| decode_message(kind, &source.to_string()))
+}
+
 fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .map(|parsed| parsed.with_timezone(&Utc))
@@ -1510,7 +1636,7 @@ fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
 }
 
 async fn exists_by_id(pool: &Pool<Sqlite>, table: &str, id: EntityId) -> Result<bool> {
-    let sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id = ?)");
+    let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "Id" = ?)"#);
     sqlx::query_scalar::<_, bool>(&sql)
         .bind(id)
         .fetch_one(pool)

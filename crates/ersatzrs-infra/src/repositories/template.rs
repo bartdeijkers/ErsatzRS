@@ -12,7 +12,7 @@ pub struct SqliteTemplateRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl TemplateRepository for SqliteTemplateRepository {
     async fn get_with_items(&self, id: EntityId) -> Result<Template> {
-        let row = sqlx::query("SELECT * FROM templates WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "Template" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
@@ -20,7 +20,7 @@ impl TemplateRepository for SqliteTemplateRepository {
         let mut template = map_template(&row)?;
         template.item_ids = load_ids(
             &self.0,
-            "SELECT id FROM template_items WHERE template_id = ? ORDER BY sort_order, id",
+            r#"SELECT "Id" FROM "TemplateItem" WHERE "TemplateId" = ? ORDER BY "StartTime", "Id""#,
             id,
         )
         .await?;
@@ -28,11 +28,12 @@ impl TemplateRepository for SqliteTemplateRepository {
     }
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Template>> {
-        let rows =
-            sqlx::query("SELECT * FROM templates WHERE template_group_id = ? ORDER BY name, id")
-                .bind(group_id)
-                .fetch_all(&self.0)
-                .await?;
+        let rows = sqlx::query(
+            r#"SELECT * FROM "Template" WHERE "TemplateGroupId" = ? ORDER BY "Name", "Id""#,
+        )
+        .bind(group_id)
+        .fetch_all(&self.0)
+        .await?;
         rows.iter()
             .map(|row| {
                 let mut template = map_template(row)?;
@@ -45,11 +46,14 @@ impl TemplateRepository for SqliteTemplateRepository {
     async fn upsert(&self, template: &Template) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            "INSERT OR REPLACE INTO templates (id, template_group_id, name) VALUES (?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "Template" (
+                "Id", "TemplateGroupId", "Name", "DateUpdated"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(template.id)
         .bind(template.template_group_id)
         .bind(&template.name)
+        .bind(template.updated_ticks.to_string())
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
@@ -59,9 +63,14 @@ impl TemplateRepository for SqliteTemplateRepository {
 
 fn map_template(row: &SqliteRow) -> Result<Template> {
     Ok(Template {
-        id: row.try_get("id")?,
-        template_group_id: row.try_get("template_group_id")?,
-        name: row.try_get("name")?,
+        id: row.try_get("Id")?,
+        template_group_id: row.try_get("TemplateGroupId")?,
+        name: row.try_get("Name")?,
+        updated_ticks: row
+            .try_get::<String, _>("DateUpdated")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0),
         item_ids: Vec::new(),
     })
 }

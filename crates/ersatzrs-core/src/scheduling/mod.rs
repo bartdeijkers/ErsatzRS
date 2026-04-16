@@ -17,7 +17,7 @@ use crate::repositories::Result as RepositoryResult;
 pub use block::{
     BlockDefinition, BlockKey, BlockSchedulingEngine, BlockTemplate, BlockTemplateItem,
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
-    EffectiveDeco,
+    EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
 pub use scripted::ScriptedSchedulingEngine;
 pub use yaml::{

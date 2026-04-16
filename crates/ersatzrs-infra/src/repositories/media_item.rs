@@ -12,7 +12,7 @@ pub struct SqliteMediaItemRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl MediaItemRepository for SqliteMediaItemRepository {
     async fn get_with_version(&self, id: EntityId) -> Result<MediaItem> {
-        let row = sqlx::query("SELECT * FROM media_items WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "MediaItem" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
@@ -21,20 +21,30 @@ impl MediaItemRepository for SqliteMediaItemRepository {
     }
 
     async fn list_for_library_path(&self, path_id: EntityId) -> Result<Vec<MediaItem>> {
-        let rows = sqlx::query("SELECT * FROM media_items WHERE library_path_id = ? ORDER BY id")
-            .bind(path_id)
-            .fetch_all(&self.0)
-            .await?;
+        let rows = sqlx::query(
+            r#"SELECT * FROM "MediaItem" WHERE "LibraryPathId" = ? ORDER BY "Id""#,
+        )
+        .bind(path_id)
+        .fetch_all(&self.0)
+        .await?;
         rows.iter().map(map_media_item).collect()
     }
 
     async fn find_by_path(&self, path: &str) -> Result<MediaItem> {
         let row = sqlx::query(
-            "SELECT mi.*
-             FROM media_items mi
-             JOIN media_versions mv ON mv.media_item_id = mi.id
-             JOIN media_files mf ON mf.media_version_id = mv.id
-             WHERE mf.path = ?",
+            r#"SELECT mi.*
+             FROM "MediaItem" mi
+             JOIN "MediaVersion" mv ON (
+                 mv."MovieId" = mi."Id"
+                 OR mv."EpisodeId" = mi."Id"
+                 OR mv."MusicVideoId" = mi."Id"
+                 OR mv."OtherVideoId" = mi."Id"
+                 OR mv."SongId" = mi."Id"
+                 OR mv."ImageId" = mi."Id"
+                 OR mv."RemoteStreamId" = mi."Id"
+             )
+             JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
+             WHERE mf."Path" = ?"#,
         )
         .bind(path)
         .fetch_one(&self.0)
@@ -44,7 +54,7 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO media_items (id, library_path_id, state) VALUES (?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.library_path_id)
@@ -57,10 +67,10 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
 fn map_media_item(row: &SqliteRow) -> Result<MediaItem> {
     Ok(MediaItem {
-        id: row.try_get("id")?,
-        library_path_id: row.try_get("library_path_id")?,
+        id: row.try_get("Id")?,
+        library_path_id: row.try_get("LibraryPathId")?,
         collection_ids: Vec::new(),
         trakt_list_item_ids: Vec::new(),
-        state: decode_enum("media item state", &row.try_get::<String, _>("state")?)?,
+        state: decode_enum("media item state", &row.try_get::<String, _>("State")?)?,
     })
 }

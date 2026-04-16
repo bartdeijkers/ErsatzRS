@@ -27,8 +27,8 @@ async fn program_schedule_repository_loads_items_and_lists_for_playout() {
         .await
         .unwrap();
     pool.execute(
-        "INSERT OR REPLACE INTO playouts (id, channel_id, program_schedule_id, schedule_kind, seed)
-         VALUES (1, 1, 1, 'Classic', 0)",
+        r#"INSERT OR REPLACE INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+         VALUES (1, 1, 1, 0, 0)"#,
     )
     .await
     .unwrap();

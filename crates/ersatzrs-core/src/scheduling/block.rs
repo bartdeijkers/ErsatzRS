@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Datelike, Duration, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
 use ersatzrs_domain::{
     BlockStopScheduling, CollectionType, DecoBreakPlacement, EntityId, FillerKind, PlaybackOrder,
     PlayoutItem,
@@ -43,7 +43,11 @@ impl EffectiveBlock {
 
         let mut effective_blocks = Vec::new();
         while day < finish {
-            if let Some(schedule) = schedules.iter().find(|schedule| schedule.applies_to(day)) {
+            if let Some(schedule) = schedules
+                .iter()
+                .filter(|schedule| schedule.applies_to(day))
+                .min_by_key(|schedule| schedule.index)
+            {
                 for item in &schedule.template.items {
                     if let Some(block) = schedule.blocks.get(&item.block_id) {
                         let start_time = item.start_time.unwrap_or_else(|| {
@@ -135,24 +139,157 @@ pub struct EffectiveBreakContent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EffectiveDecoTemplateItem {
+    pub start_time: NaiveTime,
+    pub end_time: NaiveTime,
+    pub selection: EffectiveDecoSelection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectiveDecoSelection {
+    Inherit,
+    Disable,
+    Override(Option<EffectiveDeco>),
+}
+
+impl EffectiveDecoSelection {
+    fn resolve(&self, channel_deco: Option<&EffectiveDeco>) -> Option<EffectiveDeco> {
+        match self {
+            Self::Inherit => channel_deco.cloned(),
+            Self::Disable => None,
+            Self::Override(deco) => deco.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockTemplateSchedule {
     pub id: EntityId,
     pub updated_ticks: i64,
     pub start: Option<DateTime<Utc>>,
     pub finish: Option<DateTime<Utc>>,
+    pub index: i32,
+    pub days_of_week: Vec<i32>,
+    pub days_of_month: Vec<i32>,
+    pub months_of_year: Vec<i32>,
+    pub limit_to_date_range: bool,
+    pub start_month: i32,
+    pub start_day: i32,
+    pub start_year: Option<i32>,
+    pub end_month: i32,
+    pub end_day: i32,
+    pub end_year: Option<i32>,
     pub template: BlockTemplate,
     pub blocks: BTreeMap<EntityId, BlockDefinition>,
     pub deco: Option<EffectiveDeco>,
+    pub deco_template_items: Vec<EffectiveDecoTemplateItem>,
 }
 
 impl BlockTemplateSchedule {
     fn applies_to(&self, day: DateTime<Utc>) -> bool {
-        self.start.is_none_or(|start| day >= start) && self.finish.is_none_or(|finish| day < finish)
+        if !(self.start.is_none_or(|start| day >= start)
+            && self.finish.is_none_or(|finish| day < finish))
+        {
+            return false;
+        }
+
+        let day_date = day.date_naive();
+        if self.limit_to_date_range && !date_matches_range(self, day_date) {
+            return false;
+        }
+
+        matches_integer_filter(&self.days_of_week, csharp_day_of_week(day.weekday()))
+            && matches_integer_filter(
+                &self.days_of_month,
+                i32::try_from(day.day()).unwrap_or_default(),
+            )
+            && matches_integer_filter(
+                &self.months_of_year,
+                i32::try_from(day.month()).unwrap_or_default(),
+            )
     }
 
-    fn deco_for(&self, _block_start: DateTime<Utc>) -> Option<EffectiveDeco> {
+    fn deco_for(&self, block_start: DateTime<Utc>) -> Option<EffectiveDeco> {
+        let time_of_day = block_start.time();
+        for item in &self.deco_template_items {
+            if (item.start_time <= time_of_day && item.end_time == NaiveTime::MIN)
+                || item.end_time > time_of_day
+            {
+                return item.selection.resolve(self.deco.as_ref());
+            }
+        }
+
         self.deco.clone()
     }
+}
+
+fn matches_integer_filter(values: &[i32], needle: i32) -> bool {
+    values.is_empty() || values.contains(&needle)
+}
+
+fn csharp_day_of_week(weekday: chrono::Weekday) -> i32 {
+    match weekday {
+        chrono::Weekday::Mon => 1,
+        chrono::Weekday::Tue => 2,
+        chrono::Weekday::Wed => 3,
+        chrono::Weekday::Thu => 4,
+        chrono::Weekday::Fri => 5,
+        chrono::Weekday::Sat => 6,
+        chrono::Weekday::Sun => 0,
+    }
+}
+
+fn date_matches_range(schedule: &BlockTemplateSchedule, day: NaiveDate) -> bool {
+    let mut reverse = schedule.start_month * 100 + schedule.start_day
+        > schedule.end_month * 100 + schedule.end_day;
+
+    let mut start_year = day.year();
+    let mut end_year = day.year();
+    if let (Some(explicit_start_year), Some(explicit_end_year)) =
+        (schedule.start_year, schedule.end_year)
+    {
+        start_year = explicit_start_year;
+        end_year = explicit_end_year;
+        reverse = false;
+    }
+
+    let mut start = start_range_date(start_year, schedule.start_month, schedule.start_day);
+    let mut end = end_range_date(end_year, schedule.end_month, schedule.end_day);
+
+    if reverse {
+        std::mem::swap(&mut start, &mut end);
+        !(day > start && day < end)
+    } else {
+        day >= start && day <= end
+    }
+}
+
+fn start_range_date(year: i32, month: i32, day: i32) -> NaiveDate {
+    let month = month.clamp(1, 12).cast_unsigned();
+    let day = day.max(1).cast_unsigned();
+    NaiveDate::from_ymd_opt(year, month, day).unwrap_or_else(|| {
+        let month_start = NaiveDate::from_ymd_opt(year, month, 1).expect("valid month start");
+        month_start
+            + Duration::days(i64::from(days_in_month(
+                month_start.year(),
+                month_start.month(),
+            )))
+    })
+}
+
+fn end_range_date(year: i32, month: i32, day: i32) -> NaiveDate {
+    let month = month.clamp(1, 12).cast_unsigned();
+    let day = day.max(1).cast_unsigned();
+    NaiveDate::from_ymd_opt(year, month, day).unwrap_or_else(|| {
+        NaiveDate::from_ymd_opt(year, month, days_in_month(year, month)).expect("valid month end")
+    })
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    (28..=31)
+        .rev()
+        .find(|day| NaiveDate::from_ymd_opt(year, month, *day).is_some())
+        .unwrap_or(28)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +349,7 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
         apply_block_deco_filler(
             request.playout.id,
             request.playout.seed,
+            request.finish,
             &request.reference_data,
             &mut result,
         );
@@ -528,6 +666,7 @@ fn collection_changed(item: &PlayoutItem, collection_etags: &BTreeMap<String, St
 fn apply_block_deco_filler(
     playout_id: EntityId,
     playout_seed: i32,
+    schedule_finish: DateTime<Utc>,
     reference_data: &super::SchedulingReferenceData,
     result: &mut SchedulingResult,
 ) {
@@ -535,6 +674,9 @@ fn apply_block_deco_filler(
     blocks.sort_by_key(|block| block.start);
 
     for block in blocks {
+        if block.start >= schedule_finish {
+            continue;
+        }
         let Some(deco) = &block.deco else {
             continue;
         };
@@ -890,6 +1032,17 @@ mod tests {
             updated_ticks: 11,
             start: None,
             finish: None,
+            index: 0,
+            days_of_week: vec![1, 2, 3, 4, 5, 6, 0],
+            days_of_month: (1..=31).collect(),
+            months_of_year: (1..=12).collect(),
+            limit_to_date_range: false,
+            start_month: 1,
+            start_day: 1,
+            start_year: None,
+            end_month: 12,
+            end_day: 31,
+            end_year: None,
             template: BlockTemplate {
                 id: 2000,
                 updated_ticks: 22,
@@ -921,6 +1074,7 @@ mod tests {
                 default_filler_trim_to_fit: true,
                 break_content: Vec::new(),
             }),
+            deco_template_items: Vec::new(),
         };
 
         let blocks = EffectiveBlock::from_templates(&[schedule], start, 2);
@@ -1083,6 +1237,168 @@ mod tests {
         insta::assert_json_snapshot!(serde_json::json!({
             "items": timeline(&result.added_items),
         }));
+    }
+
+    #[test]
+    fn alternate_schedule_selector_prefers_first_matching_index_and_reverse_date_ranges() {
+        let start = utc("2026-01-05T08:00:00Z");
+        let schedules = vec![
+            BlockTemplateSchedule {
+                id: 2,
+                updated_ticks: 2,
+                start: None,
+                finish: None,
+                index: 1,
+                days_of_week: vec![1],
+                days_of_month: (1..=31).collect(),
+                months_of_year: vec![1],
+                limit_to_date_range: true,
+                start_month: 12,
+                start_day: 25,
+                start_year: None,
+                end_month: 1,
+                end_day: 10,
+                end_year: None,
+                template: BlockTemplate {
+                    id: 20,
+                    updated_ticks: 20,
+                    items: vec![BlockTemplateItem {
+                        id: 200,
+                        block_id: 2000,
+                        start_time: Some(NaiveTime::from_hms_opt(8, 0, 0).expect("valid time")),
+                        sort_order: 0,
+                    }],
+                },
+                blocks: BTreeMap::from([(
+                    2000,
+                    BlockDefinition {
+                        id: 2000,
+                        updated_ticks: 2000,
+                        name: "holiday".to_owned(),
+                        duration: Duration::minutes(30),
+                        stop_scheduling: BlockStopScheduling::BeforeDurationEnd,
+                        items: vec![block_item(2001, 2000, "holiday", true)],
+                    },
+                )]),
+                deco: None,
+                deco_template_items: Vec::new(),
+            },
+            BlockTemplateSchedule {
+                id: 1,
+                updated_ticks: 1,
+                start: None,
+                finish: None,
+                index: 0,
+                days_of_week: vec![1],
+                days_of_month: (1..=31).collect(),
+                months_of_year: vec![1],
+                limit_to_date_range: false,
+                start_month: 1,
+                start_day: 1,
+                start_year: None,
+                end_month: 12,
+                end_day: 31,
+                end_year: None,
+                template: BlockTemplate {
+                    id: 10,
+                    updated_ticks: 10,
+                    items: vec![BlockTemplateItem {
+                        id: 100,
+                        block_id: 1000,
+                        start_time: Some(NaiveTime::from_hms_opt(8, 0, 0).expect("valid time")),
+                        sort_order: 0,
+                    }],
+                },
+                blocks: BTreeMap::from([(
+                    1000,
+                    BlockDefinition {
+                        id: 1000,
+                        updated_ticks: 1000,
+                        name: "default".to_owned(),
+                        duration: Duration::minutes(30),
+                        stop_scheduling: BlockStopScheduling::BeforeDurationEnd,
+                        items: vec![block_item(1001, 1000, "default", true)],
+                    },
+                )]),
+                deco: None,
+                deco_template_items: Vec::new(),
+            },
+        ];
+
+        let blocks = EffectiveBlock::from_templates(&schedules, start, 1);
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].block_id, 1000);
+        assert_eq!(
+            blocks[0]
+                .block_key
+                .as_ref()
+                .map(|key| key.playout_template_id),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn deco_template_items_can_override_or_disable_channel_deco() {
+        let channel_deco = EffectiveDeco {
+            id: 10,
+            default_filler_content: Some("channel-filler".to_owned()),
+            default_filler_collection_key: Some(collection_key(CollectionType::Collection, 10)),
+            default_filler_trim_to_fit: true,
+            break_content: Vec::new(),
+        };
+        let override_deco = EffectiveDeco {
+            id: 11,
+            default_filler_content: Some("override-filler".to_owned()),
+            default_filler_collection_key: Some(collection_key(CollectionType::Collection, 11)),
+            default_filler_trim_to_fit: false,
+            break_content: Vec::new(),
+        };
+        let schedule = BlockTemplateSchedule {
+            id: 1,
+            updated_ticks: 1,
+            start: None,
+            finish: None,
+            index: 0,
+            days_of_week: vec![1, 2, 3, 4, 5, 6, 0],
+            days_of_month: (1..=31).collect(),
+            months_of_year: (1..=12).collect(),
+            limit_to_date_range: false,
+            start_month: 1,
+            start_day: 1,
+            start_year: None,
+            end_month: 12,
+            end_day: 31,
+            end_year: None,
+            template: BlockTemplate {
+                id: 1,
+                updated_ticks: 1,
+                items: Vec::new(),
+            },
+            blocks: BTreeMap::new(),
+            deco: Some(channel_deco.clone()),
+            deco_template_items: vec![
+                EffectiveDecoTemplateItem {
+                    start_time: NaiveTime::from_hms_opt(6, 0, 0).expect("valid time"),
+                    end_time: NaiveTime::from_hms_opt(12, 0, 0).expect("valid time"),
+                    selection: EffectiveDecoSelection::Override(Some(override_deco.clone())),
+                },
+                EffectiveDecoTemplateItem {
+                    start_time: NaiveTime::from_hms_opt(12, 0, 0).expect("valid time"),
+                    end_time: NaiveTime::MIN,
+                    selection: EffectiveDecoSelection::Disable,
+                },
+            ],
+        };
+
+        assert_eq!(
+            schedule
+                .deco_for(utc("2026-04-15T08:00:00Z"))
+                .as_ref()
+                .map(|deco| deco.id),
+            Some(11)
+        );
+        assert_eq!(schedule.deco_for(utc("2026-04-15T14:00:00Z")), None);
     }
 
     fn schedule(

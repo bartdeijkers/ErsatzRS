@@ -12,21 +12,22 @@ pub struct SqliteCollectionRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl CollectionRepository for SqliteCollectionRepository {
     async fn get_with_items(&self, id: EntityId) -> Result<Collection> {
-        let row = sqlx::query("SELECT * FROM collections WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "Collection" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
             .map_err(|error| not_found("collection", id, error))?;
         let mut collection = map_collection(&row)?;
+        // ErsatzTV CollectionItem has no Id or sort_order - use MediaItemId as the item id
         collection.item_ids = load_ids(
             &self.0,
-            "SELECT id FROM collection_items WHERE collection_id = ? ORDER BY sort_order, id",
+            r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
             id,
         )
         .await?;
         collection.media_item_ids = load_ids(
             &self.0,
-            "SELECT media_item_id FROM collection_items WHERE collection_id = ? ORDER BY sort_order, id",
+            r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
             id,
         )
         .await?;
@@ -35,11 +36,11 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn list_for_media_item(&self, item_id: EntityId) -> Result<Vec<Collection>> {
         let rows = sqlx::query(
-            "SELECT c.*
-             FROM collections c
-             JOIN collection_items ci ON ci.collection_id = c.id
-             WHERE ci.media_item_id = ?
-             ORDER BY c.name, c.id",
+            r#"SELECT c.*
+             FROM "Collection" c
+             JOIN "CollectionItem" ci ON ci."CollectionId" = c."Id"
+             WHERE ci."MediaItemId" = ?
+             ORDER BY c."Name", c."Id""#,
         )
         .bind(item_id)
         .fetch_all(&self.0)
@@ -55,38 +56,38 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 
     async fn get_smart(&self, id: EntityId) -> Result<SmartCollection> {
-        let row = sqlx::query("SELECT * FROM smart_collections WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "SmartCollection" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
             .map_err(|error| not_found("smart collection", id, error))?;
         Ok(SmartCollection {
-            id: row.try_get("id")?,
-            name: row.try_get("name")?,
-            query: row.try_get("query")?,
+            id: row.try_get("Id")?,
+            name: row.try_get("Name")?,
+            query: row.try_get("Query")?,
         })
     }
 
     async fn get_playlist_with_items(&self, id: EntityId) -> Result<Playlist> {
-        let row = sqlx::query("SELECT * FROM playlists WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "Playlist" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
             .map_err(|error| not_found("playlist", id, error))?;
         let mut playlist = Playlist {
-            id: row.try_get("id")?,
-            name: row.try_get("name")?,
+            id: row.try_get("Id")?,
+            name: row.try_get("Name")?,
             item_ids: Vec::new(),
             group_ids: load_ids(
                 &self.0,
-                "SELECT id FROM playlist_groups WHERE playlist_id = ? ORDER BY sort_order, id",
+                r#"SELECT "Id" FROM "PlaylistGroup" WHERE "Id" = (SELECT "PlaylistGroupId" FROM "Playlist" WHERE "Id" = ?) ORDER BY "Id""#,
                 id,
             )
             .await?,
         };
         playlist.item_ids = load_ids(
             &self.0,
-            "SELECT id FROM playlist_items WHERE playlist_id = ? ORDER BY sort_order, id",
+            r#"SELECT "Id" FROM "PlaylistItem" WHERE "PlaylistId" = ? ORDER BY "Index", "Id""#,
             id,
         )
         .await?;
@@ -95,31 +96,25 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn upsert(&self, collection: &Collection) -> Result<()> {
         let mut tx = self.0.begin().await?;
+        // ErsatzTV Collection has no collection_type column; UseCustomPlaybackOrder is always false
         sqlx::query(
-            "INSERT OR REPLACE INTO collections (id, name, collection_type) VALUES (?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
         )
         .bind(collection.id)
         .bind(&collection.name)
-        .bind(format!("{:?}", collection.collection_type))
         .execute(&mut *tx)
         .await?;
 
-        sqlx::query("DELETE FROM collection_items WHERE collection_id = ?")
+        sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
             .bind(collection.id)
             .execute(&mut *tx)
             .await?;
-        for (index, media_item_id) in collection.media_item_ids.iter().enumerate() {
-            let fallback_id = media_item_id
-                .saturating_mul(10_000)
-                .saturating_add(i64::try_from(index).unwrap_or(i64::MAX));
+        for media_item_id in &collection.media_item_ids {
             sqlx::query(
-                "INSERT OR REPLACE INTO collection_items (id, collection_id, media_item_id, sort_order)
-                 VALUES (?, ?, ?, ?)",
+                r#"INSERT OR REPLACE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
             )
-            .bind(collection.item_ids.get(index).copied().unwrap_or(fallback_id))
             .bind(collection.id)
             .bind(media_item_id)
-            .bind(i32::try_from(index).unwrap_or(i32::MAX))
             .execute(&mut *tx)
             .await?;
         }
@@ -131,12 +126,10 @@ impl CollectionRepository for SqliteCollectionRepository {
 
 fn map_collection(row: &SqliteRow) -> Result<Collection> {
     Ok(Collection {
-        id: row.try_get("id")?,
-        name: row.try_get("name")?,
-        collection_type: decode_enum(
-            "collection type",
-            &row.try_get::<String, _>("collection_type")?,
-        )?,
+        id: row.try_get("Id")?,
+        name: row.try_get("Name")?,
+        // ErsatzTV Collection has no collection_type; default to Collection
+        collection_type: ersatzrs_domain::CollectionType::Collection,
         media_item_ids: Vec::new(),
         item_ids: Vec::new(),
     })

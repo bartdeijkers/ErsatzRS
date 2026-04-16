@@ -6,9 +6,9 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
 use super::common::{
-    decode_datetime, decode_duration, decode_enum, decode_optional_datetime,
-    decode_optional_duration, encode_datetime, encode_optional_datetime, load_ids, not_found,
-    replace_ids,
+    decode_datetime, decode_duration_text, decode_enum, decode_message, decode_optional_datetime,
+    decode_optional_duration_text, encode_datetime, encode_duration, encode_optional_datetime,
+    load_ids, not_found, replace_ids,
 };
 
 #[derive(Clone)]
@@ -17,7 +17,7 @@ pub struct SqlitePlayoutRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl PlayoutRepository for SqlitePlayoutRepository {
     async fn get_with_anchor(&self, id: EntityId) -> Result<Playout> {
-        let row = sqlx::query("SELECT * FROM playouts WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "Playout" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
@@ -25,55 +25,63 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         let mut playout = map_playout(&row)?;
         playout.item_ids = load_ids(
             &self.0,
-            "SELECT id FROM playout_items WHERE playout_id = ? ORDER BY start, id",
+            r#"SELECT "Id" FROM "PlayoutItem" WHERE "PlayoutId" = ? ORDER BY "Start", "Id""#,
             id,
         )
         .await?;
         playout.gap_ids = load_ids(
             &self.0,
-            "SELECT id FROM playout_gaps WHERE playout_id = ? ORDER BY start, id",
+            r#"SELECT "Id" FROM "PlayoutGap" WHERE "PlayoutId" = ? ORDER BY "Start", "Id""#,
             id,
         )
         .await?;
         playout.program_schedule_anchor_ids = load_ids(
             &self.0,
-            "SELECT id FROM playout_program_schedule_anchors WHERE playout_id = ? ORDER BY id",
+            r#"SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = ? ORDER BY "Id""#,
             id,
         )
         .await?;
         playout.fill_group_index_ids = load_ids(
             &self.0,
-            "SELECT id FROM playout_schedule_item_fill_group_indices WHERE playout_id = ? ORDER BY id",
+            r#"SELECT "Id" FROM "PlayoutScheduleItemFillGroupIndex" WHERE "PlayoutId" = ? ORDER BY "Id""#,
             id,
         )
         .await?;
         playout.playout_history_ids = load_ids(
             &self.0,
-            "SELECT id FROM playout_history WHERE playout_id = ? ORDER BY history_when, id",
+            r#"SELECT "Id" FROM "PlayoutHistory" WHERE "PlayoutId" = ? ORDER BY "When", "Id""#,
             id,
         )
         .await?;
-        let template_ids = load_ids(
-            &self.0,
-            "SELECT template_id FROM playout_templates WHERE playout_id = ? ORDER BY template_id",
-            id,
+        let template_rows = sqlx::query(
+            r#"SELECT *
+             FROM "PlayoutTemplate"
+             WHERE "PlayoutId" = ?
+             ORDER BY "Index", "TemplateId""#,
         )
+        .bind(id)
+        .fetch_all(&self.0)
         .await?;
-        playout.templates = template_ids
-            .into_iter()
-            .map(|template_id| ersatzrs_domain::PlayoutTemplate {
-                playout_id: id,
-                template_id,
-            })
-            .collect();
+        playout.templates = template_rows
+            .iter()
+            .map(map_playout_template)
+            .collect::<Result<Vec<_>>>()?;
 
-        let anchor = sqlx::query("SELECT * FROM playout_anchors WHERE playout_id = ?")
+        let anchor = sqlx::query(r#"SELECT * FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#)
             .bind(id)
             .fetch_optional(&self.0)
             .await?;
-        playout.anchor = anchor.as_ref().map(map_anchor).transpose()?;
+        if let Some(ref anchor_row) = anchor {
+            let state_row = sqlx::query(
+                r#"SELECT "Seed", "Index" FROM "ScheduleItemsEnumeratorState" WHERE "PlayoutAnchorPlayoutId" = ?"#,
+            )
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await?;
+            playout.anchor = Some(map_anchor(anchor_row, state_row.as_ref())?);
+        }
 
-        let status = sqlx::query("SELECT * FROM playout_build_statuses WHERE playout_id = ?")
+        let status = sqlx::query(r#"SELECT * FROM "PlayoutBuildStatus" WHERE "PlayoutId" = ?"#)
             .bind(id)
             .fetch_optional(&self.0)
             .await?;
@@ -88,10 +96,10 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         finish: DateTime<Utc>,
     ) -> Result<Vec<PlayoutItem>> {
         let rows = sqlx::query(
-            "SELECT *
-             FROM playout_items
-             WHERE playout_id = ? AND start < ? AND finish > ?
-             ORDER BY start, id",
+            r#"SELECT *
+             FROM "PlayoutItem"
+             WHERE "PlayoutId" = ? AND "Start" < ? AND "Finish" > ?
+             ORDER BY "Start", "Id""#,
         )
         .bind(playout_id)
         .bind(finish.to_rfc3339())
@@ -100,17 +108,17 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .await?;
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
-            let item_id: EntityId = row.try_get("id")?;
+            let item_id: EntityId = row.try_get("Id")?;
             let mut item = map_playout_item(row)?;
             item.watermark_ids = load_ids(
                 &self.0,
-                "SELECT watermark_id FROM playout_item_watermarks WHERE playout_item_id = ? ORDER BY watermark_id",
+                r#"SELECT "WatermarkId" FROM "PlayoutItemWatermark" WHERE "PlayoutItemId" = ? ORDER BY "WatermarkId""#,
                 item_id,
             )
             .await?;
             item.graphics_element_ids = load_ids(
                 &self.0,
-                "SELECT graphics_element_id FROM playout_item_graphics_elements WHERE playout_item_id = ? ORDER BY graphics_element_id",
+                r#"SELECT "GraphicsElementId" FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ? ORDER BY "GraphicsElementId""#,
                 item_id,
             )
             .await?;
@@ -122,13 +130,13 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            "INSERT OR REPLACE INTO playout_items (
-                id, playout_id, media_item_id, start, finish, guide_start, guide_finish,
-                custom_title, guide_group, filler_kind, in_point_ms, out_point_ms,
-                chapter_title, disable_watermarks, preferred_audio_language_code,
-                preferred_audio_title, preferred_subtitle_language_code, subtitle_mode,
-                block_key, collection_key, collection_etag, scheduling_context
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "PlayoutItem" (
+                "Id", "PlayoutId", "MediaItemId", "Start", "Finish", "GuideStart", "GuideFinish",
+                "CustomTitle", "GuideGroup", "FillerKind", "InPoint", "OutPoint",
+                "ChapterTitle", "DisableWatermarks", "PreferredAudioLanguageCode",
+                "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode",
+                "BlockKey", "CollectionKey", "CollectionEtag", "SchedulingContext"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.playout_id)
@@ -140,8 +148,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .bind(&item.custom_title)
         .bind(item.guide_group)
         .bind(format!("{:?}", item.filler_kind))
-        .bind(item.in_point.num_milliseconds())
-        .bind(item.out_point.num_milliseconds())
+        .bind(encode_duration(item.in_point))
+        .bind(encode_duration(item.out_point))
         .bind(&item.chapter_title)
         .bind(item.disable_watermarks)
         .bind(&item.preferred_audio_language_code)
@@ -156,16 +164,16 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         .await?;
         replace_ids(
             &mut tx,
-            "DELETE FROM playout_item_watermarks WHERE playout_item_id = ?",
-            "INSERT OR REPLACE INTO playout_item_watermarks (playout_item_id, watermark_id) VALUES (?, ?)",
+            r#"DELETE FROM "PlayoutItemWatermark" WHERE "PlayoutItemId" = ?"#,
+            r#"INSERT OR REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
             item.id,
             &item.watermark_ids,
         )
         .await?;
         replace_ids(
             &mut tx,
-            "DELETE FROM playout_item_graphics_elements WHERE playout_item_id = ?",
-            "INSERT OR REPLACE INTO playout_item_graphics_elements (playout_item_id, graphics_element_id) VALUES (?, ?)",
+            r#"DELETE FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ?"#,
+            r#"INSERT OR REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
             item.id,
             &item.graphics_element_ids,
         )
@@ -175,7 +183,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     }
 
     async fn delete_items_before(&self, playout_id: EntityId, cutoff: DateTime<Utc>) -> Result<()> {
-        sqlx::query("DELETE FROM playout_items WHERE playout_id = ? AND finish < ?")
+        sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
             .bind(playout_id)
             .bind(encode_datetime(cutoff))
             .execute(&self.0)
@@ -185,8 +193,8 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
     async fn upsert_build_status(&self, status: &PlayoutBuildStatus) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO playout_build_statuses (playout_id, last_build, success, message)
-             VALUES (?, ?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
+             VALUES (?, ?, ?, ?)"#,
         )
         .bind(status.playout_id)
         .bind(encode_datetime(status.last_build))
@@ -199,15 +207,18 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 }
 
 fn map_playout(row: &SqliteRow) -> Result<Playout> {
+    let daily_rebuild_time = decode_optional_duration_text(
+        row.try_get::<Option<String>, _>("DailyRebuildTime")?,
+    );
     Ok(Playout {
-        id: row.try_get("id")?,
-        channel_id: row.try_get("channel_id")?,
-        program_schedule_id: row.try_get("program_schedule_id")?,
-        schedule_file: row.try_get("schedule_file")?,
+        id: row.try_get("Id")?,
+        channel_id: row.try_get("ChannelId")?,
+        program_schedule_id: row.try_get("ProgramScheduleId")?,
+        schedule_file: row.try_get("ScheduleFile")?,
         program_schedule_alternate_ids: Vec::new(),
         schedule_kind: decode_enum(
             "playout schedule_kind",
-            &row.try_get::<String, _>("schedule_kind")?,
+            &row.try_get::<String, _>("ScheduleKind")?,
         )?,
         item_ids: Vec::new(),
         gap_ids: Vec::new(),
@@ -216,90 +227,143 @@ fn map_playout(row: &SqliteRow) -> Result<Playout> {
         fill_group_index_ids: Vec::new(),
         templates: Vec::new(),
         playout_history_ids: Vec::new(),
-        seed: row.try_get("seed")?,
-        daily_rebuild_time: decode_optional_duration(row.try_get("daily_rebuild_time_ms")?),
-        deco_id: row.try_get("deco_id")?,
+        seed: row.try_get("Seed")?,
+        daily_rebuild_time,
+        deco_id: row.try_get("DecoId")?,
         on_demand_checkpoint: decode_optional_datetime(
             "playout on_demand_checkpoint",
-            row.try_get("on_demand_checkpoint")?,
+            row.try_get("OnDemandCheckpoint")?,
         )?,
         build_status: None,
     })
 }
 
-fn map_anchor(row: &SqliteRow) -> Result<ersatzrs_domain::PlayoutAnchor> {
+fn map_anchor(
+    row: &SqliteRow,
+    state_row: Option<&SqliteRow>,
+) -> Result<ersatzrs_domain::PlayoutAnchor> {
+    let (seed, index) = if let Some(state) = state_row {
+        (
+            state.try_get("Seed").unwrap_or(0),
+            state.try_get("Index").unwrap_or(0),
+        )
+    } else {
+        (0, 0)
+    };
     Ok(ersatzrs_domain::PlayoutAnchor {
         schedule_items_enumerator_state: ersatzrs_domain::CollectionEnumeratorState {
-            seed: row.try_get("schedule_items_seed")?,
-            index: row.try_get("schedule_items_index")?,
+            seed,
+            index,
         },
         next_start: decode_datetime(
             "playout anchor next_start",
-            &row.try_get::<String, _>("next_start")?,
+            &row.try_get::<String, _>("NextStart")?,
         )?,
-        multiple_remaining: row.try_get("multiple_remaining")?,
+        multiple_remaining: row.try_get("MultipleRemaining")?,
         duration_finish: decode_optional_datetime(
             "playout anchor duration_finish",
-            row.try_get("duration_finish")?,
+            row.try_get("DurationFinish")?,
         )?,
-        in_flood: row.try_get("in_flood")?,
-        in_duration_filler: row.try_get("in_duration_filler")?,
-        next_guide_group: row.try_get("next_guide_group")?,
-        next_instruction_index: row.try_get("next_instruction_index")?,
-        context: row.try_get("context")?,
+        in_flood: row.try_get("InFlood")?,
+        in_duration_filler: row.try_get("InDurationFiller")?,
+        next_guide_group: row.try_get("NextGuideGroup")?,
+        next_instruction_index: row.try_get("NextInstructionIndex")?,
+        context: row.try_get("Context")?,
     })
 }
 
 fn map_build_status(row: &SqliteRow) -> Result<PlayoutBuildStatus> {
     Ok(PlayoutBuildStatus {
-        playout_id: row.try_get("playout_id")?,
+        playout_id: row.try_get("PlayoutId")?,
         last_build: decode_datetime(
             "playout build status last_build",
-            &row.try_get::<String, _>("last_build")?,
+            &row.try_get::<String, _>("LastBuild")?,
         )?,
-        success: row.try_get("success")?,
-        message: row.try_get("message")?,
+        success: row.try_get("Success")?,
+        message: row.try_get("Message")?,
     })
 }
 
 fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
     Ok(PlayoutItem {
-        id: row.try_get("id")?,
-        media_item_id: row.try_get("media_item_id")?,
-        start: decode_datetime("playout item start", &row.try_get::<String, _>("start")?)?,
-        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("finish")?)?,
+        id: row.try_get("Id")?,
+        media_item_id: row.try_get("MediaItemId")?,
+        start: decode_datetime("playout item start", &row.try_get::<String, _>("Start")?)?,
+        finish: decode_datetime("playout item finish", &row.try_get::<String, _>("Finish")?)?,
         guide_start: decode_optional_datetime(
             "playout item guide_start",
-            row.try_get("guide_start")?,
+            row.try_get("GuideStart")?,
         )?,
         guide_finish: decode_optional_datetime(
             "playout item guide_finish",
-            row.try_get("guide_finish")?,
+            row.try_get("GuideFinish")?,
         )?,
-        custom_title: row.try_get("custom_title")?,
-        guide_group: row.try_get("guide_group")?,
+        custom_title: row.try_get("CustomTitle")?,
+        guide_group: row.try_get("GuideGroup")?,
         filler_kind: decode_enum(
             "playout item filler_kind",
-            &row.try_get::<String, _>("filler_kind")?,
+            &row.try_get::<String, _>("FillerKind")?,
         )?,
-        playout_id: row.try_get("playout_id")?,
-        in_point: decode_duration(row.try_get("in_point_ms")?),
-        out_point: decode_duration(row.try_get("out_point_ms")?),
-        chapter_title: row.try_get("chapter_title")?,
+        playout_id: row.try_get("PlayoutId")?,
+        in_point: decode_duration_text(&row.try_get::<String, _>("InPoint")?),
+        out_point: decode_duration_text(&row.try_get::<String, _>("OutPoint")?),
+        chapter_title: row.try_get("ChapterTitle")?,
         watermark_ids: Vec::new(),
-        disable_watermarks: row.try_get("disable_watermarks")?,
-        preferred_audio_language_code: row.try_get("preferred_audio_language_code")?,
-        preferred_audio_title: row.try_get("preferred_audio_title")?,
-        preferred_subtitle_language_code: row.try_get("preferred_subtitle_language_code")?,
+        disable_watermarks: row.try_get("DisableWatermarks")?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle")?,
+        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
         subtitle_mode: row
-            .try_get::<Option<String>, _>("subtitle_mode")?
+            .try_get::<Option<String>, _>("SubtitleMode")?
             .as_deref()
             .map(|value| decode_enum("playout item subtitle_mode", value))
             .transpose()?,
-        block_key: row.try_get("block_key")?,
-        collection_key: row.try_get("collection_key")?,
-        collection_etag: row.try_get("collection_etag")?,
+        block_key: row.try_get("BlockKey")?,
+        collection_key: row.try_get("CollectionKey")?,
+        collection_etag: row.try_get("CollectionEtag")?,
         graphics_element_ids: Vec::new(),
-        scheduling_context: row.try_get("scheduling_context")?,
+        scheduling_context: row.try_get("SchedulingContext")?,
     })
+}
+
+fn map_playout_template(row: &SqliteRow) -> Result<ersatzrs_domain::PlayoutTemplate> {
+    Ok(ersatzrs_domain::PlayoutTemplate {
+        playout_id: row.try_get("PlayoutId")?,
+        template_id: row.try_get("TemplateId")?,
+        // DateUpdated is a TEXT datetime in the ErsatzTV schema; we store updated_ticks as i64.
+        // Parse the stored string back as i64, or fall back to 0.
+        updated_ticks: row
+            .try_get::<String, _>("DateUpdated")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0),
+        deco_template_id: row.try_get("DecoTemplateId")?,
+        index: row.try_get("Index")?,
+        days_of_week: decode_integer_list(
+            "playout template DaysOfWeek",
+            &row.try_get::<String, _>("DaysOfWeek").unwrap_or_default(),
+        )?,
+        days_of_month: decode_integer_list(
+            "playout template DaysOfMonth",
+            &row.try_get::<String, _>("DaysOfMonth").unwrap_or_default(),
+        )?,
+        months_of_year: decode_integer_list(
+            "playout template MonthsOfYear",
+            &row.try_get::<String, _>("MonthsOfYear").unwrap_or_default(),
+        )?,
+        limit_to_date_range: row.try_get("LimitToDateRange")?,
+        start_month: row.try_get("StartMonth")?,
+        start_day: row.try_get("StartDay")?,
+        start_year: row.try_get("StartYear")?,
+        end_month: row.try_get("EndMonth")?,
+        end_day: row.try_get("EndDay")?,
+        end_year: row.try_get("EndYear")?,
+    })
+}
+
+fn decode_integer_list(kind: &'static str, value: &str) -> Result<Vec<i32>> {
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(value).map_err(|source| decode_message(kind, &source.to_string()))
 }

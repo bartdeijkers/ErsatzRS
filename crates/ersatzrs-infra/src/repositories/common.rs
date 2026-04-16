@@ -34,16 +34,46 @@ pub fn encode_optional_datetime(value: Option<DateTime<Utc>>) -> Option<String> 
     value.map(encode_datetime)
 }
 
+/// Encode a [`Duration`] as an ISO 8601 time span string (`HH:MM:SS`).
 #[must_use]
-pub fn encode_duration(value: Duration) -> i64 {
-    value.num_milliseconds()
+pub fn encode_duration(value: Duration) -> String {
+    let total_seconds = value.num_seconds().max(0);
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
 }
 
+/// Encode an optional [`Duration`] as an ISO 8601 time span string.
 #[must_use]
-pub fn encode_optional_duration(value: Option<Duration>) -> Option<i64> {
+pub fn encode_optional_duration(value: Option<Duration>) -> Option<String> {
     value.map(encode_duration)
 }
 
+/// Decode an `HH:MM:SS` (or similar) TEXT duration stored by ErsatzTV.
+#[must_use]
+pub fn decode_duration_text(value: &str) -> Duration {
+    let parts: Vec<&str> = value.split(':').collect();
+    match parts.as_slice() {
+        [h, m, s] => {
+            let hours = h.parse::<i64>().unwrap_or(0);
+            let minutes = m.parse::<i64>().unwrap_or(0);
+            let seconds = s.parse::<i64>().unwrap_or(0);
+            Duration::seconds(hours * 3600 + minutes * 60 + seconds)
+        }
+        _ => Duration::zero(),
+    }
+}
+
+/// Decode an optional TEXT duration.
+#[must_use]
+pub fn decode_optional_duration_text(value: Option<String>) -> Option<Duration> {
+    value.as_deref().map(decode_duration_text)
+}
+
+/// Legacy millisecond-based duration helpers kept for any code that still uses
+/// integer millisecond columns (none in the ErsatzTV schema, but kept for
+/// compile compatibility until all callers are updated).
 #[must_use]
 pub fn decode_duration(value: i64) -> Duration {
     Duration::milliseconds(value)

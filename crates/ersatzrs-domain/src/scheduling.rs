@@ -161,6 +161,7 @@ pub struct Block {
     pub id: EntityId,
     pub block_group_id: Option<EntityId>,
     pub name: String,
+    pub updated_ticks: i64,
     pub duration: Duration,
     pub stop_scheduling: BlockStopScheduling,
     pub item_ids: Vec<EntityId>,
@@ -197,6 +198,13 @@ pub struct Deco {
     pub name: String,
     pub mode: DecoMode,
     pub break_content_id: Option<EntityId>,
+    pub default_filler_mode: DecoMode,
+    pub default_filler_collection_type: Option<CollectionType>,
+    pub default_filler_collection_id: Option<EntityId>,
+    pub default_filler_media_item_id: Option<EntityId>,
+    pub default_filler_multi_collection_id: Option<EntityId>,
+    pub default_filler_smart_collection_id: Option<EntityId>,
+    pub default_filler_trim_to_fit: bool,
     pub watermark_ids: Vec<EntityId>,
     pub graphics_element_ids: Vec<EntityId>,
 }
@@ -224,6 +232,7 @@ pub struct Template {
     pub id: EntityId,
     pub template_group_id: Option<EntityId>,
     pub name: String,
+    pub updated_ticks: i64,
     pub item_ids: Vec<EntityId>,
 }
 
@@ -232,6 +241,7 @@ pub struct TemplateItem {
     pub id: EntityId,
     pub template_id: EntityId,
     pub block_id: EntityId,
+    pub start_time: Option<Duration>,
     pub sort_order: i32,
 }
 
@@ -255,13 +265,50 @@ pub struct DecoTemplateItem {
     pub id: EntityId,
     pub deco_template_id: EntityId,
     pub deco_id: EntityId,
+    pub start_time: Duration,
+    pub end_time: Duration,
     pub sort_order: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayoutTemplate {
     pub playout_id: EntityId,
     pub template_id: EntityId,
+    pub updated_ticks: i64,
+    pub deco_template_id: Option<EntityId>,
+    pub index: i32,
+    pub days_of_week: Vec<i32>,
+    pub days_of_month: Vec<i32>,
+    pub months_of_year: Vec<i32>,
+    pub limit_to_date_range: bool,
+    pub start_month: i32,
+    pub start_day: i32,
+    pub start_year: Option<i32>,
+    pub end_month: i32,
+    pub end_day: i32,
+    pub end_year: Option<i32>,
+}
+
+impl Default for PlayoutTemplate {
+    fn default() -> Self {
+        Self {
+            playout_id: 0,
+            template_id: 0,
+            updated_ticks: 0,
+            deco_template_id: None,
+            index: 0,
+            days_of_week: vec![1, 2, 3, 4, 5, 6, 0],
+            days_of_month: (1..=31).collect(),
+            months_of_year: (1..=12).collect(),
+            limit_to_date_range: false,
+            start_month: 1,
+            start_day: 1,
+            start_year: None,
+            end_month: 12,
+            end_day: 31,
+            end_year: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

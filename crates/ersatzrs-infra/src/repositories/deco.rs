@@ -12,7 +12,7 @@ pub struct SqliteDecoRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl DecoRepository for SqliteDecoRepository {
     async fn get_with_watermarks(&self, id: EntityId) -> Result<Deco> {
-        let row = sqlx::query("SELECT * FROM decos WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "Deco" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
@@ -20,18 +20,18 @@ impl DecoRepository for SqliteDecoRepository {
         let mut deco = map_deco(&row)?;
         deco.watermark_ids = load_ids(
             &self.0,
-            "SELECT watermark_id FROM deco_watermarks WHERE deco_id = ? ORDER BY watermark_id",
+            r#"SELECT "WatermarkId" FROM "DecoWatermark" WHERE "DecoId" = ? ORDER BY "WatermarkId""#,
             id,
         )
         .await?;
         deco.graphics_element_ids =
-            load_ids(&self.0, "SELECT graphics_element_id FROM deco_graphics_elements WHERE deco_id = ? ORDER BY graphics_element_id", id)
+            load_ids(&self.0, r#"SELECT "GraphicsElementId" FROM "DecoGraphicsElement" WHERE "DecoId" = ? ORDER BY "GraphicsElementId""#, id)
                 .await?;
         Ok(deco)
     }
 
     async fn list_for_group(&self, group_id: EntityId) -> Result<Vec<Deco>> {
-        let rows = sqlx::query("SELECT * FROM decos WHERE deco_group_id = ? ORDER BY name, id")
+        let rows = sqlx::query(r#"SELECT * FROM "Deco" WHERE "DecoGroupId" = ? ORDER BY "Name", "Id""#)
             .bind(group_id)
             .fetch_all(&self.0)
             .await?;
@@ -48,28 +48,44 @@ impl DecoRepository for SqliteDecoRepository {
     async fn upsert(&self, deco: &Deco) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            "INSERT OR REPLACE INTO decos (id, deco_group_id, name, mode, break_content_id)
-             VALUES (?, ?, ?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "Deco" (
+                "Id", "DecoGroupId", "Name", "BreakContentMode", "DefaultFillerMode",
+                "DefaultFillerCollectionType", "DefaultFillerCollectionId",
+                "DefaultFillerMediaItemId", "DefaultFillerMultiCollectionId",
+                "DefaultFillerSmartCollectionId", "DefaultFillerTrimToFit",
+                "DeadAirFallbackMode", "DeadAirFallbackCollectionType",
+                "GraphicsElementsMode", "UseGraphicsElementsDuringFiller",
+                "UseWatermarkDuringFiller", "WatermarkMode"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0)"#,
         )
         .bind(deco.id)
         .bind(deco.deco_group_id)
         .bind(&deco.name)
         .bind(format!("{:?}", deco.mode))
-        .bind(deco.break_content_id)
+        .bind(format!("{:?}", deco.default_filler_mode))
+        .bind(
+            deco.default_filler_collection_type
+                .map(|collection_type| format!("{collection_type:?}")),
+        )
+        .bind(deco.default_filler_collection_id)
+        .bind(deco.default_filler_media_item_id)
+        .bind(deco.default_filler_multi_collection_id)
+        .bind(deco.default_filler_smart_collection_id)
+        .bind(deco.default_filler_trim_to_fit)
         .execute(&mut *tx)
         .await?;
         replace_ids(
             &mut tx,
-            "DELETE FROM deco_watermarks WHERE deco_id = ?",
-            "INSERT OR REPLACE INTO deco_watermarks (deco_id, watermark_id) VALUES (?, ?)",
+            r#"DELETE FROM "DecoWatermark" WHERE "DecoId" = ?"#,
+            r#"INSERT OR REPLACE INTO "DecoWatermark" ("DecoId", "WatermarkId") VALUES (?, ?)"#,
             deco.id,
             &deco.watermark_ids,
         )
         .await?;
         replace_ids(
             &mut tx,
-            "DELETE FROM deco_graphics_elements WHERE deco_id = ?",
-            "INSERT OR REPLACE INTO deco_graphics_elements (deco_id, graphics_element_id) VALUES (?, ?)",
+            r#"DELETE FROM "DecoGraphicsElement" WHERE "DecoId" = ?"#,
+            r#"INSERT OR REPLACE INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (?, ?)"#,
             deco.id,
             &deco.graphics_element_ids,
         )
@@ -81,11 +97,27 @@ impl DecoRepository for SqliteDecoRepository {
 
 fn map_deco(row: &SqliteRow) -> Result<Deco> {
     Ok(Deco {
-        id: row.try_get("id")?,
-        deco_group_id: row.try_get("deco_group_id")?,
-        name: row.try_get("name")?,
-        mode: decode_enum("deco mode", &row.try_get::<String, _>("mode")?)?,
-        break_content_id: row.try_get("break_content_id")?,
+        id: row.try_get("Id")?,
+        deco_group_id: row.try_get("DecoGroupId")?,
+        name: row.try_get("Name")?,
+        mode: decode_enum("deco mode", &row.try_get::<String, _>("BreakContentMode")?)?,
+        break_content_id: None,
+        default_filler_mode: row
+            .try_get::<Option<String>, _>("DefaultFillerMode")?
+            .as_deref()
+            .map(|value| decode_enum("deco default_filler_mode", value))
+            .transpose()?
+            .unwrap_or_default(),
+        default_filler_collection_type: row
+            .try_get::<Option<String>, _>("DefaultFillerCollectionType")?
+            .as_deref()
+            .map(|value| decode_enum("deco default_filler_collection_type", value))
+            .transpose()?,
+        default_filler_collection_id: row.try_get("DefaultFillerCollectionId")?,
+        default_filler_media_item_id: row.try_get("DefaultFillerMediaItemId")?,
+        default_filler_multi_collection_id: row.try_get("DefaultFillerMultiCollectionId")?,
+        default_filler_smart_collection_id: row.try_get("DefaultFillerSmartCollectionId")?,
+        default_filler_trim_to_fit: row.try_get("DefaultFillerTrimToFit")?,
         watermark_ids: Vec::new(),
         graphics_element_ids: Vec::new(),
     })

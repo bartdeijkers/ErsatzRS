@@ -12,7 +12,7 @@ pub struct SqliteGraphicsRepository(pub Pool<Sqlite>);
 #[async_trait]
 impl GraphicsRepository for SqliteGraphicsRepository {
     async fn get_element(&self, id: EntityId) -> Result<GraphicsElement> {
-        let row = sqlx::query("SELECT * FROM graphics_elements WHERE id = ?")
+        let row = sqlx::query(r#"SELECT * FROM "GraphicsElement" WHERE "Id" = ?"#)
             .bind(id)
             .fetch_one(&self.0)
             .await
@@ -22,20 +22,20 @@ impl GraphicsRepository for SqliteGraphicsRepository {
 
     async fn list_for_channel(&self, channel_id: EntityId) -> Result<Vec<GraphicsElement>> {
         let rows = sqlx::query(
-            "SELECT ge.*
-             FROM graphics_elements ge
-             JOIN playout_item_graphics_elements pige ON pige.graphics_element_id = ge.id
-             JOIN playout_items pi ON pi.id = pige.playout_item_id
-             JOIN playouts p ON p.id = pi.playout_id
-             WHERE p.channel_id = ?
+            r#"SELECT ge.*
+             FROM "GraphicsElement" ge
+             JOIN "PlayoutItemGraphicsElement" pige ON pige."GraphicsElementId" = ge."Id"
+             JOIN "PlayoutItem" pi ON pi."Id" = pige."PlayoutItemId"
+             JOIN "Playout" p ON p."Id" = pi."PlayoutId"
+             WHERE p."ChannelId" = ?
              UNION
              SELECT ge.*
-             FROM graphics_elements ge
-             JOIN deco_graphics_elements dge ON dge.graphics_element_id = ge.id
-             JOIN decos d ON d.id = dge.deco_id
-             JOIN playouts p ON p.deco_id = d.id
-             WHERE p.channel_id = ?
-             ORDER BY 1",
+             FROM "GraphicsElement" ge
+             JOIN "DecoGraphicsElement" dge ON dge."GraphicsElementId" = ge."Id"
+             JOIN "Deco" d ON d."Id" = dge."DecoId"
+             JOIN "Playout" p ON p."DecoId" = d."Id"
+             WHERE p."ChannelId" = ?
+             ORDER BY 1"#,
         )
         .bind(channel_id)
         .bind(channel_id)
@@ -45,23 +45,18 @@ impl GraphicsRepository for SqliteGraphicsRepository {
     }
 
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {
+        // ErsatzTV GraphicsElement only has Id, Path, Kind, Name.
+        // The extra fields (x, y, width, height, z_index, text, script, variables) are
+        // ErsatzRS-only extensions and are not stored in the ErsatzTV schema.
         sqlx::query(
-            "INSERT OR REPLACE INTO graphics_elements (
-                id, name, kind, x, y, width, height, z_index, path, text, script, variables
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            r#"INSERT OR REPLACE INTO "GraphicsElement" (
+                "Id", "Name", "Kind", "Path"
+             ) VALUES (?, ?, ?, ?)"#,
         )
         .bind(element.id)
         .bind(&element.name)
         .bind(format!("{:?}", element.kind))
-        .bind(element.x)
-        .bind(element.y)
-        .bind(element.width)
-        .bind(element.height)
-        .bind(element.z_index)
         .bind(&element.path)
-        .bind(&element.text)
-        .bind(&element.script)
-        .bind(&element.variables)
         .execute(&self.0)
         .await?;
         Ok(())
@@ -70,17 +65,18 @@ impl GraphicsRepository for SqliteGraphicsRepository {
 
 fn map_element(row: &SqliteRow) -> Result<GraphicsElement> {
     Ok(GraphicsElement {
-        id: row.try_get("id")?,
-        name: row.try_get("name")?,
-        kind: decode_enum("graphics element kind", &row.try_get::<String, _>("kind")?)?,
-        x: row.try_get("x")?,
-        y: row.try_get("y")?,
-        width: row.try_get("width")?,
-        height: row.try_get("height")?,
-        z_index: row.try_get("z_index")?,
-        path: row.try_get("path")?,
-        text: row.try_get("text")?,
-        script: row.try_get("script")?,
-        variables: row.try_get("variables")?,
+        id: row.try_get("Id")?,
+        name: row.try_get("Name")?,
+        kind: decode_enum("graphics element kind", &row.try_get::<String, _>("Kind")?)?,
+        // These fields do not exist in the ErsatzTV schema; default to zero/None.
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        z_index: 0,
+        path: row.try_get("Path")?,
+        text: None,
+        script: None,
+        variables: None,
     })
 }

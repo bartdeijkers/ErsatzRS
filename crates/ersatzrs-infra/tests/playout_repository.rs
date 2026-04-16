@@ -27,9 +27,38 @@ async fn playout_repository_loads_anchor_status_and_filters_item_ranges() {
         .upsert(&common::schedule(1, Vec::new()))
         .await
         .unwrap();
+    pool.execute(r#"INSERT INTO "TemplateGroup" ("Id", "Name") VALUES (1, 'default-group')"#)
+        .await
+        .unwrap();
     pool.execute(
-        "INSERT OR REPLACE INTO playouts (id, channel_id, program_schedule_id, schedule_kind, seed)
-         VALUES (1, 1, 1, 'Classic', 0)",
+        r#"INSERT INTO "Template" ("Id", "TemplateGroupId", "Name", "DateUpdated")
+         VALUES (10, 1, 'weekday', '1000')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "DecoTemplateGroup" ("Id", "Name") VALUES (1, 'deco-group')"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "DecoTemplate" ("Id", "DecoTemplateGroupId", "Name", "DateUpdated")
+         VALUES (11, 1, 'morning-window', '0')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT OR REPLACE INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+         VALUES (1, 1, 1, 'Classic', 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "PlayoutTemplate" (
+            "PlayoutId", "TemplateId", "DateUpdated", "DecoTemplateId", "Index",
+            "DaysOfWeek", "DaysOfMonth", "MonthsOfYear",
+            "LimitToDateRange", "StartMonth", "StartDay", "EndMonth", "EndDay"
+         ) VALUES (
+            1, 10, '1234', 11, 2, '[1,2,3]', '[1,15]', '[4]', 1, 4, 1, 4, 30
+         )"#,
     )
     .await
     .unwrap();
@@ -59,5 +88,9 @@ async fn playout_repository_loads_anchor_status_and_filters_item_ranges() {
 
     let loaded = repos.playout.get_with_anchor(1).await.unwrap();
     assert_eq!(loaded.item_ids, vec![1]);
+    assert_eq!(loaded.templates.len(), 1);
+    assert_eq!(loaded.templates[0].updated_ticks, 1234);
+    assert_eq!(loaded.templates[0].deco_template_id, Some(11));
+    assert_eq!(loaded.templates[0].days_of_week, vec![1, 2, 3]);
     assert_eq!(loaded.build_status.unwrap().playout_id, 1);
 }

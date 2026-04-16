@@ -18,14 +18,15 @@ async fn collection_repository_loads_relation_ids_only_for_explicit_get() {
             name: "collection".to_owned(),
             collection_type: CollectionType::Collection,
             media_item_ids: vec![1],
-            item_ids: vec![10],
+            item_ids: Vec::new(),
         })
         .await
         .unwrap();
 
     let loaded = repos.collection.get_with_items(1).await.unwrap();
     assert_eq!(loaded.media_item_ids, vec![1]);
-    assert_eq!(loaded.item_ids, vec![10]);
+    // ErsatzTV CollectionItem has no separate item id — item_ids == media_item_ids
+    assert_eq!(loaded.item_ids, vec![1]);
 
     let listed = repos.collection.list_for_media_item(1).await.unwrap();
     assert_eq!(listed[0].id, 1);
@@ -40,22 +41,23 @@ async fn collection_repository_loads_smart_collections_and_playlists() {
     common::seed_media_graph(&pool).await;
 
     pool.execute(
-        "INSERT INTO smart_collections (id, name, query) VALUES (2, 'smart', 'title = Movie')",
+        r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query") VALUES (2, 'smart', 'title = Movie')"#,
     )
     .await
     .unwrap();
-    pool.execute("INSERT INTO playlists (id, name) VALUES (3, 'playlist')")
+    // PlaylistGroup is the parent; Playlist has PlaylistGroupId FK (hierarchy reversed from old schema)
+    pool.execute(r#"INSERT INTO "PlaylistGroup" ("Id", "Name") VALUES (4, 'group')"#)
         .await
         .unwrap();
     pool.execute(
-        "INSERT INTO playlist_groups (id, playlist_id, name, sort_order) VALUES (4, 3, 'group', 0)",
+        r#"INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem") VALUES (3, 'playlist', 4, 0)"#,
     )
     .await
     .unwrap();
     pool.execute(
-        "INSERT INTO playlist_items (
-            id, playlist_id, media_item_id, collection_type, playback_order, sort_order
-         ) VALUES (5, 3, 1, 'Collection', 'None', 0)",
+        r#"INSERT INTO "PlaylistItem" (
+            "Id", "Index", "PlaylistId", "CollectionType", "MediaItemId", "PlaybackOrder"
+         ) VALUES (5, 0, 3, 'Collection', 1, 'None')"#,
     )
     .await
     .unwrap();

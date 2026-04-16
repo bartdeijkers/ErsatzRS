@@ -19,9 +19,9 @@ async fn channel_repository_round_trips_and_filters_enabled_channels() {
     let disabled = common::channel(11, "11", false);
 
     pool.execute(
-        "INSERT INTO artwork (id, path, kind, sort_order) VALUES
-         (100, '/art/100.png', 'Poster', 0),
-         (101, '/art/101.png', 'Poster', 1)",
+        r#"INSERT INTO "Artwork" ("Id", "Path", "ArtworkKind", "DateAdded", "DateUpdated") VALUES
+         (100, '/art/100.png', 'Poster', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+         (101, '/art/101.png', 'Poster', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z')"#,
     )
     .await
     .unwrap();

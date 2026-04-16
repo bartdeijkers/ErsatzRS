@@ -8,7 +8,7 @@ use ersatzrs_domain::{
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
 
-use super::common::{decode_enum, decode_optional_datetime, encode_optional_datetime, not_found};
+use super::common::{decode_optional_datetime, encode_optional_datetime, not_found};
 
 #[derive(Clone)]
 pub struct SqliteMediaSourceRepository(pub Pool<Sqlite>);
@@ -18,7 +18,7 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_plex(&self, id: EntityId) -> Result<PlexMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Plex).await?;
         let row = sqlx::query(
-            "SELECT server_name, machine_identifier FROM plex_media_sources WHERE id = ?",
+            r#"SELECT "ServerName", "ClientIdentifier" FROM "PlexMediaSource" WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_one(&self.0)
@@ -26,20 +26,20 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         .map_err(|error| not_found("plex media source", id, error))?;
 
         let connection_rows = sqlx::query(
-            "SELECT id, is_active, uri, plex_media_source_id
-             FROM plex_connections
-             WHERE plex_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "IsActive", "Uri", "PlexMediaSourceId"
+             FROM "PlexConnection"
+             WHERE "PlexMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
         .await?;
 
         let replacement_rows = sqlx::query(
-            "SELECT id, plex_media_source_id, path, replacement_path
-             FROM plex_path_replacements
-             WHERE plex_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "PlexMediaSourceId", "PlexPath", "LocalPath"
+             FROM "PlexPathReplacement"
+             WHERE "PlexMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
@@ -47,28 +47,28 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
         Ok(PlexMediaSource {
             media_source: base,
-            server_name: row.try_get("server_name")?,
-            machine_identifier: row.try_get("machine_identifier")?,
+            server_name: row.try_get("ServerName")?,
+            machine_identifier: row.try_get("ClientIdentifier")?,
             connections: connection_rows
                 .iter()
                 .map(|connection| PlexConnection {
-                    id: connection.try_get("id").unwrap_or_default(),
-                    is_active: connection.try_get("is_active").unwrap_or(false),
-                    uri: connection.try_get("uri").unwrap_or_default(),
+                    id: connection.try_get("Id").unwrap_or_default(),
+                    is_active: connection.try_get("IsActive").unwrap_or(false),
+                    uri: connection.try_get("Uri").unwrap_or_default(),
                     plex_media_source_id: connection
-                        .try_get("plex_media_source_id")
+                        .try_get("PlexMediaSourceId")
                         .unwrap_or_default(),
                 })
                 .collect(),
             path_replacements: replacement_rows
                 .iter()
                 .map(|replacement| PlexPathReplacement {
-                    id: replacement.try_get("id").unwrap_or_default(),
+                    id: replacement.try_get("Id").unwrap_or_default(),
                     plex_media_source_id: replacement
-                        .try_get("plex_media_source_id")
+                        .try_get("PlexMediaSourceId")
                         .unwrap_or_default(),
-                    path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
+                    path: replacement.try_get("PlexPath").unwrap_or_default(),
+                    replacement_path: replacement.try_get("LocalPath").unwrap_or_default(),
                 })
                 .collect(),
         })
@@ -77,9 +77,9 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_jellyfin(&self, id: EntityId) -> Result<JellyfinMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Jellyfin).await?;
         let row = sqlx::query(
-            "SELECT server_name, operating_system, last_collections_scan
-             FROM jellyfin_media_sources
-             WHERE id = ?",
+            r#"SELECT "ServerName", "OperatingSystem", "LastCollectionsScan"
+             FROM "JellyfinMediaSource"
+             WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_one(&self.0)
@@ -87,20 +87,20 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         .map_err(|error| not_found("jellyfin media source", id, error))?;
 
         let connection_rows = sqlx::query(
-            "SELECT id, address, jellyfin_media_source_id
-             FROM jellyfin_connections
-             WHERE jellyfin_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "Address", "JellyfinMediaSourceId"
+             FROM "JellyfinConnection"
+             WHERE "JellyfinMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
         .await?;
 
         let replacement_rows = sqlx::query(
-            "SELECT id, jellyfin_media_source_id, path, replacement_path
-             FROM jellyfin_path_replacements
-             WHERE jellyfin_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "JellyfinMediaSourceId", "JellyfinPath", "LocalPath"
+             FROM "JellyfinPathReplacement"
+             WHERE "JellyfinMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
@@ -108,32 +108,32 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
         Ok(JellyfinMediaSource {
             media_source: base,
-            server_name: row.try_get("server_name")?,
-            operating_system: row.try_get("operating_system")?,
+            server_name: row.try_get("ServerName")?,
+            operating_system: row.try_get("OperatingSystem")?,
             connections: connection_rows
                 .iter()
                 .map(|connection| JellyfinConnection {
-                    id: connection.try_get("id").unwrap_or_default(),
-                    address: connection.try_get("address").unwrap_or_default(),
+                    id: connection.try_get("Id").unwrap_or_default(),
+                    address: connection.try_get("Address").unwrap_or_default(),
                     jellyfin_media_source_id: connection
-                        .try_get("jellyfin_media_source_id")
+                        .try_get("JellyfinMediaSourceId")
                         .unwrap_or_default(),
                 })
                 .collect(),
             path_replacements: replacement_rows
                 .iter()
                 .map(|replacement| JellyfinPathReplacement {
-                    id: replacement.try_get("id").unwrap_or_default(),
+                    id: replacement.try_get("Id").unwrap_or_default(),
                     jellyfin_media_source_id: replacement
-                        .try_get("jellyfin_media_source_id")
+                        .try_get("JellyfinMediaSourceId")
                         .unwrap_or_default(),
-                    path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
+                    path: replacement.try_get("JellyfinPath").unwrap_or_default(),
+                    replacement_path: replacement.try_get("LocalPath").unwrap_or_default(),
                 })
                 .collect(),
             last_collections_scan: decode_optional_datetime(
                 "jellyfin media source last_collections_scan",
-                row.try_get("last_collections_scan")?,
+                row.try_get("LastCollectionsScan")?,
             )?,
         })
     }
@@ -141,9 +141,9 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     async fn get_emby(&self, id: EntityId) -> Result<EmbyMediaSource> {
         let base = fetch_base_source(&self.0, id, MediaSourceKind::Emby).await?;
         let row = sqlx::query(
-            "SELECT server_name, operating_system, last_collections_scan
-             FROM emby_media_sources
-             WHERE id = ?",
+            r#"SELECT "ServerName", "OperatingSystem", "LastCollectionsScan"
+             FROM "EmbyMediaSource"
+             WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_one(&self.0)
@@ -151,20 +151,20 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
         .map_err(|error| not_found("emby media source", id, error))?;
 
         let connection_rows = sqlx::query(
-            "SELECT id, address, emby_media_source_id
-             FROM emby_connections
-             WHERE emby_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "Address", "EmbyMediaSourceId"
+             FROM "EmbyConnection"
+             WHERE "EmbyMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
         .await?;
 
         let replacement_rows = sqlx::query(
-            "SELECT id, emby_media_source_id, path, replacement_path
-             FROM emby_path_replacements
-             WHERE emby_media_source_id = ?
-             ORDER BY id",
+            r#"SELECT "Id", "EmbyMediaSourceId", "EmbyPath", "LocalPath"
+             FROM "EmbyPathReplacement"
+             WHERE "EmbyMediaSourceId" = ?
+             ORDER BY "Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)
@@ -172,84 +172,95 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
 
         Ok(EmbyMediaSource {
             media_source: base,
-            server_name: row.try_get("server_name")?,
-            operating_system: row.try_get("operating_system")?,
+            server_name: row.try_get("ServerName")?,
+            operating_system: row.try_get("OperatingSystem")?,
             connections: connection_rows
                 .iter()
                 .map(|connection| EmbyConnection {
-                    id: connection.try_get("id").unwrap_or_default(),
-                    address: connection.try_get("address").unwrap_or_default(),
+                    id: connection.try_get("Id").unwrap_or_default(),
+                    address: connection.try_get("Address").unwrap_or_default(),
                     emby_media_source_id: connection
-                        .try_get("emby_media_source_id")
+                        .try_get("EmbyMediaSourceId")
                         .unwrap_or_default(),
                 })
                 .collect(),
             path_replacements: replacement_rows
                 .iter()
                 .map(|replacement| EmbyPathReplacement {
-                    id: replacement.try_get("id").unwrap_or_default(),
+                    id: replacement.try_get("Id").unwrap_or_default(),
                     emby_media_source_id: replacement
-                        .try_get("emby_media_source_id")
+                        .try_get("EmbyMediaSourceId")
                         .unwrap_or_default(),
-                    path: replacement.try_get("path").unwrap_or_default(),
-                    replacement_path: replacement.try_get("replacement_path").unwrap_or_default(),
+                    path: replacement.try_get("EmbyPath").unwrap_or_default(),
+                    replacement_path: replacement.try_get("LocalPath").unwrap_or_default(),
                 })
                 .collect(),
             last_collections_scan: decode_optional_datetime(
                 "emby media source last_collections_scan",
-                row.try_get("last_collections_scan")?,
+                row.try_get("LastCollectionsScan")?,
             )?,
         })
     }
 
     async fn list_all(&self) -> Result<Vec<MediaSource>> {
-        let rows = sqlx::query("SELECT * FROM media_sources ORDER BY name, id")
+        // MediaSource table only has "Id". Build a synthetic list from all sub-type tables.
+        let plex_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "PlexMediaSource" ORDER BY "Id""#)
             .fetch_all(&self.0)
             .await?;
-        rows.iter().map(map_media_source).collect()
+        let jellyfin_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "JellyfinMediaSource" ORDER BY "Id""#)
+            .fetch_all(&self.0)
+            .await?;
+        let emby_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "EmbyMediaSource" ORDER BY "Id""#)
+            .fetch_all(&self.0)
+            .await?;
+        let local_ids = sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "LocalMediaSource" ORDER BY "Id""#)
+            .fetch_all(&self.0)
+            .await?;
+
+        let mut sources = Vec::new();
+        for id in plex_ids {
+            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Plex, last_scan: None });
+        }
+        for id in jellyfin_ids {
+            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Jellyfin, last_scan: None });
+        }
+        for id in emby_ids {
+            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Emby, last_scan: None });
+        }
+        for id in local_ids {
+            sources.push(MediaSource { id, name: String::new(), kind: MediaSourceKind::Local, last_scan: None });
+        }
+        sources.sort_by_key(|s| s.id);
+        Ok(sources)
     }
 
     async fn upsert_plex(&self, source: &PlexMediaSource) -> Result<()> {
-        upsert_source(&self.0, &source.media_source, MediaSourceKind::Plex, source).await
+        upsert_source(&self.0, &source.media_source, source).await
     }
 
     async fn upsert_jellyfin(&self, source: &JellyfinMediaSource) -> Result<()> {
-        upsert_source(
-            &self.0,
-            &source.media_source,
-            MediaSourceKind::Jellyfin,
-            source,
-        )
-        .await
+        upsert_source(&self.0, &source.media_source, source).await
     }
 
     async fn upsert_emby(&self, source: &EmbyMediaSource) -> Result<()> {
-        upsert_source(&self.0, &source.media_source, MediaSourceKind::Emby, source).await
+        upsert_source(&self.0, &source.media_source, source).await
     }
 }
 
 async fn upsert_source<T>(
     pool: &Pool<Sqlite>,
     base: &MediaSource,
-    kind: MediaSourceKind,
     provider: &T,
 ) -> Result<()>
 where
     T: ProviderUpsert + Sync,
 {
-    let mut base = base.clone();
-    base.kind = kind;
     let mut tx = pool.begin().await?;
-    sqlx::query(
-        "INSERT OR REPLACE INTO media_sources (id, name, kind, last_scan)
-         VALUES (?, ?, ?, ?)",
-    )
-    .bind(base.id)
-    .bind(&base.name)
-    .bind(format!("{kind:?}"))
-    .bind(encode_optional_datetime(base.last_scan))
-    .execute(&mut *tx)
-    .await?;
+    // "MediaSource" only has "Id"
+    sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
+        .bind(base.id)
+        .execute(&mut *tx)
+        .await?;
 
     provider.upsert(&mut tx).await?;
 
@@ -271,8 +282,8 @@ impl ProviderUpsert for PlexMediaSource {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                "INSERT OR REPLACE INTO plex_media_sources (id, server_name, machine_identifier)
-                 VALUES (?, ?, ?)",
+                r#"INSERT OR REPLACE INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
+                 VALUES (?, ?, ?)"#,
             )
             .bind(self.media_source.id)
             .bind(&self.server_name)
@@ -280,14 +291,14 @@ impl ProviderUpsert for PlexMediaSource {
             .execute(&mut **tx)
             .await?;
 
-            sqlx::query("DELETE FROM plex_connections WHERE plex_media_source_id = ?")
+            sqlx::query(r#"DELETE FROM "PlexConnection" WHERE "PlexMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO plex_connections (id, plex_media_source_id, is_active, uri)
-                     VALUES (?, ?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "PlexConnection" ("Id", "PlexMediaSourceId", "IsActive", "Uri")
+                     VALUES (?, ?, ?, ?)"#,
                 )
                 .bind(connection.id)
                 .bind(self.media_source.id)
@@ -297,15 +308,15 @@ impl ProviderUpsert for PlexMediaSource {
                 .await?;
             }
 
-            sqlx::query("DELETE FROM plex_path_replacements WHERE plex_media_source_id = ?")
+            sqlx::query(r#"DELETE FROM "PlexPathReplacement" WHERE "PlexMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
                 .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO plex_path_replacements (
-                        id, plex_media_source_id, path, replacement_path
-                     ) VALUES (?, ?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "PlexPathReplacement" (
+                        "Id", "PlexMediaSourceId", "PlexPath", "LocalPath"
+                     ) VALUES (?, ?, ?, ?)"#,
                 )
                 .bind(replacement.id)
                 .bind(self.media_source.id)
@@ -327,9 +338,9 @@ impl ProviderUpsert for JellyfinMediaSource {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                "INSERT OR REPLACE INTO jellyfin_media_sources (
-                    id, server_name, operating_system, last_collections_scan
-                 ) VALUES (?, ?, ?, ?)",
+                r#"INSERT OR REPLACE INTO "JellyfinMediaSource" (
+                    "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
+                 ) VALUES (?, ?, ?, ?)"#,
             )
             .bind(self.media_source.id)
             .bind(&self.server_name)
@@ -338,14 +349,14 @@ impl ProviderUpsert for JellyfinMediaSource {
             .execute(&mut **tx)
             .await?;
 
-            sqlx::query("DELETE FROM jellyfin_connections WHERE jellyfin_media_source_id = ?")
+            sqlx::query(r#"DELETE FROM "JellyfinConnection" WHERE "JellyfinMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO jellyfin_connections (id, jellyfin_media_source_id, address)
-                     VALUES (?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "JellyfinConnection" ("Id", "JellyfinMediaSourceId", "Address")
+                     VALUES (?, ?, ?)"#,
                 )
                 .bind(connection.id)
                 .bind(self.media_source.id)
@@ -355,16 +366,16 @@ impl ProviderUpsert for JellyfinMediaSource {
             }
 
             sqlx::query(
-                "DELETE FROM jellyfin_path_replacements WHERE jellyfin_media_source_id = ?",
+                r#"DELETE FROM "JellyfinPathReplacement" WHERE "JellyfinMediaSourceId" = ?"#,
             )
             .bind(self.media_source.id)
             .execute(&mut **tx)
             .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO jellyfin_path_replacements (
-                        id, jellyfin_media_source_id, path, replacement_path
-                     ) VALUES (?, ?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "JellyfinPathReplacement" (
+                        "Id", "JellyfinMediaSourceId", "JellyfinPath", "LocalPath"
+                     ) VALUES (?, ?, ?, ?)"#,
                 )
                 .bind(replacement.id)
                 .bind(self.media_source.id)
@@ -386,9 +397,9 @@ impl ProviderUpsert for EmbyMediaSource {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                "INSERT OR REPLACE INTO emby_media_sources (
-                    id, server_name, operating_system, last_collections_scan
-                 ) VALUES (?, ?, ?, ?)",
+                r#"INSERT OR REPLACE INTO "EmbyMediaSource" (
+                    "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
+                 ) VALUES (?, ?, ?, ?)"#,
             )
             .bind(self.media_source.id)
             .bind(&self.server_name)
@@ -397,14 +408,14 @@ impl ProviderUpsert for EmbyMediaSource {
             .execute(&mut **tx)
             .await?;
 
-            sqlx::query("DELETE FROM emby_connections WHERE emby_media_source_id = ?")
+            sqlx::query(r#"DELETE FROM "EmbyConnection" WHERE "EmbyMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO emby_connections (id, emby_media_source_id, address)
-                     VALUES (?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "EmbyConnection" ("Id", "EmbyMediaSourceId", "Address")
+                     VALUES (?, ?, ?)"#,
                 )
                 .bind(connection.id)
                 .bind(self.media_source.id)
@@ -413,15 +424,15 @@ impl ProviderUpsert for EmbyMediaSource {
                 .await?;
             }
 
-            sqlx::query("DELETE FROM emby_path_replacements WHERE emby_media_source_id = ?")
+            sqlx::query(r#"DELETE FROM "EmbyPathReplacement" WHERE "EmbyMediaSourceId" = ?"#)
                 .bind(self.media_source.id)
                 .execute(&mut **tx)
                 .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    "INSERT OR REPLACE INTO emby_path_replacements (
-                        id, emby_media_source_id, path, replacement_path
-                     ) VALUES (?, ?, ?, ?)",
+                    r#"INSERT OR REPLACE INTO "EmbyPathReplacement" (
+                        "Id", "EmbyMediaSourceId", "EmbyPath", "LocalPath"
+                     ) VALUES (?, ?, ?, ?)"#,
                 )
                 .bind(replacement.id)
                 .bind(self.media_source.id)
@@ -441,21 +452,31 @@ async fn fetch_base_source(
     id: EntityId,
     expected_kind: MediaSourceKind,
 ) -> Result<MediaSource> {
-    let row = sqlx::query("SELECT * FROM media_sources WHERE id = ?")
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .map_err(|error| not_found("media source", id, error))?;
-    let source = map_media_source(&row)?;
-    debug_assert_eq!(source.kind, expected_kind);
-    Ok(source)
+    // Verify the MediaSource row exists
+    let exists: bool = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS(SELECT 1 FROM "MediaSource" WHERE "Id" = ?)"#,
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+
+    if !exists {
+        return Err(super::common::not_found("media source", id, sqlx::Error::RowNotFound));
+    }
+
+    Ok(MediaSource {
+        id,
+        name: String::new(),
+        kind: expected_kind,
+        last_scan: None,
+    })
 }
 
 fn map_media_source(row: &SqliteRow) -> Result<MediaSource> {
     Ok(MediaSource {
-        id: row.try_get("id")?,
-        name: row.try_get("name")?,
-        kind: decode_enum("media source kind", &row.try_get::<String, _>("kind")?)?,
-        last_scan: decode_optional_datetime("media source last_scan", row.try_get("last_scan")?)?,
+        id: row.try_get("Id")?,
+        name: String::new(),
+        kind: MediaSourceKind::Local,
+        last_scan: None,
     })
 }

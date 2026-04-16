@@ -16,14 +16,24 @@ async fn media_item_repository_lists_by_library_path_and_finds_file_path() {
         .await
         .unwrap();
     pool.execute(
-        "INSERT INTO media_versions (
-            id, media_item_id, name, duration_ms, video_scan_kind, date_added, date_updated, width, height
-         ) VALUES (5, 4, 'default', 0, 'Unknown', '2026-04-15T00:00:00+00:00', '2026-04-15T00:00:00+00:00', 0, 0)",
+        r#"INSERT INTO "Movie" ("Id") VALUES (4)"#,
     )
     .await
     .unwrap();
     pool.execute(
-        "INSERT INTO media_files (id, media_version_id, path, part) VALUES (6, 5, '/media/movie.mkv', 0)",
+        r#"INSERT INTO "MediaVersion" (
+            "Id", "MovieId", "DateAdded", "DateUpdated", "Duration",
+            "Height", "VideoScanKind", "Width"
+         ) VALUES (
+            5, 4, '2026-04-15T00:00:00+00:00', '2026-04-15T00:00:00+00:00',
+            '00:00:00', 0, 0, 0
+         )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaFile" ("Id", "MediaVersionId", "Path", "PathHash")
+         VALUES (6, 5, '/media/movie.mkv', 'movie-hash')"#,
     )
     .await
     .unwrap();

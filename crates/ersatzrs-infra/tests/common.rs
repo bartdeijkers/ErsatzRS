@@ -34,6 +34,13 @@ pub async fn test_db() -> SqlitePool {
         .await
         .expect("run migrations");
 
+    // Seed a default Resolution row required by FFmpegProfile's NOT NULL FK.
+    pool.execute(
+        r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#,
+    )
+    .await
+    .expect("seed default resolution");
+
     pool
 }
 
@@ -45,6 +52,7 @@ pub fn profile(id: i64, name: &str) -> FFmpegProfile {
     FFmpegProfile {
         id,
         name: name.to_owned(),
+        resolution_id: 1,
         ..FFmpegProfile::default()
     }
 }
@@ -77,25 +85,33 @@ pub async fn seed_profile_and_channel(repos: &Repositories, channel_id: i64) {
 
 pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64, path_id: i64) {
     pool.execute(
+        format!(r#"INSERT OR REPLACE INTO "MediaSource" ("Id") VALUES ({source_id})"#).as_str(),
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        format!(r#"INSERT OR REPLACE INTO "LocalMediaSource" ("Id") VALUES ({source_id})"#)
+            .as_str(),
+    )
+    .await
+    .unwrap();
+    pool.execute(
         format!(
-            "INSERT OR REPLACE INTO media_sources (id, name, kind) VALUES ({source_id}, 'local', 'Local')"
+            r#"INSERT OR REPLACE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+             VALUES ({library_id}, 'local', 'Movies', {source_id})"#
         )
         .as_str(),
     )
     .await
     .unwrap();
     pool.execute(
-        format!(
-            "INSERT OR REPLACE INTO libraries (id, name, media_kind, media_source_id, media_source_kind)
-             VALUES ({library_id}, 'local', 'Movies', {source_id}, 'Local')"
-        )
-        .as_str(),
+        format!(r#"INSERT OR REPLACE INTO "LocalLibrary" ("Id") VALUES ({library_id})"#).as_str(),
     )
     .await
     .unwrap();
     pool.execute(
         format!(
-            "INSERT OR REPLACE INTO library_paths (id, library_id, path) VALUES ({path_id}, {library_id}, '/media')"
+            r#"INSERT OR REPLACE INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES ({path_id}, {library_id}, '/media')"#
         )
         .as_str(),
     )
@@ -106,7 +122,7 @@ pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64,
 pub async fn seed_media_item(pool: &SqlitePool, item_id: i64, path_id: i64) {
     pool.execute(
         format!(
-            "INSERT OR REPLACE INTO media_items (id, library_path_id, state) VALUES ({item_id}, {path_id}, 'Normal')"
+            r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES ({item_id}, {path_id}, 'Normal')"#
         )
         .as_str(),
     )
@@ -171,12 +187,13 @@ pub fn build_status(playout_id: i64) -> PlayoutBuildStatus {
 
 pub async fn seed_collection_target(pool: &SqlitePool) {
     seed_media_graph(pool).await;
-    pool.execute("INSERT OR REPLACE INTO collections (id, name, collection_type) VALUES (99, 'fixture', 'Collection')")
-        .await
-        .unwrap();
     pool.execute(
-        "INSERT OR REPLACE INTO collection_items (id, collection_id, media_item_id, sort_order)
-         VALUES (99, 99, 1, 0)",
+        r#"INSERT OR REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (99, 'fixture', 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT OR REPLACE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (99, 1)"#,
     )
     .await
     .unwrap();

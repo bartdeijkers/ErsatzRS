@@ -12,10 +12,18 @@ async fn metadata_repository_round_trips_movie_and_episode_metadata() {
     common::seed_media_path(&pool, 1, 1, 1).await;
     common::seed_media_item(&pool, 10, 1).await;
     common::seed_media_item(&pool, 11, 1).await;
-    pool.execute("INSERT INTO movies (id) VALUES (10)")
+    common::seed_media_item(&pool, 20, 1).await;
+    common::seed_media_item(&pool, 21, 1).await;
+    pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (10)"#)
         .await
         .unwrap();
-    pool.execute("INSERT INTO episodes (id, season_number, episode_number) VALUES (11, 1, 2)")
+    pool.execute(r#"INSERT INTO "Show" ("Id") VALUES (20)"#)
+        .await
+        .unwrap();
+    pool.execute(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (21, 20, 1)"#)
+        .await
+        .unwrap();
+    pool.execute(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (11, 21)"#)
         .await
         .unwrap();
 

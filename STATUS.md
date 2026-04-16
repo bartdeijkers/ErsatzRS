@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Current Phase
 
@@ -50,10 +50,11 @@ What remains before Phase 3 can be considered end-to-end complete:
    and other Lucene fields, add director/writer joins when the schema represents
    them, and broaden provider-specific metadata edge cases.
 2. Continue block scheduling parity beyond the current SQL-backed reference-data
-   slice: add real block/template/playout-template updated timestamps to the
-   schema, complete alternate/deco-template selection, persist and load default
-   filler/deco-template fields, and broaden change-detection removal/update
-   handling beyond collection-etag comparison against persisted playout rows.
+   slice: broaden change-detection removal/update handling beyond the current
+   block/template/playout-template key comparison plus collection-etag checks,
+   persist remaining block-item/deco flags such as guide inclusion and disabled
+   watermarks, and add any still-missing scheduling fields that matter once more
+   real playout/editor flows are wired.
 3. Complete YAML parity for remaining exact handler semantics (SQL-backed
    playlist item resolution, expression evaluation, imports, shuffle-groups,
    and batch/count playlist child enumeration now have focused coverage).
@@ -99,3 +100,6 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-15 | Codex | Added a Diataxis reference glossary and linked it from the documentation index. |
 | 2026-04-15 | Codex | Continued Phase 3 block scheduling parity with core effective-template derivation structs, block keys, collection etags, guide windows, change-detection scaffolding, deco block-start/default filler behavior, and focused snapshots. |
 | 2026-04-15 | Codex | Wired block scheduling reference-data preparation to SQLite for playout templates, blocks, block items, deco break content, existing playout items/history, and collection-etag comparison coverage. |
+| 2026-04-15 | GitHub Copilot (GPT-5.4) | Continued Phase 3 block scheduling parity with persisted block/template/playout-template update fields, alternate template and deco-template selection, SQLite-backed default filler/deco windows, and focused core/infra tests. |
+| 2026-04-15 | Codex | Folded the Phase 3 block scheduling migration into the collapsed initial SQLite schema using the ErsatzTV SQLite schema as the reference source. |
+| 2026-04-16 | Codex | Verified `0001_initial.sql` against the ErsatzTV SQLite schema reference and updated remaining infra fixtures to the real table names and FK requirements; full `ersatzrs-infra --tests` passes. |
