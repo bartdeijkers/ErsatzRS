@@ -45,18 +45,23 @@ impl GraphicsRepository for SqliteGraphicsRepository {
     }
 
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {
-        // ErsatzTV GraphicsElement only has Id, Path, Kind, Name.
-        // The extra fields (x, y, width, height, z_index, text, script, variables) are
-        // ErsatzRS-only extensions and are not stored in the ErsatzTV schema.
         sqlx::query(
             r#"INSERT OR REPLACE INTO "GraphicsElement" (
-                "Id", "Name", "Kind", "Path"
-             ) VALUES (?, ?, ?, ?)"#,
+                "Id", "Name", "Kind", "Path",
+                "X", "Y", "Width", "Height", "ZIndex", "EnableExpression", "Text"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(element.id)
         .bind(&element.name)
         .bind(encode_enum(element.kind))
         .bind(&element.path)
+        .bind(element.x)
+        .bind(element.y)
+        .bind(element.width)
+        .bind(element.height)
+        .bind(element.z_index)
+        .bind(&element.enable_expression)
+        .bind(&element.text)
         .execute(&self.0)
         .await?;
         Ok(())
@@ -68,14 +73,14 @@ fn map_element(row: &SqliteRow) -> Result<GraphicsElement> {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,
         kind: decode_enum_column("graphics element kind", row, "Kind")?,
-        // These fields do not exist in the ErsatzTV schema; default to zero/None.
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        z_index: 0,
         path: row.try_get("Path")?,
-        text: None,
+        x: row.try_get("X").unwrap_or(0),
+        y: row.try_get("Y").unwrap_or(0),
+        width: row.try_get("Width").unwrap_or(0),
+        height: row.try_get("Height").unwrap_or(0),
+        z_index: row.try_get("ZIndex").unwrap_or(0),
+        enable_expression: row.try_get("EnableExpression").unwrap_or(None),
+        text: row.try_get("Text").unwrap_or(None),
         script: None,
         variables: None,
     })

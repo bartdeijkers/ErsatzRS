@@ -23,6 +23,7 @@ pub struct GraphicsElement {
     pub height: i32,
     pub z_index: i32,
     pub path: Option<String>,
+    pub enable_expression: Option<String>,
     pub text: Option<String>,
     pub script: Option<String>,
     pub variables: Option<String>,

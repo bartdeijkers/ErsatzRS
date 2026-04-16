@@ -61,9 +61,12 @@ async fn graphics_repository_round_trips_elements_and_lists_for_channel() {
     .await
     .unwrap();
 
-    assert_eq!(
-        repos.graphics.get_element(2).await.unwrap().name,
-        "lower-third"
-    );
+    let element = repos.graphics.get_element(2).await.unwrap();
+    assert_eq!(element.name, "lower-third");
+    assert_eq!(element.x, 10);
+    assert_eq!(element.y, 20);
+    assert_eq!(element.width, 300);
+    assert_eq!(element.height, 80);
+    assert_eq!(element.text.as_deref(), Some("Now"));
     assert_eq!(repos.graphics.list_for_channel(1).await.unwrap()[0].id, 2);
 }
