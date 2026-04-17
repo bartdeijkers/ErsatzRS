@@ -4,7 +4,7 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 4 — Media Source Integrations** in progress
+**Phase 5 — Protocol Endpoints** next
 
 ### Phase 0 Checklist
 
@@ -63,23 +63,25 @@ build pipeline are implemented and tested:
 3. ~~Expand Lua scheduling bindings~~ — done: full ErsatzTV Lua API parity.
 4. ~~Close remaining YAML/block/search priority gaps~~ — done.
 
-Phase 4 is now **in progress**. The scanner can extract ffprobe metadata into
+Phase 4 is now **complete**. The scanner can extract ffprobe metadata into
 domain media-version, stream, and chapter rows; scan local `.mp4`, `.mkv`, and
 `.avi` files into SQLite as `OtherVideo` items; apply provider/container path
-replacement rules; and sync Jellyfin movie library items through a mock-tested
-HTTP client without requiring a live Jellyfin server. Plex and Emby clients are
-still outstanding.
+replacement rules; sync Jellyfin movies, shows, seasons, episodes, and
+collections; sync Plex movies, shows, seasons, and episodes; sync Emby movies,
+shows, seasons, episodes, and collections; and dispatch single-shot scanner
+runs through `ersatzrs-scanner --provider <local|jellyfin|plex|emby>
+--library-id <id>`.
 
-**Phase 4 next step**: implement Plex and Emby clients after the Jellyfin path
-is broadened beyond movies, then revisit Phase 5 streaming once provider scan
-coverage is complete.
+**Phase 5 next step**: start protocol endpoints with `/iptv/channels.m3u`, then
+add HLS video endpoints, HDHomeRun discovery/lineup, UDP discovery on port
+65001, and XMLTV guide output.
 
 Persistence parity gaps are now tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
-write coverage improved through ffprobe, local scanning, and Jellyfin sync; the
-remaining high-risk slices are broader provider scanner tables, language and
-subtitle normalization, metadata joins, program schedule item subtypes,
-template items, block item targets, and deco break/template rows.
+write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
+Emby sync; the remaining high-risk slices are language and subtitle
+normalization, metadata joins, program schedule item subtypes, template items,
+block item targets, and deco break/template rows.
 
 ### Known TODOs from Phase 0
 
@@ -130,3 +132,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Codex | Resolved all Clippy warnings blocking `-D warnings`: renamed `fake_collection_key` field, replaced `.map().unwrap_or()` with `.map_or()`, merged identical match arms, and fixed pre-existing infra/test lints. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Completed Phase 3 end-to-end playout build: `PlayoutBuilder` orchestrator, `apply_build_result` single-transaction persistence, and round-trip integration tests with insta snapshots. Phase 3 ✅. |
 | 2026-04-17 | Codex | Started Phase 4 media source integrations: ffprobe extraction, local filesystem scanner, path replacement, Jellyfin movie sync, persistence matrix updates, and full workspace gates. |
+| 2026-04-17 | Codex | Completed Phase 4 provider scanning: Jellyfin shows/collections, Plex and Emby movie/show sync, scanner CLI dispatch, persistence matrix updates, and full workspace gates. |
