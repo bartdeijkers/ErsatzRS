@@ -7,6 +7,7 @@ mod error;
 mod ffmpeg_profile;
 mod filler;
 mod graphics;
+mod jellyfin;
 mod library;
 mod media_item;
 mod media_source;
@@ -24,6 +25,10 @@ pub use error::{RepositoryError, Result};
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
 pub use graphics::GraphicsRepository;
+pub use jellyfin::{
+    JellyfinConnectionConfig, JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem,
+    JellyfinPlaybackMetadata, JellyfinService,
+};
 pub use library::LibraryRepository;
 pub use media_item::MediaItemRepository;
 pub use media_source::MediaSourceRepository;

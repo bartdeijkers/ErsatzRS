@@ -6,6 +6,8 @@ pub enum RepositoryError {
     NotFound { kind: &'static str, id: EntityId },
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("failed to decode {kind}: {value}")]
+    Decode { kind: &'static str, value: String },
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }
