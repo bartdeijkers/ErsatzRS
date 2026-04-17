@@ -7,13 +7,15 @@ use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, Playout, PlayoutAnchor};
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+use super::history_key_for_collection_key;
 use super::{
-    cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
-    history_key_for_content, lookup_media_source, parse_duration, parse_hhmm, playout_item,
-    shuffle_with_seed, CurrentHistoryContext, MediaEnumerator, PlaylistChildEnumerator,
-    PlaylistEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentGuid,
-    SchedulingContentResolver, SchedulingContentSource, SchedulingError, SchedulingMediaItem,
-    SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    cleanup_history, history, history_details_for_media_item, history_key_for_content,
+    lookup_media_source, parse_duration, parse_hhmm, playout_item, shuffle_with_seed,
+    CurrentHistoryContext, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
+    PlayoutSchedulingEngine, SchedulingContentGuid, SchedulingContentResolver,
+    SchedulingContentSource, SchedulingError, SchedulingMediaItem, SchedulingPlaylistItem,
+    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
@@ -700,6 +702,14 @@ impl YamlContext {
         }
     }
 
+    fn count_expression_len(&mut self, content: &str) -> usize {
+        if let Some(playlist) = self.playlist_enumerator(content) {
+            playlist.unique_media_len()
+        } else {
+            self.enumerator(content).len()
+        }
+    }
+
     fn skip_content(&mut self, content: &str, skip: usize) {
         if let Some(playlist) = self.playlist_enumerator(content) {
             for _ in 0..skip.min(playlist.len()) {
@@ -742,7 +752,6 @@ impl YamlContext {
         }
     }
 }
-
 
 fn dispatch_instruction(
     context: &mut YamlContext,
@@ -926,10 +935,20 @@ fn handle_skip_items(context: &mut YamlContext, instruction: &YamlInstruction) {
     let Some(content) = instruction.content.as_deref() else {
         return;
     };
+    let enumerator_len = context.content_len(content);
+    if enumerator_len == 0 {
+        return;
+    }
+    let seed = context
+        .playout
+        .id
+        .cast_unsigned()
+        .wrapping_add(context.instruction_index as u64)
+        .wrapping_add(u64::from(context.current_time.ordinal()));
     let skip = instruction
         .skip_items
         .as_deref()
-        .and_then(|value| value.parse::<usize>().ok())
+        .map(|expr| eval_count_expression(expr, enumerator_len, seed) % enumerator_len)
         .unwrap_or_default();
     context.skip_content(content, skip);
 }
@@ -979,7 +998,7 @@ fn handle_count(
     let Some(content) = instruction.content.as_deref() else {
         return Ok(());
     };
-    let enumerator_len = context.content_len(content);
+    let enumerator_len = context.count_expression_len(content);
     let seed = context
         .playout
         .id
@@ -1358,12 +1377,20 @@ fn expr_parse_factor(chars: &[u8], pos: usize, count: i64, random: i64) -> (i64,
     if p >= chars.len() {
         return (0, p);
     }
+    if chars[p] == b'-' {
+        let (value, next) = expr_parse_factor(chars, p + 1, count, random);
+        return (value.saturating_neg(), next);
+    }
+    if chars[p] == b'+' {
+        return expr_parse_factor(chars, p + 1, count, random);
+    }
     if chars[p] == b'(' {
         let (val, mut next) = expr_parse_expr(chars, p + 1, count, random);
         next = expr_skip_ws(chars, next);
-        if next < chars.len() && chars[next] == b')' {
-            next += 1;
+        if next >= chars.len() || chars[next] != b')' {
+            return (0, p);
         }
+        next += 1;
         return (val, next);
     }
     let rest = &chars[p..];
@@ -1399,7 +1426,10 @@ fn eval_count_expression(expr: &str, enumerator_len: usize, seed: u64) -> usize 
         0
     };
     let chars = expr.as_bytes();
-    let (result, _) = expr_parse_expr(chars, 0, count, random);
+    let (result, pos) = expr_parse_expr(chars, 0, count, random);
+    if expr_skip_ws(chars, pos) != chars.len() {
+        return 0;
+    }
     usize::try_from(result.max(0)).unwrap_or(0)
 }
 
@@ -1904,6 +1934,19 @@ playout:
             r#"
 playout:
   - skip_items: "1"
+    content: main
+  - count: "1"
+    content: main
+"#
+        ));
+    }
+
+    #[test]
+    fn yaml_skip_items_expression_snapshot() {
+        insta::assert_json_snapshot!(snapshot(
+            r#"
+playout:
+  - skip_items: "count - 1"
     content: main
   - count: "1"
     content: main
@@ -2632,7 +2675,15 @@ playout:
     fn count_expression_zero_for_invalid() {
         // Non-parseable input falls back to 0.
         assert_eq!(eval_count_expression("bogus_var", 5, 0), 0);
+        assert_eq!(eval_count_expression("1bogus", 5, 0), 0);
+        assert_eq!(eval_count_expression("(count + 1", 5, 0), 0);
         assert_eq!(eval_count_expression("", 5, 0), 0);
+    }
+
+    #[test]
+    fn count_expression_negative_results_clamp_to_zero() {
+        assert_eq!(eval_count_expression("-1", 5, 0), 0);
+        assert_eq!(eval_count_expression("count - 10", 5, 0), 0);
     }
 
     #[test]
@@ -2657,6 +2708,66 @@ playout:
     content: main
 "#
         ));
+    }
+
+    #[test]
+    fn count_expression_for_playlist_uses_unique_media_count_snapshot() {
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.playlist_items_by_group_and_name.insert(
+            (None, "nightly".to_owned()),
+            vec![
+                SchedulingPlaylistItem {
+                    collection_key: SchedulingCollectionKey::fake_playlist_item(0),
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: Some(3),
+                    media_items: vec![
+                        SchedulingMediaItem::new(1, Duration::minutes(10)),
+                        SchedulingMediaItem::new(2, Duration::minutes(10)),
+                    ],
+                },
+                SchedulingPlaylistItem {
+                    collection_key: SchedulingCollectionKey::fake_playlist_item(1),
+                    playback_order: PlaybackOrder::Chronological,
+                    play_all: false,
+                    count: Some(3),
+                    media_items: vec![SchedulingMediaItem::new(3, Duration::minutes(10))],
+                },
+            ],
+        );
+        let definition = YamlPlayoutEngine::definition_from_str(
+            r#"
+content:
+  - key: playlist
+    playlist: nightly
+playout:
+  - count: "count"
+    content: playlist
+"#,
+        )
+        .expect("valid yaml");
+        let start = DateTime::parse_from_rfc3339("2026-04-15T10:00:00Z")
+            .expect("valid time")
+            .with_timezone(&Utc);
+        let result = YamlPlayoutEngine
+            .schedule_definition(
+                definition,
+                SchedulingRequest {
+                    playout: Playout {
+                        id: 100,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(1),
+                    mode: PlayoutBuildMode::Reset,
+                    reference_data,
+                },
+            )
+            .expect("schedule builds");
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "media": result.added_items.iter().map(|item| item.media_item_id).collect::<Vec<_>>(),
+        }));
     }
 
     // ── import merge tests ────────────────────────────────────────────────────

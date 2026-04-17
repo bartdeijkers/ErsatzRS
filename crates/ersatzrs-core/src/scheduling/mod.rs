@@ -471,7 +471,7 @@ pub enum SchedulingError {
 }
 
 #[derive(Debug, Clone)]
-struct MediaEnumerator {
+pub(super) struct MediaEnumerator {
     key: String,
     items: Vec<SchedulingMediaItem>,
     index: usize,
@@ -850,6 +850,14 @@ impl PlaylistEnumerator {
                 }
             })
             .sum()
+    }
+
+    pub fn unique_media_len(&self) -> usize {
+        self.children
+            .iter()
+            .flat_map(|child| child.enumerator.items.iter().map(|item| item.id))
+            .collect::<BTreeSet<_>>()
+            .len()
     }
 
     fn current_child(&self) -> Option<&PlaylistChildEnumerator> {

@@ -145,6 +145,61 @@ async fn scheduling_repository_resolves_playlist_children_and_overlays() {
 }
 
 #[tokio::test]
+async fn scheduling_repository_resolves_playlist_children_by_group_before_name() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+
+    pool.execute(r#"INSERT INTO "PlaylistGroup" ("Id", "Name") VALUES (42, 'late')"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
+         VALUES (5, 'nightly', 42, 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "PlaylistItem" (
+            "Id", "Index", "PlaylistId", "CollectionType", "CollectionId",
+            "SmartCollectionId", "PlaybackOrder", "Count", "PlayAll"
+         ) VALUES (501, 0, 5, 'SmartCollection', NULL, 2, 'Chronological', NULL, 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let prime = repos
+        .scheduling
+        .playlist_items_for_source(&SchedulingContentSource::Playlist {
+            group: Some("prime".to_owned()),
+            name: "nightly".to_owned(),
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let late = repos
+        .scheduling
+        .playlist_items_for_source(&SchedulingContentSource::Playlist {
+            group: Some("late".to_owned()),
+            name: "nightly".to_owned(),
+        })
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(prime[0].collection_key.collection_id, Some(1));
+    assert_eq!(late[0].collection_key.smart_collection_id, Some(2));
+    assert_eq!(
+        late[0]
+            .media_items
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![21]
+    );
+}
+
+#[tokio::test]
 async fn scheduling_repository_searches_metadata_fields_and_expands_containers() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

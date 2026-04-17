@@ -5,12 +5,11 @@ use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
 use mlua::{Lua, Table};
 
 use super::{
-    history, history_details_for_media_item, history_key_for_collection_key,
-    history_key_for_content, history_key_for_marathon_content, parse_duration, parse_hhmm,
-    playout_item, shuffle_with_seed, CurrentHistoryContext, MediaEnumerator, PlaylistEnumerator,
-    PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
-    SchedulingError, SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest,
-    SchedulingResult,
+    history, history_details_for_media_item, history_key_for_content,
+    history_key_for_marathon_content, parse_duration, parse_hhmm, playout_item, shuffle_with_seed,
+    CurrentHistoryContext, MediaEnumerator, PlaylistEnumerator, PlayoutBuildMode,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid, SchedulingError,
+    SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
 
 // ── public engine ─────────────────────────────────────────────────────────────
@@ -101,7 +100,11 @@ fn read_add_options(table: Option<&Table>) -> AddOptions {
     let mut opts = AddOptions::default();
     if let Some(t) = table {
         opts.fallback = t.get::<Option<String>>("fallback").ok().flatten();
-        opts.trim = t.get::<Option<bool>>("trim").ok().flatten().unwrap_or(false);
+        opts.trim = t
+            .get::<Option<bool>>("trim")
+            .ok()
+            .flatten()
+            .unwrap_or(false);
         opts.discard_attempts = t
             .get::<Option<i32>>("discard_attempts")
             .ok()
@@ -188,7 +191,8 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                     st.current_time + parse_duration(&duration).map_err(mlua::Error::external)?
                 };
                 let opts = AddOptions::default();
-                s.borrow_mut().add_duration_internal(&content, target, &opts);
+                s.borrow_mut()
+                    .add_duration_internal(&content, target, &opts);
                 Ok(())
             })?,
         )?;
@@ -256,8 +260,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         globals.set(
             "wait_until",
             lua.create_function_mut(move |_, value: String| {
-                let (hour, minute, second) =
-                    parse_hhmm(&value).map_err(mlua::Error::external)?;
+                let (hour, minute, second) = parse_hhmm(&value).map_err(mlua::Error::external)?;
                 let mut st = s.borrow_mut();
                 let date = st.current_time.date_naive();
                 let target = date
@@ -313,7 +316,8 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                         st.current_time
                             + parse_duration(&duration).map_err(mlua::Error::external)?
                     };
-                    s.borrow_mut().add_duration_internal(&content, target, &opts);
+                    s.borrow_mut()
+                        .add_duration_internal(&content, target, &opts);
                     Ok(())
                 },
             )?,
@@ -332,7 +336,8 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                         let st = s.borrow();
                         next_n_minute_boundary(st.current_time, minutes)
                     };
-                    s.borrow_mut().add_duration_internal(&content, target, &opts);
+                    s.borrow_mut()
+                        .add_duration_internal(&content, target, &opts);
                     Ok(())
                 },
             )?,
@@ -355,7 +360,8 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                             .ok_or_else(|| mlua::Error::external("invalid time"))?;
                         pad_until_target(st.current_time, nt, opts.tomorrow)
                     };
-                    s.borrow_mut().add_duration_internal(&content, target, &opts);
+                    s.borrow_mut()
+                        .add_duration_internal(&content, target, &opts);
                     Ok(())
                 },
             )?,
@@ -383,22 +389,20 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         let s = Rc::clone(state);
         globals.set(
             "skip_to",
-            lua.create_function_mut(
-                move |_, (content, season, episode): (String, i32, i32)| {
-                    let mut st = s.borrow_mut();
-                    let len = st.enumerator(&content).len();
-                    for _ in 0..len {
-                        let matches = st.enumerator(&content).current().is_some_and(|item| {
-                            item.season == Some(season) && item.episode == Some(episode)
-                        });
-                        if matches {
-                            break;
-                        }
-                        st.enumerator(&content).advance();
+            lua.create_function_mut(move |_, (content, season, episode): (String, i32, i32)| {
+                let mut st = s.borrow_mut();
+                let len = st.enumerator(&content).len();
+                for _ in 0..len {
+                    let matches = st.enumerator(&content).current().is_some_and(|item| {
+                        item.season == Some(season) && item.episode == Some(episode)
+                    });
+                    if matches {
+                        break;
                     }
-                    Ok(())
-                },
-            )?,
+                    st.enumerator(&content).advance();
+                }
+                Ok(())
+            })?,
         )?;
     }
 
@@ -443,13 +447,11 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         let s = Rc::clone(state);
         globals.set(
             "lock_guide_group",
-            lua.create_function_mut(
-                move |_, (advance, title): (Option<bool>, Option<String>)| {
-                    s.borrow_mut()
-                        .lock_guide_group(advance.unwrap_or(true), title);
-                    Ok(())
-                },
-            )?,
+            lua.create_function_mut(move |_, (advance, title): (Option<bool>, Option<String>)| {
+                s.borrow_mut()
+                    .lock_guide_group(advance.unwrap_or(true), title);
+                Ok(())
+            })?,
         )?;
     }
 
@@ -549,17 +551,15 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         let s = Rc::clone(state);
         globals.set(
             "graphics_on_path",
-            lua.create_function_mut(
-                move |_, (path, _vars): (String, Option<String>)| {
-                    let mut st = s.borrow_mut();
-                    if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&path) {
-                        if !st.graphics_element_ids.contains(&id) {
-                            st.graphics_element_ids.push(id);
-                        }
+            lua.create_function_mut(move |_, (path, _vars): (String, Option<String>)| {
+                let mut st = s.borrow_mut();
+                if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&path) {
+                    if !st.graphics_element_ids.contains(&id) {
+                        st.graphics_element_ids.push(id);
                     }
-                    Ok(())
-                },
-            )?,
+                }
+                Ok(())
+            })?,
         )?;
     }
 
@@ -823,6 +823,11 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                         let (source, value) = pair?;
                         guids.push(SchedulingContentGuid { source, value });
                     }
+                    guids.sort_by(|left, right| {
+                        left.source
+                            .cmp(&right.source)
+                            .then(left.value.cmp(&right.value))
+                    });
 
                     let mut searches: Vec<String> = Vec::new();
                     for v in searches_table.sequence_values::<String>() {
@@ -841,8 +846,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                         shuffle_with_seed(&mut items, seed);
                     }
 
-                    let history_key =
-                        history_key_for_marathon_content(&key, item_order, &group_by);
+                    let history_key = history_key_for_marathon_content(&key, item_order, &group_by);
                     let relevant_history = st.collect_playlist_history(&history_key);
 
                     let mut playlist = PlaylistEnumerator::new(items);
@@ -850,8 +854,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                         playlist.apply_history(&relevant_history);
                     }
 
-                    st.playlist_history_keys
-                        .insert(key.clone(), history_key);
+                    st.playlist_history_keys.insert(key.clone(), history_key);
                     st.playlist_enumerators.insert(key, playlist);
                     Ok(())
                 },
@@ -866,53 +869,53 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         let s = Rc::clone(state);
         globals.set(
             "create_playlist",
-            lua.create_function_mut(
-                move |_, (key, items_table): (String, Table)| {
-                    let mut st = s.borrow_mut();
-                    if st.enumerators.contains_key(&key)
-                        || st.playlist_enumerators.contains_key(&key)
-                    {
-                        return Ok(());
+            lua.create_function_mut(move |_, (key, items_table): (String, Table)| {
+                let mut st = s.borrow_mut();
+                if st.enumerators.contains_key(&key) || st.playlist_enumerators.contains_key(&key) {
+                    return Ok(());
+                }
+
+                let mut playlist_items: Vec<SchedulingPlaylistItem> = Vec::new();
+                let mut playlist_index: i64 = 0;
+                let mut entries = Vec::new();
+                for pair in items_table.pairs::<String, usize>() {
+                    let (child_key, count) = pair?;
+                    entries.push((child_key, count));
+                }
+                entries.sort_by(|left, right| left.0.cmp(&right.0));
+                for (child_key, count) in entries {
+                    let (playback_order, media_items) =
+                        if let Some(e) = st.enumerators.get(&child_key) {
+                            (e.playback_order, e.items.clone())
+                        } else {
+                            continue;
+                        };
+                    for _ in 0..count {
+                        playlist_items.push(SchedulingPlaylistItem {
+                            collection_key: SchedulingCollectionKey::fake_playlist_item(
+                                playlist_index,
+                            ),
+                            playback_order,
+                            play_all: false,
+                            count: None,
+                            media_items: media_items.clone(),
+                        });
+                        playlist_index += 1;
                     }
+                }
 
-                    let mut playlist_items: Vec<SchedulingPlaylistItem> = Vec::new();
-                    let mut playlist_index: i64 = 0;
-                    for pair in items_table.pairs::<String, usize>() {
-                        let (child_key, count) = pair?;
-                        let (playback_order, media_items) =
-                            if let Some(e) = st.enumerators.get(&child_key) {
-                                (e.playback_order, e.items.clone())
-                            } else {
-                                continue;
-                            };
-                        for _ in 0..count {
-                            playlist_items.push(SchedulingPlaylistItem {
-                                collection_key: SchedulingCollectionKey::fake_playlist_item(
-                                    playlist_index,
-                                ),
-                                playback_order,
-                                play_all: false,
-                                count: None,
-                                media_items: media_items.clone(),
-                            });
-                            playlist_index += 1;
-                        }
-                    }
+                let history_key = history_key_for_content(&key, PlaybackOrder::None);
+                let relevant_history = st.collect_playlist_history(&history_key);
 
-                    let history_key = history_key_for_content(&key, PlaybackOrder::None);
-                    let relevant_history = st.collect_playlist_history(&history_key);
+                let mut playlist = PlaylistEnumerator::new(playlist_items);
+                if !relevant_history.is_empty() {
+                    playlist.apply_history(&relevant_history);
+                }
 
-                    let mut playlist = PlaylistEnumerator::new(playlist_items);
-                    if !relevant_history.is_empty() {
-                        playlist.apply_history(&relevant_history);
-                    }
-
-                    st.playlist_history_keys
-                        .insert(key.clone(), history_key);
-                    st.playlist_enumerators.insert(key, playlist);
-                    Ok(())
-                },
-            )?,
+                st.playlist_history_keys.insert(key.clone(), history_key);
+                st.playlist_enumerators.insert(key, playlist);
+                Ok(())
+            })?,
         )?;
     }
 
@@ -982,9 +985,7 @@ impl ScriptState {
                 .reference_data
                 .existing_history
                 .iter()
-                .filter(|h| {
-                    h.when > start || h.finish.is_some_and(|f| f >= start)
-                })
+                .filter(|h| h.when > start || h.finish.is_some_and(|f| f >= start))
                 .map(|h| h.id)
                 .collect();
         }
@@ -1085,10 +1086,7 @@ impl ScriptState {
         }
     }
 
-    fn collect_playlist_history(
-        &self,
-        history_key: &str,
-    ) -> Vec<ersatzrs_domain::PlayoutHistory> {
+    fn collect_playlist_history(&self, history_key: &str) -> Vec<ersatzrs_domain::PlayoutHistory> {
         let cutoff = self.start;
         let Some(latest_when) = self
             .reference_data
@@ -1113,7 +1111,11 @@ impl ScriptState {
             self.guide_group
         } else {
             let next = self.guide_group + 1;
-            if next > 1000 { 1 } else { next }
+            if next > 1000 {
+                1
+            } else {
+                next
+            }
         }
     }
 
@@ -1548,10 +1550,14 @@ schedule_duration("main", "00:05:00")
     #[test]
     fn scripted_add_duration_fallback_snapshot() {
         let mut rd = SchedulingReferenceData::default();
-        rd.media_by_key
-            .insert("main".to_owned(), vec![SchedulingMediaItem::new(1, Duration::minutes(40))]);
-        rd.media_by_key
-            .insert("filler".to_owned(), vec![SchedulingMediaItem::new(99, Duration::minutes(5))]);
+        rd.media_by_key.insert(
+            "main".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::minutes(40))],
+        );
+        rd.media_by_key.insert(
+            "filler".to_owned(),
+            vec![SchedulingMediaItem::new(99, Duration::minutes(5))],
+        );
         // 30-minute window; main item (40 min) does not fit → fallback used
         let result = run(
             r#"add_duration("main", "00:30:00", {stop_before_end=true, fallback="filler"})"#,
@@ -1604,10 +1610,7 @@ schedule_duration("main", "00:05:00")
                 SchedulingMediaItem::new(3, Duration::minutes(22)),
             ],
         );
-        let result = run(
-            "skip(\"eps\", 2)\nadd_count(\"eps\", 1)",
-            rd,
-        );
+        let result = run("skip(\"eps\", 2)\nadd_count(\"eps\", 1)", rd);
         insta::assert_json_snapshot!(snapshot_items(&result));
     }
 
@@ -1627,10 +1630,7 @@ schedule_duration("main", "00:05:00")
         ep3.episode = Some(1);
         rd.media_by_key
             .insert("show".to_owned(), vec![ep1, ep2, ep3]);
-        let result = run(
-            "skip_to(\"show\", 2, 1)\nadd_count(\"show\", 1)",
-            rd,
-        );
+        let result = run("skip_to(\"show\", 2, 1)\nadd_count(\"show\", 1)", rd);
         insta::assert_json_snapshot!(snapshot_items(&result));
     }
 
@@ -1643,8 +1643,10 @@ schedule_duration("main", "00:05:00")
             "bumper".to_owned(),
             vec![SchedulingMediaItem::new(99, Duration::seconds(15))],
         );
-        rd.media_by_key
-            .insert("main".to_owned(), items_2(Duration::minutes(10), Duration::minutes(10)));
+        rd.media_by_key.insert(
+            "main".to_owned(),
+            items_2(Duration::minutes(10), Duration::minutes(10)),
+        );
         let result = run(
             "pre_roll_on(\"bumper\")\nadd_count(\"main\", 2)\npre_roll_off()",
             rd,
@@ -1685,10 +1687,7 @@ schedule_duration("main", "00:05:00")
                 SchedulingMediaItem::new(4, Duration::minutes(30)),
             ],
         );
-        let result = run(
-            "while not is_done() do\n  add_count(\"ep\", 1)\nend",
-            rd,
-        );
+        let result = run("while not is_done() do\n  add_count(\"ep\", 1)\nend", rd);
         insta::assert_json_snapshot!(snapshot_items(&result));
     }
 
@@ -1697,9 +1696,12 @@ schedule_duration("main", "00:05:00")
     #[test]
     fn scripted_watermark_by_name_snapshot() {
         let mut rd = SchedulingReferenceData::default();
-        rd.media_by_key
-            .insert("main".to_owned(), items_2(Duration::minutes(10), Duration::minutes(10)));
-        rd.watermark_ids_by_name.insert("Main Watermark".to_owned(), 55);
+        rd.media_by_key.insert(
+            "main".to_owned(),
+            items_2(Duration::minutes(10), Duration::minutes(10)),
+        );
+        rd.watermark_ids_by_name
+            .insert("Main Watermark".to_owned(), 55);
         rd.watermark_ids_by_name.insert("Secondary".to_owned(), 56);
         let result = run(
             "watermark_on(\"Main Watermark\")\nadd_count(\"main\", 1)\nwatermark_on(\"Secondary\")\nadd_count(\"main\", 1)\nwatermark_off(\"Main Watermark\")",
@@ -1713,9 +1715,12 @@ schedule_duration("main", "00:05:00")
     #[test]
     fn scripted_graphics_by_path_snapshot() {
         let mut rd = SchedulingReferenceData::default();
-        rd.media_by_key
-            .insert("main".to_owned(), items_2(Duration::minutes(10), Duration::minutes(10)));
-        rd.graphics_ids_by_path.insert("lower-third.svg".to_owned(), 200);
+        rd.media_by_key.insert(
+            "main".to_owned(),
+            items_2(Duration::minutes(10), Duration::minutes(10)),
+        );
+        rd.graphics_ids_by_path
+            .insert("lower-third.svg".to_owned(), 200);
         let result = run(
             "graphics_on_path(\"lower-third.svg\")\nadd_count(\"main\", 1)\ngraphics_off_path(\"lower-third.svg\")\nadd_count(\"main\", 1)",
             rd,

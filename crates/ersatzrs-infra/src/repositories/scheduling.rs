@@ -342,41 +342,41 @@ impl SqliteSchedulingContentRepository {
         group: Option<&str>,
         name: &str,
     ) -> Result<Vec<SchedulingPlaylistItem>> {
-        let playlist_id = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "Id" FROM "Playlist" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
-        )
-        .bind(name)
-        .fetch_optional(&self.0)
-        .await?;
+        let playlist_id = if let Some(group) = group {
+            sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT p."Id"
+                 FROM "Playlist" p
+                 JOIN "PlaylistGroup" pg ON pg."Id" = p."PlaylistGroupId"
+                 WHERE p."Name" = ? AND pg."Name" = ?
+                 ORDER BY p."Id"
+                 LIMIT 1"#,
+            )
+            .bind(name)
+            .bind(group)
+            .fetch_optional(&self.0)
+            .await?
+        } else {
+            sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT "Id" FROM "Playlist" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
+            )
+            .bind(name)
+            .fetch_optional(&self.0)
+            .await?
+        };
 
         let Some(playlist_id) = playlist_id else {
             return Ok(Vec::new());
         };
 
-        let rows = if let Some(group) = group {
-            sqlx::query(
-                r#"SELECT pi.*
-                 FROM "PlaylistItem" pi
-                 JOIN "Playlist" p ON p."Id" = pi."PlaylistId"
-                 JOIN "PlaylistGroup" pg ON pg."Id" = p."PlaylistGroupId"
-                 WHERE pi."PlaylistId" = ? AND pg."Name" = ?
-                 ORDER BY pi."Index", pi."Id""#,
-            )
-            .bind(playlist_id)
-            .bind(group)
-            .fetch_all(&self.0)
-            .await?
-        } else {
-            sqlx::query(
-                r#"SELECT *
-                 FROM "PlaylistItem"
-                 WHERE "PlaylistId" = ?
-                 ORDER BY "Index", "Id""#,
-            )
-            .bind(playlist_id)
-            .fetch_all(&self.0)
-            .await?
-        };
+        let rows = sqlx::query(
+            r#"SELECT *
+             FROM "PlaylistItem"
+             WHERE "PlaylistId" = ?
+             ORDER BY "Index", "Id""#,
+        )
+        .bind(playlist_id)
+        .fetch_all(&self.0)
+        .await?;
 
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
