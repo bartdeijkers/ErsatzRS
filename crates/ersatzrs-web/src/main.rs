@@ -51,6 +51,7 @@ async fn main() {
 
     let api_router: Router = Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
+        .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .with_state(app_state);
 
     let app: Router = Router::new()

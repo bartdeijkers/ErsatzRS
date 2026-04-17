@@ -6,13 +6,13 @@ use sqlx::SqlitePool;
 #[derive(Clone)]
 pub struct AppState {
     pub repositories: Arc<Repositories>,
+    pub pool: SqlitePool,
 }
 
 impl AppState {
     #[must_use]
     pub fn new(pool: SqlitePool) -> Self {
-        Self {
-            repositories: Arc::new(make_repositories(pool)),
-        }
+        let repositories = Arc::new(make_repositories(pool.clone()));
+        Self { repositories, pool }
     }
 }
