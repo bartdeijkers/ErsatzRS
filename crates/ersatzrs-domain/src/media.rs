@@ -294,6 +294,7 @@ pub struct MediaStream {
 pub struct MediaChapter {
     pub id: EntityId,
     pub media_version_id: EntityId,
+    pub chapter_id: i64,
     pub title: String,
     pub start_time: Duration,
     pub end_time: Duration,
