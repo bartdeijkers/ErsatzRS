@@ -3,6 +3,7 @@ mod channel;
 mod collection;
 mod config;
 mod deco;
+mod emby;
 mod error;
 mod ffmpeg_profile;
 mod filler;
@@ -21,6 +22,11 @@ pub use channel::ChannelRepository;
 pub use collection::CollectionRepository;
 pub use config::ConfigRepository;
 pub use deco::DecoRepository;
+pub use emby::{
+    EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
+    EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
+    EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService, EmbyShowItem, EmbyShowPage,
+};
 pub use error::{RepositoryError, Result};
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;

@@ -1,0 +1,13 @@
+---
+source: crates/ersatzrs-infra/tests/emby_service.rs
+assertion_line: 164
+expression: emby_collection_rows(&pool).await
+---
+[
+  {
+    "collection_item_id": "collection-1",
+    "custom_index": 0,
+    "movie_item_id": "movie-1",
+    "name": "Favorites"
+  }
+]

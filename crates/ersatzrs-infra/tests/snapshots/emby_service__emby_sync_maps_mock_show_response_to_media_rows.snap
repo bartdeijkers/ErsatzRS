@@ -1,0 +1,19 @@
+---
+source: crates/ersatzrs-infra/tests/emby_service.rs
+assertion_line: 289
+expression: emby_projected_rows(&pool).await
+---
+[
+  {
+    "chapter_count": 1,
+    "duration": "00:03:00",
+    "episode_item_id": "episode-1",
+    "height": 720,
+    "path": "/srv/media/show/s01e01.mkv",
+    "season_item_id": "season-1",
+    "season_number": 1,
+    "show_item_id": "show-1",
+    "stream_count": 2,
+    "width": 1280
+  }
+]
