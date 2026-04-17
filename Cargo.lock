@@ -539,8 +539,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -999,12 +1001,19 @@ name = "ersatzrs-web"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "ersatzrs-core",
+ "ersatzrs-domain",
  "ersatzrs-ffmpeg",
  "ersatzrs-infra",
+ "insta",
  "leptos",
  "leptos_axum",
  "leptos_meta",
  "leptos_router",
+ "quick-xml",
+ "serde",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",
@@ -1013,6 +1022,8 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
+ "uuid",
 ]
 
 [[package]]
@@ -2732,6 +2743,15 @@ dependencies = [
  "syn 2.0.117",
  "version_check",
  "yansi",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.37.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

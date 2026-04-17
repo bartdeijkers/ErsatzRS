@@ -1,11 +1,14 @@
 mod app;
 mod db;
+mod iptv;
+mod state;
 mod streaming;
 
 use app::{shell, App};
 use axum::{http::StatusCode, routing::get, Router};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
+use state::AppState;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -28,23 +31,27 @@ async fn main() {
     #[allow(clippy::disallowed_methods)] // Phase 0: config crate not yet available
     let db_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://ErsatzRS.db".to_string());
-    #[allow(unused_variables)]
-    let _pool = db::init(&db_url)
+    let pool = db::init(&db_url)
         .await
         .expect("database initialisation failed");
     tracing::info!(database_url = %db_url, "database initialised");
+
+    let app_state = AppState::new(pool);
 
     let conf = get_configuration(None).expect("valid leptos config");
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
     let leptos_options_clone = leptos_options.clone();
-    // LeptosRoutes requires `LeptosOptions: FromRef<S>`, which holds when S = LeptosOptions.
-    // Build a Router<LeptosOptions> by calling with_state first on a stub, then merge.
-    let leptos_router: Router<LeptosOptions> =
-        Router::new().leptos_routes(&leptos_options, routes, move || {
+    let leptos_router: Router = Router::new()
+        .leptos_routes(&leptos_options, routes, move || {
             shell(leptos_options_clone.clone())
-        });
+        })
+        .with_state(leptos_options);
+
+    let api_router: Router = Router::new()
+        .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
+        .with_state(app_state);
 
     let app: Router = Router::new()
         .route("/healthz", get(healthz))
@@ -52,9 +59,9 @@ async fn main() {
             "/dev/stream/bbb.ts",
             get(|| async { streaming::stream_big_buck_bunny() }),
         )
+        .merge(api_router)
         .merge(leptos_router)
-        .layer(TraceLayer::new_for_http())
-        .with_state(leptos_options);
+        .layer(TraceLayer::new_for_http());
 
     tracing::info!("ersatzrs-web listening on {LISTEN_ADDR}");
 
