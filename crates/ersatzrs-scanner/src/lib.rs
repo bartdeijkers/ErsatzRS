@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, VideoScanKind};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
+use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
 
@@ -338,12 +339,16 @@ async fn update_library_scan(
 }
 
 fn path_hash(path: &str) -> String {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    for byte in path.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    let digest = Sha256::digest(path.as_bytes());
+    let mut hash = String::with_capacity(digest.len() * 2);
+
+    for byte in digest {
+        use std::fmt::Write as _;
+
+        write!(&mut hash, "{byte:02x}").expect("writing to String should not fail");
     }
-    format!("{hash:016x}")
+
+    hash
 }
 
 fn encode_datetime(value: DateTime<Utc>) -> String {
@@ -380,4 +385,17 @@ fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
 struct LocalLibraryPath {
     id: i64,
     path: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_hash;
+
+    #[test]
+    fn path_hash_matches_sha256sum_output() {
+        assert_eq!(
+            path_hash("/media/movie.mkv"),
+            "255ca6b14e280f5d5ca28f4e6e010b19038627dbd263a1d17556460b7ee06e24"
+        );
+    }
 }

@@ -12,6 +12,7 @@ use ersatzrs_domain::{
 };
 use reqwest::Client;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 #[derive(Debug, Clone)]
@@ -1169,12 +1170,16 @@ fn provider_error(error: reqwest::Error) -> RepositoryError {
 }
 
 fn path_hash(path: &str) -> String {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    for byte in path.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    let digest = Sha256::digest(path.as_bytes());
+    let mut hash = String::with_capacity(digest.len() * 2);
+
+    for byte in digest {
+        use std::fmt::Write as _;
+
+        write!(&mut hash, "{byte:02x}").expect("writing to String should not fail");
     }
-    format!("{hash:016x}")
+
+    hash
 }
 
 fn encode_datetime(value: DateTime<Utc>) -> String {

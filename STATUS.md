@@ -85,9 +85,9 @@ protocol endpoints:
    insert `library_id.to_string()` into the provider `Key`/`ItemId`
    column. Thread the real provider id/key through from the scanner
    before real deployments.~~
-9. **`MediaFile.PathHash` must be SHA256.** ErsatzTV stores a SHA256 hex
+9. ~~**`MediaFile.PathHash` must be SHA256.** ErsatzTV stores a SHA256 hex
    digest; ErsatzRS currently uses a 16-char custom hash. Migrate to
-   SHA256 so imported ErsatzTV databases stay byte-compatible.
+   SHA256 so imported ErsatzTV databases stay byte-compatible.~~
 10. **`--dry-run` still requires credentials.** Each provider dispatch
     loads its config (which reads the token from env) before checking
     `args.dry_run`. Short-circuit to the dry-run branch first.
@@ -171,3 +171,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block B: implemented Plex collection sync plus scanner dispatch and added a collection-membership snapshot test. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block C: switched Emby season and episode fetches to `/Shows/{id}` endpoints, restored the movie fields set, and updated Emby provider tests. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block D: moved scanner provider credentials into DB-backed lookups, threaded real provider library keys into Plex/Jellyfin/Emby bootstrap rows, and added focused scanner/provider regression tests. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block E: switched scanner and provider `MediaFile.PathHash` writes to SHA256 hex for ErsatzTV parity; existing databases now require rescans to refresh stored path hashes. |
