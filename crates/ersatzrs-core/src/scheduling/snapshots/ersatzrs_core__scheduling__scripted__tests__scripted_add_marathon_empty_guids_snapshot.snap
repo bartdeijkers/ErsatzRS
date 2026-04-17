@@ -1,0 +1,7 @@
+---
+source: crates/ersatzrs-core/src/scheduling/scripted.rs
+expression: snapshot_items(&result)
+---
+{
+  "items": []
+}

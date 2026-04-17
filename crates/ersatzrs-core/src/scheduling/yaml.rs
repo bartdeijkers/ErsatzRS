@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
     history_key_for_content, lookup_media_source, parse_duration, parse_hhmm, playout_item,
-    MediaEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentGuid,
+    shuffle_with_seed, CurrentHistoryContext, MediaEnumerator, PlaylistChildEnumerator,
+    PlaylistEnumerator, PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingContentGuid,
     SchedulingContentResolver, SchedulingContentSource, SchedulingError, SchedulingMediaItem,
     SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
@@ -742,192 +743,6 @@ impl YamlContext {
     }
 }
 
-#[derive(Debug, Clone)]
-enum CurrentHistoryContext {
-    Single {
-        index: usize,
-    },
-    Playlist {
-        index: usize,
-        child_key: String,
-        child_index: usize,
-        child_details: String,
-    },
-}
-
-#[derive(Debug, Clone)]
-struct PlaylistChildEnumerator {
-    collection_key: super::SchedulingCollectionKey,
-    play_all: bool,
-    count: Option<usize>,
-    items_taken_from_current: usize,
-    enumerator: MediaEnumerator,
-}
-
-#[derive(Debug, Clone)]
-struct PlaylistEnumerator {
-    index: usize,
-    child_index: usize,
-    children: Vec<PlaylistChildEnumerator>,
-}
-
-impl PlaylistEnumerator {
-    fn new(playlist_items: Vec<SchedulingPlaylistItem>) -> Self {
-        let children = playlist_items
-            .into_iter()
-            .enumerate()
-            .map(|(index, item)| PlaylistChildEnumerator {
-                collection_key: item.collection_key,
-                play_all: item.play_all,
-                count: item.count,
-                items_taken_from_current: 0,
-                enumerator: MediaEnumerator::new(
-                    format!("playlist-child-{index}"),
-                    item.media_items,
-                )
-                .with_playback_order(item.playback_order),
-            })
-            .filter(|child| !child.enumerator.is_empty())
-            .collect();
-        Self {
-            index: 0,
-            child_index: 0,
-            children,
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.children
-            .iter()
-            .map(|child| {
-                if child.play_all {
-                    child.enumerator.len().max(1)
-                } else {
-                    child.count.unwrap_or(1)
-                }
-            })
-            .sum()
-    }
-
-    fn current_child(&self) -> Option<&PlaylistChildEnumerator> {
-        if self.children.is_empty() {
-            None
-        } else {
-            self.children.get(self.child_index % self.children.len())
-        }
-    }
-
-    fn current_child_mut(&mut self) -> Option<&mut PlaylistChildEnumerator> {
-        if self.children.is_empty() {
-            None
-        } else {
-            let index = self.child_index % self.children.len();
-            self.children.get_mut(index)
-        }
-    }
-
-    fn current(&self) -> Option<&SchedulingMediaItem> {
-        self.current_child()
-            .and_then(|child| child.enumerator.current())
-    }
-
-    fn current_history_context(&self) -> CurrentHistoryContext {
-        let Some(child) = self.current_child() else {
-            return CurrentHistoryContext::Single { index: self.index };
-        };
-        let child_details = child
-            .enumerator
-            .current()
-            .map(history_details_for_media_item)
-            .unwrap_or_default();
-        CurrentHistoryContext::Playlist {
-            index: self.index,
-            child_key: history_key_for_collection_key(&child.collection_key),
-            child_index: child.enumerator.current_index(),
-            child_details,
-        }
-    }
-
-    fn advance(&mut self) {
-        let Some(child) = self.current_child_mut() else {
-            return;
-        };
-        child.enumerator.advance();
-        child.items_taken_from_current = child.items_taken_from_current.saturating_add(1);
-
-        let should_switch = if child.play_all {
-            child.enumerator.current_index() == 0
-        } else if let Some(count) = child.count {
-            child.items_taken_from_current >= count
-        } else {
-            true
-        };
-
-        if should_switch {
-            self.child_index = (self.child_index + 1) % self.children.len();
-            if let Some(next_child) = self.current_child_mut() {
-                next_child.items_taken_from_current = 0;
-            }
-        }
-        self.index = self.index.saturating_add(1);
-        if self.child_index == 0
-            && self
-                .children
-                .first()
-                .is_some_and(|child| child.enumerator.current_index() == 0)
-        {
-            self.index = 0;
-        }
-    }
-
-    fn apply_history(&mut self, history: &[ersatzrs_domain::PlayoutHistory]) {
-        let Some(primary) = history.iter().find(|history| history.child_key.is_none()) else {
-            return;
-        };
-        self.index = usize::try_from(primary.index).unwrap_or_default();
-        let mut has_set_child = false;
-        for child_history in history.iter().filter(|history| history.child_key.is_some()) {
-            let Some(child_key) = child_history.child_key.as_deref() else {
-                continue;
-            };
-            let Some((child_index, child)) =
-                self.children.iter_mut().enumerate().find(|(_, child)| {
-                    history_key_for_collection_key(&child.collection_key) == child_key
-                })
-            else {
-                continue;
-            };
-            let next_index = if child_history.is_current_child {
-                child_history.index.saturating_add(1)
-            } else {
-                child_history.index
-            };
-            child
-                .enumerator
-                .set_index(usize::try_from(next_index).unwrap_or_default());
-            if child.enumerator.playback_order == PlaybackOrder::Chronological {
-                if child_history.is_current_child {
-                    child
-                        .enumerator
-                        .move_to_history_details(&child_history.details);
-                } else {
-                    child
-                        .enumerator
-                        .move_after_history_details(&child_history.details);
-                }
-            }
-            if child_history.is_current_child {
-                self.child_index = child_index;
-                has_set_child = true;
-            }
-        }
-        if !has_set_child && !self.children.is_empty() {
-            self.child_index =
-                usize::try_from(primary.index).unwrap_or_default() % self.children.len();
-        }
-        self.advance();
-    }
-}
 
 fn dispatch_instruction(
     context: &mut YamlContext,
@@ -1586,22 +1401,6 @@ fn eval_count_expression(expr: &str, enumerator_len: usize, seed: u64) -> usize 
     let chars = expr.as_bytes();
     let (result, _) = expr_parse_expr(chars, 0, count, random);
     usize::try_from(result.max(0)).unwrap_or(0)
-}
-
-/// Fisher-Yates shuffle with a simple LCG for deterministic ordering.
-fn shuffle_with_seed<T>(items: &mut [T], seed: u64) {
-    let len = items.len();
-    if len <= 1 {
-        return;
-    }
-    let mut state = seed;
-    for i in (1..len).rev() {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        let j = (state >> 33) as usize % (i + 1);
-        items.swap(i, j);
-    }
 }
 
 fn detect_cycle(definition: &YamlPlayoutDefinition) -> Result<(), SchedulingError> {

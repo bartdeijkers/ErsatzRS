@@ -5,9 +5,11 @@ use ersatzrs_domain::{EntityId, FillerKind, PlaybackOrder, PlayoutAnchor};
 use mlua::{Lua, Table};
 
 use super::{
-    history, history_details_for_media_item, history_key_for_content,
-    parse_duration, parse_hhmm, playout_item, MediaEnumerator, PlayoutBuildMode,
-    PlayoutSchedulingEngine, SchedulingError, SchedulingReferenceData, SchedulingRequest,
+    history, history_details_for_media_item, history_key_for_collection_key,
+    history_key_for_content, history_key_for_marathon_content, parse_duration, parse_hhmm,
+    playout_item, shuffle_with_seed, CurrentHistoryContext, MediaEnumerator, PlaylistEnumerator,
+    PlayoutBuildMode, PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
+    SchedulingError, SchedulingPlaylistItem, SchedulingReferenceData, SchedulingRequest,
     SchedulingResult,
 };
 
@@ -288,10 +290,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         globals.set(
             "add_all",
             lua.create_function_mut(move |_, (content, opts): (String, Option<Table>)| {
-                let count = {
-                    let mut st = s.borrow_mut();
-                    st.enumerator(&content).len()
-                };
+                let count = s.borrow_mut().key_len(&content);
                 let opts = read_add_options(opts.as_ref());
                 for _ in 0..count {
                     s.borrow_mut().add_item_with_opts(&content, None, &opts);
@@ -783,6 +782,140 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         )?;
     }
 
+    // add_marathon(key, guids_table, searches_table, group_by, opts?)
+    // opts = {shuffle_groups=false, item_order="season_episode", play_all=false}
+    {
+        let s = Rc::clone(state);
+        globals.set(
+            "add_marathon",
+            lua.create_function_mut(
+                move |_,
+                      (key, guids_table, searches_table, group_by, opts): (
+                    String,
+                    Table,
+                    Table,
+                    String,
+                    Option<Table>,
+                )| {
+                    let mut st = s.borrow_mut();
+                    if st.enumerators.contains_key(&key)
+                        || st.playlist_enumerators.contains_key(&key)
+                    {
+                        return Ok(());
+                    }
+
+                    let shuffle_groups = opts
+                        .as_ref()
+                        .and_then(|t| t.get::<Option<bool>>("shuffle_groups").ok().flatten())
+                        .unwrap_or(false);
+                    let play_all = opts
+                        .as_ref()
+                        .and_then(|t| t.get::<Option<bool>>("play_all").ok().flatten())
+                        .unwrap_or(false);
+                    let item_order = parse_playback_order(
+                        opts.as_ref()
+                            .and_then(|t| t.get::<Option<String>>("item_order").ok().flatten())
+                            .as_deref(),
+                    );
+
+                    let mut guids: Vec<SchedulingContentGuid> = Vec::new();
+                    for pair in guids_table.pairs::<String, String>() {
+                        let (source, value) = pair?;
+                        guids.push(SchedulingContentGuid { source, value });
+                    }
+
+                    let mut searches: Vec<String> = Vec::new();
+                    for v in searches_table.sequence_values::<String>() {
+                        searches.push(v?);
+                    }
+
+                    let mut items = st.reference_data.marathon_playlist_items(
+                        None, &guids, &searches, &group_by, item_order, play_all,
+                    );
+
+                    if shuffle_groups {
+                        let seed = st
+                            .playout_id
+                            .unsigned_abs()
+                            .wrapping_add(st.enumerators.len() as u64);
+                        shuffle_with_seed(&mut items, seed);
+                    }
+
+                    let history_key =
+                        history_key_for_marathon_content(&key, item_order, &group_by);
+                    let relevant_history = st.collect_playlist_history(&history_key);
+
+                    let mut playlist = PlaylistEnumerator::new(items);
+                    if !relevant_history.is_empty() {
+                        playlist.apply_history(&relevant_history);
+                    }
+
+                    st.playlist_history_keys
+                        .insert(key.clone(), history_key);
+                    st.playlist_enumerators.insert(key, playlist);
+                    Ok(())
+                },
+            )?,
+        )?;
+    }
+
+    // create_playlist(key, items_table)
+    // items_table = {enumerator_key = count, ...}
+    // Assembles an inline playlist from already-registered enumerators.
+    {
+        let s = Rc::clone(state);
+        globals.set(
+            "create_playlist",
+            lua.create_function_mut(
+                move |_, (key, items_table): (String, Table)| {
+                    let mut st = s.borrow_mut();
+                    if st.enumerators.contains_key(&key)
+                        || st.playlist_enumerators.contains_key(&key)
+                    {
+                        return Ok(());
+                    }
+
+                    let mut playlist_items: Vec<SchedulingPlaylistItem> = Vec::new();
+                    let mut playlist_index: i64 = 0;
+                    for pair in items_table.pairs::<String, usize>() {
+                        let (child_key, count) = pair?;
+                        let (playback_order, media_items) =
+                            if let Some(e) = st.enumerators.get(&child_key) {
+                                (e.playback_order, e.items.clone())
+                            } else {
+                                continue;
+                            };
+                        for _ in 0..count {
+                            playlist_items.push(SchedulingPlaylistItem {
+                                collection_key: SchedulingCollectionKey::fake_playlist_item(
+                                    playlist_index,
+                                ),
+                                playback_order,
+                                play_all: false,
+                                count: None,
+                                media_items: media_items.clone(),
+                            });
+                            playlist_index += 1;
+                        }
+                    }
+
+                    let history_key = history_key_for_content(&key, PlaybackOrder::None);
+                    let relevant_history = st.collect_playlist_history(&history_key);
+
+                    let mut playlist = PlaylistEnumerator::new(playlist_items);
+                    if !relevant_history.is_empty() {
+                        playlist.apply_history(&relevant_history);
+                    }
+
+                    st.playlist_history_keys
+                        .insert(key.clone(), history_key);
+                    st.playlist_enumerators.insert(key, playlist);
+                    Ok(())
+                },
+            )?,
+        )?;
+    }
+
     Ok(())
 }
 
@@ -802,6 +935,8 @@ struct ScriptState {
     added_history: Vec<ersatzrs_domain::PlayoutHistory>,
     history_to_remove: Vec<EntityId>,
     enumerators: BTreeMap<String, MediaEnumerator>,
+    playlist_enumerators: BTreeMap<String, PlaylistEnumerator>,
+    playlist_history_keys: BTreeMap<String, String>,
     guide_group: i32,
     guide_group_locked: bool,
     guide_group_title: bool,
@@ -832,6 +967,8 @@ impl ScriptState {
             added_history: Vec::new(),
             history_to_remove: Vec::new(),
             enumerators: BTreeMap::new(),
+            playlist_enumerators: BTreeMap::new(),
+            playlist_history_keys: BTreeMap::new(),
             guide_group: 0,
             guide_group_locked: false,
             guide_group_title: false,
@@ -852,6 +989,123 @@ impl ScriptState {
                 .collect();
         }
         st
+    }
+
+    fn current_media_and_context(
+        &mut self,
+        key: &str,
+    ) -> Option<(super::SchedulingMediaItem, CurrentHistoryContext)> {
+        if self.playlist_enumerators.contains_key(key) {
+            let playlist = self.playlist_enumerators.get(key).unwrap();
+            let media_item = playlist.current().cloned()?;
+            let ctx = playlist.current_history_context();
+            Some((media_item, ctx))
+        } else {
+            // lazy-load from media_by_key, mirroring the old enumerator() behaviour
+            let e = self.enumerator(key);
+            let media_item = e.current().cloned()?;
+            let idx = e.current_index();
+            Some((media_item, CurrentHistoryContext::Single { index: idx }))
+        }
+    }
+
+    fn advance_key(&mut self, key: &str) {
+        if let Some(playlist) = self.playlist_enumerators.get_mut(key) {
+            playlist.advance();
+        } else if let Some(e) = self.enumerators.get_mut(key) {
+            e.advance();
+        }
+    }
+
+    fn key_len(&mut self, key: &str) -> usize {
+        if let Some(playlist) = self.playlist_enumerators.get(key) {
+            playlist.len()
+        } else {
+            self.enumerator(key).len()
+        }
+    }
+
+    fn history_key_for(&self, key: &str) -> String {
+        if let Some(k) = self.playlist_history_keys.get(key) {
+            k.clone()
+        } else {
+            let po = self
+                .enumerators
+                .get(key)
+                .map(|e| e.playback_order)
+                .unwrap_or(PlaybackOrder::None);
+            history_key_for_content(key, po)
+        }
+    }
+
+    fn push_history_ctx(
+        &mut self,
+        item: &ersatzrs_domain::PlayoutItem,
+        media_item: &super::SchedulingMediaItem,
+        ctx: &CurrentHistoryContext,
+        history_key: &str,
+    ) {
+        match ctx {
+            CurrentHistoryContext::Single { index } => {
+                self.added_history.push(history(
+                    self.playout_id,
+                    history_key,
+                    item,
+                    None,
+                    *index,
+                    history_details_for_media_item(media_item),
+                    false,
+                ));
+            }
+            CurrentHistoryContext::Playlist {
+                index,
+                child_key,
+                child_index,
+                child_details,
+            } => {
+                self.added_history.push(history(
+                    self.playout_id,
+                    history_key,
+                    item,
+                    None,
+                    *index,
+                    history_details_for_media_item(media_item),
+                    false,
+                ));
+                self.added_history.push(history(
+                    self.playout_id,
+                    history_key,
+                    item,
+                    Some(child_key.clone()),
+                    *child_index,
+                    child_details.clone(),
+                    true,
+                ));
+            }
+        }
+    }
+
+    fn collect_playlist_history(
+        &self,
+        history_key: &str,
+    ) -> Vec<ersatzrs_domain::PlayoutHistory> {
+        let cutoff = self.start;
+        let Some(latest_when) = self
+            .reference_data
+            .existing_history
+            .iter()
+            .filter(|h| h.key == history_key && h.when < cutoff)
+            .map(|h| h.when)
+            .max()
+        else {
+            return Vec::new();
+        };
+        self.reference_data
+            .existing_history
+            .iter()
+            .filter(|h| h.key == history_key && h.when == latest_when)
+            .cloned()
+            .collect()
     }
 
     fn peek_guide_group(&self) -> i32 {
@@ -931,7 +1185,7 @@ impl ScriptState {
         if self.current_time >= self.finish {
             return;
         }
-        let Some(media_item) = self.enumerator(key).current().cloned() else {
+        let Some((media_item, history_ctx)) = self.current_media_and_context(key) else {
             return;
         };
         let duration = duration.unwrap_or(media_item.duration);
@@ -950,28 +1204,19 @@ impl ScriptState {
             self.graphics_element_ids.clone(),
             Some(format!(r#"{{"scriptContent":"{key}"}}"#)),
         );
-        let po = self.enumerator(key).playback_order;
-        let history_index = self.enumerator(key).current_index();
-        self.added_history.push(history(
-            self.playout_id,
-            history_key_for_content(key, po),
-            &item,
-            None,
-            history_index,
-            history_details_for_media_item(&media_item),
-            false,
-        ));
+        let history_key = self.history_key_for(key);
+        self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
-        self.enumerator(key).advance();
+        self.advance_key(key);
     }
 
     fn add_item_with_opts(&mut self, key: &str, duration: Option<Duration>, opts: &AddOptions) {
         if self.current_time >= self.finish {
             return;
         }
-        let Some(media_item) = self.enumerator(key).current().cloned() else {
+        let Some((media_item, history_ctx)) = self.current_media_and_context(key) else {
             return;
         };
         let duration = duration.unwrap_or(media_item.duration);
@@ -998,21 +1243,12 @@ impl ScriptState {
             self.graphics_element_ids.clone(),
             Some(format!(r#"{{"scriptContent":"{key}"}}"#)),
         );
-        let po = self.enumerator(key).playback_order;
-        let history_index = self.enumerator(key).current_index();
-        self.added_history.push(history(
-            self.playout_id,
-            history_key_for_content(key, po),
-            &item,
-            None,
-            history_index,
-            history_details_for_media_item(&media_item),
-            false,
-        ));
+        let history_key = self.history_key_for(key);
+        self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
         self.current_time = item.finish;
         self.added_items.push(item);
         self.advance_guide_group();
-        self.enumerator(key).advance();
+        self.advance_key(key);
     }
 
     fn add_pre_roll_item(&mut self, key: &str, target: DateTime<Utc>) {
@@ -1064,7 +1300,7 @@ impl ScriptState {
             if self.current_time >= target {
                 break;
             }
-            let Some(media_item) = self.enumerator(key).current().cloned() else {
+            let Some((media_item, _)) = self.current_media_and_context(key) else {
                 break;
             };
             let item_duration = media_item.duration;
@@ -1079,7 +1315,7 @@ impl ScriptState {
                 self.add_item_with_opts(key, Some(use_duration), opts);
             } else if discard_attempts > 0 {
                 discard_attempts -= 1;
-                self.enumerator(key).advance();
+                self.advance_key(key);
             } else if opts.trim {
                 self.add_item_with_opts(key, Some(remaining), opts);
                 done = true;
@@ -1572,6 +1808,108 @@ schedule_duration("main", "00:05:00")
         );
         let result = run(
             "add_count(\"ep\", 2)\nrewind(\"ep\")\nadd_count(\"ep\", 1)",
+            rd,
+        );
+        insta::assert_json_snapshot!(snapshot_items(&result));
+    }
+
+    // ── add_marathon grouping ─────────────────────────────────────────────────
+
+    #[test]
+    fn scripted_add_marathon_by_show_snapshot() {
+        // Two shows via different provider sources; show_id 1 under "plex",
+        // show_id 2 under "tvdb".  add_marathon groups by show; add_count
+        // cycles one item per group (round-robin): s1e1, s2e1, s1e2, s2e2.
+        let mut rd = SchedulingReferenceData::default();
+        let mut ep1 = SchedulingMediaItem::new(10, Duration::minutes(22));
+        ep1.show_id = Some(1);
+        ep1.season = Some(1);
+        ep1.episode = Some(1);
+        let mut ep2 = SchedulingMediaItem::new(11, Duration::minutes(22));
+        ep2.show_id = Some(1);
+        ep2.season = Some(1);
+        ep2.episode = Some(2);
+        let mut ep3 = SchedulingMediaItem::new(20, Duration::minutes(22));
+        ep3.show_id = Some(2);
+        ep3.season = Some(1);
+        ep3.episode = Some(1);
+        let mut ep4 = SchedulingMediaItem::new(21, Duration::minutes(22));
+        ep4.show_id = Some(2);
+        ep4.season = Some(1);
+        ep4.episode = Some(2);
+        rd.media_by_show_guid
+            .insert("plex://show-1".to_owned(), vec![ep1, ep2]);
+        rd.media_by_show_guid
+            .insert("tvdb://show-2".to_owned(), vec![ep3, ep4]);
+        let result = run(
+            r#"
+add_marathon("marathon", {plex="show-1", tvdb="show-2"}, {}, "show")
+add_count("marathon", 4)
+"#,
+            rd,
+        );
+        insta::assert_json_snapshot!(snapshot_items(&result));
+    }
+
+    #[test]
+    fn scripted_add_marathon_empty_guids_snapshot() {
+        // Edge case: marathon with no matching guids produces no items.
+        let rd = SchedulingReferenceData::default();
+        let result = run(
+            r#"
+add_marathon("marathon", {plex="nonexistent-show"}, {}, "show")
+add_count("marathon", 3)
+"#,
+            rd,
+        );
+        insta::assert_json_snapshot!(snapshot_items(&result));
+    }
+
+    // ── create_playlist inline assembly ──────────────────────────────────────
+
+    #[test]
+    fn scripted_create_playlist_from_enumerators_snapshot() {
+        // Two enumerators registered via add_collection; create_playlist
+        // assembles them into a single playlist with one slot from each per cycle.
+        let mut rd = SchedulingReferenceData::default();
+        rd.collections_by_name.insert(
+            "Shorts".to_owned(),
+            vec![
+                SchedulingMediaItem::new(1, Duration::minutes(5)),
+                SchedulingMediaItem::new(2, Duration::minutes(5)),
+            ],
+        );
+        rd.collections_by_name.insert(
+            "Bumpers".to_owned(),
+            vec![SchedulingMediaItem::new(99, Duration::minutes(2))],
+        );
+        let result = run(
+            r#"
+add_collection("shorts", "Shorts", "chronological")
+add_collection("bumpers", "Bumpers", "chronological")
+create_playlist("pl", {shorts=1, bumpers=1})
+add_count("pl", 4)
+"#,
+            rd,
+        );
+        insta::assert_json_snapshot!(snapshot_items(&result));
+    }
+
+    #[test]
+    fn scripted_create_playlist_missing_key_snapshot() {
+        // Edge case: create_playlist references a key never registered;
+        // the unknown key is silently skipped; valid keys still schedule.
+        let mut rd = SchedulingReferenceData::default();
+        rd.collections_by_name.insert(
+            "Shorts".to_owned(),
+            vec![SchedulingMediaItem::new(5, Duration::minutes(5))],
+        );
+        let result = run(
+            r#"
+add_collection("shorts", "Shorts", "chronological")
+create_playlist("pl", {shorts=2, nonexistent=1})
+add_count("pl", 2)
+"#,
             rd,
         );
         insta::assert_json_snapshot!(snapshot_items(&result));
