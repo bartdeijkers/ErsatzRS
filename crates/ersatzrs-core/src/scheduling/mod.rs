@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
     CollectionType, EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory,
-    PlayoutItem,
+    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    PlayoutScheduleKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -435,6 +436,11 @@ pub struct SchedulingResult {
     pub history_to_remove: Vec<EntityId>,
     pub items_to_remove: Vec<EntityId>,
     pub anchor: Option<PlayoutAnchor>,
+    /// Collection-enumerator anchors produced by Classic scheduling.
+    /// Block/YAML/Scripted engines leave this empty; state is in `anchor.context`.
+    pub program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    /// Fill-group enumerator state produced by Classic scheduling.
+    pub fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub warnings: Vec<String>,
 }
 
@@ -468,6 +474,8 @@ pub enum SchedulingError {
     InvalidTime(String),
     #[error("script error: {0}")]
     Script(String),
+    #[error("unsupported playout schedule kind: {0:?}")]
+    UnsupportedScheduleKind(PlayoutScheduleKind),
 }
 
 #[derive(Debug, Clone)]
