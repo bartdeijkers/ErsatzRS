@@ -19,6 +19,25 @@ than the current codebase requires because most code has not been written yet.
 - Constants use `SCREAMING_SNAKE_CASE`.
 - Database identifiers use `snake_case`.
 
+## Porting Parity
+
+- Treat ErsatzTV-generated strings stored in the database or returned through
+  scheduling APIs as compatibility contracts. This includes JSON payloads such
+  as `BlockKey`, `CollectionKey`, `SchedulingContext`, playout history keys,
+  and history details.
+- Match ErsatzTV serializer behavior for those contracts instead of applying
+  Rust naming conventions by default. Preserve property casing, omitted/null
+  fields, enum representation, and deterministic property order when tests or
+  persisted data depend on them.
+- When porting C# code that calls `JsonConvert.SerializeObject` or
+  `System.Text.Json.JsonSerializer.Serialize`, read the serializer settings and
+  add a fixture or snapshot that captures the produced string before relying on
+  derived `serde` output.
+- If a Rust representation intentionally differs from ErsatzTV serialized
+  output, document the reason in a code comment that references the C# source
+  path and line, and add or update an ADR if the difference affects persisted
+  data or public behavior.
+
 ## Errors
 
 - Library crates use `thiserror` for typed errors.
