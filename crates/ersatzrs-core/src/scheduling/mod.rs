@@ -472,16 +472,14 @@ pub enum SchedulingError {
 
 #[derive(Debug, Clone)]
 pub(super) struct MediaEnumerator {
-    key: String,
     items: Vec<SchedulingMediaItem>,
     index: usize,
     playback_order: PlaybackOrder,
 }
 
 impl MediaEnumerator {
-    fn new(key: impl Into<String>, items: Vec<SchedulingMediaItem>) -> Self {
+    fn new(_key: impl Into<String>, items: Vec<SchedulingMediaItem>) -> Self {
         Self {
-            key: key.into(),
             items,
             index: 0,
             playback_order: PlaybackOrder::None,
@@ -528,6 +526,20 @@ impl MediaEnumerator {
             0
         } else {
             self.index % self.items.len()
+        }
+    }
+
+    pub(super) fn scheduling_context_name(&self) -> &'static str {
+        match self.playback_order {
+            PlaybackOrder::Chronological => "Chronological",
+            PlaybackOrder::SeasonEpisode => "Season, Episode",
+            PlaybackOrder::Shuffle => "Block Shuffle",
+            PlaybackOrder::Random => "Random",
+            PlaybackOrder::RandomRotation => "Random Rotating",
+            PlaybackOrder::None
+            | PlaybackOrder::ShuffleInOrder
+            | PlaybackOrder::MultiEpisodeShuffle
+            | PlaybackOrder::Marathon => "Random",
         }
     }
 

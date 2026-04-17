@@ -1,18 +1,18 @@
 ---
 source: crates/ersatzrs-core/src/scheduling/block.rs
-assertion_line: 934
+assertion_line: 1309
 expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), \"history\":\n    result.added_history.iter().map(|history|\n    serde_json::json!({\n        \"key\": history.key, \"when\": history.when.to_rfc3339(), \"finish\":\n        history.finish.map(|finish| finish.to_rfc3339()),\n    })).collect::<Vec<_>>(),\n})"
 ---
 {
   "history": [
     {
       "finish": "2026-04-15T08:25:00+00:00",
-      "key": "{\"BlockId\":10,\"PlaybackOrder\":\"Chronological\",\"CollectionType\":\"Collection\",\"CollectionId\":1}",
+      "key": "{\"BlockId\":10,\"PlaybackOrder\":1,\"CollectionType\":0,\"CollectionId\":1}",
       "when": "2026-04-15T08:05:00+00:00"
     },
     {
       "finish": "2026-04-15T08:05:00+00:00",
-      "key": "{\"CollectionId\":null,\"CollectionType\":\"Playlist\",\"DecoBreakContentId\":71,\"MediaItemId\":null,\"MultiCollectionId\":null,\"PlaybackOrder\":\"Shuffle\",\"PlaylistId\":71,\"SmartCollectionId\":null}",
+      "key": "{\"CollectionId\":null,\"CollectionType\":6,\"DecoBreakContentId\":71,\"MediaItemId\":null,\"MultiCollectionId\":null,\"PlaybackOrder\":3,\"PlaylistId\":71,\"SmartCollectionId\":null}",
       "when": "2026-04-15T08:00:00+00:00"
     }
   ],
@@ -20,7 +20,7 @@ expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), 
     {
       "block_key": null,
       "collection_etag": null,
-      "collection_key": "{\"collection_type\":\"Playlist\",\"collection_id\":null,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":71,\"search_query\":null,\"fake_collection_key\":null}",
+      "collection_key": "{\"CollectionType\":6,\"PlaylistId\":71}",
       "context": null,
       "disable_watermarks": false,
       "filler": "DecoDefault",
@@ -36,8 +36,8 @@ expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), 
     {
       "block_key": "{\"b\":10,\"bt\":100,\"t\":20,\"tt\":200,\"pt\":30,\"ptt\":300}",
       "collection_etag": "103d955a678eb193",
-      "collection_key": "{\"collection_type\":\"Collection\",\"collection_id\":1,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null}",
-      "context": "{\"blockId\":10,\"blockItemId\":1,\"enumerator\":\"movies\",\"seed\":0,\"index\":0}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":1}",
+      "context": "{\"BlockId\":10,\"BlockItemId\":1,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
       "disable_watermarks": false,
       "filler": "None",
       "finish": "2026-04-15T08:25:00+00:00",

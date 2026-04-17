@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "block_key": "{\"b\":30,\"bt\":301,\"t\":200,\"tt\":201,\"pt\":101,\"ptt\":1001}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":31}",
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T10:15:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T10:40:00+00:00",
+      "guide_group": 40,
+      "guide_start": "2026-04-15T10:00:00+00:00",
+      "media": 301,
+      "scheduling_context": "{\"BlockId\":30,\"BlockItemId\":31,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
+      "start": "2026-04-15T10:00:00+00:00",
+      "watermarks": []
+    },
+    {
+      "block_key": "{\"b\":30,\"bt\":301,\"t\":200,\"tt\":201,\"pt\":101,\"ptt\":1001}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":32}",
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T10:25:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T10:40:00+00:00",
+      "guide_group": 40,
+      "guide_start": "2026-04-15T10:00:00+00:00",
+      "media": 302,
+      "scheduling_context": "{\"BlockId\":30,\"BlockItemId\":32,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
+      "start": "2026-04-15T10:15:00+00:00",
+      "watermarks": []
+    }
+  ]
+}

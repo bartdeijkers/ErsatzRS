@@ -1,0 +1,79 @@
+{
+  "items": [
+    {
+      "block_key": "{\"b\":10,\"bt\":100,\"t\":20,\"tt\":200,\"pt\":30,\"ptt\":300}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":1}",
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T08:10:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T08:10:00+00:00",
+      "guide_group": 20,
+      "guide_start": "2026-04-15T08:00:00+00:00",
+      "media": 1,
+      "scheduling_context": "{\"BlockId\":10,\"BlockItemId\":1,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
+      "start": "2026-04-15T08:00:00+00:00",
+      "watermarks": []
+    },
+    {
+      "block_key": null,
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":80}",
+      "disable_watermarks": false,
+      "filler": "DecoDefault",
+      "finish": "2026-04-15T08:17:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T08:10:00+00:00",
+      "guide_group": 20,
+      "guide_start": "2026-04-15T08:00:00+00:00",
+      "media": 90,
+      "scheduling_context": null,
+      "start": "2026-04-15T08:10:00+00:00",
+      "watermarks": []
+    },
+    {
+      "block_key": null,
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":80}",
+      "disable_watermarks": false,
+      "filler": "DecoDefault",
+      "finish": "2026-04-15T08:24:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T08:10:00+00:00",
+      "guide_group": 20,
+      "guide_start": "2026-04-15T08:00:00+00:00",
+      "media": 90,
+      "scheduling_context": null,
+      "start": "2026-04-15T08:17:00+00:00",
+      "watermarks": []
+    },
+    {
+      "block_key": null,
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":80}",
+      "disable_watermarks": false,
+      "filler": "DecoDefault",
+      "finish": "2026-04-15T08:25:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T08:10:00+00:00",
+      "guide_group": 20,
+      "guide_start": "2026-04-15T08:00:00+00:00",
+      "media": 90,
+      "scheduling_context": null,
+      "start": "2026-04-15T08:24:00+00:00",
+      "watermarks": []
+    },
+    {
+      "block_key": "{\"b\":11,\"bt\":110,\"t\":21,\"tt\":210,\"pt\":31,\"ptt\":310}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":2}",
+      "disable_watermarks": false,
+      "filler": "None",
+      "finish": "2026-04-15T08:35:00+00:00",
+      "graphics": [],
+      "guide_finish": "2026-04-15T08:35:00+00:00",
+      "guide_group": 21,
+      "guide_start": "2026-04-15T08:25:00+00:00",
+      "media": 1,
+      "scheduling_context": "{\"BlockId\":11,\"BlockItemId\":2,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
+      "start": "2026-04-15T08:25:00+00:00",
+      "watermarks": []
+    }
+  ]
+}

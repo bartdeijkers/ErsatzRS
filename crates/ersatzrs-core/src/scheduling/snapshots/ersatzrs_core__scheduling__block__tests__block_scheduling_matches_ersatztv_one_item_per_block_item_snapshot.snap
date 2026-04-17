@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-core/src/scheduling/block.rs
-assertion_line: 830
+assertion_line: 1193
 expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), \"history\":\n    result.added_history.iter().map(|history|\n    serde_json::json!({\n        \"key\": history.key, \"when\": history.when.to_rfc3339(), \"finish\":\n        history.finish.map(|finish| finish.to_rfc3339()), \"index\":\n        history.index,\n    })).collect::<Vec<_>>(),\n})"
 ---
 {
@@ -8,13 +8,13 @@ expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), 
     {
       "finish": "2026-04-15T08:30:00+00:00",
       "index": 0,
-      "key": "{\"BlockId\":10,\"PlaybackOrder\":\"Chronological\",\"CollectionType\":\"Collection\",\"CollectionId\":1}",
+      "key": "{\"BlockId\":10,\"PlaybackOrder\":1,\"CollectionType\":0,\"CollectionId\":1}",
       "when": "2026-04-15T08:00:00+00:00"
     },
     {
       "finish": "2026-04-15T08:35:00+00:00",
       "index": 0,
-      "key": "{\"BlockId\":10,\"PlaybackOrder\":\"Chronological\",\"CollectionType\":\"Collection\",\"CollectionId\":2}",
+      "key": "{\"BlockId\":10,\"PlaybackOrder\":1,\"CollectionType\":0,\"CollectionId\":2}",
       "when": "2026-04-15T08:30:00+00:00"
     }
   ],
@@ -22,8 +22,8 @@ expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), 
     {
       "block_key": "{\"b\":10,\"bt\":100,\"t\":20,\"tt\":200,\"pt\":30,\"ptt\":300}",
       "collection_etag": "78131d560c0ec53f",
-      "collection_key": "{\"collection_type\":\"Collection\",\"collection_id\":1,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null}",
-      "context": "{\"blockId\":10,\"blockItemId\":1,\"enumerator\":\"movies\",\"seed\":0,\"index\":0}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":1}",
+      "context": "{\"BlockId\":10,\"BlockItemId\":1,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
       "disable_watermarks": false,
       "filler": "None",
       "finish": "2026-04-15T08:30:00+00:00",
@@ -40,8 +40,8 @@ expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), 
     {
       "block_key": "{\"b\":10,\"bt\":100,\"t\":20,\"tt\":200,\"pt\":30,\"ptt\":300}",
       "collection_etag": "ef0b746f11b23ca9",
-      "collection_key": "{\"collection_type\":\"Collection\",\"collection_id\":2,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null}",
-      "context": "{\"blockId\":10,\"blockItemId\":2,\"enumerator\":\"shorts\",\"seed\":0,\"index\":0}",
+      "collection_key": "{\"CollectionType\":0,\"CollectionId\":2}",
+      "context": "{\"BlockId\":10,\"BlockItemId\":2,\"Enumerator\":\"Chronological\",\"Seed\":0,\"Index\":0}",
       "disable_watermarks": true,
       "filler": "GuideMode",
       "finish": "2026-04-15T08:35:00+00:00",

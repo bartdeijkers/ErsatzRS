@@ -452,7 +452,7 @@ fn effective_block_playout_item(
     enumerator: &super::MediaEnumerator,
 ) -> PlayoutItem {
     let block_finish = block.start + block.duration;
-    let collection_key = serde_json::to_string(&block_item.collection_key).unwrap_or_default();
+    let collection_key = collection_key_json(&block_item.collection_key);
     let collection_etag = collection_etags
         .get(&collection_key)
         .cloned()
@@ -477,8 +477,12 @@ fn effective_block_playout_item(
         block_item.watermark_ids.clone(),
         block_item.graphics_element_ids.clone(),
         Some(format!(
-            r#"{{"blockId":{},"blockItemId":{},"enumerator":"{}","seed":{},"index":{}}}"#,
-            block.block_id, block_item.id, enumerator.key, request.playout.seed, enumerator.index
+            r#"{{"BlockId":{},"BlockItemId":{},"Enumerator":"{}","Seed":{},"Index":{}}}"#,
+            block.block_id,
+            block_item.id,
+            enumerator.scheduling_context_name(),
+            context_seed(request.playout.seed, block_item, enumerator),
+            enumerator.index
         )),
     );
     item.guide_start = Some(block.start);
@@ -487,6 +491,19 @@ fn effective_block_playout_item(
     item.collection_key = Some(collection_key);
     item.collection_etag = Some(collection_etag);
     item
+}
+
+fn context_seed(
+    playout_seed: i32,
+    block_item: &EffectiveBlockItem,
+    enumerator: &super::MediaEnumerator,
+) -> i32 {
+    match enumerator.playback_order {
+        PlaybackOrder::Shuffle | PlaybackOrder::RandomRotation => {
+            playout_seed.saturating_add(i32::try_from(block_item.block_id).unwrap_or_default())
+        }
+        _ => 0,
+    }
 }
 
 fn normalize_guide_mode(mut items: Vec<EffectiveBlockItem>) -> Vec<EffectiveBlockItem> {
@@ -536,7 +553,77 @@ fn collection_etags(
 }
 
 fn collection_key_json(collection_key: &SchedulingCollectionKey) -> String {
-    serde_json::to_string(collection_key).unwrap_or_default()
+    #[derive(Serialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Key<'a> {
+        collection_type: i32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        multi_collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        smart_collection_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        media_item_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        playlist_id: Option<EntityId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        search_query: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fake_collection_key: Option<&'a str>,
+    }
+
+    // Mirrors ErsatzTV's CollectionKey JSON written by JsonConvert with
+    // NullValueHandling.Ignore in CollectionKey.ForBlockItem/ForDefaultFiller.
+    serde_json::to_string(&Key {
+        collection_type: csharp_collection_type_value(collection_key.collection_type),
+        collection_id: collection_key.collection_id,
+        multi_collection_id: collection_key.multi_collection_id,
+        smart_collection_id: collection_key.smart_collection_id,
+        media_item_id: collection_key.media_item_id,
+        playlist_id: collection_key.playlist_id,
+        search_query: collection_key.search_query.as_deref(),
+        fake_collection_key: collection_key.fake_collection_key.as_deref(),
+    })
+    .unwrap_or_default()
+}
+
+fn csharp_collection_type_value(collection_type: CollectionType) -> i32 {
+    match collection_type {
+        CollectionType::Collection => 0,
+        CollectionType::TelevisionShow => 1,
+        CollectionType::TelevisionSeason => 2,
+        CollectionType::Artist => 3,
+        CollectionType::MultiCollection => 4,
+        CollectionType::SmartCollection => 5,
+        CollectionType::Playlist => 6,
+        CollectionType::RerunFirstRun => 7,
+        CollectionType::RerunRerun => 8,
+        CollectionType::SearchQuery => 9,
+        CollectionType::Movie => 10,
+        CollectionType::Episode => 20,
+        CollectionType::MusicVideo => 30,
+        CollectionType::OtherVideo => 40,
+        CollectionType::Song => 50,
+        CollectionType::Image => 60,
+        CollectionType::RemoteStream => 70,
+        CollectionType::FakeCollection => 100,
+        CollectionType::FakePlaylistItem => 101,
+    }
+}
+
+fn csharp_playback_order_value(playback_order: PlaybackOrder) -> i32 {
+    match playback_order {
+        PlaybackOrder::None => 0,
+        PlaybackOrder::Chronological => 1,
+        PlaybackOrder::Random => 2,
+        PlaybackOrder::Shuffle => 3,
+        PlaybackOrder::ShuffleInOrder => 4,
+        PlaybackOrder::MultiEpisodeShuffle => 5,
+        PlaybackOrder::SeasonEpisode => 6,
+        PlaybackOrder::RandomRotation => 7,
+        PlaybackOrder::Marathon => 8,
+    }
 }
 
 fn collection_etag_for_items(items: &[SchedulingMediaItem]) -> String {
@@ -872,7 +959,7 @@ fn add_block_start_break_content(
         );
         filler.guide_start = Some(block.start);
         filler.guide_finish = Some(block_finish);
-        filler.collection_key = serde_json::to_string(&break_content.collection_key).ok();
+        filler.collection_key = Some(collection_key_json(&break_content.collection_key));
         inserted_duration += media_item.duration;
         result.added_history.push(history(
             playout_id,
@@ -966,7 +1053,7 @@ fn add_default_filler(
         );
         filler.guide_start = guide_item.guide_start;
         filler.guide_finish = guide_item.guide_finish;
-        filler.collection_key = serde_json::to_string(collection_key).ok();
+        filler.collection_key = Some(collection_key_json(collection_key));
         result.added_history.push(history(
             runtime.playout_id,
             history_key_for_default_filler(deco),
@@ -994,8 +1081,8 @@ fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
     #[serde(rename_all = "PascalCase")]
     struct Key<'a> {
         block_id: EntityId,
-        playback_order: PlaybackOrder,
-        collection_type: CollectionType,
+        playback_order: i32,
+        collection_type: i32,
         #[serde(skip_serializing_if = "Option::is_none")]
         collection_id: Option<EntityId>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -1010,8 +1097,8 @@ fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
 
     serde_json::to_string(&Key {
         block_id: block_item.block_id,
-        playback_order: block_item.playback_order,
-        collection_type: block_item.collection_key.collection_type,
+        playback_order: csharp_playback_order_value(block_item.playback_order),
+        collection_type: csharp_collection_type_value(block_item.collection_key.collection_type),
         collection_id: block_item.collection_key.collection_id,
         multi_collection_id: block_item.collection_key.multi_collection_id,
         smart_collection_id: block_item.collection_key.smart_collection_id,
@@ -1024,8 +1111,8 @@ fn history_key_for_block_item(block_item: &EffectiveBlockItem) -> String {
 fn history_key_for_break_content(break_content: &EffectiveBreakContent) -> String {
     serde_json::json!({
         "DecoBreakContentId": break_content.id,
-        "PlaybackOrder": "Shuffle",
-        "CollectionType": format!("{:?}", break_content.collection_key.collection_type),
+        "PlaybackOrder": csharp_playback_order_value(PlaybackOrder::Shuffle),
+        "CollectionType": csharp_collection_type_value(break_content.collection_key.collection_type),
         "CollectionId": break_content.collection_key.collection_id,
         "MultiCollectionId": break_content.collection_key.multi_collection_id,
         "SmartCollectionId": break_content.collection_key.smart_collection_id,
@@ -1041,8 +1128,8 @@ fn history_key_for_default_filler(deco: &EffectiveDeco) -> String {
     };
     serde_json::json!({
         "DecoId": deco.id,
-        "PlaybackOrder": "Shuffle",
-        "CollectionType": format!("{:?}", collection_key.collection_type),
+        "PlaybackOrder": csharp_playback_order_value(PlaybackOrder::Shuffle),
+        "CollectionType": csharp_collection_type_value(collection_key.collection_type),
         "CollectionId": collection_key.collection_id,
         "MultiCollectionId": collection_key.multi_collection_id,
         "SmartCollectionId": collection_key.smart_collection_id,
