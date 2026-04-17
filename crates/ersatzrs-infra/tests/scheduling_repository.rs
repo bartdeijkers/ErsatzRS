@@ -269,6 +269,19 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
         artist.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![31]
     );
+
+    let stream_fields = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "director:\"Director One\" AND writer:\"Writer One\" AND language_tag:eng AND sub_language_tag:nld AND video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080"
+                .to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        stream_fields.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![20]
+    );
 }
 
 #[tokio::test]
@@ -554,6 +567,44 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     pool.execute(
         r#"INSERT INTO "Actor" ("Id", "Name", "Role", "Order", "EpisodeMetadataId")
          VALUES (1, 'Lead Actor', 'Lead', 0, 130)"#,
+    )
+    .await
+    .unwrap();
+
+    pool.execute(r#"INSERT INTO "Director" ("Id", "Name", "MovieMetadataId") VALUES (1, 'Director One', 200)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Writer" ("Id", "Name", "MovieMetadataId") VALUES (1, 'Writer One', 200)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "LanguageCode" ("Id", "ThreeCode1", "ThreeCode2", "TwoCode", "EnglishName")
+         VALUES (1, 'eng', 'eng', 'en', 'English'), (2, 'nld', 'dut', 'nl', 'Dutch')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaStream" (
+            "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
+            "Default", "Forced", "MediaVersionId"
+         ) VALUES
+            (1, 0, 'h264', 1, NULL, 0, 1, 0, 200),
+            (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200),
+            (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Subtitle" (
+            "Id", "Codec", "DateAdded", "DateUpdated", "Default", "Forced",
+            "IsExtracted", "Language", "MovieMetadataId", "SDH", "StreamIndex",
+            "SubtitleKind"
+         ) VALUES (
+            1, 'srt', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 0,
+            0, 'nld', 200, 0, 3, 0
+         )"#,
     )
     .await
     .unwrap();

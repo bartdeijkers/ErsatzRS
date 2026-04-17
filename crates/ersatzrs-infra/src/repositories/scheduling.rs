@@ -619,9 +619,13 @@ impl SqliteSchedulingContentRepository {
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("search release_date", &value))
             .transpose()?;
+        let item_id = row.try_get::<EntityId, _>("item_id")?;
+        let stream_languages = self
+            .stream_search_fields(&metadata_kind, metadata_id, item_id)
+            .await?;
 
         Ok(SearchDocument {
-            media_item_id: row.try_get("item_id")?,
+            media_item_id: item_id,
             media_kind: row.try_get("media_kind")?,
             metadata_kind: metadata_kind.clone(),
             title: row.try_get("title")?,
@@ -662,8 +666,25 @@ impl SqliteSchedulingContentRepository {
             actors: self
                 .metadata_actor_values(&metadata_kind, metadata_id)
                 .await?,
-            directors: Vec::new(),
-            writers: Vec::new(),
+            directors: self
+                .metadata_credit_values("Director", &metadata_kind, metadata_id)
+                .await?,
+            writers: self
+                .metadata_credit_values("Writer", &metadata_kind, metadata_id)
+                .await?,
+            languages: self
+                .language_names_for_codes(&stream_languages.audio_languages)
+                .await?,
+            language_tags: stream_languages.audio_languages,
+            subtitle_languages: self
+                .language_names_for_codes(&stream_languages.subtitle_languages)
+                .await?,
+            subtitle_language_tags: stream_languages.subtitle_languages,
+            video_codecs: stream_languages.video_codecs,
+            audio_codecs: stream_languages.audio_codecs,
+            subtitle_codecs: stream_languages.subtitle_codecs,
+            width: stream_languages.width,
+            height: stream_languages.height,
             show_title: row.try_get("show_title")?,
             show_genres: self.show_lookup_values("Genre", show_id).await?,
             show_tags: self.show_lookup_values("Tag", show_id).await?,
@@ -730,6 +751,139 @@ impl SqliteSchedulingContentRepository {
             .fetch_all(&self.0)
             .await
             .map_err(Into::into)
+    }
+
+    async fn metadata_credit_values(
+        &self,
+        table: &str,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+    ) -> Result<Vec<String>> {
+        let fk_column = match (table, metadata_kind) {
+            ("Director", "Movie") => "MovieMetadataId",
+            ("Director", "Episode") => "EpisodeMetadataId",
+            ("Director", "MusicVideo") => "MusicVideoMetadataId",
+            ("Director", "OtherVideo") => "OtherVideoMetadataId",
+            ("Writer", "Movie") => "MovieMetadataId",
+            ("Writer", "Episode") => "EpisodeMetadataId",
+            ("Writer", "OtherVideo") => "OtherVideoMetadataId",
+            _ => return Ok(Vec::new()),
+        };
+        let sql = format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Id""#);
+        sqlx::query_scalar::<_, String>(&sql)
+            .bind(metadata_id)
+            .fetch_all(&self.0)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn stream_search_fields(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+        item_id: EntityId,
+    ) -> Result<StreamSearchFields> {
+        let mut result = StreamSearchFields::default();
+
+        let Some(version_fk) = media_version_fk(metadata_kind) else {
+            return Ok(result);
+        };
+        let version_sql = format!(
+            r#"SELECT "Id", "Width", "Height"
+             FROM "MediaVersion"
+             WHERE "{version_fk}" = ?
+             ORDER BY "Id""#
+        );
+        let version_rows = sqlx::query(&version_sql)
+            .bind(item_id)
+            .fetch_all(&self.0)
+            .await?;
+        let version_ids = version_rows
+            .iter()
+            .map(|row| row.try_get::<EntityId, _>("Id"))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        if let Some(row) = version_rows.first() {
+            result.width = row.try_get("Width").ok();
+            result.height = row.try_get("Height").ok();
+        }
+
+        for version_id in version_ids {
+            let rows = sqlx::query(
+                r#"SELECT "MediaStreamKind", "Codec", "Language"
+                 FROM "MediaStream"
+                 WHERE "MediaVersionId" = ?
+                 ORDER BY "Index", "Id""#,
+            )
+            .bind(version_id)
+            .fetch_all(&self.0)
+            .await?;
+            for row in rows {
+                let kind = media_stream_kind_from_row(&row);
+                let codec = row.try_get::<Option<String>, _>("Codec")?;
+                let language = row.try_get::<Option<String>, _>("Language")?;
+                match kind.as_deref() {
+                    Some("video") => push_unique_optional(&mut result.video_codecs, codec),
+                    Some("audio") => {
+                        push_unique_optional(&mut result.audio_codecs, codec);
+                        push_unique_optional(&mut result.audio_languages, language);
+                    }
+                    Some("subtitle") | Some("external_subtitle") => {
+                        push_unique_optional(&mut result.subtitle_codecs, codec);
+                        push_unique_optional(&mut result.subtitle_languages, language);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let subtitle_fk = metadata_fk(metadata_kind);
+        if let Some(subtitle_fk) = subtitle_fk {
+            let subtitle_sql = format!(
+                r#"SELECT "Codec", "Language"
+                 FROM "Subtitle"
+                 WHERE "{subtitle_fk}" = ?
+                 ORDER BY "StreamIndex", "Id""#
+            );
+            let rows = sqlx::query(&subtitle_sql)
+                .bind(metadata_id)
+                .fetch_all(&self.0)
+                .await?;
+            for row in rows {
+                push_unique_optional(
+                    &mut result.subtitle_codecs,
+                    row.try_get::<Option<String>, _>("Codec")?,
+                );
+                push_unique_optional(
+                    &mut result.subtitle_languages,
+                    row.try_get::<Option<String>, _>("Language")?,
+                );
+            }
+        }
+
+        Ok(result)
+    }
+
+    async fn language_names_for_codes(&self, codes: &[String]) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for code in codes {
+            let rows = sqlx::query_scalar::<_, String>(
+                r#"SELECT "EnglishName"
+                 FROM "LanguageCode"
+                 WHERE "ThreeCode1" = ? OR "ThreeCode2" = ? OR "TwoCode" = ?
+                 ORDER BY "Id""#,
+            )
+            .bind(code)
+            .bind(code)
+            .bind(code)
+            .fetch_all(&self.0)
+            .await?;
+            for row in rows {
+                push_unique(&mut names, row);
+            }
+            push_unique(&mut names, code.clone());
+        }
+        Ok(names)
     }
 
     async fn show_lookup_values(
@@ -1663,6 +1817,76 @@ fn append_unique(
         if seen.insert(item.id) {
             target.push(item);
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct StreamSearchFields {
+    audio_languages: Vec<String>,
+    subtitle_languages: Vec<String>,
+    video_codecs: Vec<String>,
+    audio_codecs: Vec<String>,
+    subtitle_codecs: Vec<String>,
+    width: Option<i32>,
+    height: Option<i32>,
+}
+
+fn metadata_fk(metadata_kind: &str) -> Option<&'static str> {
+    match metadata_kind {
+        "Movie" => Some("MovieMetadataId"),
+        "Episode" => Some("EpisodeMetadataId"),
+        "Show" => Some("ShowMetadataId"),
+        "Season" => Some("SeasonMetadataId"),
+        "MusicVideo" => Some("MusicVideoMetadataId"),
+        "Artist" => Some("ArtistMetadataId"),
+        "OtherVideo" => Some("OtherVideoMetadataId"),
+        "Song" => Some("SongMetadataId"),
+        "Image" => Some("ImageMetadataId"),
+        "RemoteStream" => Some("RemoteStreamMetadataId"),
+        _ => None,
+    }
+}
+
+fn media_version_fk(metadata_kind: &str) -> Option<&'static str> {
+    match metadata_kind {
+        "Movie" => Some("MovieId"),
+        "Episode" => Some("EpisodeId"),
+        "MusicVideo" => Some("MusicVideoId"),
+        "OtherVideo" => Some("OtherVideoId"),
+        "Song" => Some("SongId"),
+        "Image" => Some("ImageId"),
+        "RemoteStream" => Some("RemoteStreamId"),
+        _ => None,
+    }
+}
+
+fn media_stream_kind_from_row(row: &SqliteRow) -> Option<String> {
+    if let Ok(value) = row.try_get::<i64, _>("MediaStreamKind") {
+        return match value {
+            1 => Some("video".to_owned()),
+            2 => Some("audio".to_owned()),
+            3 => Some("subtitle".to_owned()),
+            5 => Some("external_subtitle".to_owned()),
+            _ => None,
+        };
+    }
+    row.try_get::<String, _>("MediaStreamKind")
+        .ok()
+        .map(|value| value.to_ascii_lowercase())
+}
+
+fn push_unique_optional(target: &mut Vec<String>, value: Option<String>) {
+    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        push_unique(target, value);
+    }
+}
+
+fn push_unique(target: &mut Vec<String>, value: String) {
+    if !target
+        .iter()
+        .any(|existing| existing.eq_ignore_ascii_case(&value))
+    {
+        target.push(value);
     }
 }
 

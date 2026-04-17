@@ -29,6 +29,15 @@ pub enum SearchField {
     Actor,
     Director,
     Writer,
+    Language,
+    LanguageTag,
+    SubtitleLanguage,
+    SubtitleLanguageTag,
+    VideoCodec,
+    AudioCodec,
+    SubtitleCodec,
+    Width,
+    Height,
     MediaKind,
     ShowTitle,
     ShowGenre,
@@ -67,6 +76,15 @@ pub struct SearchDocument {
     pub actors: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
+    pub languages: Vec<String>,
+    pub language_tags: Vec<String>,
+    pub subtitle_languages: Vec<String>,
+    pub subtitle_language_tags: Vec<String>,
+    pub video_codecs: Vec<String>,
+    pub audio_codecs: Vec<String>,
+    pub subtitle_codecs: Vec<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
     pub show_title: Option<String>,
     pub show_genres: Vec<String>,
     pub show_tags: Vec<String>,
@@ -154,6 +172,23 @@ impl SearchField {
             Self::Actor => document.actors.clone(),
             Self::Director => document.directors.clone(),
             Self::Writer => document.writers.clone(),
+            Self::Language => document.languages.clone(),
+            Self::LanguageTag => document.language_tags.clone(),
+            Self::SubtitleLanguage => document.subtitle_languages.clone(),
+            Self::SubtitleLanguageTag => document.subtitle_language_tags.clone(),
+            Self::VideoCodec => document.video_codecs.clone(),
+            Self::AudioCodec => document.audio_codecs.clone(),
+            Self::SubtitleCodec => document.subtitle_codecs.clone(),
+            Self::Width => document
+                .width
+                .map(|width| width.to_string())
+                .into_iter()
+                .collect(),
+            Self::Height => document
+                .height
+                .map(|height| height.to_string())
+                .into_iter()
+                .collect(),
             Self::MediaKind => vec![document.media_kind.clone()],
             Self::ShowTitle => option_values([document.show_title.as_deref()]),
             Self::ShowGenre => document.show_genres.clone(),
@@ -202,6 +237,15 @@ impl SearchField {
             "actor" => Self::Actor,
             "director" => Self::Director,
             "writer" => Self::Writer,
+            "language" | "audio_language" => Self::Language,
+            "language_tag" | "audio_language_tag" => Self::LanguageTag,
+            "sub_language" | "subtitle_language" => Self::SubtitleLanguage,
+            "sub_language_tag" | "subtitle_language_tag" => Self::SubtitleLanguageTag,
+            "video_codec" => Self::VideoCodec,
+            "audio_codec" => Self::AudioCodec,
+            "subtitle_codec" | "sub_codec" => Self::SubtitleCodec,
+            "width" => Self::Width,
+            "height" => Self::Height,
             "type" | "kind" | "media_kind" => Self::MediaKind,
             "show_title" => Self::ShowTitle,
             "show_genre" => Self::ShowGenre,
@@ -566,6 +610,17 @@ mod tests {
             tags: vec!["Classic".to_owned()],
             studios: vec!["United Artists".to_owned()],
             actors: vec!["Steve McQueen".to_owned()],
+            directors: vec!["John Sturges".to_owned()],
+            writers: vec!["James Clavell".to_owned()],
+            languages: vec!["English".to_owned()],
+            language_tags: vec!["eng".to_owned()],
+            subtitle_languages: vec!["Dutch".to_owned()],
+            subtitle_language_tags: vec!["nld".to_owned()],
+            video_codecs: vec!["h264".to_owned()],
+            audio_codecs: vec!["aac".to_owned()],
+            subtitle_codecs: vec!["srt".to_owned()],
+            width: Some(1920),
+            height: Some(1080),
             show_title: Some("Not a Show".to_owned()),
             provider_guids: vec![SearchProviderGuid {
                 source: "tmdb".to_owned(),
@@ -588,5 +643,20 @@ mod tests {
         assert!(SearchExpression::parse("year:[1960 TO 1970] AND tmdb:5925").matches(&doc));
         assert!(SearchExpression::parse("release_date:[19630701 TO 19630731]").matches(&doc));
         assert!(!SearchExpression::parse("type:episode OR guid:missing").matches(&doc));
+    }
+
+    #[test]
+    fn matches_stream_credit_and_dimension_fields() {
+        let doc = document();
+        assert!(SearchExpression::parse(
+            "director:Sturges AND writer:Clavell AND language_tag:eng AND sub_language_tag:nld"
+        )
+        .matches(&doc));
+        assert!(
+            SearchExpression::parse(
+                "video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080"
+            )
+            .matches(&doc)
+        );
     }
 }
