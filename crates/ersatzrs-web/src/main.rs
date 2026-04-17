@@ -17,6 +17,7 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 const LISTEN_ADDR: &str = "0.0.0.0:8080";
+const LISTEN_PORT: u16 = 8080;
 const CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 1;
@@ -46,6 +47,12 @@ async fn main() {
     let app_state = build_app_state(pool)
         .await
         .expect("failed to build application state");
+
+    tokio::spawn(hdhr::run_udp_discovery(
+        app_state.device_uuid,
+        app_state.tuner_count,
+        LISTEN_PORT,
+    ));
 
     let conf = get_configuration(None).expect("valid leptos config");
     let leptos_options = conf.leptos_options;
