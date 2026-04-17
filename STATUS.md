@@ -41,23 +41,21 @@ history application/cleanup, exact chronological history resume by media item
 details, structured playlist child/current-child history behavior for the
 in-memory adapter, a core-owned Lucene-like search query parser/evaluator, and
 SQLite search-document projection for represented metadata fields with
-show/season/artist container expansion.
+show/season/artist container expansion, YAML parity coverage for SQL-backed
+playlist child resolution and expression edge cases, block update/removal
+change detection with item-level guide/watermark/graphics flags, and SQL-backed
+Lucene fields for director/writer, language/subtitle tags, codec, and
+dimensions.
 
 What remains before Phase 3 can be considered end-to-end complete:
 
-1. Continue search-index parity beyond the current SQL-backed parser/evaluator:
-   add a real index/analyzer when needed, cover language/subtitle/codec/dimensions
-   and other Lucene fields, add director/writer joins when the schema represents
-   them, and broaden provider-specific metadata edge cases.
-2. Continue block scheduling parity beyond the current SQL-backed reference-data
-   slice: broaden change-detection removal/update handling beyond the current
-   block/template/playout-template key comparison plus collection-etag checks,
-   persist remaining block-item/deco flags such as guide inclusion and disabled
-   watermarks, and add any still-missing scheduling fields that matter once more
-   real playout/editor flows are wired.
-3. Complete YAML parity for remaining exact handler semantics (SQL-backed
-   playlist item resolution, expression evaluation, imports, shuffle-groups,
-   and batch/count playlist child enumeration now have focused coverage).
+1. Compare generated timelines against ErsatzTV fixtures where available and
+   add longer integration tests with local Big Buck Bunny media.
+2. Continue Phase 2 protocol work by replacing `/dev/stream/bbb.ts` with real
+   channel playout/IPTV streaming once scheduled playout selection is wired.
+3. Continue hardening search if production use requires a real analyzer/index
+   instead of the current SQL-backed Lucene-like evaluator, and add more
+   provider-specific metadata edge-case tests as fixtures become available.
 4. ~~Expand Lua scheduling bindings~~ — done: `add_count`, `add_all`,
    `add_duration` (trim/fallback/discard_attempts/stop_before_end/offline_tail),
    `pad_to_next`, `pad_until`, `skip`, `skip_to`, `rewind`, `pre_roll_on/off`,
@@ -70,10 +68,12 @@ What remains before Phase 3 can be considered end-to-end complete:
    history resume). Reset-mode history removal, history resume on collection
    registration. 22 snapshot tests, all passing. Full ErsatzTV Lua API parity
    achieved.
-5. Compare generated timelines against ErsatzTV fixtures where available and
-   add longer integration tests with local Big Buck Bunny media.
-6. Continue Phase 2 protocol work by replacing `/dev/stream/bbb.ts` with real
-   channel playout/IPTV streaming once scheduled playout selection is wired.
+5. ~~Close remaining YAML/block/search priority gaps~~ — done: SQL-backed
+   playlist disambiguation, playlist count expression semantics, skip expression
+   snapshots, deterministic Lua table-derived playlist ordering, block
+   item/history removal on collection or flag changes, persisted block-item
+   guide/watermark flags, and SQL search fields for director/writer,
+   language/subtitle tags, codecs, width, and height now have focused coverage.
 
 Persistence parity gaps are now tracked per table in
 `docs/reference/persistence-gap-matrix.md`. The highest-risk next persistence
@@ -126,3 +126,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-16 | GitHub Copilot (GPT-5.4) | Added SQLite playout runtime-state write parity for anchors, enumerator state rows, gaps, history, program-schedule anchors, and playout templates with focused infra tests. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Expanded Lua scripted scheduling engine to full ErsatzTV API parity: 20+ bindings (add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics + content registration), Reset-mode history removal, history resume on registration; 18 new snapshot tests, 0 failures. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Closed remaining Lua scheduling gaps: add_marathon (show/season/artist/album/director grouping, round-robin cycling, shuffle_groups/play_all/item_order, history resume) and create_playlist (inline playlist from existing enumerators, history resume); shared PlaylistEnumerator types promoted to mod.rs; 4 new snapshot tests, 72 total passing. |
+| 2026-04-17 | Codex | Closed the requested Phase 3 scheduling parity gaps in order: YAML playlist/expression semantics, block item removal/change detection, and SQL-backed Lucene fields for credits, languages, codecs, and dimensions; full workspace tests passed before each feature commit. |
