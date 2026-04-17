@@ -75,16 +75,16 @@ protocol endpoints:
 6. ~~**Emby movie fetch duplicates `recursive=true`.** `emby.rs` lines
    85-86 pair the same key twice — likely a copy-paste error that dropped
    a needed parameter.~~
-7. **Provider credentials from env vars.** Scanner reads `PLEX_TOKEN`,
+7. ~~**Provider credentials from env vars.** Scanner reads `PLEX_TOKEN`,
    `JELLYFIN_AUTHORIZATION_HEADER`, and `EMBY_API_KEY` from the process
    environment. This is a temporary shim that violates the "no deviation
    from ErsatzTV storage" rule — read them from the provider tables
-   (`PlexServerAuthToken`, Jellyfin session state, Emby API key rows).
-8. **Provider library bootstrap writes the local id as the provider key.**
+   (`PlexServerAuthToken`, Jellyfin session state, Emby API key rows).~~
+8. ~~**Provider library bootstrap writes the local id as the provider key.**
    `ensure_plex_library`/`ensure_jellyfin_library`/`ensure_emby_library`
    insert `library_id.to_string()` into the provider `Key`/`ItemId`
    column. Thread the real provider id/key through from the scanner
-   before real deployments.
+   before real deployments.~~
 9. **`MediaFile.PathHash` must be SHA256.** ErsatzTV stores a SHA256 hex
    digest; ErsatzRS currently uses a 16-char custom hash. Migrate to
    SHA256 so imported ErsatzTV databases stay byte-compatible.
@@ -170,3 +170,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block A: ported Plex pagination, fixed mixed-case Plex JSON decoding, added `Accept: application/json`, and expanded Plex provider regression tests. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block B: implemented Plex collection sync plus scanner dispatch and added a collection-membership snapshot test. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block C: switched Emby season and episode fetches to `/Shows/{id}` endpoints, restored the movie fields set, and updated Emby provider tests. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block D: moved scanner provider credentials into DB-backed lookups, threaded real provider library keys into Plex/Jellyfin/Emby bootstrap rows, and added focused scanner/provider regression tests. |

@@ -29,6 +29,10 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "PlexMediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
+    assert_eq!(
+        provider_library_key(&pool, "PlexLibrary", "Key", 1).await,
+        Some("1".to_owned())
+    );
     insta::assert_json_snapshot!(plex_movie_rows(&pool).await);
 }
 
@@ -110,6 +114,10 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
+    assert_eq!(
+        provider_library_key(&pool, "PlexLibrary", "Key", 1).await,
+        Some("2".to_owned())
+    );
     insta::assert_json_snapshot!(plex_show_rows(&pool).await);
 }
 
@@ -334,6 +342,21 @@ async fn count(pool: &SqlitePool, table: &str) -> i64 {
         .await
         .unwrap()
         .get("Count")
+}
+
+async fn provider_library_key(
+    pool: &SqlitePool,
+    table: &str,
+    column: &str,
+    id: i64,
+) -> Option<String> {
+    let sql = format!(r#"SELECT "{column}" AS "Value" FROM "{table}" WHERE "Id" = ?"#);
+    sqlx::query(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Value")
 }
 
 async fn plex_movie_rows(pool: &SqlitePool) -> serde_json::Value {

@@ -14,6 +14,15 @@ use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
 use sqlx::{Row, SqlitePool};
 use tracing::info;
 
+const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
+const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
+const JELLYFIN_AUTHORIZATION_HEADER_PREFIX: &str = "jellyfin.authorization_header.";
+const JELLYFIN_API_KEY_PREFIX: &str = "jellyfin.api_key.";
+const JELLYFIN_CURRENT_AUTHORIZATION_HEADER_KEY: &str = "jellyfin.current_authorization_header";
+const JELLYFIN_CURRENT_SERVER_API_KEY_KEY: &str = "jellyfin.current_server_api_key";
+const EMBY_API_KEY_PREFIX: &str = "emby.api_key.";
+const EMBY_CURRENT_SERVER_API_KEY_KEY: &str = "emby.current_server_api_key";
+
 #[derive(Debug, Parser)]
 #[command(about = "Run one ErsatzRS media library scan")]
 struct Args {
@@ -248,8 +257,19 @@ async fn load_jellyfin_config(
         media_source_id,
     )
     .await?;
-    let authorization_header = read_env("JELLYFIN_AUTHORIZATION_HEADER")
-        .context("JELLYFIN_AUTHORIZATION_HEADER is required")?;
+    let authorization_header = format_jellyfin_authorization_header(
+        load_first_config_value(
+            pool,
+            &[
+                format!("{JELLYFIN_AUTHORIZATION_HEADER_PREFIX}{address}"),
+                JELLYFIN_CURRENT_AUTHORIZATION_HEADER_KEY.to_owned(),
+                format!("{JELLYFIN_API_KEY_PREFIX}{address}"),
+                JELLYFIN_CURRENT_SERVER_API_KEY_KEY.to_owned(),
+            ],
+            "jellyfin credential",
+        )
+        .await?,
+    );
     Ok(JellyfinConnectionConfig {
         address,
         authorization_header,
@@ -264,7 +284,15 @@ async fn load_emby_config(
     let address =
         load_connection_address(pool, "EmbyConnection", "EmbyMediaSourceId", media_source_id)
             .await?;
-    let api_key = read_env("EMBY_API_KEY").context("EMBY_API_KEY is required")?;
+    let api_key = load_first_config_value(
+        pool,
+        &[
+            format!("{EMBY_API_KEY_PREFIX}{address}"),
+            EMBY_CURRENT_SERVER_API_KEY_KEY.to_owned(),
+        ],
+        "emby api key",
+    )
+    .await?;
     Ok(EmbyConnectionConfig { address, api_key })
 }
 
@@ -273,20 +301,65 @@ async fn load_plex_config(
     library_id: i64,
 ) -> anyhow::Result<PlexConnectionConfig> {
     let media_source_id = load_library_media_source_id(pool, library_id).await?;
-    let uri = sqlx::query(
-        r#"SELECT "Uri"
+    let row = sqlx::query(
+        r#"SELECT "PlexConnection"."Uri" AS "Uri",
+                  "PlexMediaSource"."ClientIdentifier" AS "ClientIdentifier"
            FROM "PlexConnection"
-           WHERE "PlexMediaSourceId" = ? AND "IsActive" = 1
-           ORDER BY "Id"
+           JOIN "PlexMediaSource" ON "PlexMediaSource"."Id" = "PlexConnection"."PlexMediaSourceId"
+           WHERE "PlexConnection"."PlexMediaSourceId" = ?
+             AND "PlexConnection"."IsActive" = 1
+           ORDER BY "PlexConnection"."Id"
            LIMIT 1"#,
     )
     .bind(media_source_id)
     .fetch_optional(pool)
     .await?
-    .and_then(|row| row.get::<Option<String>, _>("Uri"))
     .context("active Plex connection not found")?;
-    let token = read_env("PLEX_TOKEN").context("PLEX_TOKEN is required")?;
+    let uri = row
+        .get::<Option<String>, _>("Uri")
+        .context("active Plex connection uri not found")?;
+    let client_identifier = row
+        .get::<Option<String>, _>("ClientIdentifier")
+        .context("plex media source client identifier not found")?;
+    let token = load_first_config_value(
+        pool,
+        &[
+            format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}{client_identifier}"),
+            PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY.to_owned(),
+        ],
+        "plex server auth token",
+    )
+    .await?;
     Ok(PlexConnectionConfig { uri, token })
+}
+
+async fn load_first_config_value(
+    pool: &SqlitePool,
+    keys: &[String],
+    description: &str,
+) -> anyhow::Result<String> {
+    for key in keys {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(value) = value.filter(|candidate| !candidate.is_empty()) {
+            return Ok(value);
+        }
+    }
+
+    Err(anyhow::anyhow!("{description} not found in ConfigElement"))
+}
+
+fn format_jellyfin_authorization_header(value: String) -> String {
+    if value.contains("Token=") || value.starts_with("MediaBrowser ") {
+        value
+    } else {
+        format!("MediaBrowser Token=\"{value}\"")
+    }
 }
 
 async fn load_connection_address(
@@ -310,7 +383,170 @@ async fn load_connection_address(
         .context("provider connection not found")
 }
 
-#[allow(clippy::disallowed_methods)]
-fn read_env(name: &str) -> Result<String, std::env::VarError> {
-    std::env::var(name)
+#[cfg(test)]
+mod tests {
+    use super::{scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX};
+    use httpmock::{prelude::*, Mock};
+    use serde_json::json;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::{Executor, Row, SqlitePool};
+
+    async fn test_db() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create in-memory sqlite pool");
+
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("enable sqlite foreign keys");
+
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+
+        pool.execute(
+            r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height")
+               VALUES (1, '1920x1080', 1920, 1080)"#,
+        )
+        .await
+        .expect("seed resolution");
+
+        pool
+    }
+
+    async fn mock_plex_scan_page(server: &MockServer) -> Mock<'_> {
+        server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path("/library/sections/library-key/all")
+                    .header("Accept", "application/json")
+                    .header("X-Plex-Token", "db-token")
+                    .query_param("X-Plex-Container-Start", "0")
+                    .query_param("X-Plex-Container-Size", "100");
+                then.status(200).json_body(json!({
+                    "MediaContainer": {
+                        "totalSize": 1,
+                        "Metadata": [
+                            {
+                                "key": "/library/metadata/1",
+                                "title": "Movie",
+                                "addedAt": 1_776_406_400,
+                                "updatedAt": 1_776_406_500,
+                                "index": 1,
+                                "media": [
+                                    {
+                                        "id": 1,
+                                        "duration": 120_000,
+                                        "width": 1920,
+                                        "height": 1080,
+                                        "aspectRatio": 1.777,
+                                        "part": [
+                                            {
+                                                "id": 2,
+                                                "key": "/library/parts/1",
+                                                "file": "/media/movie.mkv",
+                                                "stream": [
+                                                    {
+                                                        "id": 1,
+                                                        "index": 0,
+                                                        "streamType": 1,
+                                                        "codec": "h264",
+                                                        "width": 1920,
+                                                        "height": 1080,
+                                                        "scanType": "progressive",
+                                                        "frameRate": "24.000"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }));
+            })
+            .await
+    }
+
+    async fn seed_plex_scan_db(pool: &SqlitePool, base_url: &str) {
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
+            .await
+            .expect("seed media source");
+        pool.execute(
+            r#"INSERT INTO "PlexMediaSource" ("Id", "ClientIdentifier") VALUES (10, 'client-1')"#,
+        )
+        .await
+        .expect("seed plex media source");
+        sqlx::query(
+            r#"INSERT INTO "PlexConnection" ("Id", "IsActive", "Uri", "PlexMediaSourceId")
+               VALUES (?, 1, ?, 10)"#,
+        )
+        .bind(1_i64)
+        .bind(base_url)
+        .execute(pool)
+        .await
+        .expect("seed plex connection");
+        pool.execute(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (5, 'Plex Movies', 0, 10)"#,
+        )
+        .await
+        .expect("seed library");
+        pool.execute(
+            r#"INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
+               VALUES (5, 'library-key', 1)"#,
+        )
+        .await
+        .expect("seed plex library");
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}client-1"))
+            .bind("db-token")
+            .execute(pool)
+            .await
+            .expect("seed config element");
+    }
+
+    fn plex_scan_args() -> Args {
+        Args {
+            provider: Provider::Plex,
+            library_id: 5,
+            ffprobe_path: "ffprobe".to_owned(),
+            dry_run: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn plex_scan_reads_token_from_database_config() {
+        let server = MockServer::start_async().await;
+        let plex_page = mock_plex_scan_page(&server).await;
+
+        let pool = test_db().await;
+        seed_plex_scan_db(&pool, &server.base_url()).await;
+
+        std::env::set_var("PLEX_TOKEN", "env-token-should-not-be-used");
+
+        scan_plex(&pool, &plex_scan_args())
+            .await
+            .expect("scan plex library");
+
+        plex_page.assert_async().await;
+
+        let library_key: Option<String> =
+            sqlx::query_scalar(r#"SELECT "Key" FROM "PlexLibrary" WHERE "Id" = 5"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load plex library key");
+        assert_eq!(library_key.as_deref(), Some("library-key"));
+
+        let file_count: i64 = sqlx::query(r#"SELECT COUNT(*) AS "Count" FROM "MediaFile""#)
+            .fetch_one(&pool)
+            .await
+            .expect("count media files")
+            .get("Count");
+        assert_eq!(file_count, 1);
+    }
 }

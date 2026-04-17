@@ -983,6 +983,8 @@ dependencies = [
  "ersatzrs-core",
  "ersatzrs-domain",
  "ersatzrs-infra",
+ "httpmock",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.18",
  "tokio",

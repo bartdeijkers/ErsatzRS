@@ -102,6 +102,10 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
     assert_eq!(count(&pool, "MediaChapter").await, 2);
+    assert_eq!(
+        provider_library_item_id(&pool, "JellyfinLibrary", 1).await,
+        Some("library-1".to_owned())
+    );
     libraries.assert_async().await;
     items.assert_async().await;
     playback.assert_async().await;
@@ -287,6 +291,10 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
     assert_eq!(count(&pool, "MediaChapter").await, 1);
+    assert_eq!(
+        provider_library_item_id(&pool, "JellyfinLibrary", 1).await,
+        Some("library-shows".to_owned())
+    );
     insta::assert_json_snapshot!(jellyfin_projected_rows(&pool).await);
     shows.assert_async().await;
     seasons.assert_async().await;
@@ -348,6 +356,16 @@ async fn count(pool: &SqlitePool, table: &str) -> i64 {
         .await
         .unwrap()
         .get("Count")
+}
+
+async fn provider_library_item_id(pool: &SqlitePool, table: &str, id: i64) -> Option<String> {
+    let sql = format!(r#"SELECT "ItemId" AS "Value" FROM "{table}" WHERE "Id" = ?"#);
+    sqlx::query(&sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Value")
 }
 
 async fn jellyfin_projected_rows(pool: &SqlitePool) -> serde_json::Value {

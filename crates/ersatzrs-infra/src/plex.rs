@@ -403,7 +403,7 @@ pub async fn sync_plex_movie_library(
 
     while start_index < total_size {
         for item in &page.items {
-            upsert_plex_movie(pool, media_source_id, library_id, item).await?;
+            upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
             synced += 1;
         }
         start_index += PLEX_PAGE_SIZE;
@@ -440,7 +440,8 @@ pub async fn sync_plex_show_library(
 
     while show_start_index < show_total_size {
         for show in &shows.items {
-            let show_id = upsert_plex_show(pool, media_source_id, library_id, show).await?;
+            let show_id =
+                upsert_plex_show(pool, media_source_id, library_id, library_key, show).await?;
             let mut season_start_index = 0;
             let mut seasons = service
                 .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
@@ -449,9 +450,15 @@ pub async fn sync_plex_show_library(
 
             while season_start_index < season_total_size {
                 for season in &seasons.items {
-                    let season_id =
-                        upsert_plex_season(pool, media_source_id, library_id, show_id, season)
-                            .await?;
+                    let season_id = upsert_plex_season(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_key,
+                        show_id,
+                        season,
+                    )
+                    .await?;
                     let mut episode_start_index = 0;
                     let mut episodes = service
                         .fetch_episode_page(
@@ -469,6 +476,7 @@ pub async fn sync_plex_show_library(
                                 pool,
                                 media_source_id,
                                 library_id,
+                                library_key,
                                 season_id,
                                 episode,
                             )
@@ -581,16 +589,11 @@ async fn upsert_plex_movie(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_key: &str,
     item: &PlexMediaItem,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
-    ensure_plex_library(
-        &mut tx,
-        media_source_id,
-        library_id,
-        library_key_path(library_id),
-    )
-    .await?;
+    ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_movie_item(&mut tx, library_path_id, item).await?;
@@ -605,16 +608,11 @@ async fn upsert_plex_show(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_key: &str,
     item: &PlexShowItem,
 ) -> Result<i64> {
     let mut tx = pool.begin().await?;
-    ensure_plex_library(
-        &mut tx,
-        media_source_id,
-        library_id,
-        library_key_path(library_id),
-    )
-    .await?;
+    ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_show_item(&mut tx, library_path_id, item).await?;
@@ -626,17 +624,12 @@ async fn upsert_plex_season(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_key: &str,
     show_id: i64,
     item: &PlexSeasonItem,
 ) -> Result<i64> {
     let mut tx = pool.begin().await?;
-    ensure_plex_library(
-        &mut tx,
-        media_source_id,
-        library_id,
-        library_key_path(library_id),
-    )
-    .await?;
+    ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let id = ensure_plex_season_item(&mut tx, library_path_id, show_id, item).await?;
@@ -648,17 +641,12 @@ async fn upsert_plex_episode(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_key: &str,
     season_id: i64,
     item: &PlexMediaItem,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
-    ensure_plex_library(
-        &mut tx,
-        media_source_id,
-        library_id,
-        library_key_path(library_id),
-    )
-    .await?;
+    ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_episode_item(&mut tx, library_path_id, season_id, item).await?;
@@ -799,7 +787,7 @@ async fn ensure_plex_library(
     tx: &mut Transaction<'_, Sqlite>,
     media_source_id: i64,
     library_id: i64,
-    key: String,
+    key: &str,
 ) -> Result<()> {
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
@@ -1255,10 +1243,6 @@ fn provider_error(error: reqwest::Error) -> RepositoryError {
         kind: "plex http",
         value: error.to_string(),
     }
-}
-
-fn library_key_path(library_id: i64) -> String {
-    library_id.to_string()
 }
 
 fn unix_time(value: Option<i64>) -> DateTime<Utc> {

@@ -346,15 +346,25 @@ pub async fn sync_emby_movie_library<S>(
     config: &EmbyConnectionConfig,
     media_source_id: i64,
     library_id: i64,
-    parent_id: &str,
+    library_item_id: &str,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
 {
-    let page = service.fetch_movie_page(config, parent_id, 0, 100).await?;
+    let page = service
+        .fetch_movie_page(config, library_item_id, 0, 100)
+        .await?;
     for item in &page.items {
         let playback = service.stream_metadata(config, &item.item_id).await?;
-        upsert_emby_movie(pool, media_source_id, library_id, item, &playback).await?;
+        upsert_emby_movie(
+            pool,
+            media_source_id,
+            library_id,
+            library_item_id,
+            item,
+            &playback,
+        )
+        .await?;
     }
     Ok(page.items.len())
 }
@@ -370,21 +380,31 @@ pub async fn sync_emby_show_library<S>(
     config: &EmbyConnectionConfig,
     media_source_id: i64,
     library_id: i64,
-    parent_id: &str,
+    library_item_id: &str,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
 {
-    let shows = service.fetch_show_page(config, parent_id, 0, 100).await?;
+    let shows = service
+        .fetch_show_page(config, library_item_id, 0, 100)
+        .await?;
     let mut synced = 0;
     for show in &shows.items {
-        let show_id = upsert_emby_show(pool, media_source_id, library_id, show).await?;
+        let show_id =
+            upsert_emby_show(pool, media_source_id, library_id, library_item_id, show).await?;
         let seasons = service
             .fetch_season_page(config, &show.item_id, 0, 100)
             .await?;
         for season in &seasons.items {
-            let season_id =
-                upsert_emby_season(pool, media_source_id, library_id, show_id, season).await?;
+            let season_id = upsert_emby_season(
+                pool,
+                media_source_id,
+                library_id,
+                library_item_id,
+                show_id,
+                season,
+            )
+            .await?;
             let episodes = service
                 .fetch_episode_page(config, &show.item_id, &season.item_id, 0, 100)
                 .await?;
@@ -394,6 +414,7 @@ where
                     pool,
                     media_source_id,
                     library_id,
+                    library_item_id,
                     season_id,
                     episode,
                     &playback,
@@ -606,11 +627,12 @@ async fn upsert_emby_movie(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_item_id: &str,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
-    ensure_emby_library(&mut tx, media_source_id, library_id).await?;
+    ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let item_id = ensure_emby_movie_item(&mut tx, library_path_id, item).await?;
@@ -627,10 +649,11 @@ async fn upsert_emby_show(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_item_id: &str,
     item: &EmbyShowItem,
 ) -> Result<i64> {
     let mut tx = pool.begin().await?;
-    ensure_emby_library(&mut tx, media_source_id, library_id).await?;
+    ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let id = ensure_emby_show_item(&mut tx, library_path_id, item).await?;
@@ -642,11 +665,12 @@ async fn upsert_emby_season(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_item_id: &str,
     show_id: i64,
     item: &EmbySeasonItem,
 ) -> Result<i64> {
     let mut tx = pool.begin().await?;
-    ensure_emby_library(&mut tx, media_source_id, library_id).await?;
+    ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let id = ensure_emby_season_item(&mut tx, library_path_id, show_id, item).await?;
@@ -658,12 +682,13 @@ async fn upsert_emby_episode(
     pool: &SqlitePool,
     media_source_id: i64,
     library_id: i64,
+    library_item_id: &str,
     season_id: i64,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
-    ensure_emby_library(&mut tx, media_source_id, library_id).await?;
+    ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let item_id = ensure_emby_episode_item(&mut tx, library_path_id, season_id, item).await?;
@@ -784,6 +809,7 @@ async fn ensure_emby_library(
     tx: &mut Transaction<'_, Sqlite>,
     media_source_id: i64,
     library_id: i64,
+    library_item_id: &str,
 ) -> Result<()> {
     sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
         .bind(media_source_id)
@@ -806,7 +832,7 @@ async fn ensure_emby_library(
            VALUES (?, ?, 1)"#,
     )
     .bind(library_id)
-    .bind(library_id.to_string())
+    .bind(library_item_id)
     .execute(&mut **tx)
     .await?;
     Ok(())
