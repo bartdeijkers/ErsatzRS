@@ -71,7 +71,6 @@ public open-source project.
 - `docs/how-to/add-migration.md`
 - `docs/how-to/add-ffmpeg-pipeline.md`
 - `docs/reference/configuration.md`
-- `docs/explanation/coding-style.md`
 - `docs/explanation/architecture.md`
 - `docs/explanation/test-strategy.md`
 

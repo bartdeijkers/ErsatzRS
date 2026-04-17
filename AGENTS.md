@@ -77,8 +77,11 @@ Read the relevant contract before changing that area:
 
 - [STATUS.md](STATUS.md) for current phase progress and session handoff log.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
-- [STYLE.md](STYLE.md) for Rust style, errors, async, logging, and public API
-  expectations.
+- [STYLE.md](STYLE.md) before writing Rust, SQL, or ErsatzTV-parity code —
+  covers Rust (naming, errors, async, logging, public API), Rust ↔ C# parity
+  (serialized contracts, option mapping), and SQL (identifier casing,
+  constraint/index naming, referential actions, migration rules). Skip for
+  docs-only, status-log, or discussion turns.
 - [ARCHITECTURE.md](ARCHITECTURE.md) for crate boundaries and dependency rules.
 - [PORTING.md](PORTING.md) before porting any ErsatzTV behavior.
 - [docs/how-to/testing.md](docs/how-to/testing.md) before adding tests.
@@ -103,7 +106,7 @@ Read the relevant contract before changing that area:
 This is primarily a porting project, not greenfield design. When implementing a feature:
 
 1. **Find the ErsatzTV source first.** The plan's critical-file table maps features to the authoritative C# files under `/home/bart/ErsatzTV/`. Read the C# before writing Rust.
-2. **Preserve patterns, not syntax.** ErsatzTV's FFmpeg pipeline builders, filter label routing (`ComplexFilter.cs`), and `ffconcat`/`resetpts` concat handling are version-agnostic and should be mirrored closely in structure. LanguageExt `Option`/`Either` map to native `Option`/`Result`; `anyhow`/`thiserror` for errors.
+2. **Preserve patterns, not syntax.** ErsatzTV's FFmpeg pipeline builders, filter label routing (`ComplexFilter.cs`), and `ffconcat`/`resetpts` concat handling are version-agnostic and should be mirrored closely in structure. LanguageExt `Option`/`Either` map to native `Option`/`Result`; `anyhow`/`thiserror` for errors. Follow the Rust ↔ C# parity and SQL rules in [STYLE.md](STYLE.md) — in particular, keep ErsatzTV JSON shapes, database identifier casing, and EF-style `PK_/FK_/IX_` names intact.
 3. **Snapshot-test generated FFmpeg argv** the way ErsatzTV's `ErsatzTV.FFmpeg.Tests` does - use `insta`. This is the primary regression gate for the pipeline crate.
 4. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, ErsatzRS should emit a `drawvg` filter node instead.
 
