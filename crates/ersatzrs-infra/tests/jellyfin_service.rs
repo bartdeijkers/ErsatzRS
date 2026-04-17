@@ -2,7 +2,8 @@ mod common;
 
 use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
 use ersatzrs_infra::jellyfin::{
-    sync_jellyfin_movie_library, sync_jellyfin_show_library, JellyfinService,
+    sync_jellyfin_collection_library, sync_jellyfin_movie_library, sync_jellyfin_show_library,
+    JellyfinService,
 };
 use httpmock::prelude::*;
 use serde_json::json;
@@ -104,6 +105,66 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
     libraries.assert_async().await;
     items.assert_async().await;
     playback.assert_async().await;
+}
+
+#[tokio::test]
+async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
+    let server = MockServer::start_async().await;
+    mock_movie(&server).await;
+    let collections = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "collections-root")
+                .query_param("includeItemTypes", "BoxSet");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    { "Name": "Favorites", "Id": "collection-1", "Etag": "collection-etag" }
+                ]
+            }));
+        })
+        .await;
+    let members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "collection-1")
+                .query_param("includeItemTypes", "Movie,Series,Season,Episode");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Id": "movie-1",
+                        "Type": "Movie",
+                        "LocationType": "FileSystem"
+                    }
+                ]
+            }));
+        })
+        .await;
+
+    let pool = common::test_db().await;
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: server.base_url(),
+        authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
+    };
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+        .await
+        .unwrap();
+
+    let synced = sync_jellyfin_collection_library(&pool, &service, &config, 1, "collections-root")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(count(&pool, "Collection").await, 1);
+    assert_eq!(count(&pool, "JellyfinCollection").await, 1);
+    assert_eq!(count(&pool, "CollectionItem").await, 1);
+    insta::assert_json_snapshot!(jellyfin_collection_rows(&pool).await);
+    collections.assert_async().await;
+    members.assert_async().await;
 }
 
 #[tokio::test]
@@ -233,6 +294,53 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
     playback.assert_async().await;
 }
 
+async fn mock_movie(server: &MockServer) {
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-1")
+                .query_param("includeItemTypes", "Movie");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Big Buck Bunny",
+                        "Id": "movie-1",
+                        "Etag": "etag-1",
+                        "Path": "/srv/media/bbb.mp4",
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 120_000_000,
+                        "LocationType": "FileSystem"
+                    }
+                ]
+            }));
+        })
+        .await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET).path("/Items/movie-1/PlaybackInfo");
+            then.status(200).json_body(json!({
+                "MediaSources": [
+                    {
+                        "RunTimeTicks": 120_000_000,
+                        "MediaStreams": [
+                            {
+                                "Type": "Video",
+                                "Codec": "h264",
+                                "Width": 1920,
+                                "Height": 1080,
+                                "Index": 0,
+                                "IsDefault": true
+                            }
+                        ]
+                    }
+                ]
+            }));
+        })
+        .await;
+}
+
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}""#);
     sqlx::query(&sql)
@@ -284,6 +392,35 @@ async fn jellyfin_projected_rows(pool: &SqlitePool) -> serde_json::Value {
                     "height": row.get::<i64, _>("Height"),
                     "stream_count": row.get::<i64, _>("StreamCount"),
                     "chapter_count": row.get::<i64, _>("ChapterCount")
+                })
+            })
+            .collect(),
+    )
+}
+
+async fn jellyfin_collection_rows(pool: &SqlitePool) -> serde_json::Value {
+    let rows = sqlx::query(
+        r#"SELECT "c"."Name" AS "Name",
+                  "jfc"."ItemId" AS "CollectionItemId",
+                  "jfm"."ItemId" AS "MovieItemId",
+                  "ci"."CustomIndex" AS "CustomIndex"
+           FROM "Collection" AS "c"
+           JOIN "JellyfinCollection" AS "jfc" ON "jfc"."Id" = "c"."Id"
+           JOIN "CollectionItem" AS "ci" ON "ci"."CollectionId" = "c"."Id"
+           JOIN "JellyfinMovie" AS "jfm" ON "jfm"."Id" = "ci"."MediaItemId""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+
+    serde_json::Value::Array(
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "name": row.get::<String, _>("Name"),
+                    "collection_item_id": row.get::<String, _>("CollectionItemId"),
+                    "movie_item_id": row.get::<String, _>("MovieItemId"),
+                    "custom_index": row.get::<i64, _>("CustomIndex")
                 })
             })
             .collect(),

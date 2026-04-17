@@ -1,0 +1,13 @@
+---
+source: crates/ersatzrs-infra/tests/jellyfin_service.rs
+assertion_line: 165
+expression: jellyfin_collection_rows(&pool).await
+---
+[
+  {
+    "collection_item_id": "collection-1",
+    "custom_index": 0,
+    "movie_item_id": "movie-1",
+    "name": "Favorites"
+  }
+]

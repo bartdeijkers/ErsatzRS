@@ -373,6 +373,34 @@ where
     Ok(synced)
 }
 
+/// Fetch Jellyfin collections and write collection membership rows.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client fails or any database write fails.
+pub async fn sync_jellyfin_collection_library<S>(
+    pool: &SqlitePool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    parent_id: &str,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
+    let page = service
+        .fetch_collection_page(config, parent_id, 0, 100)
+        .await?;
+    for collection in &page.items {
+        let collection_id = upsert_jellyfin_collection(pool, media_source_id, collection).await?;
+        let items = service
+            .fetch_collection_items_page(config, &collection.item_id, 0, 100)
+            .await?;
+        replace_collection_items(pool, collection_id, &items.items).await?;
+    }
+    Ok(page.items.len())
+}
+
 fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibrarySummary> {
     let media_kind = match response.collection_type?.to_ascii_lowercase().as_str() {
         "movies" => LibraryMediaKind::Movies,
@@ -618,6 +646,110 @@ async fn upsert_jellyfin_episode(
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
     tx.commit().await?;
     Ok(())
+}
+
+async fn upsert_jellyfin_collection(
+    pool: &SqlitePool,
+    media_source_id: i64,
+    item: &JellyfinCollectionItem,
+) -> Result<i64> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
+        .bind(media_source_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(r#"INSERT OR IGNORE INTO "JellyfinMediaSource" ("Id") VALUES (?)"#)
+        .bind(media_source_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let id = if let Some(row) =
+        sqlx::query(r#"SELECT "Id" FROM "JellyfinCollection" WHERE "ItemId" = ?"#)
+            .bind(&item.item_id)
+            .fetch_optional(&mut *tx)
+            .await?
+    {
+        let id = row.get("Id");
+        sqlx::query(r#"UPDATE "JellyfinCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
+            .bind(&item.etag)
+            .bind(&item.name)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
+            .bind(&item.name)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
+        )
+        .bind(&item.name)
+        .execute(&mut *tx)
+        .await?;
+        let id = result.last_insert_rowid();
+        sqlx::query(
+            r#"INSERT INTO "JellyfinCollection" ("Id", "ItemId", "Etag", "Name")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(id)
+        .bind(&item.item_id)
+        .bind(&item.etag)
+        .bind(&item.name)
+        .execute(&mut *tx)
+        .await?;
+        id
+    };
+
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn replace_collection_items(
+    pool: &SqlitePool,
+    collection_id: i64,
+    items: &[JellyfinCollectionMediaItem],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
+        .bind(collection_id)
+        .execute(&mut *tx)
+        .await?;
+    for (index, item) in items.iter().enumerate() {
+        if let Some(media_item_id) = find_jellyfin_media_item(&mut tx, item).await? {
+            sqlx::query(
+                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(collection_id)
+            .bind(media_item_id)
+            .bind(i32::try_from(index).unwrap_or_default())
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn find_jellyfin_media_item(
+    tx: &mut Transaction<'_, Sqlite>,
+    item: &JellyfinCollectionMediaItem,
+) -> Result<Option<i64>> {
+    let table = match item.kind {
+        JellyfinCollectionMediaKind::Movie => "JellyfinMovie",
+        JellyfinCollectionMediaKind::Show => "JellyfinShow",
+        JellyfinCollectionMediaKind::Season => "JellyfinSeason",
+        JellyfinCollectionMediaKind::Episode => "JellyfinEpisode",
+    };
+    let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "ItemId" = ?"#);
+    Ok(sqlx::query(&sql)
+        .bind(&item.item_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(|row| row.get("Id")))
 }
 
 async fn ensure_jellyfin_library(
