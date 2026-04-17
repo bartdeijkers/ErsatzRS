@@ -613,6 +613,15 @@ dependencies = [
 [[package]]
 name = "ersatzrs-scanner"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "ersatzrs-domain",
+ "ersatzrs-infra",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+]
 
 [[package]]
 name = "ersatzrs-web"
