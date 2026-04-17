@@ -41,11 +41,11 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
 
     async fn list_for_playout(&self, playout_id: EntityId) -> Result<Vec<ProgramSchedule>> {
         let rows = sqlx::query(
-            r#"SELECT ps.*
-             FROM "ProgramSchedule" ps
-             JOIN "Playout" p ON p."ProgramScheduleId" = ps."Id"
-             WHERE p."Id" = ?
-             ORDER BY ps."Name", ps."Id""#,
+            r#"SELECT "ps".*
+             FROM "ProgramSchedule" AS "ps"
+             JOIN "Playout" AS "p" ON "p"."ProgramScheduleId" = "ps"."Id"
+             WHERE "p"."Id" = ?
+             ORDER BY "ps"."Name", "ps"."Id""#,
         )
         .bind(playout_id)
         .fetch_all(&self.0)

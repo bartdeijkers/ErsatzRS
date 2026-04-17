@@ -22,19 +22,19 @@ impl GraphicsRepository for SqliteGraphicsRepository {
 
     async fn list_for_channel(&self, channel_id: EntityId) -> Result<Vec<GraphicsElement>> {
         let rows = sqlx::query(
-            r#"SELECT ge.*
-             FROM "GraphicsElement" ge
-             JOIN "PlayoutItemGraphicsElement" pige ON pige."GraphicsElementId" = ge."Id"
-             JOIN "PlayoutItem" pi ON pi."Id" = pige."PlayoutItemId"
-             JOIN "Playout" p ON p."Id" = pi."PlayoutId"
-             WHERE p."ChannelId" = ?
+            r#"SELECT "ge".*
+             FROM "GraphicsElement" AS "ge"
+             JOIN "PlayoutItemGraphicsElement" AS "pige" ON "pige"."GraphicsElementId" = "ge"."Id"
+             JOIN "PlayoutItem" AS "pi" ON "pi"."Id" = "pige"."PlayoutItemId"
+             JOIN "Playout" AS "p" ON "p"."Id" = "pi"."PlayoutId"
+             WHERE "p"."ChannelId" = ?
              UNION
-             SELECT ge.*
-             FROM "GraphicsElement" ge
-             JOIN "DecoGraphicsElement" dge ON dge."GraphicsElementId" = ge."Id"
-             JOIN "Deco" d ON d."Id" = dge."DecoId"
-             JOIN "Playout" p ON p."DecoId" = d."Id"
-             WHERE p."ChannelId" = ?
+             SELECT "ge".*
+             FROM "GraphicsElement" AS "ge"
+             JOIN "DecoGraphicsElement" AS "dge" ON "dge"."GraphicsElementId" = "ge"."Id"
+             JOIN "Deco" AS "d" ON "d"."Id" = "dge"."DecoId"
+             JOIN "Playout" AS "p" ON "p"."DecoId" = "d"."Id"
+             WHERE "p"."ChannelId" = ?
              ORDER BY 1"#,
         )
         .bind(channel_id)

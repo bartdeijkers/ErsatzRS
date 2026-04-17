@@ -344,11 +344,11 @@ impl SqliteSchedulingContentRepository {
     ) -> Result<Vec<SchedulingPlaylistItem>> {
         let playlist_id = if let Some(group) = group {
             sqlx::query_scalar::<_, EntityId>(
-                r#"SELECT p."Id"
-                 FROM "Playlist" p
-                 JOIN "PlaylistGroup" pg ON pg."Id" = p."PlaylistGroupId"
-                 WHERE p."Name" = ? AND pg."Name" = ?
-                 ORDER BY p."Id"
+                r#"SELECT "p"."Id"
+                 FROM "Playlist" AS "p"
+                 JOIN "PlaylistGroup" AS "pg" ON "pg"."Id" = "p"."PlaylistGroupId"
+                 WHERE "p"."Name" = ? AND "pg"."Name" = ?
+                 ORDER BY "p"."Id"
                  LIMIT 1"#,
             )
             .bind(name)
@@ -474,12 +474,12 @@ impl SqliteSchedulingContentRepository {
         // Episodes are linked via Season -> Show. Season has SeasonNumber.
         // EpisodeMetadata has EpisodeNumber. We need to join through Season for ordering.
         let ids = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT e."Id"
-             FROM "Episode" e
-             JOIN "Season" s ON s."Id" = e."SeasonId"
-             LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
-             WHERE s."ShowId" = ?
-             ORDER BY s."SeasonNumber", em."EpisodeNumber", e."Id""#,
+            r#"SELECT "e"."Id"
+             FROM "Episode" AS "e"
+             JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId"
+             LEFT JOIN "EpisodeMetadata" AS "em" ON "em"."EpisodeId" = "e"."Id"
+             WHERE "s"."ShowId" = ?
+             ORDER BY "s"."SeasonNumber", "em"."EpisodeNumber", "e"."Id""#,
         )
         .bind(show_id)
         .fetch_all(&self.0)
@@ -489,11 +489,11 @@ impl SqliteSchedulingContentRepository {
 
     async fn items_for_season_id(&self, season_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
         let ids = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT e."Id"
-             FROM "Episode" e
-             LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
-             WHERE e."SeasonId" = ?
-             ORDER BY em."EpisodeNumber", e."Id""#,
+            r#"SELECT "e"."Id"
+             FROM "Episode" AS "e"
+             LEFT JOIN "EpisodeMetadata" AS "em" ON "em"."EpisodeId" = "e"."Id"
+             WHERE "e"."SeasonId" = ?
+             ORDER BY "em"."EpisodeNumber", "e"."Id""#,
         )
         .bind(season_id)
         .fetch_all(&self.0)
@@ -504,10 +504,10 @@ impl SqliteSchedulingContentRepository {
     async fn items_for_artist_id(&self, artist_id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
         // MusicVideo has ArtistId FK; join through MusicVideoMetadata for ordering
         let ids = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT mv."Id"
-             FROM "MusicVideo" mv
-             WHERE mv."ArtistId" = ?
-             ORDER BY mv."Id""#,
+            r#"SELECT "mv"."Id"
+             FROM "MusicVideo" AS "mv"
+             WHERE "mv"."ArtistId" = ?
+             ORDER BY "mv"."Id""#,
         )
         .bind(artist_id)
         .fetch_all(&self.0)
@@ -517,11 +517,11 @@ impl SqliteSchedulingContentRepository {
 
     async fn show_ids_by_name(&self, name: &str) -> Result<Vec<EntityId>> {
         sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT s."Id"
-             FROM "Show" s
-             JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-             WHERE sm."Title" = ?
-             ORDER BY s."Id""#,
+            r#"SELECT "s"."Id"
+             FROM "Show" AS "s"
+             JOIN "ShowMetadata" AS "sm" ON "sm"."ShowId" = "s"."Id"
+             WHERE "sm"."Title" = ?
+             ORDER BY "s"."Id""#,
         )
         .bind(name)
         .fetch_all(&self.0)
@@ -536,11 +536,11 @@ impl SqliteSchedulingContentRepository {
     ) -> Result<Vec<SchedulingMediaItem>> {
         // MetadataGuid has ShowMetadataId FK (nullable); join to ShowMetadata to get ShowId
         let show_id = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT sm."ShowId"
-             FROM "MetadataGuid" mg
-             JOIN "ShowMetadata" sm ON sm."Id" = mg."ShowMetadataId"
-             WHERE mg."Guid" = ?
-             ORDER BY sm."ShowId"
+            r#"SELECT "sm"."ShowId"
+             FROM "MetadataGuid" AS "mg"
+             JOIN "ShowMetadata" AS "sm" ON "sm"."Id" = "mg"."ShowMetadataId"
+             WHERE "mg"."Guid" = ?
+             ORDER BY "sm"."ShowId"
              LIMIT 1"#,
         )
         .bind(format!("{source}://{value}"))
@@ -550,11 +550,11 @@ impl SqliteSchedulingContentRepository {
         // Also try plain guid format
         let show_id = if show_id.is_none() {
             sqlx::query_scalar::<_, EntityId>(
-                r#"SELECT sm."ShowId"
-                 FROM "MetadataGuid" mg
-                 JOIN "ShowMetadata" sm ON sm."Id" = mg."ShowMetadataId"
-                 WHERE mg."Guid" LIKE ?
-                 ORDER BY sm."ShowId"
+                r#"SELECT "sm"."ShowId"
+                 FROM "MetadataGuid" AS "mg"
+                 JOIN "ShowMetadata" AS "sm" ON "sm"."Id" = "mg"."ShowMetadataId"
+                 WHERE "mg"."Guid" LIKE ?
+                 ORDER BY "sm"."ShowId"
                  LIMIT 1"#,
             )
             .bind(format!("%{value}%"))
@@ -973,36 +973,36 @@ impl SqliteSchedulingContentRepository {
     async fn load_media_item(&self, id: EntityId) -> Result<Option<SchedulingMediaItem>> {
         let row = sqlx::query(
             r#"SELECT
-                mi."Id",
+                "mi"."Id",
                 COALESCE(
-                    (SELECT MAX(mv."Duration") FROM "MediaVersion" mv WHERE
-                        mv."MovieId" = mi."Id" OR mv."EpisodeId" = mi."Id" OR
-                        mv."MusicVideoId" = mi."Id" OR mv."OtherVideoId" = mi."Id" OR
-                        mv."SongId" = mi."Id" OR mv."ImageId" = mi."Id" OR
-                        mv."RemoteStreamId" = mi."Id"),
+                    (SELECT MAX("mv"."Duration") FROM "MediaVersion" AS "mv" WHERE
+                        "mv"."MovieId" = "mi"."Id" OR "mv"."EpisodeId" = "mi"."Id" OR
+                        "mv"."MusicVideoId" = "mi"."Id" OR "mv"."OtherVideoId" = "mi"."Id" OR
+                        "mv"."SongId" = "mi"."Id" OR "mv"."ImageId" = "mi"."Id" OR
+                        "mv"."RemoteStreamId" = "mi"."Id"),
                     '00:00:00'
-                ) AS duration_text,
+                ) AS "duration_text",
                 COALESCE(
-                    (SELECT em."Title" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1),
-                    (SELECT mm."Title" FROM "MovieMetadata" mm WHERE mm."MovieId" = mi."Id" LIMIT 1),
-                    (SELECT mvm."Title" FROM "MusicVideoMetadata" mvm WHERE mvm."MusicVideoId" = mi."Id" LIMIT 1),
-                    (SELECT ovm."Title" FROM "OtherVideoMetadata" ovm WHERE ovm."OtherVideoId" = mi."Id" LIMIT 1),
-                    (SELECT som."Title" FROM "SongMetadata" som WHERE som."SongId" = mi."Id" LIMIT 1),
-                    (SELECT shm."Title" FROM "ShowMetadata" shm WHERE shm."ShowId" = mi."Id" LIMIT 1),
-                    (SELECT sem."Title" FROM "SeasonMetadata" sem WHERE sem."SeasonId" = mi."Id" LIMIT 1),
-                    (SELECT am."Title" FROM "ArtistMetadata" am WHERE am."ArtistId" = mi."Id" LIMIT 1)
-                ) AS title,
-                (SELECT s."ShowId" FROM "Episode" e JOIN "Season" s ON s."Id" = e."SeasonId" WHERE e."Id" = mi."Id" LIMIT 1) AS show_id,
-                (SELECT e."SeasonId" FROM "Episode" e WHERE e."Id" = mi."Id" LIMIT 1) AS season_id,
-                (SELECT s."SeasonNumber" FROM "Episode" e JOIN "Season" s ON s."Id" = e."SeasonId" WHERE e."Id" = mi."Id" LIMIT 1) AS season_number,
-                (SELECT em."EpisodeNumber" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1) AS episode_number,
+                    (SELECT "em"."Title" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
+                    (SELECT "mm"."Title" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
+                    (SELECT "mvm"."Title" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1),
+                    (SELECT "ovm"."Title" FROM "OtherVideoMetadata" AS "ovm" WHERE "ovm"."OtherVideoId" = "mi"."Id" LIMIT 1),
+                    (SELECT "som"."Title" FROM "SongMetadata" AS "som" WHERE "som"."SongId" = "mi"."Id" LIMIT 1),
+                    (SELECT "shm"."Title" FROM "ShowMetadata" AS "shm" WHERE "shm"."ShowId" = "mi"."Id" LIMIT 1),
+                    (SELECT "sem"."Title" FROM "SeasonMetadata" AS "sem" WHERE "sem"."SeasonId" = "mi"."Id" LIMIT 1),
+                    (SELECT "am"."Title" FROM "ArtistMetadata" AS "am" WHERE "am"."ArtistId" = "mi"."Id" LIMIT 1)
+                ) AS "title",
+                (SELECT "s"."ShowId" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "show_id",
+                (SELECT "e"."SeasonId" FROM "Episode" AS "e" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_id",
+                (SELECT "s"."SeasonNumber" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_number",
+                (SELECT "em"."EpisodeNumber" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1) AS "episode_number",
                 COALESCE(
-                    (SELECT em."ReleaseDate" FROM "EpisodeMetadata" em WHERE em."EpisodeId" = mi."Id" LIMIT 1),
-                    (SELECT mm."ReleaseDate" FROM "MovieMetadata" mm WHERE mm."MovieId" = mi."Id" LIMIT 1),
-                    (SELECT mvm."ReleaseDate" FROM "MusicVideoMetadata" mvm WHERE mvm."MusicVideoId" = mi."Id" LIMIT 1)
-                ) AS release_date
-             FROM "MediaItem" mi
-             WHERE mi."Id" = ?"#,
+                    (SELECT "em"."ReleaseDate" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
+                    (SELECT "mm"."ReleaseDate" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
+                    (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1)
+                ) AS "release_date"
+             FROM "MediaItem" AS "mi"
+             WHERE "mi"."Id" = ?"#,
         )
         .bind(id)
         .fetch_optional(&self.0)
@@ -1365,11 +1365,11 @@ impl SqliteSchedulingContentRepository {
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<Vec<EffectiveDecoTemplateItem>> {
         let rows = sqlx::query(
-            r#"SELECT dti."StartTime", dti."EndTime", dti."DecoId", d."BreakContentMode"
-             FROM "DecoTemplateItem" dti
-             JOIN "Deco" d ON d."Id" = dti."DecoId"
-             WHERE dti."DecoTemplateId" = ?
-             ORDER BY dti."StartTime", dti."Id""#,
+            r#"SELECT "dti"."StartTime", "dti"."EndTime", "dti"."DecoId", "d"."BreakContentMode"
+             FROM "DecoTemplateItem" AS "dti"
+             JOIN "Deco" AS "d" ON "d"."Id" = "dti"."DecoId"
+             WHERE "dti"."DecoTemplateId" = ?
+             ORDER BY "dti"."StartTime", "dti"."Id""#,
         )
         .bind(deco_template_id)
         .fetch_all(&self.0)
@@ -1505,139 +1505,139 @@ const SEARCH_DOCUMENT_SQL: &str = r#"
 SELECT *
 FROM (
     SELECT
-        mm."MovieId" AS item_id,
-        'movie' AS media_kind,
-        'Movie' AS metadata_kind,
-        mm."Id" AS metadata_id,
-        mm."Title" AS title,
-        mm."OriginalTitle" AS original_title,
-        mm."SortTitle" AS sort_title,
-        mm."Year" AS year,
-        mm."ReleaseDate" AS release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "MovieMetadata" mm
+        "mm"."MovieId" AS "item_id",
+        'movie' AS "media_kind",
+        'Movie' AS "metadata_kind",
+        "mm"."Id" AS "metadata_id",
+        "mm"."Title" AS "title",
+        "mm"."OriginalTitle" AS "original_title",
+        "mm"."SortTitle" AS "sort_title",
+        "mm"."Year" AS "year",
+        "mm"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "MovieMetadata" AS "mm"
     UNION ALL
     SELECT
-        sm."ShowId" AS item_id,
-        'show' AS media_kind,
-        'Show' AS metadata_kind,
-        sm."Id" AS metadata_id,
-        sm."Title" AS title,
-        sm."OriginalTitle" AS original_title,
-        sm."SortTitle" AS sort_title,
-        sm."Year" AS year,
-        sm."ReleaseDate" AS release_date,
-        sm."ShowId" AS show_id,
-        sm."Title" AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "ShowMetadata" sm
+        "sm"."ShowId" AS "item_id",
+        'show' AS "media_kind",
+        'Show' AS "metadata_kind",
+        "sm"."Id" AS "metadata_id",
+        "sm"."Title" AS "title",
+        "sm"."OriginalTitle" AS "original_title",
+        "sm"."SortTitle" AS "sort_title",
+        "sm"."Year" AS "year",
+        "sm"."ReleaseDate" AS "release_date",
+        "sm"."ShowId" AS "show_id",
+        "sm"."Title" AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "ShowMetadata" AS "sm"
     UNION ALL
     SELECT
-        sem."SeasonId" AS item_id,
-        'season' AS media_kind,
-        'Season' AS metadata_kind,
-        sem."Id" AS metadata_id,
-        sem."Title" AS title,
-        sem."OriginalTitle" AS original_title,
-        sem."SortTitle" AS sort_title,
-        sem."Year" AS year,
-        sem."ReleaseDate" AS release_date,
-        se."ShowId" AS show_id,
-        shm."Title" AS show_title,
-        se."SeasonNumber" AS season_number,
-        NULL AS episode_number
-    FROM "SeasonMetadata" sem
-    JOIN "Season" se ON se."Id" = sem."SeasonId"
-    LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = se."ShowId"
+        "sem"."SeasonId" AS "item_id",
+        'season' AS "media_kind",
+        'Season' AS "metadata_kind",
+        "sem"."Id" AS "metadata_id",
+        "sem"."Title" AS "title",
+        "sem"."OriginalTitle" AS "original_title",
+        "sem"."SortTitle" AS "sort_title",
+        "sem"."Year" AS "year",
+        "sem"."ReleaseDate" AS "release_date",
+        "se"."ShowId" AS "show_id",
+        "shm"."Title" AS "show_title",
+        "se"."SeasonNumber" AS "season_number",
+        NULL AS "episode_number"
+    FROM "SeasonMetadata" AS "sem"
+    JOIN "Season" AS "se" ON "se"."Id" = "sem"."SeasonId"
+    LEFT JOIN "ShowMetadata" AS "shm" ON "shm"."ShowId" = "se"."ShowId"
     UNION ALL
     SELECT
-        em."EpisodeId" AS item_id,
-        'episode' AS media_kind,
-        'Episode' AS metadata_kind,
-        em."Id" AS metadata_id,
-        em."Title" AS title,
-        em."OriginalTitle" AS original_title,
-        em."SortTitle" AS sort_title,
-        em."Year" AS year,
-        em."ReleaseDate" AS release_date,
-        s."ShowId" AS show_id,
-        shm."Title" AS show_title,
-        s."SeasonNumber" AS season_number,
-        em."EpisodeNumber" AS episode_number
-    FROM "EpisodeMetadata" em
-    JOIN "Episode" e ON e."Id" = em."EpisodeId"
-    JOIN "Season" s ON s."Id" = e."SeasonId"
-    LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = s."ShowId"
+        "em"."EpisodeId" AS "item_id",
+        'episode' AS "media_kind",
+        'Episode' AS "metadata_kind",
+        "em"."Id" AS "metadata_id",
+        "em"."Title" AS "title",
+        "em"."OriginalTitle" AS "original_title",
+        "em"."SortTitle" AS "sort_title",
+        "em"."Year" AS "year",
+        "em"."ReleaseDate" AS "release_date",
+        "s"."ShowId" AS "show_id",
+        "shm"."Title" AS "show_title",
+        "s"."SeasonNumber" AS "season_number",
+        "em"."EpisodeNumber" AS "episode_number"
+    FROM "EpisodeMetadata" AS "em"
+    JOIN "Episode" AS "e" ON "e"."Id" = "em"."EpisodeId"
+    JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId"
+    LEFT JOIN "ShowMetadata" AS "shm" ON "shm"."ShowId" = "s"."ShowId"
     UNION ALL
     SELECT
-        mvm."MusicVideoId" AS item_id,
-        'music_video' AS media_kind,
-        'MusicVideo' AS metadata_kind,
-        mvm."Id" AS metadata_id,
-        mvm."Title" AS title,
-        mvm."OriginalTitle" AS original_title,
-        mvm."SortTitle" AS sort_title,
-        mvm."Year" AS year,
-        mvm."ReleaseDate" AS release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "MusicVideoMetadata" mvm
+        "mvm"."MusicVideoId" AS "item_id",
+        'music_video' AS "media_kind",
+        'MusicVideo' AS "metadata_kind",
+        "mvm"."Id" AS "metadata_id",
+        "mvm"."Title" AS "title",
+        "mvm"."OriginalTitle" AS "original_title",
+        "mvm"."SortTitle" AS "sort_title",
+        "mvm"."Year" AS "year",
+        "mvm"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "MusicVideoMetadata" AS "mvm"
     UNION ALL
     SELECT
-        am."ArtistId" AS item_id,
-        'artist' AS media_kind,
-        'Artist' AS metadata_kind,
-        am."Id" AS metadata_id,
-        am."Title" AS title,
-        am."OriginalTitle" AS original_title,
-        am."SortTitle" AS sort_title,
-        am."Year" AS year,
-        am."ReleaseDate" AS release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "ArtistMetadata" am
+        "am"."ArtistId" AS "item_id",
+        'artist' AS "media_kind",
+        'Artist' AS "metadata_kind",
+        "am"."Id" AS "metadata_id",
+        "am"."Title" AS "title",
+        "am"."OriginalTitle" AS "original_title",
+        "am"."SortTitle" AS "sort_title",
+        "am"."Year" AS "year",
+        "am"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "ArtistMetadata" AS "am"
     UNION ALL
     SELECT
-        ovm."OtherVideoId" AS item_id,
-        'other_video' AS media_kind,
-        'OtherVideo' AS metadata_kind,
-        ovm."Id" AS metadata_id,
-        ovm."Title" AS title,
-        ovm."OriginalTitle" AS original_title,
-        ovm."SortTitle" AS sort_title,
-        ovm."Year" AS year,
-        ovm."ReleaseDate" AS release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "OtherVideoMetadata" ovm
+        "ovm"."OtherVideoId" AS "item_id",
+        'other_video' AS "media_kind",
+        'OtherVideo' AS "metadata_kind",
+        "ovm"."Id" AS "metadata_id",
+        "ovm"."Title" AS "title",
+        "ovm"."OriginalTitle" AS "original_title",
+        "ovm"."SortTitle" AS "sort_title",
+        "ovm"."Year" AS "year",
+        "ovm"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "OtherVideoMetadata" AS "ovm"
     UNION ALL
     SELECT
-        som."SongId" AS item_id,
-        'song' AS media_kind,
-        'Song' AS metadata_kind,
-        som."Id" AS metadata_id,
-        som."Title" AS title,
-        som."OriginalTitle" AS original_title,
-        som."SortTitle" AS sort_title,
-        som."Year" AS year,
-        som."ReleaseDate" AS release_date,
-        NULL AS show_id,
-        NULL AS show_title,
-        NULL AS season_number,
-        NULL AS episode_number
-    FROM "SongMetadata" som
+        "som"."SongId" AS "item_id",
+        'song' AS "media_kind",
+        'Song' AS "metadata_kind",
+        "som"."Id" AS "metadata_id",
+        "som"."Title" AS "title",
+        "som"."OriginalTitle" AS "original_title",
+        "som"."SortTitle" AS "sort_title",
+        "som"."Year" AS "year",
+        "som"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "SongMetadata" AS "som"
 )
-ORDER BY COALESCE(sort_title, title), item_id"#;
+ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
 fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {

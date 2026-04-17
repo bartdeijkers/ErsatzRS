@@ -18,7 +18,7 @@ impl ConfigRepository for SqliteConfigRepository {
     async fn set(&self, key: &str, value: &str) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-             ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+             ON CONFLICT("Key") DO UPDATE SET "Value" = "excluded"."Value""#,
         )
         .bind(key)
         .bind(value)

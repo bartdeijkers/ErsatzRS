@@ -24,11 +24,11 @@ impl MetadataRepository for SqliteMetadataRepository {
 
     async fn get_episode_metadata(&self, item_id: EntityId) -> Result<EpisodeMetadata> {
         let row = sqlx::query(
-            r#"SELECT em.*, s."SeasonNumber"
-             FROM "EpisodeMetadata" em
-             JOIN "Episode" e ON e."Id" = em."EpisodeId"
-             JOIN "Season" s ON s."Id" = e."SeasonId"
-             WHERE em."EpisodeId" = ?"#,
+            r#"SELECT "em".*, "s"."SeasonNumber"
+             FROM "EpisodeMetadata" AS "em"
+             JOIN "Episode" AS "e" ON "e"."Id" = "em"."EpisodeId"
+             JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId"
+             WHERE "em"."EpisodeId" = ?"#,
         )
         .bind(item_id)
         .fetch_one(&self.0)

@@ -31,19 +31,19 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
     async fn find_by_path(&self, path: &str) -> Result<MediaItem> {
         let row = sqlx::query(
-            r#"SELECT mi.*
-             FROM "MediaItem" mi
-             JOIN "MediaVersion" mv ON (
-                 mv."MovieId" = mi."Id"
-                 OR mv."EpisodeId" = mi."Id"
-                 OR mv."MusicVideoId" = mi."Id"
-                 OR mv."OtherVideoId" = mi."Id"
-                 OR mv."SongId" = mi."Id"
-                 OR mv."ImageId" = mi."Id"
-                 OR mv."RemoteStreamId" = mi."Id"
+            r#"SELECT "mi".*
+             FROM "MediaItem" AS "mi"
+             JOIN "MediaVersion" AS "mv" ON (
+                 "mv"."MovieId" = "mi"."Id"
+                 OR "mv"."EpisodeId" = "mi"."Id"
+                 OR "mv"."MusicVideoId" = "mi"."Id"
+                 OR "mv"."OtherVideoId" = "mi"."Id"
+                 OR "mv"."SongId" = "mi"."Id"
+                 OR "mv"."ImageId" = "mi"."Id"
+                 OR "mv"."RemoteStreamId" = "mi"."Id"
              )
-             JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-             WHERE mf."Path" = ?"#,
+             JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id"
+             WHERE "mf"."Path" = ?"#,
         )
         .bind(path)
         .fetch_one(&self.0)

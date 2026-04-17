@@ -41,7 +41,7 @@ async fn real_world_ersatztv_sqlite_database_is_readable() {
     let repos = make_repositories(pool.clone());
 
     let table_count: i64 = sqlx::query_scalar(
-        r"SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        r#"SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'"#,
     )
     .fetch_one(&pool)
     .await
@@ -345,10 +345,10 @@ async fn assert_scheduling_sources_resolve(pool: &SqlitePool, repos: &Repositori
     }
 
     for row in sqlx::query(
-        r#"SELECT pg."Name" AS "GroupName", p."Name" AS "Name"
-           FROM "Playlist" p
-           LEFT JOIN "PlaylistGroup" pg ON pg."Id" = p."PlaylistGroupId"
-           ORDER BY p."Id"
+        r#"SELECT "pg"."Name" AS "GroupName", "p"."Name" AS "Name"
+           FROM "Playlist" AS "p"
+           LEFT JOIN "PlaylistGroup" AS "pg" ON "pg"."Id" = "p"."PlaylistGroupId"
+           ORDER BY "p"."Id"
            LIMIT 10"#,
     )
     .fetch_all(pool)
@@ -374,7 +374,7 @@ async fn ids(pool: &SqlitePool, table: &str) -> Vec<i64> {
 }
 
 async fn child_count(pool: &SqlitePool, table: &str, foreign_key: &str, id: i64) -> usize {
-    let sql = format!(r#"SELECT count(*) FROM "{table}" WHERE "{foreign_key}" = ?"#);
+    let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "{foreign_key}" = ?"#);
     let count: i64 = sqlx::query_scalar(&sql)
         .bind(id)
         .fetch_one(pool)

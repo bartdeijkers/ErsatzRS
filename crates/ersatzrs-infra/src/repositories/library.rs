@@ -28,11 +28,11 @@ impl LibraryRepository for SqliteLibraryRepository {
         .await?;
         library.folder_ids = load_ids(
             &self.0,
-            r#"SELECT lf."Id"
-               FROM "LibraryFolder" lf
-               JOIN "LibraryPath" lp ON lp."Id" = lf."LibraryPathId"
-               WHERE lp."LibraryId" = ?
-               ORDER BY lf."Id""#,
+            r#"SELECT "lf"."Id"
+               FROM "LibraryFolder" AS "lf"
+               JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "lf"."LibraryPathId"
+               WHERE "lp"."LibraryId" = ?
+               ORDER BY "lf"."Id""#,
             id,
         )
         .await?;

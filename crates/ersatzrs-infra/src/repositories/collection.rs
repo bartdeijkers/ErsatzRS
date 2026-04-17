@@ -36,11 +36,11 @@ impl CollectionRepository for SqliteCollectionRepository {
 
     async fn list_for_media_item(&self, item_id: EntityId) -> Result<Vec<Collection>> {
         let rows = sqlx::query(
-            r#"SELECT c.*
-             FROM "Collection" c
-             JOIN "CollectionItem" ci ON ci."CollectionId" = c."Id"
-             WHERE ci."MediaItemId" = ?
-             ORDER BY c."Name", c."Id""#,
+            r#"SELECT "c".*
+             FROM "Collection" AS "c"
+             JOIN "CollectionItem" AS "ci" ON "ci"."CollectionId" = "c"."Id"
+             WHERE "ci"."MediaItemId" = ?
+             ORDER BY "c"."Name", "c"."Id""#,
         )
         .bind(item_id)
         .fetch_all(&self.0)
