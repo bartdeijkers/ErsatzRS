@@ -4,7 +4,7 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 5 — Protocol Endpoints** next.
+**Phase 6 — Leptos Admin UI** next (channel list and editor first).
 
 ### Phase 0 Checklist
 
@@ -91,9 +91,24 @@ The Phase 4 remediation list is now closed:
    Bunny fixture is missing, so CI reports "1 passed" with zero
    behavior exercised. Gate with `#[ignore]` or commit a tiny fixture.~~
 
-**Phase 5 kick-off** is now unblocked. The intended starting sequence is
-`/iptv/channels.m3u`, HLS video endpoints, HDHomeRun discovery/lineup, UDP
-discovery on port 65001, and XMLTV guide output.
+**Phase 5 — complete.** The IPTV/HDHomeRun protocol surface is in place:
+`/iptv/channels.m3u` emits the M3U playlist; `/iptv/xmltv.xml` renders a
+48-hour XMLTV guide via quick-xml with COALESCEd titles from the metadata
+tables; `/discover.json`, `/device.xml`, `/lineup_status.json`, and
+`/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names
+(DeviceID/LineupURL/GuideNumber/…); the HDHomeRun UDP discovery responder
+listens on port 65001 with TLV + CRC32 encoding covered by protocol tests;
+and `/iptv/channel/{number}.ts` resolves the active PlayoutItem, applies
+Plex/Jellyfin/Emby path replacements, and pipes a software FFmpeg MPEG-TS
+stream with `kill_on_drop` cleanup. Device UUID is seeded into
+`ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
+read from `HDHR.TunerCount` (default 1).
+
+**Phase 6 entry point — Leptos admin UI.** Start with the channel list
+and editor, then media source configuration, library browser/collections,
+and the block editor. HLS multi-variant playlists, the segmenter
+worker with work-ahead and discontinuity tracking, hls-direct passthrough,
+access tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -160,3 +175,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block E: switched scanner and provider `MediaFile.PathHash` writes to SHA256 hex for ErsatzTV parity; existing databases now require rescans to refresh stored path hashes. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block F: short-circuited provider `--dry-run` before credential loading, marked the ffprobe fixture test ignored with explicit invocation docs, and closed the last Phase 4 remediation items. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block G: ported the NVENC and VAAPI decode-path argv shape from ErsatzTV into the Rust FFmpeg pipeline builders, updated the hardware pipeline snapshots, and cleared the remaining Phase 2 remediation item. |
+| 2026-04-17 | Claude Code (claude-opus-4-7[1m]) | Completed Phase 5 protocol endpoints: `/iptv/channels.m3u` + `/iptv/xmltv.xml` via quick-xml (48-hour window, COALESCE titles); HDHomeRun HTTP quartet (`discover.json`, `device.xml`, `lineup_status.json`, `lineup.json`) with verbatim C# field names; UDP discovery responder on port 65001 with TLV + CRC32 round-trip tests; `/iptv/channel/{number}.ts` resolving the active PlayoutItem through `MediaVersion`/`MediaFile`, applying provider path replacements, and piping a software FFmpeg MPEG-TS stream with `kill_on_drop`. Device UUID seeded into `ConfigElement` under `HDHR.DeviceUuid`. Phase 5 ✅. |
