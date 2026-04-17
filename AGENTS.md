@@ -11,18 +11,17 @@ The authoritative implementation plan lives at **[/home/bart/ErsatzRS/plans/sequ
 
 ## Current status
 
-Phase 0 (bootstrap), partially complete. Documentation contracts, ADRs,
-Diataxis docs, CI, tooling config, and Claude skills are done. **There is no
-`Cargo.toml`, no crates, and no runnable code yet.** The next step is creating
-the Cargo workspace with empty crate stubs. See [STATUS.md](STATUS.md) for the
-detailed Phase 0 checklist and session log.
+**Phase 5 — Protocol Endpoints** (Phases 0–4 complete). The Cargo workspace,
+FFmpeg pipeline, playout scheduling engines (Block/YAML/Scripted), and media
+source scanning (local/Plex/Jellyfin/Emby) are all in place. Phase 5 targets
+the IPTV/HDHomeRun protocol layer: `/iptv/channels.m3u`, HLS video endpoints,
+HDHomeRun discovery/lineup, UDP discovery on port 65001, and XMLTV guide output.
+See [STATUS.md](STATUS.md) for the full checklist and session log.
 
 When adding code, follow the workspace layout from the plan's architecture and
 crate-layout section.
 
 ## Commands
-
-There is no Cargo workspace yet. Once it exists, these are the baseline commands:
 
 ```bash
 # Build
