@@ -49,8 +49,11 @@ dimensions.
 
 What remains before Phase 3 can be considered end-to-end complete:
 
-1. Compare generated timelines against ErsatzTV fixtures where available and
-   add longer integration tests with local Big Buck Bunny media.
+1. ~~Compare generated timelines against ErsatzTV fixtures where available~~ —
+   done: block scheduling now has ErsatzTV-fixture-based regression coverage for
+   basic chronological blocks, default deco filler, and guide-group locking.
+   Big Buck Bunny media-dependent tests remain excluded from CI unless added as
+   ignored or feature-gated fixtures.
 2. Continue Phase 2 protocol work by replacing `/dev/stream/bbb.ts` with real
    channel playout/IPTV streaming once scheduled playout selection is wired.
 3. Continue hardening search if production use requires a real analyzer/index
@@ -127,3 +130,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Expanded Lua scripted scheduling engine to full ErsatzTV API parity: 20+ bindings (add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics + content registration), Reset-mode history removal, history resume on registration; 18 new snapshot tests, 0 failures. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Closed remaining Lua scheduling gaps: add_marathon (show/season/artist/album/director grouping, round-robin cycling, shuffle_groups/play_all/item_order, history resume) and create_playlist (inline playlist from existing enumerators, history resume); shared PlaylistEnumerator types promoted to mod.rs; 4 new snapshot tests, 72 total passing. |
 | 2026-04-17 | Codex | Closed the requested Phase 3 scheduling parity gaps in order: YAML playlist/expression semantics, block item removal/change detection, and SQL-backed Lucene fields for credits, languages, codecs, and dimensions; full workspace tests passed before each feature commit. |
+| 2026-04-17 | Codex | Added ErsatzTV-fixture-based block scheduling regression coverage and documented serialized parity contracts. |
