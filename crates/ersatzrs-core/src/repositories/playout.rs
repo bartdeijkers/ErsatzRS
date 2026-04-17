@@ -36,8 +36,7 @@ pub trait PlayoutRepository: Send + Sync {
     ///
     /// Returns an error when any database operation inside the transaction
     /// fails.
-    async fn apply_build_result(&self, result: &SchedulingResult, playout: &Playout)
-        -> Result<()>;
+    async fn apply_build_result(&self, result: &SchedulingResult, playout: &Playout) -> Result<()>;
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()>;
     async fn delete_items_before(&self, playout_id: EntityId, cutoff: DateTime<Utc>) -> Result<()>;
     async fn upsert_build_status(&self, status: &PlayoutBuildStatus) -> Result<()>;

@@ -1,0 +1,16 @@
+---
+source: crates/ersatzrs-infra/tests/playout_build_round_trip.rs
+expression: "written.iter().map(|i|\n{\n    let offset_min = (i.start - now).num_minutes(); let duration_min =\n    (i.finish - i.start).num_minutes();\n    serde_json::json!({\n        \"offset_min\": offset_min, \"duration_min\": duration_min, \"filler_kind\":\n        format!(\"{:?}\", i.filler_kind),\n    })\n}).collect::<Vec<_>>()"
+---
+[
+  {
+    "duration_min": 90,
+    "filler_kind": "None",
+    "offset_min": 0
+  },
+  {
+    "duration_min": 45,
+    "filler_kind": "None",
+    "offset_min": 89
+  }
+]

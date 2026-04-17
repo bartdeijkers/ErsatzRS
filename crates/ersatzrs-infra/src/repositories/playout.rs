@@ -219,11 +219,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         Ok(())
     }
 
-    async fn apply_build_result(
-        &self,
-        result: &SchedulingResult,
-        playout: &Playout,
-    ) -> Result<()> {
+    async fn apply_build_result(&self, result: &SchedulingResult, playout: &Playout) -> Result<()> {
         let mut tx = self.0.begin().await?;
 
         // ── items ─────────────────────────────────────────────────────────────
@@ -240,13 +236,11 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                     .await?;
             }
             if let Some(cutoff) = result.remove_before {
-                sqlx::query(
-                    r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Start" < ?"#,
-                )
-                .bind(playout.id)
-                .bind(encode_datetime(cutoff))
-                .execute(&mut *tx)
-                .await?;
+                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Start" < ?"#)
+                    .bind(playout.id)
+                    .bind(encode_datetime(cutoff))
+                    .execute(&mut *tx)
+                    .await?;
             }
         }
 

@@ -1,0 +1,11 @@
+---
+source: crates/ersatzrs-infra/tests/playout_build_round_trip.rs
+expression: "&items.iter().map(|i|\nserde_json::json!({\n    \"media_item_id\": i.media_item_id, \"guide_group\": i.guide_group,\n    \"filler_kind\": format!(\"{:?}\", i.filler_kind),\n})).collect::<Vec<_>>()"
+---
+[
+  {
+    "filler_kind": "None",
+    "guide_group": 1,
+    "media_item_id": 1
+  }
+]
