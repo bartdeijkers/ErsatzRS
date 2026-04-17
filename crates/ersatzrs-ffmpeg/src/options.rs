@@ -237,6 +237,11 @@ pub fn fast_start() -> PipelineStep {
 }
 
 #[must_use]
+pub fn no_autoscale() -> PipelineStep {
+    PipelineStep::generic("no_autoscale", ["-noautoscale"])
+}
+
+#[must_use]
 pub fn mpegts_output(initial_discontinuity: bool) -> PipelineStep {
     if initial_discontinuity {
         PipelineStep::generic(

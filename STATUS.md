@@ -4,8 +4,7 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 5 — Protocol Endpoints** next. Phase 2 still has a parallel
-NVENC/VAAPI remediation item targeted at Phase 7.
+**Phase 5 — Protocol Endpoints** next.
 
 ### Phase 0 Checklist
 
@@ -28,17 +27,15 @@ NVENC/VAAPI remediation item targeted at Phase 7.
 
 **Phase 0, Phase 1, and Phase 3 are complete.**
 
-**Phase 2 — mostly complete, with one remediation item before Phase 7.** The
-FFmpeg foundation is in place: typed inputs, command generation, complex
-filter routing, watermark/subtitle/song-progress filters, drawvg SVG template
-rendering, ffconcat v1.0 playlist writing, snapshot tests, and a development
-MPEG-TS streaming route at `/dev/stream/bbb.ts`. The NVENC and VAAPI pipeline
-"builders" currently only swap the encoder onto a software-style command: the
-NVENC path lacks `-hwaccel cuda`, `-hwaccel_output_format cuda`, and the CUDA
-filter chain; the VAAPI path lacks `-init_hw_device vaapi`, `-hwaccel vaapi`,
-`-hwaccel_output_format vaapi`, and `hwupload`/`scale_vaapi`. Port the decode
-paths from `ErsatzTV.FFmpeg.Pipeline.NvidiaPipelineBuilder` and
-`VaapiPipelineBuilder` before Phase 7 expands to QSV/AMF/VideoToolbox/RKMPP.
+**Phase 2 — complete for the currently targeted hardware paths.** The FFmpeg
+foundation is in place: typed inputs, command generation, complex filter
+routing, watermark/subtitle/song-progress filters, drawvg SVG template
+rendering, ffconcat v1.0 playlist writing, snapshot tests, a development
+MPEG-TS streaming route at `/dev/stream/bbb.ts`, and NVENC/VAAPI decode-path
+parity for the currently implemented builders (`-hwaccel`,
+`-hwaccel_output_format`, `-init_hw_device`, hardware scaling, and
+`-noautoscale`). Future accelerators such as QSV/AMF/VideoToolbox/RKMPP remain
+Phase 7 work rather than a current remediation blocker.
 
 **Phase 3 — complete.** All scheduling engines and the end-to-end playout
 build pipeline are implemented and tested: shared `PlayoutSchedulingEngine`
@@ -162,3 +159,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block D: moved scanner provider credentials into DB-backed lookups, threaded real provider library keys into Plex/Jellyfin/Emby bootstrap rows, and added focused scanner/provider regression tests. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block E: switched scanner and provider `MediaFile.PathHash` writes to SHA256 hex for ErsatzTV parity; existing databases now require rescans to refresh stored path hashes. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block F: short-circuited provider `--dry-run` before credential loading, marked the ffprobe fixture test ignored with explicit invocation docs, and closed the last Phase 4 remediation items. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block G: ported the NVENC and VAAPI decode-path argv shape from ErsatzTV into the Rust FFmpeg pipeline builders, updated the hardware pipeline snapshots, and cleared the remaining Phase 2 remediation item. |

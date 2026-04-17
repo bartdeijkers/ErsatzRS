@@ -4,7 +4,7 @@ use ersatzrs_domain::{
 };
 
 use crate::{
-    closed_gop, fast_start, hide_banner, loglevel_error, mpegts_output, no_b_frames,
+    closed_gop, fast_start, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
     no_standard_input, no_stats, pipe_output, progress_to_stdout, standard_format_flags,
     subtitle_overlay_filter, watermark_opacity_filter, watermark_overlay_filter, CommandGenerator,
     ComplexFilter, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, InputFile,
@@ -204,11 +204,13 @@ fn build_transcode_pipeline(
     }
 
     let mut filter_chain = FilterChain::default();
-    let target_state = FrameState::new(request.desired.frame_size);
-    filter_chain.video.push(crate::scale_filter(
+    let target_state = configure_hardware_acceleration(&mut request, &mut steps, acceleration);
+    filter_chain.video.push(video_scale_filter(
+        acceleration,
         &target_state,
         request.desired.frame_size,
         request.desired.frame_size,
+        request.desired.bit_depth,
     ));
 
     if let Some(watermark) = &request.watermark {
@@ -298,6 +300,157 @@ fn video_encoder(
         }
     }
     PipelineStep::encoder(name, StreamKind::Video, extra)
+}
+
+fn configure_hardware_acceleration(
+    request: &mut PipelineRequest,
+    steps: &mut Vec<PipelineStep>,
+    acceleration: HardwareAccelerationKind,
+) -> FrameState {
+    let mut state = FrameState::new(request.desired.frame_size);
+
+    match acceleration {
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => {}
+        HardwareAccelerationKind::Nvenc => {
+            steps.push(PipelineStep::global(
+                "cuda_hw_device",
+                ["-init_hw_device", "cuda"],
+            ));
+            steps.push(PipelineStep::global("cuda_hwaccel", ["-hwaccel", "cuda"]));
+            steps.push(PipelineStep::global(
+                "cuda_hwaccel_output_format",
+                ["-hwaccel_output_format", "cuda"],
+            ));
+            steps.push(no_autoscale());
+
+            state.frame_data_location = crate::FrameDataLocation::Hardware;
+            state.pixel_format = if request.desired.bit_depth == FFmpegProfileBitDepth::EightBit {
+                PixelFormat::Nv12
+            } else {
+                PixelFormat::Cuda
+            };
+        }
+        HardwareAccelerationKind::Vaapi => {
+            steps.push(PipelineStep::global(
+                "vaapi_hw_device",
+                ["-init_hw_device", "vaapi"],
+            ));
+            steps.push(PipelineStep::global("vaapi_hwaccel", ["-hwaccel", "vaapi"]));
+            steps.push(PipelineStep::global(
+                "vaapi_hwaccel_output_format",
+                ["-hwaccel_output_format", "vaapi"],
+            ));
+            steps.push(no_autoscale());
+
+            state.frame_data_location = crate::FrameDataLocation::Hardware;
+            state.pixel_format = if request.desired.bit_depth == FFmpegProfileBitDepth::EightBit {
+                PixelFormat::Nv12
+            } else {
+                PixelFormat::Vaapi
+            };
+        }
+    }
+
+    state
+}
+
+fn video_scale_filter(
+    acceleration: HardwareAccelerationKind,
+    current: &FrameState,
+    scaled_size: FrameSize,
+    padded_size: FrameSize,
+    bit_depth: FFmpegProfileBitDepth,
+) -> String {
+    match acceleration {
+        HardwareAccelerationKind::Nvenc => {
+            scale_cuda_filter(current, scaled_size, padded_size, bit_depth)
+        }
+        HardwareAccelerationKind::Vaapi => {
+            scale_vaapi_filter(current, scaled_size, padded_size, bit_depth)
+        }
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => crate::scale_filter(current, scaled_size, padded_size),
+    }
+}
+
+fn scale_cuda_filter(
+    current: &FrameState,
+    scaled_size: FrameSize,
+    padded_size: FrameSize,
+    bit_depth: FFmpegProfileBitDepth,
+) -> String {
+    let format = hardware_surface_format(bit_depth);
+    if current.scaled_size == scaled_size {
+        return format!("scale_cuda=format={format}");
+    }
+
+    let aspect_ratio = if scaled_size == padded_size {
+        ",setsar=1"
+    } else if current.cropped_size.is_some() {
+        ":force_original_aspect_ratio=increase,setsar=1"
+    } else {
+        ":force_original_aspect_ratio=decrease,setsar=1"
+    };
+
+    if current.is_anamorphic {
+        format!(
+            "scale_cuda=iw*sar:ih:format={format},setsar=1,scale_cuda={}:{}:format={format}{}",
+            padded_size.width, padded_size.height, aspect_ratio
+        )
+    } else {
+        format!(
+            "scale_cuda={}:{}:format={format}{}",
+            padded_size.width, padded_size.height, aspect_ratio
+        )
+    }
+}
+
+fn scale_vaapi_filter(
+    current: &FrameState,
+    scaled_size: FrameSize,
+    padded_size: FrameSize,
+    bit_depth: FFmpegProfileBitDepth,
+) -> String {
+    let format = hardware_surface_format(bit_depth);
+    if current.scaled_size == scaled_size {
+        return format!("scale_vaapi=format={format}");
+    }
+
+    let aspect_ratio = if scaled_size == padded_size {
+        ",setsar=1"
+    } else if current.cropped_size.is_some() {
+        ":force_original_aspect_ratio=increase,setsar=1"
+    } else {
+        ":force_original_aspect_ratio=decrease,setsar=1"
+    };
+
+    if current.is_anamorphic {
+        format!(
+            "scale_vaapi=iw*sar:ih:format={format},setsar=1,scale_vaapi={}:{}:force_divisible_by=2:format={format}{}",
+            padded_size.width, padded_size.height, aspect_ratio
+        )
+    } else {
+        format!(
+            "scale_vaapi={}:{}:force_divisible_by=2:format={format}{}",
+            padded_size.width, padded_size.height, aspect_ratio
+        )
+    }
+}
+
+const fn hardware_surface_format(bit_depth: FFmpegProfileBitDepth) -> &'static str {
+    match bit_depth {
+        FFmpegProfileBitDepth::EightBit => "nv12",
+        FFmpegProfileBitDepth::TenBit => "p010le",
+    }
 }
 
 fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
