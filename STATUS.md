@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 ## Current Phase
 
@@ -64,9 +64,12 @@ What remains before Phase 3 can be considered end-to-end complete:
    `lock/unlock_guide_group`, `is_done`, `watermark_on/off` (by name),
    `graphics_on/off_path` (by path), `add_collection`, `add_multi_collection`,
    `add_smart_collection`, `add_search`, `add_show`, `add_playlist`, `add_key`,
-   Reset-mode history removal, history resume on collection registration.
-   18 new snapshot tests, all passing. Remaining gap: marathon registration and
-   `create_playlist` (inline playlist assembly from existing enumerators).
+   `add_marathon` (group-by show/season/artist/album/director with round-robin
+   cycling, shuffle_groups, play_all, item_order, and history resume),
+   `create_playlist` (inline playlist assembly from existing enumerators with
+   history resume). Reset-mode history removal, history resume on collection
+   registration. 22 snapshot tests, all passing. Full ErsatzTV Lua API parity
+   achieved.
 5. Compare generated timelines against ErsatzTV fixtures where available and
    add longer integration tests with local Big Buck Bunny media.
 6. Continue Phase 2 protocol work by replacing `/dev/stream/bbb.ts` with real
@@ -122,3 +125,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-16 | Codex | Added a 138-table persistence gap matrix and expanded env-gated real-world SQLite decode coverage across existing infra repositories. |
 | 2026-04-16 | GitHub Copilot (GPT-5.4) | Added SQLite playout runtime-state write parity for anchors, enumerator state rows, gaps, history, program-schedule anchors, and playout templates with focused infra tests. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Expanded Lua scripted scheduling engine to full ErsatzTV API parity: 20+ bindings (add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics + content registration), Reset-mode history removal, history resume on registration; 18 new snapshot tests, 0 failures. |
+| 2026-04-17 | Claude Code (claude-sonnet-4-6) | Closed remaining Lua scheduling gaps: add_marathon (show/season/artist/album/director grouping, round-robin cycling, shuffle_groups/play_all/item_order, history resume) and create_playlist (inline playlist from existing enumerators, history resume); shared PlaylistEnumerator types promoted to mod.rs; 4 new snapshot tests, 72 total passing. |
