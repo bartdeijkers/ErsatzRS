@@ -1,0 +1,14 @@
+---
+source: crates/ersatzrs-infra/tests/plex_service.rs
+assertion_line: 56
+expression: plex_show_rows(&pool).await
+---
+[
+  {
+    "episode_key": "/library/metadata/202",
+    "path": "/media/show/s01e01.mkv",
+    "season_key": "/library/metadata/201",
+    "season_number": 1,
+    "show_key": "/library/metadata/200"
+  }
+]

@@ -1,0 +1,14 @@
+---
+source: crates/ersatzrs-infra/tests/plex_service.rs
+assertion_line: 31
+expression: plex_movie_rows(&pool).await
+---
+[
+  {
+    "duration": "00:02:00",
+    "key": "/library/metadata/100",
+    "part_key": "/library/parts/10",
+    "path": "/media/movie.mkv",
+    "stream_count": 2
+  }
+]
