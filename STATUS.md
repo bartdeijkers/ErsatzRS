@@ -4,7 +4,7 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 3 — Scheduling Engines** (foundation started)
+**Phase 3 — Scheduling Engines** ✅ complete; Phase 5 (streaming) is next
 
 ### Phase 0 Checklist
 
@@ -47,36 +47,25 @@ change detection with item-level guide/watermark/graphics flags, and SQL-backed
 Lucene fields for director/writer, language/subtitle tags, codec, and
 dimensions.
 
-What remains before Phase 3 can be considered end-to-end complete:
+Phase 3 is now **complete**. All scheduling engines and the end-to-end playout
+build pipeline are implemented and tested:
 
 1. ~~Compare generated timelines against ErsatzTV fixtures where available~~ —
    done: block scheduling now has ErsatzTV-fixture-based regression coverage for
    basic chronological blocks, default deco filler, and guide-group locking.
-   Big Buck Bunny media-dependent tests remain excluded from CI unless added as
-   ignored or feature-gated fixtures.
-2. Continue Phase 2 protocol work by replacing `/dev/stream/bbb.ts` with real
-   channel playout/IPTV streaming once scheduled playout selection is wired.
-3. Continue hardening search if production use requires a real analyzer/index
-   instead of the current SQL-backed Lucene-like evaluator, and add more
-   provider-specific metadata edge-case tests as fixtures become available.
-4. ~~Expand Lua scheduling bindings~~ — done: `add_count`, `add_all`,
-   `add_duration` (trim/fallback/discard_attempts/stop_before_end/offline_tail),
-   `pad_to_next`, `pad_until`, `skip`, `skip_to`, `rewind`, `pre_roll_on/off`,
-   `lock/unlock_guide_group`, `is_done`, `watermark_on/off` (by name),
-   `graphics_on/off_path` (by path), `add_collection`, `add_multi_collection`,
-   `add_smart_collection`, `add_search`, `add_show`, `add_playlist`, `add_key`,
-   `add_marathon` (group-by show/season/artist/album/director with round-robin
-   cycling, shuffle_groups, play_all, item_order, and history resume),
-   `create_playlist` (inline playlist assembly from existing enumerators with
-   history resume). Reset-mode history removal, history resume on collection
-   registration. 22 snapshot tests, all passing. Full ErsatzTV Lua API parity
-   achieved.
-5. ~~Close remaining YAML/block/search priority gaps~~ — done: SQL-backed
-   playlist disambiguation, playlist count expression semantics, skip expression
-   snapshots, deterministic Lua table-derived playlist ordering, block
-   item/history removal on collection or flag changes, persisted block-item
-   guide/watermark flags, and SQL search fields for director/writer,
-   language/subtitle tags, codecs, width, and height now have focused coverage.
+2. ~~End-to-end playout build~~ — done: `PlayoutBuilder` orchestrator in
+   `ersatzrs-core` dispatches on schedule kind; `apply_build_result` in
+   `ersatzrs-infra` persists the full `SchedulingResult` (items, gaps, history,
+   anchors, program-schedule anchors, fill-group indices) in a single
+   transaction respecting Reset and Continue semantics; round-trip integration
+   tests with insta snapshots verify Block and YAML engines against in-memory
+   databases.
+3. ~~Expand Lua scheduling bindings~~ — done: full ErsatzTV Lua API parity.
+4. ~~Close remaining YAML/block/search priority gaps~~ — done.
+
+**Phase 5 entry point** (next): Replace `/dev/stream/bbb.ts` with real channel
+playout/IPTV streaming — wire the scheduled playout selection through
+`PlayoutBuilder` and serve the resulting `PlayoutItem` sequence over HLS/MPEG-TS.
 
 Persistence parity gaps are now tracked per table in
 `docs/reference/persistence-gap-matrix.md`. The highest-risk next persistence
@@ -133,3 +122,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Codex | Added ErsatzTV-fixture-based block scheduling regression coverage and documented serialized parity contracts. |
 | 2026-04-17 | Codex | Refactored infra SQL query text to quote aliases and projected identifiers consistently while preserving ErsatzTV schema parity. |
 | 2026-04-17 | Codex | Resolved all Clippy warnings blocking `-D warnings`: renamed `fake_collection_key` field, replaced `.map().unwrap_or()` with `.map_or()`, merged identical match arms, and fixed pre-existing infra/test lints. |
+| 2026-04-17 | Claude Code (claude-sonnet-4-6) | Completed Phase 3 end-to-end playout build: `PlayoutBuilder` orchestrator, `apply_build_result` single-transaction persistence, and round-trip integration tests with insta snapshots. Phase 3 ✅. |
