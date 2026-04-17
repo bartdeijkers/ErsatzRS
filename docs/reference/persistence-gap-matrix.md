@@ -15,9 +15,9 @@ Scope:
 
 Current summary:
 
-- 53 tables have both read and write coverage.
-- 29 tables have read-only coverage.
-- 56 tables have no infra read/write coverage yet.
+- 72 tables have both read and write coverage.
+- 25 tables have read-only coverage.
+- 41 tables have no infra read/write coverage yet.
 
 Recommended order:
 
@@ -58,17 +58,17 @@ Recommended order:
 | `DecoTemplateItem` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Deco-template item selection is read-only. | P1 deco template repository |
 | `DecoWatermark` | Deco repository | Yes: Deco repository | Yes: Deco repository | Yes, through deco decode | Low/medium. | P2 watermark edit parity |
 | `Director` | Domain/core search placeholder only | No | No | No | Director search parity is absent. | P1 media metadata/search joins |
-| `EmbyCollection` | Domain model only | No | No | No | Emby collection scanner data cannot round-trip. | P3 provider scanner tables |
+| `EmbyCollection` | Emby collection sync | Yes: Emby collection sync lookup by item id | Yes: Emby collection sync | No | Collection identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden provider scanner tables |
 | `EmbyConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `EmbyEpisode` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `EmbyLibrary` | Domain model only | No | No | No | Emby library subtype lookup currently defaults rather than verifies row shape. | P3 provider library subtype repository |
+| `EmbyEpisode` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `EmbyLibrary` | Emby sync bootstrap and scanner dispatch | Yes: scanner dispatch and Emby sync bootstrap | Yes: Emby sync bootstrap | No | Library subtype rows can now be created for provider scans; full update/delete remains thin. | P3 provider library subtype update parity |
 | `EmbyMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `EmbyMovie` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `EmbyMovie` | Emby movie sync | Yes: Emby sync lookup by item id | Yes: Emby movie sync | No | Movie provider identity rows now persist during mock-covered sync. | P3 broaden provider scanner tables |
 | `EmbyPathInfo` | Schema only | No | No | No | Provider path scanning state is absent. | P3 provider scanner tables |
 | `EmbyPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Emby source decode | Low. | P0 broaden provider source decode |
-| `EmbySeason` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `EmbyShow` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `Episode` | Metadata repository join and scheduling read model | Yes: metadata/scheduling read paths | No | Partial, env-gated scheduling decode if data exists | Episode container rows cannot be created by current metadata writes. | P1 media polymorphic repository |
+| `EmbySeason` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `EmbyShow` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `Episode` | Metadata repository join, scheduling read model, provider sync | Yes: metadata/scheduling read paths plus provider sync lookups | Yes: Jellyfin, Plex, and Emby show library sync | Partial, env-gated scheduling decode if data exists | Episode container rows can now be created by provider scans; non-provider owner repository parity remains incomplete. | P3 broaden provider scanner coverage |
 | `EpisodeMetadata` | Metadata repository and scheduling read model | Yes: metadata/scheduling read paths | Yes: Metadata repository | Yes, env-gated direct decode | Covered core fields; normalized joins remain incomplete. | P1 media metadata/search joins |
 | `FFmpegProfile` | FFmpeg profile repository | Yes: FFmpeg profile repository | Yes: FFmpeg profile repository | Yes, env-gated direct decode | Low; continue enum compatibility checks. | P0 broaden real-world enum cases |
 | `FillGroupEnumeratorState` | Playout repository | Yes: Playout repository via `PlayoutScheduleItemFillGroupIndex` | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; covered through parent fill-group state writes and env-gated decode. | P1 done in playout state slice |
@@ -78,16 +78,16 @@ Recommended order:
 | `Image` | Scheduling read model only | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Image item scheduling lacks owner repository and metadata decode. | P1 media polymorphic repository |
 | `ImageFolderDuration` | Domain model only | No | No | No | Still-image duration parity is absent. | P1 media item detail decode |
 | `ImageMetadata` | Domain model only | No | No | No | Image search/display metadata cannot decode. | P1 media metadata/search joins |
-| `JellyfinCollection` | Domain model only | No | No | No | Jellyfin collection scanner data cannot round-trip. | P3 provider scanner tables |
+| `JellyfinCollection` | Jellyfin collection sync | Yes: Jellyfin collection sync lookup by item id | Yes: Jellyfin collection sync | No | Collection identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden provider scanner tables |
 | `JellyfinConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `JellyfinEpisode` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `JellyfinEpisode` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `JellyfinLibrary` | Library repository subtype check plus Jellyfin sync bootstrap | Yes: Library repository subtype lookup and Jellyfin sync bootstrap | Yes: Jellyfin sync bootstrap | Yes, through library decode | Library subtype rows can now be created for movie sync; full library update/delete remains thin. | P3 provider library subtype update parity |
 | `JellyfinMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `JellyfinMovie` | Jellyfin movie sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin movie sync | No | Movie provider identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden Jellyfin scanner tables |
 | `JellyfinPathInfo` | Schema only | No | No | No | Provider path scanning state is absent. | P3 provider scanner tables |
 | `JellyfinPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Jellyfin source decode | Low. | P0 broaden provider source decode |
-| `JellyfinSeason` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `JellyfinShow` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `JellyfinSeason` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `JellyfinShow` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `LanguageCode` | Domain model only | No | No | No | Audio/subtitle language parity is absent. | P1 stream/subtitle metadata |
 | `Library` | Library repository | Yes: Library repository | Yes: Library repository | Yes, env-gated direct decode | Low/medium; provider subtype writes are incomplete. | P2/P3 library subtype writes |
 | `LibraryFolder` | Library repository | Yes: Library repository | No | Yes, through library decode | Folder hierarchy cannot round-trip on write. | P2 library folder writes |
@@ -128,15 +128,15 @@ Recommended order:
 | `PlayoutTemplate` | Playout and scheduling repositories | Yes: playout/scheduling read paths | Yes: Playout repository via `replace_runtime_state` | Yes, through playout decode | Low/medium; template/deco-template selection now round-trips with date-window fields intact. | P1 done in playout state slice |
 | `PlexCollection` | Domain model only | No | No | No | Plex collection scanner data cannot round-trip. | P3 provider scanner tables |
 | `PlexConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `PlexEpisode` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `PlexLibrary` | Library repository subtype check | Yes: Library repository subtype lookup | No | Yes, through library decode | Library subtype rows are read-only. | P3 provider library subtype writes |
-| `PlexMediaFile` | Domain model only | No | No | No | Plex media-file scanner data cannot round-trip. | P3 provider scanner tables |
+| `PlexEpisode` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `PlexLibrary` | Library repository subtype check plus Plex sync bootstrap | Yes: Library repository subtype lookup and scanner dispatch | Yes: Plex sync bootstrap | Yes, through library decode | Library subtype rows can now be created for provider scans; full update/delete remains thin. | P3 provider library subtype writes |
+| `PlexMediaFile` | Plex sync | Yes: Plex sync writes and tests project rows | Yes: Plex movie/show sync | No | Plex part identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden Plex scanner tables |
 | `PlexMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `PlexMovie` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `PlexMovie` | Plex movie sync | Yes: Plex sync lookup by key | Yes: Plex movie sync | No | Movie provider identity rows now persist during mock-covered sync. | P3 broaden provider scanner tables |
 | `PlexOtherVideo` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
 | `PlexPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Plex source decode | Low. | P0 broaden provider source decode |
-| `PlexSeason` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `PlexShow` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `PlexSeason` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
+| `PlexShow` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `ProgramSchedule` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository | Yes, env-gated direct decode | Covered root fields; child subtypes are missing. | P1 schedule item subtype repository |
 | `ProgramScheduleAlternate` | Program schedule repository | Yes: Program schedule repository | No | Yes, through program schedule decode | Alternate schedules are read-only. | P1 schedule item subtype repository |
 | `ProgramScheduleDurationItem` | Schema only | No | No | No | Duration schedule item behavior cannot round-trip. | P1 schedule item subtype repository |
@@ -152,9 +152,9 @@ Recommended order:
 | `RerunHistory` | Domain model only | No | No | No | Rerun history parity is absent. | P4 rerun collections |
 | `Resolution` | Domain model only | No | No | No | Stream/dimension search and transcode decisions cannot use imported rows. | P1 media stream repository |
 | `ScheduleItemsEnumeratorState` | Playout repository | Yes: Playout repository | Yes: Playout repository via `replace_runtime_state` | Yes, through playout anchor decode | Low/medium; anchor enumerator state now round-trips. | P1 done in playout state slice |
-| `Season` | Metadata repository join and scheduling read model | Yes: metadata/scheduling read paths | No | Partial, env-gated scheduling decode if data exists | Season rows cannot be created by owner repository. | P1 media polymorphic repository |
+| `Season` | Metadata repository join, scheduling read model, provider sync | Yes: metadata/scheduling read paths plus provider sync lookups | Yes: Jellyfin, Plex, and Emby show library sync | Partial, env-gated scheduling decode if data exists | Season rows can now be created by provider scans; non-provider owner repository parity remains incomplete. | P3 broaden provider scanner coverage |
 | `SeasonMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Season metadata has no owner repository. | P1 media metadata/search joins |
-| `Show` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Show rows cannot be created by owner repository. | P1 media polymorphic repository |
+| `Show` | Scheduling read model plus provider sync | Yes: Scheduling read model plus provider sync lookups | Yes: Jellyfin, Plex, and Emby show library sync | Partial, env-gated scheduling decode if data exists | Show rows can now be created by provider scans; non-provider owner repository parity remains incomplete. | P3 broaden provider scanner coverage |
 | `ShowMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Show metadata has no owner repository. | P1 media metadata/search joins |
 | `SmartCollection` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, env-gated direct decode | Smart collection editor writes are absent. | P2 collection editor parity |
 | `Song` | Scheduling read model | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Song rows cannot round-trip. | P1 media polymorphic repository |
