@@ -1,9 +1,15 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
-use reqwest::Client;
+use reqwest::{
+    header::{HeaderValue, ACCEPT},
+    Client,
+};
 use serde::Deserialize;
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
+
+const PLEX_PAGE_SIZE: i32 = 100;
+const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexConnectionConfig {
@@ -53,6 +59,28 @@ pub struct PlexSeasonItem {
     pub etag: Option<String>,
     pub title: String,
     pub season_number: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlexCollectionItem {
+    pub key: String,
+    pub etag: Option<String>,
+    pub title: String,
+    pub library_section_id: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlexCollectionMediaKind {
+    Movie,
+    Show,
+    Season,
+    Episode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlexCollectionMediaItem {
+    pub key: String,
+    pub kind: PlexCollectionMediaKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -203,6 +231,80 @@ impl PlexService {
         })
     }
 
+    /// Fetch one page of Plex collections.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_collection_page(
+        &self,
+        config: &PlexConnectionConfig,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<PlexPage<PlexCollectionItem>> {
+        let url = format!("{}/library/all", config.uri.trim_end_matches('/'));
+        let start_index = start_index.to_string();
+        let limit = limit.to_string();
+        let response: PlexCollectionResponse = self
+            .client
+            .get(url)
+            .header(ACCEPT, APPLICATION_JSON)
+            .header("X-Plex-Token", &config.token)
+            .query(&[
+                ("type", "18"),
+                ("X-Plex-Container-Start", start_index.as_str()),
+                ("X-Plex-Container-Size", limit.as_str()),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+
+        Ok(PlexPage {
+            total_record_count: response.media_container.total_size,
+            items: response
+                .media_container
+                .metadata
+                .into_iter()
+                .filter_map(project_collection)
+                .collect(),
+        })
+    }
+
+    /// Fetch one page of Plex collection members.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_collection_items_page(
+        &self,
+        config: &PlexConnectionConfig,
+        collection_key: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<PlexPage<PlexCollectionMediaItem>> {
+        let url = format!(
+            "{}/library/collections/{collection_key}/children",
+            config.uri.trim_end_matches('/')
+        );
+        let response: PlexCollectionItemsResponse =
+            self.get_page(config, url, start_index, limit).await?;
+
+        Ok(PlexPage {
+            total_record_count: response.media_container.total_size,
+            items: response
+                .media_container
+                .metadata
+                .into_iter()
+                .filter_map(project_collection_media_item)
+                .collect(),
+        })
+    }
+
     async fn fetch_section_page(
         &self,
         config: &PlexConnectionConfig,
@@ -232,15 +334,19 @@ impl PlexService {
         self.get_page(config, url, start_index, limit).await
     }
 
-    async fn get_page(
+    async fn get_page<T>(
         &self,
         config: &PlexConnectionConfig,
         url: String,
         start_index: i32,
         limit: i32,
-    ) -> Result<PlexMetadataResponse> {
+    ) -> Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
         self.client
             .get(url)
+            .header(ACCEPT, APPLICATION_JSON)
             .header("X-Plex-Token", &config.token)
             .query(&[
                 ("X-Plex-Container-Start", start_index.to_string()),
@@ -262,6 +368,7 @@ impl PlexService {
     {
         self.client
             .get(url)
+            .header(ACCEPT, APPLICATION_JSON)
             .header("X-Plex-Token", &config.token)
             .send()
             .await
@@ -287,13 +394,28 @@ pub async fn sync_plex_movie_library(
     library_id: i64,
     library_key: &str,
 ) -> Result<usize> {
-    let page = service
-        .fetch_movie_page(config, library_key, 0, 100)
+    let mut synced = 0;
+    let mut start_index = 0;
+    let mut page = service
+        .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
         .await?;
-    for item in &page.items {
-        upsert_plex_movie(pool, media_source_id, library_id, item).await?;
+    let total_size = page.total_record_count;
+
+    while start_index < total_size {
+        for item in &page.items {
+            upsert_plex_movie(pool, media_source_id, library_id, item).await?;
+            synced += 1;
+        }
+        start_index += PLEX_PAGE_SIZE;
+        if start_index >= total_size {
+            break;
+        }
+        page = service
+            .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
+            .await?;
     }
-    Ok(page.items.len())
+
+    Ok(synced)
 }
 
 /// Sync Plex shows, seasons, and episodes into media rows.
@@ -309,23 +431,149 @@ pub async fn sync_plex_show_library(
     library_id: i64,
     library_key: &str,
 ) -> Result<usize> {
-    let shows = service.fetch_show_page(config, library_key, 0, 100).await?;
     let mut synced = 0;
-    for show in &shows.items {
-        let show_id = upsert_plex_show(pool, media_source_id, library_id, show).await?;
-        let seasons = service.fetch_season_page(config, &show.key, 0, 100).await?;
-        for season in &seasons.items {
-            let season_id =
-                upsert_plex_season(pool, media_source_id, library_id, show_id, season).await?;
-            let episodes = service
-                .fetch_episode_page(config, &season.key, 0, 100)
+    let mut show_start_index = 0;
+    let mut shows = service
+        .fetch_show_page(config, library_key, show_start_index, PLEX_PAGE_SIZE)
+        .await?;
+    let show_total_size = shows.total_record_count;
+
+    while show_start_index < show_total_size {
+        for show in &shows.items {
+            let show_id = upsert_plex_show(pool, media_source_id, library_id, show).await?;
+            let mut season_start_index = 0;
+            let mut seasons = service
+                .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
                 .await?;
-            for episode in &episodes.items {
-                upsert_plex_episode(pool, media_source_id, library_id, season_id, episode).await?;
-                synced += 1;
+            let season_total_size = seasons.total_record_count;
+
+            while season_start_index < season_total_size {
+                for season in &seasons.items {
+                    let season_id =
+                        upsert_plex_season(pool, media_source_id, library_id, show_id, season)
+                            .await?;
+                    let mut episode_start_index = 0;
+                    let mut episodes = service
+                        .fetch_episode_page(
+                            config,
+                            &season.key,
+                            episode_start_index,
+                            PLEX_PAGE_SIZE,
+                        )
+                        .await?;
+                    let episode_total_size = episodes.total_record_count;
+
+                    while episode_start_index < episode_total_size {
+                        for episode in &episodes.items {
+                            upsert_plex_episode(
+                                pool,
+                                media_source_id,
+                                library_id,
+                                season_id,
+                                episode,
+                            )
+                            .await?;
+                            synced += 1;
+                        }
+                        episode_start_index += PLEX_PAGE_SIZE;
+                        if episode_start_index >= episode_total_size {
+                            break;
+                        }
+                        episodes = service
+                            .fetch_episode_page(
+                                config,
+                                &season.key,
+                                episode_start_index,
+                                PLEX_PAGE_SIZE,
+                            )
+                            .await?;
+                    }
+                }
+                season_start_index += PLEX_PAGE_SIZE;
+                if season_start_index >= season_total_size {
+                    break;
+                }
+                seasons = service
+                    .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
+                    .await?;
             }
         }
+        show_start_index += PLEX_PAGE_SIZE;
+        if show_start_index >= show_total_size {
+            break;
+        }
+        shows = service
+            .fetch_show_page(config, library_key, show_start_index, PLEX_PAGE_SIZE)
+            .await?;
     }
+
+    Ok(synced)
+}
+
+/// Sync Plex collections and their memberships.
+///
+/// # Errors
+///
+/// Returns an error when Plex requests or database writes fail.
+pub async fn sync_plex_collection_library(
+    pool: &SqlitePool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_key: &str,
+) -> Result<usize> {
+    let library_section_id = library_key.parse::<i32>().unwrap_or_default();
+    let mut synced = 0;
+    let mut start_index = 0;
+    let mut page = service
+        .fetch_collection_page(config, start_index, PLEX_PAGE_SIZE)
+        .await?;
+    let total_size = page.total_record_count;
+
+    while start_index < total_size {
+        for collection in &page.items {
+            if collection.library_section_id != library_section_id {
+                continue;
+            }
+
+            let collection_id = upsert_plex_collection(pool, media_source_id, collection).await?;
+            let mut item_start_index = 0;
+            let items = service
+                .fetch_collection_items_page(
+                    config,
+                    &collection.key,
+                    item_start_index,
+                    PLEX_PAGE_SIZE,
+                )
+                .await?;
+            let item_total_size = items.total_record_count;
+            let mut all_items = items.items;
+
+            while item_start_index + PLEX_PAGE_SIZE < item_total_size {
+                item_start_index += PLEX_PAGE_SIZE;
+                let next_page = service
+                    .fetch_collection_items_page(
+                        config,
+                        &collection.key,
+                        item_start_index,
+                        PLEX_PAGE_SIZE,
+                    )
+                    .await?;
+                all_items.extend(next_page.items);
+            }
+            replace_plex_collection_items(pool, collection_id, &all_items).await?;
+            synced += 1;
+        }
+
+        start_index += PLEX_PAGE_SIZE;
+        if start_index >= total_size {
+            break;
+        }
+        page = service
+            .fetch_collection_page(config, start_index, PLEX_PAGE_SIZE)
+            .await?;
+    }
+
     Ok(synced)
 }
 
@@ -448,6 +696,32 @@ fn project_season(item: PlexMetadataItemResponse) -> Option<PlexSeasonItem> {
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
         season_number: item.index.unwrap_or_default(),
+    })
+}
+
+fn project_collection(item: PlexCollectionMetadataItemResponse) -> Option<PlexCollectionItem> {
+    Some(PlexCollectionItem {
+        key: item.rating_key?,
+        etag: item.updated_at.map(|value| value.to_string()),
+        title: item.title.unwrap_or_default(),
+        library_section_id: item.library_section_id.unwrap_or_default(),
+    })
+}
+
+fn project_collection_media_item(
+    item: PlexCollectionMediaItemResponse,
+) -> Option<PlexCollectionMediaItem> {
+    let kind = match item.item_type.as_deref()? {
+        "movie" => PlexCollectionMediaKind::Movie,
+        "show" => PlexCollectionMediaKind::Show,
+        "season" => PlexCollectionMediaKind::Season,
+        "episode" => PlexCollectionMediaKind::Episode,
+        _ => return None,
+    };
+
+    Some(PlexCollectionMediaItem {
+        key: item.key.or(item.rating_key)?,
+        kind,
     })
 }
 
@@ -686,6 +960,109 @@ async fn ensure_plex_episode_item(
         .execute(&mut **tx)
         .await?;
     Ok(id)
+}
+
+async fn upsert_plex_collection(
+    pool: &SqlitePool,
+    media_source_id: i64,
+    item: &PlexCollectionItem,
+) -> Result<i64> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (?)"#)
+        .bind(media_source_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(r#"INSERT OR IGNORE INTO "PlexMediaSource" ("Id") VALUES (?)"#)
+        .bind(media_source_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let id = if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexCollection" WHERE "Key" = ?"#)
+        .bind(&item.key)
+        .fetch_optional(&mut *tx)
+        .await?
+    {
+        let id = row.get("Id");
+        sqlx::query(r#"UPDATE "PlexCollection" SET "Etag" = ?, "Name" = ? WHERE "Id" = ?"#)
+            .bind(&item.etag)
+            .bind(&item.title)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
+            .bind(&item.title)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
+        )
+        .bind(&item.title)
+        .execute(&mut *tx)
+        .await?;
+        let id = result.last_insert_rowid();
+        sqlx::query(
+            r#"INSERT INTO "PlexCollection" ("Id", "Key", "Etag", "Name")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(id)
+        .bind(&item.key)
+        .bind(&item.etag)
+        .bind(&item.title)
+        .execute(&mut *tx)
+        .await?;
+        id
+    };
+
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn replace_plex_collection_items(
+    pool: &SqlitePool,
+    collection_id: i64,
+    items: &[PlexCollectionMediaItem],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = ?"#)
+        .bind(collection_id)
+        .execute(&mut *tx)
+        .await?;
+    for (index, item) in items.iter().enumerate() {
+        if let Some(media_item_id) = find_plex_media_item(&mut tx, item).await? {
+            sqlx::query(
+                r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId", "CustomIndex")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(collection_id)
+            .bind(media_item_id)
+            .bind(i32::try_from(index).unwrap_or_default())
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn find_plex_media_item(
+    tx: &mut Transaction<'_, Sqlite>,
+    item: &PlexCollectionMediaItem,
+) -> Result<Option<i64>> {
+    let table = match item.kind {
+        PlexCollectionMediaKind::Movie => "PlexMovie",
+        PlexCollectionMediaKind::Show => "PlexShow",
+        PlexCollectionMediaKind::Season => "PlexSeason",
+        PlexCollectionMediaKind::Episode => "PlexEpisode",
+    };
+    let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "Key" = ?"#);
+    Ok(sqlx::query(&sql)
+        .bind(&item.key)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(|row| row.get("Id")))
 }
 
 async fn ensure_simple_media_item(
@@ -930,40 +1307,85 @@ fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 struct PlexLibrariesResponse {
+    #[serde(rename = "MediaContainer")]
     media_container: PlexLibraryContainerResponse,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 struct PlexLibraryContainerResponse {
-    #[serde(default)]
+    #[serde(rename = "Directory", default)]
     directory: Vec<PlexLibraryResponse>,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 struct PlexLibraryResponse {
+    #[serde(rename = "Key")]
     key: String,
+    #[serde(rename = "Title")]
     title: String,
     #[serde(rename = "type")]
     library_type: String,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 struct PlexMetadataResponse {
+    #[serde(rename = "MediaContainer")]
     media_container: PlexMetadataContainerResponse,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 struct PlexMetadataContainerResponse {
-    #[serde(default)]
+    #[serde(rename = "totalSize", default)]
     total_size: i32,
-    #[serde(default)]
+    #[serde(rename = "Metadata", default)]
     metadata: Vec<PlexMetadataItemResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexCollectionResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: PlexCollectionContainerResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexCollectionContainerResponse {
+    #[serde(rename = "totalSize", default)]
+    total_size: i32,
+    #[serde(rename = "Metadata", default)]
+    metadata: Vec<PlexCollectionMetadataItemResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlexCollectionMetadataItemResponse {
+    rating_key: Option<String>,
+    title: Option<String>,
+    updated_at: Option<i64>,
+    library_section_id: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexCollectionItemsResponse {
+    #[serde(rename = "MediaContainer")]
+    media_container: PlexCollectionItemsContainerResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct PlexCollectionItemsContainerResponse {
+    #[serde(rename = "totalSize", default)]
+    total_size: i32,
+    #[serde(rename = "Metadata", default)]
+    metadata: Vec<PlexCollectionMediaItemResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlexCollectionMediaItemResponse {
+    key: Option<String>,
+    rating_key: Option<String>,
+    #[serde(rename = "type")]
+    item_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

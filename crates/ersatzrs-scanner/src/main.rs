@@ -7,7 +7,8 @@ use ersatzrs_infra::jellyfin::{
     sync_jellyfin_movie_library, sync_jellyfin_show_library, JellyfinService,
 };
 use ersatzrs_infra::plex::{
-    sync_plex_movie_library, sync_plex_show_library, PlexConnectionConfig, PlexService,
+    sync_plex_collection_library, sync_plex_movie_library, sync_plex_show_library,
+    PlexConnectionConfig, PlexService,
 };
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
 use sqlx::{Row, SqlitePool};
@@ -129,26 +130,33 @@ async fn scan_plex(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
         return Ok(());
     }
     let service = PlexService::new();
-    let count = if kind == 1 {
-        sync_plex_show_library(
-            pool,
-            &service,
-            &config,
-            media_source_id,
-            args.library_id,
-            &library_key,
-        )
-        .await?
-    } else {
-        sync_plex_movie_library(
-            pool,
-            &service,
-            &config,
-            media_source_id,
-            args.library_id,
-            &library_key,
-        )
-        .await?
+    let count = match kind {
+        1 => {
+            sync_plex_show_library(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                args.library_id,
+                &library_key,
+            )
+            .await?
+        }
+        0 => {
+            sync_plex_movie_library(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                args.library_id,
+                &library_key,
+            )
+            .await?
+        }
+        _ => {
+            sync_plex_collection_library(pool, &service, &config, media_source_id, &library_key)
+                .await?
+        }
     };
     info!(count, provider = "plex", "scan complete");
     Ok(())

@@ -1,0 +1,19 @@
+---
+source: crates/ersatzrs-infra/tests/plex_service.rs
+assertion_line: 183
+expression: plex_collection_rows(&pool).await
+---
+[
+  {
+    "collection_key": "900",
+    "custom_index": 0,
+    "media_key": "/library/metadata/400",
+    "name": "Favorites"
+  },
+  {
+    "collection_key": "900",
+    "custom_index": 1,
+    "media_key": "/library/metadata/401",
+    "name": "Favorites"
+  }
+]

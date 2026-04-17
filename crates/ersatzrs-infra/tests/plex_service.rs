@@ -1,7 +1,8 @@
 mod common;
 
 use ersatzrs_infra::plex::{
-    sync_plex_movie_library, sync_plex_show_library, PlexConnectionConfig, PlexService,
+    sync_plex_collection_library, sync_plex_movie_library, sync_plex_show_library,
+    PlexConnectionConfig, PlexService,
 };
 use httpmock::prelude::*;
 use serde_json::json;
@@ -32,6 +33,62 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
 }
 
 #[tokio::test]
+async fn plex_sync_paginates_movie_library() {
+    let server = MockServer::start_async().await;
+    let first_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/3/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 101,
+                    "Metadata": [
+                        media_json("/library/metadata/300", "/library/parts/30", "/media/movie-1.mkv", 300)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let second_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/3/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "100")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 101,
+                    "Metadata": [
+                        media_json("/library/metadata/301", "/library/parts/31", "/media/movie-2.mkv", 301)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 3, "3")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 2);
+    assert_eq!(count(&pool, "PlexMovie").await, 2);
+    first_page.assert_async().await;
+    second_page.assert_async().await;
+}
+
+#[tokio::test]
 async fn plex_sync_maps_mock_show_response_to_media_rows() {
     let server = MockServer::start_async().await;
     mock_plex_show_pages(&server).await;
@@ -56,11 +113,84 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
     insta::assert_json_snapshot!(plex_show_rows(&pool).await);
 }
 
+#[tokio::test]
+async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
+    let server = MockServer::start_async().await;
+    mock_plex_collection_movie_pages(&server).await;
+    let collections = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("type", "18")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        {
+                            "ratingKey": "900",
+                            "title": "Favorites",
+                            "updatedAt": 5,
+                            "librarySectionId": 4
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/collections/900/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        { "key": "/library/metadata/400", "type": "movie" },
+                        { "key": "/library/metadata/401", "type": "movie" }
+                    ]
+                }
+            }));
+        })
+        .await;
+
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4")
+        .await
+        .unwrap();
+
+    let synced = sync_plex_collection_library(&pool, &service, &config, 1, "4")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(count(&pool, "Collection").await, 1);
+    assert_eq!(count(&pool, "PlexCollection").await, 1);
+    assert_eq!(count(&pool, "CollectionItem").await, 2);
+    insta::assert_json_snapshot!(plex_collection_rows(&pool).await);
+    collections.assert_async().await;
+    members.assert_async().await;
+}
+
 async fn mock_plex_movie_page(server: &MockServer) {
     server
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/sections/1/all")
+                .header("Accept", "application/json")
                 .header("X-Plex-Token", "plex-token");
             then.status(200).json_body(json!({
                 "MediaContainer": {
@@ -79,6 +209,7 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/sections/2/all")
+                .header("Accept", "application/json")
                 .header("X-Plex-Token", "plex-token");
             then.status(200).json_body(json!({
                 "MediaContainer": {
@@ -94,6 +225,7 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/metadata/200/children")
+                .header("Accept", "application/json")
                 .header("X-Plex-Token", "plex-token");
             then.status(200).json_body(json!({
                 "MediaContainer": {
@@ -114,12 +246,33 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .mock_async(|when, then| {
             when.method(GET)
                 .path("/library/metadata/201/children")
+                .header("Accept", "application/json")
                 .header("X-Plex-Token", "plex-token");
             then.status(200).json_body(json!({
                 "MediaContainer": {
                     "totalSize": 1,
                     "Metadata": [
                         media_json("/library/metadata/202", "/library/parts/20", "/media/show/s01e01.mkv", 202)
+                    ]
+                }
+            }));
+        })
+        .await;
+}
+
+async fn mock_plex_collection_movie_pages(server: &MockServer) {
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/4/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        media_json("/library/metadata/400", "/library/parts/40", "/media/collection/movie-1.mkv", 400),
+                        media_json("/library/metadata/401", "/library/parts/41", "/media/collection/movie-2.mkv", 401)
                     ]
                 }
             }));
@@ -242,6 +395,35 @@ async fn plex_show_rows(pool: &SqlitePool) -> serde_json::Value {
                     "season_number": row.get::<i64, _>("SeasonNumber"),
                     "episode_key": row.get::<String, _>("EpisodeKey"),
                     "path": row.get::<String, _>("Path")
+                })
+            })
+            .collect(),
+    )
+}
+
+async fn plex_collection_rows(pool: &SqlitePool) -> serde_json::Value {
+    let rows = sqlx::query(
+        r#"SELECT "pc"."Key" AS "CollectionKey",
+                  "c"."Name" AS "Name",
+                  "pm"."Key" AS "MediaKey",
+                  "ci"."CustomIndex" AS "CustomIndex"
+           FROM "Collection" AS "c"
+           JOIN "PlexCollection" AS "pc" ON "pc"."Id" = "c"."Id"
+           JOIN "CollectionItem" AS "ci" ON "ci"."CollectionId" = "c"."Id"
+           JOIN "PlexMovie" AS "pm" ON "pm"."Id" = "ci"."MediaItemId"
+           ORDER BY "ci"."CustomIndex""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    serde_json::Value::Array(
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "collection_key": row.get::<String, _>("CollectionKey"),
+                    "name": row.get::<String, _>("Name"),
+                    "media_key": row.get::<String, _>("MediaKey"),
+                    "custom_index": row.get::<i64, _>("CustomIndex")
                 })
             })
             .collect(),
