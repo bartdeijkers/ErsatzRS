@@ -4,7 +4,8 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 5 — Protocol Endpoints** next
+**Phase 4 remediation** before Phase 5 protocol endpoints. Phase 2 has a
+parallel NVENC/VAAPI remediation item targeted at Phase 7.
 
 ### Phase 0 Checklist
 
@@ -25,58 +26,90 @@ Last updated: 2026-04-17
 
 ### What an Agent Should Do Next
 
-Phase 0 and Phase 1 are complete. Phase 2 now has a working FFmpeg foundation:
-typed inputs, command generation, complex filter routing, software/NVENC/VAAPI
-pipeline builders, watermark/subtitle/song-progress filters, drawvg SVG
-template rendering, ffconcat v1.0 playlist writing, snapshot tests, and a
-development MPEG-TS streaming route at `/dev/stream/bbb.ts` using local Big
-Buck Bunny fixtures when present. Phase 3 now has a `ersatzrs-core` scheduling
-foundation with a shared `PlayoutSchedulingEngine` trait, deterministic
-in-memory scheduling adapters behind content resolver traits, block scheduling,
-sequential YAML instruction dispatch, Lua 5.4 scripted scheduling, playout
-anchors, gaps, pre-roll/post-roll/mid-roll, watermark and graphics state, filler
-kinds, YAML content source resolution for collection, multi_collection,
-smart_collection, playlist, search, and single media item references, practical
-history application/cleanup, exact chronological history resume by media item
-details, structured playlist child/current-child history behavior for the
-in-memory adapter, a core-owned Lucene-like search query parser/evaluator, and
-SQLite search-document projection for represented metadata fields with
-show/season/artist container expansion, YAML parity coverage for SQL-backed
-playlist child resolution and expression edge cases, block update/removal
-change detection with item-level guide/watermark/graphics flags, and SQL-backed
-Lucene fields for director/writer, language/subtitle tags, codec, and
-dimensions.
+A 2026-04-17 audit reconciled this file with the actual code. Earlier session
+entries that declared Phase 4 "complete" overstated the shipped surface; the
+status below supersedes those claims.
 
-Phase 3 is now **complete**. All scheduling engines and the end-to-end playout
-build pipeline are implemented and tested:
+**Phase 0, Phase 1, and Phase 3 are complete.**
 
-1. ~~Compare generated timelines against ErsatzTV fixtures where available~~ —
-   done: block scheduling now has ErsatzTV-fixture-based regression coverage for
-   basic chronological blocks, default deco filler, and guide-group locking.
-2. ~~End-to-end playout build~~ — done: `PlayoutBuilder` orchestrator in
-   `ersatzrs-core` dispatches on schedule kind; `apply_build_result` in
-   `ersatzrs-infra` persists the full `SchedulingResult` (items, gaps, history,
-   anchors, program-schedule anchors, fill-group indices) in a single
-   transaction respecting Reset and Continue semantics; round-trip integration
-   tests with insta snapshots verify Block and YAML engines against in-memory
-   databases.
-3. ~~Expand Lua scheduling bindings~~ — done: full ErsatzTV Lua API parity.
-4. ~~Close remaining YAML/block/search priority gaps~~ — done.
+**Phase 2 — mostly complete, with one remediation item before Phase 7.** The
+FFmpeg foundation is in place: typed inputs, command generation, complex
+filter routing, watermark/subtitle/song-progress filters, drawvg SVG template
+rendering, ffconcat v1.0 playlist writing, snapshot tests, and a development
+MPEG-TS streaming route at `/dev/stream/bbb.ts`. The NVENC and VAAPI pipeline
+"builders" currently only swap the encoder onto a software-style command: the
+NVENC path lacks `-hwaccel cuda`, `-hwaccel_output_format cuda`, and the CUDA
+filter chain; the VAAPI path lacks `-init_hw_device vaapi`, `-hwaccel vaapi`,
+`-hwaccel_output_format vaapi`, and `hwupload`/`scale_vaapi`. Port the decode
+paths from `ErsatzTV.FFmpeg.Pipeline.NvidiaPipelineBuilder` and
+`VaapiPipelineBuilder` before Phase 7 expands to QSV/AMF/VideoToolbox/RKMPP.
 
-Phase 4 is now **complete**. The scanner can extract ffprobe metadata into
-domain media-version, stream, and chapter rows; scan local `.mp4`, `.mkv`, and
-`.avi` files into SQLite as `OtherVideo` items; apply provider/container path
-replacement rules; sync Jellyfin movies, shows, seasons, episodes, and
-collections; sync Plex movies, shows, seasons, and episodes; sync Emby movies,
-shows, seasons, episodes, and collections; and dispatch single-shot scanner
-runs through `ersatzrs-scanner --provider <local|jellyfin|plex|emby>
---library-id <id>`.
+**Phase 3 — complete.** All scheduling engines and the end-to-end playout
+build pipeline are implemented and tested: shared `PlayoutSchedulingEngine`
+trait, Block/YAML/Scripted engines, SQL-backed content resolvers, full Lua
+API parity, `PlayoutBuilder` dispatch, and `apply_build_result` single-
+transaction persistence with Reset/Continue semantics verified by round-trip
+integration snapshots against in-memory and real-world databases.
 
-**Phase 5 next step**: start protocol endpoints with `/iptv/channels.m3u`, then
-add HLS video endpoints, HDHomeRun discovery/lineup, UDP discovery on port
-65001, and XMLTV guide output.
+**Phase 4 — in progress; remediation required before Phase 5.** Local scan
+via ffprobe, path replacement, and first-page Plex/Jellyfin/Emby sync are
+landed; `ersatzrs-scanner --provider <local|jellyfin|plex|emby> --library-id
+<id>` dispatches correctly. The following gaps must close before Phase 5
+protocol endpoints:
 
-Persistence parity gaps are now tracked per table in
+1. **No pagination.** All `sync_*_library` functions fetch only the first
+   100 items. Port ErsatzTV's `GetPagedLibraryContents` loop so larger
+   libraries are scanned in full.
+2. **Plex JSON casing is wrong.** `PlexMetadataContainerResponse` uses
+   `rename_all = "PascalCase"` but Plex sends `totalSize` (camelCase). Fix
+   alongside (1) so pagination exercises the real Plex shape.
+3. **Plex missing `Accept: application/json` header.** ErsatzTV's
+   `IPlexServerApi` sets it on every JSON endpoint; without it, real Plex
+   servers fall back to XML on some routes and deserialization fails.
+4. **Plex collections absent.** `GetCollections`/`GetCollectionItems` are
+   not ported. Either implement them or mark the feature out of scope in
+   an ADR and `parity-matrix.md`.
+5. **Emby seasons/episodes use the wrong endpoint.** ErsatzTV calls
+   `/Shows/{parentId}/Seasons` and `/Shows/{showId}/Episodes`; ErsatzRS
+   routes through generic `/Items?includeItemTypes=Season/Episode&parentId=…`.
+6. **Emby movie fetch duplicates `recursive=true`.** `emby.rs` lines
+   85-86 pair the same key twice — likely a copy-paste error that dropped
+   a needed parameter.
+7. **Provider credentials from env vars.** Scanner reads `PLEX_TOKEN`,
+   `JELLYFIN_AUTHORIZATION_HEADER`, and `EMBY_API_KEY` from the process
+   environment. This is a temporary shim that violates the "no deviation
+   from ErsatzTV storage" rule — read them from the provider tables
+   (`PlexServerAuthToken`, Jellyfin session state, Emby API key rows).
+8. **Provider library bootstrap writes the local id as the provider key.**
+   `ensure_plex_library`/`ensure_jellyfin_library`/`ensure_emby_library`
+   insert `library_id.to_string()` into the provider `Key`/`ItemId`
+   column. Thread the real provider id/key through from the scanner
+   before real deployments.
+9. **`MediaFile.PathHash` must be SHA256.** ErsatzTV stores a SHA256 hex
+   digest; ErsatzRS currently uses a 16-char custom hash. Migrate to
+   SHA256 so imported ErsatzTV databases stay byte-compatible.
+10. **`--dry-run` still requires credentials.** Each provider dispatch
+    loads its config (which reads the token from env) before checking
+    `args.dry_run`. Short-circuit to the dry-run branch first.
+11. **Local-scan test silently skips.** `crates/ersatzrs-scanner/tests/
+    local_scan.rs` early-returns `Ok` whenever ffprobe or the Big Buck
+    Bunny fixture is missing, so CI reports "1 passed" with zero
+    behavior exercised. Gate with `#[ignore]` or commit a tiny fixture.
+
+Sequencing notes:
+
+- Fix (1) and (2) together — pagination is blind without the correct
+  casing.
+- Fix (7) and (8) before real deployments; they are deployment blockers.
+- Fix (9) before any import-compatibility smoke test against an ErsatzTV
+  database.
+
+**Phase 5 kick-off** is blocked on the Phase 4 remediation list above. The
+intended starting sequence once unblocked is `/iptv/channels.m3u`, HLS video
+endpoints, HDHomeRun discovery/lineup, UDP discovery on port 65001, and XMLTV
+guide output.
+
+Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
 write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
 Emby sync; the remaining high-risk slices are language and subtitle
@@ -133,3 +166,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Completed Phase 3 end-to-end playout build: `PlayoutBuilder` orchestrator, `apply_build_result` single-transaction persistence, and round-trip integration tests with insta snapshots. Phase 3 ✅. |
 | 2026-04-17 | Codex | Started Phase 4 media source integrations: ffprobe extraction, local filesystem scanner, path replacement, Jellyfin movie sync, persistence matrix updates, and full workspace gates. |
 | 2026-04-17 | Codex | Completed Phase 4 provider scanning: Jellyfin shows/collections, Plex and Emby movie/show sync, scanner CLI dispatch, persistence matrix updates, and full workspace gates. |
+| 2026-04-17 | Claude Code (claude-opus-4-7[1m]) | Phase 1–4 audit: reconciled STATUS.md and `parity-matrix.md` with the code. Phase 4 revised from "complete" to "in progress" with documented gaps — pagination, Plex collections/`Accept` header/JSON casing, Emby `/Shows/{id}/Seasons+Episodes` and duplicate `recursive=true`, DB-backed provider credentials, correct provider library `Key`/`ItemId` writes, SHA256 `PathHash`, `--dry-run` short-circuit, non-skipping local-scan fixture. Phase 2 flagged NVENC/VAAPI as cosmetic encoder swaps pending real hwaccel port. |
