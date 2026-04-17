@@ -6,6 +6,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Executor, Row, SqlitePool};
 
 #[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
 async fn local_scan_populates_media_rows_from_test_mp4() {
     let Some(ffprobe) = ffprobe_binary() else {
         eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");

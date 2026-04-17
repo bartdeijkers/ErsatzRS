@@ -83,20 +83,19 @@ async fn scan_local(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
 }
 
 async fn scan_jellyfin(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+    if args.dry_run {
+        info!(
+            library_id = args.library_id,
+            provider = "jellyfin",
+            "dry run"
+        );
+        return Ok(());
+    }
     let config = load_jellyfin_config(pool, args.library_id).await?;
     let media_source_id = load_library_media_source_id(pool, args.library_id).await?;
     let parent_id =
         load_provider_library_key(pool, "JellyfinLibrary", "ItemId", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
-    if args.dry_run {
-        info!(
-            library_id = args.library_id,
-            provider = "jellyfin",
-            parent_id,
-            "dry run"
-        );
-        return Ok(());
-    }
     let service = JellyfinService::new();
     let count = if kind == 1 {
         sync_jellyfin_show_library(
@@ -124,20 +123,15 @@ async fn scan_jellyfin(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
 }
 
 async fn scan_plex(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+    if args.dry_run {
+        info!(library_id = args.library_id, provider = "plex", "dry run");
+        return Ok(());
+    }
     let config = load_plex_config(pool, args.library_id).await?;
     let media_source_id = load_library_media_source_id(pool, args.library_id).await?;
     let library_key =
         load_provider_library_key(pool, "PlexLibrary", "Key", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
-    if args.dry_run {
-        info!(
-            library_id = args.library_id,
-            provider = "plex",
-            library_key,
-            "dry run"
-        );
-        return Ok(());
-    }
     let service = PlexService::new();
     let count = match kind {
         1 => {
@@ -172,20 +166,15 @@ async fn scan_plex(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
 }
 
 async fn scan_emby(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+    if args.dry_run {
+        info!(library_id = args.library_id, provider = "emby", "dry run");
+        return Ok(());
+    }
     let config = load_emby_config(pool, args.library_id).await?;
     let media_source_id = load_library_media_source_id(pool, args.library_id).await?;
     let parent_id =
         load_provider_library_key(pool, "EmbyLibrary", "ItemId", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
-    if args.dry_run {
-        info!(
-            library_id = args.library_id,
-            provider = "emby",
-            parent_id,
-            "dry run"
-        );
-        return Ok(());
-    }
     let service = EmbyService::new();
     let count = if kind == 1 {
         sync_emby_show_library(
@@ -385,7 +374,9 @@ async fn load_connection_address(
 
 #[cfg(test)]
 mod tests {
-    use super::{scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX};
+    use super::{
+        scan_emby, scan_jellyfin, scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX,
+    };
     use httpmock::{prelude::*, Mock};
     use serde_json::json;
     use sqlx::sqlite::SqlitePoolOptions;
@@ -517,6 +508,42 @@ mod tests {
             ffprobe_path: "ffprobe".to_owned(),
             dry_run: false,
         }
+    }
+
+    fn dry_run_args(provider: Provider) -> Args {
+        Args {
+            provider,
+            library_id: 999,
+            ffprobe_path: "ffprobe".to_owned(),
+            dry_run: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn jellyfin_dry_run_returns_before_loading_credentials() {
+        let pool = test_db().await;
+
+        scan_jellyfin(&pool, &dry_run_args(Provider::Jellyfin))
+            .await
+            .expect("jellyfin dry run should short-circuit");
+    }
+
+    #[tokio::test]
+    async fn plex_dry_run_returns_before_loading_credentials() {
+        let pool = test_db().await;
+
+        scan_plex(&pool, &dry_run_args(Provider::Plex))
+            .await
+            .expect("plex dry run should short-circuit");
+    }
+
+    #[tokio::test]
+    async fn emby_dry_run_returns_before_loading_credentials() {
+        let pool = test_db().await;
+
+        scan_emby(&pool, &dry_run_args(Provider::Emby))
+            .await
+            .expect("emby dry run should short-circuit");
     }
 
     #[tokio::test]

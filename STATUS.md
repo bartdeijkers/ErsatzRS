@@ -4,8 +4,8 @@ Last updated: 2026-04-17
 
 ## Current Phase
 
-**Phase 4 remediation** before Phase 5 protocol endpoints. Phase 2 has a
-parallel NVENC/VAAPI remediation item targeted at Phase 7.
+**Phase 5 — Protocol Endpoints** next. Phase 2 still has a parallel
+NVENC/VAAPI remediation item targeted at Phase 7.
 
 ### Phase 0 Checklist
 
@@ -25,10 +25,6 @@ parallel NVENC/VAAPI remediation item targeted at Phase 7.
 - [x] Health endpoint (`/healthz` → 200)
 
 ### What an Agent Should Do Next
-
-A 2026-04-17 audit reconciled this file with the actual code. Earlier session
-entries that declared Phase 4 "complete" overstated the shipped surface; the
-status below supersedes those claims.
 
 **Phase 0, Phase 1, and Phase 3 are complete.**
 
@@ -51,11 +47,13 @@ API parity, `PlayoutBuilder` dispatch, and `apply_build_result` single-
 transaction persistence with Reset/Continue semantics verified by round-trip
 integration snapshots against in-memory and real-world databases.
 
-**Phase 4 — in progress; remediation required before Phase 5.** Local scan
-via ffprobe, path replacement, and first-page Plex/Jellyfin/Emby sync are
-landed; `ersatzrs-scanner --provider <local|jellyfin|plex|emby> --library-id
-<id>` dispatches correctly. The following gaps must close before Phase 5
-protocol endpoints:
+**Phase 4 — complete.** Local scan via ffprobe, path replacement, paged
+Plex/Jellyfin/Emby sync, provider collection sync, DB-backed provider
+credentials, SHA256 `MediaFile.PathHash`, and the dry-run/test remediations
+are landed; `ersatzrs-scanner --provider <local|jellyfin|plex|emby> --library-id
+<id>` dispatches correctly.
+
+The Phase 4 remediation list is now closed:
 
 1. ~~**No pagination.** All `sync_*_library` functions fetch only the first
    100 items. Port ErsatzTV's `GetPagedLibraryContents` loop so larger
@@ -88,26 +86,17 @@ protocol endpoints:
 9. ~~**`MediaFile.PathHash` must be SHA256.** ErsatzTV stores a SHA256 hex
    digest; ErsatzRS currently uses a 16-char custom hash. Migrate to
    SHA256 so imported ErsatzTV databases stay byte-compatible.~~
-10. **`--dry-run` still requires credentials.** Each provider dispatch
-    loads its config (which reads the token from env) before checking
-    `args.dry_run`. Short-circuit to the dry-run branch first.
-11. **Local-scan test silently skips.** `crates/ersatzrs-scanner/tests/
-    local_scan.rs` early-returns `Ok` whenever ffprobe or the Big Buck
-    Bunny fixture is missing, so CI reports "1 passed" with zero
-    behavior exercised. Gate with `#[ignore]` or commit a tiny fixture.
+10. ~~**`--dry-run` still requires credentials.** Each provider dispatch
+   loads its config (which reads the token from env) before checking
+   `args.dry_run`. Short-circuit to the dry-run branch first.~~
+11. ~~**Local-scan test silently skips.** `crates/ersatzrs-scanner/tests/
+   local_scan.rs` early-returns `Ok` whenever ffprobe or the Big Buck
+   Bunny fixture is missing, so CI reports "1 passed" with zero
+   behavior exercised. Gate with `#[ignore]` or commit a tiny fixture.~~
 
-Sequencing notes:
-
-- Fix (1) and (2) together — pagination is blind without the correct
-  casing.
-- Fix (7) and (8) before real deployments; they are deployment blockers.
-- Fix (9) before any import-compatibility smoke test against an ErsatzTV
-  database.
-
-**Phase 5 kick-off** is blocked on the Phase 4 remediation list above. The
-intended starting sequence once unblocked is `/iptv/channels.m3u`, HLS video
-endpoints, HDHomeRun discovery/lineup, UDP discovery on port 65001, and XMLTV
-guide output.
+**Phase 5 kick-off** is now unblocked. The intended starting sequence is
+`/iptv/channels.m3u`, HLS video endpoints, HDHomeRun discovery/lineup, UDP
+discovery on port 65001, and XMLTV guide output.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -172,3 +161,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block C: switched Emby season and episode fetches to `/Shows/{id}` endpoints, restored the movie fields set, and updated Emby provider tests. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block D: moved scanner provider credentials into DB-backed lookups, threaded real provider library keys into Plex/Jellyfin/Emby bootstrap rows, and added focused scanner/provider regression tests. |
 | 2026-04-17 | GitHub Copilot (GPT-5.4) | Block E: switched scanner and provider `MediaFile.PathHash` writes to SHA256 hex for ErsatzTV parity; existing databases now require rescans to refresh stored path hashes. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block F: short-circuited provider `--dry-run` before credential loading, marked the ffprobe fixture test ignored with explicit invocation docs, and closed the last Phase 4 remediation items. |

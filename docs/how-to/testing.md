@@ -12,6 +12,9 @@ domain logic, small parsers, builder invariants, and error mapping.
 Use crate-level `tests/` directories for behavior that crosses module
 boundaries. Keep fixtures small and deterministic.
 
+Ignored integration tests remain part of the contract when they depend on
+local tooling or large fixtures. Run them explicitly with `cargo test -- --ignored`.
+
 ## Snapshot Tests
 
 Use `insta` for generated output that must not drift silently:
