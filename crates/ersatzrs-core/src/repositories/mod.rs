@@ -26,8 +26,10 @@ pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
 pub use graphics::GraphicsRepository;
 pub use jellyfin::{
-    JellyfinConnectionConfig, JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem,
-    JellyfinPlaybackMetadata, JellyfinService,
+    JellyfinCollectionItem, JellyfinCollectionMediaItem, JellyfinCollectionMediaKind,
+    JellyfinCollectionMediaPage, JellyfinCollectionPage, JellyfinConnectionConfig,
+    JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem, JellyfinPlaybackMetadata,
+    JellyfinSeasonItem, JellyfinSeasonPage, JellyfinService, JellyfinShowItem, JellyfinShowPage,
 };
 pub use library::LibraryRepository;
 pub use media_item::MediaItemRepository;

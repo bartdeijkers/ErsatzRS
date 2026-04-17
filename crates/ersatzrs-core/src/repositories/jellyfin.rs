@@ -28,6 +28,42 @@ pub struct JellyfinMediaItem {
     pub chapters: Vec<MediaChapter>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinShowItem {
+    pub item_id: String,
+    pub etag: Option<String>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinSeasonItem {
+    pub item_id: String,
+    pub etag: Option<String>,
+    pub name: String,
+    pub season_number: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinCollectionItem {
+    pub item_id: String,
+    pub etag: Option<String>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JellyfinCollectionMediaKind {
+    Movie,
+    Show,
+    Season,
+    Episode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinCollectionMediaItem {
+    pub item_id: String,
+    pub kind: JellyfinCollectionMediaKind,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JellyfinPlaybackMetadata {
     pub duration: Duration,
@@ -45,6 +81,30 @@ pub struct JellyfinItemPage {
     pub items: Vec<JellyfinMediaItem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinShowPage {
+    pub total_record_count: i32,
+    pub items: Vec<JellyfinShowItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinSeasonPage {
+    pub total_record_count: i32,
+    pub items: Vec<JellyfinSeasonItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinCollectionPage {
+    pub total_record_count: i32,
+    pub items: Vec<JellyfinCollectionItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinCollectionMediaPage {
+    pub total_record_count: i32,
+    pub items: Vec<JellyfinCollectionMediaItem>,
+}
+
 #[async_trait]
 pub trait JellyfinService: Send + Sync {
     async fn list_libraries(
@@ -59,6 +119,46 @@ pub trait JellyfinService: Send + Sync {
         start_index: i32,
         limit: i32,
     ) -> Result<JellyfinItemPage>;
+
+    async fn fetch_show_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinShowPage>;
+
+    async fn fetch_season_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinSeasonPage>;
+
+    async fn fetch_episode_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinItemPage>;
+
+    async fn fetch_collection_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinCollectionPage>;
+
+    async fn fetch_collection_items_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinCollectionMediaPage>;
 
     async fn stream_metadata(
         &self,

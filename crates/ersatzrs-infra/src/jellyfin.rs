@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
-    JellyfinConnectionConfig, JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem,
-    JellyfinPlaybackMetadata, JellyfinService as JellyfinServiceTrait, RepositoryError, Result,
+    JellyfinCollectionItem, JellyfinCollectionMediaItem, JellyfinCollectionMediaKind,
+    JellyfinCollectionMediaPage, JellyfinCollectionPage, JellyfinConnectionConfig,
+    JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem, JellyfinPlaybackMetadata,
+    JellyfinSeasonItem, JellyfinSeasonPage, JellyfinService as JellyfinServiceTrait,
+    JellyfinShowItem, JellyfinShowPage, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
@@ -104,6 +107,134 @@ impl JellyfinServiceTrait for JellyfinService {
         })
     }
 
+    async fn fetch_show_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinShowPage> {
+        let response = self
+            .fetch_items(
+                config,
+                parent_id,
+                "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,OfficialRating,ProviderIds",
+                "Series",
+                start_index,
+                limit,
+            )
+            .await?;
+        Ok(JellyfinShowPage {
+            total_record_count: response.total_record_count,
+            items: response
+                .items
+                .into_iter()
+                .filter_map(project_show)
+                .collect(),
+        })
+    }
+
+    async fn fetch_season_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinSeasonPage> {
+        let response = self
+            .fetch_items(
+                config,
+                parent_id,
+                "Path,DateCreated,Etag,Taglines,ProviderIds",
+                "Season",
+                start_index,
+                limit,
+            )
+            .await?;
+        Ok(JellyfinSeasonPage {
+            total_record_count: response.total_record_count,
+            items: response
+                .items
+                .into_iter()
+                .filter_map(project_season)
+                .collect(),
+        })
+    }
+
+    async fn fetch_episode_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinItemPage> {
+        let response = self
+            .fetch_items(
+                config,
+                parent_id,
+                "Path,Genres,Tags,DateCreated,Etag,Overview,ProviderIds,People,Chapters",
+                "Episode",
+                start_index,
+                limit,
+            )
+            .await?;
+        Ok(JellyfinItemPage {
+            total_record_count: response.total_record_count,
+            items: response
+                .items
+                .into_iter()
+                .filter_map(project_movie)
+                .collect(),
+        })
+    }
+
+    async fn fetch_collection_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinCollectionPage> {
+        let response = self
+            .fetch_items(config, parent_id, "Etag", "BoxSet", start_index, limit)
+            .await?;
+        Ok(JellyfinCollectionPage {
+            total_record_count: response.total_record_count,
+            items: response
+                .items
+                .into_iter()
+                .filter_map(project_collection)
+                .collect(),
+        })
+    }
+
+    async fn fetch_collection_items_page(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinCollectionMediaPage> {
+        let response = self
+            .fetch_items(
+                config,
+                parent_id,
+                "Etag",
+                "Movie,Series,Season,Episode",
+                start_index,
+                limit,
+            )
+            .await?;
+        Ok(JellyfinCollectionMediaPage {
+            total_record_count: response.total_record_count,
+            items: response
+                .items
+                .into_iter()
+                .filter_map(project_collection_media_item)
+                .collect(),
+        })
+    }
+
     async fn stream_metadata(
         &self,
         config: &JellyfinConnectionConfig,
@@ -134,6 +265,43 @@ impl JellyfinServiceTrait for JellyfinService {
     }
 }
 
+impl JellyfinService {
+    async fn fetch_items(
+        &self,
+        config: &JellyfinConnectionConfig,
+        parent_id: &str,
+        fields: &str,
+        include_item_types: &str,
+        start_index: i32,
+        limit: i32,
+    ) -> Result<JellyfinLibraryItemsResponse> {
+        let url = format!("{}/Items", config.address.trim_end_matches('/'));
+        let start_index = start_index.to_string();
+        let limit = limit.to_string();
+        self.client
+            .get(url)
+            .header("Authorization", &config.authorization_header)
+            .query(&[
+                ("sortOrder", "Ascending"),
+                ("sortBy", "SortName"),
+                ("parentId", parent_id),
+                ("fields", fields),
+                ("includeItemTypes", include_item_types),
+                ("recursive", "true"),
+                ("startIndex", &start_index),
+                ("limit", &limit),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)
+    }
+}
+
 /// Fetch one Jellyfin movie page and write mapped movie rows.
 ///
 /// # Errors
@@ -158,6 +326,53 @@ where
     Ok(page.items.len())
 }
 
+/// Fetch Jellyfin shows, seasons, and episodes and write mapped media rows.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client fails or any database write fails.
+pub async fn sync_jellyfin_show_library<S>(
+    pool: &SqlitePool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    parent_id: &str,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
+    let shows = service.fetch_show_page(config, parent_id, 0, 100).await?;
+    let mut synced = 0;
+    for show in &shows.items {
+        let show_id = upsert_jellyfin_show(pool, media_source_id, library_id, show).await?;
+        let seasons = service
+            .fetch_season_page(config, &show.item_id, 0, 100)
+            .await?;
+        for season in &seasons.items {
+            let season_id =
+                upsert_jellyfin_season(pool, media_source_id, library_id, show_id, season).await?;
+            let episodes = service
+                .fetch_episode_page(config, &season.item_id, 0, 100)
+                .await?;
+            for episode in &episodes.items {
+                let playback = service.stream_metadata(config, &episode.item_id).await?;
+                upsert_jellyfin_episode(
+                    pool,
+                    media_source_id,
+                    library_id,
+                    season_id,
+                    episode,
+                    &playback,
+                )
+                .await?;
+                synced += 1;
+            }
+        }
+    }
+    Ok(synced)
+}
+
 fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibrarySummary> {
     let media_kind = match response.collection_type?.to_ascii_lowercase().as_str() {
         "movies" => LibraryMediaKind::Movies,
@@ -168,6 +383,50 @@ fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibraryS
         item_id: response.item_id?,
         name: response.name.unwrap_or_default(),
         media_kind,
+    })
+}
+
+fn project_show(item: JellyfinLibraryItemResponse) -> Option<JellyfinShowItem> {
+    Some(JellyfinShowItem {
+        item_id: item.id?,
+        etag: item.etag,
+        name: item.name.unwrap_or_default(),
+    })
+}
+
+fn project_season(item: JellyfinLibraryItemResponse) -> Option<JellyfinSeasonItem> {
+    Some(JellyfinSeasonItem {
+        item_id: item.id?,
+        etag: item.etag,
+        name: item.name.unwrap_or_default(),
+        season_number: item.index_number.unwrap_or_default(),
+    })
+}
+
+fn project_collection(item: JellyfinLibraryItemResponse) -> Option<JellyfinCollectionItem> {
+    Some(JellyfinCollectionItem {
+        item_id: item.id?,
+        etag: item.etag,
+        name: item.name.unwrap_or_default(),
+    })
+}
+
+fn project_collection_media_item(
+    item: JellyfinLibraryItemResponse,
+) -> Option<JellyfinCollectionMediaItem> {
+    if item.location_type.as_deref() != Some("FileSystem") {
+        return None;
+    }
+    let kind = match item.item_type.as_deref()? {
+        "Movie" => JellyfinCollectionMediaKind::Movie,
+        "Series" => JellyfinCollectionMediaKind::Show,
+        "Season" => JellyfinCollectionMediaKind::Season,
+        "Episode" => JellyfinCollectionMediaKind::Episode,
+        _ => return None,
+    };
+    Some(JellyfinCollectionMediaItem {
+        item_id: item.id?,
+        kind,
     })
 }
 
@@ -299,7 +558,61 @@ async fn upsert_jellyfin_movie(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let item_id = ensure_jellyfin_movie_item(&mut tx, library_path_id, item).await?;
-    let version_id = ensure_media_version(&mut tx, item_id, item, playback).await?;
+    let version_id =
+        ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item, playback).await?;
+    ensure_media_file(&mut tx, version_id, &item.path).await?;
+    replace_streams(&mut tx, version_id, &playback.streams).await?;
+    replace_chapters(&mut tx, version_id, &item.chapters).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn upsert_jellyfin_show(
+    pool: &SqlitePool,
+    media_source_id: i64,
+    library_id: i64,
+    item: &JellyfinShowItem,
+) -> Result<i64> {
+    let mut tx = pool.begin().await?;
+    ensure_jellyfin_library(&mut tx, media_source_id, library_id).await?;
+    let library_path_id =
+        ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
+    let id = ensure_jellyfin_show_item(&mut tx, library_path_id, item).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn upsert_jellyfin_season(
+    pool: &SqlitePool,
+    media_source_id: i64,
+    library_id: i64,
+    show_id: i64,
+    item: &JellyfinSeasonItem,
+) -> Result<i64> {
+    let mut tx = pool.begin().await?;
+    ensure_jellyfin_library(&mut tx, media_source_id, library_id).await?;
+    let library_path_id =
+        ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
+    let id = ensure_jellyfin_season_item(&mut tx, library_path_id, show_id, item).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn upsert_jellyfin_episode(
+    pool: &SqlitePool,
+    media_source_id: i64,
+    library_id: i64,
+    season_id: i64,
+    item: &JellyfinMediaItem,
+    playback: &JellyfinPlaybackMetadata,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    ensure_jellyfin_library(&mut tx, media_source_id, library_id).await?;
+    let library_path_id =
+        ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
+    let item_id = ensure_jellyfin_episode_item(&mut tx, library_path_id, season_id, item).await?;
+    let version_id =
+        ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
@@ -396,13 +709,166 @@ async fn ensure_jellyfin_movie_item(
     Ok(id)
 }
 
+async fn ensure_jellyfin_show_item(
+    tx: &mut Transaction<'_, Sqlite>,
+    library_path_id: i64,
+    item: &JellyfinShowItem,
+) -> Result<i64> {
+    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinShow" WHERE "ItemId" = ?"#)
+        .bind(&item.item_id)
+        .fetch_optional(&mut **tx)
+        .await?
+    {
+        let id = row.get("Id");
+        sqlx::query(r#"UPDATE "JellyfinShow" SET "Etag" = ? WHERE "Id" = ?"#)
+            .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        return Ok(id);
+    }
+
+    let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
+        .bind(library_path_id)
+        .execute(&mut **tx)
+        .await?;
+    let id = result.last_insert_rowid();
+    sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"INSERT INTO "JellyfinShow" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
+        .bind(id)
+        .bind(&item.item_id)
+        .bind(&item.etag)
+        .execute(&mut **tx)
+        .await?;
+    Ok(id)
+}
+
+async fn ensure_jellyfin_season_item(
+    tx: &mut Transaction<'_, Sqlite>,
+    library_path_id: i64,
+    show_id: i64,
+    item: &JellyfinSeasonItem,
+) -> Result<i64> {
+    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinSeason" WHERE "ItemId" = ?"#)
+        .bind(&item.item_id)
+        .fetch_optional(&mut **tx)
+        .await?
+    {
+        let id = row.get("Id");
+        sqlx::query(r#"UPDATE "JellyfinSeason" SET "Etag" = ? WHERE "Id" = ?"#)
+            .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "Season" SET "ShowId" = ?, "SeasonNumber" = ? WHERE "Id" = ?"#)
+            .bind(show_id)
+            .bind(item.season_number)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        return Ok(id);
+    }
+
+    let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
+        .bind(library_path_id)
+        .execute(&mut **tx)
+        .await?;
+    let id = result.last_insert_rowid();
+    sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, ?, ?)"#)
+        .bind(id)
+        .bind(show_id)
+        .bind(item.season_number)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"INSERT INTO "JellyfinSeason" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
+        .bind(id)
+        .bind(&item.item_id)
+        .bind(&item.etag)
+        .execute(&mut **tx)
+        .await?;
+    Ok(id)
+}
+
+async fn ensure_jellyfin_episode_item(
+    tx: &mut Transaction<'_, Sqlite>,
+    library_path_id: i64,
+    season_id: i64,
+    item: &JellyfinMediaItem,
+) -> Result<i64> {
+    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinEpisode" WHERE "ItemId" = ?"#)
+        .bind(&item.item_id)
+        .fetch_optional(&mut **tx)
+        .await?
+    {
+        let id = row.get("Id");
+        sqlx::query(r#"UPDATE "JellyfinEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
+            .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
+            .bind(season_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        return Ok(id);
+    }
+
+    let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
+        .bind(library_path_id)
+        .execute(&mut **tx)
+        .await?;
+    let id = result.last_insert_rowid();
+    sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (?, ?)"#)
+        .bind(id)
+        .bind(season_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"INSERT INTO "JellyfinEpisode" ("Id", "ItemId", "Etag") VALUES (?, ?, ?)"#)
+        .bind(id)
+        .bind(&item.item_id)
+        .bind(&item.etag)
+        .execute(&mut **tx)
+        .await?;
+    Ok(id)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum VersionOwner {
+    Movie(i64),
+    Episode(i64),
+}
+
 async fn ensure_media_version(
     tx: &mut Transaction<'_, Sqlite>,
-    item_id: i64,
+    owner: VersionOwner,
     item: &JellyfinMediaItem,
     playback: &JellyfinPlaybackMetadata,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "MediaVersion" WHERE "MovieId" = ?"#)
+    let (column, item_id) = match owner {
+        VersionOwner::Movie(item_id) => ("MovieId", item_id),
+        VersionOwner::Episode(item_id) => ("EpisodeId", item_id),
+    };
+    let sql = format!(r#"SELECT "Id" FROM "MediaVersion" WHERE "{column}" = ?"#);
+    if let Some(row) = sqlx::query(&sql)
         .bind(item_id)
         .fetch_optional(&mut **tx)
         .await?
@@ -412,25 +878,26 @@ async fn ensure_media_version(
         return Ok(id);
     }
 
-    let result = sqlx::query(
+    let sql = format!(
         r#"INSERT INTO "MediaVersion" (
             "DateAdded", "DateUpdated", "DisplayAspectRatio", "Duration", "Height",
-            "Name", "MovieId", "RFrameRate", "SampleAspectRatio",
+            "Name", "{column}", "RFrameRate", "SampleAspectRatio",
             "VideoScanKind", "Width"
-        ) VALUES (?, ?, ?, ?, ?, 'Main', ?, ?, ?, ?, ?)"#,
-    )
-    .bind(encode_datetime(item.date_created))
-    .bind(encode_datetime(Utc::now()))
-    .bind(&playback.display_aspect_ratio)
-    .bind(encode_duration(playback.duration))
-    .bind(playback.height)
-    .bind(item_id)
-    .bind(&playback.r_frame_rate)
-    .bind(&playback.sample_aspect_ratio)
-    .bind(encode_video_scan_kind(VideoScanKind::Progressive))
-    .bind(playback.width)
-    .execute(&mut **tx)
-    .await?;
+        ) VALUES (?, ?, ?, ?, ?, 'Main', ?, ?, ?, ?, ?)"#
+    );
+    let result = sqlx::query(&sql)
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(Utc::now()))
+        .bind(&playback.display_aspect_ratio)
+        .bind(encode_duration(playback.duration))
+        .bind(playback.height)
+        .bind(item_id)
+        .bind(&playback.r_frame_rate)
+        .bind(&playback.sample_aspect_ratio)
+        .bind(encode_video_scan_kind(VideoScanKind::Progressive))
+        .bind(playback.width)
+        .execute(&mut **tx)
+        .await?;
     Ok(result.last_insert_rowid())
 }
 
@@ -611,6 +1078,9 @@ struct JellyfinLibraryItemResponse {
     #[serde(default)]
     run_time_ticks: i64,
     location_type: Option<String>,
+    #[serde(rename = "Type")]
+    item_type: Option<String>,
+    index_number: Option<i32>,
     #[serde(default)]
     chapters: Vec<JellyfinChapterResponse>,
 }
