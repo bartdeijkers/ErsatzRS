@@ -332,8 +332,14 @@ impl PlayoutSchedulingEngine for BlockSchedulingEngine {
             .or(Some(request.start));
 
         let collection_etags = collection_etags(&request.reference_data, &blocks);
-        let blocks_to_update = blocks_to_update(&request, &blocks, &collection_etags);
-        let block_starts_to_update = blocks_to_update
+        let change_set = block_changes(&request, &blocks, &collection_etags);
+        result.items_to_remove.extend(change_set.items_to_remove);
+        result.history_to_remove.extend(history_to_remove_for_items(
+            &request,
+            &result.items_to_remove,
+        ));
+        let block_starts_to_update = change_set
+            .blocks_to_update
             .iter()
             .map(|block| block.start)
             .collect::<BTreeSet<_>>();
@@ -548,13 +554,22 @@ fn collection_etag_for_items(items: &[SchedulingMediaItem]) -> String {
     format!("{value:016x}")
 }
 
-fn blocks_to_update(
+#[derive(Debug, Clone, Default)]
+struct BlockChangeSet {
+    blocks_to_update: Vec<EffectiveBlock>,
+    items_to_remove: Vec<EntityId>,
+}
+
+fn block_changes(
     request: &SchedulingRequest,
     blocks: &[EffectiveBlock],
     collection_etags: &BTreeMap<String, String>,
-) -> Vec<EffectiveBlock> {
+) -> BlockChangeSet {
     if request.reference_data.existing_items.is_empty() {
-        return blocks.to_vec();
+        return BlockChangeSet {
+            blocks_to_update: blocks.to_vec(),
+            items_to_remove: Vec::new(),
+        };
     }
 
     let item_block_keys = item_block_keys(&request.reference_data.existing_items);
@@ -572,6 +587,7 @@ fn blocks_to_update(
     let existing_block_keys = item_block_keys.values().collect::<BTreeSet<_>>();
 
     let mut updated_starts = BTreeSet::new();
+    let mut updated_item_ids = BTreeSet::new();
     let mut earliest_block_by_key = BTreeMap::<BlockKey, DateTime<Utc>>::new();
     let mut earliest_block_by_id = BTreeMap::<EntityId, DateTime<Utc>>::new();
 
@@ -603,6 +619,7 @@ fn blocks_to_update(
         };
 
         let collection_changed = collection_changed(item, collection_etags);
+        let effective_item_changed = effective_block_item_changed(item, block_key, blocks);
         let key_affected = earliest_block_by_key
             .get(block_key)
             .is_some_and(|start| *start <= item.start);
@@ -612,9 +629,11 @@ fn blocks_to_update(
         if item.start >= request.start
             && (!block_keys_to_schedule.contains(block_key)
                 || collection_changed
+                || effective_item_changed
                 || key_affected
                 || id_affected)
         {
+            updated_item_ids.insert(item.id);
             if let Some(block) = blocks
                 .iter()
                 .filter(|block| block.block_id == block_key.block_id)
@@ -634,11 +653,15 @@ fn blocks_to_update(
         updated_starts.insert(block.start);
     }
 
-    blocks
+    let blocks_to_update = blocks
         .iter()
         .filter(|block| updated_starts.contains(&block.start))
         .cloned()
-        .collect()
+        .collect();
+    BlockChangeSet {
+        blocks_to_update,
+        items_to_remove: updated_item_ids.into_iter().collect(),
+    }
 }
 
 fn item_block_keys(items: &[PlayoutItem]) -> BTreeMap<EntityId, BlockKey> {
@@ -661,6 +684,73 @@ fn collection_changed(item: &PlayoutItem, collection_etags: &BTreeMap<String, St
     collection_etags
         .get(collection_key)
         .is_none_or(|etag| Some(etag) != item.collection_etag.as_ref())
+}
+
+fn effective_block_item_changed(
+    item: &PlayoutItem,
+    block_key: &BlockKey,
+    blocks: &[EffectiveBlock],
+) -> bool {
+    let Some(block) = blocks.iter().find(|block| {
+        block.block_key.as_ref() == Some(block_key)
+            && block.start <= item.start
+            && item.start < block.start + block.duration
+    }) else {
+        return true;
+    };
+
+    let Some(collection_key) = item.collection_key.as_deref() else {
+        return true;
+    };
+    let Some(block_item) = block
+        .items
+        .iter()
+        .find(|block_item| collection_key_json(&block_item.collection_key) == collection_key)
+    else {
+        return true;
+    };
+
+    let expected_guide_group = i32::try_from(block.template_item_id).unwrap_or_default();
+    let expected_filler_kind = if block_item.include_in_program_guide {
+        FillerKind::None
+    } else {
+        FillerKind::GuideMode
+    };
+
+    item.guide_group != expected_guide_group
+        || item.guide_start != Some(block.start)
+        || item.guide_finish != Some(block.start + block.duration)
+        || item.filler_kind != expected_filler_kind
+        || item.disable_watermarks != block_item.disable_watermarks
+        || sorted_ids(&item.watermark_ids) != sorted_ids(&block_item.watermark_ids)
+        || sorted_ids(&item.graphics_element_ids) != sorted_ids(&block_item.graphics_element_ids)
+}
+
+fn sorted_ids(ids: &[EntityId]) -> Vec<EntityId> {
+    let mut sorted = ids.to_vec();
+    sorted.sort_unstable();
+    sorted
+}
+
+fn history_to_remove_for_items(
+    request: &SchedulingRequest,
+    item_ids_to_remove: &[EntityId],
+) -> Vec<EntityId> {
+    let starts = request
+        .reference_data
+        .existing_items
+        .iter()
+        .filter(|item| item_ids_to_remove.contains(&item.id))
+        .map(|item| item.start)
+        .collect::<BTreeSet<_>>();
+
+    request
+        .reference_data
+        .existing_history
+        .iter()
+        .filter(|history| starts.contains(&history.when))
+        .map(|history| history.id)
+        .collect()
 }
 
 fn apply_block_deco_filler(
@@ -1236,6 +1326,55 @@ mod tests {
 
         insta::assert_json_snapshot!(serde_json::json!({
             "items": timeline(&result.added_items),
+            "items_to_remove": result.items_to_remove,
+            "history_to_remove": result.history_to_remove,
+        }));
+    }
+
+    #[test]
+    fn block_item_flag_change_removes_existing_item_and_history_snapshot() {
+        let start = utc("2026-04-15T08:00:00Z");
+        let mut reference_data = SchedulingReferenceData::default();
+        reference_data.media_by_key.insert(
+            "a".to_owned(),
+            vec![SchedulingMediaItem::new(1, Duration::minutes(10))],
+        );
+        let mut block = effective_block(10, 20, "a", start);
+        block.items[0].include_in_program_guide = false;
+        block.items[0].disable_watermarks = true;
+        block.items[0].watermark_ids = vec![42];
+        block.items[0].graphics_element_ids = vec![77];
+        let collection_key = collection_key_json(&block.items[0].collection_key);
+        reference_data.effective_blocks = vec![block];
+        reference_data.existing_items = vec![PlayoutItem {
+            filler_kind: FillerKind::None,
+            disable_watermarks: false,
+            watermark_ids: Vec::new(),
+            graphics_element_ids: Vec::new(),
+            ..existing_item(
+                1,
+                10,
+                20,
+                start,
+                collection_key,
+                collection_etag_for_items(&[SchedulingMediaItem::new(1, Duration::minutes(10))]),
+            )
+        }];
+        reference_data.existing_history = vec![ersatzrs_domain::PlayoutHistory {
+            id: 9001,
+            playout_id: 100,
+            when: start,
+            finish: Some(start + Duration::minutes(10)),
+            key: "old-block-history".to_owned(),
+            ..ersatzrs_domain::PlayoutHistory::default()
+        }];
+
+        let result = schedule(reference_data, start, Duration::hours(1), 100, 0);
+
+        insta::assert_json_snapshot!(serde_json::json!({
+            "items": timeline(&result.added_items),
+            "items_to_remove": result.items_to_remove,
+            "history_to_remove": result.history_to_remove,
         }));
     }
 

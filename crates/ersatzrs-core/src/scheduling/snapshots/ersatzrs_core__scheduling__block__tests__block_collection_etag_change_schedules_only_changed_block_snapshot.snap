@@ -1,9 +1,10 @@
 ---
 source: crates/ersatzrs-core/src/scheduling/block.rs
-assertion_line: 1039
-expression: "serde_json::json!({ \"items\": timeline(&result.added_items), })"
+assertion_line: 1327
+expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), \"items_to_remove\":\n    result.items_to_remove, \"history_to_remove\": result.history_to_remove,\n})"
 ---
 {
+  "history_to_remove": [],
   "items": [
     {
       "block_key": "{\"b\":11,\"bt\":110,\"t\":21,\"tt\":210,\"pt\":31,\"ptt\":310}",
@@ -21,5 +22,8 @@ expression: "serde_json::json!({ \"items\": timeline(&result.added_items), })"
       "start": "2026-04-15T08:30:00+00:00",
       "watermarks": []
     }
+  ],
+  "items_to_remove": [
+    2
   ]
 }

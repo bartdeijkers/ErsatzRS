@@ -1046,8 +1046,8 @@ impl SqliteSchedulingContentRepository {
                     &row,
                     "PlaybackOrder",
                 )?,
-                include_in_program_guide: true,
-                disable_watermarks: false,
+                include_in_program_guide: row.try_get("IncludeInProgramGuide").unwrap_or(true),
+                disable_watermarks: row.try_get("DisableWatermarks").unwrap_or(false),
                 watermark_ids: load_ids(
                     &self.0,
                     r#"SELECT "WatermarkId"

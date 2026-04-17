@@ -1,0 +1,35 @@
+---
+source: crates/ersatzrs-core/src/scheduling/block.rs
+assertion_line: 1374
+expression: "serde_json::json!({\n    \"items\": timeline(&result.added_items), \"items_to_remove\":\n    result.items_to_remove, \"history_to_remove\": result.history_to_remove,\n})"
+---
+{
+  "history_to_remove": [
+    9001
+  ],
+  "items": [
+    {
+      "block_key": "{\"b\":10,\"bt\":100,\"t\":20,\"tt\":200,\"pt\":30,\"ptt\":300}",
+      "collection_etag": "12eb183e87660138",
+      "collection_key": "{\"collection_type\":\"Collection\",\"collection_id\":10,\"multi_collection_id\":null,\"smart_collection_id\":null,\"media_item_id\":null,\"playlist_id\":null,\"search_query\":null,\"fake_collection_key\":null}",
+      "context": "{\"blockId\":10,\"blockItemId\":10,\"enumerator\":\"a\",\"seed\":0,\"index\":0}",
+      "disable_watermarks": true,
+      "filler": "GuideMode",
+      "finish": "2026-04-15T08:10:00+00:00",
+      "graphics": [
+        77
+      ],
+      "guide_finish": "2026-04-15T08:20:00+00:00",
+      "guide_group": 20,
+      "guide_start": "2026-04-15T08:00:00+00:00",
+      "media": 1,
+      "start": "2026-04-15T08:00:00+00:00",
+      "watermarks": [
+        42
+      ]
+    }
+  ],
+  "items_to_remove": [
+    1
+  ]
+}
