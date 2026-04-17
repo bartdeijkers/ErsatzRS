@@ -24,6 +24,10 @@ async fn emby_sync_maps_mock_movie_response_to_media_rows() {
             when.method(GET)
                 .path("/Items")
                 .query_param("parentId", "library-1")
+                .query_param(
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,Chapters",
+                )
                 .query_param("includeItemTypes", "Movie");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -192,9 +196,8 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
     let seasons = server
         .mock_async(|when, then| {
             when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "show-1")
-                .query_param("includeItemTypes", "Season");
+                .path("/Shows/show-1/Seasons")
+                .query_param("fields", "Path,DateCreated,Etag,Taglines,ProviderIds");
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
                 "Items": [
@@ -212,9 +215,12 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
     let episodes = server
         .mock_async(|when, then| {
             when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "season-1")
-                .query_param("includeItemTypes", "Episode");
+                .path("/Shows/show-1/Episodes")
+                .query_param("seasonId", "season-1")
+                .query_param(
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,Chapters",
+                );
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
                 "Items": [

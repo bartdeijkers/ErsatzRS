@@ -79,10 +79,9 @@ impl EmbyServiceTrait for EmbyService {
                 ("parentId", parent_id),
                 (
                     "fields",
-                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,OfficialRating,ProviderIds,Chapters",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,Chapters",
                 ),
                 ("includeItemTypes", "Movie"),
-                ("recursive", "true"),
                 ("recursive", "true"),
                 ("startIndex", &start_index),
                 ("limit", &limit),
@@ -140,16 +139,31 @@ impl EmbyServiceTrait for EmbyService {
         start_index: i32,
         limit: i32,
     ) -> Result<EmbySeasonPage> {
-        let response = self
-            .fetch_items(
-                config,
-                parent_id,
-                "Path,DateCreated,Etag,Taglines,ProviderIds",
-                "Season",
-                start_index,
-                limit,
-            )
-            .await?;
+        let url = format!(
+            "{}/Shows/{parent_id}/Seasons",
+            config.address.trim_end_matches('/')
+        );
+        let start_index = start_index.to_string();
+        let limit = limit.to_string();
+        let response: EmbyLibraryItemsResponse = self
+            .client
+            .get(url)
+            .header("X-Emby-Token", &config.api_key)
+            .query(&[
+                ("sortOrder", "Ascending"),
+                ("sortBy", "SortName"),
+                ("fields", "Path,DateCreated,Etag,Taglines,ProviderIds"),
+                ("startIndex", start_index.as_str()),
+                ("limit", limit.as_str()),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
         Ok(EmbySeasonPage {
             total_record_count: response.total_record_count,
             items: response
@@ -163,20 +177,40 @@ impl EmbyServiceTrait for EmbyService {
     async fn fetch_episode_page(
         &self,
         config: &EmbyConnectionConfig,
-        parent_id: &str,
+        show_id: &str,
+        season_id: &str,
         start_index: i32,
         limit: i32,
     ) -> Result<EmbyItemPage> {
-        let response = self
-            .fetch_items(
-                config,
-                parent_id,
-                "Path,Genres,Tags,DateCreated,Etag,Overview,ProviderIds,People,Chapters",
-                "Episode",
-                start_index,
-                limit,
-            )
-            .await?;
+        let url = format!(
+            "{}/Shows/{show_id}/Episodes",
+            config.address.trim_end_matches('/')
+        );
+        let start_index = start_index.to_string();
+        let limit = limit.to_string();
+        let response: EmbyLibraryItemsResponse = self
+            .client
+            .get(url)
+            .header("X-Emby-Token", &config.api_key)
+            .query(&[
+                ("seasonId", season_id),
+                (
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,Chapters",
+                ),
+                ("sortOrder", "Ascending"),
+                ("sortBy", "SortName"),
+                ("startIndex", start_index.as_str()),
+                ("limit", limit.as_str()),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
         Ok(EmbyItemPage {
             total_record_count: response.total_record_count,
             items: response
@@ -352,7 +386,7 @@ where
             let season_id =
                 upsert_emby_season(pool, media_source_id, library_id, show_id, season).await?;
             let episodes = service
-                .fetch_episode_page(config, &season.item_id, 0, 100)
+                .fetch_episode_page(config, &show.item_id, &season.item_id, 0, 100)
                 .await?;
             for episode in &episodes.items {
                 let playback = service.stream_metadata(config, &episode.item_id).await?;

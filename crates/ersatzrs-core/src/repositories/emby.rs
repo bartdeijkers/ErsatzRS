@@ -139,7 +139,8 @@ pub trait EmbyService: Send + Sync {
     async fn fetch_episode_page(
         &self,
         config: &EmbyConnectionConfig,
-        parent_id: &str,
+        show_id: &str,
+        season_id: &str,
         start_index: i32,
         limit: i32,
     ) -> Result<EmbyItemPage>;

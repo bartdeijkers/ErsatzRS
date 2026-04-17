@@ -57,24 +57,24 @@ landed; `ersatzrs-scanner --provider <local|jellyfin|plex|emby> --library-id
 <id>` dispatches correctly. The following gaps must close before Phase 5
 protocol endpoints:
 
-1. **No pagination.** All `sync_*_library` functions fetch only the first
+1. ~~**No pagination.** All `sync_*_library` functions fetch only the first
    100 items. Port ErsatzTV's `GetPagedLibraryContents` loop so larger
-   libraries are scanned in full.
-2. **Plex JSON casing is wrong.** `PlexMetadataContainerResponse` uses
+   libraries are scanned in full.~~
+2. ~~**Plex JSON casing is wrong.** `PlexMetadataContainerResponse` uses
    `rename_all = "PascalCase"` but Plex sends `totalSize` (camelCase). Fix
-   alongside (1) so pagination exercises the real Plex shape.
-3. **Plex missing `Accept: application/json` header.** ErsatzTV's
+   alongside (1) so pagination exercises the real Plex shape.~~
+3. ~~**Plex missing `Accept: application/json` header.** ErsatzTV's
    `IPlexServerApi` sets it on every JSON endpoint; without it, real Plex
-   servers fall back to XML on some routes and deserialization fails.
-4. **Plex collections absent.** `GetCollections`/`GetCollectionItems` are
+   servers fall back to XML on some routes and deserialization fails.~~
+4. ~~**Plex collections absent.** `GetCollections`/`GetCollectionItems` are
    not ported. Either implement them or mark the feature out of scope in
-   an ADR and `parity-matrix.md`.
-5. **Emby seasons/episodes use the wrong endpoint.** ErsatzTV calls
+   an ADR and `parity-matrix.md`.~~
+5. ~~**Emby seasons/episodes use the wrong endpoint.** ErsatzTV calls
    `/Shows/{parentId}/Seasons` and `/Shows/{showId}/Episodes`; ErsatzRS
-   routes through generic `/Items?includeItemTypes=Season/Episode&parentId=…`.
-6. **Emby movie fetch duplicates `recursive=true`.** `emby.rs` lines
+   routes through generic `/Items?includeItemTypes=Season/Episode&parentId=…`.~~
+6. ~~**Emby movie fetch duplicates `recursive=true`.** `emby.rs` lines
    85-86 pair the same key twice — likely a copy-paste error that dropped
-   a needed parameter.
+   a needed parameter.~~
 7. **Provider credentials from env vars.** Scanner reads `PLEX_TOKEN`,
    `JELLYFIN_AUTHORIZATION_HEADER`, and `EMBY_API_KEY` from the process
    environment. This is a temporary shim that violates the "no deviation
@@ -167,3 +167,6 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Codex | Started Phase 4 media source integrations: ffprobe extraction, local filesystem scanner, path replacement, Jellyfin movie sync, persistence matrix updates, and full workspace gates. |
 | 2026-04-17 | Codex | Completed Phase 4 provider scanning: Jellyfin shows/collections, Plex and Emby movie/show sync, scanner CLI dispatch, persistence matrix updates, and full workspace gates. |
 | 2026-04-17 | Claude Code (claude-opus-4-7[1m]) | Phase 1–4 audit: reconciled STATUS.md and `parity-matrix.md` with the code. Phase 4 revised from "complete" to "in progress" with documented gaps — pagination, Plex collections/`Accept` header/JSON casing, Emby `/Shows/{id}/Seasons+Episodes` and duplicate `recursive=true`, DB-backed provider credentials, correct provider library `Key`/`ItemId` writes, SHA256 `PathHash`, `--dry-run` short-circuit, non-skipping local-scan fixture. Phase 2 flagged NVENC/VAAPI as cosmetic encoder swaps pending real hwaccel port. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block A: ported Plex pagination, fixed mixed-case Plex JSON decoding, added `Accept: application/json`, and expanded Plex provider regression tests. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block B: implemented Plex collection sync plus scanner dispatch and added a collection-membership snapshot test. |
+| 2026-04-17 | GitHub Copilot (GPT-5.4) | Block C: switched Emby season and episode fetches to `/Shows/{id}` endpoints, restored the movie fields set, and updated Emby provider tests. |
