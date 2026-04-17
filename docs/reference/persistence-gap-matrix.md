@@ -15,9 +15,9 @@ Scope:
 
 Current summary:
 
-- 45 tables have both read and write coverage.
-- 34 tables have read-only coverage.
-- 59 tables have no infra read/write coverage yet.
+- 53 tables have both read and write coverage.
+- 29 tables have read-only coverage.
+- 56 tables have no infra read/write coverage yet.
 
 Recommended order:
 
@@ -81,9 +81,9 @@ Recommended order:
 | `JellyfinCollection` | Domain model only | No | No | No | Jellyfin collection scanner data cannot round-trip. | P3 provider scanner tables |
 | `JellyfinConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `JellyfinEpisode` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
-| `JellyfinLibrary` | Library repository subtype check | Yes: Library repository subtype lookup | No | Yes, through library decode | Library subtype rows are read-only. | P3 provider library subtype writes |
+| `JellyfinLibrary` | Library repository subtype check plus Jellyfin sync bootstrap | Yes: Library repository subtype lookup and Jellyfin sync bootstrap | Yes: Jellyfin sync bootstrap | Yes, through library decode | Library subtype rows can now be created for movie sync; full library update/delete remains thin. | P3 provider library subtype update parity |
 | `JellyfinMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
-| `JellyfinMovie` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
+| `JellyfinMovie` | Jellyfin movie sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin movie sync | No | Movie provider identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden Jellyfin scanner tables |
 | `JellyfinPathInfo` | Schema only | No | No | No | Provider path scanning state is absent. | P3 provider scanner tables |
 | `JellyfinPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Jellyfin source decode | Low. | P0 broaden provider source decode |
 | `JellyfinSeason` | Domain model only | No | No | No | Provider GUID/type rows cannot round-trip. | P3 provider scanner tables |
@@ -92,17 +92,17 @@ Recommended order:
 | `Library` | Library repository | Yes: Library repository | Yes: Library repository | Yes, env-gated direct decode | Low/medium; provider subtype writes are incomplete. | P2/P3 library subtype writes |
 | `LibraryFolder` | Library repository | Yes: Library repository | No | Yes, through library decode | Folder hierarchy cannot round-trip on write. | P2 library folder writes |
 | `LibraryPath` | Library repository | Yes: Library repository | Yes: Library repository | Yes, through library decode | Low/medium; path context for folders is incomplete. | P2 library folder writes |
-| `LocalLibrary` | Library repository | Yes: Library repository | Yes: Library repository | Yes, through library decode | Low. | P0 retain decode |
+| `LocalLibrary` | Library repository and local scanner | Yes: Library repository | Yes: Library repository and local scanner preserves subtype rows while updating scan timestamps | Yes, through library decode | Low; local scanner now depends on this subtype for configured library paths. | P0 retain decode |
 | `LocalMediaSource` | Media source repository list only | Yes: Media source repository list | No | Yes, through source listing | Local source has no full get/upsert path. | P2 local media source repository |
-| `MediaChapter` | Domain model only | No | No | No | Chapter playout and search parity is absent. | P1 media item detail decode |
-| `MediaFile` | Media item repository path lookup | Yes: Media item repository | No | Yes, through media item path/decode when present | Scanner cannot persist media file rows yet. | P1 media version/file repository |
+| `MediaChapter` | ffprobe extraction, local scanner, Jellyfin sync | Yes: scanner/sync tests assert persisted rows | Yes: local scanner and Jellyfin movie sync | No | Chapter rows are now populated for scanned media; owner repository update/delete parity is still narrow. | P3 broaden provider/local scanner coverage |
+| `MediaFile` | Media item repository path lookup plus scanner/sync writes | Yes: Media item repository and scanner/sync row lookup | Yes: local scanner and Jellyfin movie sync | Yes, through media item path/decode when present | File rows now persist for local and Jellyfin scans; path-hash compatibility should be compared against ErsatzTV samples. | P3 broaden provider/local scanner coverage |
 | `MediaItem` | Media item repository and scheduling read model | Yes: media item/scheduling read paths | Yes: Media item repository | Yes, env-gated direct decode | Covered scalar item state; polymorphic subtypes are incomplete. | P1 media polymorphic repository |
 | `MediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through provider source decode | Low. | P0 retain decode |
-| `MediaStream` | Domain model only | No | No | No | FFmpeg/transcode decisions cannot use imported stream data. | P1 media stream repository |
-| `MediaVersion` | Media item repository and scheduling read model | Yes: media item/scheduling read paths | No | Yes, through media item/scheduling decode | Version rows are read-only; scanner cannot persist them. | P1 media version/file repository |
+| `MediaStream` | ffprobe extraction, local scanner, Jellyfin sync | Yes: scanner/sync tests assert persisted rows | Yes: local scanner and Jellyfin movie sync | No | Stream rows are now populated for scanned media; full color/profile/subtitle fields remain partial. | P3 broaden provider/local scanner coverage |
+| `MediaVersion` | Media item repository, scheduling read model, scanner/sync writes | Yes: media item/scheduling read paths plus scanner/sync row lookup | Yes: local scanner and Jellyfin movie sync | Yes, through media item/scheduling decode | Version rows now persist for local and Jellyfin scans; additional media kinds still need owner-specific sync. | P3 broaden provider/local scanner coverage |
 | `MetadataGuid` | Scheduling search/GUID lookup | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | GUID resolution is read-only and not complete across owner repos. | P1 media metadata/search joins |
 | `Mood` | Domain model only | No | No | No | Music metadata/search facet parity is absent. | P1 media metadata/search joins |
-| `Movie` | Scheduling read model | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Movie container rows cannot be created by metadata writes. | P1 media polymorphic repository |
+| `Movie` | Scheduling read model plus Jellyfin sync | Yes: scheduling read model and Jellyfin sync lookup | Yes: Jellyfin movie sync | Partial, env-gated scheduling decode if data exists | Movie container rows can now be created by Jellyfin sync; non-provider local movie repository parity remains incomplete. | P3 broaden provider scanner coverage |
 | `MovieMetadata` | Metadata repository and scheduling read model | Yes: metadata/scheduling read paths | Yes: Metadata repository | Yes, env-gated direct decode | Covered core fields; normalized joins remain incomplete. | P1 media metadata/search joins |
 | `MultiCollection` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Multi-collection editor persistence is absent. | P2 collection editor parity |
 | `MultiCollectionItem` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Multi-collection contents are read-only. | P2 collection editor parity |
@@ -110,7 +110,7 @@ Recommended order:
 | `MusicVideo` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Music-video rows cannot be created by current metadata writes. | P1 media polymorphic repository |
 | `MusicVideoArtist` | Domain model only | No | No | No | Music-video artist joins are not decoded. | P1 media metadata/search joins |
 | `MusicVideoMetadata` | Metadata repository and scheduling read model | Yes: metadata/scheduling read paths | No | Yes, env-gated direct decode | No write path; artist joins are empty. | P1 media metadata/search joins |
-| `OtherVideo` | Scheduling read model | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Other-video rows cannot round-trip. | P1 media polymorphic repository |
+| `OtherVideo` | Scheduling read model plus local scanner | Yes: scheduling read model and local scanner write test | Yes: local scanner | Partial, env-gated scheduling decode if data exists | Other-video rows can now be created by local scans; metadata owner fields remain absent. | P3 broaden local scanner coverage |
 | `OtherVideoMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Other-video metadata has no owner repository. | P1 media metadata/search joins |
 | `Playlist` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, env-gated direct decode | Playlist editor writes are absent. | P2 playlist repository writes |
 | `PlaylistGroup` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, through playlist decode | Playlist groups are read-only. | P2 playlist repository writes |
