@@ -569,8 +569,8 @@ fn collection_key_json(collection_key: &SchedulingCollectionKey) -> String {
         playlist_id: Option<EntityId>,
         #[serde(skip_serializing_if = "Option::is_none")]
         search_query: Option<&'a str>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        fake_collection_key: Option<&'a str>,
+        #[serde(rename = "FakeCollectionKey", skip_serializing_if = "Option::is_none")]
+        fake_collection_tag: Option<&'a str>,
     }
 
     // Mirrors ErsatzTV's CollectionKey JSON written by JsonConvert with
@@ -583,7 +583,7 @@ fn collection_key_json(collection_key: &SchedulingCollectionKey) -> String {
         media_item_id: collection_key.media_item_id,
         playlist_id: collection_key.playlist_id,
         search_query: collection_key.search_query.as_deref(),
-        fake_collection_key: collection_key.fake_collection_key.as_deref(),
+        fake_collection_tag: collection_key.fake_collection_key.as_deref(),
     })
     .unwrap_or_default()
 }

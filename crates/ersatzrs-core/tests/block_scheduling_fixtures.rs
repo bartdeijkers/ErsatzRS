@@ -59,7 +59,7 @@ fn basic_chronological_block_matches_ersatztv_fixture() {
 
     assert_fixture(
         "basic_chronological_block.json",
-        schedule(reference_data, start, Duration::hours(2), 100, 0),
+        &schedule(reference_data, start, Duration::hours(2), 100, 0),
     );
 }
 
@@ -111,7 +111,7 @@ fn deco_default_filler_matches_ersatztv_fixture() {
 
     assert_fixture(
         "deco_default_filler.json",
-        schedule(reference_data, start, Duration::hours(1), 100, 0),
+        &schedule(reference_data, start, Duration::hours(1), 100, 0),
     );
 }
 
@@ -180,11 +180,11 @@ fn guide_group_locking_matches_ersatztv_fixture() {
 
     assert_fixture(
         "guide_group_locking.json",
-        schedule(reference_data, start, Duration::hours(2), 100, 0),
+        &schedule(reference_data, start, Duration::hours(2), 100, 0),
     );
 }
 
-fn assert_fixture(fixture_name: &str, result: ersatzrs_core::scheduling::SchedulingResult) {
+fn assert_fixture(fixture_name: &str, result: &ersatzrs_core::scheduling::SchedulingResult) {
     let actual = serde_json::json!({
         "items": playout_sequence(&result.added_items),
     });

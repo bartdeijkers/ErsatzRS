@@ -1033,8 +1033,7 @@ impl ScriptState {
             let po = self
                 .enumerators
                 .get(key)
-                .map(|e| e.playback_order)
-                .unwrap_or(PlaybackOrder::None);
+                .map_or(PlaybackOrder::None, |e| e.playback_order);
             history_key_for_content(key, po)
         }
     }

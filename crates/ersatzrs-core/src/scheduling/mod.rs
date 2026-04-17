@@ -534,9 +534,9 @@ impl MediaEnumerator {
             PlaybackOrder::Chronological => "Chronological",
             PlaybackOrder::SeasonEpisode => "Season, Episode",
             PlaybackOrder::Shuffle => "Block Shuffle",
-            PlaybackOrder::Random => "Random",
             PlaybackOrder::RandomRotation => "Random Rotating",
-            PlaybackOrder::None
+            PlaybackOrder::Random
+            | PlaybackOrder::None
             | PlaybackOrder::ShuffleInOrder
             | PlaybackOrder::MultiEpisodeShuffle
             | PlaybackOrder::Marathon => "Random",

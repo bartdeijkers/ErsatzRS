@@ -760,13 +760,10 @@ impl SqliteSchedulingContentRepository {
         metadata_id: EntityId,
     ) -> Result<Vec<String>> {
         let fk_column = match (table, metadata_kind) {
-            ("Director", "Movie") => "MovieMetadataId",
-            ("Director", "Episode") => "EpisodeMetadataId",
+            ("Director" | "Writer", "Movie") => "MovieMetadataId",
+            ("Director" | "Writer", "Episode") => "EpisodeMetadataId",
             ("Director", "MusicVideo") => "MusicVideoMetadataId",
-            ("Director", "OtherVideo") => "OtherVideoMetadataId",
-            ("Writer", "Movie") => "MovieMetadataId",
-            ("Writer", "Episode") => "EpisodeMetadataId",
-            ("Writer", "OtherVideo") => "OtherVideoMetadataId",
+            ("Director" | "Writer", "OtherVideo") => "OtherVideoMetadataId",
             _ => return Ok(Vec::new()),
         };
         let sql = format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Id""#);
@@ -828,7 +825,7 @@ impl SqliteSchedulingContentRepository {
                         push_unique_optional(&mut result.audio_codecs, codec);
                         push_unique_optional(&mut result.audio_languages, language);
                     }
-                    Some("subtitle") | Some("external_subtitle") => {
+                    Some("subtitle" | "external_subtitle") => {
                         push_unique_optional(&mut result.subtitle_codecs, codec);
                         push_unique_optional(&mut result.subtitle_languages, language);
                     }

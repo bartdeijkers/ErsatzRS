@@ -516,6 +516,7 @@ async fn seed_media_fixture(pool: &SqlitePool) {
     insert_movie(pool, 21, 210, "Bonus", "2026-02-01T00:00:00Z").await;
 }
 
+#[allow(clippy::too_many_lines)]
 async fn seed_search_enrichment(pool: &SqlitePool) {
     pool.execute(
         r#"UPDATE "MovieMetadata" SET "Year" = 2025, "SortTitle" = 'feature',
