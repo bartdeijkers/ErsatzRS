@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
+use ersatzrs_core::scheduling::SchedulingResult;
 use ersatzrs_domain::{
     EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
@@ -18,6 +19,7 @@ use super::common::{
 #[derive(Clone)]
 pub struct SqlitePlayoutRepository(pub Pool<Sqlite>);
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl PlayoutRepository for SqlitePlayoutRepository {
     async fn get_with_anchor(&self, id: EntityId) -> Result<Playout> {
@@ -214,6 +216,159 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .bind(encode_datetime(cutoff))
             .execute(&self.0)
             .await?;
+        Ok(())
+    }
+
+    async fn apply_build_result(
+        &self,
+        result: &SchedulingResult,
+        playout: &Playout,
+    ) -> Result<()> {
+        let mut tx = self.0.begin().await?;
+
+        // ── items ─────────────────────────────────────────────────────────────
+        if result.clear_items {
+            sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ?"#)
+                .bind(playout.id)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            for &item_id in &result.items_to_remove {
+                sqlx::query(r#"DELETE FROM "PlayoutItem" WHERE "Id" = ?"#)
+                    .bind(item_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            if let Some(cutoff) = result.remove_before {
+                sqlx::query(
+                    r#"DELETE FROM "PlayoutItem" WHERE "PlayoutId" = ? AND "Start" < ?"#,
+                )
+                .bind(playout.id)
+                .bind(encode_datetime(cutoff))
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        for item in &result.added_items {
+            // Insert without an explicit Id so SQLite auto-assigns one.
+            let inserted_id = sqlx::query(
+                r#"INSERT INTO "PlayoutItem" (
+                    "PlayoutId", "MediaItemId", "Start", "Finish",
+                    "GuideStart", "GuideFinish", "CustomTitle", "GuideGroup",
+                    "FillerKind", "InPoint", "OutPoint", "ChapterTitle",
+                    "DisableWatermarks", "PreferredAudioLanguageCode",
+                    "PreferredAudioTitle", "PreferredSubtitleLanguageCode",
+                    "SubtitleMode", "BlockKey", "CollectionKey",
+                    "CollectionEtag", "SchedulingContext"
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(item.playout_id)
+            .bind(item.media_item_id)
+            .bind(encode_datetime(item.start))
+            .bind(encode_datetime(item.finish))
+            .bind(encode_optional_datetime(item.guide_start))
+            .bind(encode_optional_datetime(item.guide_finish))
+            .bind(&item.custom_title)
+            .bind(item.guide_group)
+            .bind(encode_enum(item.filler_kind))
+            .bind(encode_duration(item.in_point))
+            .bind(encode_duration(item.out_point))
+            .bind(&item.chapter_title)
+            .bind(item.disable_watermarks)
+            .bind(&item.preferred_audio_language_code)
+            .bind(&item.preferred_audio_title)
+            .bind(&item.preferred_subtitle_language_code)
+            .bind(item.subtitle_mode.map(encode_enum))
+            .bind(&item.block_key)
+            .bind(&item.collection_key)
+            .bind(&item.collection_etag)
+            .bind(&item.scheduling_context)
+            .execute(&mut *tx)
+            .await?
+            .last_insert_rowid();
+
+            for &wm_id in &item.watermark_ids {
+                sqlx::query(
+                    r#"INSERT OR REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
+                )
+                .bind(inserted_id)
+                .bind(wm_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            for &gfx_id in &item.graphics_element_ids {
+                sqlx::query(
+                    r#"INSERT OR REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
+                )
+                .bind(inserted_id)
+                .bind(gfx_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        // ── gaps ──────────────────────────────────────────────────────────────
+        if result.clear_items {
+            sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ?"#)
+                .bind(playout.id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        for gap in &result.added_gaps {
+            sqlx::query(
+                r#"INSERT INTO "PlayoutGap" ("PlayoutId", "Start", "Finish") VALUES (?, ?, ?)"#,
+            )
+            .bind(playout.id)
+            .bind(encode_datetime(gap.start))
+            .bind(encode_datetime(gap.finish))
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── history ───────────────────────────────────────────────────────────
+        if result.clear_items {
+            sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "PlayoutId" = ?"#)
+                .bind(playout.id)
+                .execute(&mut *tx)
+                .await?;
+        } else {
+            for &history_id in &result.history_to_remove {
+                sqlx::query(r#"DELETE FROM "PlayoutHistory" WHERE "Id" = ?"#)
+                    .bind(history_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+        for entry in &result.added_history {
+            sqlx::query(
+                r#"INSERT INTO "PlayoutHistory" (
+                    "BlockId", "Details", "Index", "Key", "PlaybackOrder",
+                    "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild"
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(entry.block_id)
+            .bind(&entry.details)
+            .bind(entry.index)
+            .bind(&entry.key)
+            .bind(encode_enum(entry.playback_order))
+            .bind(entry.playout_id)
+            .bind(encode_datetime(entry.when))
+            .bind(encode_optional_datetime(entry.finish))
+            .bind(&entry.child_key)
+            .bind(entry.is_current_child)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── anchor, program-schedule anchors, fill-group indices, templates ───
+        replace_anchor_state(&mut tx, playout).await?;
+        replace_program_schedule_anchors(&mut tx, playout.id, &result.program_schedule_anchors)
+            .await?;
+        replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
+        replace_playout_templates(&mut tx, playout).await?;
+
+        tx.commit().await?;
         Ok(())
     }
 
