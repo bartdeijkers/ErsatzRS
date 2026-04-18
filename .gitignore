@@ -52,8 +52,11 @@ config.local.toml
 
 # Generated frontend/package artifacts
 node_modules/
+package-lock.json
 dist/
 pkg/
+# CSS bundle rebuilt by build.rs via stylance-cli
+crates/ersatzrs-web/public/bundle.css
 
 # Coverage and profiling output
 /coverage/
