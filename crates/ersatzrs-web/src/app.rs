@@ -2,27 +2,61 @@ use leptos::prelude::*;
 use leptos_meta::provide_meta_context;
 use leptos_router::{
     components::{Route, Router, Routes},
-    StaticSegment,
+    ParamSegment, StaticSegment,
 };
+
+use crate::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
+use crate::pages::dev::ComponentsPage;
+use crate::ui::layout::AppShell;
+use crate::ui::primitives::toast::provide_toast_store;
+
+stylance::import_crate_style!(style, "src/app.module.css");
 
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
+    provide_toast_store();
 
     view! {
-        <Router>
-            <Routes fallback=|| "Not found.".into_view()>
-                <Route path=StaticSegment("") view=HomePage/>
-            </Routes>
-        </Router>
+        <AppShell>
+            <Router>
+                <Routes fallback=|| {
+                    view! {
+                        <div class=style::not_found>
+                            <p class=style::not_found_code>"404"</p>
+                            <p class=style::not_found_msg>"Page not found."</p>
+                            <a href="/" class=style::not_found_link>"Go home"</a>
+                        </div>
+                    }
+                    .into_view()
+                }>
+                    <Route path=StaticSegment("") view=HomePage/>
+                    <Route path=StaticSegment("dev/components") view=ComponentsPage/>
+                    <Route path=StaticSegment("channels") view=ChannelsListPage/>
+                    <Route
+                        path=(StaticSegment("channels"), StaticSegment("add"))
+                        view=ChannelEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("channels"), ParamSegment("id"))
+                        view=ChannelEditorPage
+                    />
+                </Routes>
+            </Router>
+        </AppShell>
     }
 }
 
 #[component]
 fn HomePage() -> impl IntoView {
     view! {
-        <h1>"ErsatzRS"</h1>
-        <p>"IPTV server starting up."</p>
+        <div class=style::page_home>
+            <h1 class=style::page_home_title>"ErsatzRS"</h1>
+            <p class=style::page_home_subtitle>"IPTV server is running."</p>
+            <p>
+                <a href="/channels" class=style::page_home_link>"→ Channels"</a>
+            </p>
+        </div>
     }
 }
 
@@ -33,7 +67,10 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="UTF-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-                <HydrationScripts options/>
+                <meta name="color-scheme" content="dark"/>
+                <title>"ErsatzRS"</title>
+                <link rel="stylesheet" href="/public/bundle.css"/>
+                <HydrationScripts options islands=true/>
             </head>
             <body>
                 <App/>
