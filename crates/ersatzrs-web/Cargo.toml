@@ -22,7 +22,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-leptos = { version = "0.7", features = ["ssr"] }
+leptos = { version = "0.7", features = ["ssr", "islands"] }
 leptos_axum = "0.7"
 leptos_router = { version = "0.7", features = ["ssr"] }
 leptos_meta = { version = "0.7", features = ["ssr"] }
@@ -32,6 +32,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
 quick-xml = "0.37"
 stylance = "0.7"
 

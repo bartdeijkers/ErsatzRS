@@ -7,6 +7,14 @@ use leptos_router::{
 
 use crate::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
 use crate::pages::dev::ComponentsPage;
+use crate::pages::media_sources::{
+    emby::{EmbyConnectionPage, EmbyLibrariesPage, EmbyPathsPage, EmbySourcesPage},
+    jellyfin::{
+        JellyfinConnectionPage, JellyfinLibrariesPage, JellyfinPathsPage, JellyfinSourcesPage,
+    },
+    local::{LocalLibrariesPage, LocalLibraryEditorPage},
+    plex::{PlexLibrariesPage, PlexPathsPage, PlexSourcesPage},
+};
 use crate::ui::layout::AppShell;
 use crate::ui::primitives::toast::provide_toast_store;
 
@@ -40,6 +48,70 @@ pub fn App() -> impl IntoView {
                     <Route
                         path=(StaticSegment("channels"), ParamSegment("id"))
                         view=ChannelEditorPage
+                    />
+
+                    // ── Local libraries ──────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("local"))
+                        view=LocalLibrariesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("local"), StaticSegment("add"))
+                        view=LocalLibraryEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("local"), ParamSegment("id"), StaticSegment("edit"))
+                        view=LocalLibraryEditorPage
+                    />
+
+                    // ── Jellyfin ─────────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("jellyfin"))
+                        view=JellyfinSourcesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("jellyfin"), StaticSegment("edit"))
+                        view=JellyfinConnectionPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("jellyfin"), ParamSegment("id"), StaticSegment("libraries"))
+                        view=JellyfinLibrariesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("jellyfin"), ParamSegment("id"), StaticSegment("paths"))
+                        view=JellyfinPathsPage
+                    />
+
+                    // ── Emby ─────────────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("emby"))
+                        view=EmbySourcesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("emby"), StaticSegment("edit"))
+                        view=EmbyConnectionPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("emby"), ParamSegment("id"), StaticSegment("libraries"))
+                        view=EmbyLibrariesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("emby"), ParamSegment("id"), StaticSegment("paths"))
+                        view=EmbyPathsPage
+                    />
+
+                    // ── Plex ─────────────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("plex"))
+                        view=PlexSourcesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("plex"), ParamSegment("id"), StaticSegment("libraries"))
+                        view=PlexLibrariesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("sources"), StaticSegment("plex"), ParamSegment("id"), StaticSegment("paths"))
+                        view=PlexPathsPage
                     />
                 </Routes>
             </Router>

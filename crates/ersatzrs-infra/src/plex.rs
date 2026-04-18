@@ -11,11 +11,35 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 const PLEX_PAGE_SIZE: i32 = 100;
 const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
+const PLEX_TV_BASE: &str = "https://plex.tv";
+const PLEX_APP_NAME: &str = "ErsatzRS";
+const PLEX_CLIENT_IDENTIFIER_KEY: &str = "plex.client_identifier";
+pub const PLEX_PENDING_PIN_CODE_KEY: &str = "plex.pending_pin_code";
+pub const PLEX_USER_AUTH_TOKEN_KEY: &str = "plex.user_auth_token";
+const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
+const PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY: &str = "plex.current_server_auth_token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlexConnectionConfig {
     pub uri: String,
     pub token: String,
+}
+
+/// Result of starting a Plex PIN auth flow.
+#[derive(Debug, Clone)]
+pub struct PlexAuthPin {
+    pub id: String,
+    pub code: String,
+    pub auth_url: String,
+}
+
+/// A Plex server discovered via the plex.tv resources API.
+#[derive(Debug, Clone)]
+pub struct PlexServerResource {
+    pub name: String,
+    pub client_identifier: String,
+    pub server_auth_token: String,
+    pub uris: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -379,6 +403,277 @@ impl PlexService {
             .json()
             .await
             .map_err(provider_error)
+    }
+
+    // ── Plex TV (plex.tv) OAuth / server-discovery API ───────────────────────
+
+    /// Gets or creates a persistent client identifier in `ConfigElement`.
+    ///
+    /// Mirrors `IPlexSecretStore.GetClientIdentifier()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error when the read or write fails.
+    pub async fn get_or_create_client_identifier(pool: &SqlitePool) -> Result<String> {
+        if let Some(id) = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(PLEX_CLIENT_IDENTIFIER_KEY)
+        .fetch_optional(pool)
+        .await?
+        .filter(|v| !v.is_empty())
+        {
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+               ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+        )
+        .bind(PLEX_CLIENT_IDENTIFIER_KEY)
+        .bind(&id)
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
+    /// Initiates the Plex PIN auth flow. Returns a [`PlexAuthPin`] containing
+    /// the PIN id, code, and the URL the user must visit to authorize.
+    ///
+    /// Mirrors `IPlexTvApiClient.StartPinFlow()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request to plex.tv fails.
+    pub async fn start_pin_flow(&self, client_identifier: &str) -> Result<PlexAuthPin> {
+        #[derive(Deserialize)]
+        struct PinResponse {
+            id: i64,
+            code: String,
+        }
+        let resp: PinResponse = self
+            .client
+            .post(format!("{PLEX_TV_BASE}/api/v2/pins"))
+            .header(ACCEPT, APPLICATION_JSON)
+            .header("X-Plex-Product", PLEX_APP_NAME)
+            .header("X-Plex-Client-Identifier", client_identifier)
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+        let auth_url = format!(
+            "https://app.plex.tv/auth#?clientID={client_identifier}&code={code}&context[device][product]={PLEX_APP_NAME}",
+            code = resp.code,
+        );
+        Ok(PlexAuthPin {
+            id: resp.id.to_string(),
+            code: resp.code,
+            auth_url,
+        })
+    }
+
+    /// Checks whether the Plex PIN has been authorized.
+    ///
+    /// Returns `Some(user_auth_token)` when the user has authorized,
+    /// `None` if still pending.
+    ///
+    /// Mirrors `IPlexTvApiClient.TryCompletePinFlow()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request to plex.tv fails.
+    pub async fn complete_pin_flow(
+        &self,
+        pin_id: &str,
+        pin_code: &str,
+        client_identifier: &str,
+    ) -> Result<Option<String>> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct PinStatusResponse {
+            #[serde(default)]
+            auth_token: String,
+        }
+        let resp: PinStatusResponse = self
+            .client
+            .get(format!("{PLEX_TV_BASE}/api/v2/pins/{pin_id}"))
+            .header(ACCEPT, APPLICATION_JSON)
+            .header("X-Plex-Client-Identifier", client_identifier)
+            .query(&[("code", pin_code)])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+        Ok(if resp.auth_token.is_empty() {
+            None
+        } else {
+            Some(resp.auth_token)
+        })
+    }
+
+    /// Discovers Plex media servers accessible with `user_auth_token`.
+    ///
+    /// Filters to owned servers only, matching
+    /// `SynchronizePlexMediaSourcesHandler` behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request to plex.tv fails.
+    pub async fn get_servers(
+        &self,
+        user_auth_token: &str,
+        client_identifier: &str,
+    ) -> Result<Vec<PlexServerResource>> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ResourceResponse {
+            name: String,
+            client_identifier: String,
+            access_token: String,
+            provides: String,
+            #[serde(default)]
+            owned: bool,
+            #[serde(default)]
+            connections: Vec<ResourceConnectionResponse>,
+        }
+        #[derive(Deserialize)]
+        struct ResourceConnectionResponse {
+            uri: String,
+        }
+        let resources: Vec<ResourceResponse> = self
+            .client
+            .get(format!("{PLEX_TV_BASE}/api/v2/resources"))
+            .header(ACCEPT, APPLICATION_JSON)
+            .header("X-Plex-Token", user_auth_token)
+            .header("X-Plex-Client-Identifier", client_identifier)
+            .query(&[("includeHttps", "1"), ("includeIPv6", "1")])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+        Ok(resources
+            .into_iter()
+            .filter(|r| r.provides.split(',').any(|p| p.trim() == "server"))
+            .filter(|r| r.owned)
+            .map(|r| PlexServerResource {
+                name: r.name,
+                client_identifier: r.client_identifier,
+                server_auth_token: r.access_token,
+                uris: r.connections.into_iter().map(|c| c.uri).collect(),
+            })
+            .collect())
+    }
+
+    /// Upserts `PlexMediaSource` and `PlexConnection` rows for each discovered
+    /// server, storing per-server auth tokens in `ConfigElement`.
+    ///
+    /// Mirrors `SynchronizePlexMediaSourcesHandler.SynchronizeAllServers`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error on any write failure.
+    pub async fn upsert_sources(pool: &SqlitePool, servers: &[PlexServerResource]) -> Result<()> {
+        for server in servers {
+            let existing: Option<i64> = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "PlexMediaSource" WHERE "ClientIdentifier" = ?"#,
+            )
+            .bind(&server.client_identifier)
+            .fetch_optional(pool)
+            .await?;
+
+            let ms_id = if let Some(id) = existing {
+                sqlx::query(r#"UPDATE "PlexMediaSource" SET "ServerName" = ? WHERE "Id" = ?"#)
+                    .bind(&server.name)
+                    .bind(id)
+                    .execute(pool)
+                    .await?;
+                id
+            } else {
+                let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
+                    .execute(pool)
+                    .await?;
+                let ms_id = ms.last_insert_rowid();
+                sqlx::query(
+                    r#"INSERT INTO "PlexMediaSource"
+                       ("Id", "ServerName", "ClientIdentifier")
+                       VALUES (?, ?, ?)"#,
+                )
+                .bind(ms_id)
+                .bind(&server.name)
+                .bind(&server.client_identifier)
+                .execute(pool)
+                .await?;
+                ms_id
+            };
+
+            for uri in &server.uris {
+                let already: bool = sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "PlexConnection"
+                       WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
+                )
+                .bind(ms_id)
+                .bind(uri)
+                .fetch_one(pool)
+                .await?
+                    > 0;
+                if !already {
+                    sqlx::query(
+                        r#"INSERT INTO "PlexConnection"
+                           ("IsActive", "Uri", "PlexMediaSourceId")
+                           VALUES (0, ?, ?)"#,
+                    )
+                    .bind(uri)
+                    .bind(ms_id)
+                    .execute(pool)
+                    .await?;
+                }
+            }
+
+            if let Some(first_uri) = server.uris.first() {
+                sqlx::query(
+                    r#"UPDATE "PlexConnection" SET "IsActive" = 1
+                       WHERE "PlexMediaSourceId" = ? AND "Uri" = ?"#,
+                )
+                .bind(ms_id)
+                .bind(first_uri)
+                .execute(pool)
+                .await?;
+            }
+
+            sqlx::query(
+                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                   ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+            )
+            .bind(format!(
+                "{PLEX_SERVER_AUTH_TOKEN_PREFIX}{}",
+                server.client_identifier
+            ))
+            .bind(&server.server_auth_token)
+            .execute(pool)
+            .await?;
+
+            sqlx::query(
+                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                   ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+            )
+            .bind(PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY)
+            .bind(&server.server_auth_token)
+            .execute(pool)
+            .await?;
+        }
+        Ok(())
     }
 }
 
@@ -1236,6 +1531,116 @@ async fn replace_streams(
         .await?;
     }
     Ok(())
+}
+
+/// Loads all configuration from the database and synchronizes one Plex library.
+///
+/// Dispatches to movie, show, or collection sync based on `MediaKind`.
+/// Mirrors the orchestration in `scan_plex` in `ersatzrs-scanner`.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<usize> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind", l."MediaSourceId"
+           FROM "Library" l
+           WHERE l."Id" = ?
+           LIMIT 1"#,
+    )
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "plex library",
+        value: format!("library {library_id} not found"),
+    })?;
+    let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+
+    let conn_row = sqlx::query(
+        r#"SELECT pc."Uri", pms."ClientIdentifier"
+           FROM "PlexConnection" pc
+           JOIN "PlexMediaSource" pms ON pms."Id" = pc."PlexMediaSourceId"
+           WHERE pc."PlexMediaSourceId" = ? AND pc."IsActive" = 1
+           ORDER BY pc."Id"
+           LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "plex connection",
+        value: format!("no active connection for source {media_source_id}"),
+    })?;
+    let uri: String = conn_row.try_get("Uri").unwrap_or_default();
+    let client_identifier: String = conn_row.try_get("ClientIdentifier").unwrap_or_default();
+
+    let token = load_plex_token(pool, &client_identifier).await?;
+    let config = PlexConnectionConfig { uri, token };
+
+    let library_key: String =
+        sqlx::query_scalar(r#"SELECT "Key" FROM "PlexLibrary" WHERE "Id" = ?"#)
+            .bind(library_id)
+            .fetch_optional(pool)
+            .await?
+            .and_then(|v: Option<String>| v)
+            .ok_or_else(|| RepositoryError::Decode {
+                kind: "plex library",
+                value: format!("PlexLibrary row {library_id} not found"),
+            })?;
+
+    let service = PlexService::new();
+    match kind {
+        1 => {
+            sync_plex_show_library(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                library_id,
+                &library_key,
+            )
+            .await
+        }
+        0 => {
+            sync_plex_movie_library(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                library_id,
+                &library_key,
+            )
+            .await
+        }
+        _ => {
+            sync_plex_collection_library(pool, &service, &config, media_source_id, &library_key)
+                .await
+        }
+    }
+}
+
+async fn load_plex_token(pool: &SqlitePool, client_identifier: &str) -> Result<String> {
+    for key in &[
+        format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}{client_identifier}"),
+        PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY.to_owned(),
+    ] {
+        if let Some(v) = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+        .filter(|v| !v.is_empty())
+        {
+            return Ok(v);
+        }
+    }
+    Err(RepositoryError::Decode {
+        kind: "plex config",
+        value: "auth token not found".into(),
+    })
 }
 
 #[allow(clippy::needless_pass_by_value)]

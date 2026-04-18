@@ -436,6 +436,116 @@ fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibraryS
     })
 }
 
+/// Loads configuration from the database and synchronizes one Jellyfin library.
+///
+/// Dispatches to movie, show, or collection sync based on `MediaKind`.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Jellyfin API, or database writes fail.
+pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<usize> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind", l."MediaSourceId"
+           FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
+    )
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "jellyfin library",
+        value: format!("library {library_id} not found"),
+    })?;
+    let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+
+    let address: String = sqlx::query_scalar(
+        r#"SELECT "Address" FROM "JellyfinConnection"
+           WHERE "JellyfinMediaSourceId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v: Option<String>| v)
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "jellyfin connection",
+        value: format!("no connection for source {media_source_id}"),
+    })?;
+
+    let api_key = load_jellyfin_api_key(pool, &address).await?;
+    let authorization_header = format_jellyfin_auth_header(api_key);
+    let config = JellyfinConnectionConfig {
+        address,
+        authorization_header,
+    };
+
+    let parent_id: String =
+        sqlx::query_scalar(r#"SELECT "ItemId" FROM "JellyfinLibrary" WHERE "Id" = ?"#)
+            .bind(library_id)
+            .fetch_optional(pool)
+            .await?
+            .and_then(|v: Option<String>| v)
+            .ok_or_else(|| RepositoryError::Decode {
+                kind: "jellyfin library",
+                value: format!("JellyfinLibrary row {library_id} not found"),
+            })?;
+
+    let service = JellyfinService::new();
+    if kind == 1 {
+        sync_jellyfin_show_library(
+            pool,
+            &service,
+            &config,
+            media_source_id,
+            library_id,
+            &parent_id,
+        )
+        .await
+    } else {
+        sync_jellyfin_movie_library(
+            pool,
+            &service,
+            &config,
+            media_source_id,
+            library_id,
+            &parent_id,
+        )
+        .await
+    }
+}
+
+async fn load_jellyfin_api_key(pool: &SqlitePool, address: &str) -> Result<String> {
+    let keys = [
+        format!("jellyfin.authorization_header.{address}"),
+        "jellyfin.current_authorization_header".to_owned(),
+        format!("jellyfin.api_key.{address}"),
+        "jellyfin.current_server_api_key".to_owned(),
+    ];
+    for key in &keys {
+        if let Some(v) = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+        .filter(|v| !v.is_empty())
+        {
+            return Ok(v);
+        }
+    }
+    Err(RepositoryError::Decode {
+        kind: "jellyfin config",
+        value: "api key not found".into(),
+    })
+}
+
+fn format_jellyfin_auth_header(value: String) -> String {
+    if value.contains("Token=") || value.starts_with("MediaBrowser ") {
+        value
+    } else {
+        format!("MediaBrowser Token=\"{value}\"")
+    }
+}
+
 fn project_show(item: JellyfinLibraryItemResponse) -> Option<JellyfinShowItem> {
     Some(JellyfinShowItem {
         item_id: item.id?,

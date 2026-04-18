@@ -469,6 +469,102 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
     })
 }
 
+/// Loads configuration from the database and synchronizes one Emby library.
+///
+/// Dispatches to movie or show sync based on `MediaKind`.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Emby API, or database writes fail.
+pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<usize> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind", l."MediaSourceId"
+           FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
+    )
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "emby library",
+        value: format!("library {library_id} not found"),
+    })?;
+    let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+
+    let address: String = sqlx::query_scalar(
+        r#"SELECT "Address" FROM "EmbyConnection"
+           WHERE "EmbyMediaSourceId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v: Option<String>| v)
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "emby connection",
+        value: format!("no connection for source {media_source_id}"),
+    })?;
+
+    let api_key = load_emby_api_key(pool, &address).await?;
+    let config = EmbyConnectionConfig { address, api_key };
+
+    let parent_id: String =
+        sqlx::query_scalar(r#"SELECT "ItemId" FROM "EmbyLibrary" WHERE "Id" = ?"#)
+            .bind(library_id)
+            .fetch_optional(pool)
+            .await?
+            .and_then(|v: Option<String>| v)
+            .ok_or_else(|| RepositoryError::Decode {
+                kind: "emby library",
+                value: format!("EmbyLibrary row {library_id} not found"),
+            })?;
+
+    let service = EmbyService::new();
+    if kind == 1 {
+        sync_emby_show_library(
+            pool,
+            &service,
+            &config,
+            media_source_id,
+            library_id,
+            &parent_id,
+        )
+        .await
+    } else {
+        sync_emby_movie_library(
+            pool,
+            &service,
+            &config,
+            media_source_id,
+            library_id,
+            &parent_id,
+        )
+        .await
+    }
+}
+
+async fn load_emby_api_key(pool: &SqlitePool, address: &str) -> Result<String> {
+    let keys = [
+        format!("emby.api_key.{address}"),
+        "emby.current_server_api_key".to_owned(),
+    ];
+    for key in &keys {
+        if let Some(v) = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(pool)
+        .await?
+        .filter(|v| !v.is_empty())
+        {
+            return Ok(v);
+        }
+    }
+    Err(RepositoryError::Decode {
+        kind: "emby config",
+        value: "api key not found".into(),
+    })
+}
+
 fn project_show(item: EmbyLibraryItemResponse) -> Option<EmbyShowItem> {
     Some(EmbyShowItem {
         item_id: item.id?,

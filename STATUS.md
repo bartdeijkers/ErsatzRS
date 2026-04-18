@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 
 ## Current Phase
 
@@ -104,8 +104,8 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.2 complete. Next: Phase 6.3 (media
-source configuration), library browser/collections, and the block editor. HLS
+**Phase 6 in progress.** Phases 6.0–6.3 complete. Next: Phase 6.4 (library
+browser/collections) and the block editor. HLS
 multi-variant playlists, the segmenter worker with work-ahead and discontinuity
 tracking, hls-direct passthrough, access tokens, and Kodi #KODIPROP headers
 are Phase 7 hardening.
@@ -178,3 +178,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Claude Code (claude-opus-4-7[1m]) | Completed Phase 5 protocol endpoints: `/iptv/channels.m3u` + `/iptv/xmltv.xml` via quick-xml (48-hour window, COALESCE titles); HDHomeRun HTTP quartet (`discover.json`, `device.xml`, `lineup_status.json`, `lineup.json`) with verbatim C# field names; UDP discovery responder on port 65001 with TLV + CRC32 round-trip tests; `/iptv/channel/{number}.ts` resolving the active PlayoutItem through `MediaVersion`/`MediaFile`, applying provider path replacements, and piping a software FFmpeg MPEG-TS stream with `kill_on_drop`. Device UUID seeded into `ConfigElement` under `HDHR.DeviceUuid`. Phase 5 ✅. |
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Phase 6.0 complete: Tailwind v4 CSS pipeline (21 KB), 8 primitive components (button/form/icon/badge/table/dialog/toast/card), AppShell+NavDrawer+TopBar layout, component gallery at `/dev/components`, `leptos_routes_with_context` AppState injection. Phase 6.1 complete: channel list (`/channels`) with paginated table + show-disabled toggle + delete confirm dialog; channel editor (`/channels/add`, `/channels/:id`) with form validation, streaming-mode/FFmpeg-profile/filler selects, and navigate-on-save. All quality gates pass. |
 | 2026-04-18 | Claude Code (claude-sonnet-4-6) | Phase 6.2 complete: AppShell CSS-checkbox drawer toggle (no JS/island needed); full NavDrawer nav structure matching ErsatzTV URLs; `PlayoutWarningBadge` and `HealthBadge` islands backed by `#[server]` functions in `server/layout.rs`; `app.rs` and `app.module.css` migrated to Stylance CSS modules; all quality gates pass. |
+| 2026-04-18 | Claude Code (claude-sonnet-4-6) | Phase 6.3 complete: media source configuration pages for Local/Jellyfin/Emby/Plex — server functions, 10 page components (list/editor/libraries/paths per provider), shared CSS module, Plex OAuth PIN island, `PathsEditor` shared sub-component; all quality gates pass. |

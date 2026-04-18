@@ -1,0 +1,216 @@
+/* Shared layout tokens for all media-source pages */
+
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0;
+}
+
+.toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.btn-primary {
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 150ms;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.btn-primary:hover { background-color: var(--color-primary-h); }
+
+.btn-secondary {
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-secondary-80);
+    color: var(--color-on-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 150ms;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.btn-secondary:hover { background-color: var(--color-secondary); }
+
+.btn-danger {
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: transparent;
+    color: var(--color-error);
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--color-error);
+    cursor: pointer;
+    transition: background-color 150ms;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.btn-danger:hover { background-color: var(--color-error-20); }
+
+/* Row action buttons */
+.row-actions {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.row-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    color: var(--color-gray-300);
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+.row-btn:hover { background-color: var(--color-primary-20); }
+
+.row-btn-del {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius);
+    background-color: transparent;
+    color: var(--color-error);
+    border: none;
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+.row-btn-del:hover { background-color: var(--color-error-20); }
+
+.cell-muted { color: var(--color-muted); }
+
+/* Editor form layout */
+.editor-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 40rem;
+}
+
+.form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-gray-300);
+}
+
+.form-input {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    border: 1px solid var(--color-border);
+    font-size: 0.875rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+.form-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.form-select {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    border: 1px solid var(--color-border);
+    font-size: 0.875rem;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+.form-select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.form-error {
+    font-size: 0.75rem;
+    color: var(--color-error);
+}
+
+.path-add-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+}
+
+/* Sign-in / status cards */
+
+.pin-waiting {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.pin-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+.pin-link:hover { text-decoration: underline; }
+
+.success-msg {
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.error-msg {
+    color: var(--color-error);
+    font-size: 0.875rem;
+}
+
+/* Back breadcrumb */
+.back-link {
+    font-size: 0.875rem;
+    color: var(--color-muted);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.back-link:hover { color: var(--color-on-surface); }
+
