@@ -1,9 +1,14 @@
+#![recursion_limit = "512"]
+
 mod app;
 mod db;
 mod hdhr;
 mod iptv;
+mod pages;
+mod server;
 mod state;
 mod streaming;
+mod ui;
 
 use app::{shell, App};
 use axum::{http::StatusCode, routing::get, Router};
@@ -12,7 +17,7 @@ use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use sqlx::SqlitePool;
 use state::AppState;
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -59,10 +64,15 @@ async fn main() {
     let routes = generate_route_list(App);
 
     let leptos_options_clone = leptos_options.clone();
+    let app_state_for_leptos = app_state.clone();
     let leptos_router: Router = Router::new()
-        .leptos_routes(&leptos_options, routes, move || {
-            shell(leptos_options_clone.clone())
-        })
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes,
+            move || provide_context(app_state_for_leptos.clone()),
+            move || shell(leptos_options_clone.clone()),
+        )
+        .nest_service("/public", ServeDir::new("public"))
         .with_state(leptos_options);
 
     let api_router: Router = Router::new()

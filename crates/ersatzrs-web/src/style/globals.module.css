@@ -1,0 +1,53 @@
+/* Design tokens (from ErsatzTV PaletteDark) + base reset */
+:root {
+    --color-bg:          #272727;
+    --color-surface:     #1f1f1f;
+    --color-appbar:      #121212;
+    --color-border:      #374151;
+    --color-primary:     #009000;
+    --color-primary-h:   #00a800;
+    --color-primary-20:  rgba(0, 144, 0, 0.20);
+    --color-secondary:   #009090;
+    --color-secondary-h: #00aaaa;
+    --color-secondary-80: rgba(0, 144, 144, 0.80);
+    --color-on-primary:  #ffffff;
+    --color-muted:       rgba(255, 255, 255, 0.40);
+    --color-error:       #ef4444;
+    --color-error-20:    rgba(239, 68, 68, 0.20);
+    --color-error-90:    rgba(239, 68, 68, 0.90);
+    --color-warning:     #f59e0b;
+    --color-warning-20:  rgba(245, 158, 11, 0.20);
+    --color-success:     #22c55e;
+    --color-success-20:  rgba(34, 197, 94, 0.20);
+    --color-gray-100:    #f3f4f6;
+    --color-gray-200:    #e5e7eb;
+    --color-gray-300:    #d1d5db;
+    --color-gray-400:    #9ca3af;
+    --radius:            4px;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--color-bg);
+    color: var(--color-gray-200);
+    min-height: 100vh;
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    padding: 0;
+}
