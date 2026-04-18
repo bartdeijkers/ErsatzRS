@@ -10,6 +10,60 @@ for commit messages.
 
 ### Added
 
+- Phase 6.2 layout and navigation wiring: CSS-checkbox drawer toggle drives
+  mobile overlay and desktop hide without JS or island hydration; full
+  NavDrawer matching ErsatzTV URL structure across all nav groups (Media
+  Sources, Media, Lists, Scheduling, Settings, Support); `PlayoutWarningBadge`
+  and `HealthBadge` Leptos islands backed by `#[server]` functions querying
+  `PlayoutBuildStatus`; `app.rs` and all layout modules migrated from Tailwind
+  strings to Stylance CSS modules.
+- Phase 6.1 channel list and editor pages: `/channels` paginated table with
+  show-disabled toggle and delete confirm dialog; `/channels/add` and
+  `/channels/:id` editor with number/name/enabled fields, streaming-mode
+  select, FFmpeg-profile select, filler select, form validation, and
+  navigate-on-save; all backed by `#[server]` functions over AppState/sqlx.
+- Phase 6.0 Leptos admin UI foundation: eight Stylance-scoped primitive
+  components (Button, Form, Icon, Badge, Table, Dialog, Toast, Card);
+  ErsatzTV PaletteDark design tokens in `globals.module.css`; stylance-cli
+  build pipeline producing `public/bundle.css`; `ServeDir` at `/public`;
+  `leptos_routes_with_context` AppState injection; component gallery at
+  `/dev/components`.
+- Phase 5 IPTV and HDHomeRun protocol surface: `/iptv/channels.m3u` M3U
+  playlist; `/iptv/xmltv.xml` 48-hour XMLTV guide via quick-xml with
+  COALESCEd titles; HDHomeRun HTTP quartet (`/discover.json`, `/device.xml`,
+  `/lineup_status.json`, `/lineup.json`) with verbatim C# field names;
+  HDHomeRun UDP discovery responder on port 65001 with TLV + CRC32;
+  `/iptv/channel/{number}.ts` resolving the active PlayoutItem through
+  `MediaVersion`/`MediaFile`, applying provider path replacements, and piping
+  a software FFmpeg MPEG-TS stream with `kill_on_drop`; device UUID seeded
+  into `ConfigElement` under `HDHR.DeviceUuid`.
+- Phase 4 media source scanning: ffprobe metadata extraction; local filesystem
+  scanner; paged Plex/Jellyfin/Emby sync with correct `Accept` headers and
+  JSON casing; Plex collections and collection-membership sync; Emby
+  `/Shows/{id}/Seasons` and `/Shows/{id}/Episodes` endpoint parity; DB-backed
+  provider credentials from `PlexServerAuthToken`/Jellyfin/Emby tables;
+  correct provider library `Key`/`ItemId` bootstrap writes; SHA256
+  `MediaFile.PathHash` for ErsatzTV database compatibility; `--dry-run`
+  short-circuit before credential loading; NVENC and VAAPI decode-path argv
+  parity in the FFmpeg pipeline builders.
+- Phase 3 end-to-end playout build: `PlayoutBuilder` orchestrator, block/YAML/
+  Lua engine dispatch, `apply_build_result` single-transaction persistence,
+  and round-trip integration tests with insta snapshots.
+- Phase 3 Lua scripted scheduling engine at full ErsatzTV API parity: 20+
+  bindings including `add_marathon` (show/season/artist/album/director
+  grouping, round-robin cycling, shuffle_groups/play_all/item_order, history
+  resume) and `create_playlist` (inline playlist from existing enumerators,
+  history resume); Reset-mode history removal; 72 snapshot tests.
+- Application artwork: SVG/PNG/ICO/ICNS logos.
+- Phase 6 implementation plan document (`plans/phase-6-admin-ui.md`).
+
+### Removed
+
+- `docs/003_ersatztv_sqlite3_schema.sql` — superseded by the normative
+  `0001_initial.sql` migration and the persistence gap matrix.
+
+### Added (continued from earlier phases)
+
 - Phase 1 playout runtime-state persistence parity for SQLite: playout anchors,
   schedule/fill-group enumerator state rows, gaps, history, program-schedule
   anchors, playout templates, focused in-memory integration coverage, and
