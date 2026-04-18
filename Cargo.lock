@@ -1006,6 +1006,7 @@ dependencies = [
  "ersatzrs-domain",
  "ersatzrs-ffmpeg",
  "ersatzrs-infra",
+ "ersatzrs-scanner",
  "gloo-timers",
  "insta",
  "leptos",

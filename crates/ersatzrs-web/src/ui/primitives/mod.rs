@@ -4,5 +4,6 @@ pub mod card;
 pub mod dialog;
 pub mod form;
 pub mod icon;
+pub mod letter_bar;
 pub mod table;
 pub mod toast;

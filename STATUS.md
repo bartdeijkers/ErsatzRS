@@ -104,8 +104,12 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.3 complete. Next: Phase 6.4 (library
-browser/collections) and the block editor. HLS
+**Phase 6 in progress.** Phases 6.0–6.4 complete. Phase 6.4 delivers the
+library management page with Scan/Deep Scan actions plus the full media
+browser flow (movies/shows/images) with the shared `LetterBar` +
+`FragmentLetterAnchor` quick-nav primitive, `MediaCardPager` pagination, and
+autocomplete-backed manual/smart collection editors per
+`plans/phase-6-admin-ui.md` §6.4. HLS
 multi-variant playlists, the segmenter worker with work-ahead and discontinuity
 tracking, hls-direct passthrough, access tokens, and Kodi #KODIPROP headers
 are Phase 7 hardening.
@@ -179,3 +183,5 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-17 | Claude Code (claude-sonnet-4-6) | Phase 6.0 complete: Tailwind v4 CSS pipeline (21 KB), 8 primitive components (button/form/icon/badge/table/dialog/toast/card), AppShell+NavDrawer+TopBar layout, component gallery at `/dev/components`, `leptos_routes_with_context` AppState injection. Phase 6.1 complete: channel list (`/channels`) with paginated table + show-disabled toggle + delete confirm dialog; channel editor (`/channels/add`, `/channels/:id`) with form validation, streaming-mode/FFmpeg-profile/filler selects, and navigate-on-save. All quality gates pass. |
 | 2026-04-18 | Claude Code (claude-sonnet-4-6) | Phase 6.2 complete: AppShell CSS-checkbox drawer toggle (no JS/island needed); full NavDrawer nav structure matching ErsatzTV URLs; `PlayoutWarningBadge` and `HealthBadge` islands backed by `#[server]` functions in `server/layout.rs`; `app.rs` and `app.module.css` migrated to Stylance CSS modules; all quality gates pass. |
 | 2026-04-18 | Claude Code (claude-sonnet-4-6) | Phase 6.3 complete: media source configuration pages for Local/Jellyfin/Emby/Plex — server functions, 10 page components (list/editor/libraries/paths per provider), shared CSS module, Plex OAuth PIN island, `PathsEditor` shared sub-component; all quality gates pass. |
+| 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.4 partial: landed `/media/libraries` management page (join across Library + subtype + MediaSource tables) with per-library Scan/Deep Scan firing background `sync_library_by_id`; added `[lib]` target to `ersatzrs-scanner` so the web crate can invoke `scan_local_library` directly. Media browser pages (movies/shows/images) and collection editors are still outstanding. |
+| 2026-04-19 | Claude Code (claude-opus-4-7) | Phase 6.4 complete: added `LetterBar` + `FragmentLetterAnchor` primitives (sticky A–Z quick-nav with `#letter-X` anchors, `letter_bucket` helper); `server/media_browser.rs` covering movies/shows/images paginated card-grid queries, manual + smart collection CRUD, `suggest_media_items` autocomplete (Movie ∪ Show), and `add/remove/list_collection_members`; pages `pages/media/{movies,shows,images,collections,smart_collections}.rs` built on a shared `MediaBrowserPage` helper (search input, letter bar, `MediaCardPager`); collection editor uses an `#[island]` autocomplete component with debounced `suggest_media_items` and member add/remove. All quality gates pass. |

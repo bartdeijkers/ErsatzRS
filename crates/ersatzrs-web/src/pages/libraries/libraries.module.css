@@ -1,0 +1,80 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 1rem 0;
+}
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-gray-200);
+    margin: 0 0 0.75rem 0;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-weight: 500;
+    color: var(--color-gray-400);
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
+}
+
+td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+    color: var(--color-gray-200);
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+.cell-muted {
+    color: var(--color-muted);
+}
+
+.actions {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.btn-scan {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    color: var(--color-gray-300);
+    transition: background-color 150ms;
+    white-space: nowrap;
+}
+.btn-scan:hover { background-color: var(--color-primary-20); }
+.btn-scan:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+}

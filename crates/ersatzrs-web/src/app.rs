@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 use leptos_meta::provide_meta_context;
 use leptos_router::{
@@ -7,6 +8,12 @@ use leptos_router::{
 
 use crate::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
 use crate::pages::dev::ComponentsPage;
+use crate::pages::libraries::LibrariesPage;
+use crate::pages::media::collections::{CollectionEditorPage, CollectionsPage};
+use crate::pages::media::images::ImagesPage;
+use crate::pages::media::movies::MoviesPage;
+use crate::pages::media::shows::ShowsPage;
+use crate::pages::media::smart_collections::{SmartCollectionEditorPage, SmartCollectionsPage};
 use crate::pages::media_sources::{
     emby::{EmbyConnectionPage, EmbyLibrariesPage, EmbyPathsPage, EmbySourcesPage},
     jellyfin::{
@@ -48,6 +55,54 @@ pub fn App() -> impl IntoView {
                     <Route
                         path=(StaticSegment("channels"), ParamSegment("id"))
                         view=ChannelEditorPage
+                    />
+
+                    // ── Libraries ────────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("libraries"))
+                        view=LibrariesPage
+                    />
+
+                    // ── Media browsers ───────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("movies"))
+                        view=MoviesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("shows"))
+                        view=ShowsPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("images"))
+                        view=ImagesPage
+                    />
+
+                    // ── Collections ──────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("collections"))
+                        view=CollectionsPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("collections"), StaticSegment("add"))
+                        view=CollectionEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("collections"), ParamSegment("id"))
+                        view=CollectionEditorPage
+                    />
+
+                    // ── Smart Collections ────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("smart-collections"))
+                        view=SmartCollectionsPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("smart-collections"), StaticSegment("add"))
+                        view=SmartCollectionEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("smart-collections"), ParamSegment("id"))
+                        view=SmartCollectionEditorPage
                     />
 
                     // ── Local libraries ──────────────────────────────────────
