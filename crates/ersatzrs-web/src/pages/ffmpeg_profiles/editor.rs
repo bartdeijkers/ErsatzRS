@@ -14,8 +14,8 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
 use crate::server::ffmpeg_profiles::{
-    copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select, save_ffmpeg_profile,
-    FfmpegProfileForm,
+    copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
+    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, FfmpegProfileForm,
 };
 use crate::ui::primitives::dialog::Modal;
 use crate::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -37,22 +37,31 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     let profile_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
     #[allow(clippy::type_complexity)]
-    let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>)>> =
+    let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
         Resource::new(profile_id, |maybe_id| async move {
-            let resolutions = list_resolutions_for_select().await.unwrap_or_default();
+            let (resolutions, hw_accels) = tokio::join!(
+                list_resolutions_for_select(),
+                list_supported_hw_accelerations(),
+            );
+            let resolutions = resolutions.unwrap_or_default();
+            let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
             let form = match maybe_id {
                 None => Some(FfmpegProfileForm::new_defaults()),
                 Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
             };
-            form.map(|f| (f, resolutions))
+            form.map(|f| (f, resolutions, hw_accels))
         });
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
             {move || {
                 data.get().map(|maybe| match maybe {
-                    Some((form, resolutions)) => view! {
-                        <FfmpegProfileEditorIsland initial_form=form initial_resolutions=resolutions/>
+                    Some((form, resolutions, hw_accels)) => view! {
+                        <FfmpegProfileEditorIsland
+                            initial_form=form
+                            initial_resolutions=resolutions
+                            initial_hw_accels=hw_accels
+                        />
                     }
                     .into_any(),
                     None => view! {
@@ -79,6 +88,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
 fn FfmpegProfileEditorIsland(
     initial_form: FfmpegProfileForm,
     initial_resolutions: Vec<(i64, String)>,
+    initial_hw_accels: Vec<(i32, String)>,
 ) -> impl IntoView {
     let profile_id = initial_form.id;
 
@@ -172,6 +182,38 @@ fn FfmpegProfileEditorIsland(
         }
     });
 
+    // When NormalizeLoudnessMode changes, mirror the ViewModel setter from
+    // FFmpegProfileEditViewModel.cs: enabling LoudNorm sets target to -16,
+    // disabling clears it.
+    Effect::new(move |prev_mode: Option<i32>| {
+        let mode = normalize_loudness_mode.get();
+        if let Some(prev) = prev_mode {
+            if prev != 1 && mode == 1 {
+                target_loudness.set("-16".to_string());
+            } else if prev == 1 && mode != 1 {
+                target_loudness.set(String::new());
+            }
+        }
+        mode
+    });
+
+    // Clear VideoPreset when the hw/format/depth combination changes and the
+    // current preset is no longer valid.  Mirrors the server-side clearing in
+    // UpdateFFmpegProfileHandler.cs so the island stays in sync.
+    Effect::new(move |_| {
+        let hw = hardware_acceleration.get();
+        let vf = video_format.get();
+        let bd = bit_depth.get();
+        let valid: Vec<String> = presets_for_profile(hw, vf, bd)
+            .into_iter()
+            .map(ToString::to_string)
+            .collect();
+        let current = video_preset.get_untracked();
+        if !current.is_empty() && !valid.contains(&current) {
+            video_preset.set(String::new());
+        }
+    });
+
     // ── Build dispatched form ─────────────────────────────────────────────
     let build_form = move || FfmpegProfileForm {
         id: profile_id,
@@ -209,18 +251,12 @@ fn FfmpegProfileEditorIsland(
     };
 
     // ── Item list constructors (closures so they can be called inside Show) ─
-    let mk_hw_accel_items = || -> Vec<(i32, String)> {
-        vec![
-            (0, "None".to_string()),
-            (1, "QSV".to_string()),
-            (2, "NVENC".to_string()),
-            (3, "VAAPI".to_string()),
-            (4, "VideoToolbox".to_string()),
-            (5, "AMF".to_string()),
-            (6, "V4L2M2M".to_string()),
-            (7, "RKMPP".to_string()),
-        ]
-    };
+    // HW acceleration items come from the capability-filtered list loaded by the
+    // SSR wrapper (mirrors GetSupportedHardwareAccelerationKindsHandler).
+    // StoredValue is Copy, so the closure below is Fn and can be captured by
+    // multiple reactive closures in the view.
+    let hw_accel_stored = StoredValue::new(initial_hw_accels);
+    let mk_hw_accel_items = move || hw_accel_stored.get_value();
     let mk_vaapi_driver_items = || -> Vec<(i32, String)> {
         vec![
             (0, "Auto".to_string()),
@@ -391,7 +427,25 @@ fn FfmpegProfileEditorIsland(
                         </div>
                         <div class=style::form_row>
                             <TextField label="Video Profile" value=video_profile/>
-                            <TextField label="Video Preset" value=video_preset/>
+                            // Preset options vary by hw/format/depth (AvailablePresets.ForAccelAndFormat).
+                            // Re-rendered reactively; the Effect above clears a stale preset value.
+                            {move || {
+                                let hw = hardware_acceleration.get();
+                                let vf = video_format.get();
+                                let bd = bit_depth.get();
+                                let mut items: Vec<(String, String)> =
+                                    vec![(String::new(), "(None)".to_string())];
+                                for p in presets_for_profile(hw, vf, bd) {
+                                    items.push((p.to_string(), p.to_string()));
+                                }
+                                view! {
+                                    <SelectField<String>
+                                        label="Video Preset"
+                                        value=video_preset
+                                        items=items
+                                    />
+                                }
+                            }}
                         </div>
                         <div class=style::form_row>
                             <SelectField<i32>

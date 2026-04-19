@@ -5,6 +5,10 @@ ignore = [
   # Transitive through Leptos 0.7/tachys/either_of. No safe upstream upgrade is
   # available yet; revisit when Leptos moves off paste.
   "RUSTSEC-2024-0436",
+  # async-std discontinued advisory. async-std is a dev-dependency only, pulled
+  # in transitively by httpmock → async-object-pool. No production code is
+  # affected; revisit when httpmock drops the async-object-pool dependency.
+  "RUSTSEC-2025-0052",
 ]
 
 [licenses]
@@ -15,9 +19,12 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "GPL-3.0-or-later",
+  "ISC",
   "MIT",
   "Unicode-3.0",
   "Zlib",
+  # webpki-roots (TLS CA bundle), pulled in transitively by the rustls stack.
+  "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 

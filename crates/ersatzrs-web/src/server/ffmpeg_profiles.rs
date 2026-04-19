@@ -145,6 +145,29 @@ fn af_label(v: i32) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
+// Preset helpers — ports ErsatzTV's `AvailablePresets.ForAccelAndFormat`
+// ---------------------------------------------------------------------------
+
+/// Returns the valid `VideoPreset` strings for a given hardware/format/depth
+/// combination.  Mirrors `AvailablePresets.ForAccelAndFormat` exactly.
+///
+/// - `hw`: `HardwareAccelerationKind` integer (0=None, 1=QSV, 2=NVENC, …)
+/// - `vf`: `FFmpegProfileVideoFormat` integer (1=H264, 2=HEVC, …)
+/// - `bd`: `FFmpegProfileBitDepth` integer (0=EightBit, 1=TenBit)
+pub fn presets_for_profile(hw: i32, vf: i32, bd: i32) -> Vec<&'static str> {
+    match (hw, vf, bd) {
+        // NVENC: H264 8-bit uses low-latency presets; HEVC uses them for any depth.
+        // This arm must precede the H264/10-bit arm so NVENC+HEVC+10bit returns llhp/llhq.
+        (2, 1, 0) | (2, 2, _) => vec!["llhp", "llhq"],
+        // 10-bit H264 always uses libx264 veryfast (all accelerators, including NVENC).
+        // QSV and software H264/HEVC also use veryfast.
+        (_, 1, 1) | (0 | 1, 1 | 2, _) => vec!["veryfast"],
+        // AV1, MPEG-2, Copy, VAAPI, VideoToolbox, AMF, V4L2M2M, RKMPP: no presets.
+        _ => vec![],
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Server functions
 // ---------------------------------------------------------------------------
 
@@ -246,6 +269,41 @@ pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerF
         .collect())
 }
 
+/// Returns `(integer, label)` pairs for hardware acceleration kinds supported
+/// by the local FFmpeg installation.  Ports `GetSupportedHardwareAccelerationKindsHandler`.
+///
+/// Runs `ffmpeg -hwaccels -v quiet` and maps reported accelerator names to
+/// `HardwareAccelerationKind` integers.  Always includes `None (0)`.
+/// V4L2M2M is excluded (commented out in the upstream handler too).
+#[server]
+pub async fn list_supported_hw_accelerations() -> Result<Vec<(i32, String)>, ServerFnError> {
+    use tokio::process::Command;
+
+    let mut result = vec![(0i32, "None".to_string())];
+
+    let output = Command::new("ffmpeg")
+        .args(["-hwaccels", "-v", "quiet"])
+        .output()
+        .await;
+
+    if let Ok(out) = output {
+        let text = String::from_utf8_lossy(&out.stdout);
+        for line in text.lines().skip(1) {
+            match line.trim() {
+                "cuda" => result.push((2, "NVENC".to_string())),
+                "qsv" => result.push((1, "QSV".to_string())),
+                "vaapi" => result.push((3, "VAAPI".to_string())),
+                "videotoolbox" => result.push((4, "VideoToolbox".to_string())),
+                "amf" => result.push((5, "AMF".to_string())),
+                "rkmpp" => result.push((7, "RKMPP".to_string())),
+                _ => {}
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 /// Loads a profile into [`FfmpegProfileForm`]. Returns `None` if not found.
 #[server]
 pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm>, ServerFnError> {
@@ -306,7 +364,18 @@ pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm
             audio_bitrate: r.try_get("AudioBitrate").unwrap_or(192),
             audio_buffer_size: r.try_get("AudioBufferSize").unwrap_or(384),
             normalize_loudness_mode: r.try_get("NormalizeLoudnessMode").unwrap_or(0),
-            target_loudness: target.map_or("-23.0".to_string(), |v| format!("{v}")),
+            // When LoudNorm is active and TargetLoudness is null, default to -16
+            // (mirrors FFmpegProfileEditViewModel's NormalizeLoudnessMode setter).
+            target_loudness: target.map_or_else(
+                || {
+                    if r.try_get::<i32, _>("NormalizeLoudnessMode").unwrap_or(0) == 1 {
+                        "-16".to_string()
+                    } else {
+                        String::new()
+                    }
+                },
+                |v| format!("{v}"),
+            ),
             audio_channels: r.try_get("AudioChannels").unwrap_or(2),
             audio_sample_rate: r.try_get("AudioSampleRate").unwrap_or(48),
             normalize_framerate: r.try_get::<i32, _>("NormalizeFramerate").unwrap_or(0) != 0,
@@ -423,10 +492,19 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
     } else {
         Some(&form.video_profile)
     };
-    let video_preset: Option<&str> = if form.video_preset.is_empty() {
+    // Clear preset if it is not valid for the resolved hw/format/depth combination,
+    // mirroring the server-side clearing in UpdateFFmpegProfileHandler.cs.
+    let valid_presets = presets_for_profile(hw_accel, video_format, bit_depth);
+    let preset_str: String =
+        if form.video_preset.is_empty() || !valid_presets.contains(&form.video_preset.as_str()) {
+            String::new()
+        } else {
+            form.video_preset.clone()
+        };
+    let video_preset: Option<&str> = if preset_str.is_empty() {
         None
     } else {
-        Some(&form.video_preset)
+        Some(&preset_str)
     };
     let deinterlace: Option<i32> = Some(i32::from(form.deinterlace_video));
     let qsv_frames: Option<i32> = if hw_accel == 1 {
