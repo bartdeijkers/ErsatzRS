@@ -4,7 +4,7 @@ Last updated: 2026-04-19
 
 ## Current Phase
 
-**Phase 6 — Leptos Admin UI** next (channel list and editor first).
+**Phase 7 — Hardening and Parity Completion** next.
 
 ### Phase 0 Checklist
 
@@ -25,7 +25,7 @@ Last updated: 2026-04-19
 
 ### What an Agent Should Do Next
 
-**Phase 0, Phase 1, and Phase 3 are complete.**
+**Phases 0 through 6 are complete.**
 
 **Phase 2 — complete for the currently targeted hardware paths.** The FFmpeg
 foundation is in place: typed inputs, command generation, complex filter
@@ -104,7 +104,7 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.9 complete. Phase 6.9 delivers the
+**Phase 6 — complete.** Phases 6.0–6.9 complete. Phase 6.9 delivers the
 playout timeline visualiser at `/playouts`: a read-only `#[island]` SVG view
 for the selected playout with a 24-hour proportional time axis, filler-vs-main
 item colouring, hour tick marks, Prev/Next window paging, and click-to-inspect
@@ -116,9 +116,14 @@ SSR wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`;
 margins=5, frequency=15); full `WatermarkEditViewModelValidator.cs` validation
 parity; custom image upload via axum multipart + WASM `gloo_net` FormData
 POST; drawvg placement preview (320×180 PNG via FFmpeg, debounced 400 ms).
-Phase 6.7 delivered the FFmpeg Profile editor. HLS multi-variant playlists,
-the segmenter worker with work-ahead and discontinuity tracking, hls-direct
-passthrough, access tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
+Phase 6.7 delivered the FFmpeg Profile editor.
+
+**Phase 7 — next.** The remaining hardening work starts with the HLS surface:
+multi-variant playlists, the segmenter worker with work-ahead and
+discontinuity tracking, hls-direct passthrough, access tokens, and Kodi
+`#KODIPROP` headers. After that, continue Phase 7 items from the master plan:
+additional hardware paths, MySQL backend support, Trakt integration, Docker
+multi-arch images, side-by-side benchmarking, and long soak tests.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -204,3 +209,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 second NO GO remediation: (1) drawvg filter option corrected from `filename=` to `file=` (matches FFmpeg docs and existing `ersatzrs-ffmpeg` helper at `graphics/mod.rs:31`); (2) upload size guard added — `max_upload_bytes()` reads `ETV_MAXIMUM_UPLOAD_MB` env var (default 10 MB, parity with `SystemEnvironment.MaximumUploadMb`), returns HTTP 413 when exceeded. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 third NO GO remediation: axum's `Multipart` extractor enforces a 2 MB default body limit independently of handler logic; applied `DefaultBodyLimit::max(max_upload_bytes())` as a per-route layer on `/api/watermarks/image` in `main.rs` so the actual transport cap matches `ETV_MAXIMUM_UPLOAD_MB`; handler byte-length check retained as secondary guard; `max_upload_bytes()` made `pub`. All quality gates pass. |
 | 2026-04-19 | GitHub Copilot (GPT-5.4) | Phase 6.9 complete: added `list_playout_items` server data, embedded playout selection on `/playouts`, and shipped a read-only SVG timeline island with 24-hour paging, proportional bar placement, filler colouring, hour ticks, and click-to-inspect item details. All quality gates pass. |
+| 2026-04-19 | GitHub Copilot (GPT-5.4) | Updated STATUS.md to mark Phase 6 complete, advance the repo to Phase 7, and record the playout timeline SQL dedupe follow-up. |
