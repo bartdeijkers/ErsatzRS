@@ -13,6 +13,7 @@ mod watermark_upload;
 
 use app::{shell, App};
 use axum::{
+    extract::DefaultBodyLimit,
     http::StatusCode,
     routing::{get, post},
     Router,
@@ -83,7 +84,8 @@ async fn main() {
     let api_router: Router = Router::new()
         .route(
             "/api/watermarks/image",
-            post(watermark_upload::upload_watermark_image),
+            post(watermark_upload::upload_watermark_image)
+                .layer(DefaultBodyLimit::max(watermark_upload::max_upload_bytes())),
         )
         .route(
             "/artwork/watermarks/:filename",
