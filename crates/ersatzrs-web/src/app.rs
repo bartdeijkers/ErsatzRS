@@ -22,6 +22,8 @@ use crate::pages::media_sources::{
     local::{LocalLibrariesPage, LocalLibraryEditorPage},
     plex::{PlexLibrariesPage, PlexPathsPage, PlexSourcesPage},
 };
+use crate::pages::scheduling::block_editor::BlockEditorPage;
+use crate::pages::scheduling::blocks::BlocksPage;
 use crate::ui::layout::AppShell;
 use crate::ui::primitives::toast::provide_toast_store;
 
@@ -48,6 +50,16 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("dev/components") view=ComponentsPage/>
                     <Route path=StaticSegment("channels") view=ChannelsListPage/>
+
+                    // ── Scheduling ────────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("scheduling"), StaticSegment("blocks"))
+                        view=BlocksPage
+                    />
+                    <Route
+                        path=(StaticSegment("scheduling"), StaticSegment("blocks"), ParamSegment("id"))
+                        view=BlockEditorPage
+                    />
                     <Route
                         path=(StaticSegment("channels"), StaticSegment("add"))
                         view=ChannelEditorPage

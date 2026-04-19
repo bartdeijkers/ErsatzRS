@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## Current Phase
 
@@ -104,15 +104,15 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.4 complete. Phase 6.4 delivers the
-library management page with Scan/Deep Scan actions plus the full media
-browser flow (movies/shows/images) with the shared `LetterBar` +
-`FragmentLetterAnchor` quick-nav primitive, `MediaCardPager` pagination, and
-autocomplete-backed manual/smart collection editors per
-`plans/phase-6-admin-ui.md` §6.4. HLS
-multi-variant playlists, the segmenter worker with work-ahead and discontinuity
-tracking, hls-direct passthrough, access tokens, and Kodi #KODIPROP headers
-are Phase 7 hardening.
+**Phase 6 in progress.** Phases 6.0–6.5 complete. Phase 6.5 delivers the
+block scheduling UI: blocks list page with group management, and a fully
+hydrated `#[island]` block editor with Up/Down reorder, per-item collection
+autocomplete for all `CollectionType` variants, and a "Preview Playout" modal.
+`BlockItemForm` faithfully round-trips `watermark_ids` and `graphics_element_ids`
+via `GROUP_CONCAT` load + junction-table reinsert on save, matching ErsatzTV's
+`ReplaceBlockItem` shape. HLS multi-variant playlists, the segmenter worker
+with work-ahead and discontinuity tracking, hls-direct passthrough, access
+tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -185,3 +185,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-18 | Claude Code (claude-sonnet-4-6) | Phase 6.3 complete: media source configuration pages for Local/Jellyfin/Emby/Plex — server functions, 10 page components (list/editor/libraries/paths per provider), shared CSS module, Plex OAuth PIN island, `PathsEditor` shared sub-component; all quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.4 partial: landed `/media/libraries` management page (join across Library + subtype + MediaSource tables) with per-library Scan/Deep Scan firing background `sync_library_by_id`; added `[lib]` target to `ersatzrs-scanner` so the web crate can invoke `scan_local_library` directly. Media browser pages (movies/shows/images) and collection editors are still outstanding. |
 | 2026-04-19 | Claude Code (claude-opus-4-7) | Phase 6.4 complete: added `LetterBar` + `FragmentLetterAnchor` primitives (sticky A–Z quick-nav with `#letter-X` anchors, `letter_bucket` helper); `server/media_browser.rs` covering movies/shows/images paginated card-grid queries, manual + smart collection CRUD, `suggest_media_items` autocomplete (Movie ∪ Show), and `add/remove/list_collection_members`; pages `pages/media/{movies,shows,images,collections,smart_collections}.rs` built on a shared `MediaBrowserPage` helper (search input, letter bar, `MediaCardPager`); collection editor uses an `#[island]` autocomplete component with debounced `suggest_media_items` and member add/remove. All quality gates pass. |
+| 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.5 complete: block scheduling UI — `server/blocks.rs` with CRUD + playout preview server functions; `pages/scheduling/blocks.rs` list page with group management (add/delete groups, add/delete blocks grouped by group_name); `pages/scheduling/block_editor.rs` fully hydrated `#[island]` with `RwSignal<Vec<BlockItemForm>>` local state, Up/Down reorder, `ItemEditor` autocomplete panel for all collection types (Collection/Show/Season/SmartCollection/SearchQuery), and "Preview Playout" modal via `preview_block_playout`. Parity fixes: nav link corrected to `/scheduling/blocks`; col_type Effect skips initial run to preserve loaded references; `BlockItemForm` carries `watermark_ids`/`graphics_element_ids` loaded via `GROUP_CONCAT` and reinserted on save so overlay metadata round-trips faithfully. All quality gates pass. |

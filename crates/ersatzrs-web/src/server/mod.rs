@@ -1,3 +1,4 @@
+pub mod blocks;
 pub mod channels;
 pub mod layout;
 pub mod libraries;

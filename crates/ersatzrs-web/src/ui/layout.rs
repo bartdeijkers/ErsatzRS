@@ -104,7 +104,7 @@ fn NavDrawer() -> impl IntoView {
 
                 <SchedulingNavGroup>
                     <NavLink href="/schedules"     label="Schedules"        icon=IconName::Settings/>
-                    <NavLink href="/blocks"        label="Blocks"           icon=IconName::Copy/>
+                    <NavLink href="/scheduling/blocks" label="Blocks"        icon=IconName::Copy/>
                     <NavLink href="/templates"     label="Templates"        icon=IconName::Copy/>
                     <NavLink href="/decos"         label="Decorations"      icon=IconName::Edit/>
                     <NavLink href="/deco-templates" label="Deco Templates"  icon=IconName::Copy/>

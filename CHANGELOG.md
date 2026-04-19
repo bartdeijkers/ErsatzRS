@@ -10,6 +10,24 @@ for commit messages.
 
 ### Added
 
+- Phase 6.5 block scheduling UI: `/scheduling/blocks` list page with block
+  group management (add/delete groups, add/delete blocks grouped by group
+  name); `/scheduling/blocks/:id` block editor as a fully hydrated Leptos
+  `#[island]` — `RwSignal<Vec<BlockItemForm>>` local state, Up/Down index
+  reorder, per-item `ItemEditor` panel with autocomplete search for
+  Collection/TelevisionShow/TelevisionSeason/SmartCollection/SearchQuery
+  collection types, playback-order select, EPG and watermark toggles, and a
+  "Preview Playout" modal backed by `preview_block_playout`. `BlockItemForm`
+  carries `watermark_ids` and `graphics_element_ids` loaded from
+  `BlockItemWatermark`/`BlockItemGraphicsElement` via `GROUP_CONCAT` and
+  reinserted on every save, matching ErsatzTV's `ReplaceBlockItem` shape and
+  preserving overlay metadata across edits.
+- Phase 6.4 media library and browser pages: `/media/libraries` management
+  page with Scan/Deep Scan actions; `/media/movies`, `/media/shows`,
+  `/media/images` paginated card-grid browsers; `LetterBar` +
+  `FragmentLetterAnchor` sticky A–Z quick-nav primitives; manual and smart
+  collection editors (`/media/collections`, `/media/smart-collections`) with
+  autocomplete-backed member management.
 - Phase 6.2 layout and navigation wiring: CSS-checkbox drawer toggle drives
   mobile overlay and desktop hide without JS or island hydration; full
   NavDrawer matching ErsatzTV URL structure across all nav groups (Media
