@@ -8,6 +8,9 @@ use leptos_router::{
 
 use crate::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
 use crate::pages::dev::ComponentsPage;
+use crate::pages::ffmpeg_profiles::{
+    editor::FfmpegProfileEditorPage, list::FfmpegProfilesListPage,
+};
 use crate::pages::libraries::LibrariesPage;
 use crate::pages::media::collections::{CollectionEditorPage, CollectionsPage};
 use crate::pages::media::images::ImagesPage;
@@ -52,6 +55,28 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment("dev/components") view=ComponentsPage/>
                     <Route path=StaticSegment("channels") view=ChannelsListPage/>
+                    <Route
+                        path=(StaticSegment("channels"), StaticSegment("add"))
+                        view=ChannelEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("channels"), ParamSegment("id"))
+                        view=ChannelEditorPage
+                    />
+
+                    // ── FFmpeg Profiles ───────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("ffmpeg"), StaticSegment("profiles"))
+                        view=FfmpegProfilesListPage
+                    />
+                    <Route
+                        path=(StaticSegment("ffmpeg"), StaticSegment("profiles"), StaticSegment("add"))
+                        view=FfmpegProfileEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("ffmpeg"), StaticSegment("profiles"), ParamSegment("id"))
+                        view=FfmpegProfileEditorPage
+                    />
 
                     // ── Scheduling ────────────────────────────────────────────
                     <Route path=StaticSegment("playouts") view=PlayoutsPage/>
@@ -67,15 +92,6 @@ pub fn App() -> impl IntoView {
                         path=(StaticSegment("scheduling"), StaticSegment("blocks"), ParamSegment("id"))
                         view=BlockEditorPage
                     />
-                    <Route
-                        path=(StaticSegment("channels"), StaticSegment("add"))
-                        view=ChannelEditorPage
-                    />
-                    <Route
-                        path=(StaticSegment("channels"), ParamSegment("id"))
-                        view=ChannelEditorPage
-                    />
-
                     // ── Libraries ────────────────────────────────────────────
                     <Route
                         path=(StaticSegment("media"), StaticSegment("libraries"))

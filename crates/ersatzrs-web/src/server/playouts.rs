@@ -97,7 +97,9 @@ pub async fn list_playouts() -> Result<Vec<PlayoutListRow>, ServerFnError> {
 /// Scripted → `ScriptedSchedulingEngine` (Lua). This editor targets YAML, so
 /// it must filter on 3.
 #[server]
-pub async fn get_sequential_playout(id: i64) -> Result<Option<SequentialPlayoutForm>, ServerFnError> {
+pub async fn get_sequential_playout(
+    id: i64,
+) -> Result<Option<SequentialPlayoutForm>, ServerFnError> {
     use crate::state::AppState;
     use sqlx::Row;
 

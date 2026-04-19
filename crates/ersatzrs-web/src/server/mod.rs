@@ -1,5 +1,6 @@
 pub mod blocks;
 pub mod channels;
+pub mod ffmpeg_profiles;
 pub mod layout;
 pub mod libraries;
 pub mod media_browser;
