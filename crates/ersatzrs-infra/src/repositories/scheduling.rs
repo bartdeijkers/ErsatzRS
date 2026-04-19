@@ -77,6 +77,47 @@ impl SqliteSchedulingContentRepository {
         })
     }
 
+    /// Prepare SQL-backed reference data for a YAML/Sequential scripted
+    /// playout.  Parses the inline YAML content, loads media items for every
+    /// content section declared in the definition, and also loads existing
+    /// playout items and history so the engine can apply cleanup and resume
+    /// semantics correctly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the YAML is structurally invalid or any `SQLite`
+    /// query fails.
+    pub async fn yaml_reference_data(
+        &self,
+        playout_id: EntityId,
+        yaml_content: &str,
+        max_playout_offset: Duration,
+    ) -> Result<SchedulingReferenceData> {
+        use ersatzrs_core::scheduling::YamlPlayoutEngine;
+
+        let definition = YamlPlayoutEngine::definition_from_str(yaml_content).map_err(|e| {
+            ersatzrs_core::repositories::RepositoryError::Decode {
+                kind: "yaml",
+                value: e.to_string(),
+            }
+        })?;
+
+        let mut media_by_key = BTreeMap::new();
+        for item in &definition.content {
+            let source = item.source();
+            let items = self.media_items_for_source(&source).await?;
+            media_by_key.insert(item.key.clone(), items);
+        }
+
+        Ok(SchedulingReferenceData {
+            media_by_key,
+            existing_items: self.playout_items(playout_id).await?,
+            existing_history: self.playout_history(playout_id).await?,
+            max_playout_offset,
+            ..SchedulingReferenceData::default()
+        })
+    }
+
     /// Resolve playable media items for a scheduling content source.
     ///
     /// # Errors

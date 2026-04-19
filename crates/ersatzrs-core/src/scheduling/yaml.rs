@@ -123,7 +123,7 @@ impl YamlContentItem {
         }
     }
 
-    fn source(&self) -> SchedulingContentSource {
+    pub fn source(&self) -> SchedulingContentSource {
         if let Some(collection) = &self.collection {
             SchedulingContentSource::Collection(collection.clone())
         } else if let Some(multi_collection) = &self.multi_collection {
@@ -297,14 +297,29 @@ impl YamlPlayoutEngine {
     }
 
     fn definition_for_playout(playout: &Playout) -> Result<YamlPlayoutDefinition, SchedulingError> {
-        let path = playout
+        let content = playout
             .schedule_file
             .as_ref()
             .ok_or(SchedulingError::MissingScheduleFile)?;
-        let yaml = fs::read_to_string(path)
-            .map_err(|_| SchedulingError::ScheduleFileMissing(path.clone()))?;
+        // ErsatzRS divergence: `ScheduleFile` stores raw YAML content inline
+        // instead of a filesystem path (the ErsatzTV convention).
+        // Detection: Linux filesystem paths always start with `/` or `~/`;
+        // YAML mapping documents (the only valid playout definition form)
+        // always start with a key, `---`, or whitespace — never `/` or `~`.
+        // This is robust even for single-line YAML like `{}`.
+        if !content.starts_with('/') && !content.starts_with('~') {
+            let mut definition = Self::definition_from_str(content)?;
+            // Imports with absolute paths still resolve correctly; relative
+            // imports are not meaningful without a file-system base so we pass
+            // an empty base and let them fail gracefully as `ScheduleFileMissing`.
+            Self::load_imports(&mut definition, "")?;
+            return Ok(definition);
+        }
+        // Filesystem path (ErsatzTV legacy or explicit overrides).
+        let yaml = fs::read_to_string(content)
+            .map_err(|_| SchedulingError::ScheduleFileMissing(content.clone()))?;
         let mut definition = Self::definition_from_str(&yaml)?;
-        Self::load_imports(&mut definition, path)?;
+        Self::load_imports(&mut definition, content)?;
         Ok(definition)
     }
 

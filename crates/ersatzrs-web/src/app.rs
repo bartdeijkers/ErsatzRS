@@ -24,6 +24,8 @@ use crate::pages::media_sources::{
 };
 use crate::pages::scheduling::block_editor::BlockEditorPage;
 use crate::pages::scheduling::blocks::BlocksPage;
+use crate::pages::scheduling::playouts::PlayoutsPage;
+use crate::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::ui::layout::AppShell;
 use crate::ui::primitives::toast::provide_toast_store;
 
@@ -52,6 +54,11 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment("channels") view=ChannelsListPage/>
 
                     // ── Scheduling ────────────────────────────────────────────
+                    <Route path=StaticSegment("playouts") view=PlayoutsPage/>
+                    <Route
+                        path=(StaticSegment("playouts"), StaticSegment("sequential"), ParamSegment("id"))
+                        view=YamlEditorPage
+                    />
                     <Route
                         path=(StaticSegment("scheduling"), StaticSegment("blocks"))
                         view=BlocksPage

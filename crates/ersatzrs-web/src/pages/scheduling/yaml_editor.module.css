@@ -1,0 +1,101 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: var(--color-appbar);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.action-bar-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-gray-200);
+    flex: 1;
+}
+
+.btn-primary {
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    border-radius: var(--radius);
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    transition: background-color 150ms;
+    white-space: nowrap;
+}
+
+.btn-primary:hover {
+    background-color: var(--color-primary-80);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-danger {
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    border-radius: var(--radius);
+    background-color: var(--color-error);
+    color: #fff;
+    transition: opacity 150ms;
+    white-space: nowrap;
+}
+
+.btn-danger:hover {
+    opacity: 0.85;
+}
+
+.btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.error-banner {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--color-error);
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    color: var(--color-error);
+    margin: 0.75rem 1rem 0;
+    font-size: 0.875rem;
+}
+
+.editor-wrap {
+    padding: 1rem;
+    flex: 1;
+}
+
+.yaml-textarea {
+    width: 100%;
+    font-family: monospace;
+    font-size: 0.875rem;
+    background: var(--color-surface);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 0.75rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.yaml-textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.empty {
+    padding: 1rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+}
