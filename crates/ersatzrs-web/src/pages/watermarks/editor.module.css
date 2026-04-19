@@ -69,7 +69,45 @@
     gap: 0.75rem;
 }
 
-.hint {
+.img-preview-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.img-preview {
+    max-height: 60px;
+    max-width: 200px;
+    object-fit: contain;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
+}
+
+.upload-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.field-label {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+.file-input {
+    font-size: 0.875rem;
+    color: var(--color-gray-300);
+}
+
+.preview-img {
+    width: 320px;
+    height: 180px;
+    display: block;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
+}
+
+.preview-loading {
     font-size: 0.8rem;
     color: var(--color-muted);
     margin: 0;

@@ -36,6 +36,14 @@ uuid = { version = "1", features = ["v4"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 quick-xml = "0.37"
 stylance = "0.7"
+base64 = "0.22.1"
+tempfile = "3.27.0"
+
+# WASM-only: file upload in islands. Feature-gated; never compiled for the SSR binary.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["File", "FileList", "FormData", "HtmlInputElement", "Blob"] }
+gloo-net = { version = "0.6", features = ["http"] }
+wasm-bindgen = "0.2"
 
 [package.metadata.stylance]
 output_file = "public/bundle.css"

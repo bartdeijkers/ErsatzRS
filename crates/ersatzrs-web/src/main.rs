@@ -9,9 +9,14 @@ mod server;
 mod state;
 mod streaming;
 mod ui;
+mod watermark_upload;
 
 use app::{shell, App};
-use axum::{http::StatusCode, routing::get, Router};
+use axum::{
+    http::StatusCode,
+    routing::{get, post},
+    Router,
+};
 use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -76,6 +81,14 @@ async fn main() {
         .with_state(leptos_options);
 
     let api_router: Router = Router::new()
+        .route(
+            "/api/watermarks/image",
+            post(watermark_upload::upload_watermark_image),
+        )
+        .route(
+            "/artwork/watermarks/:filename",
+            get(watermark_upload::serve_watermark_image),
+        )
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .route(

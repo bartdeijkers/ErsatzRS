@@ -65,3 +65,20 @@
 .cell-muted {
     color: var(--color-muted);
 }
+
+.thumb {
+    max-height: 36px;
+    max-width: 120px;
+    object-fit: contain;
+    border-radius: 2px;
+}
+
+.row-btn-copy {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius);
+    color: var(--color-gray-300);
+    background-color: var(--color-surface);
+    transition: background-color 150ms;
+}
+.row-btn-copy:hover { background-color: var(--color-primary-20); }

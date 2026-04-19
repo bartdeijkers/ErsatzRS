@@ -1001,12 +1001,14 @@ name = "ersatzrs-web"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "chrono",
  "ersatzrs-core",
  "ersatzrs-domain",
  "ersatzrs-ffmpeg",
  "ersatzrs-infra",
  "ersatzrs-scanner",
+ "gloo-net",
  "gloo-timers",
  "insta",
  "leptos",
@@ -1018,6 +1020,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "stylance",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -1027,6 +1030,8 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

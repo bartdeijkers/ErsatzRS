@@ -1,11 +1,14 @@
+#![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
 use crate::server::watermarks::{
-    count_watermarks, delete_watermark, list_watermark_rows, WatermarkListRow,
+    copy_watermark, count_watermarks, delete_watermark, list_watermark_rows, WatermarkListRow,
 };
 use crate::ui::primitives::{
-    dialog::DeleteDialog,
+    dialog::{DeleteDialog, Modal},
+    form::TextField,
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
+    toast::{use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/pages/watermarks/list.module.css");
@@ -44,10 +47,54 @@ pub fn WatermarksListPage() -> impl IntoView {
         }
     });
 
+    // Copy watermark state
+    let copy_action = Action::new(|(id, name): &(i64, String)| {
+        let id = *id;
+        let name = name.clone();
+        async move { copy_watermark(id, name).await }
+    });
+    let copy_source: RwSignal<Option<WatermarkListRow>> = RwSignal::new(None);
+    let copy_open = RwSignal::new(false);
+    let copy_name = RwSignal::new(String::new());
+    let toast = use_toast();
+    let navigate = leptos_router::hooks::use_navigate();
+
+    Effect::new(move |_| {
+        if let Some(res) = copy_action.value().get() {
+            match res {
+                Ok(new_id) => {
+                    toast.push("Watermark copied.".to_string(), ToastSeverity::Success);
+                    copy_open.set(false);
+                    navigate(
+                        &format!("/watermarks/{new_id}"),
+                        leptos_router::NavigateOptions::default(),
+                    );
+                }
+                Err(e) => toast.push(format!("Copy failed: {e}"), ToastSeverity::Error),
+            }
+        }
+    });
+
     let columns: Vec<Column<WatermarkListRow>> = vec![
         Column::new("Name", |r: &WatermarkListRow| {
             let n = r.name.clone();
             view! { <span>{n}</span> }.into_any()
+        }),
+        Column::new("Image", |r: &WatermarkListRow| {
+            if let Some(path) = r.image_path.clone() {
+                view! {
+                    <img
+                        src=format!("/artwork/watermarks/{path}")
+                        class=style::thumb
+                        alt="watermark"
+                    />
+                }
+                .into_any()
+            } else if r.image_source == 1 {
+                view! { <span class=style::cell_muted>"[channel logo]"</span> }.into_any()
+            } else {
+                view! { <span/> }.into_any()
+            }
         }),
         Column::new("Mode", |r: &WatermarkListRow| {
             let m = r.mode.clone();
@@ -61,14 +108,25 @@ pub fn WatermarksListPage() -> impl IntoView {
 
     let row_actions: RowActionsRenderer<WatermarkListRow> = Box::new(move |r| {
         let id = r.id;
-        let r_clone = r.clone();
+        let r_for_delete = r.clone();
+        let r_for_copy = r.clone();
         view! {
             <div class=style::row_actions>
                 <a href=format!("/watermarks/{id}") class=style::row_btn_edit>"Edit"</a>
                 <button
+                    class=style::row_btn_copy
+                    on:click=move |_| {
+                        copy_source.set(Some(r_for_copy.clone()));
+                        copy_name.set(format!("Copy of {}", r_for_copy.name));
+                        copy_open.set(true);
+                    }
+                >
+                    "Copy"
+                </button>
+                <button
                     class=style::row_btn_delete
                     on:click=move |_| {
-                        delete_target.set(Some(r_clone.clone()));
+                        delete_target.set(Some(r_for_delete.clone()));
                         delete_open.set(true);
                     }
                 >
@@ -116,6 +174,22 @@ pub fn WatermarksListPage() -> impl IntoView {
                     }
                 })
             />
+
+            <Modal
+                open=copy_open
+                title="Copy Watermark".to_string()
+                on_close=Callback::new(move |confirmed: bool| {
+                    if confirmed {
+                        if let Some(src) = copy_source.get_untracked() {
+                            copy_action.dispatch((src.id, copy_name.get_untracked()));
+                        }
+                    } else {
+                        copy_open.set(false);
+                    }
+                })
+            >
+                <TextField label="New Name" value=copy_name/>
+            </Modal>
         </div>
     }
 }
