@@ -29,6 +29,7 @@ use crate::pages::scheduling::block_editor::BlockEditorPage;
 use crate::pages::scheduling::blocks::BlocksPage;
 use crate::pages::scheduling::playouts::PlayoutsPage;
 use crate::pages::scheduling::yaml_editor::YamlEditorPage;
+use crate::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
 use crate::ui::layout::AppShell;
 use crate::ui::primitives::toast::provide_toast_store;
 
@@ -76,6 +77,17 @@ pub fn App() -> impl IntoView {
                     <Route
                         path=(StaticSegment("ffmpeg"), StaticSegment("profiles"), ParamSegment("id"))
                         view=FfmpegProfileEditorPage
+                    />
+
+                    // ── Watermarks ────────────────────────────────────────────
+                    <Route path=StaticSegment("watermarks") view=WatermarksListPage/>
+                    <Route
+                        path=(StaticSegment("watermarks"), StaticSegment("add"))
+                        view=WatermarkEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("watermarks"), ParamSegment("id"))
+                        view=WatermarkEditorPage
                     />
 
                     // ── Scheduling ────────────────────────────────────────────

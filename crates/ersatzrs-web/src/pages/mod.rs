@@ -5,3 +5,4 @@ pub mod libraries;
 pub mod media;
 pub mod media_sources;
 pub mod scheduling;
+pub mod watermarks;
