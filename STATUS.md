@@ -104,21 +104,17 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.8 complete. Phase 6.8 delivers the
-watermark list and editor: list page at `/watermarks` with Mode and Location
-columns; SSR wrapper + `#[island]` editor at `/watermarks/add` and
-`/watermarks/:id`; full `WatermarkForm` (17 fields) matching `ChannelWatermark`
-domain defaults — Mode=Permanent, ImageSource=Custom, Location=BottomRight,
-Size=Scaled, WidthPercent=10, HorizontalMarginPercent=2, VerticalMarginPercent=2,
-FrequencyMinutes=5, DurationSeconds=15, Opacity=100; server-side validation (name
-non-empty ≤50 chars, duplicate check, OpacityExpression cleared when mode≠3,
-image/content-type cleared when source≠Custom); conditional editor sections
-(Placement hidden when mode=None, Intermittent timing when mode=Intermittent,
-OpacityExpression when mode=OpacityExpression); location/size Vecs in
-`StoredValue` to satisfy `Fn` inside `Show` blocks. Phase 6.7 delivered the
-FFmpeg Profile editor. HLS multi-variant playlists, the segmenter worker with
-work-ahead and discontinuity tracking, hls-direct passthrough, access tokens,
-and Kodi #KODIPROP headers are Phase 7 hardening.
+**Phase 6 in progress.** Phases 6.0–6.8 complete. Phase 6.8 delivers full
+watermark list and editor parity with ErsatzTV: list at `/watermarks` with
+image thumbnail, Mode, Location columns + Edit/Copy/Delete row actions; SSR
+wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`;
+`WatermarkForm` (17 fields) with correct ErsatzTV defaults (width=15,
+margins=5, frequency=15); full `WatermarkEditViewModelValidator.cs` validation
+parity; custom image upload via axum multipart + WASM `gloo_net` FormData
+POST; drawvg placement preview (320×180 PNG via FFmpeg, debounced 400 ms).
+Phase 6.7 delivered the FFmpeg Profile editor. HLS multi-variant playlists,
+the segmenter worker with work-ahead and discontinuity tracking, hls-direct
+passthrough, access tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -200,3 +196,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 NO GO remediation: (1) nav link `/ffmpeg` → `/ffmpeg/profiles`; (2) VideoFormat.Copy and AudioFormat.Copy corrected to 99 (C# parity); (3) `FfmpegProfileForm` expanded to 31 fields with `FFmpegProfile.New` defaults (AudioBufferSize=384, QsvExtraHardwareFrames=64, VideoProfile="high", NormalizeVideo/Audio/Colors/Deinterlace=true); (4) full server-side validation + handler-mirroring derivation (NormalizeVideo=false→Copy/None; NormalizeAudio=false→Copy; PadMode/BitDepth derived); (5) editor island rewritten — HW accordion driven by `normalize_video` signal, VAAPI sub-rows when hw==3, QSV frames when hw==1, all 31 fields present; (6) copy Effect navigates to `/ffmpeg/profiles/{new_id}`; list updated with Resolution + AudioFormat columns. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 second NO GO remediation: (1) `deny.toml` — added ISC + CDLA-Permissive-2.0 licenses (TLS stack: ring/rustls-webpki/untrusted/webpki-roots), added RUSTSEC-2025-0052 ignore (async-std discontinued, dev-dep only via httpmock); (2) video preset parity — ported `AvailablePresets.ForAccelAndFormat` as `presets_for_profile(hw, vf, bd)`, added server-side preset clearing in `save_ffmpeg_profile`, replaced free-text VideoPreset `TextField` with reactive `SelectField<String>` driven by hw/vf/bd signals, added Effect to clear stale preset when combination changes; (3) LoudNorm target parity — added Effect mirroring `FFmpegProfileEditViewModel.NormalizeLoudnessMode` setter: enabling LoudNorm sets target to −16, disabling clears it; fixed DB load default; (4) HW acceleration capability filtering — new `list_supported_hw_accelerations` server fn runs `ffmpeg -hwaccels`, maps to `HardwareAccelerationKind` integers, SSR wrapper passes capability-filtered list to island via `initial_hw_accels` prop. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 complete: `server/watermarks.rs` with `list_watermark_rows`, `count_watermarks`, `get_watermark_form`, `save_watermark` (name validation, duplicate check, OpacityExpression/image field clearing), `delete_watermark`; `pages/watermarks/list.rs` paged table at `/watermarks` with Mode and Location columns + DeleteDialog; `pages/watermarks/editor.rs` SSR wrapper + island — Placement section hidden when mode=None, Intermittent timing section when mode=Intermittent, OpacityExpression section when mode=OpacityExpression; location/size option Vecs wrapped in `StoredValue` to satisfy `Fn` inside `Show`. Routes wired at `/watermarks`, `/watermarks/add`, `/watermarks/:id`. All quality gates pass. |
+| 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 NO GO remediation: (1) `preview_watermark_placement` server fn — generates 320×180 PNG via FFmpeg drawvg filter from an SVG template written to `tempfile::NamedTempFile`, returns `data:image/png;base64,…`; editor debounces 400 ms via `gloo_timers::future::TimeoutFuture` (`#[cfg(target_arch = "wasm32")]` guard) then fires `preview_resource` showing `<img>` in Placement Preview section; (2) custom image handling fixed — `image_path`/`image_content_type` signals loaded from form and preserved on save; `watermark_upload.rs` axum multipart upload endpoint (`/api/watermarks/image`) + static serve endpoint (`/artwork/watermarks/:filename`); WASM `upload_file` fn in editor POSTs `FormData` via `gloo_net`; (3) full `WatermarkEditViewModelValidator.cs` validation parity — custom image required, width (0,100], margins [0,50], duration < freq×60, opacity (0,100]; (4) defaults corrected to width=15, h_margin=5, v_margin=5, frequency_minutes=15; (5) list parity — image thumbnail column (custom path or "[channel logo]") and copy action with `Modal` + `TextField`, row actions Edit | Copy | Delete. All quality gates pass. |
