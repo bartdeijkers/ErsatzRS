@@ -104,23 +104,21 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.7 complete. Phase 6.7 delivers the
-FFmpeg Profile editor: list page at `/ffmpeg/profiles` with Resolution and
-AudioFormat columns; SSR wrapper + `#[island]` editor at `/ffmpeg/profiles/add`
-and `/ffmpeg/profiles/:id`; full 31-field `FfmpegProfileForm` matching
-`FFmpegProfile.New` defaults (AudioBufferSize=384, QsvExtraHardwareFrames=64,
-VideoProfile="high", NormalizeVideo/Audio=true, NormalizeColors=true,
-DeinterlaceVideo=true); server-side validation (name non-empty ≤50 chars,
-duplicate check, thread count ≥0); handler-mirroring derivation logic
-(NormalizeVideo=false → VideoFormat=Copy(99)/HardwareAcceleration=None;
-NormalizeAudio=false → AudioFormat=Copy(99); PadMode Software for None, VAAPI
-form, HardwareIfPossible for others; BitDepth EightBit forced for MPEG-2);
-hardware accordion driven by `normalize_video` signal; VAAPI sub-rows when
-hw==3, QSV frames when hw==1; "Copy Profile" navigates to the new profile's
-editor at `/ffmpeg/profiles/{new_id}`. All C# enum values correct (Copy=99 for
-both video and audio formats). HLS multi-variant playlists, the segmenter
-worker with work-ahead and discontinuity tracking, hls-direct passthrough,
-access tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
+**Phase 6 in progress.** Phases 6.0–6.8 complete. Phase 6.8 delivers the
+watermark list and editor: list page at `/watermarks` with Mode and Location
+columns; SSR wrapper + `#[island]` editor at `/watermarks/add` and
+`/watermarks/:id`; full `WatermarkForm` (17 fields) matching `ChannelWatermark`
+domain defaults — Mode=Permanent, ImageSource=Custom, Location=BottomRight,
+Size=Scaled, WidthPercent=10, HorizontalMarginPercent=2, VerticalMarginPercent=2,
+FrequencyMinutes=5, DurationSeconds=15, Opacity=100; server-side validation (name
+non-empty ≤50 chars, duplicate check, OpacityExpression cleared when mode≠3,
+image/content-type cleared when source≠Custom); conditional editor sections
+(Placement hidden when mode=None, Intermittent timing when mode=Intermittent,
+OpacityExpression when mode=OpacityExpression); location/size Vecs in
+`StoredValue` to satisfy `Fn` inside `Show` blocks. Phase 6.7 delivered the
+FFmpeg Profile editor. HLS multi-variant playlists, the segmenter worker with
+work-ahead and discontinuity tracking, hls-direct passthrough, access tokens,
+and Kodi #KODIPROP headers are Phase 7 hardening.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -201,3 +199,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 complete: `server/ffmpeg_profiles.rs` with `list_ffmpeg_profile_rows`, `count_ffmpeg_profiles`, `get_ffmpeg_profile_form`, `save_ffmpeg_profile` (INSERT seeds a default 1080p resolution if none exists), `delete_ffmpeg_profile`, and `copy_ffmpeg_profile` (SELECT→INSERT preserving all columns); `pages/ffmpeg_profiles/list.rs` SSR list at `/ffmpeg/profiles` with `PagedTable` + `DeleteDialog`; `pages/ffmpeg_profiles/editor.rs` with SSR wrapper `FfmpegProfileEditorPage` and `#[island]` `FfmpegProfileEditorIsland` — `RwSignal<i32>` for `video_format` drives hardware accordion visibility (H264/H265 → show, other → hide), inner `hardware_acceleration` signal drives device/driver fields, "Copy Profile" button opens `Modal` with `TextField` for name wired to `copy_ffmpeg_profile`. Routes `/ffmpeg/profiles`, `/ffmpeg/profiles/add`, `/ffmpeg/profiles/:id` registered in `app.rs`. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 NO GO remediation: (1) nav link `/ffmpeg` → `/ffmpeg/profiles`; (2) VideoFormat.Copy and AudioFormat.Copy corrected to 99 (C# parity); (3) `FfmpegProfileForm` expanded to 31 fields with `FFmpegProfile.New` defaults (AudioBufferSize=384, QsvExtraHardwareFrames=64, VideoProfile="high", NormalizeVideo/Audio/Colors/Deinterlace=true); (4) full server-side validation + handler-mirroring derivation (NormalizeVideo=false→Copy/None; NormalizeAudio=false→Copy; PadMode/BitDepth derived); (5) editor island rewritten — HW accordion driven by `normalize_video` signal, VAAPI sub-rows when hw==3, QSV frames when hw==1, all 31 fields present; (6) copy Effect navigates to `/ffmpeg/profiles/{new_id}`; list updated with Resolution + AudioFormat columns. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 second NO GO remediation: (1) `deny.toml` — added ISC + CDLA-Permissive-2.0 licenses (TLS stack: ring/rustls-webpki/untrusted/webpki-roots), added RUSTSEC-2025-0052 ignore (async-std discontinued, dev-dep only via httpmock); (2) video preset parity — ported `AvailablePresets.ForAccelAndFormat` as `presets_for_profile(hw, vf, bd)`, added server-side preset clearing in `save_ffmpeg_profile`, replaced free-text VideoPreset `TextField` with reactive `SelectField<String>` driven by hw/vf/bd signals, added Effect to clear stale preset when combination changes; (3) LoudNorm target parity — added Effect mirroring `FFmpegProfileEditViewModel.NormalizeLoudnessMode` setter: enabling LoudNorm sets target to −16, disabling clears it; fixed DB load default; (4) HW acceleration capability filtering — new `list_supported_hw_accelerations` server fn runs `ffmpeg -hwaccels`, maps to `HardwareAccelerationKind` integers, SSR wrapper passes capability-filtered list to island via `initial_hw_accels` prop. All quality gates pass. |
+| 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 complete: `server/watermarks.rs` with `list_watermark_rows`, `count_watermarks`, `get_watermark_form`, `save_watermark` (name validation, duplicate check, OpacityExpression/image field clearing), `delete_watermark`; `pages/watermarks/list.rs` paged table at `/watermarks` with Mode and Location columns + DeleteDialog; `pages/watermarks/editor.rs` SSR wrapper + island — Placement section hidden when mode=None, Intermittent timing section when mode=Intermittent, OpacityExpression section when mode=OpacityExpression; location/size option Vecs wrapped in `StoredValue` to satisfy `Fn` inside `Show`. Routes wired at `/watermarks`, `/watermarks/add`, `/watermarks/:id`. All quality gates pass. |
