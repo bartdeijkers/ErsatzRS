@@ -519,7 +519,7 @@ pub async fn preview_watermark_placement(
             "-vframes",
             "1",
             "-vf",
-            &format!("drawvg=filename={svg_path}"),
+            &format!("drawvg=file={svg_path}"),
             "-f",
             "image2pipe",
             "-c:v",

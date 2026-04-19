@@ -11,6 +11,16 @@ use tokio::fs;
 use uuid::Uuid;
 
 const WATERMARK_DIR: &str = "data/watermarks";
+const DEFAULT_MAX_UPLOAD_MB: u64 = 10;
+
+fn max_upload_bytes() -> u64 {
+    #[allow(clippy::disallowed_methods)] // Phase 0: config crate not yet available
+    let mb = std::env::var("ETV_MAXIMUM_UPLOAD_MB")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_MAX_UPLOAD_MB);
+    mb * 1024 * 1024
+}
 
 pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
     if let Err(e) = fs::create_dir_all(WATERMARK_DIR).await {
@@ -40,6 +50,13 @@ pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
 
         match field.bytes().await {
             Ok(bytes) => {
+                if bytes.len() as u64 > max_upload_bytes() {
+                    return (
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        Json(json!({"error": "Upload exceeds maximum allowed size"})),
+                    )
+                        .into_response();
+                }
                 if let Err(e) = fs::write(&dest, &bytes).await {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
