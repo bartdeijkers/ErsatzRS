@@ -49,13 +49,17 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
             let n = p.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Hardware Acceleration", |p: &FfmpegProfileListRow| {
-            let h = p.hardware_accel.clone();
-            view! { <span class=style::cell_muted>{h}</span> }.into_any()
+        Column::new("Resolution", |p: &FfmpegProfileListRow| {
+            let r = p.resolution.clone();
+            view! { <span class=style::cell_muted>{r}</span> }.into_any()
         }),
         Column::new("Video Format", |p: &FfmpegProfileListRow| {
             let v = p.video_format.clone();
             view! { <span class=style::cell_muted>{v}</span> }.into_any()
+        }),
+        Column::new("Audio Format", |p: &FfmpegProfileListRow| {
+            let a = p.audio_format.clone();
+            view! { <span class=style::cell_muted>{a}</span> }.into_any()
         }),
     ];
 

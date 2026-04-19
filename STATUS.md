@@ -104,16 +104,23 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.7 complete. Phase 6.6 delivers the
-YAML playout editor: a read-only playouts list at `/playouts` and a scripted
-YAML editor island at `/playouts/scripted/:id`. The island stores raw YAML
-content directly in `Playout.ScheduleFile` (ErsatzRS divergence from ErsatzTV's
-file-path storage), provides 500 ms debounced server-side validation via
-`YamlPlayoutEngine::definition_from_str`, and an "Erase Items & History"
-action backed by a transactional `DELETE` server function. HLS multi-variant
-playlists, the segmenter worker with work-ahead and discontinuity tracking,
-hls-direct passthrough, access tokens, and Kodi #KODIPROP headers are Phase 7
-hardening.
+**Phase 6 in progress.** Phases 6.0–6.7 complete. Phase 6.7 delivers the
+FFmpeg Profile editor: list page at `/ffmpeg/profiles` with Resolution and
+AudioFormat columns; SSR wrapper + `#[island]` editor at `/ffmpeg/profiles/add`
+and `/ffmpeg/profiles/:id`; full 31-field `FfmpegProfileForm` matching
+`FFmpegProfile.New` defaults (AudioBufferSize=384, QsvExtraHardwareFrames=64,
+VideoProfile="high", NormalizeVideo/Audio=true, NormalizeColors=true,
+DeinterlaceVideo=true); server-side validation (name non-empty ≤50 chars,
+duplicate check, thread count ≥0); handler-mirroring derivation logic
+(NormalizeVideo=false → VideoFormat=Copy(99)/HardwareAcceleration=None;
+NormalizeAudio=false → AudioFormat=Copy(99); PadMode Software for None, VAAPI
+form, HardwareIfPossible for others; BitDepth EightBit forced for MPEG-2);
+hardware accordion driven by `normalize_video` signal; VAAPI sub-rows when
+hw==3, QSV frames when hw==1; "Copy Profile" navigates to the new profile's
+editor at `/ffmpeg/profiles/{new_id}`. All C# enum values correct (Copy=99 for
+both video and audio formats). HLS multi-variant playlists, the segmenter
+worker with work-ahead and discontinuity tracking, hls-direct passthrough,
+access tokens, and Kodi #KODIPROP headers are Phase 7 hardening.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -192,3 +199,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | GitHub Copilot (Claude Sonnet 4.6) | Phase 6.6 scheduler/parity fixes: (1) SQL `ScheduleKind` filter changed from 4 (Scripted/Lua → `ScriptedSchedulingEngine`) to 3 (Sequential/YAML → `YamlPlayoutEngine`) in `get_scripted_playout` and `save_scripted_playout`; (2) `YamlPlayoutEngine::definition_for_playout` updated to detect inline YAML content (ErsatzRS divergence: `ScheduleFile` stores raw YAML, not a filesystem path) — newline-in-value is the heuristic; (3) `rebuild_yaml_playout` now uses `PlayoutBuilder::default().build()` as the canonical dispatcher instead of calling `YamlPlayoutEngine::schedule_definition` directly; (4) `yaml_reference_data` gains a `playout_id` arg, loads `existing_items` and `existing_history`, and propagates `media_items_for_source` errors instead of swallowing with `unwrap_or_default`. All quality gates pass. |
 | 2026-04-19 | GitHub Copilot (Claude Sonnet 4.6) | Phase 6.6 naming/routing/detection fixes: (1) playout list `SCRIPTED=4` constant corrected to `SEQUENTIAL=3` so edit links appear for Sequential/YAML playouts (not Scripted/Lua); edit URL changed to `/playouts/sequential/{id}`; (2) full rename `get_scripted_playout`→`get_sequential_playout`, `save_scripted_playout`→`save_sequential_playout`, `ScriptedPlayoutForm`→`SequentialPlayoutForm`, route segment `"scripted"`→`"sequential"`, user-facing label "Scripted Schedule"→"Sequential Schedule"; (3) inline YAML detection replaced with path-prefix heuristic (`!starts_with('/')  && !starts_with('~')`) — robust even for single-line YAML. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 complete: `server/ffmpeg_profiles.rs` with `list_ffmpeg_profile_rows`, `count_ffmpeg_profiles`, `get_ffmpeg_profile_form`, `save_ffmpeg_profile` (INSERT seeds a default 1080p resolution if none exists), `delete_ffmpeg_profile`, and `copy_ffmpeg_profile` (SELECT→INSERT preserving all columns); `pages/ffmpeg_profiles/list.rs` SSR list at `/ffmpeg/profiles` with `PagedTable` + `DeleteDialog`; `pages/ffmpeg_profiles/editor.rs` with SSR wrapper `FfmpegProfileEditorPage` and `#[island]` `FfmpegProfileEditorIsland` — `RwSignal<i32>` for `video_format` drives hardware accordion visibility (H264/H265 → show, other → hide), inner `hardware_acceleration` signal drives device/driver fields, "Copy Profile" button opens `Modal` with `TextField` for name wired to `copy_ffmpeg_profile`. Routes `/ffmpeg/profiles`, `/ffmpeg/profiles/add`, `/ffmpeg/profiles/:id` registered in `app.rs`. All quality gates pass. |
+| 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.7 NO GO remediation: (1) nav link `/ffmpeg` → `/ffmpeg/profiles`; (2) VideoFormat.Copy and AudioFormat.Copy corrected to 99 (C# parity); (3) `FfmpegProfileForm` expanded to 31 fields with `FFmpegProfile.New` defaults (AudioBufferSize=384, QsvExtraHardwareFrames=64, VideoProfile="high", NormalizeVideo/Audio/Colors/Deinterlace=true); (4) full server-side validation + handler-mirroring derivation (NormalizeVideo=false→Copy/None; NormalizeAudio=false→Copy; PadMode/BitDepth derived); (5) editor island rewritten — HW accordion driven by `normalize_video` signal, VAAPI sub-rows when hw==3, QSV frames when hw==1, all 31 fields present; (6) copy Effect navigates to `/ffmpeg/profiles/{new_id}`; list updated with Resolution + AudioFormat columns. All quality gates pass. |

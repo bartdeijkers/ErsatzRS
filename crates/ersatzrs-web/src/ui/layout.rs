@@ -70,7 +70,7 @@ fn NavDrawer() -> impl IntoView {
         <aside class=style::drawer>
             <nav class=style::drawer_nav>
                 <NavLink href="/channels"   label="Channels"        icon=IconName::Play/>
-                <NavLink href="/ffmpeg"     label="FFmpeg Profiles" icon=IconName::Tune/>
+                <NavLink href="/ffmpeg/profiles" label="FFmpeg Profiles" icon=IconName::Tune/>
                 <NavLink href="/watermarks" label="Watermarks"      icon=IconName::Visibility/>
 
                 <NavGroup label="Media Sources">
