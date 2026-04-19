@@ -40,6 +40,15 @@ pub struct PlayoutListRow {
     pub schedule_name: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlayoutTimelineItem {
+    pub title: String,
+    pub start_ms: i64,
+    pub finish_ms: i64,
+    pub filler_kind: i32,
+    pub scheduling_context: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SequentialPlayoutForm {
     pub id: i64,
@@ -87,6 +96,54 @@ pub async fn list_playouts() -> Result<Vec<PlayoutListRow>, ServerFnError> {
             }
         })
         .collect())
+}
+
+#[server]
+pub async fn list_playout_items(
+    playout_id: i64,
+    from_ms: i64,
+    to_ms: i64,
+) -> Result<Vec<PlayoutTimelineItem>, ServerFnError> {
+    use crate::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT
+                  COALESCE(pi."CustomTitle", mv.title, ep."Title", mo."Title", '') AS "Title",
+                  CAST(strftime('%s', pi."Start") * 1000 AS INTEGER) AS "StartMs",
+                  CAST(strftime('%s', pi."Finish") * 1000 AS INTEGER) AS "FinishMs",
+                  pi."FillerKind" AS "FillerKind",
+                  pi."SchedulingContext" AS "SchedulingContext"
+           FROM "PlayoutItem" pi
+           LEFT JOIN "MediaItem" mi ON mi."Id" = pi."MediaItemId"
+           LEFT JOIN "EpisodeMetadata" ep ON ep."EpisodeId" = mi."Id"
+           LEFT JOIN "MovieMetadata" mo ON mo."MovieId" = mi."Id"
+           LEFT JOIN "MusicVideoMetadata" mv ON mv."MusicVideoId" = mi."Id"
+           WHERE pi."PlayoutId" = ?
+             AND pi."Finish" > datetime(? / 1000, 'unixepoch')
+             AND pi."Start" < datetime(? / 1000, 'unixepoch')
+           ORDER BY pi."Start""#,
+    )
+    .bind(playout_id)
+    .bind(from_ms)
+    .bind(to_ms)
+    .fetch_all(&state.pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let filler_kind = i32::try_from(row.try_get::<i64, _>("FillerKind")?).unwrap_or(0);
+
+            Ok(PlayoutTimelineItem {
+                title: row.try_get("Title")?,
+                start_ms: row.try_get::<i64, _>("StartMs")?,
+                finish_ms: row.try_get::<i64, _>("FinishMs")?,
+                filler_kind,
+                scheduling_context: row.try_get("SchedulingContext").ok(),
+            })
+        })
+        .collect()
 }
 
 /// Loads a Sequential (YAML) playout (`ScheduleKind = 3`) by id.

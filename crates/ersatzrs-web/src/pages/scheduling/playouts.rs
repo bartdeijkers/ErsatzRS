@@ -5,6 +5,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use crate::pages::scheduling::timeline::PlayoutTimelineIsland;
 use crate::server::playouts::{list_playouts, PlayoutListRow};
 
 stylance::import_crate_style!(style, "src/pages/scheduling/playouts.module.css");
@@ -14,6 +15,7 @@ const SEQUENTIAL: i32 = 3;
 
 #[component]
 pub fn PlayoutsPage() -> impl IntoView {
+    let selected_id: RwSignal<Option<i64>> = RwSignal::new(None);
     let rows: Resource<Vec<PlayoutListRow>> = Resource::new(
         || (),
         |()| async { list_playouts().await.unwrap_or_default() },
@@ -41,7 +43,7 @@ pub fn PlayoutsPage() -> impl IntoView {
                                             <th>"Channel"</th>
                                             <th>"Schedule Kind"</th>
                                             <th>"Schedule Name"</th>
-                                            <th/>
+                                            <th>"Actions"</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -61,8 +63,17 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                 let kind_label = row.schedule_kind_label.clone();
                                                 let sched_name = row.schedule_name.clone();
                                                 let is_sequential = row.schedule_kind == SEQUENTIAL;
+                                                let is_selected = Signal::derive(move || {
+                                                    selected_id.get() == Some(id)
+                                                });
                                                 view! {
-                                                    <tr>
+                                                    <tr class=move || {
+                                                        if is_selected.get() {
+                                                            style::row_selected
+                                                        } else {
+                                                            ""
+                                                        }
+                                                    }>
                                                         <td>{channel}</td>
                                                         <td class=style::cell_muted>
                                                             {kind_label}
@@ -71,21 +82,41 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                             {sched_name}
                                                         </td>
                                                         <td>
-                                                            {if is_sequential {
-                                                                view! {
-                                                                    <a
-                                                                        class=style::btn_edit
-                                                                        href=format!(
-                                                                            "/playouts/sequential/{id}",
-                                                                        )
-                                                                    >
-                                                                        "Edit"
-                                                                    </a>
-                                                                }
-                                                                    .into_any()
-                                                            } else {
-                                                                view! { <span/> }.into_any()
-                                                            }}
+                                                            <div class=style::row_actions>
+                                                                <button
+                                                                    class=move || {
+                                                                        if is_selected.get() {
+                                                                            format!(
+                                                                                "{} {}",
+                                                                                style::btn_select,
+                                                                                style::btn_select_active,
+                                                                            )
+                                                                        } else {
+                                                                            style::btn_select.to_string()
+                                                                        }
+                                                                    }
+                                                                    on:click=move |_| {
+                                                                        selected_id.set(Some(id));
+                                                                    }
+                                                                >
+                                                                    {move || if is_selected.get() { "Selected" } else { "Timeline" }}
+                                                                </button>
+                                                                {if is_sequential {
+                                                                    view! {
+                                                                        <a
+                                                                            class=style::btn_edit
+                                                                            href=format!(
+                                                                                "/playouts/sequential/{id}",
+                                                                            )
+                                                                        >
+                                                                            "Edit"
+                                                                        </a>
+                                                                    }
+                                                                        .into_any()
+                                                                } else {
+                                                                    view! { <span/> }.into_any()
+                                                                }}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 }
@@ -99,6 +130,24 @@ pub fn PlayoutsPage() -> impl IntoView {
                     })
                 }}
             </Suspense>
+
+            <Show when=move || selected_id.get().is_some()>
+                {move || {
+                    selected_id.get().map(|playout_id| {
+                        view! {
+                            <section class=style::timeline_section>
+                                <div class=style::timeline_header>
+                                    <h2 class=style::timeline_title>"Playout Timeline"</h2>
+                                    <p class=style::timeline_copy>
+                                        "Read-only 24-hour view of scheduled playout items."
+                                    </p>
+                                </div>
+                                <PlayoutTimelineIsland playout_id/>
+                            </section>
+                        }
+                    })
+                }}
+            </Show>
         </div>
     }
 }

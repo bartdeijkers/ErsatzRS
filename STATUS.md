@@ -104,10 +104,14 @@ stream with `kill_on_drop` cleanup. Device UUID is seeded into
 `ConfigElement` under `HDHR.DeviceUuid` on first start; tuner count is
 read from `HDHR.TunerCount` (default 1).
 
-**Phase 6 in progress.** Phases 6.0–6.8 complete. Phase 6.8 delivers full
-watermark list and editor parity with ErsatzTV: list at `/watermarks` with
-image thumbnail, Mode, Location columns + Edit/Copy/Delete row actions; SSR
-wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`;
+**Phase 6 in progress.** Phases 6.0–6.9 complete. Phase 6.9 delivers the
+playout timeline visualiser at `/playouts`: a read-only `#[island]` SVG view
+for the selected playout with a 24-hour proportional time axis, filler-vs-main
+item colouring, hour tick marks, Prev/Next window paging, and click-to-inspect
+detail output for title/start/finish/scheduling context. Phase 6.8 delivered
+full watermark list and editor parity with ErsatzTV: list at `/watermarks`
+with image thumbnail, Mode, Location columns + Edit/Copy/Delete row actions;
+SSR wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`;
 `WatermarkForm` (17 fields) with correct ErsatzTV defaults (width=15,
 margins=5, frequency=15); full `WatermarkEditViewModelValidator.cs` validation
 parity; custom image upload via axum multipart + WASM `gloo_net` FormData
@@ -199,3 +203,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 NO GO remediation: (1) `preview_watermark_placement` server fn — generates 320×180 PNG via FFmpeg drawvg filter from an SVG template written to `tempfile::NamedTempFile`, returns `data:image/png;base64,…`; editor debounces 400 ms via `gloo_timers::future::TimeoutFuture` (`#[cfg(target_arch = "wasm32")]` guard) then fires `preview_resource` showing `<img>` in Placement Preview section; (2) custom image handling fixed — `image_path`/`image_content_type` signals loaded from form and preserved on save; `watermark_upload.rs` axum multipart upload endpoint (`/api/watermarks/image`) + static serve endpoint (`/artwork/watermarks/:filename`); WASM `upload_file` fn in editor POSTs `FormData` via `gloo_net`; (3) full `WatermarkEditViewModelValidator.cs` validation parity — custom image required, width (0,100], margins [0,50], duration < freq×60, opacity (0,100]; (4) defaults corrected to width=15, h_margin=5, v_margin=5, frequency_minutes=15; (5) list parity — image thumbnail column (custom path or "[channel logo]") and copy action with `Modal` + `TextField`, row actions Edit | Copy | Delete. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 second NO GO remediation: (1) drawvg filter option corrected from `filename=` to `file=` (matches FFmpeg docs and existing `ersatzrs-ffmpeg` helper at `graphics/mod.rs:31`); (2) upload size guard added — `max_upload_bytes()` reads `ETV_MAXIMUM_UPLOAD_MB` env var (default 10 MB, parity with `SystemEnvironment.MaximumUploadMb`), returns HTTP 413 when exceeded. All quality gates pass. |
 | 2026-04-19 | Claude Code (claude-sonnet-4-6) | Phase 6.8 third NO GO remediation: axum's `Multipart` extractor enforces a 2 MB default body limit independently of handler logic; applied `DefaultBodyLimit::max(max_upload_bytes())` as a per-route layer on `/api/watermarks/image` in `main.rs` so the actual transport cap matches `ETV_MAXIMUM_UPLOAD_MB`; handler byte-length check retained as secondary guard; `max_upload_bytes()` made `pub`. All quality gates pass. |
+| 2026-04-19 | GitHub Copilot (GPT-5.4) | Phase 6.9 complete: added `list_playout_items` server data, embedded playout selection on `/playouts`, and shipped a read-only SVG timeline island with 24-hour paging, proportional bar placement, filler colouring, hour ticks, and click-to-inspect item details. All quality gates pass. |
