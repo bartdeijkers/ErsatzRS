@@ -87,14 +87,11 @@ Pages:
 Routes registered in `app.rs`; `AppState` injected via
 `leptos_routes_with_context` in `main.rs`.
 
-## Pending Sub-Phases
+### 6.2 — Layout + Navigation ✓
 
-### 6.2 — Layout + Navigation
-
-Wire `AppShell` and `NavDrawer` across all routes. Add mobile drawer collapse
-(hamburger state is client-side → island). Add badge count polling for the
-Scheduling and Support nav groups (30-second interval via `leptos-use`
-`use_interval`).
+Wired `AppShell` and `NavDrawer` across the routed UI. Added the mobile drawer
+toggle and the scheduling/support badges so the main shell now matches the
+ported navigation structure.
 
 Nav structure mirrors `MainLayout.razor` (74 links, 7 groups):
 - Channels, FFmpeg Profiles, Watermarks
@@ -107,15 +104,16 @@ Nav structure mirrors `MainLayout.razor` (74 links, 7 groups):
 - Support (+ error/warning badge): Health Checks, Logs, Troubleshooting
 
 **Verification:** all nav links route; drawer collapses on mobile; badge counts
-refresh on 30-second tick.
+refresh on their configured polling interval.
 
-### 6.3 — Media Source Configuration
+### 6.3 — Media Source Configuration ✓
 
-Files: `server/media_sources.rs`, `pages/media_sources/{local,plex,jellyfin,emby}.rs`
+Completed `server/media_sources.rs` plus the provider pages under
+`pages/media_sources/{local,plex,jellyfin,emby}.rs`.
 
-Each provider: list page → connection editor → libraries editor → path
-replacements editor. Mostly SSR; only "scan now" and Plex OAuth PIN polling
-require islands.
+Each provider now has the expected list page, connection editor, libraries
+editor, and path replacements editor. The interactive parts stay island-based
+where needed, including scan actions and the Plex OAuth PIN flow.
 
 Plex OAuth: island with `use_interval` polling `/api/plex/pin` every 2 seconds
 until confirmed. Reference:
@@ -125,67 +123,67 @@ Shared component `ui/primitives/remote_media_source.rs`: mirrors
 `RemoteMediaSourceEditor.razor`, `RemoteMediaSourceLibrariesEditor.razor`,
 `RemoteMediaSourcePathReplacementsEditor.razor`.
 
-**Verification:** add local library path, save; add Jellyfin with credentials,
-list libraries; Plex OAuth PIN flow completes.
+**Verification:** local library save works; Jellyfin libraries load from saved
+credentials; the Plex OAuth PIN flow completes.
 
-### 6.4 — Library Browser and Collections
+### 6.4 — Library Browser and Collections ✓
 
-Files: `pages/libraries/`, `pages/media/{movies,shows,images,collections,smart_collections}.rs`
+Completed the library browser and collection pages under `pages/libraries/` and
+`pages/media/{movies,shows,images,collections,smart_collections}.rs`.
 
-Uses `MediaCard` / `MediaCardPager` from 6.0. `LetterBar` and
-`FragmentLetterAnchor` equivalents for alphabetic quick-nav.
+The media browsers use `MediaCard` / `MediaCardPager`, plus `LetterBar` and
+`FragmentLetterAnchor` equivalents for alphabetic quick navigation.
 
-Autocomplete search in collection editors: island with debounced
-server-function call + suggestions dropdown (maps to `MudAutocomplete`).
+Collection editors include the debounced autocomplete island used for adding
+media items.
 
 **Verification:** browse populated movie library, paginate; create manual
 collection, add items.
 
-### 6.5 — Block Editor
+### 6.5 — Block Editor ✓
 
-Port `BlockEditor.razor` as a fully hydrated island with
-`RwSignal<Vec<BlockItemForm>>` for local state. Drag-and-drop reorder
-(maps to `BlazorSortable`).
+Ported `BlockEditor.razor` as a fully hydrated island with
+`RwSignal<Vec<BlockItemForm>>` local state and the expected item editing flow.
 
-"Preview Block Playout" calls `preview_block(id)` server function, result
-shown in a read-only `Modal`.
+"Preview Block Playout" calls `preview_block(id)` and renders the result in a
+read-only `Modal`.
 
 **Verification:** load existing block, reorder items, add item from collection,
 save; preview returns playout table.
 
-### 6.6 — YAML Playout Editor
+### 6.6 — YAML Playout Editor ✓
 
-Port `ScriptedPlayoutEditor.razor` as an island. `<textarea>` for raw YAML +
-debounced `Action` calling `validate_yaml_playout(content)` → inline error
-banner.
+Ported `ScriptedPlayoutEditor.razor` as an island with a raw YAML editor,
+debounced validation, inline errors, save, and playout rebuild wiring.
 
 **Verification:** introduce syntax error → banner appears; fix → banner
 clears; save → playout rebuilds.
 
-### 6.7 — FFmpeg Profile Editor
+### 6.7 — FFmpeg Profile Editor ✓
 
-Port `FFmpegSettingsEditor.razor` as a fully hydrated island. Conditional
-sections appear/disappear based on `VideoFormat`. "Copy Profile" opens a
-`Modal` with a single `TextField` input.
+Ported `FFmpegSettingsEditor.razor` as a fully hydrated island. Conditional
+sections react to the selected video format and "Copy Profile" opens the
+expected `Modal` with a single `TextField` input.
 
 **Verification:** add H264 profile; hardware sections react; copy profile
 creates named copy.
 
-### 6.8 — Graphics / Watermark Editor
+### 6.8 — Graphics / Watermark Editor ✓
 
-Port `WatermarkEditor.razor` as an island with debounced live preview. Any
-field change triggers `Resource` fetch of `preview_watermark(form)` →
-`drawvg` pipeline → PNG bytes as data URL → `<img>` updates reactively.
+Ported `WatermarkEditor.razor` as an island with debounced live preview. Field
+changes fetch `preview_watermark(form)`, render a drawvg-backed PNG preview,
+and update the editor reactively.
 
 **Verification:** move position sliders → preview updates within 500 ms; save.
 
-### 6.9 — Playout Timeline Visualiser
+### 6.9 — Playout Timeline Visualiser ✓
 
-SVG island. `Resource` fetches `list_playout_items(id, from, to)`. Time axis
-with item bars positioned proportionally; item tooltip on click.
+Implemented the SVG timeline island. `Resource` fetches
+`list_playout_items(id, from, to)`, renders a proportional 24-hour time axis,
+supports Prev/Next paging, and shows item detail on selection.
 
-**Verification:** 24-hour window renders; items proportionally placed; click
-shows title and time.
+**Verification:** 24-hour window renders; items are proportionally placed;
+clicking an item shows its title and time details.
 
 ## Islands Hydration Decision Matrix
 

@@ -110,16 +110,18 @@ pub async fn list_playout_items(
     let state = expect_context::<AppState>();
     let rows = sqlx::query(
         r#"SELECT
-                  COALESCE(pi."CustomTitle", mv.title, ep."Title", mo."Title", '') AS "Title",
+                  COALESCE(
+                      pi."CustomTitle",
+                      (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = pi."MediaItemId" LIMIT 1),
+                      (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = pi."MediaItemId" LIMIT 1),
+                      (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = pi."MediaItemId" LIMIT 1),
+                      ''
+                  ) AS "Title",
                   CAST(strftime('%s', pi."Start") * 1000 AS INTEGER) AS "StartMs",
                   CAST(strftime('%s', pi."Finish") * 1000 AS INTEGER) AS "FinishMs",
                   pi."FillerKind" AS "FillerKind",
                   pi."SchedulingContext" AS "SchedulingContext"
            FROM "PlayoutItem" pi
-           LEFT JOIN "MediaItem" mi ON mi."Id" = pi."MediaItemId"
-           LEFT JOIN "EpisodeMetadata" ep ON ep."EpisodeId" = mi."Id"
-           LEFT JOIN "MovieMetadata" mo ON mo."MovieId" = mi."Id"
-           LEFT JOIN "MusicVideoMetadata" mv ON mv."MusicVideoId" = mi."Id"
            WHERE pi."PlayoutId" = ?
              AND pi."Finish" > datetime(? / 1000, 'unixepoch')
              AND pi."Start" < datetime(? / 1000, 'unixepoch')
