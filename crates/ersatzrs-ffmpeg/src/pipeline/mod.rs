@@ -168,6 +168,51 @@ impl PipelineBuilder for VaapiPipelineBuilder {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QsvPipelineBuilder;
+
+impl PipelineBuilder for QsvPipelineBuilder {
+    fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
+        build_transcode_pipeline(request, HardwareAccelerationKind::Qsv)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VideoToolboxPipelineBuilder;
+
+impl PipelineBuilder for VideoToolboxPipelineBuilder {
+    fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
+        build_transcode_pipeline(request, HardwareAccelerationKind::VideoToolbox)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AmfPipelineBuilder;
+
+impl PipelineBuilder for AmfPipelineBuilder {
+    fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
+        build_transcode_pipeline(request, HardwareAccelerationKind::Amf)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct V4l2m2mPipelineBuilder;
+
+impl PipelineBuilder for V4l2m2mPipelineBuilder {
+    fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
+        build_transcode_pipeline(request, HardwareAccelerationKind::V4l2m2m)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RkmppPipelineBuilder;
+
+impl PipelineBuilder for RkmppPipelineBuilder {
+    fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
+        build_transcode_pipeline(request, HardwareAccelerationKind::Rkmpp)
+    }
+}
+
 fn build_transcode_pipeline(
     mut request: PipelineRequest,
     acceleration: HardwareAccelerationKind,
@@ -253,7 +298,10 @@ fn build_transcode_pipeline(
         );
     }
 
-    let is_intel = acceleration == HardwareAccelerationKind::Vaapi;
+    let is_intel = matches!(
+        acceleration,
+        HardwareAccelerationKind::Vaapi | HardwareAccelerationKind::Qsv
+    );
     let complex = ComplexFilter::build(&request.inputs, filter_chain, is_intel);
     let filter_graph = complex.filter_graph.clone();
 
@@ -276,12 +324,28 @@ fn video_encoder(
 ) -> PipelineStep {
     let name = match (acceleration, desired.video_format) {
         (_, FFmpegProfileVideoFormat::Copy) => "copy",
+        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::H264) => "h264_qsv",
+        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Hevc) => "hevc_qsv",
+        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2_qsv",
+        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Av1) => "av1_qsv",
         (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::H264) => "h264_nvenc",
         (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Hevc) => "hevc_nvenc",
         (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Av1) => "av1_nvenc",
+        (HardwareAccelerationKind::Amf, FFmpegProfileVideoFormat::H264) => "h264_amf",
+        (HardwareAccelerationKind::Amf, FFmpegProfileVideoFormat::Hevc) => "hevc_amf",
         (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::H264) => "h264_vaapi",
         (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::Hevc) => "hevc_vaapi",
         (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2_vaapi",
+        (HardwareAccelerationKind::VideoToolbox, FFmpegProfileVideoFormat::H264) => {
+            "h264_videotoolbox"
+        }
+        (HardwareAccelerationKind::VideoToolbox, FFmpegProfileVideoFormat::Hevc) => {
+            "hevc_videotoolbox"
+        }
+        (HardwareAccelerationKind::V4l2m2m, FFmpegProfileVideoFormat::H264) => "h264_v4l2m2m",
+        (HardwareAccelerationKind::V4l2m2m, FFmpegProfileVideoFormat::Hevc) => "hevc_v4l2m2m",
+        (HardwareAccelerationKind::Rkmpp, FFmpegProfileVideoFormat::H264) => "h264_rkmpp",
+        (HardwareAccelerationKind::Rkmpp, FFmpegProfileVideoFormat::Hevc) => "hevc_rkmpp",
         (_, FFmpegProfileVideoFormat::Hevc) => "libx265",
         (_, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2video",
         (_, FFmpegProfileVideoFormat::Av1) => "libsvtav1",
@@ -289,17 +353,75 @@ fn video_encoder(
     };
 
     let mut extra = Vec::new();
-    if let Some(profile) = &desired.video_profile {
-        extra.extend(["-profile:v".to_owned(), profile.to_lowercase()]);
+    if let Some(profile) = video_profile_option(acceleration, desired) {
+        extra.extend(["-profile:v".to_owned(), profile]);
     }
+
+    if acceleration == HardwareAccelerationKind::Qsv {
+        extra.extend(["-low_power".to_owned(), "0".to_owned()]);
+        extra.extend(["-look_ahead".to_owned(), "0".to_owned()]);
+    }
+
     if acceleration != HardwareAccelerationKind::Vaapi {
         if let Some(preset) = &desired.video_preset {
             if !preset.trim().is_empty() {
-                extra.extend(["-preset:v".to_owned(), preset.clone()]);
+                match acceleration {
+                    HardwareAccelerationKind::VideoToolbox
+                    | HardwareAccelerationKind::Amf
+                    | HardwareAccelerationKind::V4l2m2m
+                    | HardwareAccelerationKind::Rkmpp => {}
+                    _ => extra.extend(["-preset:v".to_owned(), preset.clone()]),
+                }
             }
         }
     }
+
+    if acceleration == HardwareAccelerationKind::V4l2m2m
+        && desired.video_format == FFmpegProfileVideoFormat::H264
+    {
+        extra.extend(["-num_capture_buffers".to_owned(), "16".to_owned()]);
+    }
+
     PipelineStep::encoder(name, StreamKind::Video, extra)
+}
+
+fn video_profile_option(
+    acceleration: HardwareAccelerationKind,
+    desired: &DesiredVideoState,
+) -> Option<String> {
+    match acceleration {
+        HardwareAccelerationKind::Qsv => match desired.video_format {
+            FFmpegProfileVideoFormat::H264 => desired
+                .video_profile
+                .as_ref()
+                .map(|profile| profile.to_lowercase()),
+            FFmpegProfileVideoFormat::Hevc => None,
+            _ => desired
+                .video_profile
+                .as_ref()
+                .map(|profile| profile.to_lowercase()),
+        },
+        HardwareAccelerationKind::VideoToolbox | HardwareAccelerationKind::Rkmpp => {
+            match desired.video_format {
+                FFmpegProfileVideoFormat::H264 => desired
+                    .video_profile
+                    .as_ref()
+                    .map(|profile| profile.to_lowercase()),
+                FFmpegProfileVideoFormat::Hevc => Some(match desired.bit_depth {
+                    FFmpegProfileBitDepth::EightBit => "main".to_owned(),
+                    FFmpegProfileBitDepth::TenBit => "main10".to_owned(),
+                }),
+                _ => desired
+                    .video_profile
+                    .as_ref()
+                    .map(|profile| profile.to_lowercase()),
+            }
+        }
+        _ => desired
+            .video_profile
+            .as_ref()
+            .map(|profile| profile.to_lowercase()),
+    }
 }
 
 fn configure_hardware_acceleration(
@@ -311,11 +433,22 @@ fn configure_hardware_acceleration(
 
     match acceleration {
         HardwareAccelerationKind::None
-        | HardwareAccelerationKind::Qsv
-        | HardwareAccelerationKind::VideoToolbox
         | HardwareAccelerationKind::Amf
-        | HardwareAccelerationKind::V4l2m2m
-        | HardwareAccelerationKind::Rkmpp => {}
+        | HardwareAccelerationKind::V4l2m2m => {}
+        HardwareAccelerationKind::Qsv => {
+            steps.push(PipelineStep::global("qsv_hwaccel", ["-hwaccel", "qsv"]));
+            steps.push(PipelineStep::global(
+                "qsv_hwaccel_output_format",
+                ["-hwaccel_output_format", "qsv"],
+            ));
+            steps.push(PipelineStep::global(
+                "qsv_hw_device",
+                ["-init_hw_device", "qsv=hw", "-filter_hw_device", "hw"],
+            ));
+
+            state.frame_data_location = crate::FrameDataLocation::Hardware;
+            state.pixel_format = request.desired.pixel_format();
+        }
         HardwareAccelerationKind::Nvenc => {
             steps.push(PipelineStep::global(
                 "cuda_hw_device",
@@ -354,6 +487,21 @@ fn configure_hardware_acceleration(
                 PixelFormat::Vaapi
             };
         }
+        HardwareAccelerationKind::VideoToolbox => {
+            steps.push(PipelineStep::global(
+                "videotoolbox_hwaccel",
+                ["-hwaccel", "videotoolbox"],
+            ));
+        }
+        HardwareAccelerationKind::Rkmpp => {
+            steps.push(PipelineStep::global("rkmpp_hwaccel", ["-hwaccel", "rkmpp"]));
+            state.frame_data_location = crate::FrameDataLocation::Hardware;
+            state.pixel_format = if request.desired.bit_depth == FFmpegProfileBitDepth::EightBit {
+                PixelFormat::Nv12
+            } else {
+                request.desired.pixel_format()
+            };
+        }
     }
 
     state
@@ -367,6 +515,9 @@ fn video_scale_filter(
     bit_depth: FFmpegProfileBitDepth,
 ) -> String {
     match acceleration {
+        HardwareAccelerationKind::Qsv => {
+            scale_qsv_filter(current, scaled_size, padded_size, bit_depth)
+        }
         HardwareAccelerationKind::Nvenc => {
             scale_cuda_filter(current, scaled_size, padded_size, bit_depth)
         }
@@ -374,11 +525,40 @@ fn video_scale_filter(
             scale_vaapi_filter(current, scaled_size, padded_size, bit_depth)
         }
         HardwareAccelerationKind::None
-        | HardwareAccelerationKind::Qsv
         | HardwareAccelerationKind::VideoToolbox
         | HardwareAccelerationKind::Amf
         | HardwareAccelerationKind::V4l2m2m
         | HardwareAccelerationKind::Rkmpp => crate::scale_filter(current, scaled_size, padded_size),
+    }
+}
+
+fn scale_qsv_filter(
+    current: &FrameState,
+    scaled_size: FrameSize,
+    padded_size: FrameSize,
+    bit_depth: FFmpegProfileBitDepth,
+) -> String {
+    let format = hardware_surface_format(bit_depth);
+    if current.scaled_size == scaled_size {
+        return format!("vpp_qsv=format={format}");
+    }
+
+    let format_segment = format!(":format={format}");
+    if current.is_anamorphic {
+        format!(
+            "vpp_qsv=w=iw*sar:h=ih{format_segment},setsar=1,vpp_qsv=w={}:h={}{format_segment},setsar=1",
+            padded_size.width, padded_size.height
+        )
+    } else {
+        let target = if current.cropped_size.is_some() {
+            padded_size
+        } else {
+            scaled_size
+        };
+        format!(
+            "vpp_qsv=w={}:h={}{format_segment},setsar=1",
+            target.width, target.height
+        )
     }
 }
 
@@ -538,7 +718,7 @@ fn hls_output(
     acceleration: HardwareAccelerationKind,
 ) -> PipelineStep {
     let frame_rate = desired.frame_rate.unwrap_or(FrameRate::DEFAULT);
-    let one_second_gop = acceleration == HardwareAccelerationKind::Vaapi;
+    let one_second_gop = acceleration == HardwareAccelerationKind::Qsv;
     let keyframe_interval_seconds = 2.0;
     let gop = if one_second_gop {
         frame_rate.parsed().round()

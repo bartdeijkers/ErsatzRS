@@ -3,10 +3,11 @@ use std::time::Duration;
 
 use ersatzrs_domain::WatermarkLocation;
 use ersatzrs_ffmpeg::{
-    lower_third_overlay, song_progress_filter, ComplexFilter, ConcatPlaylist, DesiredVideoState,
-    DrawvgOverlay, FilterChain, FrameSize, GraphicsTemplateRenderer, HlsOutput, InputFile,
-    NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest, SoftwarePipelineBuilder,
-    SvgTemplate, VaapiPipelineBuilder, WatermarkOverlay,
+    lower_third_overlay, song_progress_filter, AmfPipelineBuilder, ComplexFilter, ConcatPlaylist,
+    DesiredVideoState, DrawvgOverlay, FilterChain, FrameSize, GraphicsTemplateRenderer, HlsOutput,
+    InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
+    QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder, SvgTemplate,
+    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkOverlay,
 };
 
 #[test]
@@ -57,6 +58,81 @@ fn vaapi_pipeline_snapshot() {
     let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
 
     let pipeline = VaapiPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_hls_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    request.state.output_format = OutputFormat::Hls;
+    request.state.hls = Some(HlsOutput {
+        segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
+        init_template: None,
+        playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
+        segment_options: None,
+        is_first_transcode: true,
+        troubleshooting: false,
+    });
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn videotoolbox_pipeline_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+
+    let pipeline = VideoToolboxPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn amf_pipeline_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+
+    let pipeline = AmfPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn v4l2m2m_pipeline_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+
+    let pipeline = V4l2m2mPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn rkmpp_pipeline_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+
+    let pipeline = RkmppPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
 
     insta::assert_snapshot!(command.arguments.join(" "));

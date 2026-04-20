@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-20 (night: Phase 7 Slice 5 — IPTV/HLS token verification)
+Last updated: 2026-04-20 (night: Phase 7 Slice 6 — additional hardware acceleration paths)
 
 ## Current Phase
 
@@ -169,9 +169,18 @@ endpoints. The propagated access token now gates `/iptv/channels.m3u`,
 `/iptv/xmltv.xml`, `/iptv/channel/{n}.{ts|m3u8}`, `/iptv/session/{n}/...`, and
 `/iptv/hls-direct/{n}...` instead of being a pass-through-only query suffix.
 
-Next up (Slice 6): add the remaining hardware acceleration paths beyond the
-currently landed NVENC/VAAPI decode-path parity: QSV, AMF, VideoToolbox,
-RKMPP, and V4L2M2M.
+Slice 6 lands the remaining Phase 7 hardware builder surface in
+`ersatzrs-ffmpeg`: QSV, AMF, VideoToolbox, RKMPP, and V4L2M2M now have Rust
+pipeline builders, hardware-specific encoder names, QSV/Videotoolbox/RKMPP
+global hwaccel setup, QSV-specific `vpp_qsv` scaling plus one-second HLS GOP
+parity, and dedicated snapshot coverage for the generated argv. This slice is
+approved as a GO for Slice 7. Remaining FFmpeg parity work is narrower: the
+current `PipelineRequest` model still lacks source-codec metadata, so the more
+granular ErsatzTV decoder dispatch tables (`h264_qsv`, `vp9_v4l2m2m`, etc.)
+are not yet expressible in Rust and remain future FFmpeg follow-up rather than
+Slice 6 blockers.
+
+Next up (Slice 7): MySQL backend behind a feature flag.
 After HLS is complete, continue Phase 7 items from the master plan: additional
 hardware paths, MySQL backend support, Trakt integration, Docker multi-arch
 images, side-by-side benchmarking, and long soak tests.
@@ -298,3 +307,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 3 — HLS playlist trimming and cleanup. Ported the first real `HlsPlaylistFilter` behavior into `ersatzrs-infra::hls_worker`: session playlists now trim around recent segments, preserve discontinuities, delete stale temp-backed segment files, and support fMP4 segmenter output with `#EXT-X-MAP` / `init.mp4` serving on `/iptv/session/{n}/{file}`. Review outcome: GO for Slice 4. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 4 — HLS direct passthrough. Ported the direct-HLS branch in `iptv/hls.rs`: `.m3u8?mode=hls-direct` now emits a single-entry playlist with per-channel media-sequence tracking and format-aware `.ts` / `.mp4` / `.mkv` targets, `/iptv/hls-direct/{channel}` reuses the shared FFmpeg stream path with config-driven output format selection, and focused tests/snapshot coverage landed for the playlist shape and output-format helpers. Review outcome: GO for Slice 5. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 5 — IPTV/HLS token verification. Ported ConditionalIptvAuthorizeFilter behavior with route-scoped JWT verification for propagated `access_token` URLs and focused middleware tests. Review outcome: GO for Slice 6. |
+| 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 6 — additional FFmpeg hardware paths. Added QSV/AMF/VideoToolbox/RKMPP/V4L2M2M pipeline builders, QSV hardware-init and scaling/HLS GOP parity, hardware-specific encoder argv snapshots, and cleared the slice gates. Review outcome: GO for Slice 7. |
