@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-20 (night: Phase 7 Slice 3 — HLS playlist trimming)
+Last updated: 2026-04-20 (night: Phase 7 Slice 4 — HLS direct passthrough)
 
 ## Current Phase
 
@@ -121,7 +121,7 @@ Phase 6.7 delivered the FFmpeg Profile editor.
 **Phase 7 — in progress.** Full HLS parity is intentionally scheduled into
 Phase 7 rather than Phase 5; see `plans/defer-hls-parity-to-phase-7.md`.
 
-Phase 7 Slice 1, Slice 2, and Slice 3 are landed. Slice 1 ported the HLS entry surface:
+Phase 7 Slice 1 through Slice 4 are landed. Slice 1 ported the HLS entry surface:
 `/iptv/channels.m3u` emits mode-aware URL suffixes (HLS segmenter →
 `.m3u8?mode=segmenter`, HLS-direct → `.m3u8?mode=hls-direct`, TS → `.ts`,
 TS-legacy → `.ts?mode=ts-legacy`), short unique ids, ErsatzTV-compatible
@@ -151,10 +151,18 @@ files from the worker temp directory, and carries the fMP4 `#EXT-X-MAP`
 init-segment path through `segmenter-fmp4` output plus the shared
 `/iptv/session/{n}/{file}` file route.
 
-Next up (Slice 4): port the `hls-direct` passthrough branch
-(`/iptv/hls-direct/{n}[.ts|.mp4|.mkv]`) and keep the remaining HLS parity gaps
-scoped to auth (`ConditionalIptvAuthorizeFilter`), access-token verification,
-and any init-segment caching nuances still required after direct mode lands.
+Slice 4 ports the `hls-direct` passthrough branch: `.m3u8?mode=hls-direct`
+now returns a single-entry live playlist with ErsatzTV-style
+`#EXT-X-MEDIA-SEQUENCE` tracking, `#EXT-X-DISCONTINUITY`, and an
+output-format-aware `/iptv/hls-direct/{channel}[.ts|.mp4|.mkv]` target based
+on the `ffmpeg.hls_direct.output_format` config value (default `mpegts`). The
+direct stream route reuses the current FFmpeg spawn path and emits
+`video/mp2t`, `video/mp4`, or `video/x-matroska` as appropriate.
+
+Next up (Slice 5): close the remaining HLS parity gaps around
+`ConditionalIptvAuthorizeFilter` behavior, access-token verification on the
+new direct/segmenter URLs, and any remaining fMP4 init-segment caching nuance
+that still matters once direct mode is in place.
 After HLS is complete, continue Phase 7 items from the master plan: additional
 hardware paths, MySQL backend support, Trakt integration, Docker multi-arch
 images, side-by-side benchmarking, and long soak tests.
@@ -279,3 +287,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 2 — HLS segmenter worker. Extended the core HLS registry/handle traits with async insert/remove and playlist access, added `ersatzrs-infra::hls_worker::HlsSessionWorker` with FFmpeg CLI spawn into temp-backed HLS output plus an argv snapshot test, wired `/iptv/channel/{n}.m3u8` to start/touch workers, and added `/iptv/session/{n}/hls.m3u8` + `/iptv/session/{n}/{file}` serving for live playlists and segment files. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Hardened Phase 7 Slice 2 after review: reused provider path replacements for HLS worker media paths, made session worker registration atomic to avoid duplicate FFmpeg segmenters under concurrent requests, and stopped failed FFmpeg workers from restart-looping until idle timeout. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 3 — HLS playlist trimming and cleanup. Ported the first real `HlsPlaylistFilter` behavior into `ersatzrs-infra::hls_worker`: session playlists now trim around recent segments, preserve discontinuities, delete stale temp-backed segment files, and support fMP4 segmenter output with `#EXT-X-MAP` / `init.mp4` serving on `/iptv/session/{n}/{file}`. Review outcome: GO for Slice 4. |
+| 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 4 — HLS direct passthrough. Ported the direct-HLS branch in `iptv/hls.rs`: `.m3u8?mode=hls-direct` now emits a single-entry playlist with per-channel media-sequence tracking and format-aware `.ts` / `.mp4` / `.mkv` targets, `/iptv/hls-direct/{channel}` reuses the shared FFmpeg stream path with config-driven output format selection, and focused tests/snapshot coverage landed for the playlist shape and output-format helpers. Review outcome: GO for Slice 5. |
