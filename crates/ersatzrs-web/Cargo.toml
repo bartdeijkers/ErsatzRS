@@ -50,6 +50,17 @@ js-sys = "0.3"
 output_file = "public/bundle.css"
 folders = ["./src/"]
 
+[package.metadata.leptos]
+output-name = "ersatzrs-web"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+assets-dir = "public"
+site-addr = "0.0.0.0:8409"
+reload-port = 3001
+browserquery = "defaults"
+watch = false
+env = "DEV"
+
 [dev-dependencies]
 insta = "1"
 

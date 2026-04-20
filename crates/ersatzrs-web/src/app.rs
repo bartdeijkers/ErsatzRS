@@ -5,6 +5,7 @@ use leptos_router::{
     components::{Route, Router, Routes},
     ParamSegment, StaticSegment,
 };
+use std::path::{Path, PathBuf};
 
 use crate::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
 use crate::pages::dev::ComponentsPage;
@@ -12,11 +13,15 @@ use crate::pages::ffmpeg_profiles::{
     editor::FfmpegProfileEditorPage, list::FfmpegProfilesListPage,
 };
 use crate::pages::libraries::LibrariesPage;
+use crate::pages::media::artists::ArtistsPage;
 use crate::pages::media::collections::{CollectionEditorPage, CollectionsPage};
 use crate::pages::media::images::ImagesPage;
 use crate::pages::media::movies::MoviesPage;
+use crate::pages::media::other_videos::OtherVideosPage;
 use crate::pages::media::shows::ShowsPage;
 use crate::pages::media::smart_collections::{SmartCollectionEditorPage, SmartCollectionsPage};
+use crate::pages::media::songs::SongsPage;
+use crate::pages::media::trash::TrashPage;
 use crate::pages::media_sources::{
     emby::{EmbyConnectionPage, EmbyLibrariesPage, EmbyPathsPage, EmbySourcesPage},
     jellyfin::{
@@ -41,8 +46,8 @@ pub fn App() -> impl IntoView {
     provide_toast_store();
 
     view! {
-        <AppShell>
-            <Router>
+        <Router>
+            <AppShell>
                 <Routes fallback=|| {
                     view! {
                         <div class=style::not_found>
@@ -66,6 +71,15 @@ pub fn App() -> impl IntoView {
                     />
 
                     // ── FFmpeg Profiles ───────────────────────────────────────
+                    <Route path=StaticSegment("ffmpeg") view=FfmpegProfilesListPage/>
+                    <Route
+                        path=(StaticSegment("ffmpeg"), StaticSegment("add"))
+                        view=FfmpegProfileEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("ffmpeg"), ParamSegment("id"))
+                        view=FfmpegProfileEditorPage
+                    />
                     <Route
                         path=(StaticSegment("ffmpeg"), StaticSegment("profiles"))
                         view=FfmpegProfilesListPage
@@ -96,6 +110,11 @@ pub fn App() -> impl IntoView {
                         path=(StaticSegment("playouts"), StaticSegment("sequential"), ParamSegment("id"))
                         view=YamlEditorPage
                     />
+                    <Route path=StaticSegment("blocks") view=BlocksPage/>
+                    <Route
+                        path=(StaticSegment("blocks"), ParamSegment("id"))
+                        view=BlockEditorPage
+                    />
                     <Route
                         path=(StaticSegment("scheduling"), StaticSegment("blocks"))
                         view=BlocksPage
@@ -109,11 +128,19 @@ pub fn App() -> impl IntoView {
                         path=(StaticSegment("media"), StaticSegment("libraries"))
                         view=LibrariesPage
                     />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("trash"))
+                        view=TrashPage
+                    />
 
                     // ── Media browsers ───────────────────────────────────────
                     <Route
                         path=(StaticSegment("media"), StaticSegment("movies"))
                         view=MoviesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("tv"), StaticSegment("shows"))
+                        view=ShowsPage
                     />
                     <Route
                         path=(StaticSegment("media"), StaticSegment("shows"))
@@ -123,6 +150,22 @@ pub fn App() -> impl IntoView {
                         path=(StaticSegment("media"), StaticSegment("images"))
                         view=ImagesPage
                     />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("browser"), StaticSegment("images"))
+                        view=ImagesPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("music"), StaticSegment("artists"))
+                        view=ArtistsPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("other"), StaticSegment("videos"))
+                        view=OtherVideosPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("music"), StaticSegment("songs"))
+                        view=SongsPage
+                    />
 
                     // ── Collections ──────────────────────────────────────────
                     <Route
@@ -131,6 +174,10 @@ pub fn App() -> impl IntoView {
                     />
                     <Route
                         path=(StaticSegment("media"), StaticSegment("collections"), StaticSegment("add"))
+                        view=CollectionEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("collections"), ParamSegment("id"), StaticSegment("edit"))
                         view=CollectionEditorPage
                     />
                     <Route
@@ -145,6 +192,10 @@ pub fn App() -> impl IntoView {
                     />
                     <Route
                         path=(StaticSegment("media"), StaticSegment("smart-collections"), StaticSegment("add"))
+                        view=SmartCollectionEditorPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("smart-collections"), ParamSegment("id"), StaticSegment("edit"))
                         view=SmartCollectionEditorPage
                     />
                     <Route
@@ -216,8 +267,8 @@ pub fn App() -> impl IntoView {
                         view=PlexPathsPage
                     />
                 </Routes>
-            </Router>
-        </AppShell>
+            </AppShell>
+        </Router>
     }
 }
 
@@ -235,6 +286,8 @@ fn HomePage() -> impl IntoView {
 }
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
+    let hydration_assets_available = resolve_hydration_assets(&options).is_some();
+
     view! {
         <!DOCTYPE html>
         <html lang="en">
@@ -244,11 +297,40 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="color-scheme" content="dark"/>
                 <title>"ErsatzRS"</title>
                 <link rel="stylesheet" href="/public/bundle.css"/>
-                <HydrationScripts options islands=true/>
+                {hydration_assets_available.then(|| {
+                    view! { <HydrationScripts options=options.clone() islands=true/> }
+                })}
             </head>
             <body>
                 <App/>
             </body>
         </html>
     }
+}
+
+fn resolve_hydration_assets(options: &LeptosOptions) -> Option<PathBuf> {
+    let js_name = format!("{}.js", options.output_name);
+    let wasm_name = format!("{}_bg.wasm", options.output_name);
+    let site_root = options.site_root.to_string();
+    let site_pkg_dir = options.site_pkg_dir.to_string();
+
+    candidate_site_roots(site_root)
+        .into_iter()
+        .map(|root| root.join(&site_pkg_dir))
+        .find(|pkg_dir| pkg_dir.join(&js_name).is_file() && pkg_dir.join(&wasm_name).is_file())
+}
+
+fn candidate_site_roots(site_root: impl AsRef<Path>) -> Vec<PathBuf> {
+    let site_root = site_root.as_ref();
+    let configured = PathBuf::from(site_root);
+    if configured.is_absolute() {
+        return vec![configured];
+    }
+
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    vec![
+        crate_dir.join(site_root),
+        crate_dir.join("..").join("..").join(site_root),
+        configured,
+    ]
 }

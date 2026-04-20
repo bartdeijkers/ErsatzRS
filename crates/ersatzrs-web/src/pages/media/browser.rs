@@ -60,16 +60,14 @@ where
         },
     );
 
-    let total = Signal::derive(move || data.get().map_or(0u64, |(_, t)| t));
+    let total = Signal::derive(move || data.get().map(|(_, t)| t));
 
-    let present: Signal<HashSet<char>> = Signal::derive(move || {
-        data.get()
-            .map(|(rows, _)| {
-                rows.iter()
-                    .map(|r| letter_bucket(&r.sort_title))
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default()
+    let present: Signal<Option<HashSet<char>>> = Signal::derive(move || {
+        data.get().map(|(rows, _)| {
+            rows.iter()
+                .map(|r| letter_bucket(&r.sort_title))
+                .collect::<HashSet<_>>()
+        })
     });
 
     view! {

@@ -30,7 +30,7 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
         |()| async move { count_ffmpeg_profiles().await.unwrap_or(0) },
     );
 
-    let total = Signal::derive(move || count_resource.get().unwrap_or(0));
+    let total = Signal::derive(move || count_resource.get());
 
     let delete_action = Action::new(|id: &i64| delete_ffmpeg_profile(*id));
     let delete_target: RwSignal<Option<FfmpegProfileListRow>> = RwSignal::new(None);
@@ -68,7 +68,7 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
         let p_clone = p.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/ffmpeg/profiles/{id}") class=style::row_btn_edit>"Edit"</a>
+                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>"Edit"</a>
                 <button
                     class=style::row_btn_delete
                     on:click=move |_| {
@@ -95,7 +95,7 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
             <div class=style::toolbar>
                 <h1 class=style::page_title>"FFmpeg Profiles"</h1>
                 <div class=style::toolbar_actions>
-                    <a href="/ffmpeg/profiles/add" class=style::btn_add>"Add Profile"</a>
+                    <a href="/ffmpeg/add" class=style::btn_add>"Add Profile"</a>
                 </div>
             </div>
 

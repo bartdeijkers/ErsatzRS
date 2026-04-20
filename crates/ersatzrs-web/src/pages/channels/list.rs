@@ -30,7 +30,7 @@ pub fn ChannelsListPage() -> impl IntoView {
         |disabled| async move { count_channels(disabled).await.unwrap_or(0) },
     );
 
-    let total = Signal::derive(move || count_resource.get().unwrap_or(0));
+    let total = Signal::derive(move || count_resource.get());
 
     let delete_action = Action::new(|id: &i64| delete_channel(*id));
     let delete_target: RwSignal<Option<ChannelListRow>> = RwSignal::new(None);

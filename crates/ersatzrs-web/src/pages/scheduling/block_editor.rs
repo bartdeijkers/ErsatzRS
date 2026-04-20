@@ -100,7 +100,7 @@ fn BlockEditorIsland(initial_block: BlockForm, initial_items: Vec<BlockItemForm>
             match res {
                 Ok(()) => {
                     toast.push("Block saved.", ToastSeverity::Success);
-                    navigate("/scheduling/blocks", NavigateOptions::default());
+                    navigate("/blocks", NavigateOptions::default());
                 }
                 Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
             }

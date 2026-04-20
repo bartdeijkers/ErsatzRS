@@ -277,13 +277,13 @@ pub fn BlocksPage() -> impl IntoView {
                                                     view! {
                                                         <tr>
                                                             <td>
-                                                                <a href=format!("/scheduling/blocks/{id}")>{name}</a>
+                                                                <a href=format!("/blocks/{id}")>{name}</a>
                                                             </td>
                                                             <td class=style::cell_muted>{dur}</td>
                                                             <td class=style::cell_muted>{stop}</td>
                                                             <td>
                                                                 <div class=style::row_actions>
-                                                                    <a class=style::btn_edit href=format!("/scheduling/blocks/{id}")>
+                                                                    <a class=style::btn_edit href=format!("/blocks/{id}")>
                                                                         "Edit"
                                                                     </a>
                                                                     <button

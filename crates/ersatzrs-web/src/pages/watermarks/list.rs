@@ -33,7 +33,7 @@ pub fn WatermarksListPage() -> impl IntoView {
         |()| async move { count_watermarks().await.unwrap_or(0) },
     );
 
-    let total = Signal::derive(move || count_resource.get().unwrap_or(0));
+    let total = Signal::derive(move || count_resource.get());
 
     let delete_action = Action::new(|id: &i64| delete_watermark(*id));
     let delete_target: RwSignal<Option<WatermarkListRow>> = RwSignal::new(None);

@@ -11,28 +11,59 @@ pub fn LetterBar(
     /// Letters (lowercase, plus '#' for digits/symbols) that actually occur in
     /// the current page. Missing letters are rendered disabled.
     #[prop(into)]
-    present: Signal<HashSet<char>>,
+    present: Signal<Option<HashSet<char>>>,
 ) -> impl IntoView {
     let letters: Vec<char> = std::iter::once('#').chain('a'..='z').collect();
+    let fallback_letters = letters.clone();
+    let resolved_letters = letters;
 
     view! {
-        <div class=style::bar>
-            {letters
-                .into_iter()
-                .map(|letter| {
-                    let label = if letter == '#' { "#".to_string() } else { letter.to_ascii_uppercase().to_string() };
-                    let anchor = format!("#letter-{letter}");
-                    let cls = move || {
-                        if present.get().contains(&letter) {
-                            style::letter.to_string()
+        <Suspense fallback=move || view! {
+            <div class=style::bar>
+                {fallback_letters
+                    .iter()
+                    .map(|letter| {
+                        let label = if *letter == '#' {
+                            "#".to_string()
                         } else {
-                            format!("{} {}", style::letter, style::letter_disabled)
+                            letter.to_ascii_uppercase().to_string()
+                        };
+                        view! {
+                            <a href="#" class=format!("{} {}", style::letter, style::letter_disabled)>
+                                {label}
+                            </a>
                         }
-                    };
-                    view! { <a href=anchor class=cls>{label}</a> }
+                    })
+                    .collect_view()}
+            </div>
+        }>
+            {move || {
+                present.get().map(|present_letters| {
+                    view! {
+                        <div class=style::bar>
+                            {resolved_letters
+                                .iter()
+                                .map(|letter| {
+                                    let label = if *letter == '#' {
+                                        "#".to_string()
+                                    } else {
+                                        letter.to_ascii_uppercase().to_string()
+                                    };
+                                    let anchor = format!("#letter-{letter}");
+                                    let is_present = present_letters.contains(letter);
+                                    let class_name = if is_present {
+                                        style::letter.to_string()
+                                    } else {
+                                        format!("{} {}", style::letter, style::letter_disabled)
+                                    };
+                                    view! { <a href=anchor class=class_name>{label}</a> }
+                                })
+                                .collect_view()}
+                        </div>
+                    }
                 })
-                .collect_view()}
-        </div>
+            }}
+        </Suspense>
     }
 }
 

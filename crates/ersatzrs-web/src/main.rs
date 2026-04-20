@@ -23,12 +23,16 @@ use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use sqlx::SqlitePool;
 use state::AppState;
+use std::path::{Path, PathBuf};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
-const LISTEN_ADDR: &str = "0.0.0.0:8080";
-const LISTEN_PORT: u16 = 8080;
+const WEB_CRATE_CARGO_TOML: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+const WEB_PUBLIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/public");
+const WEB_CRATE_DIR: &str = env!("CARGO_MANIFEST_DIR");
+const LISTEN_ADDR: &str = "0.0.0.0:8409";
+const LISTEN_PORT: u16 = 8409;
 const CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 1;
@@ -65,21 +69,31 @@ async fn main() {
         LISTEN_PORT,
     ));
 
-    let conf = get_configuration(None).expect("valid leptos config");
+    let conf = get_configuration(Some(WEB_CRATE_CARGO_TOML)).expect("valid leptos config");
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
+    let pkg_dir = resolve_pkg_dir(&leptos_options);
 
     let leptos_options_clone = leptos_options.clone();
     let app_state_for_leptos = app_state.clone();
-    let leptos_router: Router = Router::new()
+    let mut leptos_router: Router = Router::new()
         .leptos_routes_with_context(
             &leptos_options,
             routes,
             move || provide_context(app_state_for_leptos.clone()),
             move || shell(leptos_options_clone.clone()),
         )
-        .nest_service("/public", ServeDir::new("public"))
+        .nest_service("/public", ServeDir::new(WEB_PUBLIC_DIR))
         .with_state(leptos_options);
+
+    if let Some(pkg_dir) = pkg_dir {
+        tracing::info!(pkg_dir = %pkg_dir.display(), "serving Leptos hydration assets");
+        leptos_router = leptos_router.nest_service("/pkg", ServeDir::new(pkg_dir));
+    } else {
+        tracing::warn!(
+            "Leptos pkg assets not found; serving SSR HTML only without browser hydration"
+        );
+    }
 
     let api_router: Router = Router::new()
         .route(
@@ -162,4 +176,30 @@ fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
 
 async fn healthz() -> StatusCode {
     StatusCode::OK
+}
+
+fn resolve_pkg_dir(options: &LeptosOptions) -> Option<PathBuf> {
+    let site_root = options.site_root.to_string();
+    let pkg_dir = options.site_pkg_dir.to_string();
+    candidate_site_roots(site_root)
+        .into_iter()
+        .map(|root| root.join(&pkg_dir))
+        .find(|candidate| candidate.is_dir())
+}
+
+fn candidate_site_roots(site_root: impl AsRef<Path>) -> Vec<PathBuf> {
+    let site_root = site_root.as_ref();
+    let configured = PathBuf::from(site_root);
+    if configured.is_absolute() {
+        return vec![configured];
+    }
+
+    vec![
+        Path::new(WEB_CRATE_DIR).join(site_root),
+        Path::new(WEB_CRATE_DIR)
+            .join("..")
+            .join("..")
+            .join(site_root),
+        configured,
+    ]
 }

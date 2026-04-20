@@ -38,7 +38,7 @@ pub fn ComponentsPage() -> impl IntoView {
     .map(|(n, name)| (n.to_string(), name.to_string()))
     .collect();
     let rows_data_for_total = rows_data.clone();
-    let total = Signal::derive(move || rows_data_for_total.len() as u64);
+    let total = Signal::derive(move || Some(rows_data_for_total.len() as u64));
     let rows = Resource::new(
         move || params.get(),
         move |p| {

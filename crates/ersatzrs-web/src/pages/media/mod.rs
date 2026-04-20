@@ -1,6 +1,10 @@
+pub mod artists;
 pub mod browser;
 pub mod collections;
 pub mod images;
 pub mod movies;
+pub mod other_videos;
 pub mod shows;
 pub mod smart_collections;
+pub mod songs;
+pub mod trash;

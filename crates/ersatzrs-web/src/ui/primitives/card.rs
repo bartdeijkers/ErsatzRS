@@ -52,7 +52,7 @@ pub fn MediaCard(
 #[allow(dead_code)]
 #[component]
 pub fn MediaCardPager(
-    total: Signal<u64>,
+    total: Signal<Option<u64>>,
     page: RwSignal<u32>,
     page_size: u32,
     #[prop(default = None)] selected_count: Option<Signal<usize>>,
@@ -68,7 +68,7 @@ pub fn MediaCardPager(
     };
     let go_next = move |_| {
         page.update(|p| {
-            let max_page = total.get().saturating_sub(1) / u64::from(page_size);
+            let max_page = total.get().unwrap_or(0).saturating_sub(1) / u64::from(page_size);
             if u64::from(*p) < max_page {
                 *p += 1;
             }
@@ -97,29 +97,48 @@ pub fn MediaCardPager(
                 })}
             </div>
             <div class=style::pager_right>
-                <span>
+                <Suspense fallback=move || view! {
+                    <span>"Loading..."</span>
+                    <button class=style::pager_btn disabled=true>"‹"</button>
+                    <button class=style::pager_btn disabled=true>"›"</button>
+                }>
                     {move || {
-                        let t = total.get();
-                        let p = page.get();
-                        let start = p * page_size + 1;
-                        let end = ((p + 1) * page_size).min(u32::try_from(t).unwrap_or(u32::MAX));
-                        if t == 0 { "0 items".to_string() }
-                        else { format!("{start}–{end} of {t}") }
+                        total.get().map(|total_items| {
+                            view! {
+                                <span>
+                                    {move || {
+                                        let p = page.get();
+                                        let start = p * page_size + 1;
+                                        let end = ((p + 1) * page_size)
+                                            .min(u32::try_from(total_items).unwrap_or(u32::MAX));
+                                        if total_items == 0 {
+                                            "0 items".to_string()
+                                        } else {
+                                            format!("{start}–{end} of {total_items}")
+                                        }
+                                    }}
+                                </span>
+                                <button
+                                    class=style::pager_btn
+                                    disabled=move || page.get() == 0
+                                    on:click=go_prev
+                                >
+                                    "‹"
+                                </button>
+                                <button
+                                    class=style::pager_btn
+                                    disabled=move || {
+                                        total_items == 0
+                                            || u64::from((page.get() + 1) * page_size) >= total_items
+                                    }
+                                    on:click=go_next
+                                >
+                                    "›"
+                                </button>
+                            }
+                        })
                     }}
-                </span>
-                <button class=style::pager_btn disabled=move || page.get() == 0 on:click=go_prev>
-                    "‹"
-                </button>
-                <button
-                    class=style::pager_btn
-                    disabled=move || {
-                        let t = total.get();
-                        t == 0 || u64::from((page.get() + 1) * page_size) >= t
-                    }
-                    on:click=go_next
-                >
-                    "›"
-                </button>
+                </Suspense>
             </div>
         </div>
     }

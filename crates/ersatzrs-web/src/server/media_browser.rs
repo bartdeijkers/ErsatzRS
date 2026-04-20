@@ -1,9 +1,15 @@
-//! Server functions for the media browser (movies/shows/images) and the
+//! Server functions for the media browser (movies/shows/images/artists/
+//! songs/other videos/trash) and the
 //! manual/smart collection editors. Ports:
 //!
 //! - `Pages/MovieList.razor` → [`list_movies`]
 //! - `Pages/TelevisionShowList.razor` → [`list_shows`]
 //! - `Pages/ImageList.razor` → [`list_images`]
+//! - `Pages/ArtistList.razor` → [`list_artists`]
+//! - `Pages/SongList.razor` → [`list_songs`]
+//! - `Pages/OtherVideoList.razor` → [`list_other_videos`]
+//! - `Pages/Trash.razor` → [`list_trash_items`], [`delete_media_items`],
+//!   [`empty_trash`]
 //! - `Pages/ManualCollections.razor` + `CollectionEditor.razor` →
 //!   [`list_collections`], [`get_collection`], [`save_collection`],
 //!   [`delete_collection`]
@@ -37,6 +43,16 @@ pub struct CollectionForm {
     pub name: String,
     /// Only used by smart collections.
     pub query: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TrashPageData {
+    pub movies: Vec<MediaCardRow>,
+    pub shows: Vec<MediaCardRow>,
+    pub artists: Vec<MediaCardRow>,
+    pub other_videos: Vec<MediaCardRow>,
+    pub songs: Vec<MediaCardRow>,
+    pub images: Vec<MediaCardRow>,
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +248,459 @@ pub async fn list_images(
 
     #[allow(clippy::cast_sign_loss)]
     Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Artists
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_artists(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "ArtistMetadata" am
+           WHERE (? = '' OR am."Title" LIKE ? COLLATE NOCASE)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  COALESCE(am."Title", '') AS "Title",
+                  COALESCE(am."SortTitle", am."Title", '') AS "SortTitle",
+                  am."Disambiguation" AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "Artist" a
+           JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           LEFT JOIN "Artwork" art
+               ON art."ArtistMetadataId" = am."Id" AND art."ArtworkKind" = 1
+           WHERE (? = '' OR am."Title" LIKE ? COLLATE NOCASE)
+           ORDER BY am."SortTitle" COLLATE NOCASE, am."Title" COLLATE NOCASE
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Other videos
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_other_videos(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "OtherVideoMetadata" ovm
+           WHERE (? = '' OR ovm."Title" LIKE ? COLLATE NOCASE)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT ov."Id" AS "Id",
+                  COALESCE(ovm."Title", '') AS "Title",
+                  COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
+                  ovm."OriginalTitle" AS "Subtitle",
+                  COALESCE(thumb."Path", poster."Path") AS "Artwork"
+           FROM "OtherVideo" ov
+           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           LEFT JOIN "Artwork" thumb
+               ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
+           LEFT JOIN "Artwork" poster
+               ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
+           WHERE (? = '' OR ovm."Title" LIKE ? COLLATE NOCASE)
+           ORDER BY ovm."SortTitle" COLLATE NOCASE, ovm."Title" COLLATE NOCASE
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Artwork").unwrap_or(None),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Songs
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_songs(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "SongMetadata" sm
+           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  COALESCE(sm."Title", '') AS "Title",
+                  COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
+                  CASE
+                      WHEN COALESCE(sm."Artists", '') = '' AND COALESCE(sm."Album", '') = '' THEN NULL
+                      WHEN COALESCE(sm."Artists", '') = '' THEN sm."Album"
+                      WHEN COALESCE(sm."Album", '') = '' THEN sm."Artists"
+                      ELSE sm."Artists" || ' - ' || sm."Album"
+                  END AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "Song" s
+           JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
+           LEFT JOIN "Artwork" art
+               ON art."SongMetadataId" = sm."Id" AND art."ArtworkKind" = 1
+           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)
+           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Trash
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_trash_items() -> Result<TrashPageData, ServerFnError> {
+    use crate::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let (movies, shows, artists, other_videos, songs, images) = tokio::join!(
+        load_trash_movies(&state.pool),
+        load_trash_shows(&state.pool),
+        load_trash_artists(&state.pool),
+        load_trash_other_videos(&state.pool),
+        load_trash_songs(&state.pool),
+        load_trash_images(&state.pool),
+    );
+
+    Ok(TrashPageData {
+        movies: movies?,
+        shows: shows?,
+        artists: artists?,
+        other_videos: other_videos?,
+        songs: songs?,
+        images: images?,
+    })
+}
+
+#[server]
+pub async fn delete_media_items(ids: Vec<i64>) -> Result<u64, ServerFnError> {
+    use crate::state::AppState;
+    use sqlx::{QueryBuilder, Sqlite};
+
+    let state = expect_context::<AppState>();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut builder = QueryBuilder::<Sqlite>::new(r#"DELETE FROM "MediaItem" WHERE "Id" IN ("#);
+    let mut separated = builder.separated(", ");
+    for id in ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+
+    let result = builder.build().execute(&state.pool).await?;
+    Ok(result.rows_affected())
+}
+
+#[server]
+pub async fn empty_trash() -> Result<u64, ServerFnError> {
+    use crate::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let result = sqlx::query(r#"DELETE FROM "MediaItem" WHERE "State" = 1"#)
+        .execute(&state.pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
+async fn load_trash_movies(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT m."Id" AS "Id",
+                  COALESCE(mm."Title", '') AS "Title",
+                  COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
+                  mm."Year" AS "Year",
+                  a."Path" AS "Poster"
+           FROM "Movie" m
+           JOIN "MediaItem" mi ON mi."Id" = m."Id" AND mi."State" = 1
+           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           LEFT JOIN "Artwork" a
+               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 1
+           ORDER BY mm."SortTitle" COLLATE NOCASE, mm."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<i64>, _>("Year")
+                .unwrap_or(None)
+                .map(|year| year.to_string()),
+            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+        })
+        .collect())
+}
+
+async fn load_trash_shows(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  COALESCE(sm."Title", '') AS "Title",
+                  COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
+                  sm."Year" AS "Year",
+                  a."Path" AS "Poster"
+           FROM "Show" s
+           JOIN "MediaItem" mi ON mi."Id" = s."Id" AND mi."State" = 1
+           JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+           LEFT JOIN "Artwork" a
+               ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 1
+           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<i64>, _>("Year")
+                .unwrap_or(None)
+                .map(|year| year.to_string()),
+            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+        })
+        .collect())
+}
+
+async fn load_trash_artists(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  COALESCE(am."Title", '') AS "Title",
+                  COALESCE(am."SortTitle", am."Title", '') AS "SortTitle",
+                  am."Disambiguation" AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "Artist" a
+           JOIN "MediaItem" mi ON mi."Id" = a."Id" AND mi."State" = 1
+           JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           LEFT JOIN "Artwork" art
+               ON art."ArtistMetadataId" = am."Id" AND art."ArtworkKind" = 1
+           ORDER BY am."SortTitle" COLLATE NOCASE, am."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+        })
+        .collect())
+}
+
+async fn load_trash_other_videos(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT ov."Id" AS "Id",
+                  COALESCE(ovm."Title", '') AS "Title",
+                  COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
+                  ovm."OriginalTitle" AS "Subtitle",
+                  COALESCE(thumb."Path", poster."Path") AS "Artwork"
+           FROM "OtherVideo" ov
+           JOIN "MediaItem" mi ON mi."Id" = ov."Id" AND mi."State" = 1
+           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           LEFT JOIN "Artwork" thumb
+               ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
+           LEFT JOIN "Artwork" poster
+               ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
+           ORDER BY ovm."SortTitle" COLLATE NOCASE, ovm."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Artwork").unwrap_or(None),
+        })
+        .collect())
+}
+
+async fn load_trash_songs(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  COALESCE(sm."Title", '') AS "Title",
+                  COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
+                  CASE
+                      WHEN COALESCE(sm."Artists", '') = '' AND COALESCE(sm."Album", '') = '' THEN NULL
+                      WHEN COALESCE(sm."Artists", '') = '' THEN sm."Album"
+                      WHEN COALESCE(sm."Album", '') = '' THEN sm."Artists"
+                      ELSE sm."Artists" || ' - ' || sm."Album"
+                  END AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "Song" s
+           JOIN "MediaItem" mi ON mi."Id" = s."Id" AND mi."State" = 1
+           JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
+           LEFT JOIN "Artwork" art
+               ON art."SongMetadataId" = sm."Id" AND art."ArtworkKind" = 1
+           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+        })
+        .collect())
+}
+
+async fn load_trash_images(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT i."Id" AS "Id",
+                  COALESCE(im."Title", '') AS "Title",
+                  COALESCE(im."SortTitle", im."Title", '') AS "SortTitle",
+                  im."ReleaseDate" AS "ReleaseDate",
+                  a."Path" AS "Thumb"
+           FROM "Image" i
+           JOIN "MediaItem" mi ON mi."Id" = i."Id" AND mi."State" = 1
+           JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
+           LEFT JOIN "Artwork" a ON a."ImageMetadataId" = im."Id"
+           ORDER BY im."SortTitle" COLLATE NOCASE, im."Title" COLLATE NOCASE"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("ReleaseDate").unwrap_or(None),
+            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+        })
+        .collect())
 }
 
 // ---------------------------------------------------------------------------

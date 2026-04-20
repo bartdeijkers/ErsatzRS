@@ -70,7 +70,7 @@ fn NavDrawer() -> impl IntoView {
         <aside class=style::drawer>
             <nav class=style::drawer_nav>
                 <NavLink href="/channels"   label="Channels"        icon=IconName::Play/>
-                <NavLink href="/ffmpeg/profiles" label="FFmpeg Profiles" icon=IconName::Tune/>
+                <NavLink href="/ffmpeg" label="FFmpeg Profiles" icon=IconName::Tune/>
                 <NavLink href="/watermarks" label="Watermarks"      icon=IconName::Visibility/>
 
                 <NavGroup label="Media Sources">
@@ -104,7 +104,7 @@ fn NavDrawer() -> impl IntoView {
 
                 <SchedulingNavGroup>
                     <NavLink href="/schedules"     label="Schedules"        icon=IconName::Settings/>
-                    <NavLink href="/scheduling/blocks" label="Blocks"        icon=IconName::Copy/>
+                    <NavLink href="/blocks" label="Blocks"        icon=IconName::Copy/>
                     <NavLink href="/templates"     label="Templates"        icon=IconName::Copy/>
                     <NavLink href="/decos"         label="Decorations"      icon=IconName::Edit/>
                     <NavLink href="/deco-templates" label="Deco Templates"  icon=IconName::Copy/>
@@ -217,17 +217,27 @@ pub fn PlayoutWarningBadge() -> impl IntoView {
         |()| async move { count_playout_warnings().await.unwrap_or(0) },
     );
 
-    let n = Signal::derive(move || count.get().unwrap_or(0));
-
     view! {
-        <Show when=move || n.get() != 0>
-            <span class=style::nav_badge_warning>
-                {move || {
-                    let v = n.get();
-                    if v > 99 { "99+".to_string() } else { v.to_string() }
-                }}
-            </span>
-        </Show>
+        <Suspense fallback=|| ()>
+            {move || {
+                count.get().map(|value| {
+                    if value == 0 {
+                        ().into_any()
+                    } else {
+                        let label = if value > 99 {
+                            "99+".to_string()
+                        } else {
+                            value.to_string()
+                        };
+
+                        view! {
+                            <span class=style::nav_badge_warning>{label}</span>
+                        }
+                            .into_any()
+                    }
+                })
+            }}
+        </Suspense>
     }
 }
 
@@ -243,26 +253,38 @@ pub fn HealthBadge() -> impl IntoView {
         |()| async move { count_health_issues().await.unwrap_or((0, 0)) },
     );
 
-    let errors = Signal::derive(move || issues.get().unwrap_or((0, 0)).0);
-    let warnings = Signal::derive(move || issues.get().unwrap_or((0, 0)).1);
-
     view! {
-        <Show when=move || errors.get() != 0>
-            <span class=style::nav_badge_error>
-                {move || {
-                    let e = errors.get();
-                    if e > 99 { "99+".to_string() } else { e.to_string() }
-                }}
-            </span>
-        </Show>
-        <Show when=move || errors.get() == 0 && warnings.get() != 0>
-            <span class=style::nav_badge_warning>
-                {move || {
-                    let w = warnings.get();
-                    if w > 99 { "99+".to_string() } else { w.to_string() }
-                }}
-            </span>
-        </Show>
+        <Suspense fallback=|| ()>
+            {move || {
+                issues.get().map(|(errors, warnings)| {
+                    if errors != 0 {
+                        let label = if errors > 99 {
+                            "99+".to_string()
+                        } else {
+                            errors.to_string()
+                        };
+
+                        view! {
+                            <span class=style::nav_badge_error>{label}</span>
+                        }
+                            .into_any()
+                    } else if warnings != 0 {
+                        let label = if warnings > 99 {
+                            "99+".to_string()
+                        } else {
+                            warnings.to_string()
+                        };
+
+                        view! {
+                            <span class=style::nav_badge_warning>{label}</span>
+                        }
+                            .into_any()
+                    } else {
+                        ().into_any()
+                    }
+                })
+            }}
+        </Suspense>
     }
 }
 

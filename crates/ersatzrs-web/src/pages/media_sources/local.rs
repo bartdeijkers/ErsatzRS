@@ -24,7 +24,7 @@ pub fn LocalLibrariesPage() -> impl IntoView {
         |()| async { list_local_libraries().await.unwrap_or_default() },
     );
 
-    let total = Signal::derive(move || rows.get().map_or(0, |r| r.len() as u64));
+    let total = Signal::derive(move || rows.get().map(|r| r.len() as u64));
     let params = RwSignal::new(PageParams::new(50));
 
     let delete_action = Action::new(|id: &i64| delete_local_library(*id));

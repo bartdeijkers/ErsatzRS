@@ -7,7 +7,7 @@
 //!   VAAPI device/driver/display/pad-mode and QSV extra-frames sub-rows appear
 //!   only when the matching accelerator is selected.  "Copy Profile" opens a
 //!   `Modal` wired to `copy_ffmpeg_profile`; on success it navigates to the
-//!   newly-created profile's editor at `/ffmpeg/profiles/{id}`.
+//!   newly-created profile's editor at `/ffmpeg/{id}`.
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
@@ -27,7 +27,7 @@ stylance::import_crate_style!(style, "src/pages/ffmpeg_profiles/editor.module.cs
 // SSR wrapper
 // ---------------------------------------------------------------------------
 
-/// SSR page at `/ffmpeg/profiles/add` and `/ffmpeg/profiles/:id`.
+/// SSR page at `/ffmpeg/add` and `/ffmpeg/:id`.
 ///
 /// Fetches the profile form and the resolution list in parallel, then delegates
 /// to the fully-hydrated island.
@@ -160,7 +160,7 @@ fn FfmpegProfileEditorIsland(
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
-                Ok(_) => navigate("/ffmpeg/profiles", NavigateOptions::default()),
+                Ok(_) => navigate("/ffmpeg", NavigateOptions::default()),
                 Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
             }
         }
@@ -173,7 +173,7 @@ fn FfmpegProfileEditorIsland(
                     toast.push("Profile copied.", ToastSeverity::Success);
                     copy_open.set(false);
                     navigate2(
-                        &format!("/ffmpeg/profiles/{new_id}"),
+                        &format!("/ffmpeg/{new_id}"),
                         NavigateOptions::default(),
                     );
                 }
@@ -308,7 +308,7 @@ fn FfmpegProfileEditorIsland(
         <div class=style::page>
             // ── Breadcrumb ────────────────────────────────────────────
             <div class=style::breadcrumb>
-                <a href="/ffmpeg/profiles" class=style::back_link>"← FFmpeg Profiles"</a>
+                <a href="/ffmpeg" class=style::back_link>"← FFmpeg Profiles"</a>
                 <h1 class=style::page_title>{page_title}</h1>
             </div>
 
@@ -335,12 +335,12 @@ fn FfmpegProfileEditorIsland(
                         >
                             "Copy Profile"
                         </button>
-                        <a href="/ffmpeg/profiles" class=style::cancel_link>"Cancel"</a>
+                        <a href="/ffmpeg" class=style::cancel_link>"Cancel"</a>
                     }
                     .into_any()
                 } else {
                     view! {
-                        <a href="/ffmpeg/profiles" class=style::cancel_link>"Cancel"</a>
+                        <a href="/ffmpeg" class=style::cancel_link>"Cancel"</a>
                     }
                     .into_any()
                 }}

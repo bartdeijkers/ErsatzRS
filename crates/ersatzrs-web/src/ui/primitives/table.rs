@@ -75,7 +75,7 @@ pub fn PagedTable<T>(
     /// The current (fetched) rows to display.
     rows: Resource<Vec<T>>,
     /// Total item count across all pages (for footer).
-    total: Signal<u64>,
+    total: Signal<Option<u64>>,
     /// Shared page/sort params — the parent derives its resource key from this.
     params: RwSignal<PageParams>,
     /// Column definitions.
@@ -96,7 +96,8 @@ where
     };
     let go_next = move |_| {
         params.update(|p| {
-            let max = total.get().saturating_sub(1) / u64::from(p.page_size);
+            let total_items = total.get().unwrap_or(0);
+            let max = total_items.saturating_sub(1) / u64::from(p.page_size);
             if u64::from(p.page) < max {
                 p.page += 1;
             }
@@ -180,36 +181,53 @@ where
                     </tbody>
                 </table>
             </div>
-
-            <div class=style::pagination>
-                <span>
-                    {move || {
-                        let p = params.get();
-                        let start = p.page * p.page_size + 1;
-                        let t = total.get();
-                        let end = ((p.page + 1) * p.page_size)
-                            .min(u32::try_from(t).unwrap_or(u32::MAX));
-                        if t == 0 { "0 items".to_string() }
-                        else { format!("{start}–{end} of {t}") }
-                    }}
-                </span>
-                <div class=style::page_btns>
-                    <button
-                        class=style::page_btn
-                        disabled=move || params.get().page == 0
-                        on:click=go_prev
-                    >"‹ Prev"</button>
-                    <button
-                        class=style::page_btn
-                        disabled=move || {
-                            let p = params.get();
-                            let t = total.get();
-                            t == 0 || u64::from((p.page + 1) * p.page_size) >= t
-                        }
-                        on:click=go_next
-                    >"Next ›"</button>
+            <Suspense fallback=|| view! {
+                <div class=style::pagination>
+                    <span>"Loading..."</span>
+                    <div class=style::page_btns>
+                        <button class=style::page_btn disabled=true>"‹ Prev"</button>
+                        <button class=style::page_btn disabled=true>"Next ›"</button>
+                    </div>
                 </div>
-            </div>
+            }>
+                {move || {
+                    total.get().map(|total_items| {
+                        view! {
+                            <div class=style::pagination>
+                                <span>
+                                    {move || {
+                                        let p = params.get();
+                                        let start = p.page * p.page_size + 1;
+                                        let end = ((p.page + 1) * p.page_size)
+                                            .min(u32::try_from(total_items).unwrap_or(u32::MAX));
+                                        if total_items == 0 {
+                                            "0 items".to_string()
+                                        } else {
+                                            format!("{start}–{end} of {total_items}")
+                                        }
+                                    }}
+                                </span>
+                                <div class=style::page_btns>
+                                    <button
+                                        class=style::page_btn
+                                        disabled=move || params.get().page == 0
+                                        on:click=go_prev
+                                    >"‹ Prev"</button>
+                                    <button
+                                        class=style::page_btn
+                                        disabled=move || {
+                                            let p = params.get();
+                                            total_items == 0
+                                                || u64::from((p.page + 1) * p.page_size) >= total_items
+                                        }
+                                        on:click=go_next
+                                    >"Next ›"</button>
+                                </div>
+                            </div>
+                        }
+                    })
+                }}
+            </Suspense>
         </div>
     }
 }
