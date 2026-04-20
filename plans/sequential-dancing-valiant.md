@@ -185,7 +185,10 @@ unit tests without the large downloads.
 ### Phase 5 - Protocol Endpoints
 
 - Add `/iptv/channels.m3u`.
-- Add HLS video endpoints.
+- Add the core IPTV/HDHomeRun protocol surface with MPEG-TS channel streaming.
+- Defer full HLS parity to Phase 7, including multi-variant playlists,
+  segmenter work-ahead, discontinuity tracking, hls-direct passthrough,
+  access tokens, and Kodi `#KODIPROP` headers.
 - Add HDHomeRun discovery and lineup endpoints.
 - Add UDP discovery on port 65001.
 - Add XMLTV guide output.
@@ -208,6 +211,12 @@ Start server-rendered and add islands hydration where the workflow requires it.
 
 ### Phase 7 - Hardening and Parity Completion
 
+- Complete HLS parity deferred from Phase 5:
+  - multi-variant playlists,
+  - segmenter worker with work-ahead and discontinuity tracking,
+  - hls-direct passthrough,
+  - access tokens,
+  - Kodi `#KODIPROP` headers.
 - Add additional hardware paths: QSV, AMF, VideoToolbox, RKMPP, V4L2M2M.
 - Enable MySQL backend support.
 - Add Trakt integration and version checks.

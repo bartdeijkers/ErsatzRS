@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-19
+Last updated: 2026-04-20 (evening: Phase 7 Slice 1 — HLS entry routes + multi-variant playlist)
 
 ## Current Phase
 
@@ -118,12 +118,28 @@ parity; custom image upload via axum multipart + WASM `gloo_net` FormData
 POST; drawvg placement preview (320×180 PNG via FFmpeg, debounced 400 ms).
 Phase 6.7 delivered the FFmpeg Profile editor.
 
-**Phase 7 — next.** The remaining hardening work starts with the HLS surface:
-multi-variant playlists, the segmenter worker with work-ahead and
-discontinuity tracking, hls-direct passthrough, access tokens, and Kodi
-`#KODIPROP` headers. After that, continue Phase 7 items from the master plan:
-additional hardware paths, MySQL backend support, Trakt integration, Docker
-multi-arch images, side-by-side benchmarking, and long soak tests.
+**Phase 7 — in progress.** Full HLS parity is intentionally scheduled into
+Phase 7 rather than Phase 5; see `plans/defer-hls-parity-to-phase-7.md`.
+
+Phase 7 Slice 1 is landed: `/iptv/channels.m3u` emits mode-aware URL suffixes
+(HLS segmenter → `.m3u8?mode=segmenter`, HLS-direct → `.m3u8?mode=hls-direct`,
+TS → `.ts`, TS-legacy → `.ts?mode=ts-legacy`), short unique ids, ErsatzTV-
+compatible `tvg-id` via `ChannelIdentifier.FromNumber`, `tvc-stream-{v,a}codec`
+tags, and Kodi `#KODIPROP` headers when the `User-Agent` starts with `kodi`.
+`/iptv/channel/{n}.m3u8` is routed and dispatches by mode: `segmenter` returns
+the multi-variant playlist targeting `/iptv/session/{n}/hls.m3u8`, TS modes
+redirect to `.ts`, and `hls-direct` returns `501` until a later slice. A
+`HlsSessionRegistry` trait lives in `ersatzrs-core` with the in-memory
+implementation in `ersatzrs-infra`; `AppState` holds an `Arc<dyn …>` and the
+session playlist route 503s until the worker lands. Access tokens propagate
+through every URL (no verification yet).
+
+Next up (Slice 2): port `HlsSessionWorker` — FFmpeg spawn, work-ahead vs.
+realtime throttling, `TrimPlaylist`, `DeleteOldSegments`, idle shutdown, and
+serve the trimmed playlist through `/iptv/session/{n}/hls.m3u8`. After HLS is
+complete, continue Phase 7 items from the master plan: additional hardware
+paths, MySQL backend support, Trakt integration, Docker multi-arch images,
+side-by-side benchmarking, and long soak tests.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -131,6 +147,33 @@ write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
 Emby sync; the remaining high-risk slices are language and subtitle
 normalization, metadata joins, program schedule item subtypes, template items,
 block item targets, and deco break/template rows.
+
+### Admin UI Route Coverage
+
+The NavDrawer in [`crates/ersatzrs-web/src/ui/layout.rs`](crates/ersatzrs-web/src/ui/layout.rs)
+advertises the full ErsatzTV navigation tree, but several entries are
+intentional placeholders pending Phase 7. Authoritative per-link mapping lives
+in [`docs/reference/parity-matrix.md`](docs/reference/parity-matrix.md#admin-ui-route-coverage);
+the summary below is the readiness view.
+
+**Routed today** (work end-to-end against the current binary): `/channels`,
+`/ffmpeg` (alias for `/ffmpeg/profiles`), `/watermarks`,
+`/media/sources/{local,jellyfin,emby,plex}` and their per-source
+`libraries`/`paths` sub-pages, `/media/libraries`, `/media/trash`,
+`/media/movies`, `/media/tv/shows` (alias `/media/shows`),
+`/media/browser/images` (alias `/media/images`), `/media/music/artists`,
+`/media/music/songs`, `/media/other/videos`, `/media/collections`,
+`/media/smart-collections`, `/blocks` (alias for `/scheduling/blocks`),
+`/playouts` and `/playouts/sequential/:id`.
+
+**Advertised but currently 404** (placeholders pending Phase 7):
+`/media/remote/streams`, `/media/multi-collections`, `/media/rerun-collections`,
+`/media/playlists`, `/media/trakt/lists`, `/media/filler/presets`,
+`/schedules`, `/templates`, `/decos`, `/deco-templates`,
+`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`, and
+`/system/{health,logs,troubleshooting}`. These should not be read as Phase 6
+regressions; they were intentionally shipped in the navigation tree for layout
+parity ahead of the corresponding pages.
 
 ### Known TODOs from Phase 0
 
@@ -212,3 +255,6 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-19 | GitHub Copilot (GPT-5.4) | Updated STATUS.md to mark Phase 6 complete, advance the repo to Phase 7, and record the playout timeline SQL dedupe follow-up. |
 | 2026-04-19 | GitHub Copilot (GPT-5.4) | Restored ErsatzTV route parity for already-ported web pages by wiring canonical aliases for `/ffmpeg`, `/blocks`, `/media/tv/shows`, and `/media/browser/images`, while keeping the previously shipped `/ffmpeg/profiles`, `/scheduling/blocks`, `/media/shows`, and `/media/images` paths as temporary aliases; updated nav and internal links to prefer the ErsatzTV URLs. `cargo check -p ersatzrs-web` passes. |
 | 2026-04-19 | GitHub Copilot (GPT-5.4) | Ported the next non-placeholder media pages: added artist/song/other-video browsers at `/media/music/artists`, `/media/music/songs`, and `/media/other/videos` backed by new `server/media_browser.rs` SQL loaders with ErsatzTV-style subtitle/artwork mapping; added a real `/media/trash` page for the currently implemented browser types (movies, shows, artists, other videos, songs, images) with grouped file-not-found sections plus direct delete-selected and empty-trash actions via `MediaItem` deletes. `cargo check -p ersatzrs-web`, `cargo build -p ersatzrs-web`, and HTTP probes against all four new routes pass. |
+| 2026-04-20 | GitHub Copilot (GPT-5.4) | Amended the master plan and added a planning note under `plans/` so full HLS parity is intentionally scheduled in Phase 7, aligning the plan with current status and implementation sequencing. |
+| 2026-04-20 | Claude Code (claude-opus-4-7) | Reconciled STATUS.md, parity-matrix.md, and the actual code: rewrote parity matrix to mark Phase 4 Scanner / Phase 5 IPTV+XMLTV+HDHomeRun HTTP+UDP+MPEG-TS as Ported, HLS as Deferred (Phase 7), drawvg engine as Ported, and added Phase 6 admin-UI feature rows (channels/ffmpeg-profile/watermark/media-source/library/media-browser/collection/block/sequential-playout/timeline). Added an "Admin UI Route Coverage" table to the matrix and STATUS.md listing the 19 routed nav links and the 20 nav entries that are intentional 404 placeholders pending Phase 7 (remote streams, multi/rerun collections, playlists, trakt lists, filler presets, schedules/templates/decos/deco-templates, all `/settings/*`, all `/system/*`). |
+| 2026-04-20 | Claude Code (claude-opus-4-7[1m]) | Phase 7 Slice 1 — HLS entry routes + multi-variant playlist + session-registry seam. Ported `ChannelPlaylist.cs` mode-aware URL suffix, Kodi `#KODIPROP` headers, `ChannelIdentifier.FromNumber`, short unique id, and `tvc-stream-{v,a}codec` tags on `/iptv/channels.m3u`. Added `/iptv/channel/{n}.m3u8` dispatcher (segmenter → multi-variant playlist targeting `/iptv/session/{n}/hls.m3u8`; TS modes redirect to `.ts`; `hls-direct` returns 501 until a later slice), the `build_multi_variant_playlist` builder with ErsatzTV's `BANDWIDTH = (VideoBitrate + AudioBitrate) * 1000 * 1.2` formula, and an `/iptv/session/{n}/hls.m3u8` endpoint that 503s until Slice 2 lands the worker. Introduced `HlsSessionRegistry` + `HlsSessionHandle` traits in `ersatzrs-core` with `InMemoryHlsSessionRegistry` in `ersatzrs-infra`, wired into `AppState`. Access tokens propagate through all URLs (verification deferred to Slice 5). Six new insta snapshots cover m3u mode-aware/Kodi/access-token and three variant-playlist shapes. Gates: fmt, clippy -D warnings, tests (workspace), deny check all green. |
