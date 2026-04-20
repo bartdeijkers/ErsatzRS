@@ -5,9 +5,12 @@ use axum::{
 };
 use ersatzrs_core::repositories::ChannelRepository;
 use ersatzrs_domain::StreamingMode;
+use ersatzrs_infra::hls_worker::HlsSessionWorker;
 use serde::Deserialize;
+use std::sync::Arc;
 
 use crate::iptv::access_token::AccessToken;
+use crate::iptv::stream;
 use crate::iptv::streaming_specs;
 use crate::iptv::variant::build_multi_variant_playlist;
 use crate::state::AppState;
@@ -55,6 +58,37 @@ fn hls_response(body: String) -> Response {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+async fn ensure_segmenter_worker_running(
+    state: &AppState,
+    channel_number: &str,
+    channel_id: i64,
+    path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+) {
+    if let Some(worker) = state.hls_sessions.try_get(channel_number).await {
+        worker.touch();
+        return;
+    }
+
+    let working_dir = std::env::temp_dir()
+        .join("ersatzrs-hls")
+        .join(channel_number);
+    let worker = HlsSessionWorker::new(
+        channel_number.to_string(),
+        channel_id,
+        working_dir,
+        path_replacements,
+    );
+    if state.hls_sessions.try_insert(worker.clone()).await {
+        worker.start(
+            state.pool.clone(),
+            Arc::clone(&state.hls_sessions),
+            Some(std::time::Duration::from_secs(30)),
+        );
+    } else if let Some(existing_worker) = state.hls_sessions.try_get(channel_number).await {
+        existing_worker.touch();
+    }
 }
 
 /// `GET /iptv/channel/{number}.m3u8` — mode-dispatched HLS entry point.
@@ -113,10 +147,21 @@ pub async fn serve_channel_m3u8(
                 }
             };
 
-            // NOTE: Slice 2 wires the segmenter worker that serves the per-session
-            // `/iptv/session/{n}/hls.m3u8` variant URL. For this slice we still emit
-            // the multi-variant playlist so clients can connect and clearly see the
-            // session endpoint 503 until the worker lands.
+            let path_replacements = match stream::load_path_replacements(
+                &state.repositories.media_source,
+            )
+            .await
+            {
+                Ok(replacements) => replacements,
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for hls worker; continuing with raw path");
+                    Vec::new()
+                }
+            };
+
+            ensure_segmenter_worker_running(state, &channel.number, channel.id, path_replacements)
+                .await;
+
             let body = build_multi_variant_playlist(
                 &scheme,
                 &host,
@@ -157,26 +202,50 @@ pub async fn get_session_playlist(
 ) -> Response {
     if let Some(handle) = state.hls_sessions.try_get(&channel_number).await {
         handle.touch();
-        tracing::debug!(
-            channel_number,
-            "hls session worker present but playlist trimming is not wired yet"
-        );
-        // TODO (Slice 2): wire `worker.trim_playlist(now - 30s)` and return the
-        // trimmed playlist body.
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "hls session worker has no playlist yet",
-        )
-            .into_response();
+        return match handle.trim_playlist().await {
+            Some(playlist) => hls_response(playlist),
+            None => (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response(),
+        };
     }
 
-    tracing::info!(
-        channel_number,
-        "no hls session worker for channel; segmenter not started yet"
-    );
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        "hls session worker is not running",
-    )
-        .into_response()
+    (StatusCode::SERVICE_UNAVAILABLE, "hls session not running").into_response()
+}
+
+pub async fn get_session_segment(
+    State(_state): State<AppState>,
+    Path((channel_number, filename)): Path<(String, String)>,
+) -> Response {
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "invalid segment filename").into_response();
+    }
+
+    let path = std::env::temp_dir()
+        .join("ersatzrs-hls")
+        .join(&channel_number)
+        .join(&filename);
+
+    match tokio::fs::read(path).await {
+        Ok(body) => {
+            let mut response = body.into_response();
+            if std::path::Path::new(&filename)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+            {
+                response
+                    .headers_mut()
+                    .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+            }
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            StatusCode::NOT_FOUND.into_response()
+        }
+        Err(error) => {
+            tracing::warn!(%error, channel_number, filename, "failed to read hls segment");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }

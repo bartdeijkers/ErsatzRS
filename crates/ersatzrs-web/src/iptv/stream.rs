@@ -133,7 +133,7 @@ async fn load_active_media_path(
     }))
 }
 
-async fn load_path_replacements(
+pub(crate) async fn load_path_replacements(
     media_sources: &impl MediaSourceRepository,
 ) -> Result<Vec<PathReplacement>, ersatzrs_core::repositories::RepositoryError> {
     let all = media_sources.list_all().await?;

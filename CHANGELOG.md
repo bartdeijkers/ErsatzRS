@@ -158,6 +158,12 @@ for commit messages.
 
 ### Changed
 
+- Phase 7 Slice 2 HLS segmenter hardening: the temp-backed `HlsSessionWorker`
+  now mirrors the MPEG-TS route's provider path-replacement handling before
+  invoking FFmpeg, uses atomic session registration to avoid duplicate
+  segmenters on concurrent requests, and treats failed FFmpeg child exits as
+  terminal cleanup instead of looping until idle timeout.
+
 - SQLite repository decoding and writes now use ErsatzTV-compatible integer
   enum values, EF-style UTC `DateTime` text, and ErsatzTV `TimeSpan` parsing.
 - Env-gated real-world ErsatzTV SQLite compatibility coverage now exercises

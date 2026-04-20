@@ -19,16 +19,6 @@ impl InMemoryHlsSessionRegistry {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub async fn insert(&self, handle: Arc<dyn HlsSessionHandle>) {
-        let mut guard = self.inner.write().await;
-        guard.insert(handle.channel_number().to_string(), handle);
-    }
-
-    pub async fn remove(&self, channel_number: &str) {
-        let mut guard = self.inner.write().await;
-        guard.remove(channel_number);
-    }
 }
 
 #[async_trait]
@@ -36,6 +26,27 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
     async fn try_get(&self, channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
         let guard = self.inner.read().await;
         guard.get(channel_number).cloned()
+    }
+
+    async fn try_insert(&self, handle: Arc<dyn HlsSessionHandle>) -> bool {
+        let mut guard = self.inner.write().await;
+        let key = handle.channel_number().to_string();
+        if guard.contains_key(&key) {
+            return false;
+        }
+
+        guard.insert(key, handle);
+        true
+    }
+
+    async fn insert(&self, handle: Arc<dyn HlsSessionHandle>) {
+        let mut guard = self.inner.write().await;
+        guard.insert(handle.channel_number().to_string(), handle);
+    }
+
+    async fn remove(&self, channel_number: &str) {
+        let mut guard = self.inner.write().await;
+        guard.remove(channel_number);
     }
 }
 
@@ -49,6 +60,7 @@ mod tests {
         touched: AtomicUsize,
     }
 
+    #[async_trait]
     impl HlsSessionHandle for FakeHandle {
         fn channel_number(&self) -> &str {
             &self.channel
@@ -56,6 +68,10 @@ mod tests {
 
         fn touch(&self) {
             self.touched.fetch_add(1, Ordering::SeqCst);
+        }
+
+        async fn trim_playlist(&self) -> Option<String> {
+            None
         }
     }
 
@@ -74,6 +90,22 @@ mod tests {
 
         registry.remove("42").await;
         assert!(registry.try_get("42").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn try_insert_returns_false_when_channel_exists() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let first = Arc::new(FakeHandle {
+            channel: "42".to_string(),
+            touched: AtomicUsize::new(0),
+        });
+        let second = Arc::new(FakeHandle {
+            channel: "42".to_string(),
+            touched: AtomicUsize::new(0),
+        });
+
+        assert!(registry.try_insert(first).await);
+        assert!(!registry.try_insert(second).await);
     }
 
     #[tokio::test]
