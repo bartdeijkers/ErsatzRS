@@ -172,10 +172,7 @@ fn FfmpegProfileEditorIsland(
                 Ok(new_id) => {
                     toast.push("Profile copied.", ToastSeverity::Success);
                     copy_open.set(false);
-                    navigate2(
-                        &format!("/ffmpeg/{new_id}"),
-                        NavigateOptions::default(),
-                    );
+                    navigate2(&format!("/ffmpeg/{new_id}"), NavigateOptions::default());
                 }
                 Err(e) => toast.push(format!("Copy failed: {e}"), ToastSeverity::Error),
             }

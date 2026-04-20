@@ -2,7 +2,6 @@ use std::process::Stdio;
 
 use axum::{
     body::Body,
-    extract::{Path, State},
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -20,14 +19,7 @@ use tokio_util::io::ReaderStream;
 
 use crate::state::AppState;
 
-pub async fn get_transport_stream(
-    State(state): State<AppState>,
-    Path(file): Path<String>,
-) -> Response {
-    let Some(channel_number) = file.strip_suffix(".ts") else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-
+pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> Response {
     let channel = match state
         .repositories
         .channel

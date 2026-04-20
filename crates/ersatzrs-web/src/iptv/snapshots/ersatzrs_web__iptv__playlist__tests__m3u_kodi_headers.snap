@@ -1,0 +1,10 @@
+---
+source: crates/ersatzrs-web/src/iptv/playlist.rs
+expression: output
+---
+#EXTM3U url-tvg="http://example.test:8080/iptv/xmltv.xml" x-tvg-url="http://example.test:8080/iptv/xmltv.xml"
+#KODIPROP:inputstream=inputstream.ffmpegdirect
+#KODIPROP:mimetype=application/x-mpegURL
+#KODIPROP:inputstream.ffmpegdirect.open_mode=ffmpeg
+#EXTINF:0 tvg-id="C1.145.ersatztv.org" channel-id="AAAAAAAAAAAAAAAAAAAAAQ" channel-number="1" CUID="AAAAAAAAAAAAAAAAAAAAAQ" tvg-chno="1" tvg-name="Movies" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Movies" group-title="ErsatzRS" tvc-stream-vcodec="h264" tvc-stream-acodec="aac", Movies
+http://example.test:8080/iptv/channel/1.m3u8?mode=segmenter

@@ -26,8 +26,10 @@ struct TrashSection {
 
 #[component]
 pub fn TrashPage() -> impl IntoView {
-    let data: Resource<TrashPageData> =
-        Resource::new(|| (), |_| async move { list_trash_items().await.unwrap_or_default() });
+    let data: Resource<TrashPageData> = Resource::new(
+        || (),
+        |()| async move { list_trash_items().await.unwrap_or_default() },
+    );
 
     let selected_ids = RwSignal::new(HashSet::<i64>::new());
     let single_delete_target = RwSignal::new(None::<(i64, String)>);
@@ -39,7 +41,7 @@ pub fn TrashPage() -> impl IntoView {
         let ids = ids.clone();
         async move { delete_media_items(ids).await }
     });
-    let empty_action = Action::new(|_: &()| async move { empty_trash().await });
+    let empty_action = Action::new(|(): &()| async move { empty_trash().await });
 
     let toast = use_toast();
 
@@ -87,7 +89,7 @@ pub fn TrashPage() -> impl IntoView {
         }
     });
 
-    let selected_count = Signal::derive(move || selected_ids.with(|ids| ids.len()));
+    let selected_count = Signal::derive(move || selected_ids.with(HashSet::len));
 
     view! {
         <div class=style::page>

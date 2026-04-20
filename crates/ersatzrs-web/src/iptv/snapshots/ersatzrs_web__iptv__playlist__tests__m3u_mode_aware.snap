@@ -1,0 +1,13 @@
+---
+source: crates/ersatzrs-web/src/iptv/playlist.rs
+expression: output
+---
+#EXTM3U url-tvg="http://example.test:8080/iptv/xmltv.xml" x-tvg-url="http://example.test:8080/iptv/xmltv.xml"
+#EXTINF:0 tvg-id="C1.145.ersatztv.org" channel-id="AAAAAAAAAAAAAAAAAAAAAQ" channel-number="1" CUID="AAAAAAAAAAAAAAAAAAAAAQ" tvg-chno="1" tvg-name="Movies" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Movies" group-title="ErsatzRS" tvc-stream-vcodec="h264" tvc-stream-acodec="aac", Movies
+http://example.test:8080/iptv/channel/1.ts?mode=ts-legacy
+#EXTINF:0 tvg-id="C2.146.ersatztv.org" channel-id="AQIDBAUGBwgJCgsMDQ4PEA" channel-number="2" CUID="AQIDBAUGBwgJCgsMDQ4PEA" tvg-chno="2" tvg-name="Kids" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Kids" group-title="Family" tvc-stream-vcodec="hevc" tvc-stream-acodec="ac3", Kids
+http://example.test:8080/iptv/channel/2.m3u8?mode=segmenter
+#EXTINF:0 tvg-id="C3.147.ersatztv.org" channel-id="AAAAAAAAAAAAAAAAAAAAAg" channel-number="3" CUID="AAAAAAAAAAAAAAAAAAAAAg" tvg-chno="3" tvg-name="Direct" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Direct" group-title="" tvc-stream-vcodec="h264" tvc-stream-acodec="aac", Direct
+http://example.test:8080/iptv/channel/3.m3u8?mode=hls-direct
+#EXTINF:0 tvg-id="C4.148.ersatztv.org" channel-id="AAAAAAAAAAAAAAAAAAAAAw" channel-number="4" CUID="AAAAAAAAAAAAAAAAAAAAAw" tvg-chno="4" tvg-name="Hybrid" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Hybrid" group-title="" tvc-stream-vcodec="h264" tvc-stream-acodec="aac", Hybrid
+http://example.test:8080/iptv/channel/4.ts

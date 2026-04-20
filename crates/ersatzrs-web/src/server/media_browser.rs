@@ -503,7 +503,9 @@ pub async fn empty_trash() -> Result<u64, ServerFnError> {
     Ok(result.rows_affected())
 }
 
-async fn load_trash_movies(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+async fn load_trash_movies(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -537,7 +539,9 @@ async fn load_trash_movies(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaC
         .collect())
 }
 
-async fn load_trash_shows(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+async fn load_trash_shows(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -571,7 +575,9 @@ async fn load_trash_shows(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCa
         .collect())
 }
 
-async fn load_trash_artists(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+async fn load_trash_artists(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -637,7 +643,9 @@ async fn load_trash_other_videos(
         .collect())
 }
 
-async fn load_trash_songs(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+async fn load_trash_songs(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -673,7 +681,9 @@ async fn load_trash_songs(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCa
         .collect())
 }
 
-async fn load_trash_images(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+async fn load_trash_images(
+    pool: &sqlx::Pool<sqlx::Sqlite>,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -697,7 +707,9 @@ async fn load_trash_images(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<Vec<MediaC
             id: r.try_get("Id").unwrap_or(0),
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
-            subtitle: r.try_get::<Option<String>, _>("ReleaseDate").unwrap_or(None),
+            subtitle: r
+                .try_get::<Option<String>, _>("ReleaseDate")
+                .unwrap_or(None),
             artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
         })
         .collect())

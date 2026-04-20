@@ -107,9 +107,10 @@ async fn main() {
         )
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
+        .route("/iptv/channel/:file", get(iptv::dispatch_channel_request))
         .route(
-            "/iptv/channel/:file",
-            get(iptv::stream::get_transport_stream),
+            "/iptv/session/:channel_number/hls.m3u8",
+            get(iptv::hls::get_session_playlist),
         )
         .route("/discover.json", get(hdhr::get_discover_json))
         .route("/device.xml", get(hdhr::get_device_xml))

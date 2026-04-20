@@ -1,9 +1,0 @@
----
-source: crates/ersatzrs-web/src/iptv/playlist.rs
-expression: output
----
-#EXTM3U url-tvg="http://example.test:8080/iptv/xmltv.xml" x-tvg-url="http://example.test:8080/iptv/xmltv.xml"
-#EXTINF:-1 tvg-id="1" tvg-name="Movies" tvg-logo="http://example.test:8080/iptv/logos/Movies" group-title="ErsatzRS",Movies
-http://example.test:8080/iptv/channel/1.ts
-#EXTINF:-1 tvg-id="2" tvg-name="Kids" tvg-logo="http://example.test:8080/iptv/logos/Kids" group-title="Family",Kids
-http://example.test:8080/iptv/channel/2.ts

@@ -285,6 +285,7 @@ fn HomePage() -> impl IntoView {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)] // signature dictated by leptos_axum
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     let hydration_assets_available = resolve_hydration_assets(&options).is_some();
 
