@@ -5,6 +5,7 @@ use axum::{
 };
 use ersatzrs_core::repositories::ChannelRepository;
 use ersatzrs_domain::StreamingMode;
+use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::hls_worker::HlsSessionWorker;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -64,6 +65,7 @@ async fn ensure_segmenter_worker_running(
     state: &AppState,
     channel_number: &str,
     channel_id: i64,
+    output_format: OutputFormat,
     path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
 ) {
     if let Some(worker) = state.hls_sessions.try_get(channel_number).await {
@@ -78,6 +80,7 @@ async fn ensure_segmenter_worker_running(
         channel_number.to_string(),
         channel_id,
         working_dir,
+        output_format,
         path_replacements,
     );
     if state.hls_sessions.try_insert(worker.clone()).await {
@@ -133,6 +136,11 @@ pub async fn serve_channel_m3u8(
 
     match mode.as_str() {
         "segmenter" | "segmenter-v2" | "segmenter-fmp4" => {
+            let output_format = if mode == "segmenter-fmp4" {
+                OutputFormat::HlsMp4
+            } else {
+                OutputFormat::Hls
+            };
             let scheme = request_scheme(headers);
             let host = request_host(headers);
             let spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
@@ -159,8 +167,14 @@ pub async fn serve_channel_m3u8(
                 }
             };
 
-            ensure_segmenter_worker_running(state, &channel.number, channel.id, path_replacements)
-                .await;
+            ensure_segmenter_worker_running(
+                state,
+                &channel.number,
+                channel.id,
+                output_format,
+                path_replacements,
+            )
+            .await;
 
             let body = build_multi_variant_playlist(
                 &scheme,
@@ -227,13 +241,29 @@ pub async fn get_session_segment(
     match tokio::fs::read(path).await {
         Ok(body) => {
             let mut response = body.into_response();
-            if std::path::Path::new(&filename)
+            match std::path::Path::new(&filename)
                 .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+                .and_then(|extension| extension.to_str())
+                .map(str::to_ascii_lowercase)
+                .as_deref()
             {
-                response
-                    .headers_mut()
-                    .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+                Some("ts") => {
+                    response
+                        .headers_mut()
+                        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+                }
+                Some("mp4") => {
+                    response
+                        .headers_mut()
+                        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp4"));
+                }
+                Some("m4s") => {
+                    response.headers_mut().insert(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("video/iso.segment"),
+                    );
+                }
+                Some(_) | None => {}
             }
             response
                 .headers_mut()

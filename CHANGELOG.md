@@ -10,6 +10,13 @@ for commit messages.
 
 ### Added
 
+- Phase 7 Slice 3 HLS playlist trimming: the HLS session worker now filters
+  live playlists before serving them, carries forward `#EXT-X-DISCONTINUITY`
+  boundaries, deletes stale `.ts`/`.m4s`/`.mp4` segment files from the temp
+  session directory, and can emit fMP4 HLS output (`segmenter-fmp4`) with
+  `#EXT-X-MAP` / `init.mp4` support on the shared `/iptv/session/{n}/{file}`
+  route.
+
 - Phase 6.5 block scheduling UI: `/scheduling/blocks` list page with block
   group management (add/delete groups, add/delete blocks grouped by group
   name); `/scheduling/blocks/:id` block editor as a fully hydrated Leptos
