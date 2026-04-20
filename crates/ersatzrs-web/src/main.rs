@@ -15,6 +15,7 @@ use app::{shell, App};
 use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
+    middleware,
     routing::{get, post},
     Router,
 };
@@ -23,6 +24,7 @@ use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use sqlx::SqlitePool;
 use state::AppState;
+use state::IptvAccessTokenVerifier;
 use std::path::{Path, PathBuf};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
@@ -105,21 +107,7 @@ async fn main() {
             "/artwork/watermarks/:filename",
             get(watermark_upload::serve_watermark_image),
         )
-        .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
-        .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
-        .route("/iptv/channel/:file", get(iptv::dispatch_channel_request))
-        .route(
-            "/iptv/session/:channel_number/hls.m3u8",
-            get(iptv::hls::get_session_playlist),
-        )
-        .route(
-            "/iptv/session/:channel_number/:filename",
-            get(iptv::hls::get_session_segment),
-        )
-        .route(
-            "/iptv/hls-direct/:file",
-            get(iptv::hls::get_hls_direct_stream),
-        )
+        .merge(build_iptv_router(&app_state))
         .route("/discover.json", get(hdhr::get_discover_json))
         .route("/device.xml", get(hdhr::get_device_xml))
         .route("/lineup_status.json", get(hdhr::get_lineup_status_json))
@@ -149,6 +137,8 @@ async fn main() {
 
 async fn build_app_state(pool: SqlitePool) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    let iptv_access_token_verifier =
+        IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());
 
     let device_uuid = if let Some(value) = repositories
         .config
@@ -176,7 +166,42 @@ async fn build_app_state(pool: SqlitePool) -> Result<AppState, sqlx::Error> {
         .and_then(|value| value.trim().parse::<i32>().ok())
         .unwrap_or(DEFAULT_TUNER_COUNT);
 
-    Ok(AppState::new(pool, device_uuid, tuner_count))
+    Ok(AppState::new(
+        pool,
+        device_uuid,
+        tuner_count,
+        iptv_access_token_verifier,
+    ))
+}
+
+fn load_iptv_jwt_signing_key() -> Option<String> {
+    #[allow(clippy::disallowed_methods)]
+    std::env::var("JWT__IssuerSigningKey")
+        .ok()
+        .or_else(|| std::env::var("JWT:IssuerSigningKey").ok())
+}
+
+fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
+    Router::new()
+        .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
+        .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
+        .route("/iptv/channel/:file", get(iptv::dispatch_channel_request))
+        .route(
+            "/iptv/session/:channel_number/hls.m3u8",
+            get(iptv::hls::get_session_playlist),
+        )
+        .route(
+            "/iptv/session/:channel_number/:filename",
+            get(iptv::hls::get_session_segment),
+        )
+        .route(
+            "/iptv/hls-direct/:file",
+            get(iptv::hls::get_hls_direct_stream),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            iptv::access_token::require_iptv_access,
+        ))
 }
 
 fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
+use jsonwebtoken::{DecodingKey, Validation};
 use sqlx::SqlitePool;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -16,11 +17,23 @@ pub struct AppState {
     pub tuner_count: i32,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
+    pub iptv_access_token_verifier: IptvAccessTokenVerifier,
+}
+
+#[derive(Clone)]
+pub struct IptvAccessTokenVerifier {
+    pub(crate) validation: Option<Validation>,
+    pub(crate) decoding_key: Option<DecodingKey>,
 }
 
 impl AppState {
     #[must_use]
-    pub fn new(pool: SqlitePool, device_uuid: Uuid, tuner_count: i32) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        device_uuid: Uuid,
+        tuner_count: i32,
+        iptv_access_token_verifier: IptvAccessTokenVerifier,
+    ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
@@ -31,6 +44,18 @@ impl AppState {
             tuner_count,
             hls_sessions,
             hls_direct_indices,
+            iptv_access_token_verifier,
         }
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn for_tests(iptv_access_token_verifier: IptvAccessTokenVerifier) -> Self {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("sqlite::memory:")
+            .expect("lazy sqlite pool");
+
+        Self::new(pool, Uuid::nil(), 1, iptv_access_token_verifier)
     }
 }
