@@ -20,6 +20,14 @@ use tokio_util::io::ReaderStream;
 use crate::state::AppState;
 
 pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> Response {
+    serve_channel_stream(state, channel_number, OutputFormat::MpegTs).await
+}
+
+pub async fn serve_channel_stream(
+    state: &AppState,
+    channel_number: &str,
+    output_format: OutputFormat,
+) -> Response {
     let channel = match state
         .repositories
         .channel
@@ -64,13 +72,14 @@ pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> R
         replace_path(&replacements, &active.media_path, PathPlatform::Unix)
     };
 
-    let command = build_stream_command(&resolved);
+    let command = build_stream_command(&resolved, output_format);
     match spawn_stream_body(command) {
         Ok(body) => {
             let mut response = body.into_response();
-            response
-                .headers_mut()
-                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(content_type_for_output_format(output_format)),
+            );
             response
                 .headers_mut()
                 .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -92,18 +101,22 @@ enum StreamSpawnError {
 }
 
 #[derive(Debug, Clone)]
-struct ActivePlayoutItem {
-    media_path: String,
+pub(crate) struct ActivePlayoutItem {
+    pub(crate) media_path: String,
+    pub(crate) playout_start: String,
+    pub(crate) playout_finish: String,
 }
 
-async fn load_active_media_path(
+pub(crate) async fn load_active_media_path(
     pool: &SqlitePool,
     channel_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<ActivePlayoutItem>, sqlx::Error> {
     let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
-        r#"SELECT mf."Path" AS "MediaPath"
+        r#"SELECT mf."Path" AS "MediaPath",
+                  pi."Start" AS "PlayoutStart",
+                  pi."Finish" AS "PlayoutFinish"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "MediaVersion" mv
@@ -130,6 +143,8 @@ async fn load_active_media_path(
 
     Ok(row.map(|row| ActivePlayoutItem {
         media_path: row.get::<String, _>("MediaPath"),
+        playout_start: row.get::<String, _>("PlayoutStart"),
+        playout_finish: row.get::<String, _>("PlayoutFinish"),
     }))
 }
 
@@ -201,10 +216,28 @@ fn detect_platform(path: &str) -> PathPlatform {
     }
 }
 
-fn build_stream_command(path: &str) -> FfmpegCommand {
+pub(crate) fn content_type_for_output_format(output_format: OutputFormat) -> &'static str {
+    match output_format {
+        OutputFormat::MpegTs => "video/mp2t",
+        OutputFormat::Mp4 => "video/mp4",
+        OutputFormat::Mkv => "video/x-matroska",
+        OutputFormat::Nut | OutputFormat::Hls | OutputFormat::HlsMp4 => "application/octet-stream",
+    }
+}
+
+pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'static str {
+    match output_format {
+        OutputFormat::MpegTs => ".ts",
+        OutputFormat::Mp4 => ".mp4",
+        OutputFormat::Mkv => ".mkv",
+        OutputFormat::Nut | OutputFormat::Hls | OutputFormat::HlsMp4 => "",
+    }
+}
+
+fn build_stream_command(path: &str, output_format: OutputFormat) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
-    request.state.output_format = OutputFormat::MpegTs;
+    request.state.output_format = output_format;
     request.state.report_progress = false;
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
@@ -254,11 +287,38 @@ mod tests {
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
-        let command = build_stream_command("/media/movie.mkv");
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
         assert!(!arguments.contains("-progress pipe:1"));
+    }
+
+    #[test]
+    fn build_stream_command_can_target_mp4() {
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4);
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("-f mp4"));
+        assert!(arguments.ends_with("pipe:1"));
+    }
+
+    #[test]
+    fn output_format_helpers_match_hls_direct_variants() {
+        assert_eq!(extension_for_output_format(OutputFormat::MpegTs), ".ts");
+        assert_eq!(extension_for_output_format(OutputFormat::Mp4), ".mp4");
+        assert_eq!(extension_for_output_format(OutputFormat::Mkv), ".mkv");
+        assert_eq!(
+            content_type_for_output_format(OutputFormat::MpegTs),
+            "video/mp2t"
+        );
+        assert_eq!(
+            content_type_for_output_format(OutputFormat::Mp4),
+            "video/mp4"
+        );
+        assert_eq!(
+            content_type_for_output_format(OutputFormat::Mkv),
+            "video/x-matroska"
+        );
     }
 
     #[test]
@@ -293,7 +353,8 @@ mod tests {
             return;
         }
 
-        let command = build_stream_command(fixture.to_string_lossy().as_ref());
+        let command =
+            build_stream_command(fixture.to_string_lossy().as_ref(), OutputFormat::MpegTs);
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)

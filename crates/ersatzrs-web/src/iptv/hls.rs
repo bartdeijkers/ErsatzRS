@@ -3,12 +3,13 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use ersatzrs_core::repositories::ChannelRepository;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::StreamingMode;
 use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::hls_worker::HlsSessionWorker;
 use serde::Deserialize;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::iptv::access_token::AccessToken;
 use crate::iptv::stream;
@@ -28,6 +29,7 @@ pub struct HlsQuery {
 /// `Content(playlist, "application/vnd.apple.mpegurl")` call sites in
 /// `ErsatzTV`'s `IptvController`.
 const HLS_CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/vnd.apple.mpegurl");
+const CONFIG_KEY_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_format";
 
 fn request_scheme(headers: &HeaderMap) -> String {
     headers
@@ -94,12 +96,134 @@ async fn ensure_segmenter_worker_running(
     }
 }
 
+async fn serve_hls_direct_playlist(
+    state: &AppState,
+    channel_id: i64,
+    channel_number: &str,
+    scheme: &str,
+    host: &str,
+    access_token: &AccessToken,
+) -> Response {
+    let active = match stream::load_active_media_path(&state.pool, channel_id, Utc::now()).await {
+        Ok(Some(active)) => active,
+        Ok(None) => {
+            tracing::info!(channel_number, "no active playout item for hls-direct");
+            return (StatusCode::SERVICE_UNAVAILABLE, "no active playout item").into_response();
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number, "failed to load active playout item for hls-direct");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let output_format = load_hls_direct_output_format(state).await;
+    let index = next_hls_direct_index(state, channel_id, &active.playout_start).await;
+    let time_remaining =
+        format_time_remaining(&active.playout_finish).unwrap_or_else(|| "10.00".to_string());
+    let body = build_hls_direct_playlist(
+        scheme,
+        host,
+        channel_number,
+        stream::extension_for_output_format(output_format),
+        index,
+        &time_remaining,
+        access_token,
+    );
+    hls_response(body)
+}
+
+async fn load_hls_direct_output_format(state: &AppState) -> OutputFormat {
+    let configured = state
+        .repositories
+        .config
+        .get(CONFIG_KEY_HLS_DIRECT_OUTPUT_FORMAT)
+        .await
+        .ok()
+        .flatten();
+    parse_hls_direct_output_format(configured.as_deref())
+}
+
+fn parse_hls_direct_output_format(value: Option<&str>) -> OutputFormat {
+    let normalized = value.unwrap_or_default().trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "1" | "mkv" | "matroska" => OutputFormat::Mkv,
+        "3" | "mp4" => OutputFormat::Mp4,
+        _ => OutputFormat::MpegTs,
+    }
+}
+
+async fn next_hls_direct_index(state: &AppState, channel_id: i64, playout_start: &str) -> u64 {
+    let mut indices = state.hls_direct_indices.write().await;
+    next_channel_index(&mut indices, channel_id, playout_start)
+}
+
+fn next_channel_index(
+    indices: &mut HashMap<i64, (String, u64)>,
+    channel_id: i64,
+    playout_start: &str,
+) -> u64 {
+    match indices.get_mut(&channel_id) {
+        Some((existing_start, index)) if existing_start == playout_start => *index,
+        Some((existing_start, index)) => {
+            *existing_start = playout_start.to_string();
+            *index += 1;
+            *index
+        }
+        None => {
+            indices.insert(channel_id, (playout_start.to_string(), 1));
+            1
+        }
+    }
+}
+
+fn format_time_remaining(playout_finish: &str) -> Option<String> {
+    parse_sqlite_utc_timestamp(playout_finish).map(|finish| {
+        let milliseconds = (finish - Utc::now()).num_milliseconds().unsigned_abs();
+        format!(
+            "{}.{:02}",
+            milliseconds / 1_000,
+            (milliseconds % 1_000) / 10
+        )
+    })
+}
+
+fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
+    for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
+            return Some(DateTime::<Utc>::from_naive_utc_and_offset(parsed, Utc));
+        }
+    }
+    None
+}
+
+fn build_hls_direct_playlist(
+    scheme: &str,
+    host: &str,
+    channel_number: &str,
+    extension: &str,
+    index: u64,
+    time_remaining: &str,
+    access_token: &AccessToken,
+) -> String {
+    format!(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:{index}\n#EXT-X-DISCONTINUITY\n#EXTINF:{time_remaining},\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={index}{}\n",
+        access_token.query_amp()
+    )
+}
+
+fn parse_hls_direct_file(file: &str) -> &str {
+    file.strip_suffix(".ts")
+        .or_else(|| file.strip_suffix(".mp4"))
+        .or_else(|| file.strip_suffix(".mkv"))
+        .unwrap_or(file)
+}
+
 /// `GET /iptv/channel/{number}.m3u8` — mode-dispatched HLS entry point.
 ///
 /// Ports `IptvController.GetHttpLiveStreamingVideo`: resolves `mode=mixed`
 /// against the channel's configured streaming mode, then either:
 ///  * returns the multi-variant playlist for `segmenter`,
-///  * returns `501 Not Implemented` for `hls-direct` (landing in a later slice),
+///  * returns the single-entry direct playlist for `hls-direct`,
 ///  * or redirects to the MPEG-TS variant for TS modes.
 pub async fn serve_channel_m3u8(
     state: &AppState,
@@ -186,15 +310,17 @@ pub async fn serve_channel_m3u8(
             hls_response(body)
         }
         "hls-direct" => {
-            tracing::info!(
-                channel_number = %channel.number,
-                "hls-direct mode requested; handler arrives in a later Phase 7 slice"
-            );
-            (
-                StatusCode::NOT_IMPLEMENTED,
-                "hls-direct output is not available yet",
+            let scheme = request_scheme(headers);
+            let host = request_host(headers);
+            serve_hls_direct_playlist(
+                state,
+                channel.id,
+                &channel.number,
+                &scheme,
+                &host,
+                &access_token,
             )
-                .into_response()
+            .await
         }
         _ => {
             let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
@@ -277,5 +403,77 @@ pub async fn get_session_segment(
             tracing::warn!(%error, channel_number, filename, "failed to read hls segment");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+pub async fn get_hls_direct_stream(
+    State(state): State<AppState>,
+    Path(file): Path<String>,
+) -> Response {
+    let channel_number = parse_hls_direct_file(&file);
+    let output_format = load_hls_direct_output_format(&state).await;
+    stream::serve_channel_stream(&state, channel_number, output_format).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_hls_direct_playlist_matches_expected_shape() {
+        let playlist = build_hls_direct_playlist(
+            "https",
+            "example.test",
+            "42",
+            ".mp4",
+            7,
+            "91.25",
+            &AccessToken::new(Some("abc123")),
+        );
+
+        insta::assert_snapshot!("hls_direct_playlist_mp4", playlist);
+    }
+
+    #[test]
+    fn parse_hls_direct_output_format_supports_numeric_values() {
+        assert_eq!(parse_hls_direct_output_format(Some("1")), OutputFormat::Mkv);
+        assert_eq!(
+            parse_hls_direct_output_format(Some("2")),
+            OutputFormat::MpegTs
+        );
+        assert_eq!(parse_hls_direct_output_format(Some("3")), OutputFormat::Mp4);
+        assert_eq!(
+            parse_hls_direct_output_format(Some("999")),
+            OutputFormat::MpegTs
+        );
+    }
+
+    #[test]
+    fn next_channel_index_advances_only_when_playout_changes() {
+        let mut indices = HashMap::new();
+        assert_eq!(
+            next_channel_index(&mut indices, 5, "2026-04-20 20:00:00"),
+            1
+        );
+        assert_eq!(
+            next_channel_index(&mut indices, 5, "2026-04-20 20:00:00"),
+            1
+        );
+        assert_eq!(
+            next_channel_index(&mut indices, 5, "2026-04-20 20:30:00"),
+            2
+        );
+        assert_eq!(
+            next_channel_index(&mut indices, 6, "2026-04-20 20:00:00"),
+            1
+        );
+    }
+
+    #[test]
+    fn parse_hls_direct_file_strips_supported_suffixes() {
+        assert_eq!(parse_hls_direct_file("99.ts"), "99");
+        assert_eq!(parse_hls_direct_file("99.mp4"), "99");
+        assert_eq!(parse_hls_direct_file("99.mkv"), "99");
+        assert_eq!(parse_hls_direct_file("99"), "99");
     }
 }

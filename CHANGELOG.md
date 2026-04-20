@@ -10,6 +10,13 @@ for commit messages.
 
 ### Added
 
+- Phase 7 Slice 4 HLS direct passthrough: `.m3u8?mode=hls-direct` now emits
+  a single-entry direct playlist that targets `/iptv/hls-direct/{channel}`
+  with output-format-aware `.ts` / `.mp4` / `.mkv` suffixes, tracks
+  per-channel `#EXT-X-MEDIA-SEQUENCE` in memory, and streams direct FFmpeg
+  output using the configured `ffmpeg.hls_direct.output_format` setting
+  (default `mpegts`).
+
 - Phase 7 Slice 3 HLS playlist trimming: the HLS session worker now filters
   live playlists before serving them, carries forward `#EXT-X-DISCONTINUITY`
   boundaries, deletes stale `.ts`/`.m4s`/`.mp4` segment files from the temp

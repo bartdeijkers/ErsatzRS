@@ -1,0 +1,11 @@
+---
+source: crates/ersatzrs-web/src/iptv/hls.rs
+expression: playlist
+---
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:7
+#EXT-X-DISCONTINUITY
+#EXTINF:91.25,
+https://example.test/iptv/hls-direct/42.mp4?index=7&access_token=abc123

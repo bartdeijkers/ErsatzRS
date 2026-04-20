@@ -116,6 +116,10 @@ async fn main() {
             "/iptv/session/:channel_number/:filename",
             get(iptv::hls::get_session_segment),
         )
+        .route(
+            "/iptv/hls-direct/:file",
+            get(iptv::hls::get_hls_direct_stream),
+        )
         .route("/discover.json", get(hdhr::get_discover_json))
         .route("/device.xml", get(hdhr::get_device_xml))
         .route("/lineup_status.json", get(hdhr::get_lineup_status_json))
