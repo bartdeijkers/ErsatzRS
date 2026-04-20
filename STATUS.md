@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-20 (night: Phase 7 Slice 2 — HLS segmenter worker)
+Last updated: 2026-04-20 (night: Phase 7 Slice 3 — HLS playlist trimming)
 
 ## Current Phase
 
@@ -121,7 +121,7 @@ Phase 6.7 delivered the FFmpeg Profile editor.
 **Phase 7 — in progress.** Full HLS parity is intentionally scheduled into
 Phase 7 rather than Phase 5; see `plans/defer-hls-parity-to-phase-7.md`.
 
-Phase 7 Slice 1 and Slice 2 are landed. Slice 1 ported the HLS entry surface:
+Phase 7 Slice 1, Slice 2, and Slice 3 are landed. Slice 1 ported the HLS entry surface:
 `/iptv/channels.m3u` emits mode-aware URL suffixes (HLS segmenter →
 `.m3u8?mode=segmenter`, HLS-direct → `.m3u8?mode=hls-direct`, TS → `.ts`,
 TS-legacy → `.ts?mode=ts-legacy`), short unique ids, ErsatzTV-compatible
@@ -143,9 +143,18 @@ guarded by atomic registry insertion so concurrent requests do not launch
 duplicate segmenters, and failed FFmpeg exits stop the worker and clean up the
 session instead of looping until idle timeout.
 
-Next up (Slice 3): port the real playlist-trimming and cleanup behavior from
-`HlsPlaylistFilter.cs` / `HlsSessionWorker.cs` — discontinuity tracking,
-filter-before trimming, old-segment deletion, and the fMP4 init-segment path.
+Slice 3 ports the first real playlist-management pass from
+`HlsPlaylistFilter.cs` / `HlsSessionWorker.cs`: `/iptv/session/{n}/hls.m3u8`
+now trims `live.m3u8` before serving it, preserves `#EXT-X-DISCONTINUITY`
+boundaries across retained segments, deletes stale `.ts` / `.m4s` / `.mp4`
+files from the worker temp directory, and carries the fMP4 `#EXT-X-MAP`
+init-segment path through `segmenter-fmp4` output plus the shared
+`/iptv/session/{n}/{file}` file route.
+
+Next up (Slice 4): port the `hls-direct` passthrough branch
+(`/iptv/hls-direct/{n}[.ts|.mp4|.mkv]`) and keep the remaining HLS parity gaps
+scoped to auth (`ConditionalIptvAuthorizeFilter`), access-token verification,
+and any init-segment caching nuances still required after direct mode lands.
 After HLS is complete, continue Phase 7 items from the master plan: additional
 hardware paths, MySQL backend support, Trakt integration, Docker multi-arch
 images, side-by-side benchmarking, and long soak tests.
@@ -269,3 +278,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-20 | Claude Code (claude-opus-4-7[1m]) | Phase 7 Slice 1 — HLS entry routes + multi-variant playlist + session-registry seam. Ported `ChannelPlaylist.cs` mode-aware URL suffix, Kodi `#KODIPROP` headers, `ChannelIdentifier.FromNumber`, short unique id, and `tvc-stream-{v,a}codec` tags on `/iptv/channels.m3u`. Added `/iptv/channel/{n}.m3u8` dispatcher (segmenter → multi-variant playlist targeting `/iptv/session/{n}/hls.m3u8`; TS modes redirect to `.ts`; `hls-direct` returns 501 until a later slice), the `build_multi_variant_playlist` builder with ErsatzTV's `BANDWIDTH = (VideoBitrate + AudioBitrate) * 1000 * 1.2` formula, and an `/iptv/session/{n}/hls.m3u8` endpoint that 503s until Slice 2 lands the worker. Introduced `HlsSessionRegistry` + `HlsSessionHandle` traits in `ersatzrs-core` with `InMemoryHlsSessionRegistry` in `ersatzrs-infra`, wired into `AppState`. Access tokens propagate through all URLs (verification deferred to Slice 5). Six new insta snapshots cover m3u mode-aware/Kodi/access-token and three variant-playlist shapes. Gates: fmt, clippy -D warnings, tests (workspace), deny check all green. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 2 — HLS segmenter worker. Extended the core HLS registry/handle traits with async insert/remove and playlist access, added `ersatzrs-infra::hls_worker::HlsSessionWorker` with FFmpeg CLI spawn into temp-backed HLS output plus an argv snapshot test, wired `/iptv/channel/{n}.m3u8` to start/touch workers, and added `/iptv/session/{n}/hls.m3u8` + `/iptv/session/{n}/{file}` serving for live playlists and segment files. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Hardened Phase 7 Slice 2 after review: reused provider path replacements for HLS worker media paths, made session worker registration atomic to avoid duplicate FFmpeg segmenters under concurrent requests, and stopped failed FFmpeg workers from restart-looping until idle timeout. |
+| 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 3 — HLS playlist trimming and cleanup. Ported the first real `HlsPlaylistFilter` behavior into `ersatzrs-infra::hls_worker`: session playlists now trim around recent segments, preserve discontinuities, delete stale temp-backed segment files, and support fMP4 segmenter output with `#EXT-X-MAP` / `init.mp4` serving on `/iptv/session/{n}/{file}`. Review outcome: GO for Slice 4. |
