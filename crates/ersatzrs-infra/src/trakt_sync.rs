@@ -615,7 +615,7 @@ where
             return Ok(playlist_id);
         }
 
-        let group_id = ensure_system_playlist_group(&self.pool).await?;
+        let group_id = system_playlist_group_id(&self.pool).await?;
         let name = format!("{}/{}", list.user, list.list);
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId")
@@ -701,22 +701,17 @@ where
     }
 }
 
-async fn ensure_system_playlist_group(pool: &Pool<Db>) -> Result<EntityId> {
-    if let Some(id) = sqlx::query_scalar::<_, EntityId>(
+async fn system_playlist_group_id(pool: &Pool<Db>) -> Result<EntityId> {
+    sqlx::query_scalar::<_, EntityId>(
         r#"SELECT "Id" FROM "PlaylistGroup" WHERE "IsSystem" = 1 ORDER BY "Id" LIMIT 1"#,
     )
     .fetch_optional(pool)
     .await?
-    {
-        return Ok(id);
-    }
-
-    let result = sqlx::query(
-        r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES ('Trakt Lists', 1)"#,
-    )
-    .execute(pool)
-    .await?;
-    Ok(last_insert_id(result))
+    .ok_or_else(|| {
+        RepositoryError::Database(sqlx::Error::Protocol(
+            "system playlist group is not initialized".into(),
+        ))
+    })
 }
 
 async fn insert_item(

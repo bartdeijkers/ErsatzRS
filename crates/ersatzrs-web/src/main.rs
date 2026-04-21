@@ -1,7 +1,6 @@
 #![recursion_limit = "512"]
 
 mod app;
-mod db;
 mod hdhr;
 mod iptv;
 mod pages;
@@ -37,9 +36,11 @@ const WEB_PUBLIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/public");
 const WEB_CRATE_DIR: &str = env!("CARGO_MANIFEST_DIR");
 const LISTEN_ADDR: &str = "0.0.0.0:8409";
 const LISTEN_PORT: u16 = 8409;
-const CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
-const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
-const DEFAULT_TUNER_COUNT: i32 = 1;
+const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
+const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
+const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
+const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
+const DEFAULT_TUNER_COUNT: i32 = 2;
 
 #[tokio::main]
 async fn main() {
@@ -55,16 +56,16 @@ async fn main() {
         }
     }
 
-    #[allow(clippy::disallowed_methods)] // Phase 0: config crate not yet available
-    let db_url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://ErsatzRS.db".to_string());
-    let database_backend = ersatzrs_infra::db::database_backend(&db_url);
-    let pool = db::init(&db_url)
+    let startup = ersatzrs_infra::db::bootstrap_media_server_database()
         .await
         .expect("database initialisation failed");
-    tracing::info!(database_url = %db_url, ?database_backend, "database initialised");
+    tracing::info!(
+        database_url = %startup.database_url,
+        ?startup.database_backend,
+        "database initialised"
+    );
 
-    let app_state = build_app_state(pool, database_backend)
+    let app_state = build_app_state(startup.pool, startup.database_backend)
         .await
         .expect("failed to build application state");
 
@@ -147,11 +148,12 @@ async fn build_app_state(
     let iptv_access_token_verifier =
         IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());
 
-    let device_uuid = if let Some(value) = repositories
-        .config
-        .get(CONFIG_KEY_HDHR_UUID)
-        .await
-        .map_err(|error| sqlx_repo_error(&error))?
+    let device_uuid = if let Some(value) = load_config_value(
+        &repositories.config,
+        CONFIG_KEY_HDHR_UUID,
+        Some(LEGACY_CONFIG_KEY_HDHR_UUID),
+    )
+    .await?
     {
         Uuid::parse_str(value.trim()).unwrap_or_else(|_| Uuid::new_v4())
     } else {
@@ -165,13 +167,14 @@ async fn build_app_state(
         new_uuid
     };
 
-    let tuner_count = repositories
-        .config
-        .get(CONFIG_KEY_HDHR_TUNER_COUNT)
-        .await
-        .map_err(|error| sqlx_repo_error(&error))?
-        .and_then(|value| value.trim().parse::<i32>().ok())
-        .unwrap_or(DEFAULT_TUNER_COUNT);
+    let tuner_count = load_config_value(
+        &repositories.config,
+        CONFIG_KEY_HDHR_TUNER_COUNT,
+        Some(LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT),
+    )
+    .await?
+    .and_then(|value| value.trim().parse::<i32>().ok())
+    .unwrap_or(DEFAULT_TUNER_COUNT);
 
     Ok(AppState::new(
         pool,
@@ -187,6 +190,39 @@ fn load_iptv_jwt_signing_key() -> Option<String> {
     std::env::var("JWT__IssuerSigningKey")
         .ok()
         .or_else(|| std::env::var("JWT:IssuerSigningKey").ok())
+}
+
+async fn load_config_value(
+    repository: &dyn ConfigRepository,
+    key: &str,
+    legacy_key: Option<&str>,
+) -> Result<Option<String>, sqlx::Error> {
+    if let Some(value) = repository
+        .get(key)
+        .await
+        .map_err(|error| sqlx_repo_error(&error))?
+    {
+        return Ok(Some(value));
+    }
+
+    let Some(legacy_key) = legacy_key else {
+        return Ok(None);
+    };
+
+    let legacy_value = repository
+        .get(legacy_key)
+        .await
+        .map_err(|error| sqlx_repo_error(&error))?;
+
+    if let Some(value) = legacy_value {
+        repository
+            .set(key, &value)
+            .await
+            .map_err(|error| sqlx_repo_error(&error))?;
+        return Ok(Some(value));
+    }
+
+    Ok(None)
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {

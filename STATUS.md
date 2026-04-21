@@ -264,6 +264,8 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-21 | GitHub Copilot (GPT-5.4) | Added an explicit mediaserver bootstrap in `ersatzrs-infra` that ports the current ErsatzTV one-time defaults for the system Trakt playlist group, stock resolutions, default FFmpeg profile/config keys, and default channel; `ersatzrs-web` now uses that bootstrap and the lazy UI/Trakt seed paths were removed. |
+| 2026-04-21 | GitHub Copilot (GPT-5.4) | Started database-startup parity work: centralized database URL resolution in `ersatzrs-infra`, switched the default SQLite location to `~/.ersatzrs/ErsatzRS.db` for both web and scanner, added focused resolver tests, and updated the operator docs/examples. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Updated AGENTS.md with concrete commands for running the full mediaserver on SQLite/MySQL, health-check verification, optional IPTV JWT enforcement, and scanner invocation. |
 | 2026-04-21 | Codex (GPT-5) | Completed Phase 7 Trakt list integration with API sync, matching, generated playlists, admin UI, search route, docs, and gates. |
 | 2026-04-15 | Copilot (Claude) | Audited repo readiness; added CODEX.md, STATUS.md, copilot-instructions.md, Commands section in AGENTS.md. |

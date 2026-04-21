@@ -229,27 +229,13 @@ pub async fn count_ffmpeg_profiles() -> Result<u64, ServerFnError> {
     Ok(u64::try_from(count).unwrap_or(0))
 }
 
-/// Returns `(id, name)` pairs for resolutions, seeding a default 1080p row if the
-/// table is empty.
+/// Returns `(id, name)` pairs for resolutions.
 #[server]
 pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::state::AppState;
     use sqlx::Row;
 
     let state = expect_context::<AppState>();
-
-    let count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Resolution""#)
-        .fetch_one(&state.pool)
-        .await?;
-
-    if count == 0 {
-        sqlx::query(
-            r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height")
-               VALUES ('1920x1080', 0, 1920, 1080)"#,
-        )
-        .execute(&state.pool)
-        .await?;
-    }
 
     let rows =
         sqlx::query(r#"SELECT "Id", "Name" FROM "Resolution" ORDER BY "Height", "Width", "Id""#)
@@ -517,20 +503,15 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         // Resolve ResolutionId — seed a default 1080p entry if none exists.
         let resolution_id = if form.resolution_id > 0 {
             form.resolution_id
-        } else if let Some(id) =
+        } else {
             sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "Resolution" ORDER BY "Id" LIMIT 1"#)
                 .fetch_optional(&state.pool)
                 .await?
-        {
-            id
-        } else {
-            let result = sqlx::query(
-                r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height")
-                   VALUES ('1920x1080', 0, 1920, 1080)"#,
-            )
-            .execute(&state.pool)
-            .await?;
-            ersatzrs_infra::db::last_insert_id(result)
+                .ok_or_else(|| {
+                    ServerFnError::new(
+                        "No FFmpeg resolutions are available; database bootstrap is incomplete",
+                    )
+                })?
         };
 
         let result = sqlx::query(

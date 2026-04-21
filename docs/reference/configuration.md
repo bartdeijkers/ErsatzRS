@@ -19,10 +19,14 @@ Use the `ErsatzRS_` prefix for environment variables.
 Examples:
 
 ```text
-ErsatzRS_DATABASE__URL=sqlite://ErsatzRS.db
+ErsatzRS_DATABASE__URL=sqlite:$HOME/.ersatzrs/ErsatzRS.db
 ErsatzRS_HTTP__BIND=0.0.0.0:8080
 ErsatzRS_FFMPEG__PATH=/usr/local/bin/ffmpeg
 ```
+
+When `DATABASE_URL` / `ErsatzRS_DATABASE__URL` is not set, ErsatzRS currently
+defaults SQLite to `~/.ersatzrs/ErsatzRS.db` and creates the `~/.ersatzrs`
+directory on startup.
 
 ## Trakt
 

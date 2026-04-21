@@ -12,6 +12,7 @@ mysql-integration = ["mysql"]
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+directories = "6"
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }

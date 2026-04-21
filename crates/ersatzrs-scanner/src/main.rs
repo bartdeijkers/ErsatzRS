@@ -52,10 +52,10 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     let args = Args::parse();
-    let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
-    let pool = db::init(&database_url)
+    let startup = db::open_startup_database()
         .await
-        .context("initialize sqlite database")?;
+        .context("initialize database")?;
+    let pool = startup.pool;
 
     match args.provider {
         Provider::Local => scan_local(&pool, &args).await?,

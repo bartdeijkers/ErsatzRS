@@ -11,12 +11,14 @@ The authoritative implementation plan lives at **[/home/bart/ErsatzRS/plans/sequ
 
 ## Current status
 
-**Phase 5 — Protocol Endpoints** (Phases 0–4 complete). The Cargo workspace,
-FFmpeg pipeline, playout scheduling engines (Block/YAML/Scripted), and media
-source scanning (local/Plex/Jellyfin/Emby) are all in place. Phase 5 targets
-the IPTV/HDHomeRun protocol layer: `/iptv/channels.m3u`, HLS video endpoints,
-HDHomeRun discovery/lineup, UDP discovery on port 65001, and XMLTV guide output.
-See [STATUS.md](STATUS.md) for the full checklist and session log.
+**Phase 7 — Hardening and Parity Completion** (Phases 0–6 complete). The Cargo
+workspace, FFmpeg pipeline, playout scheduling engines, media source scanning,
+IPTV/HDHomeRun endpoints, and the admin UI slices through Trakt list
+integration are all in place. The current startup/runtime parity work now
+includes shared database URL resolution plus the first explicit mediaserver
+bootstrap slice for default startup data; the next priority is the remaining
+startup/runtime parity around readiness and downgrade/schema checks. See
+[STATUS.md](STATUS.md) for the current checklist and session log.
 
 When adding code, follow the workspace layout from the plan's architecture and
 crate-layout section.
@@ -35,20 +37,22 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
+# Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
 # FFmpeg 8.1+ must be available on PATH; pending migrations run automatically.
-DATABASE_URL=sqlite://ErsatzRS.db cargo run --bin ersatzrs-web
+cargo run --bin ersatzrs-web
 
 # Verify the server is up.
 curl http://127.0.0.1:8409/healthz
 
 # Run the full mediaserver with IPTV JWT enforcement enabled.
-DATABASE_URL=sqlite://ErsatzRS.db JWT__IssuerSigningKey=dev-secret cargo run --bin ersatzrs-web
+JWT__IssuerSigningKey=dev-secret cargo run --bin ersatzrs-web
 
 # Run the full mediaserver against MySQL/MariaDB.
 DATABASE_URL='mysql://user:pass@127.0.0.1:3306/ersatzrs' cargo run --features mysql --bin ersatzrs-web
 
 # Run a one-shot media scan against the same database.
-DATABASE_URL=sqlite://ErsatzRS.db cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
+# Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
+cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
 
 # Dependency audit
 cargo deny check
