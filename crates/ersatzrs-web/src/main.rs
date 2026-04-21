@@ -21,6 +21,8 @@ use axum::{
 };
 use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
+use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
+use ersatzrs_infra::trakt_sync::TraktSynchronizer;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use state::AppState;
@@ -71,6 +73,7 @@ async fn main() {
         app_state.tuner_count,
         LISTEN_PORT,
     ));
+    tokio::spawn(run_trakt_maintenance(app_state.pool.clone()));
 
     let conf = get_configuration(Some(WEB_CRATE_CARGO_TOML)).expect("valid leptos config");
     let leptos_options = conf.leptos_options;
@@ -215,6 +218,25 @@ fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
 
 async fn healthz() -> StatusCode {
     StatusCode::OK
+}
+
+async fn run_trakt_maintenance(pool: DbPool) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+    loop {
+        interval.tick().await;
+
+        if let Ok(client) = TraktApiClient::from_env() {
+            let sync = TraktSynchronizer::new(pool.clone(), client);
+            if let Err(error) = sync.refresh_due_auto_lists().await {
+                tracing::warn!(error = %error, "failed to refresh due Trakt lists");
+            }
+        }
+
+        let sync = TraktSynchronizer::new(pool.clone(), NoopTraktApiClient);
+        if let Err(error) = sync.match_due_lists().await {
+            tracing::warn!(error = %error, "failed to match due Trakt lists");
+        }
+    }
 }
 
 fn resolve_pkg_dir(options: &LeptosOptions) -> Option<PathBuf> {

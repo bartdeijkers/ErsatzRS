@@ -732,6 +732,7 @@ impl SqliteSchedulingContentRepository {
             show_studios: self.show_lookup_values("Studio", show_id).await?,
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
+            trakt_lists: self.trakt_list_values(item_id).await?,
             provider_guids: self.metadata_guids(&metadata_kind, metadata_id).await?,
         })
     }
@@ -767,6 +768,26 @@ impl SqliteSchedulingContentRepository {
             .fetch_all(&self.0)
             .await
             .map_err(Into::into)
+    }
+
+    async fn trakt_list_values(&self, item_id: EntityId) -> Result<Vec<String>> {
+        let rows = sqlx::query(
+            r#"SELECT "tl"."TraktId"
+               FROM "TraktListItem" AS "tli"
+               JOIN "TraktList" AS "tl" ON "tl"."Id" = "tli"."TraktListId"
+               WHERE "tli"."MediaItemId" = ?
+               ORDER BY "tl"."TraktId""#,
+        )
+        .bind(item_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                let trakt_id: i32 = row.try_get("TraktId")?;
+                Ok(trakt_id.to_string())
+            })
+            .collect()
     }
 
     async fn metadata_actor_values(

@@ -6,4 +6,6 @@ pub mod libraries;
 pub mod media_browser;
 pub mod media_sources;
 pub mod playouts;
+pub mod search;
+pub mod trakt;
 pub mod watermarks;

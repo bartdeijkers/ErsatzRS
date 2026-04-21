@@ -161,10 +161,17 @@ pub struct PlexTag {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TraktList {
     pub id: EntityId,
+    pub trakt_id: i32,
     pub name: String,
     pub user: String,
     pub list: String,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub description: Option<String>,
+    pub item_count: i32,
+    pub auto_refresh: bool,
+    pub generate_playlist: bool,
+    pub playlist_id: Option<EntityId>,
+    pub last_update: Option<DateTime<Utc>>,
+    pub last_match: Option<DateTime<Utc>>,
     pub item_ids: Vec<EntityId>,
 }
 
@@ -173,6 +180,10 @@ pub struct TraktListItem {
     pub id: EntityId,
     pub trakt_list_id: EntityId,
     pub kind: TraktListItemKind,
+    pub trakt_id: i32,
+    pub rank: i32,
+    pub title: String,
+    pub year: Option<i32>,
     pub media_item_id: Option<EntityId>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
@@ -184,6 +195,5 @@ pub struct TraktListItem {
 pub struct TraktListItemGuid {
     pub id: EntityId,
     pub trakt_list_item_id: EntityId,
-    pub source: String,
-    pub value: String,
+    pub guid: String,
 }

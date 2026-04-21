@@ -1,7 +1,7 @@
 mod block;
 mod channel;
 mod collection;
-mod common;
+pub(crate) mod common;
 mod config;
 mod deco;
 mod ffmpeg_profile;

@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-21 (Phase 7 Slice 7 — MySQL backend support remediation)
+Last updated: 2026-04-21 (Phase 7 Slice 8 — Trakt list integration)
 
 ## Current Phase
 
@@ -196,9 +196,22 @@ against MySQL. Review found a test-only no-default-features scanner compile
 regression; remediation restores the SQLite-specific scanner test helper type.
 Review outcome: GO for the next Phase 7 slice.
 
-Next up: continue Phase 7 items from the master plan, prioritising Trakt
-integration and the remaining admin/navigation placeholders, then Docker
-multi-arch images, side-by-side benchmarking, and long soak tests.
+Slice 8 lands Trakt list integration parity for the current admin surface.
+The core Trakt contracts parse ErsatzTV-compatible list locators, the infra
+client calls the Trakt v2 API with ErsatzTV header shape, and the synchronizer
+persists `TraktList`, `TraktListItem`, and `TraktListItemGuid` rows, rematches
+local media by provider GUID then title/year/season/episode fallback, creates
+or removes generated playlists under the system `Trakt Lists` group, and runs
+hourly auto-refresh/rematch maintenance. The web UI now routes
+`/media/trakt/lists` and `/media/trakt/lists/:id` for Add/Edit/Search/Match/
+Delete and toggle editing, and `/search?query=trakt_list:{id}` resolves through
+the scheduling search projection. `TRAKT__CLIENTID` is required only for API
+refresh/add operations; match/update/delete remain DB-only. Review outcome:
+GO for the next Phase 7 slice.
+
+Next up: continue Phase 7 items from the master plan, prioritising version
+checks, Docker multi-arch images, the remaining admin/navigation placeholders,
+side-by-side benchmarking, and long soak tests.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -222,12 +235,13 @@ the summary below is the readiness view.
 `/media/movies`, `/media/tv/shows` (alias `/media/shows`),
 `/media/browser/images` (alias `/media/images`), `/media/music/artists`,
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
-`/media/smart-collections`, `/blocks` (alias for `/scheduling/blocks`),
-`/playouts` and `/playouts/sequential/:id`.
+`/media/smart-collections`, `/media/trakt/lists`, `/search`, `/blocks`
+(alias for `/scheduling/blocks`), `/playouts` and
+`/playouts/sequential/:id`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
 `/media/remote/streams`, `/media/multi-collections`, `/media/rerun-collections`,
-`/media/playlists`, `/media/trakt/lists`, `/media/filler/presets`,
+`/media/playlists`, `/media/filler/presets`,
 `/schedules`, `/templates`, `/decos`, `/deco-templates`,
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`, and
 `/system/{health,logs,troubleshooting}`. These should not be read as Phase 6
@@ -250,6 +264,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-21 | Codex (GPT-5) | Completed Phase 7 Trakt list integration with API sync, matching, generated playlists, admin UI, search route, docs, and gates. |
 | 2026-04-15 | Copilot (Claude) | Audited repo readiness; added CODEX.md, STATUS.md, copilot-instructions.md, Commands section in AGENTS.md. |
 | 2026-04-15 | Claude Code (claude-sonnet-4-6) | Completed Phase 0: Cargo workspace, FFmpeg 8.1 detection, axum+Leptos SSR, SQLite bootstrap, /healthz, Dockerfile. Branch: phase/0-bootstrap. |
 | 2026-04-15 | Codex | Started Phase 1 by porting channel, playout, schedule, media, collection, playlist, block, library, media-source, FFmpeg profile, watermark, graphics, artwork, and filler domain entities into `ersatzrs-domain`. |

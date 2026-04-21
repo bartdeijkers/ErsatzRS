@@ -46,6 +46,7 @@ pub enum SearchField {
     SeasonNumber,
     EpisodeNumber,
     MetadataKind,
+    TraktList,
     ProviderGuid(Option<String>),
 }
 
@@ -91,6 +92,7 @@ pub struct SearchDocument {
     pub show_studios: Vec<String>,
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
+    pub trakt_lists: Vec<String>,
     pub provider_guids: Vec<SearchProviderGuid>,
 }
 
@@ -205,6 +207,7 @@ impl SearchField {
                 .into_iter()
                 .collect(),
             Self::MetadataKind => vec![document.metadata_kind.clone()],
+            Self::TraktList => document.trakt_lists.clone(),
             Self::ProviderGuid(None) => document
                 .provider_guids
                 .iter()
@@ -254,6 +257,7 @@ impl SearchField {
             "season_number" | "season" => Self::SeasonNumber,
             "episode_number" | "episode" => Self::EpisodeNumber,
             "metadata_kind" => Self::MetadataKind,
+            "trakt_list" | "traktlist" => Self::TraktList,
             "guid" | "provider_guid" => Self::ProviderGuid(None),
             source => Self::ProviderGuid(Some(source.to_owned())),
         }

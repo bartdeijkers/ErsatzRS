@@ -15,9 +15,9 @@ Scope:
 
 Current summary:
 
-- 72 tables have both read and write coverage.
+- 75 tables have both read and write coverage.
 - 25 tables have read-only coverage.
-- 41 tables have no infra read/write coverage yet.
+- 38 tables have no infra read/write coverage yet.
 
 Recommended order:
 
@@ -28,7 +28,7 @@ Recommended order:
 - `P2`: complete owner repository writes for existing read models and add small
   repositories for group/lookup tables used by editors.
 - `P3`: provider-specific scanner persistence tables.
-- `P4`: Trakt/rerun collection tables.
+- `P4`: Rerun collection tables and remaining playlist editor writes.
 - `P9`: preserve Entity Framework bookkeeping only for imported database
   compatibility.
 
@@ -166,9 +166,9 @@ Recommended order:
 | `Template` | Template repository and scheduling read model | Yes: template/scheduling read paths | Yes: Template repository | Yes, env-gated direct decode | Root covered; child item writes remain missing. | P1 template item write parity |
 | `TemplateGroup` | Domain model only | No | No | No | Template editor cannot round-trip groups. | P2 group repositories |
 | `TemplateItem` | Template repository and scheduling read model | Yes: template/scheduling read paths | No | Yes, through template decode | Template item writes are absent. | P1 template item write parity |
-| `TraktList` | Domain model only | No | No | No | Trakt list feature is not persisted. | P4 Trakt collections |
-| `TraktListItem` | Domain model only | No | No | No | Trakt list item feature is not persisted. | P4 Trakt collections |
-| `TraktListItemGuid` | Domain model only | No | No | No | Trakt GUID matching is not persisted. | P4 Trakt collections |
+| `TraktList` | Trakt synchronizer, admin UI, and scheduling search projection | Yes: Trakt synchronizer, admin UI list/editor, scheduling search projection | Yes: Trakt add/refresh/settings/delete and generated-playlist linkage | No | Low/medium; API sync, auto-refresh, generated playlist linkage, and settings round-trip are covered by focused SQLite tests, but real imported database decode should be broadened when sample data exists. | P4 done for Trakt slice |
+| `TraktListItem` | Trakt synchronizer and generated playlist writer | Yes: Trakt synchronizer, match/rematch, generated playlist writer | Yes: Trakt add/refresh saves ranked items and match updates `MediaItemId` | No | Low/medium; GUID-first and title fallback matching are covered by focused SQLite tests, but imported edge cases still need broader samples. | P4 done for Trakt slice |
+| `TraktListItemGuid` | Trakt synchronizer and match resolver | Yes: Trakt synchronizer matching | Yes: Trakt add/refresh replaces item GUID rows | No | Low/medium; GUID persistence and match lookup are covered by focused SQLite tests, but real-world provider GUID variants need more samples. | P4 done for Trakt slice |
 | `Writer` | Domain/core search placeholder only | No | No | No | Writer search parity is absent. | P1 media metadata/search joins |
 | `__EFMigrationsHistory` | Schema compatibility only | No | No | No | Low; required only so imported EF databases keep expected bookkeeping shape. | P9 preserve only |
 | `__EFMigrationsLock` | Schema compatibility only | No | No | No | Low; required only so imported EF databases keep expected bookkeeping shape. | P9 preserve only |

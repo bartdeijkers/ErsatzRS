@@ -21,6 +21,7 @@ use crate::pages::media::other_videos::OtherVideosPage;
 use crate::pages::media::shows::ShowsPage;
 use crate::pages::media::smart_collections::{SmartCollectionEditorPage, SmartCollectionsPage};
 use crate::pages::media::songs::SongsPage;
+use crate::pages::media::trakt_lists::{TraktListEditorPage, TraktListsPage};
 use crate::pages::media::trash::TrashPage;
 use crate::pages::media_sources::{
     emby::{EmbyConnectionPage, EmbyLibrariesPage, EmbyPathsPage, EmbySourcesPage},
@@ -34,6 +35,7 @@ use crate::pages::scheduling::block_editor::BlockEditorPage;
 use crate::pages::scheduling::blocks::BlocksPage;
 use crate::pages::scheduling::playouts::PlayoutsPage;
 use crate::pages::scheduling::yaml_editor::YamlEditorPage;
+use crate::pages::search::SearchPage;
 use crate::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
 use crate::ui::layout::AppShell;
 use crate::ui::primitives::toast::provide_toast_store;
@@ -111,6 +113,7 @@ pub fn App() -> impl IntoView {
                         view=YamlEditorPage
                     />
                     <Route path=StaticSegment("blocks") view=BlocksPage/>
+                    <Route path=StaticSegment("search") view=SearchPage/>
                     <Route
                         path=(StaticSegment("blocks"), ParamSegment("id"))
                         view=BlockEditorPage
@@ -201,6 +204,16 @@ pub fn App() -> impl IntoView {
                     <Route
                         path=(StaticSegment("media"), StaticSegment("smart-collections"), ParamSegment("id"))
                         view=SmartCollectionEditorPage
+                    />
+
+                    // ── Trakt Lists ─────────────────────────────────────────
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("trakt"), StaticSegment("lists"))
+                        view=TraktListsPage
+                    />
+                    <Route
+                        path=(StaticSegment("media"), StaticSegment("trakt"), StaticSegment("lists"), ParamSegment("id"))
+                        view=TraktListEditorPage
                     />
 
                     // ── Local libraries ──────────────────────────────────────
