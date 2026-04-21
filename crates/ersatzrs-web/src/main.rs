@@ -24,8 +24,8 @@ use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
 use ersatzrs_infra::trakt_sync::TraktSynchronizer;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
-use state::AppState;
 use state::IptvAccessTokenVerifier;
+use state::{AppState, SystemStartup};
 use std::path::{Path, PathBuf};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
@@ -64,10 +64,32 @@ async fn main() {
         ?startup.database_backend,
         "database initialised"
     );
+    if let Some(version) = startup.schema_status.dirty_version {
+        tracing::error!(
+            version,
+            "database schema contains a partially applied migration"
+        );
+    }
+    if !startup.schema_status.unknown_migrations.is_empty() {
+        tracing::error!(
+            unknown_migrations = ?startup.schema_status.unknown_migrations,
+            "database schema contains migrations unknown to this build"
+        );
+    }
+    if !startup.schema_status.mismatched_migrations.is_empty() {
+        tracing::error!(
+            mismatched_migrations = ?startup.schema_status.mismatched_migrations,
+            "database schema contains migrations whose checksums differ from this build"
+        );
+    }
 
-    let app_state = build_app_state(startup.pool, startup.database_backend)
-        .await
-        .expect("failed to build application state");
+    let app_state = build_app_state(
+        startup.pool,
+        startup.database_backend,
+        startup.schema_status,
+    )
+    .await
+    .expect("failed to build application state");
 
     tokio::spawn(hdhr::run_udp_discovery(
         app_state.device_uuid,
@@ -103,6 +125,7 @@ async fn main() {
     }
 
     let api_router: Router = Router::new()
+        .route("/healthz", get(healthz))
         .route(
             "/api/watermarks/image",
             post(watermark_upload::upload_watermark_image)
@@ -120,7 +143,6 @@ async fn main() {
         .with_state(app_state);
 
     let app: Router = Router::new()
-        .route("/healthz", get(healthz))
         .route(
             "/dev/stream/bbb.ts",
             get(|| async { streaming::stream_big_buck_bunny() }),
@@ -143,6 +165,7 @@ async fn main() {
 async fn build_app_state(
     pool: DbPool,
     database_backend: DatabaseBackend,
+    schema_status: ersatzrs_infra::db::DatabaseSchemaStatus,
 ) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
@@ -179,6 +202,10 @@ async fn build_app_state(
     Ok(AppState::new(
         pool,
         database_backend,
+        SystemStartup {
+            database_ready: true,
+            schema_status,
+        },
         device_uuid,
         tuner_count,
         iptv_access_token_verifier,
@@ -252,8 +279,12 @@ fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
     sqlx::Error::Protocol(error.to_string())
 }
 
-async fn healthz() -> StatusCode {
-    StatusCode::OK
+async fn healthz(axum::extract::State(state): axum::extract::State<AppState>) -> StatusCode {
+    if state.system_startup.is_ready() {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
 }
 
 async fn run_trakt_maintenance(pool: DbPool) {

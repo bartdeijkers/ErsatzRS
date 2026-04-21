@@ -1,4 +1,5 @@
 use directories::BaseDirs;
+use sqlx::migrate::Migrator;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -56,6 +57,10 @@ const DEFAULT_CHANNEL_NAME: &str = "ErsatzTV";
 const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_RESOLUTION_ID: &str = "ffmpeg.default_resolution_id";
 
+static SQLITE_MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
+#[cfg(feature = "mysql")]
+static MYSQL_MIGRATOR: Migrator = sqlx::migrate!("../../migrations/mysql");
+
 #[derive(Debug, Error)]
 pub enum DatabaseUrlError {
     #[error("DATABASE_URL must be valid UTF-8")]
@@ -77,12 +82,41 @@ pub struct StartupDatabase {
     pub pool: DbPool,
 }
 
+#[derive(Debug)]
+pub struct MediaServerStartupDatabase {
+    pub database_url: String,
+    pub database_backend: DatabaseBackend,
+    pub pool: DbPool,
+    pub schema_status: DatabaseSchemaStatus,
+}
+
 #[derive(Debug, Error)]
 pub enum DatabaseBootstrapError {
     #[error(transparent)]
     DatabaseUrl(#[from] DatabaseUrlError),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DatabaseSchemaStatus {
+    pub dirty_version: Option<i64>,
+    pub unknown_migrations: Vec<i64>,
+    pub mismatched_migrations: Vec<i64>,
+}
+
+impl DatabaseSchemaStatus {
+    #[must_use]
+    pub fn failure_count(&self) -> u32 {
+        u32::from(self.dirty_version.is_some())
+            + u32::from(!self.unknown_migrations.is_empty())
+            + u32::from(!self.mismatched_migrations.is_empty())
+    }
+
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.failure_count() == 0
+    }
 }
 
 /// Resolve the startup database URL, preferring `DATABASE_URL` and otherwise
@@ -158,11 +192,10 @@ pub async fn init(database_url: &str) -> Result<DbPool, sqlx::Error> {
         ));
     }
 
-    match database_backend(database_url) {
-        DatabaseBackend::Sqlite => init_sqlite(database_url).await,
-        #[cfg(feature = "mysql")]
-        DatabaseBackend::MySql => init_mysql(database_url).await,
-    }
+    let database_backend = database_backend(database_url);
+    let pool = connect_database(database_url, database_backend).await?;
+    run_migrations(&pool, database_backend).await?;
+    Ok(pool)
 }
 
 /// Resolve the startup database URL, detect the backend, and open the pooled
@@ -191,14 +224,33 @@ pub async fn open_startup_database() -> Result<StartupDatabase, DatabaseBootstra
 ///
 /// Returns an error when startup database resolution, migrations, or default
 /// data initialization fail.
-pub async fn bootstrap_media_server_database() -> Result<StartupDatabase, DatabaseBootstrapError> {
-    let startup = open_startup_database().await?;
-    initialize_media_server_database(&startup.pool).await?;
-    Ok(startup)
+pub async fn bootstrap_media_server_database(
+) -> Result<MediaServerStartupDatabase, DatabaseBootstrapError> {
+    bootstrap_media_server_database_from_url(resolve_database_url()?).await
+}
+
+async fn bootstrap_media_server_database_from_url(
+    database_url: String,
+) -> Result<MediaServerStartupDatabase, DatabaseBootstrapError> {
+    let database_backend = database_backend(&database_url);
+    let pool = connect_database(&database_url, database_backend).await?;
+    let schema_status = inspect_database_schema(&pool, database_backend).await?;
+
+    if schema_status.is_ready() {
+        run_migrations(&pool, database_backend).await?;
+        initialize_media_server_database(&pool).await?;
+    }
+
+    Ok(MediaServerStartupDatabase {
+        database_url,
+        database_backend,
+        pool,
+        schema_status,
+    })
 }
 
 #[cfg(not(feature = "mysql"))]
-async fn init_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
+async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
     let options = database_url
         .parse::<SqliteConnectOptions>()?
         .create_if_missing(true)
@@ -206,20 +258,18 @@ async fn init_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
         .journal_mode(SqliteJournalMode::Wal)
         .disable_statement_logging();
 
-    let pool = SqlitePoolOptions::new().connect_with(options).await?;
-    sqlx::migrate!("../../migrations").run(&pool).await?;
-    Ok(pool)
+    SqlitePoolOptions::new().connect_with(options).await
 }
 
 #[cfg(feature = "mysql")]
-async fn init_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
+async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
     sqlx::any::install_default_drivers();
     let database_url = sqlite_url_with_create_mode(database_url);
     let options = database_url
         .parse::<sqlx::any::AnyConnectOptions>()?
         .disable_statement_logging();
 
-    let pool = AnyPoolOptions::new()
+    AnyPoolOptions::new()
         .after_connect(|connection, _metadata| {
             Box::pin(async move {
                 connection.execute("PRAGMA foreign_keys = ON").await?;
@@ -228,9 +278,7 @@ async fn init_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
             })
         })
         .connect_with(options)
-        .await?;
-    sqlx::migrate!("../../migrations").run(&pool).await?;
-    Ok(pool)
+        .await
 }
 
 /// Open a `MySQL` pool, enable ANSI identifier quotes for each session, and run
@@ -240,13 +288,13 @@ async fn init_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
 ///
 /// Returns an error if the database cannot be opened or migrations fail.
 #[cfg(feature = "mysql")]
-async fn init_mysql(database_url: &str) -> Result<DbPool, sqlx::Error> {
+async fn connect_mysql(database_url: &str) -> Result<DbPool, sqlx::Error> {
     sqlx::any::install_default_drivers();
     let options = database_url
         .parse::<sqlx::any::AnyConnectOptions>()?
         .disable_statement_logging();
 
-    let pool = AnyPoolOptions::new()
+    AnyPoolOptions::new()
         .after_connect(|connection, _metadata| {
             Box::pin(async move {
                 connection
@@ -256,9 +304,106 @@ async fn init_mysql(database_url: &str) -> Result<DbPool, sqlx::Error> {
             })
         })
         .connect_with(options)
-        .await?;
-    sqlx::migrate!("../../migrations/mysql").run(&pool).await?;
-    Ok(pool)
+        .await
+}
+
+async fn connect_database(
+    database_url: &str,
+    database_backend: DatabaseBackend,
+) -> Result<DbPool, sqlx::Error> {
+    match database_backend {
+        DatabaseBackend::Sqlite => connect_sqlite(database_url).await,
+        #[cfg(feature = "mysql")]
+        DatabaseBackend::MySql => connect_mysql(database_url).await,
+    }
+}
+
+async fn run_migrations(
+    pool: &DbPool,
+    database_backend: DatabaseBackend,
+) -> Result<(), sqlx::Error> {
+    migrator_for_backend(database_backend).run(pool).await?;
+    Ok(())
+}
+
+/// Inspect the migrations metadata table for downgrade or partially applied
+/// schema problems.
+///
+/// # Errors
+///
+/// Returns an error when the migrations metadata cannot be read.
+pub async fn inspect_database_schema(
+    pool: &DbPool,
+    database_backend: DatabaseBackend,
+) -> Result<DatabaseSchemaStatus, sqlx::Error> {
+    if !migrations_table_exists(pool, database_backend).await? {
+        return Ok(DatabaseSchemaStatus::default());
+    }
+
+    let applied_rows = sqlx::query_as::<_, (i64, bool, Vec<u8>)>(
+        r#"SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let known_migrations = migrator_for_backend(database_backend)
+        .iter()
+        .map(|migration| (migration.version, migration.checksum.as_ref().to_vec()))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let dirty_version = applied_rows
+        .iter()
+        .find_map(|(version, success, _checksum)| (!success).then_some(*version));
+    let unknown_migrations = applied_rows
+        .iter()
+        .map(|(version, _success, _checksum)| *version)
+        .filter(|version| !known_migrations.contains_key(version))
+        .collect();
+    let mismatched_migrations = applied_rows
+        .into_iter()
+        .filter_map(|(version, _success, checksum)| {
+            known_migrations
+                .get(&version)
+                .filter(|known_checksum| known_checksum.as_slice() != checksum.as_slice())
+                .map(|_known_checksum| version)
+        })
+        .collect();
+
+    Ok(DatabaseSchemaStatus {
+        dirty_version,
+        unknown_migrations,
+        mismatched_migrations,
+    })
+}
+
+async fn migrations_table_exists(
+    pool: &DbPool,
+    database_backend: DatabaseBackend,
+) -> Result<bool, sqlx::Error> {
+    let exists: i64 = match database_backend {
+        DatabaseBackend::Sqlite => sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'"#,
+        )
+        .fetch_one(pool)
+        .await?,
+        #[cfg(feature = "mysql")]
+        DatabaseBackend::MySql => sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM information_schema.tables
+               WHERE table_schema = DATABASE() AND table_name = '_sqlx_migrations'"#,
+        )
+        .fetch_one(pool)
+        .await?,
+    };
+
+    Ok(exists > 0)
+}
+
+fn migrator_for_backend(database_backend: DatabaseBackend) -> &'static Migrator {
+    match database_backend {
+        #[cfg(feature = "mysql")]
+        DatabaseBackend::MySql => &MYSQL_MIGRATOR,
+        DatabaseBackend::Sqlite => &SQLITE_MIGRATOR,
+    }
 }
 
 #[must_use]
@@ -521,7 +666,8 @@ fn sqlite_url_with_create_mode(database_url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        database_backend, init, initialize_media_server_database, resolve_database_url_from_parts,
+        bootstrap_media_server_database_from_url, connect_database, database_backend, init,
+        initialize_media_server_database, inspect_database_schema, resolve_database_url_from_parts,
         DatabaseBackend, DatabaseUrlError, DEFAULT_SQLITE_DIR_NAME, DEFAULT_SQLITE_FILE_NAME,
     };
     use sqlx::Row;
@@ -674,6 +820,139 @@ mod tests {
         assert_eq!(profile_count, 1);
         assert_eq!(channel_count, 1);
         assert_eq!(system_group_count, 1);
+    }
+
+    #[tokio::test]
+    async fn schema_inspection_reports_unknown_migrations() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        sqlx::query(
+            r#"INSERT INTO _sqlx_migrations
+                (version, description, installed_on, success, checksum, execution_time)
+               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("insert future migration row");
+
+        let schema = inspect_database_schema(&pool, DatabaseBackend::Sqlite)
+            .await
+            .expect("inspect schema");
+
+        assert_eq!(schema.dirty_version, None);
+        assert_eq!(schema.unknown_migrations, vec![9999]);
+        assert!(schema.mismatched_migrations.is_empty());
+        assert!(!schema.is_ready());
+    }
+
+    #[tokio::test]
+    async fn schema_inspection_reports_dirty_migrations() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        sqlx::query(
+            r#"INSERT INTO _sqlx_migrations
+                (version, description, installed_on, success, checksum, execution_time)
+               VALUES (9998, 'dirty migration', CURRENT_TIMESTAMP, 0, X'02', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("insert dirty migration row");
+
+        let schema = inspect_database_schema(&pool, DatabaseBackend::Sqlite)
+            .await
+            .expect("inspect schema");
+
+        assert_eq!(schema.dirty_version, Some(9998));
+        assert!(schema.unknown_migrations.contains(&9998));
+        assert!(schema.mismatched_migrations.is_empty());
+        assert!(!schema.is_ready());
+    }
+
+    #[tokio::test]
+    async fn schema_inspection_reports_mismatched_migrations() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        sqlx::query(r#"UPDATE _sqlx_migrations SET checksum = X'03' WHERE version = 1"#)
+            .execute(&pool)
+            .await
+            .expect("update checksum");
+
+        let schema = inspect_database_schema(&pool, DatabaseBackend::Sqlite)
+            .await
+            .expect("inspect schema");
+
+        assert_eq!(schema.dirty_version, None);
+        assert!(schema.unknown_migrations.is_empty());
+        assert_eq!(schema.mismatched_migrations, vec![1]);
+        assert!(!schema.is_ready());
+    }
+
+    #[tokio::test]
+    async fn schema_inspection_is_clean_when_migrations_table_is_missing() {
+        let database_url = temp_sqlite_database_url();
+        let pool = connect_database(&database_url, DatabaseBackend::Sqlite)
+            .await
+            .expect("connect database without migrations");
+
+        let schema = inspect_database_schema(&pool, DatabaseBackend::Sqlite)
+            .await
+            .expect("inspect schema");
+
+        assert_eq!(schema, super::DatabaseSchemaStatus::default());
+    }
+
+    #[tokio::test]
+    async fn mediaserver_bootstrap_skips_migrations_when_schema_is_invalid() {
+        let database_path = std::env::temp_dir().join(format!(
+            "ersatzrs-bootstrap-invalid-{}.db",
+            uuid::Uuid::new_v4()
+        ));
+        let database_url = format!("sqlite:{}", database_path.display());
+        let pool = connect_database(&database_url, DatabaseBackend::Sqlite)
+            .await
+            .expect("connect database without migrations");
+
+        sqlx::query(
+            r#"CREATE TABLE _sqlx_migrations (
+                version BIGINT PRIMARY KEY,
+                description TEXT NOT NULL,
+                installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                success BOOLEAN NOT NULL,
+                checksum BLOB NOT NULL,
+                execution_time BIGINT NOT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create migrations table");
+        sqlx::query(
+            r#"INSERT INTO _sqlx_migrations
+                (version, description, installed_on, success, checksum, execution_time)
+               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("insert future migration row");
+        drop(pool);
+
+        let startup = bootstrap_media_server_database_from_url(database_url)
+            .await
+            .expect("bootstrap mediaserver database");
+
+        assert_eq!(startup.schema_status.unknown_migrations, vec![9999]);
+
+        let resolution_table_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Resolution'"#,
+        )
+        .fetch_one(&startup.pool)
+        .await
+        .expect("check for resolution table");
+
+        assert_eq!(resolution_table_count, 0);
+        assert!(!startup.schema_status.is_ready());
     }
 
     fn temp_sqlite_database_url() -> String {

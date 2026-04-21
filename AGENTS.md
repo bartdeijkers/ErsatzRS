@@ -15,10 +15,12 @@ The authoritative implementation plan lives at **[/home/bart/ErsatzRS/plans/sequ
 workspace, FFmpeg pipeline, playout scheduling engines, media source scanning,
 IPTV/HDHomeRun endpoints, and the admin UI slices through Trakt list
 integration are all in place. The current startup/runtime parity work now
-includes shared database URL resolution plus the first explicit mediaserver
-bootstrap slice for default startup data; the next priority is the remaining
-startup/runtime parity around readiness and downgrade/schema checks. See
-[STATUS.md](STATUS.md) for the current checklist and session log.
+includes shared database URL resolution, explicit mediaserver bootstrap for
+default startup data, and initial readiness plus downgrade/schema checks wired
+into startup health reporting. The next priority is broader health /
+troubleshooting coverage and the remaining Phase 7 hardening items from the
+master plan. See [STATUS.md](STATUS.md) for the current checklist and session
+log.
 
 When adding code, follow the workspace layout from the plan's architecture and
 crate-layout section.

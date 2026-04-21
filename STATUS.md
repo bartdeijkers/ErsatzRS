@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-21 (Phase 7 Slice 8 — Trakt list integration)
+Last updated: 2026-04-21 (Phase 7 Slice 9 — Startup readiness and schema checks)
 
 ## Current Phase
 
@@ -209,6 +209,18 @@ the scheduling search projection. `TRAKT__CLIENTID` is required only for API
 refresh/add operations; match/update/delete remain DB-only. Review outcome:
 GO for the next Phase 7 slice.
 
+Slice 9 ports the first explicit readiness and downgrade/schema-check surface.
+`ersatzrs-infra` now opens the mediaserver database before running migrations,
+inspects `_sqlx_migrations` for unknown versions, partially applied rows, and
+checksum mismatches, and only runs migrations plus default bootstrap when that
+schema state is clean. `ersatzrs-web` now captures that startup state, returns
+`503 Service Unavailable` from `/healthz` when the schema is not ready, logs
+downgrade / dirty-migration findings at startup, and feeds the existing
+Support nav badge from the same counts. The web startup path also now reads and
+backfills the upstream `hdhr.uuid` / `hdhr.tuner_count` config keys while
+remaining backward compatible with the earlier mixed-case keys. Review
+outcome: ready for review.
+
 Next up: continue Phase 7 items from the master plan, prioritising version
 checks, Docker multi-arch images, the remaining admin/navigation placeholders,
 side-by-side benchmarking, and long soak tests.
@@ -264,6 +276,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-21 | GitHub Copilot (GPT-5.4) | Added startup readiness and downgrade/schema checks: `ersatzrs-infra` now inspects `_sqlx_migrations` before migrations run so the web host can stay up and report unknown, dirty, or checksum-mismatched schema rows through `/healthz` and the Support badge, and the HDHR config keys now match ErsatzTV with legacy-key backfill. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added an explicit mediaserver bootstrap in `ersatzrs-infra` that ports the current ErsatzTV one-time defaults for the system Trakt playlist group, stock resolutions, default FFmpeg profile/config keys, and default channel; `ersatzrs-web` now uses that bootstrap and the lazy UI/Trakt seed paths were removed. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Started database-startup parity work: centralized database URL resolution in `ersatzrs-infra`, switched the default SQLite location to `~/.ersatzrs/ErsatzRS.db` for both web and scanner, added focused resolver tests, and updated the operator docs/examples. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Updated AGENTS.md with concrete commands for running the full mediaserver on SQLite/MySQL, health-check verification, optional IPTV JWT enforcement, and scanner invocation. |
