@@ -1,3 +1,4 @@
+use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
@@ -12,7 +13,7 @@ use ersatzrs_domain::{
 use reqwest::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use sqlx::{Row, Sqlite, SqlitePool, Transaction};
+use sqlx::{Row, Transaction};
 
 #[derive(Debug, Clone)]
 pub struct EmbyService {
@@ -342,7 +343,7 @@ impl EmbyService {
 ///
 /// Returns an error when the HTTP client fails or any database write fails.
 pub async fn sync_emby_movie_library<S>(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &S,
     config: &EmbyConnectionConfig,
     media_source_id: i64,
@@ -376,7 +377,7 @@ where
 ///
 /// Returns an error when the HTTP client fails or any database write fails.
 pub async fn sync_emby_show_library<S>(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &S,
     config: &EmbyConnectionConfig,
     media_source_id: i64,
@@ -434,7 +435,7 @@ where
 ///
 /// Returns an error when the HTTP client fails or any database write fails.
 pub async fn sync_emby_collection_library<S>(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &S,
     config: &EmbyConnectionConfig,
     media_source_id: i64,
@@ -476,7 +477,7 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
 /// # Errors
 ///
 /// Returns an error when config loading, the Emby API, or database writes fail.
-pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<usize> {
+pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -542,7 +543,7 @@ pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<us
     }
 }
 
-async fn load_emby_api_key(pool: &SqlitePool, address: &str) -> Result<String> {
+async fn load_emby_api_key(pool: &DbPool, address: &str) -> Result<String> {
     let keys = [
         format!("emby.api_key.{address}"),
         "emby.current_server_api_key".to_owned(),
@@ -721,7 +722,7 @@ fn is_anamorphic(width: i32, height: i32, aspect_ratio: &str) -> bool {
 }
 
 async fn upsert_emby_movie(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
@@ -743,7 +744,7 @@ async fn upsert_emby_movie(
 }
 
 async fn upsert_emby_show(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
@@ -759,7 +760,7 @@ async fn upsert_emby_show(
 }
 
 async fn upsert_emby_season(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
@@ -776,7 +777,7 @@ async fn upsert_emby_season(
 }
 
 async fn upsert_emby_episode(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
@@ -799,7 +800,7 @@ async fn upsert_emby_episode(
 }
 
 async fn upsert_emby_collection(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     item: &EmbyCollectionItem,
 ) -> Result<i64> {
@@ -839,7 +840,7 @@ async fn upsert_emby_collection(
         .bind(&item.name)
         .execute(&mut *tx)
         .await?;
-        let id = result.last_insert_rowid();
+        let id = crate::db::last_insert_id(result);
         sqlx::query(
             r#"INSERT INTO "EmbyCollection" ("Id", "ItemId", "Etag", "Name")
                VALUES (?, ?, ?, ?)"#,
@@ -858,7 +859,7 @@ async fn upsert_emby_collection(
 }
 
 async fn replace_collection_items(
-    pool: &SqlitePool,
+    pool: &DbPool,
     collection_id: i64,
     items: &[EmbyCollectionMediaItem],
 ) -> Result<()> {
@@ -885,7 +886,7 @@ async fn replace_collection_items(
 }
 
 async fn find_emby_media_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     item: &EmbyCollectionMediaItem,
 ) -> Result<Option<i64>> {
     let table = match item.kind {
@@ -903,7 +904,7 @@ async fn find_emby_media_item(
 }
 
 async fn ensure_emby_library(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
@@ -936,7 +937,7 @@ async fn ensure_emby_library(
 }
 
 async fn ensure_library_path(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_id: i64,
     path: &str,
 ) -> Result<i64> {
@@ -952,11 +953,11 @@ async fn ensure_library_path(
         .bind(path)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(crate::db::last_insert_id(result))
 }
 
 async fn ensure_emby_movie_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<i64> {
@@ -978,7 +979,7 @@ async fn ensure_emby_movie_item(
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    let id = result.last_insert_rowid();
+    let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (?)"#)
         .bind(id)
         .execute(&mut **tx)
@@ -993,7 +994,7 @@ async fn ensure_emby_movie_item(
 }
 
 async fn ensure_emby_show_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     item: &EmbyShowItem,
 ) -> Result<i64> {
@@ -1020,7 +1021,7 @@ async fn ensure_emby_show_item(
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    let id = result.last_insert_rowid();
+    let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
         .bind(id)
         .execute(&mut **tx)
@@ -1035,7 +1036,7 @@ async fn ensure_emby_show_item(
 }
 
 async fn ensure_emby_season_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     show_id: i64,
     item: &EmbySeasonItem,
@@ -1069,7 +1070,7 @@ async fn ensure_emby_season_item(
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    let id = result.last_insert_rowid();
+    let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (?, ?, ?)"#)
         .bind(id)
         .bind(show_id)
@@ -1086,7 +1087,7 @@ async fn ensure_emby_season_item(
 }
 
 async fn ensure_emby_episode_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     season_id: i64,
     item: &EmbyMediaItem,
@@ -1119,7 +1120,7 @@ async fn ensure_emby_episode_item(
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    let id = result.last_insert_rowid();
+    let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (?, ?)"#)
         .bind(id)
         .bind(season_id)
@@ -1141,7 +1142,7 @@ enum VersionOwner {
 }
 
 async fn ensure_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     owner: VersionOwner,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
@@ -1181,11 +1182,11 @@ async fn ensure_media_version(
         .bind(playback.width)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(crate::db::last_insert_id(result))
 }
 
 async fn update_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     id: i64,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
@@ -1212,12 +1213,12 @@ async fn update_media_version(
 }
 
 async fn ensure_media_file(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     version_id: i64,
     path: &str,
 ) -> Result<()> {
     sqlx::query(
-        r#"INSERT OR REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+        r#"REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
            VALUES (?, ?, ?)"#,
     )
     .bind(version_id)
@@ -1229,7 +1230,7 @@ async fn ensure_media_file(
 }
 
 async fn replace_streams(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     version_id: i64,
     streams: &[MediaStream],
 ) -> Result<()> {
@@ -1260,7 +1261,7 @@ async fn replace_streams(
 }
 
 async fn replace_chapters(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     version_id: i64,
     chapters: &[MediaChapter],
 ) -> Result<()> {

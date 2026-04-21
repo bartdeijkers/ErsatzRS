@@ -20,9 +20,9 @@ use axum::{
     Router,
 };
 use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
+use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
-use sqlx::SqlitePool;
 use state::AppState;
 use state::IptvAccessTokenVerifier;
 use std::path::{Path, PathBuf};
@@ -56,12 +56,13 @@ async fn main() {
     #[allow(clippy::disallowed_methods)] // Phase 0: config crate not yet available
     let db_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://ErsatzRS.db".to_string());
+    let database_backend = ersatzrs_infra::db::database_backend(&db_url);
     let pool = db::init(&db_url)
         .await
         .expect("database initialisation failed");
-    tracing::info!(database_url = %db_url, "database initialised");
+    tracing::info!(database_url = %db_url, ?database_backend, "database initialised");
 
-    let app_state = build_app_state(pool)
+    let app_state = build_app_state(pool, database_backend)
         .await
         .expect("failed to build application state");
 
@@ -135,7 +136,10 @@ async fn main() {
         .expect("server error");
 }
 
-async fn build_app_state(pool: SqlitePool) -> Result<AppState, sqlx::Error> {
+async fn build_app_state(
+    pool: DbPool,
+    database_backend: DatabaseBackend,
+) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
         IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());
@@ -168,6 +172,7 @@ async fn build_app_state(pool: SqlitePool) -> Result<AppState, sqlx::Error> {
 
     Ok(AppState::new(
         pool,
+        database_backend,
         device_uuid,
         tuner_count,
         iptv_access_token_verifier,

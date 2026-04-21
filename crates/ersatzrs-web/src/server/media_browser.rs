@@ -55,6 +55,17 @@ pub struct TrashPageData {
     pub images: Vec<MediaCardRow>,
 }
 
+fn song_subtitle(artists: Option<String>, album: Option<String>) -> Option<String> {
+    let artists = artists.unwrap_or_default();
+    let album = album.unwrap_or_default();
+    match (artists.trim(), album.trim()) {
+        ("", "") => None,
+        ("", album) => Some(album.to_string()),
+        (artists, "") => Some(artists.to_string()),
+        (artists, album) => Some(format!("{artists} - {album}")),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Movies
 // ---------------------------------------------------------------------------
@@ -75,7 +86,7 @@ pub async fn list_movies(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "MovieMetadata" mm
-           WHERE (? = '' OR mm."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR mm."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -92,8 +103,8 @@ pub async fn list_movies(
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
            LEFT JOIN "Artwork" a
                ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 1
-           WHERE (? = '' OR mm."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY mm."SortTitle" COLLATE NOCASE, mm."Title" COLLATE NOCASE
+           WHERE (? = '' OR mm."Title" LIKE ?)
+           ORDER BY mm."SortTitle", mm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -140,7 +151,7 @@ pub async fn list_shows(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ShowMetadata" sm
-           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR sm."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -157,8 +168,8 @@ pub async fn list_shows(
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
            LEFT JOIN "Artwork" a
                ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 1
-           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE
+           WHERE (? = '' OR sm."Title" LIKE ?)
+           ORDER BY sm."SortTitle", sm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -205,7 +216,7 @@ pub async fn list_images(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ImageMetadata" im
-           WHERE (? = '' OR im."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR im."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -222,8 +233,8 @@ pub async fn list_images(
            JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
            LEFT JOIN "Artwork" a
                ON a."ImageMetadataId" = im."Id"
-           WHERE (? = '' OR im."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY im."SortTitle" COLLATE NOCASE, im."Title" COLLATE NOCASE
+           WHERE (? = '' OR im."Title" LIKE ?)
+           ORDER BY im."SortTitle", im."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -269,7 +280,7 @@ pub async fn list_artists(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ArtistMetadata" am
-           WHERE (? = '' OR am."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR am."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -286,8 +297,8 @@ pub async fn list_artists(
            JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
            LEFT JOIN "Artwork" art
                ON art."ArtistMetadataId" = am."Id" AND art."ArtworkKind" = 1
-           WHERE (? = '' OR am."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY am."SortTitle" COLLATE NOCASE, am."Title" COLLATE NOCASE
+           WHERE (? = '' OR am."Title" LIKE ?)
+           ORDER BY am."SortTitle", am."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -331,7 +342,7 @@ pub async fn list_other_videos(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "OtherVideoMetadata" ovm
-           WHERE (? = '' OR ovm."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR ovm."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -350,8 +361,8 @@ pub async fn list_other_videos(
                ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
            LEFT JOIN "Artwork" poster
                ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
-           WHERE (? = '' OR ovm."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY ovm."SortTitle" COLLATE NOCASE, ovm."Title" COLLATE NOCASE
+           WHERE (? = '' OR ovm."Title" LIKE ?)
+           ORDER BY ovm."SortTitle", ovm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -395,7 +406,7 @@ pub async fn list_songs(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "SongMetadata" sm
-           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR sm."Title" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -406,19 +417,15 @@ pub async fn list_songs(
         r#"SELECT s."Id" AS "Id",
                   COALESCE(sm."Title", '') AS "Title",
                   COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
-                  CASE
-                      WHEN COALESCE(sm."Artists", '') = '' AND COALESCE(sm."Album", '') = '' THEN NULL
-                      WHEN COALESCE(sm."Artists", '') = '' THEN sm."Album"
-                      WHEN COALESCE(sm."Album", '') = '' THEN sm."Artists"
-                      ELSE sm."Artists" || ' - ' || sm."Album"
-                  END AS "Subtitle",
+                  sm."Artists",
+                  sm."Album",
                   art."Path" AS "Thumb"
            FROM "Song" s
            JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
            LEFT JOIN "Artwork" art
                ON art."SongMetadataId" = sm."Id" AND art."ArtworkKind" = 1
-           WHERE (? = '' OR sm."Title" LIKE ? COLLATE NOCASE)
-           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE
+           WHERE (? = '' OR sm."Title" LIKE ?)
+           ORDER BY sm."SortTitle", sm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -434,7 +441,10 @@ pub async fn list_songs(
             id: r.try_get("Id").unwrap_or(0),
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
-            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            subtitle: song_subtitle(
+                r.try_get::<Option<String>, _>("Artists").unwrap_or(None),
+                r.try_get::<Option<String>, _>("Album").unwrap_or(None),
+            ),
             artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
         })
         .collect();
@@ -474,14 +484,15 @@ pub async fn list_trash_items() -> Result<TrashPageData, ServerFnError> {
 #[server]
 pub async fn delete_media_items(ids: Vec<i64>) -> Result<u64, ServerFnError> {
     use crate::state::AppState;
-    use sqlx::{QueryBuilder, Sqlite};
+    use sqlx::QueryBuilder;
 
     let state = expect_context::<AppState>();
     if ids.is_empty() {
         return Ok(0);
     }
 
-    let mut builder = QueryBuilder::<Sqlite>::new(r#"DELETE FROM "MediaItem" WHERE "Id" IN ("#);
+    let mut builder =
+        QueryBuilder::<ersatzrs_infra::db::Db>::new(r#"DELETE FROM "MediaItem" WHERE "Id" IN ("#);
     let mut separated = builder.separated(", ");
     for id in ids {
         separated.push_bind(id);
@@ -504,7 +515,7 @@ pub async fn empty_trash() -> Result<u64, ServerFnError> {
 }
 
 async fn load_trash_movies(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -519,7 +530,7 @@ async fn load_trash_movies(
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
            LEFT JOIN "Artwork" a
                ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 1
-           ORDER BY mm."SortTitle" COLLATE NOCASE, mm."Title" COLLATE NOCASE"#,
+           ORDER BY mm."SortTitle", mm."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -540,7 +551,7 @@ async fn load_trash_movies(
 }
 
 async fn load_trash_shows(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -555,7 +566,7 @@ async fn load_trash_shows(
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
            LEFT JOIN "Artwork" a
                ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 1
-           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE"#,
+           ORDER BY sm."SortTitle", sm."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -576,7 +587,7 @@ async fn load_trash_shows(
 }
 
 async fn load_trash_artists(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -591,7 +602,7 @@ async fn load_trash_artists(
            JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
            LEFT JOIN "Artwork" art
                ON art."ArtistMetadataId" = am."Id" AND art."ArtworkKind" = 1
-           ORDER BY am."SortTitle" COLLATE NOCASE, am."Title" COLLATE NOCASE"#,
+           ORDER BY am."SortTitle", am."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -609,7 +620,7 @@ async fn load_trash_artists(
 }
 
 async fn load_trash_other_videos(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -626,7 +637,7 @@ async fn load_trash_other_videos(
                ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
            LEFT JOIN "Artwork" poster
                ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
-           ORDER BY ovm."SortTitle" COLLATE NOCASE, ovm."Title" COLLATE NOCASE"#,
+           ORDER BY ovm."SortTitle", ovm."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -644,7 +655,7 @@ async fn load_trash_other_videos(
 }
 
 async fn load_trash_songs(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -652,19 +663,15 @@ async fn load_trash_songs(
         r#"SELECT s."Id" AS "Id",
                   COALESCE(sm."Title", '') AS "Title",
                   COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
-                  CASE
-                      WHEN COALESCE(sm."Artists", '') = '' AND COALESCE(sm."Album", '') = '' THEN NULL
-                      WHEN COALESCE(sm."Artists", '') = '' THEN sm."Album"
-                      WHEN COALESCE(sm."Album", '') = '' THEN sm."Artists"
-                      ELSE sm."Artists" || ' - ' || sm."Album"
-                  END AS "Subtitle",
+                  sm."Artists",
+                  sm."Album",
                   art."Path" AS "Thumb"
            FROM "Song" s
            JOIN "MediaItem" mi ON mi."Id" = s."Id" AND mi."State" = 1
            JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
            LEFT JOIN "Artwork" art
                ON art."SongMetadataId" = sm."Id" AND art."ArtworkKind" = 1
-           ORDER BY sm."SortTitle" COLLATE NOCASE, sm."Title" COLLATE NOCASE"#,
+           ORDER BY sm."SortTitle", sm."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -675,14 +682,17 @@ async fn load_trash_songs(
             id: r.try_get("Id").unwrap_or(0),
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
-            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            subtitle: song_subtitle(
+                r.try_get::<Option<String>, _>("Artists").unwrap_or(None),
+                r.try_get::<Option<String>, _>("Album").unwrap_or(None),
+            ),
             artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
         })
         .collect())
 }
 
 async fn load_trash_images(
-    pool: &sqlx::Pool<sqlx::Sqlite>,
+    pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
     use sqlx::Row;
 
@@ -696,7 +706,7 @@ async fn load_trash_images(
            JOIN "MediaItem" mi ON mi."Id" = i."Id" AND mi."State" = 1
            JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
            LEFT JOIN "Artwork" a ON a."ImageMetadataId" = im."Id"
-           ORDER BY im."SortTitle" COLLATE NOCASE, im."Title" COLLATE NOCASE"#,
+           ORDER BY im."SortTitle", im."Title""#,
     )
     .fetch_all(pool)
     .await?;
@@ -734,7 +744,7 @@ pub async fn list_collections(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "Collection" c
-           WHERE (? = '' OR c."Name" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR c."Name" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -744,8 +754,8 @@ pub async fn list_collections(
     let rows = sqlx::query(
         r#"SELECT c."Id", COALESCE(c."Name", '') AS "Name"
            FROM "Collection" c
-           WHERE (? = '' OR c."Name" LIKE ? COLLATE NOCASE)
-           ORDER BY c."Name" COLLATE NOCASE
+           WHERE (? = '' OR c."Name" LIKE ?)
+           ORDER BY c."Name"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -799,13 +809,13 @@ pub async fn save_collection(form: CollectionForm) -> Result<i64, ServerFnError>
     }
 
     if form.id == 0 {
-        let id = sqlx::query(
+        let result = sqlx::query(
             r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
         )
         .bind(name)
         .execute(&state.pool)
-        .await?
-        .last_insert_rowid();
+        .await?;
+        let id = ersatzrs_infra::db::last_insert_id(result);
         Ok(id)
     } else {
         sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
@@ -847,7 +857,7 @@ pub async fn list_smart_collections(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "SmartCollection" sc
-           WHERE (? = '' OR sc."Name" LIKE ? COLLATE NOCASE)"#,
+           WHERE (? = '' OR sc."Name" LIKE ?)"#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -859,8 +869,8 @@ pub async fn list_smart_collections(
                   COALESCE(sc."Name", '') AS "Name",
                   COALESCE(sc."Query", '') AS "Query"
            FROM "SmartCollection" sc
-           WHERE (? = '' OR sc."Name" LIKE ? COLLATE NOCASE)
-           ORDER BY sc."Name" COLLATE NOCASE
+           WHERE (? = '' OR sc."Name" LIKE ?)
+           ORDER BY sc."Name"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
@@ -919,12 +929,13 @@ pub async fn save_smart_collection(form: CollectionForm) -> Result<i64, ServerFn
     }
 
     if form.id == 0 {
-        let id = sqlx::query(r#"INSERT INTO "SmartCollection" ("Name", "Query") VALUES (?, ?)"#)
-            .bind(name)
-            .bind(query)
-            .execute(&state.pool)
-            .await?
-            .last_insert_rowid();
+        let result =
+            sqlx::query(r#"INSERT INTO "SmartCollection" ("Name", "Query") VALUES (?, ?)"#)
+                .bind(name)
+                .bind(query)
+                .execute(&state.pool)
+                .await?;
+        let id = ersatzrs_infra::db::last_insert_id(result);
         Ok(id)
     } else {
         sqlx::query(r#"UPDATE "SmartCollection" SET "Name" = ?, "Query" = ? WHERE "Id" = ?"#)
@@ -983,7 +994,7 @@ pub async fn suggest_media_items(
                       mm."SortTitle" AS "SortTitle"
                FROM "Movie" m
                JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-               WHERE mm."Title" LIKE ? COLLATE NOCASE
+               WHERE mm."Title" LIKE ?
                UNION ALL
                SELECT s."Id" AS "Id",
                       COALESCE(sm."Title", '') AS "Title",
@@ -991,9 +1002,9 @@ pub async fn suggest_media_items(
                       sm."SortTitle" AS "SortTitle"
                FROM "Show" s
                JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-               WHERE sm."Title" LIKE ? COLLATE NOCASE
+               WHERE sm."Title" LIKE ?
            )
-           ORDER BY "SortTitle" COLLATE NOCASE, "Title" COLLATE NOCASE
+           ORDER BY "SortTitle", "Title"
            LIMIT 20"#,
     )
     .bind(&like)
@@ -1068,7 +1079,7 @@ pub async fn list_collection_members(
                FROM "Show" s JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
            ) items ON items."Id" = ci."MediaItemId"
            WHERE ci."CollectionId" = ?
-           ORDER BY "Title" COLLATE NOCASE"#,
+           ORDER BY "Title""#,
     )
     .bind(collection_id)
     .fetch_all(&state.pool)

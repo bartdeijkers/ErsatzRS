@@ -1,3 +1,4 @@
+#![cfg(not(feature = "mysql"))]
 #![allow(dead_code)]
 #![allow(clippy::missing_panics_doc, clippy::must_use_candidate)]
 

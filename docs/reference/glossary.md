@@ -126,7 +126,7 @@ consistent with ErsatzTV where parity matters.
 | Scheduling engine | Component that converts configured schedule rules into playout items. ErsatzRS ports block, YAML, and Lua scheduling. |
 | Search index | Searchable projection of media metadata used by smart collections and schedule content resolution. |
 | Smart collection | Dynamic collection defined by a search query or filter rather than a fixed list of media items. |
-| SQLx | Rust database toolkit used by ErsatzRS for SQLite first and MySQL later behind a feature flag. |
+| SQLx | Rust database toolkit used by ErsatzRS for SQLite by default and optional MySQL support behind a feature flag. |
 | SSR | Server-side rendering. The default rendering mode for the ErsatzRS admin UI. |
 
 ## T

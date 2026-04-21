@@ -31,7 +31,7 @@ pub use metadata::SqliteMetadataRepository;
 pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
 pub use scheduling::SqliteSchedulingContentRepository;
-use sqlx::{Pool, Sqlite};
+use sqlx::Pool;
 pub use template::SqliteTemplateRepository;
 
 #[derive(Clone)]
@@ -55,7 +55,7 @@ pub struct Repositories {
 }
 
 #[must_use]
-pub fn make_repositories(pool: Pool<Sqlite>) -> Repositories {
+pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
     Repositories {
         channel: SqliteChannelRepository(pool.clone()),
         playout: SqlitePlayoutRepository(pool.clone()),

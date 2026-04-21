@@ -65,5 +65,14 @@ env = "DEV"
 [dev-dependencies]
 insta = "1"
 
+[features]
+default = []
+mysql = ["ersatzrs-infra/mysql", "ersatzrs-scanner/mysql"]
+mysql-integration = [
+    "mysql",
+    "ersatzrs-infra/mysql-integration",
+    "ersatzrs-scanner/mysql-integration",
+]
+
 [lints]
 workspace = true

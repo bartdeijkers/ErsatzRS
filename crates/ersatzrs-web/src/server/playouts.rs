@@ -117,19 +117,19 @@ pub async fn list_playout_items(
                       (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = pi."MediaItemId" LIMIT 1),
                       ''
                   ) AS "Title",
-                  CAST(strftime('%s', pi."Start") * 1000 AS INTEGER) AS "StartMs",
-                  CAST(strftime('%s', pi."Finish") * 1000 AS INTEGER) AS "FinishMs",
+                  pi."Start",
+                  pi."Finish",
                   pi."FillerKind" AS "FillerKind",
                   pi."SchedulingContext" AS "SchedulingContext"
            FROM "PlayoutItem" pi
            WHERE pi."PlayoutId" = ?
-             AND pi."Finish" > datetime(? / 1000, 'unixepoch')
-             AND pi."Start" < datetime(? / 1000, 'unixepoch')
+             AND pi."Finish" > ?
+             AND pi."Start" < ?
            ORDER BY pi."Start""#,
     )
     .bind(playout_id)
-    .bind(from_ms)
-    .bind(to_ms)
+    .bind(format_epoch_ms(from_ms)?)
+    .bind(format_epoch_ms(to_ms)?)
     .fetch_all(&state.pool)
     .await?;
 
@@ -137,15 +137,34 @@ pub async fn list_playout_items(
         .map(|row| {
             let filler_kind = i32::try_from(row.try_get::<i64, _>("FillerKind")?).unwrap_or(0);
 
+            let start: String = row.try_get("Start")?;
+            let finish: String = row.try_get("Finish")?;
+
             Ok(PlayoutTimelineItem {
                 title: row.try_get("Title")?,
-                start_ms: row.try_get::<i64, _>("StartMs")?,
-                finish_ms: row.try_get::<i64, _>("FinishMs")?,
+                start_ms: parse_timeline_datetime(&start)?,
+                finish_ms: parse_timeline_datetime(&finish)?,
                 filler_kind,
                 scheduling_context: row.try_get("SchedulingContext").ok(),
             })
         })
         .collect()
+}
+
+fn format_epoch_ms(epoch_ms: i64) -> Result<String, ServerFnError> {
+    chrono::DateTime::from_timestamp_millis(epoch_ms)
+        .map(|value| value.format("%Y-%m-%d %H:%M:%S").to_string())
+        .ok_or_else(|| ServerFnError::new("invalid timeline timestamp"))
+}
+
+fn parse_timeline_datetime(value: &str) -> Result<i64, ServerFnError> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|parsed| parsed.timestamp_millis())
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
+                .map(|parsed| parsed.and_utc().timestamp_millis())
+        })
+        .map_err(|source| ServerFnError::new(format!("invalid playout timestamp: {source}")))
 }
 
 /// Loads a Sequential (YAML) playout (`ScheduleKind = 3`) by id.

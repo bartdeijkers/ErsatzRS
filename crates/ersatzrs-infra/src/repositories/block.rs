@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{BlockRepository, Result};
 use ersatzrs_domain::{Block, EntityId};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
-pub struct SqliteBlockRepository(pub Pool<Sqlite>);
+pub struct SqliteBlockRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl BlockRepository for SqliteBlockRepository {
@@ -45,7 +45,7 @@ impl BlockRepository for SqliteBlockRepository {
     async fn upsert(&self, block: &Block) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Block" (
+            r#"REPLACE INTO "Block" (
                 "Id", "BlockGroupId", "Name", "DateUpdated", "Minutes", "StopScheduling"
              ) VALUES (?, ?, ?, ?, ?, ?)"#,
         )
@@ -60,7 +60,7 @@ impl BlockRepository for SqliteBlockRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "BlockItem" WHERE "BlockId" = ?"#,
-            r#"INSERT OR REPLACE INTO "BlockItem" (
+            r#"REPLACE INTO "BlockItem" (
                 "BlockId", "Id", "CollectionType", "PlaybackOrder", "Index"
              ) VALUES (?, ?, 0, 0, 0)"#,
             block.id,
@@ -72,7 +72,7 @@ impl BlockRepository for SqliteBlockRepository {
     }
 }
 
-fn map_block(row: &SqliteRow) -> Result<Block> {
+fn map_block(row: &DbRow) -> Result<Block> {
     let date_updated: String = row.try_get("DateUpdated")?;
     let updated_ticks: i64 = date_updated.parse().unwrap_or(0);
     let minutes: i64 = row.try_get("Minutes")?;

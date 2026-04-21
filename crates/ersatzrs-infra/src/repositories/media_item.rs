@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{MediaItemRepository, Result};
 use ersatzrs_domain::{EntityId, MediaItem};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
-pub struct SqliteMediaItemRepository(pub Pool<Sqlite>);
+pub struct SqliteMediaItemRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl MediaItemRepository for SqliteMediaItemRepository {
@@ -53,7 +53,7 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, ?)"#,
+            r#"REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.library_path_id)
@@ -64,7 +64,7 @@ impl MediaItemRepository for SqliteMediaItemRepository {
     }
 }
 
-fn map_media_item(row: &SqliteRow) -> Result<MediaItem> {
+fn map_media_item(row: &DbRow) -> Result<MediaItem> {
     Ok(MediaItem {
         id: row.try_get("Id")?,
         library_path_id: row.try_get("LibraryPathId")?,

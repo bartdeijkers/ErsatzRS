@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{LibraryRepository, Result};
 use ersatzrs_domain::{EntityId, Library, MediaSourceKind};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
-pub struct SqliteLibraryRepository(pub Pool<Sqlite>);
+pub struct SqliteLibraryRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl LibraryRepository for SqliteLibraryRepository {
@@ -59,7 +59,7 @@ impl LibraryRepository for SqliteLibraryRepository {
     async fn upsert(&self, library: &Library) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Library" (
+            r#"REPLACE INTO "Library" (
                 "Id", "Name", "MediaKind", "MediaSourceId"
              ) VALUES (?, ?, ?, ?)"#,
         )
@@ -75,7 +75,7 @@ impl LibraryRepository for SqliteLibraryRepository {
             .execute(&mut *tx)
             .await?;
         if matches!(library.media_source_kind, MediaSourceKind::Local) {
-            sqlx::query(r#"INSERT OR REPLACE INTO "LocalLibrary" ("Id") VALUES (?)"#)
+            sqlx::query(r#"REPLACE INTO "LocalLibrary" ("Id") VALUES (?)"#)
                 .bind(library.id)
                 .execute(&mut *tx)
                 .await?;
@@ -84,7 +84,7 @@ impl LibraryRepository for SqliteLibraryRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#,
-            r#"INSERT OR REPLACE INTO "LibraryPath" ("LibraryId", "Id", "Path") VALUES (?, ?, '')"#,
+            r#"REPLACE INTO "LibraryPath" ("LibraryId", "Id", "Path") VALUES (?, ?, '')"#,
             library.id,
             &library.path_ids,
         )
@@ -99,7 +99,7 @@ impl LibraryRepository for SqliteLibraryRepository {
 }
 
 async fn resolve_media_source_kind(
-    pool: &Pool<Sqlite>,
+    pool: &Pool<crate::db::Db>,
     library_id: EntityId,
 ) -> Result<MediaSourceKind> {
     let is_local: bool = sqlx::query_scalar::<_, bool>(
@@ -132,7 +132,7 @@ async fn resolve_media_source_kind(
     Ok(MediaSourceKind::Emby)
 }
 
-fn map_library(row: &SqliteRow) -> Result<Library> {
+fn map_library(row: &DbRow) -> Result<Library> {
     Ok(Library {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,

@@ -10,6 +10,16 @@ for commit messages.
 
 ### Added
 
+- Phase 7 Slice 7 MySQL backend support: `ersatzrs-infra` can initialize
+  SQLite or MySQL from `DATABASE_URL` when built with the `mysql` feature,
+  `ersatzrs-web` and `ersatzrs-scanner` propagate the backend-aware pool, and
+  `mysql://` / `mariadb://` URLs now fail with a clear unsupported-backend
+  error when the feature is not compiled. Added ordered ErsatzTV-compatible
+  MySQL migrations under `migrations/mysql/` with named constraints and
+  `utf8mb4` collation parity, plus a feature-gated MySQL integration test
+  covering migrations, config upsert/read, channel/profile reads, playout item
+  lookup, and scanner insert-id handling.
+
 - Phase 7 Slice 4 HLS direct passthrough: `.m3u8?mode=hls-direct` now emits
   a single-entry direct playlist that targets `/iptv/hls-direct/{channel}`
   with output-format-aware `.ts` / `.mp4` / `.mkv` suffixes, tracks

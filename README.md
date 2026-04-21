@@ -49,8 +49,9 @@ long-term baseline is:
 
 - Rust stable, pinned through [rust-toolchain.toml](rust-toolchain.toml).
 - FFmpeg 8.1 or newer available on `PATH`.
-- SQLite for the first database backend.
-- MySQL support later behind a Cargo feature flag.
+- SQLite as the default database backend.
+- MySQL 8/MariaDB-compatible backend support behind the `mysql` Cargo feature;
+  use a `mysql://...` or `mariadb://...` `DATABASE_URL` when building with it.
 
 ## License
 

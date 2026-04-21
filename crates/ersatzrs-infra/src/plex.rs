@@ -1,3 +1,4 @@
+use crate::db::DbPool;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
@@ -7,7 +8,7 @@ use reqwest::{
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use sqlx::{Row, Sqlite, SqlitePool, Transaction};
+use sqlx::{Row, Transaction};
 
 const PLEX_PAGE_SIZE: i32 = 100;
 const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
@@ -414,7 +415,7 @@ impl PlexService {
     /// # Errors
     ///
     /// Returns a database error when the read or write fails.
-    pub async fn get_or_create_client_identifier(pool: &SqlitePool) -> Result<String> {
+    pub async fn get_or_create_client_identifier(pool: &DbPool) -> Result<String> {
         if let Some(id) = sqlx::query_scalar::<_, String>(
             r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
         )
@@ -427,8 +428,8 @@ impl PlexService {
         }
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-               ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+            r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+               "#,
         )
         .bind(PLEX_CLIENT_IDENTIFIER_KEY)
         .bind(&id)
@@ -584,7 +585,7 @@ impl PlexService {
     /// # Errors
     ///
     /// Returns a database error on any write failure.
-    pub async fn upsert_sources(pool: &SqlitePool, servers: &[PlexServerResource]) -> Result<()> {
+    pub async fn upsert_sources(pool: &DbPool, servers: &[PlexServerResource]) -> Result<()> {
         for server in servers {
             let existing: Option<i64> = sqlx::query_scalar(
                 r#"SELECT "Id" FROM "PlexMediaSource" WHERE "ClientIdentifier" = ?"#,
@@ -604,7 +605,7 @@ impl PlexService {
                 let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
                     .execute(pool)
                     .await?;
-                let ms_id = ms.last_insert_rowid();
+                let ms_id = crate::db::last_insert_id(ms);
                 sqlx::query(
                     r#"INSERT INTO "PlexMediaSource"
                        ("Id", "ServerName", "ClientIdentifier")
@@ -653,8 +654,8 @@ impl PlexService {
             }
 
             sqlx::query(
-                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-                   ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+                r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                   "#,
             )
             .bind(format!(
                 "{PLEX_SERVER_AUTH_TOKEN_PREFIX}{}",
@@ -665,8 +666,8 @@ impl PlexService {
             .await?;
 
             sqlx::query(
-                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-                   ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+                r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                   "#,
             )
             .bind(PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY)
             .bind(&server.server_auth_token)
@@ -683,7 +684,7 @@ impl PlexService {
 ///
 /// Returns an error when Plex requests or database writes fail.
 pub async fn sync_plex_movie_library(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &PlexService,
     config: &PlexConnectionConfig,
     media_source_id: i64,
@@ -720,7 +721,7 @@ pub async fn sync_plex_movie_library(
 ///
 /// Returns an error when Plex requests or database writes fail.
 pub async fn sync_plex_show_library(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &PlexService,
     config: &PlexConnectionConfig,
     media_source_id: i64,
@@ -820,7 +821,7 @@ pub async fn sync_plex_show_library(
 ///
 /// Returns an error when Plex requests or database writes fail.
 pub async fn sync_plex_collection_library(
-    pool: &SqlitePool,
+    pool: &DbPool,
     service: &PlexService,
     config: &PlexConnectionConfig,
     media_source_id: i64,
@@ -882,7 +883,7 @@ pub async fn sync_plex_collection_library(
 }
 
 async fn upsert_plex_movie(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
@@ -901,7 +902,7 @@ async fn upsert_plex_movie(
 }
 
 async fn upsert_plex_show(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
@@ -917,7 +918,7 @@ async fn upsert_plex_show(
 }
 
 async fn upsert_plex_season(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
@@ -934,7 +935,7 @@ async fn upsert_plex_season(
 }
 
 async fn upsert_plex_episode(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
@@ -1080,7 +1081,7 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
 }
 
 async fn ensure_plex_library(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     media_source_id: i64,
     library_id: i64,
     key: &str,
@@ -1113,7 +1114,7 @@ async fn ensure_plex_library(
 }
 
 async fn ensure_library_path(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_id: i64,
     path: &str,
 ) -> Result<i64> {
@@ -1129,11 +1130,11 @@ async fn ensure_library_path(
         .bind(path)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(crate::db::last_insert_id(result))
 }
 
 async fn ensure_plex_movie_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     item: &PlexMediaItem,
 ) -> Result<i64> {
@@ -1150,7 +1151,7 @@ async fn ensure_plex_movie_item(
 }
 
 async fn ensure_plex_show_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     item: &PlexShowItem,
 ) -> Result<i64> {
@@ -1167,7 +1168,7 @@ async fn ensure_plex_show_item(
 }
 
 async fn ensure_plex_season_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     show_id: i64,
     item: &PlexSeasonItem,
@@ -1208,7 +1209,7 @@ async fn ensure_plex_season_item(
 }
 
 async fn ensure_plex_episode_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     library_path_id: i64,
     season_id: i64,
     item: &PlexMediaItem,
@@ -1247,7 +1248,7 @@ async fn ensure_plex_episode_item(
 }
 
 async fn upsert_plex_collection(
-    pool: &SqlitePool,
+    pool: &DbPool,
     media_source_id: i64,
     item: &PlexCollectionItem,
 ) -> Result<i64> {
@@ -1286,7 +1287,7 @@ async fn upsert_plex_collection(
         .bind(&item.title)
         .execute(&mut *tx)
         .await?;
-        let id = result.last_insert_rowid();
+        let id = crate::db::last_insert_id(result);
         sqlx::query(
             r#"INSERT INTO "PlexCollection" ("Id", "Key", "Etag", "Name")
                VALUES (?, ?, ?, ?)"#,
@@ -1305,7 +1306,7 @@ async fn upsert_plex_collection(
 }
 
 async fn replace_plex_collection_items(
-    pool: &SqlitePool,
+    pool: &DbPool,
     collection_id: i64,
     items: &[PlexCollectionMediaItem],
 ) -> Result<()> {
@@ -1332,7 +1333,7 @@ async fn replace_plex_collection_items(
 }
 
 async fn find_plex_media_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     item: &PlexCollectionMediaItem,
 ) -> Result<Option<i64>> {
     let table = match item.kind {
@@ -1350,7 +1351,7 @@ async fn find_plex_media_item(
 }
 
 async fn ensure_simple_media_item(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     base_table: &str,
     provider_table: &str,
     provider_key_column: &str,
@@ -1394,12 +1395,15 @@ async fn ensure_simple_media_item(
     Ok(id)
 }
 
-async fn insert_media_item(tx: &mut Transaction<'_, Sqlite>, library_path_id: i64) -> Result<i64> {
+async fn insert_media_item(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    library_path_id: i64,
+) -> Result<i64> {
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(crate::db::last_insert_id(result))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1409,7 +1413,7 @@ enum VersionOwner {
 }
 
 async fn ensure_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     owner: VersionOwner,
     item: &PlexMediaItem,
 ) -> Result<i64> {
@@ -1446,11 +1450,11 @@ async fn ensure_media_version(
         .bind(item.width)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(crate::db::last_insert_id(result))
 }
 
 async fn update_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     id: i64,
     item: &PlexMediaItem,
 ) -> Result<()> {
@@ -1477,12 +1481,12 @@ async fn update_media_version(
 }
 
 async fn ensure_media_file(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     version_id: i64,
     item: &PlexMediaItem,
 ) -> Result<()> {
     let result = sqlx::query(
-        r#"INSERT OR REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+        r#"REPLACE INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
            VALUES (?, ?, ?)"#,
     )
     .bind(version_id)
@@ -1490,20 +1494,18 @@ async fn ensure_media_file(
     .bind(path_hash(&item.path))
     .execute(&mut **tx)
     .await?;
-    let file_id = result.last_insert_rowid();
-    sqlx::query(
-        r#"INSERT OR REPLACE INTO "PlexMediaFile" ("Id", "PlexId", "Key") VALUES (?, ?, ?)"#,
-    )
-    .bind(file_id)
-    .bind(item.plex_part_id)
-    .bind(&item.part_key)
-    .execute(&mut **tx)
-    .await?;
+    let file_id = crate::db::last_insert_id(result);
+    sqlx::query(r#"REPLACE INTO "PlexMediaFile" ("Id", "PlexId", "Key") VALUES (?, ?, ?)"#)
+        .bind(file_id)
+        .bind(item.plex_part_id)
+        .bind(&item.part_key)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
 async fn replace_streams(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     version_id: i64,
     streams: &[MediaStream],
 ) -> Result<()> {
@@ -1541,7 +1543,7 @@ async fn replace_streams(
 /// # Errors
 ///
 /// Returns an error when config loading, the Plex API, or database writes fail.
-pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<usize> {
+pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l
@@ -1621,7 +1623,7 @@ pub async fn sync_library_by_id(pool: &SqlitePool, library_id: i64) -> Result<us
     }
 }
 
-async fn load_plex_token(pool: &SqlitePool, client_identifier: &str) -> Result<String> {
+async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<String> {
     for key in &[
         format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}{client_identifier}"),
         PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY.to_owned(),

@@ -517,22 +517,20 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         // Resolve ResolutionId — seed a default 1080p entry if none exists.
         let resolution_id = if form.resolution_id > 0 {
             form.resolution_id
-        } else {
-            match sqlx::query_scalar::<_, i64>(
-                r#"SELECT "Id" FROM "Resolution" ORDER BY "Id" LIMIT 1"#,
-            )
-            .fetch_optional(&state.pool)
-            .await?
-            {
-                Some(id) => id,
-                None => sqlx::query(
-                    r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height")
-                           VALUES ('1920x1080', 0, 1920, 1080)"#,
-                )
-                .execute(&state.pool)
+        } else if let Some(id) =
+            sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "Resolution" ORDER BY "Id" LIMIT 1"#)
+                .fetch_optional(&state.pool)
                 .await?
-                .last_insert_rowid(),
-            }
+        {
+            id
+        } else {
+            let result = sqlx::query(
+                r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height")
+                   VALUES ('1920x1080', 0, 1920, 1080)"#,
+            )
+            .execute(&state.pool)
+            .await?;
+            ersatzrs_infra::db::last_insert_id(result)
         };
 
         let result = sqlx::query(
@@ -581,7 +579,7 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         .execute(&state.pool)
         .await?;
 
-        Ok(result.last_insert_rowid())
+        Ok(ersatzrs_infra::db::last_insert_id(result))
     } else {
         sqlx::query(
             r#"UPDATE "FFmpegProfile" SET
@@ -702,5 +700,5 @@ pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, Serve
         return Err(ServerFnError::new("Source profile not found."));
     }
 
-    Ok(result.last_insert_rowid())
+    Ok(ersatzrs_infra::db::last_insert_id(result))
 }

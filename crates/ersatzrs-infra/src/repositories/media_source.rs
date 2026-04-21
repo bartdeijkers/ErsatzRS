@@ -5,12 +5,12 @@ use ersatzrs_domain::{
     JellyfinMediaSource, JellyfinPathReplacement, MediaSource, MediaSourceKind, PlexConnection,
     PlexMediaSource, PlexPathReplacement,
 };
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_optional_datetime, encode_optional_datetime, not_found};
 
 #[derive(Clone)]
-pub struct SqliteMediaSourceRepository(pub Pool<Sqlite>);
+pub struct SqliteMediaSourceRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl MediaSourceRepository for SqliteMediaSourceRepository {
@@ -274,7 +274,11 @@ impl MediaSourceRepository for SqliteMediaSourceRepository {
     }
 }
 
-async fn upsert_source<T>(pool: &Pool<Sqlite>, base: &MediaSource, provider: &T) -> Result<()>
+async fn upsert_source<T>(
+    pool: &Pool<crate::db::Db>,
+    base: &MediaSource,
+    provider: &T,
+) -> Result<()>
 where
     T: ProviderUpsert + Sync,
 {
@@ -294,18 +298,18 @@ where
 trait ProviderUpsert {
     fn upsert<'a>(
         &'a self,
-        tx: &'a mut sqlx::Transaction<'_, Sqlite>,
+        tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>>;
 }
 
 impl ProviderUpsert for PlexMediaSource {
     fn upsert<'a>(
         &'a self,
-        tx: &'a mut sqlx::Transaction<'_, Sqlite>,
+        tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                r#"INSERT OR REPLACE INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
+                r#"REPLACE INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
                  VALUES (?, ?, ?)"#,
             )
             .bind(self.media_source.id)
@@ -320,7 +324,7 @@ impl ProviderUpsert for PlexMediaSource {
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "PlexConnection" ("Id", "PlexMediaSourceId", "IsActive", "Uri")
+                    r#"REPLACE INTO "PlexConnection" ("Id", "PlexMediaSourceId", "IsActive", "Uri")
                      VALUES (?, ?, ?, ?)"#,
                 )
                 .bind(connection.id)
@@ -337,7 +341,7 @@ impl ProviderUpsert for PlexMediaSource {
                 .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "PlexPathReplacement" (
+                    r#"REPLACE INTO "PlexPathReplacement" (
                         "Id", "PlexMediaSourceId", "PlexPath", "LocalPath"
                      ) VALUES (?, ?, ?, ?)"#,
                 )
@@ -357,11 +361,11 @@ impl ProviderUpsert for PlexMediaSource {
 impl ProviderUpsert for JellyfinMediaSource {
     fn upsert<'a>(
         &'a self,
-        tx: &'a mut sqlx::Transaction<'_, Sqlite>,
+        tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                r#"INSERT OR REPLACE INTO "JellyfinMediaSource" (
+                r#"REPLACE INTO "JellyfinMediaSource" (
                     "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
                  ) VALUES (?, ?, ?, ?)"#,
             )
@@ -378,7 +382,7 @@ impl ProviderUpsert for JellyfinMediaSource {
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "JellyfinConnection" ("Id", "JellyfinMediaSourceId", "Address")
+                    r#"REPLACE INTO "JellyfinConnection" ("Id", "JellyfinMediaSourceId", "Address")
                      VALUES (?, ?, ?)"#,
                 )
                 .bind(connection.id)
@@ -396,7 +400,7 @@ impl ProviderUpsert for JellyfinMediaSource {
             .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "JellyfinPathReplacement" (
+                    r#"REPLACE INTO "JellyfinPathReplacement" (
                         "Id", "JellyfinMediaSourceId", "JellyfinPath", "LocalPath"
                      ) VALUES (?, ?, ?, ?)"#,
                 )
@@ -416,11 +420,11 @@ impl ProviderUpsert for JellyfinMediaSource {
 impl ProviderUpsert for EmbyMediaSource {
     fn upsert<'a>(
         &'a self,
-        tx: &'a mut sqlx::Transaction<'_, Sqlite>,
+        tx: &'a mut sqlx::Transaction<'_, crate::db::Db>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             sqlx::query(
-                r#"INSERT OR REPLACE INTO "EmbyMediaSource" (
+                r#"REPLACE INTO "EmbyMediaSource" (
                     "Id", "ServerName", "OperatingSystem", "LastCollectionsScan"
                  ) VALUES (?, ?, ?, ?)"#,
             )
@@ -437,7 +441,7 @@ impl ProviderUpsert for EmbyMediaSource {
                 .await?;
             for connection in &self.connections {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "EmbyConnection" ("Id", "EmbyMediaSourceId", "Address")
+                    r#"REPLACE INTO "EmbyConnection" ("Id", "EmbyMediaSourceId", "Address")
                      VALUES (?, ?, ?)"#,
                 )
                 .bind(connection.id)
@@ -453,7 +457,7 @@ impl ProviderUpsert for EmbyMediaSource {
                 .await?;
             for replacement in &self.path_replacements {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "EmbyPathReplacement" (
+                    r#"REPLACE INTO "EmbyPathReplacement" (
                         "Id", "EmbyMediaSourceId", "EmbyPath", "LocalPath"
                      ) VALUES (?, ?, ?, ?)"#,
                 )
@@ -471,7 +475,7 @@ impl ProviderUpsert for EmbyMediaSource {
 }
 
 async fn fetch_base_source(
-    pool: &Pool<Sqlite>,
+    pool: &Pool<crate::db::Db>,
     id: EntityId,
     expected_kind: MediaSourceKind,
 ) -> Result<MediaSource> {

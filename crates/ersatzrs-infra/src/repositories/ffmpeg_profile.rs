@@ -1,13 +1,16 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{FfmpegProfileRepository, Result};
 use ersatzrs_domain::{EntityId, FFmpegProfile};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
-use super::common::{decode_enum_column, encode_enum, not_found};
+use super::common::{
+    decode_bool_column, decode_enum_column, decode_optional_bool_column,
+    decode_optional_string_column, decode_string_column, encode_enum, not_found,
+};
 
 #[derive(Clone)]
-pub struct SqliteFfmpegProfileRepository(pub Pool<Sqlite>);
+pub struct SqliteFfmpegProfileRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
@@ -29,7 +32,7 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
 
     async fn upsert(&self, profile: &FFmpegProfile) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "FFmpegProfile" (
+            r#"REPLACE INTO "FFmpegProfile" (
                 "Id", "Name", "ThreadCount", "NormalizeAudio", "NormalizeVideo",
                 "HardwareAcceleration", "VaapiDisplay", "VaapiDriver", "VaapiDevice",
                 "QsvExtraHardwareFrames", "ResolutionId", "ScalingBehavior", "PadMode",
@@ -85,21 +88,21 @@ impl FfmpegProfileRepository for SqliteFfmpegProfileRepository {
     }
 }
 
-fn map_profile(row: &SqliteRow) -> Result<FFmpegProfile> {
+fn map_profile(row: &DbRow) -> Result<FFmpegProfile> {
     Ok(FFmpegProfile {
         id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
+        name: decode_string_column(row, "Name")?,
         thread_count: row.try_get("ThreadCount")?,
-        normalize_audio: row.try_get("NormalizeAudio")?,
-        normalize_video: row.try_get("NormalizeVideo")?,
+        normalize_audio: decode_bool_column(row, "NormalizeAudio")?,
+        normalize_video: decode_bool_column(row, "NormalizeVideo")?,
         hardware_acceleration: decode_enum_column(
             "ffmpeg profile hardware_acceleration",
             row,
             "HardwareAcceleration",
         )?,
-        vaapi_display: row.try_get("VaapiDisplay")?,
+        vaapi_display: decode_optional_string_column(row, "VaapiDisplay")?,
         vaapi_driver: decode_enum_column("ffmpeg profile vaapi_driver", row, "VaapiDriver")?,
-        vaapi_device: row.try_get("VaapiDevice")?,
+        vaapi_device: decode_optional_string_column(row, "VaapiDevice")?,
         qsv_extra_hardware_frames: row.try_get("QsvExtraHardwareFrames")?,
         resolution_id: row.try_get("ResolutionId")?,
         scaling_behavior: decode_enum_column(
@@ -109,9 +112,9 @@ fn map_profile(row: &SqliteRow) -> Result<FFmpegProfile> {
         )?,
         pad_mode: decode_enum_column("ffmpeg profile pad_mode", row, "PadMode")?,
         video_format: decode_enum_column("ffmpeg profile video_format", row, "VideoFormat")?,
-        video_profile: row.try_get("VideoProfile")?,
-        video_preset: row.try_get("VideoPreset")?,
-        allow_b_frames: row.try_get("AllowBFrames")?,
+        video_profile: decode_optional_string_column(row, "VideoProfile")?,
+        video_preset: decode_optional_string_column(row, "VideoPreset")?,
+        allow_b_frames: decode_bool_column(row, "AllowBFrames")?,
         bit_depth: decode_enum_column("ffmpeg profile bit_depth", row, "BitDepth")?,
         video_bitrate: row.try_get("VideoBitrate")?,
         video_buffer_size: row.try_get("VideoBufferSize")?,
@@ -131,8 +134,8 @@ fn map_profile(row: &SqliteRow) -> Result<FFmpegProfile> {
         target_loudness: row.try_get("TargetLoudness")?,
         audio_channels: row.try_get("AudioChannels")?,
         audio_sample_rate: row.try_get("AudioSampleRate")?,
-        normalize_framerate: row.try_get("NormalizeFramerate")?,
-        normalize_colors: row.try_get("NormalizeColors")?,
-        deinterlace_video: row.try_get("DeinterlaceVideo")?,
+        normalize_framerate: decode_bool_column(row, "NormalizeFramerate")?,
+        normalize_colors: decode_bool_column(row, "NormalizeColors")?,
+        deinterlace_video: decode_optional_bool_column(row, "DeinterlaceVideo")?,
     })
 }

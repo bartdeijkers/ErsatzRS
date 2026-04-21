@@ -1,3 +1,4 @@
+#![cfg(not(feature = "mysql"))]
 use std::path::PathBuf;
 
 use chrono::{Duration, Utc};

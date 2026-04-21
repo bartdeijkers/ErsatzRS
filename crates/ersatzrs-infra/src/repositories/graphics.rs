@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{GraphicsRepository, Result};
 use ersatzrs_domain::{EntityId, GraphicsElement};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
-pub struct SqliteGraphicsRepository(pub Pool<Sqlite>);
+pub struct SqliteGraphicsRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl GraphicsRepository for SqliteGraphicsRepository {
@@ -46,7 +46,7 @@ impl GraphicsRepository for SqliteGraphicsRepository {
 
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "GraphicsElement" (
+            r#"REPLACE INTO "GraphicsElement" (
                 "Id", "Name", "Kind", "Path",
                 "X", "Y", "Width", "Height", "ZIndex", "EnableExpression", "Text"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
@@ -68,7 +68,7 @@ impl GraphicsRepository for SqliteGraphicsRepository {
     }
 }
 
-fn map_element(row: &SqliteRow) -> Result<GraphicsElement> {
+fn map_element(row: &DbRow) -> Result<GraphicsElement> {
     Ok(GraphicsElement {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,

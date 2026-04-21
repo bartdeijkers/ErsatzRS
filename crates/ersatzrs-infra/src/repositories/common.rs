@@ -1,3 +1,4 @@
+use crate::db::DbRow;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
@@ -14,8 +15,7 @@ use ersatzrs_domain::{
     WatermarkSize,
 };
 use serde::de::DeserializeOwned;
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 pub fn decode_enum<T>(kind: &'static str, value: &str) -> Result<T>
 where
@@ -33,7 +33,7 @@ where
         .ok_or_else(|| decode_message(kind, &format!("unknown enum value {int_value}")))
 }
 
-pub fn decode_enum_column<T>(kind: &'static str, row: &SqliteRow, column: &'static str) -> Result<T>
+pub fn decode_enum_column<T>(kind: &'static str, row: &DbRow, column: &'static str) -> Result<T>
 where
     T: DbEnum,
 {
@@ -48,7 +48,7 @@ where
 
 pub fn decode_optional_enum_column<T>(
     kind: &'static str,
-    row: &SqliteRow,
+    row: &DbRow,
     column: &'static str,
 ) -> Result<Option<T>>
 where
@@ -64,6 +64,49 @@ where
             .map(|value| decode_enum(kind, &value))
             .transpose(),
     }
+}
+
+pub fn decode_bool_column(row: &DbRow, column: &'static str) -> Result<bool> {
+    if let Ok(value) = row.try_get(column) {
+        return Ok(value);
+    }
+
+    Ok(row.try_get::<i64, _>(column)? != 0)
+}
+
+pub fn decode_optional_bool_column(row: &DbRow, column: &'static str) -> Result<Option<bool>> {
+    if let Ok(value) = row.try_get(column) {
+        return Ok(value);
+    }
+
+    Ok(row
+        .try_get::<Option<i64>, _>(column)?
+        .map(|value| value != 0))
+}
+
+pub fn decode_string_column(row: &DbRow, column: &'static str) -> Result<String> {
+    if let Ok(value) = row.try_get(column) {
+        return Ok(value);
+    }
+
+    decode_utf8_column(row.try_get(column)?, column)
+}
+
+pub fn decode_optional_string_column(row: &DbRow, column: &'static str) -> Result<Option<String>> {
+    if let Ok(value) = row.try_get(column) {
+        return Ok(value);
+    }
+
+    row.try_get::<Option<Vec<u8>>, _>(column)?
+        .map(|bytes| decode_utf8_column(bytes, column))
+        .transpose()
+}
+
+fn decode_utf8_column(bytes: Vec<u8>, column: &'static str) -> Result<String> {
+    String::from_utf8(bytes).map_err(|error| RepositoryError::Decode {
+        kind: column,
+        value: error.to_string(),
+    })
 }
 
 pub trait DbEnum: DeserializeOwned + Sized {
@@ -512,7 +555,7 @@ pub fn not_found(kind: &'static str, id: i64, error: sqlx::Error) -> RepositoryE
 }
 
 pub async fn replace_ids(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     delete_sql: &str,
     insert_sql: &str,
     parent_id: i64,
@@ -534,7 +577,7 @@ pub async fn replace_ids(
     Ok(())
 }
 
-pub async fn load_ids(pool: &Pool<Sqlite>, sql: &str, parent_id: i64) -> Result<Vec<i64>> {
+pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> Result<Vec<i64>> {
     sqlx::query_scalar::<_, i64>(sql)
         .bind(parent_id)
         .fetch_all(pool)

@@ -19,8 +19,8 @@ ADR: [0004](../adr/0004-collapsed-initial-schema.md)
 
 ## sqlx instead of EF Core
 
-ErsatzRS uses explicit SQL through sqlx, with SQLite first and MySQL later behind a
-feature flag.
+ErsatzRS uses explicit SQL through sqlx, with SQLite as the default backend and
+MySQL support behind a Cargo feature flag.
 
 ADR: [0006](../adr/0006-sqlx-over-sea-orm.md)
 

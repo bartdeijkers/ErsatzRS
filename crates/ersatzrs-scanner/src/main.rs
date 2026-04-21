@@ -2,6 +2,7 @@ use anyhow::Context;
 use clap::{Parser, ValueEnum};
 use ersatzrs_core::repositories::{EmbyConnectionConfig, JellyfinConnectionConfig};
 use ersatzrs_infra::db;
+use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::emby::{sync_emby_movie_library, sync_emby_show_library, EmbyService};
 use ersatzrs_infra::jellyfin::{
     sync_jellyfin_movie_library, sync_jellyfin_show_library, JellyfinService,
@@ -11,7 +12,7 @@ use ersatzrs_infra::plex::{
     PlexConnectionConfig, PlexService,
 };
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
-use sqlx::{Row, SqlitePool};
+use sqlx::Row;
 use tracing::info;
 
 const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
@@ -65,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn scan_local(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     if args.dry_run {
         info!(library_id = args.library_id, provider = "local", "dry run");
         return Ok(());
@@ -82,7 +83,7 @@ async fn scan_local(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn scan_jellyfin(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+async fn scan_jellyfin(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     if args.dry_run {
         info!(
             library_id = args.library_id,
@@ -122,7 +123,7 @@ async fn scan_jellyfin(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn scan_plex(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     if args.dry_run {
         info!(library_id = args.library_id, provider = "plex", "dry run");
         return Ok(());
@@ -165,7 +166,7 @@ async fn scan_plex(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn scan_emby(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
+async fn scan_emby(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     if args.dry_run {
         info!(library_id = args.library_id, provider = "emby", "dry run");
         return Ok(());
@@ -201,7 +202,7 @@ async fn scan_emby(pool: &SqlitePool, args: &Args) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn load_library_media_source_id(pool: &SqlitePool, library_id: i64) -> anyhow::Result<i64> {
+async fn load_library_media_source_id(pool: &DbPool, library_id: i64) -> anyhow::Result<i64> {
     sqlx::query(r#"SELECT "MediaSourceId" FROM "Library" WHERE "Id" = ?"#)
         .bind(library_id)
         .fetch_optional(pool)
@@ -210,7 +211,7 @@ async fn load_library_media_source_id(pool: &SqlitePool, library_id: i64) -> any
         .context("library not found")
 }
 
-async fn load_library_media_kind(pool: &SqlitePool, library_id: i64) -> anyhow::Result<i64> {
+async fn load_library_media_kind(pool: &DbPool, library_id: i64) -> anyhow::Result<i64> {
     sqlx::query(r#"SELECT "MediaKind" FROM "Library" WHERE "Id" = ?"#)
         .bind(library_id)
         .fetch_optional(pool)
@@ -220,7 +221,7 @@ async fn load_library_media_kind(pool: &SqlitePool, library_id: i64) -> anyhow::
 }
 
 async fn load_provider_library_key(
-    pool: &SqlitePool,
+    pool: &DbPool,
     table: &str,
     column: &str,
     library_id: i64,
@@ -235,7 +236,7 @@ async fn load_provider_library_key(
 }
 
 async fn load_jellyfin_config(
-    pool: &SqlitePool,
+    pool: &DbPool,
     library_id: i64,
 ) -> anyhow::Result<JellyfinConnectionConfig> {
     let media_source_id = load_library_media_source_id(pool, library_id).await?;
@@ -265,10 +266,7 @@ async fn load_jellyfin_config(
     })
 }
 
-async fn load_emby_config(
-    pool: &SqlitePool,
-    library_id: i64,
-) -> anyhow::Result<EmbyConnectionConfig> {
+async fn load_emby_config(pool: &DbPool, library_id: i64) -> anyhow::Result<EmbyConnectionConfig> {
     let media_source_id = load_library_media_source_id(pool, library_id).await?;
     let address =
         load_connection_address(pool, "EmbyConnection", "EmbyMediaSourceId", media_source_id)
@@ -285,10 +283,7 @@ async fn load_emby_config(
     Ok(EmbyConnectionConfig { address, api_key })
 }
 
-async fn load_plex_config(
-    pool: &SqlitePool,
-    library_id: i64,
-) -> anyhow::Result<PlexConnectionConfig> {
+async fn load_plex_config(pool: &DbPool, library_id: i64) -> anyhow::Result<PlexConnectionConfig> {
     let media_source_id = load_library_media_source_id(pool, library_id).await?;
     let row = sqlx::query(
         r#"SELECT "PlexConnection"."Uri" AS "Uri",
@@ -323,7 +318,7 @@ async fn load_plex_config(
 }
 
 async fn load_first_config_value(
-    pool: &SqlitePool,
+    pool: &DbPool,
     keys: &[String],
     description: &str,
 ) -> anyhow::Result<String> {
@@ -352,7 +347,7 @@ fn format_jellyfin_authorization_header(value: String) -> String {
 }
 
 async fn load_connection_address(
-    pool: &SqlitePool,
+    pool: &DbPool,
     table: &str,
     media_source_column: &str,
     media_source_id: i64,
@@ -372,7 +367,7 @@ async fn load_connection_address(
         .context("provider connection not found")
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "mysql")))]
 mod tests {
     use super::{
         scan_emby, scan_jellyfin, scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX,
@@ -463,7 +458,7 @@ mod tests {
             .await
     }
 
-    async fn seed_plex_scan_db(pool: &SqlitePool, base_url: &str) {
+    async fn seed_plex_scan_db(pool: &DbPool, base_url: &str) {
         pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
             .await
             .expect("seed media source");
@@ -493,7 +488,7 @@ mod tests {
         )
         .await
         .expect("seed plex library");
-        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
             .bind(format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}client-1"))
             .bind("db-token")
             .execute(pool)

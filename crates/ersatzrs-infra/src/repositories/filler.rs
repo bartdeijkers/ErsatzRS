@@ -1,15 +1,15 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{FillerRepository, Result};
 use ersatzrs_domain::{EntityId, FillerPreset};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{
     decode_enum_column, decode_optional_duration_text, encode_duration, encode_enum, not_found,
 };
 
 #[derive(Clone)]
-pub struct SqliteFillerRepository(pub Pool<Sqlite>);
+pub struct SqliteFillerRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl FillerRepository for SqliteFillerRepository {
@@ -31,7 +31,7 @@ impl FillerRepository for SqliteFillerRepository {
 
     async fn upsert(&self, preset: &FillerPreset) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "FillerPreset" (
+            r#"REPLACE INTO "FillerPreset" (
                 "Id", "Name", "FillerMode", "FillerKind", "CollectionType", "CollectionId",
                 "MediaItemId", "MultiCollectionId", "SmartCollectionId", "PlaylistId",
                 "Duration", "Count", "PadToNearestMinute", "AllowWatermarks",
@@ -65,7 +65,7 @@ impl FillerRepository for SqliteFillerRepository {
     }
 }
 
-fn map_filler(row: &SqliteRow) -> Result<FillerPreset> {
+fn map_filler(row: &DbRow) -> Result<FillerPreset> {
     Ok(FillerPreset {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use ersatzrs_domain::{FFmpegProfileAudioFormat, FFmpegProfileVideoFormat};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, SqlitePool};
+use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::db::DbRow;
+use sqlx::Row;
 
 /// Streaming specs for the multi-variant HLS playlist and `tvc-stream-*codec`
 /// tags on the channels M3U.
@@ -33,7 +34,7 @@ const SELECT_SPECS_SQL: &str = r#"
 "#;
 
 pub async fn load_all_specs(
-    pool: &SqlitePool,
+    pool: &DbPool,
 ) -> Result<HashMap<i64, ChannelStreamingSpec>, sqlx::Error> {
     let rows = sqlx::query(SELECT_SPECS_SQL).fetch_all(pool).await?;
     let mut out = HashMap::with_capacity(rows.len());
@@ -45,7 +46,7 @@ pub async fn load_all_specs(
 }
 
 pub async fn load_spec(
-    pool: &SqlitePool,
+    pool: &DbPool,
     channel_id: i64,
 ) -> Result<Option<ChannelStreamingSpec>, sqlx::Error> {
     let sql = format!("{SELECT_SPECS_SQL} WHERE c.\"Id\" = ?");
@@ -56,7 +57,7 @@ pub async fn load_spec(
     row.as_ref().map(map_spec).transpose()
 }
 
-fn map_spec(row: &SqliteRow) -> Result<ChannelStreamingSpec, sqlx::Error> {
+fn map_spec(row: &DbRow) -> Result<ChannelStreamingSpec, sqlx::Error> {
     let video_int: i32 = row.try_get("VideoFormat")?;
     let audio_int: i32 = row.try_get("AudioFormat")?;
     Ok(ChannelStreamingSpec {

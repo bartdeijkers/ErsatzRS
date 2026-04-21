@@ -116,7 +116,7 @@ pub async fn list_watermark_rows(
     let rows = sqlx::query(
         r#"SELECT "Id","Name","Mode","Location","Image","ImageSource"
            FROM "ChannelWatermark"
-           ORDER BY "Name" COLLATE NOCASE LIMIT ? OFFSET ?"#,
+           ORDER BY "Name" LIMIT ? OFFSET ?"#,
     )
     .bind(i64::from(page_size))
     .bind(offset)
@@ -259,18 +259,17 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
     let place_within = i64::from(form.place_within_source_content);
 
     if form.id == 0 {
-        let exists: i64 = sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ? COLLATE NOCASE"#,
-        )
-        .bind(&name)
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or(0);
+        let exists: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ?"#)
+                .bind(&name)
+                .fetch_one(&state.pool)
+                .await
+                .unwrap_or(0);
         if exists > 0 {
             return Err(ServerFnError::new("Watermark name must be unique"));
         }
 
-        let id = sqlx::query(
+        let result = sqlx::query(
             r#"INSERT INTO "ChannelWatermark"
                ("Name","Mode","ImageSource","Image","OriginalContentType","Location","Size",
                 "WidthPercent","HorizontalMarginPercent","VerticalMarginPercent",
@@ -295,13 +294,13 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
         .bind(&opacity_expr)
         .bind(i64::from(form.z_index))
         .execute(&state.pool)
-        .await?
-        .last_insert_rowid();
+        .await?;
+        let id = ersatzrs_infra::db::last_insert_id(result);
 
         Ok(id)
     } else {
         let exists: i64 = sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ? COLLATE NOCASE AND "Id" != ?"#,
+            r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ? AND "Id" != ?"#,
         )
         .bind(&name)
         .bind(form.id)
@@ -375,13 +374,12 @@ pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnEr
         return Err(ServerFnError::new("Name must be 50 characters or fewer"));
     }
 
-    let exists: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ? COLLATE NOCASE"#,
-    )
-    .bind(&new_name)
-    .fetch_one(&state.pool)
-    .await
-    .unwrap_or(0);
+    let exists: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ?"#)
+            .bind(&new_name)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap_or(0);
     if exists > 0 {
         return Err(ServerFnError::new("Watermark name must be unique"));
     }
@@ -401,7 +399,7 @@ pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnEr
         return Err(ServerFnError::new("Source watermark not found"));
     };
 
-    let new_id = sqlx::query(
+    let result = sqlx::query(
         r#"INSERT INTO "ChannelWatermark"
            ("Name","Mode","ImageSource","Image","OriginalContentType","Location","Size",
             "WidthPercent","HorizontalMarginPercent","VerticalMarginPercent",
@@ -443,8 +441,8 @@ pub async fn copy_watermark(id: i64, new_name: String) -> Result<i64, ServerFnEr
     )
     .bind(src.try_get::<i64, _>("ZIndex").unwrap_or(0))
     .execute(&state.pool)
-    .await?
-    .last_insert_rowid();
+    .await?;
+    let new_id = ersatzrs_infra::db::last_insert_id(result);
 
     Ok(new_id)
 }

@@ -173,7 +173,7 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
         let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
             .execute(&state.pool)
             .await?;
-        let ms_id = ms.last_insert_rowid();
+        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (?)"#)
             .bind(ms_id)
@@ -188,7 +188,7 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
         .bind(&form.name)
         .execute(&state.pool)
         .await?;
-        let lib_id = lib.last_insert_rowid();
+        let lib_id = ersatzrs_infra::db::last_insert_id(lib);
 
         sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
             .bind(lib_id)
@@ -336,7 +336,7 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
             .execute(&state.pool)
             .await?;
-        let ms_id = ms.last_insert_rowid();
+        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(
             r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName") VALUES (?, 'Jellyfin')"#,
@@ -371,8 +371,8 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
     };
 
     sqlx::query(
-        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('jellyfin.current_server_api_key', ?)
-           ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('jellyfin.current_server_api_key', ?)
+           "#,
     )
     .bind(&form.api_key)
     .execute(&state.pool)
@@ -600,7 +600,7 @@ pub async fn save_emby_connection(form: ConnectionForm) -> Result<i64, ServerFnE
         let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
             .execute(&state.pool)
             .await?;
-        let ms_id = ms.last_insert_rowid();
+        let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(r#"INSERT INTO "EmbyMediaSource" ("Id", "ServerName") VALUES (?, 'Emby')"#)
             .bind(ms_id)
@@ -633,8 +633,8 @@ pub async fn save_emby_connection(form: ConnectionForm) -> Result<i64, ServerFnE
     };
 
     sqlx::query(
-        r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES ('emby.current_server_api_key', ?)
-           ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('emby.current_server_api_key', ?)
+           "#,
     )
     .bind(&form.api_key)
     .execute(&state.pool)
@@ -864,9 +864,9 @@ pub async fn start_plex_pin_flow() -> Result<(String, String), ServerFnError> {
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     sqlx::query(
-        r#"INSERT INTO "ConfigElement" ("Key", "Value")
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value")
            VALUES ('plex.pending_pin_code', ?)
-           ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+           "#,
     )
     .bind(&pin.code)
     .execute(&state.pool)
@@ -907,9 +907,9 @@ pub async fn check_plex_pin(pin_id: String) -> Result<Option<String>, ServerFnEr
 
     if let Some(ref user_token) = token {
         sqlx::query(
-            r#"INSERT INTO "ConfigElement" ("Key", "Value")
+            r#"REPLACE INTO "ConfigElement" ("Key", "Value")
                VALUES ('plex.user_auth_token', ?)
-               ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+               "#,
         )
         .bind(user_token)
         .execute(&state.pool)

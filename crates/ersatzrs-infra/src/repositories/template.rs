@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{Result, TemplateRepository};
 use ersatzrs_domain::{EntityId, Template};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{load_ids, not_found};
 
 #[derive(Clone)]
-pub struct SqliteTemplateRepository(pub Pool<Sqlite>);
+pub struct SqliteTemplateRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl TemplateRepository for SqliteTemplateRepository {
@@ -46,7 +46,7 @@ impl TemplateRepository for SqliteTemplateRepository {
     async fn upsert(&self, template: &Template) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Template" (
+            r#"REPLACE INTO "Template" (
                 "Id", "TemplateGroupId", "Name", "DateUpdated"
              ) VALUES (?, ?, ?, ?)"#,
         )
@@ -61,7 +61,7 @@ impl TemplateRepository for SqliteTemplateRepository {
     }
 }
 
-fn map_template(row: &SqliteRow) -> Result<Template> {
+fn map_template(row: &DbRow) -> Result<Template> {
     Ok(Template {
         id: row.try_get("Id")?,
         template_group_id: row.try_get("TemplateGroupId")?,

@@ -1,3 +1,4 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
@@ -6,8 +7,7 @@ use ersatzrs_domain::{
     EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
 };
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite, Transaction};
+use sqlx::{Pool, Row, Transaction};
 
 use super::common::{
     decode_datetime, decode_duration_text, decode_enum_column, decode_message,
@@ -17,7 +17,7 @@ use super::common::{
 };
 
 #[derive(Clone)]
-pub struct SqlitePlayoutRepository(pub Pool<Sqlite>);
+pub struct SqlitePlayoutRepository(pub Pool<crate::db::Db>);
 
 #[allow(clippy::too_many_lines)]
 #[async_trait]
@@ -158,7 +158,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     async fn upsert_item(&self, item: &PlayoutItem) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutItem" (
+            r#"REPLACE INTO "PlayoutItem" (
                 "Id", "PlayoutId", "MediaItemId", "Start", "Finish", "GuideStart", "GuideFinish",
                 "CustomTitle", "GuideGroup", "FillerKind", "InPoint", "OutPoint",
                 "ChapterTitle", "DisableWatermarks", "PreferredAudioLanguageCode",
@@ -193,7 +193,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "PlayoutItemWatermark" WHERE "PlayoutItemId" = ?"#,
-            r#"INSERT OR REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
+            r#"REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
             item.id,
             &item.watermark_ids,
         )
@@ -201,7 +201,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ?"#,
-            r#"INSERT OR REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
+            r#"REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
             item.id,
             &item.graphics_element_ids,
         )
@@ -246,7 +246,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
         for item in &result.added_items {
             // Insert without an explicit Id so SQLite auto-assigns one.
-            let inserted_id = sqlx::query(
+            let inserted = sqlx::query(
                 r#"INSERT INTO "PlayoutItem" (
                     "PlayoutId", "MediaItemId", "Start", "Finish",
                     "GuideStart", "GuideFinish", "CustomTitle", "GuideGroup",
@@ -279,12 +279,12 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             .bind(&item.collection_etag)
             .bind(&item.scheduling_context)
             .execute(&mut *tx)
-            .await?
-            .last_insert_rowid();
+            .await?;
+            let inserted_id = crate::db::last_insert_id(inserted);
 
             for &wm_id in &item.watermark_ids {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
+                    r#"REPLACE INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#,
                 )
                 .bind(inserted_id)
                 .bind(wm_id)
@@ -293,7 +293,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             }
             for &gfx_id in &item.graphics_element_ids {
                 sqlx::query(
-                    r#"INSERT OR REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
+                    r#"REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
                 )
                 .bind(inserted_id)
                 .bind(gfx_id)
@@ -368,7 +368,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
 
     async fn upsert_build_status(&self, status: &PlayoutBuildStatus) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
+            r#"REPLACE INTO "PlayoutBuildStatus" ("PlayoutId", "LastBuild", "Success", "Message")
              VALUES (?, ?, ?, ?)"#,
         )
         .bind(status.playout_id)
@@ -381,7 +381,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
     }
 }
 
-fn map_playout(row: &SqliteRow) -> Result<Playout> {
+fn map_playout(row: &DbRow) -> Result<Playout> {
     let daily_rebuild_time = decode_optional_duration_text(
         row.try_get::<Option<String>, _>("DailyRebuildTime")?
             .as_deref(),
@@ -411,10 +411,7 @@ fn map_playout(row: &SqliteRow) -> Result<Playout> {
     })
 }
 
-fn map_anchor(
-    row: &SqliteRow,
-    state_row: Option<&SqliteRow>,
-) -> Result<ersatzrs_domain::PlayoutAnchor> {
+fn map_anchor(row: &DbRow, state_row: Option<&DbRow>) -> Result<ersatzrs_domain::PlayoutAnchor> {
     let (seed, index) = if let Some(state) = state_row {
         (
             state.try_get("Seed").unwrap_or(0),
@@ -442,7 +439,7 @@ fn map_anchor(
     })
 }
 
-fn map_build_status(row: &SqliteRow) -> Result<PlayoutBuildStatus> {
+fn map_build_status(row: &DbRow) -> Result<PlayoutBuildStatus> {
     Ok(PlayoutBuildStatus {
         playout_id: row.try_get("PlayoutId")?,
         last_build: decode_datetime(
@@ -454,7 +451,7 @@ fn map_build_status(row: &SqliteRow) -> Result<PlayoutBuildStatus> {
     })
 }
 
-fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
+fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
     Ok(PlayoutItem {
         id: row.try_get("Id")?,
         media_item_id: row.try_get("MediaItemId")?,
@@ -493,7 +490,7 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
     })
 }
 
-fn map_playout_template(row: &SqliteRow) -> Result<ersatzrs_domain::PlayoutTemplate> {
+fn map_playout_template(row: &DbRow) -> Result<ersatzrs_domain::PlayoutTemplate> {
     Ok(ersatzrs_domain::PlayoutTemplate {
         playout_id: row.try_get("PlayoutId")?,
         template_id: row.try_get("TemplateId")?,
@@ -540,7 +537,7 @@ fn encode_integer_list(value: &[i32]) -> Result<String> {
 }
 
 async fn update_playout_checkpoint(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout: &Playout,
 ) -> Result<()> {
     sqlx::query(r#"UPDATE "Playout" SET "OnDemandCheckpoint" = ? WHERE "Id" = ?"#)
@@ -551,10 +548,13 @@ async fn update_playout_checkpoint(
     Ok(())
 }
 
-async fn replace_anchor_state(tx: &mut Transaction<'_, Sqlite>, playout: &Playout) -> Result<()> {
+async fn replace_anchor_state(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout: &Playout,
+) -> Result<()> {
     if let Some(anchor) = &playout.anchor {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutAnchor" (
+            r#"REPLACE INTO "PlayoutAnchor" (
                 "PlayoutId", "DurationFinish", "InDurationFiller", "InFlood",
                 "MultipleRemaining", "NextGuideGroup", "NextStart",
                 "NextInstructionIndex", "Context"
@@ -572,7 +572,7 @@ async fn replace_anchor_state(tx: &mut Transaction<'_, Sqlite>, playout: &Playou
         .execute(&mut **tx)
         .await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "ScheduleItemsEnumeratorState" (
+            r#"REPLACE INTO "ScheduleItemsEnumeratorState" (
                 "PlayoutAnchorPlayoutId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
@@ -591,7 +591,7 @@ async fn replace_anchor_state(tx: &mut Transaction<'_, Sqlite>, playout: &Playou
 }
 
 async fn replace_gaps(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout_id: EntityId,
     gaps: &[PlayoutGap],
 ) -> Result<()> {
@@ -601,7 +601,7 @@ async fn replace_gaps(
         .await?;
     for gap in gaps {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish")
+            r#"REPLACE INTO "PlayoutGap" ("Id", "PlayoutId", "Start", "Finish")
              VALUES (?, ?, ?, ?)"#,
         )
         .bind(gap.id)
@@ -615,7 +615,7 @@ async fn replace_gaps(
 }
 
 async fn replace_history(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout_id: EntityId,
     history: &[PlayoutHistory],
 ) -> Result<()> {
@@ -625,7 +625,7 @@ async fn replace_history(
         .await?;
     for entry in history {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutHistory" (
+            r#"REPLACE INTO "PlayoutHistory" (
                 "Id", "BlockId", "Details", "Index", "Key", "PlaybackOrder",
                 "PlayoutId", "When", "Finish", "ChildKey", "IsCurrentChild"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
@@ -648,7 +648,7 @@ async fn replace_history(
 }
 
 async fn replace_program_schedule_anchors(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout_id: EntityId,
     anchors: &[PlayoutProgramScheduleAnchor],
 ) -> Result<()> {
@@ -667,7 +667,7 @@ async fn replace_program_schedule_anchors(
         .await?;
     for anchor in anchors {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutProgramScheduleAnchor" (
+            r#"REPLACE INTO "PlayoutProgramScheduleAnchor" (
                 "Id", "AnchorDate", "CollectionId", "CollectionType", "FakeCollectionKey",
                 "MediaItemId", "MultiCollectionId", "PlaylistId", "PlayoutId",
                 "RerunCollectionId", "SmartCollectionId", "SearchQuery"
@@ -688,7 +688,7 @@ async fn replace_program_schedule_anchors(
         .execute(&mut **tx)
         .await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "CollectionEnumeratorState" (
+            r#"REPLACE INTO "CollectionEnumeratorState" (
                 "PlayoutProgramScheduleAnchorId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
@@ -702,7 +702,7 @@ async fn replace_program_schedule_anchors(
 }
 
 async fn replace_fill_group_indices(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout_id: EntityId,
     indices: &[PlayoutScheduleItemFillGroupIndex],
 ) -> Result<()> {
@@ -721,7 +721,7 @@ async fn replace_fill_group_indices(
         .await?;
     for index in indices {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutScheduleItemFillGroupIndex" (
+            r#"REPLACE INTO "PlayoutScheduleItemFillGroupIndex" (
                 "Id", "PlayoutId", "ProgramScheduleItemId"
              ) VALUES (?, ?, ?)"#,
         )
@@ -731,7 +731,7 @@ async fn replace_fill_group_indices(
         .execute(&mut **tx)
         .await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "FillGroupEnumeratorState" (
+            r#"REPLACE INTO "FillGroupEnumeratorState" (
                 "PlayoutScheduleItemFillGroupIndexId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
@@ -745,7 +745,7 @@ async fn replace_fill_group_indices(
 }
 
 async fn replace_playout_templates(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, crate::db::Db>,
     playout: &Playout,
 ) -> Result<()> {
     sqlx::query(r#"DELETE FROM "PlayoutTemplate" WHERE "PlayoutId" = ?"#)
@@ -754,7 +754,7 @@ async fn replace_playout_templates(
         .await?;
     for template in &playout.templates {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "PlayoutTemplate" (
+            r#"REPLACE INTO "PlayoutTemplate" (
                 "PlayoutId", "TemplateId", "DateUpdated", "DecoTemplateId", "Index",
                 "DaysOfWeek", "DaysOfMonth", "MonthsOfYear", "LimitToDateRange",
                 "StartMonth", "StartDay", "StartYear", "EndMonth", "EndDay", "EndYear"

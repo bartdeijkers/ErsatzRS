@@ -1,15 +1,15 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{DecoRepository, Result};
 use ersatzrs_domain::{Deco, EntityId};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{
     decode_enum_column, decode_optional_enum_column, encode_enum, load_ids, not_found, replace_ids,
 };
 
 #[derive(Clone)]
-pub struct SqliteDecoRepository(pub Pool<Sqlite>);
+pub struct SqliteDecoRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl DecoRepository for SqliteDecoRepository {
@@ -51,7 +51,7 @@ impl DecoRepository for SqliteDecoRepository {
     async fn upsert(&self, deco: &Deco) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Deco" (
+            r#"REPLACE INTO "Deco" (
                 "Id", "DecoGroupId", "Name", "BreakContentMode", "DefaultFillerMode",
                 "DefaultFillerCollectionType", "DefaultFillerCollectionId",
                 "DefaultFillerMediaItemId", "DefaultFillerMultiCollectionId",
@@ -77,7 +77,7 @@ impl DecoRepository for SqliteDecoRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "DecoWatermark" WHERE "DecoId" = ?"#,
-            r#"INSERT OR REPLACE INTO "DecoWatermark" ("DecoId", "WatermarkId") VALUES (?, ?)"#,
+            r#"REPLACE INTO "DecoWatermark" ("DecoId", "WatermarkId") VALUES (?, ?)"#,
             deco.id,
             &deco.watermark_ids,
         )
@@ -85,7 +85,7 @@ impl DecoRepository for SqliteDecoRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "DecoGraphicsElement" WHERE "DecoId" = ?"#,
-            r#"INSERT OR REPLACE INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (?, ?)"#,
+            r#"REPLACE INTO "DecoGraphicsElement" ("DecoId", "GraphicsElementId") VALUES (?, ?)"#,
             deco.id,
             &deco.graphics_element_ids,
         )
@@ -95,7 +95,7 @@ impl DecoRepository for SqliteDecoRepository {
     }
 }
 
-fn map_deco(row: &SqliteRow) -> Result<Deco> {
+fn map_deco(row: &DbRow) -> Result<Deco> {
     Ok(Deco {
         id: row.try_get("Id")?,
         deco_group_id: row.try_get("DecoGroupId")?,

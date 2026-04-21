@@ -1,8 +1,8 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{MetadataRepository, Result};
 use ersatzrs_domain::{EntityId, EpisodeMetadata, MovieMetadata, MusicVideoMetadata};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{
     decode_datetime, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
@@ -10,7 +10,7 @@ use super::common::{
 };
 
 #[derive(Clone)]
-pub struct SqliteMetadataRepository(pub Pool<Sqlite>);
+pub struct SqliteMetadataRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl MetadataRepository for SqliteMetadataRepository {
@@ -46,7 +46,7 @@ impl MetadataRepository for SqliteMetadataRepository {
 
     async fn upsert_movie_metadata(&self, metadata: &MovieMetadata) -> Result<()> {
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "MovieMetadata" (
+            r#"REPLACE INTO "MovieMetadata" (
                 "Id", "MovieId", "MetadataKind", "Title", "OriginalTitle", "SortTitle", "Year",
                 "ReleaseDate", "DateAdded", "DateUpdated", "Outline", "Plot", "Tagline"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
@@ -75,7 +75,7 @@ impl MetadataRepository for SqliteMetadataRepository {
         // schema unless we added it. Since ErsatzTV schema has no season_number on EpisodeMetadata,
         // we omit it from the INSERT and store only what the schema supports.
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "EpisodeMetadata" (
+            r#"REPLACE INTO "EpisodeMetadata" (
                 "Id", "EpisodeId", "MetadataKind", "Title", "OriginalTitle", "SortTitle", "Year",
                 "ReleaseDate", "DateAdded", "DateUpdated", "EpisodeNumber",
                 "Outline", "Plot"
@@ -100,7 +100,7 @@ impl MetadataRepository for SqliteMetadataRepository {
     }
 }
 
-fn map_movie_metadata(row: &SqliteRow) -> Result<MovieMetadata> {
+fn map_movie_metadata(row: &DbRow) -> Result<MovieMetadata> {
     Ok(MovieMetadata {
         metadata: map_common_metadata(row, "MovieId")?,
         outline: row.try_get("Outline")?,
@@ -109,7 +109,7 @@ fn map_movie_metadata(row: &SqliteRow) -> Result<MovieMetadata> {
     })
 }
 
-fn map_episode_metadata(row: &SqliteRow) -> Result<EpisodeMetadata> {
+fn map_episode_metadata(row: &DbRow) -> Result<EpisodeMetadata> {
     // SeasonNumber comes from the joined "Season" row
     let season_number: i32 = row.try_get("SeasonNumber").unwrap_or(0);
     Ok(EpisodeMetadata {
@@ -121,7 +121,7 @@ fn map_episode_metadata(row: &SqliteRow) -> Result<EpisodeMetadata> {
     })
 }
 
-fn map_music_video_metadata(row: &SqliteRow) -> Result<MusicVideoMetadata> {
+fn map_music_video_metadata(row: &DbRow) -> Result<MusicVideoMetadata> {
     Ok(MusicVideoMetadata {
         metadata: map_common_metadata(row, "MusicVideoId")?,
         album: row.try_get("Album")?,
@@ -130,10 +130,7 @@ fn map_music_video_metadata(row: &SqliteRow) -> Result<MusicVideoMetadata> {
     })
 }
 
-fn map_common_metadata(
-    row: &SqliteRow,
-    _item_id_column: &str,
-) -> Result<ersatzrs_domain::Metadata> {
+fn map_common_metadata(row: &DbRow, _item_id_column: &str) -> Result<ersatzrs_domain::Metadata> {
     Ok(ersatzrs_domain::Metadata {
         id: row.try_get("Id")?,
         metadata_kind: decode_enum_column("metadata kind", row, "MetadataKind")?,

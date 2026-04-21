@@ -8,6 +8,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
@@ -16,7 +17,7 @@ use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, HlsOutput, InputFile, OutputFormat, PipelineBuilder,
     PipelineRequest, SoftwarePipelineBuilder,
 };
-use sqlx::{Row, SqlitePool};
+use sqlx::Row;
 use tokio::process::Command;
 use tokio::sync::Notify;
 
@@ -59,7 +60,7 @@ impl HlsSessionWorker {
 
     pub fn start(
         self: Arc<Self>,
-        pool: SqlitePool,
+        pool: DbPool,
         registry: Arc<dyn HlsSessionRegistry>,
         idle_timeout: Option<Duration>,
     ) {
@@ -70,7 +71,7 @@ impl HlsSessionWorker {
 
     async fn run(
         self: Arc<Self>,
-        pool: SqlitePool,
+        pool: DbPool,
         registry: Arc<dyn HlsSessionRegistry>,
         idle_timeout: Option<Duration>,
     ) {
@@ -197,7 +198,7 @@ fn build_hls_command(
 }
 
 async fn load_active_hls_item(
-    pool: &SqlitePool,
+    pool: &DbPool,
     channel_id: i64,
     path_replacements: &[PathReplacement],
 ) -> Option<String> {

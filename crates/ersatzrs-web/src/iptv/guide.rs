@@ -6,6 +6,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::ChannelRepository;
 use ersatzrs_domain::Channel;
+use ersatzrs_infra::db::DbPool;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::writer::Writer;
 use sqlx::Row;
@@ -112,7 +113,7 @@ fn format_xmltv_time(value: DateTime<Utc>) -> String {
 }
 
 async fn load_programmes(
-    pool: &sqlx::SqlitePool,
+    pool: &DbPool,
     start: DateTime<Utc>,
     finish: DateTime<Utc>,
 ) -> Result<Vec<GuideProgramme>, sqlx::Error> {

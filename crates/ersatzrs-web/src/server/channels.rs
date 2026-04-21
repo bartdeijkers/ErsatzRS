@@ -175,7 +175,7 @@ pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
         .execute(&state.pool)
         .await?;
 
-        Ok(result.last_insert_rowid())
+        Ok(ersatzrs_infra::db::last_insert_id(result))
     } else {
         sqlx::query(
             r#"UPDATE "Channel" SET

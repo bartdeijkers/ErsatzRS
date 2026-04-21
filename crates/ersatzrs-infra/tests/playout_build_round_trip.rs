@@ -1,3 +1,4 @@
+#![cfg(not(feature = "mysql"))]
 //! Round-trip integration tests for `PlayoutBuilder` → `apply_build_result`.
 //!
 //! These tests verify that the persistence write path correctly stores

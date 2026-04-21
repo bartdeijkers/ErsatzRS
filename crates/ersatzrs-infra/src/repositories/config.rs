@@ -1,24 +1,27 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{ConfigRepository, Result};
-use sqlx::{Pool, Sqlite};
+use sqlx::Pool;
+
+use super::common::decode_string_column;
 
 #[derive(Clone)]
-pub struct SqliteConfigRepository(pub Pool<Sqlite>);
+pub struct SqliteConfigRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl ConfigRepository for SqliteConfigRepository {
     async fn get(&self, key: &str) -> Result<Option<String>> {
-        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+        let row = sqlx::query(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
             .bind(key)
             .fetch_optional(&self.0)
-            .await
-            .map_err(Into::into)
+            .await?;
+
+        row.map(|row| decode_config_value(&row)).transpose()
     }
 
     async fn set(&self, key: &str, value: &str) -> Result<()> {
         sqlx::query(
-            r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
-             ON CONFLICT("Key") DO UPDATE SET "Value" = "excluded"."Value""#,
+            r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+             "#,
         )
         .bind(key)
         .bind(value)
@@ -26,4 +29,8 @@ impl ConfigRepository for SqliteConfigRepository {
         .await?;
         Ok(())
     }
+}
+
+fn decode_config_value(row: &crate::db::DbRow) -> Result<String> {
+    decode_string_column(row, "Value")
 }

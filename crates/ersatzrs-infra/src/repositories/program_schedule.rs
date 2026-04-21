@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
 use ersatzrs_domain::{EntityId, ProgramSchedule};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{decode_enum_column, encode_enum, load_ids, not_found, replace_ids};
 
 #[derive(Clone)]
-pub struct SqliteProgramScheduleRepository(pub Pool<Sqlite>);
+pub struct SqliteProgramScheduleRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
@@ -64,7 +64,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     async fn upsert(&self, schedule: &ProgramSchedule) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "ProgramSchedule" (
+            r#"REPLACE INTO "ProgramSchedule" (
                 "Id", "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
                 "ShuffleScheduleItems", "RandomStartPoint", "FixedStartTimeBehavior"
              ) VALUES (?, ?, ?, ?, ?, ?, ?)"#,
@@ -81,7 +81,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         replace_ids(
             &mut tx,
             r#"DELETE FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
-            r#"INSERT OR REPLACE INTO "ProgramScheduleItem" (
+            r#"REPLACE INTO "ProgramScheduleItem" (
                 "ProgramScheduleId", "Id", "CollectionType", "PlaybackOrder",
                 "FillWithGroupMode", "GuideMode", "MarathonGroupBy", "MarathonShuffleGroups",
                 "MarathonShuffleItems", "Index"
@@ -95,7 +95,7 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 }
 
-fn map_program_schedule(row: &SqliteRow) -> Result<ProgramSchedule> {
+fn map_program_schedule(row: &DbRow) -> Result<ProgramSchedule> {
     Ok(ProgramSchedule {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,

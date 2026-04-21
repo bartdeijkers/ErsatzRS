@@ -8,6 +8,7 @@
 //! - Autocomplete helpers → [`search_collections_for_block`],
 //!   [`search_smart_collections_for_block`], [`search_shows_for_block`],
 //!   [`search_seasons_for_block`]
+use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -117,9 +118,11 @@ pub async fn list_block_groups() -> Result<Vec<BlockGroupRow>, ServerFnError> {
     use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let rows = sqlx::query(r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "BlockGroup" ORDER BY "Name" COLLATE NOCASE"#)
-        .fetch_all(&state.pool)
-        .await?;
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "BlockGroup" ORDER BY "Name""#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
 
     Ok(rows
         .iter()
@@ -140,11 +143,11 @@ pub async fn create_block_group(name: String) -> Result<i64, ServerFnError> {
         return Err(ServerFnError::new("Block group name is required"));
     }
 
-    let id = sqlx::query(r#"INSERT INTO "BlockGroup" ("Name") VALUES (?)"#)
+    let result = sqlx::query(r#"INSERT INTO "BlockGroup" ("Name") VALUES (?)"#)
         .bind(name)
         .execute(&state.pool)
-        .await?
-        .last_insert_rowid();
+        .await?;
+    let id = ersatzrs_infra::db::last_insert_id(result);
 
     Ok(id)
 }
@@ -181,8 +184,8 @@ pub async fn list_blocks(search: String) -> Result<Vec<BlockRow>, ServerFnError>
                   b."StopScheduling"
            FROM "Block" b
            JOIN "BlockGroup" bg ON bg."Id" = b."BlockGroupId"
-           WHERE (? = '' OR b."Name" LIKE ? COLLATE NOCASE)
-           ORDER BY bg."Name" COLLATE NOCASE, b."Name" COLLATE NOCASE"#,
+           WHERE (? = '' OR b."Name" LIKE ?)
+           ORDER BY bg."Name", b."Name""#,
     )
     .bind(search.trim())
     .bind(&like)
@@ -212,15 +215,15 @@ pub async fn create_block(group_id: i64, name: String) -> Result<i64, ServerFnEr
         return Err(ServerFnError::new("Block name is required"));
     }
 
-    let id = sqlx::query(
+    let result = sqlx::query(
         r#"INSERT INTO "Block" ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
-           VALUES (?, ?, 60, 0, datetime('now'))"#,
+           VALUES (?, ?, 60, 0, CURRENT_TIMESTAMP)"#,
     )
     .bind(group_id)
     .bind(name)
     .execute(&state.pool)
-    .await?
-    .last_insert_rowid();
+    .await?;
+    let id = ersatzrs_infra::db::last_insert_id(result);
 
     Ok(id)
 }
@@ -298,10 +301,11 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                bi."PlaybackOrder",
                bi."IncludeInProgramGuide",
                bi."DisableWatermarks",
+               s."SeasonNumber",
                CASE bi."CollectionType"
                    WHEN 0 THEN COALESCE(c."Name", '')
                    WHEN 1 THEN COALESCE(sm."Title", '')
-                   WHEN 2 THEN COALESCE(sh."Title", '') || ' S' || PRINTF('%02d', s."SeasonNumber")
+                   WHEN 2 THEN COALESCE(sh."Title", '')
                    WHEN 5 THEN COALESCE(sc."Name", '')
                    WHEN 9 THEN COALESCE(bi."SearchTitle", bi."SearchQuery", '')
                    ELSE ''
@@ -341,7 +345,16 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                 .try_get::<bool, _>("IncludeInProgramGuide")
                 .unwrap_or(false),
             disable_watermarks: r.try_get::<bool, _>("DisableWatermarks").unwrap_or(false),
-            collection_name: r.try_get("CollectionName").unwrap_or_default(),
+            collection_name: if r.try_get::<i32, _>("CollectionType").unwrap_or(0)
+                == collection_type::TELEVISION_SEASON
+            {
+                season_label(
+                    &r.try_get::<String, _>("CollectionName").unwrap_or_default(),
+                    r.try_get("SeasonNumber").unwrap_or(0),
+                )
+            } else {
+                r.try_get("CollectionName").unwrap_or_default()
+            },
             watermark_ids: parse_id_list(r.try_get("WatermarkIds").unwrap_or(None)),
             graphics_element_ids: parse_id_list(r.try_get("GraphicsElementIds").unwrap_or(None)),
         })
@@ -363,7 +376,7 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
 
     sqlx::query(
         r#"UPDATE "Block"
-           SET "Name" = ?, "Minutes" = ?, "StopScheduling" = ?, "DateUpdated" = datetime('now')
+           SET "Name" = ?, "Minutes" = ?, "StopScheduling" = ?, "DateUpdated" = CURRENT_TIMESTAMP
            WHERE "Id" = ?"#,
     )
     .bind(name)
@@ -379,7 +392,7 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
         .await?;
 
     for item in &form.items {
-        let new_id = sqlx::query(
+        let result = sqlx::query(
             r#"INSERT INTO "BlockItem"
                ("BlockId", "Index", "CollectionType", "CollectionId",
                 "SmartCollectionId", "MediaItemId", "SearchTitle", "SearchQuery",
@@ -398,8 +411,8 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
         .bind(item.include_in_program_guide)
         .bind(item.disable_watermarks)
         .execute(&mut *tx)
-        .await?
-        .last_insert_rowid();
+        .await?;
+        let new_id = ersatzrs_infra::db::last_insert_id(result);
 
         for wm_id in &item.watermark_ids {
             sqlx::query(
@@ -444,7 +457,7 @@ pub async fn preview_block_playout(block_id: i64) -> Result<Vec<PlayoutPreviewRo
     let mut elapsed_secs: i64 = 0;
 
     for item in &items {
-        let media_rows = query_items_for_preview(item, &state.pool).await;
+        let media_rows = query_items_for_preview(item, &state.pool, state.database_backend).await;
         for (title, dur_secs) in media_rows {
             let start = format_hms(elapsed_secs);
             elapsed_secs += dur_secs;
@@ -478,10 +491,15 @@ fn parse_hms(s: &str) -> i64 {
     h * 3600 + m * 60 + sec
 }
 
+fn duration_secs(duration: Option<&str>) -> i64 {
+    duration.map_or(0, parse_hms)
+}
+
 #[allow(clippy::too_many_lines)]
 async fn query_items_for_preview(
     item: &BlockItemForm,
-    pool: &sqlx::SqlitePool,
+    pool: &DbPool,
+    database_backend: DatabaseBackend,
 ) -> Vec<(String, i64)> {
     use sqlx::Row;
 
@@ -491,11 +509,11 @@ async fn query_items_for_preview(
             let Some(cid) = item.collection_id else {
                 return vec![];
             };
-            let order_clause = playback_order_clause(item.playback_order, false);
+            let order_clause = playback_order_clause(item.playback_order, false, database_backend);
             let sql = format!(
-                r#"SELECT "Title", "DurSecs" FROM (
+                r#"SELECT "Title", "Duration" FROM (
                        SELECT COALESCE(mm."Title", '') AS "Title",
-                              {dur_expr} AS "DurSecs"
+                              mvv."Duration" AS "Duration"
                        FROM "CollectionItem" ci
                        JOIN "MediaItem" mi ON mi."Id" = ci."MediaItemId"
                        LEFT JOIN "Movie" mv_row ON mv_row."Id" = mi."Id"
@@ -504,7 +522,7 @@ async fn query_items_for_preview(
                        WHERE ci."CollectionId" = ?
                        UNION ALL
                        SELECT COALESCE(sm."Title", '') AS "Title",
-                              {dur_expr_ep} AS "DurSecs"
+                              mvv."Duration" AS "Duration"
                        FROM "CollectionItem" ci
                        JOIN "MediaItem" mi ON mi."Id" = ci."MediaItemId"
                        LEFT JOIN "Episode" ep ON ep."Id" = mi."Id"
@@ -512,9 +530,6 @@ async fn query_items_for_preview(
                        LEFT JOIN "MediaVersion" mvv ON mvv."EpisodeId" = ep."Id"
                        WHERE ci."CollectionId" = ?
                    ) ORDER BY {order_clause}"#,
-                dur_expr = "CAST(SUBSTR(mvv.\"Duration\", 1, 2) AS INTEGER) * 3600 + CAST(SUBSTR(mvv.\"Duration\", 4, 2) AS INTEGER) * 60 + CAST(SUBSTR(mvv.\"Duration\", 7, 2) AS INTEGER)",
-                dur_expr_ep = "CAST(SUBSTR(mvv.\"Duration\", 1, 2) AS INTEGER) * 3600 + CAST(SUBSTR(mvv.\"Duration\", 4, 2) AS INTEGER) * 60 + CAST(SUBSTR(mvv.\"Duration\", 7, 2) AS INTEGER)",
-                order_clause = order_clause,
             );
             sqlx::query(&sql)
                 .bind(cid)
@@ -525,7 +540,8 @@ async fn query_items_for_preview(
                 .iter()
                 .map(|r| {
                     let title: String = r.try_get("Title").unwrap_or_default();
-                    let dur: i64 = r.try_get("DurSecs").unwrap_or(0);
+                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
+                    let dur = duration_secs(duration.as_deref());
                     (title, dur)
                 })
                 .collect()
@@ -536,14 +552,12 @@ async fn query_items_for_preview(
             let Some(show_id) = item.media_item_id else {
                 return vec![];
             };
-            let order_clause = playback_order_clause(item.playback_order, true);
+            let order_clause = playback_order_clause(item.playback_order, true, database_backend);
             let sql = format!(
                 r#"SELECT COALESCE(sm."Title", '') AS "Title",
                           se."SeasonNumber" AS "SeasonNum",
                           em."EpisodeNumber" AS "EpNum",
-                          CAST(SUBSTR(mv."Duration", 1, 2) AS INTEGER) * 3600 +
-                          CAST(SUBSTR(mv."Duration", 4, 2) AS INTEGER) * 60 +
-                          CAST(SUBSTR(mv."Duration", 7, 2) AS INTEGER) AS "DurSecs"
+                          mv."Duration" AS "Duration"
                    FROM "Episode" e
                    JOIN "Season" se ON se."Id" = e."SeasonId"
                    JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
@@ -559,7 +573,8 @@ async fn query_items_for_preview(
                 .iter()
                 .map(|r| {
                     let title: String = r.try_get("Title").unwrap_or_default();
-                    let dur: i64 = r.try_get("DurSecs").unwrap_or(0);
+                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
+                    let dur = duration_secs(duration.as_deref());
                     (title, dur)
                 })
                 .collect()
@@ -571,9 +586,7 @@ async fn query_items_for_preview(
                 return vec![];
             };
             let sql = r#"SELECT COALESCE(em."Title", '') AS "Title",
-                                CAST(SUBSTR(mv."Duration", 1, 2) AS INTEGER) * 3600 +
-                                CAST(SUBSTR(mv."Duration", 4, 2) AS INTEGER) * 60 +
-                                CAST(SUBSTR(mv."Duration", 7, 2) AS INTEGER) AS "DurSecs"
+                                mv."Duration" AS "Duration"
                          FROM "Episode" e
                          JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
                          LEFT JOIN "MediaVersion" mv ON mv."EpisodeId" = e."Id"
@@ -587,7 +600,8 @@ async fn query_items_for_preview(
                 .iter()
                 .map(|r| {
                     let title: String = r.try_get("Title").unwrap_or_default();
-                    let dur: i64 = r.try_get("DurSecs").unwrap_or(0);
+                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
+                    let dur = duration_secs(duration.as_deref());
                     (title, dur)
                 })
                 .collect()
@@ -608,11 +622,15 @@ async fn query_items_for_preview(
     }
 }
 
-fn playback_order_clause(order: i32, is_episode: bool) -> &'static str {
+fn playback_order_clause(
+    order: i32,
+    is_episode: bool,
+    database_backend: DatabaseBackend,
+) -> &'static str {
     match order {
         6 if is_episode => r#""SeasonNum", "EpNum""#,
-        2 | 3 => "RANDOM()",
-        _ => r#""Title" COLLATE NOCASE"#,
+        2 | 3 => ersatzrs_infra::db::random_order_expression(database_backend),
+        _ => r#""Title""#,
     }
 }
 
@@ -637,8 +655,8 @@ pub async fn search_collections_for_block(
     let rows = sqlx::query(
         r#"SELECT "Id", COALESCE("Name", '') AS "Name"
            FROM "Collection"
-           WHERE "Name" LIKE ? COLLATE NOCASE
-           ORDER BY "Name" COLLATE NOCASE
+           WHERE "Name" LIKE ?
+           ORDER BY "Name"
            LIMIT 10"#,
     )
     .bind(&like)
@@ -673,8 +691,8 @@ pub async fn search_smart_collections_for_block(
     let rows = sqlx::query(
         r#"SELECT "Id", COALESCE("Name", '') AS "Name"
            FROM "SmartCollection"
-           WHERE "Name" LIKE ? COLLATE NOCASE
-           ORDER BY "Name" COLLATE NOCASE
+           WHERE "Name" LIKE ?
+           ORDER BY "Name"
            LIMIT 10"#,
     )
     .bind(&like)
@@ -708,8 +726,8 @@ pub async fn search_shows_for_block(prefix: String) -> Result<Vec<(i64, String)>
         r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Title"
            FROM "Show" s
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
-           WHERE sm."Title" LIKE ? COLLATE NOCASE
-           ORDER BY sm."Title" COLLATE NOCASE
+           WHERE sm."Title" LIKE ?
+           ORDER BY sm."Title"
            LIMIT 10"#,
     )
     .bind(&like)
@@ -741,12 +759,13 @@ pub async fn search_seasons_for_block(prefix: String) -> Result<Vec<(i64, String
 
     let rows = sqlx::query(
         r#"SELECT se."Id",
-                  COALESCE(sm."Title", '') || ' S' || PRINTF('%02d', se."SeasonNumber") AS "Label"
+                  COALESCE(sm."Title", '') AS "Title",
+                  se."SeasonNumber"
            FROM "Season" se
            JOIN "Show" sh ON sh."Id" = se."ShowId"
            JOIN "ShowMetadata" sm ON sm."ShowId" = sh."Id"
-           WHERE sm."Title" LIKE ? COLLATE NOCASE
-           ORDER BY sm."Title" COLLATE NOCASE, se."SeasonNumber"
+           WHERE sm."Title" LIKE ?
+           ORDER BY sm."Title", se."SeasonNumber"
            LIMIT 20"#,
     )
     .bind(&like)
@@ -758,10 +777,17 @@ pub async fn search_seasons_for_block(prefix: String) -> Result<Vec<(i64, String
         .map(|r| {
             (
                 r.try_get("Id").unwrap_or(0),
-                r.try_get("Label").unwrap_or_default(),
+                season_label(
+                    &r.try_get::<String, _>("Title").unwrap_or_default(),
+                    r.try_get("SeasonNumber").unwrap_or(0),
+                ),
             )
         })
         .collect())
+}
+
+fn season_label(title: &str, season_number: i64) -> String {
+    format!("{title} S{season_number:02}")
 }
 
 /// Human-readable label for a `PlaybackOrder` integer.

@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, VideoScanKind};
+use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use sha2::{Digest, Sha256};
-use sqlx::{Row, Sqlite, SqlitePool, Transaction};
+use sqlx::{Row, Transaction};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -40,7 +41,7 @@ pub struct LocalScanReport {
 /// Returns an error when the library has no paths, ffprobe fails, or database
 /// writes fail.
 pub async fn scan_local_library(
-    pool: &SqlitePool,
+    pool: &DbPool,
     config: &LocalScanConfig,
 ) -> Result<LocalScanReport> {
     let paths = load_library_paths(pool, config.library_id).await?;
@@ -104,7 +105,7 @@ fn is_scannable_video(path: &Path) -> bool {
     )
 }
 
-async fn load_library_paths(pool: &SqlitePool, library_id: i64) -> Result<Vec<LocalLibraryPath>> {
+async fn load_library_paths(pool: &DbPool, library_id: i64) -> Result<Vec<LocalLibraryPath>> {
     let rows = sqlx::query(
         r#"SELECT "Id", "Path"
            FROM "LibraryPath"
@@ -125,7 +126,7 @@ async fn load_library_paths(pool: &SqlitePool, library_id: i64) -> Result<Vec<Lo
 }
 
 async fn upsert_local_file(
-    pool: &SqlitePool,
+    pool: &DbPool,
     library_path: &LocalLibraryPath,
     path: &Path,
     probed: FfprobeMediaVersion,
@@ -182,16 +183,16 @@ async fn upsert_local_file(
     Ok(())
 }
 
-async fn insert_media_item(tx: &mut Transaction<'_, Sqlite>, library_path_id: i64) -> Result<i64> {
+async fn insert_media_item(tx: &mut Transaction<'_, Db>, library_path_id: i64) -> Result<i64> {
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
         .await?;
-    Ok(result.last_insert_rowid())
+    Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
 async fn insert_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, Db>,
     item_id: i64,
     probed: &FfprobeMediaVersion,
 ) -> Result<i64> {
@@ -218,11 +219,11 @@ async fn insert_media_version(
     .bind(version.interlaced_ratio)
     .execute(&mut **tx)
     .await?;
-    Ok(result.last_insert_rowid())
+    Ok(ersatzrs_infra::db::last_insert_id(result))
 }
 
 async fn update_media_version(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, Db>,
     version_id: i64,
     probed: &FfprobeMediaVersion,
 ) -> Result<()> {
@@ -252,7 +253,7 @@ async fn update_media_version(
 }
 
 async fn replace_streams(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, Db>,
     version_id: i64,
     streams: &[MediaStream],
 ) -> Result<()> {
@@ -285,7 +286,7 @@ async fn replace_streams(
 }
 
 async fn replace_chapters(
-    tx: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, Db>,
     version_id: i64,
     chapters: &[MediaChapter],
 ) -> Result<()> {
@@ -313,7 +314,7 @@ async fn replace_chapters(
 }
 
 async fn update_library_path_scan(
-    pool: &SqlitePool,
+    pool: &DbPool,
     library_path_id: i64,
     when: DateTime<Utc>,
 ) -> Result<()> {
@@ -325,11 +326,7 @@ async fn update_library_path_scan(
     Ok(())
 }
 
-async fn update_library_scan(
-    pool: &SqlitePool,
-    library_id: i64,
-    when: DateTime<Utc>,
-) -> Result<()> {
+async fn update_library_scan(pool: &DbPool, library_id: i64, when: DateTime<Utc>) -> Result<()> {
     sqlx::query(r#"UPDATE "Library" SET "LastScan" = ? WHERE "Id" = ?"#)
         .bind(encode_datetime(when))
         .bind(library_id)

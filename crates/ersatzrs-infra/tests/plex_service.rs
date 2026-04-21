@@ -1,3 +1,4 @@
+#![cfg(not(feature = "mysql"))]
 mod common;
 
 use ersatzrs_infra::plex::{

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::db::DbRow;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::repositories::Result;
@@ -11,8 +12,7 @@ use ersatzrs_core::scheduling::{
 };
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
 use ersatzrs_domain::{CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{
     decode_datetime, decode_duration_text, decode_enum_column, decode_message,
@@ -20,7 +20,7 @@ use super::common::{
 };
 
 #[derive(Clone)]
-pub struct SqliteSchedulingContentRepository(pub Pool<Sqlite>);
+pub struct SqliteSchedulingContentRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl SchedulingContentRepository for SqliteSchedulingContentRepository {
@@ -444,7 +444,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn items_for_collection_key_row(
         &self,
-        row: &SqliteRow,
+        row: &DbRow,
         depth: usize,
     ) -> Result<Vec<SchedulingMediaItem>> {
         let collection_key = collection_key_from_row(row)?;
@@ -651,7 +651,7 @@ impl SqliteSchedulingContentRepository {
         Ok(documents)
     }
 
-    async fn search_document_from_row(&self, row: &SqliteRow) -> Result<SearchDocument> {
+    async fn search_document_from_row(&self, row: &DbRow) -> Result<SearchDocument> {
         let metadata_kind = row.try_get::<String, _>("metadata_kind")?;
         let metadata_id = row.try_get::<EntityId, _>("metadata_id")?;
         let show_id = row.try_get::<Option<EntityId>, _>("show_id")?;
@@ -1447,7 +1447,7 @@ impl SqliteSchedulingContentRepository {
     async fn effective_default_filler(
         &self,
         deco_id: EntityId,
-        row: &SqliteRow,
+        row: &DbRow,
         media_by_key: &mut BTreeMap<String, Vec<SchedulingMediaItem>>,
     ) -> Result<(Option<String>, Option<SchedulingCollectionKey>)> {
         let collection_type = decode_optional_enum_column(
@@ -1479,7 +1479,7 @@ impl SqliteSchedulingContentRepository {
 
     async fn items_for_deco_break_content_row(
         &self,
-        row: &SqliteRow,
+        row: &DbRow,
     ) -> Result<Vec<SchedulingMediaItem>> {
         let collection_key = collection_key_from_deco_break_content_row(row)?;
         self.items_for_collection_key(&collection_key, 0).await
@@ -1677,7 +1677,7 @@ FROM (
 )
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
-fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
+fn collection_key_from_row(row: &DbRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
         collection_type: decode_enum_column("collection type", row, "CollectionType")?,
         collection_id: optional_id(row, "CollectionId")?,
@@ -1693,7 +1693,7 @@ fn collection_key_from_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
     })
 }
 
-fn collection_key_from_deco_break_content_row(row: &SqliteRow) -> Result<SchedulingCollectionKey> {
+fn collection_key_from_deco_break_content_row(row: &DbRow) -> Result<SchedulingCollectionKey> {
     Ok(SchedulingCollectionKey {
         collection_type: decode_enum_column(
             "deco break content collection type",
@@ -1707,7 +1707,7 @@ fn collection_key_from_deco_break_content_row(row: &SqliteRow) -> Result<Schedul
     })
 }
 
-fn optional_id(row: &SqliteRow, column: &str) -> Result<Option<EntityId>> {
+fn optional_id(row: &DbRow, column: &str) -> Result<Option<EntityId>> {
     match row.try_get::<Option<EntityId>, _>(column) {
         Ok(value) => Ok(value),
         Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
@@ -1715,7 +1715,7 @@ fn optional_id(row: &SqliteRow, column: &str) -> Result<Option<EntityId>> {
     }
 }
 
-fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
+fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
     let duration_text: String = row.try_get("duration_text").unwrap_or_default();
     let duration = decode_duration_text(&duration_text);
     Ok(SchedulingMediaItem {
@@ -1734,7 +1734,7 @@ fn map_scheduling_media_item(row: &SqliteRow) -> Result<SchedulingMediaItem> {
     })
 }
 
-fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
+fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
     Ok(PlayoutItem {
         id: row.try_get("Id")?,
         media_item_id: row.try_get("MediaItemId")?,
@@ -1773,7 +1773,7 @@ fn map_playout_item(row: &SqliteRow) -> Result<PlayoutItem> {
     })
 }
 
-fn map_playout_history(row: &SqliteRow) -> Result<PlayoutHistory> {
+fn map_playout_history(row: &DbRow) -> Result<PlayoutHistory> {
     Ok(PlayoutHistory {
         id: row.try_get("Id")?,
         playout_id: row.try_get("PlayoutId")?,
@@ -1837,7 +1837,7 @@ fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
         .map_err(|source| decode_message(kind, &source.to_string()))
 }
 
-async fn exists_by_id(pool: &Pool<Sqlite>, table: &str, id: EntityId) -> Result<bool> {
+async fn exists_by_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> Result<bool> {
     let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "Id" = ?)"#);
     sqlx::query_scalar::<_, bool>(&sql)
         .bind(id)
@@ -1898,7 +1898,7 @@ fn media_version_fk(metadata_kind: &str) -> Option<&'static str> {
     }
 }
 
-fn media_stream_kind_from_row(row: &SqliteRow) -> Option<String> {
+fn media_stream_kind_from_row(row: &DbRow) -> Option<String> {
     if let Ok(value) = row.try_get::<i64, _>("MediaStreamKind") {
         return match value {
             1 => Some("video".to_owned()),

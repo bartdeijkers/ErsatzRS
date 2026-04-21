@@ -1,13 +1,13 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{CollectionRepository, Result};
 use ersatzrs_domain::{Collection, EntityId, Playlist, SmartCollection};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 
 use super::common::{load_ids, not_found};
 
 #[derive(Clone)]
-pub struct SqliteCollectionRepository(pub Pool<Sqlite>);
+pub struct SqliteCollectionRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl CollectionRepository for SqliteCollectionRepository {
@@ -98,7 +98,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         let mut tx = self.0.begin().await?;
         // ErsatzTV Collection has no collection_type column; UseCustomPlaybackOrder is always false
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
+            r#"REPLACE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (?, ?, 0)"#,
         )
         .bind(collection.id)
         .bind(&collection.name)
@@ -111,7 +111,7 @@ impl CollectionRepository for SqliteCollectionRepository {
             .await?;
         for media_item_id in &collection.media_item_ids {
             sqlx::query(
-                r#"INSERT OR REPLACE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
+                r#"REPLACE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
             )
             .bind(collection.id)
             .bind(media_item_id)
@@ -124,7 +124,7 @@ impl CollectionRepository for SqliteCollectionRepository {
     }
 }
 
-fn map_collection(row: &SqliteRow) -> Result<Collection> {
+fn map_collection(row: &DbRow) -> Result<Collection> {
     Ok(Collection {
         id: row.try_get("Id")?,
         name: row.try_get("Name")?,

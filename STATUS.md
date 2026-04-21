@@ -1,10 +1,10 @@
 # Project Status
 
-Last updated: 2026-04-20 (night: Phase 7 Slice 6 — additional hardware acceleration paths)
+Last updated: 2026-04-21 (Phase 7 Slice 7 — MySQL backend support)
 
 ## Current Phase
 
-**Phase 7 — Hardening and Parity Completion** next.
+**Phase 7 — Hardening and Parity Completion** in progress.
 
 ### Phase 0 Checklist
 
@@ -180,10 +180,23 @@ granular ErsatzTV decoder dispatch tables (`h264_qsv`, `vp9_v4l2m2m`, etc.)
 are not yet expressible in Rust and remain future FFmpeg follow-up rather than
 Slice 6 blockers.
 
-Next up (Slice 7): MySQL backend behind a feature flag.
-After HLS is complete, continue Phase 7 items from the master plan: additional
-hardware paths, MySQL backend support, Trakt integration, Docker multi-arch
-images, side-by-side benchmarking, and long soak tests.
+Slice 7 lands MySQL backend support behind the `mysql` feature. `db::init`
+now detects `mysql://` and `mariadb://` URLs when the feature is enabled,
+returns a clear unsupported-backend error otherwise, and runs backend-specific
+migrations. `ersatzrs-web` and `ersatzrs-scanner` use the backend-aware pool
+and repository construction, while dialect-sensitive SQL paths now avoid
+SQLite-only constructs such as `INSERT OR REPLACE`, `ON CONFLICT`,
+`last_insert_rowid`, `COLLATE NOCASE`, `strftime`, and `datetime('now')` in
+production code. The MySQL migration set under `migrations/mysql/` is ordered
+for MySQL execution, preserves EF-style named constraints and indexes, and
+uses the ErsatzTV MySQL model's `utf8mb4` / `utf8mb4_general_ci` behavior.
+Feature-gated integration coverage verifies migrations, config upsert/read,
+channel/profile reads, playout item lookup, and scanner insert-id handling
+against MySQL. Review outcome: GO for the next Phase 7 slice.
+
+Next up: continue Phase 7 items from the master plan, prioritising Trakt
+integration and the remaining admin/navigation placeholders, then Docker
+multi-arch images, side-by-side benchmarking, and long soak tests.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -308,3 +321,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 4 — HLS direct passthrough. Ported the direct-HLS branch in `iptv/hls.rs`: `.m3u8?mode=hls-direct` now emits a single-entry playlist with per-channel media-sequence tracking and format-aware `.ts` / `.mp4` / `.mkv` targets, `/iptv/hls-direct/{channel}` reuses the shared FFmpeg stream path with config-driven output format selection, and focused tests/snapshot coverage landed for the playlist shape and output-format helpers. Review outcome: GO for Slice 5. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 5 — IPTV/HLS token verification. Ported ConditionalIptvAuthorizeFilter behavior with route-scoped JWT verification for propagated `access_token` URLs and focused middleware tests. Review outcome: GO for Slice 6. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 6 — additional FFmpeg hardware paths. Added QSV/AMF/VideoToolbox/RKMPP/V4L2M2M pipeline builders, QSV hardware-init and scaling/HLS GOP parity, hardware-specific encoder argv snapshots, and cleared the slice gates. Review outcome: GO for Slice 7. |
+| 2026-04-21 | Codex (GPT-5) | Phase 7 Slice 7 — MySQL backend support. Added feature-gated MySQL runtime initialization, ordered ErsatzTV-compatible MySQL migrations, backend-aware web/scanner repository wiring, dialect remediations, and real MySQL migration/integration coverage. Review outcome: GO for the next slice. |

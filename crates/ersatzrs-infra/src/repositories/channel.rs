@@ -1,17 +1,17 @@
+use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{ChannelRepository, Result};
 use ersatzrs_domain::{Channel, EntityId};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row};
 use uuid::Uuid;
 
 use super::common::{
-    decode_duration_text, decode_enum_column, decode_message, encode_duration, encode_enum,
-    load_ids, not_found,
+    decode_bool_column, decode_duration_text, decode_enum_column, decode_message, encode_duration,
+    encode_enum, load_ids, not_found,
 };
 
 #[derive(Clone)]
-pub struct SqliteChannelRepository(pub Pool<Sqlite>);
+pub struct SqliteChannelRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl ChannelRepository for SqliteChannelRepository {
@@ -64,7 +64,7 @@ impl ChannelRepository for SqliteChannelRepository {
     async fn upsert(&self, channel: &Channel) -> Result<()> {
         let mut tx = self.0.begin().await?;
         sqlx::query(
-            r#"INSERT OR REPLACE INTO "Channel" (
+            r#"REPLACE INTO "Channel" (
                 "Id", "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
                 "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
                 "StreamingMode", "StreamSelectorMode", "StreamSelector",
@@ -135,7 +135,7 @@ impl ChannelRepository for SqliteChannelRepository {
     }
 }
 
-fn map_channel(row: &SqliteRow) -> Result<Channel> {
+fn map_channel(row: &DbRow) -> Result<Channel> {
     let unique_id = row.try_get::<String, _>("UniqueId")?;
     Ok(Channel {
         id: row.try_get("Id")?,
@@ -181,7 +181,7 @@ fn map_channel(row: &SqliteRow) -> Result<Channel> {
             .map(decode_duration_text),
         transcode_mode: decode_enum_column("channel transcode_mode", row, "TranscodeMode")?,
         idle_behavior: decode_enum_column("channel idle_behavior", row, "IdleBehavior")?,
-        is_enabled: row.try_get("IsEnabled")?,
-        show_in_epg: row.try_get("ShowInEpg")?,
+        is_enabled: decode_bool_column(row, "IsEnabled")?,
+        show_in_epg: decode_bool_column(row, "ShowInEpg")?,
     })
 }

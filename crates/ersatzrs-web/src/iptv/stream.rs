@@ -13,7 +13,8 @@ use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, InputFile, OutputFormat, PipelineBuilder, PipelineRequest,
     SoftwarePipelineBuilder,
 };
-use sqlx::{Row, SqlitePool};
+use ersatzrs_infra::db::DbPool;
+use sqlx::Row;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
 
@@ -108,7 +109,7 @@ pub(crate) struct ActivePlayoutItem {
 }
 
 pub(crate) async fn load_active_media_path(
-    pool: &SqlitePool,
+    pool: &DbPool,
     channel_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<ActivePlayoutItem>, sqlx::Error> {
