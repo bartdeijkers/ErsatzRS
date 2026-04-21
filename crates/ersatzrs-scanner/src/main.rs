@@ -458,7 +458,7 @@ mod tests {
             .await
     }
 
-    async fn seed_plex_scan_db(pool: &DbPool, base_url: &str) {
+    async fn seed_plex_scan_db(pool: &SqlitePool, base_url: &str) {
         pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
             .await
             .expect("seed media source");

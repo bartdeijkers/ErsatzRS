@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-21 (Phase 7 Slice 7 — MySQL backend support)
+Last updated: 2026-04-21 (Phase 7 Slice 7 — MySQL backend support remediation)
 
 ## Current Phase
 
@@ -192,7 +192,9 @@ for MySQL execution, preserves EF-style named constraints and indexes, and
 uses the ErsatzTV MySQL model's `utf8mb4` / `utf8mb4_general_ci` behavior.
 Feature-gated integration coverage verifies migrations, config upsert/read,
 channel/profile reads, playout item lookup, and scanner insert-id handling
-against MySQL. Review outcome: GO for the next Phase 7 slice.
+against MySQL. Review found a test-only no-default-features scanner compile
+regression; remediation restores the SQLite-specific scanner test helper type.
+Review outcome: GO for the next Phase 7 slice.
 
 Next up: continue Phase 7 items from the master plan, prioritising Trakt
 integration and the remaining admin/navigation placeholders, then Docker
@@ -321,4 +323,4 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 4 — HLS direct passthrough. Ported the direct-HLS branch in `iptv/hls.rs`: `.m3u8?mode=hls-direct` now emits a single-entry playlist with per-channel media-sequence tracking and format-aware `.ts` / `.mp4` / `.mkv` targets, `/iptv/hls-direct/{channel}` reuses the shared FFmpeg stream path with config-driven output format selection, and focused tests/snapshot coverage landed for the playlist shape and output-format helpers. Review outcome: GO for Slice 5. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 5 — IPTV/HLS token verification. Ported ConditionalIptvAuthorizeFilter behavior with route-scoped JWT verification for propagated `access_token` URLs and focused middleware tests. Review outcome: GO for Slice 6. |
 | 2026-04-20 | GitHub Copilot (GPT-5.4) | Phase 7 Slice 6 — additional FFmpeg hardware paths. Added QSV/AMF/VideoToolbox/RKMPP/V4L2M2M pipeline builders, QSV hardware-init and scaling/HLS GOP parity, hardware-specific encoder argv snapshots, and cleared the slice gates. Review outcome: GO for Slice 7. |
-| 2026-04-21 | Codex (GPT-5) | Phase 7 Slice 7 — MySQL backend support. Added feature-gated MySQL runtime initialization, ordered ErsatzTV-compatible MySQL migrations, backend-aware web/scanner repository wiring, dialect remediations, and real MySQL migration/integration coverage. Review outcome: GO for the next slice. |
+| 2026-04-21 | Codex (GPT-5) | Phase 7 Slice 7 — MySQL backend support. Added feature-gated MySQL runtime initialization, ordered ErsatzTV-compatible MySQL migrations, backend-aware web/scanner repository wiring, dialect remediations, and real MySQL migration/integration coverage. Review found and fixed a no-default-features scanner test compile regression; final outcome: GO for the next slice. |
