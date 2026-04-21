@@ -34,6 +34,22 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 # Test
 cargo test --workspace --all-features
 
+# Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
+# FFmpeg 8.1+ must be available on PATH; pending migrations run automatically.
+DATABASE_URL=sqlite://ErsatzRS.db cargo run --bin ersatzrs-web
+
+# Verify the server is up.
+curl http://127.0.0.1:8409/healthz
+
+# Run the full mediaserver with IPTV JWT enforcement enabled.
+DATABASE_URL=sqlite://ErsatzRS.db JWT__IssuerSigningKey=dev-secret cargo run --bin ersatzrs-web
+
+# Run the full mediaserver against MySQL/MariaDB.
+DATABASE_URL='mysql://user:pass@127.0.0.1:3306/ersatzrs' cargo run --features mysql --bin ersatzrs-web
+
+# Run a one-shot media scan against the same database.
+DATABASE_URL=sqlite://ErsatzRS.db cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
+
 # Dependency audit
 cargo deny check
 
