@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-21 (Phase 7 Slice 9 — Startup readiness and schema checks)
+Last updated: 2026-04-22 (Phase 7 Slice 10 — FFmpeg runtime checks and multi-arch images)
 
 ## Current Phase
 
@@ -221,9 +221,22 @@ backfills the upstream `hdhr.uuid` / `hdhr.tuner_count` config keys while
 remaining backward compatible with the earlier mixed-case keys. Review
 outcome: ready for review.
 
-Next up: continue Phase 7 items from the master plan, prioritising version
-checks, Docker multi-arch images, the remaining admin/navigation placeholders,
-side-by-side benchmarking, and long soak tests.
+Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
+`ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
+ErsatzRS-specific path overrides with compatibility aliases, parses version
+banners, validates required drawvg/software codec/text-stack capabilities, and
+captures filters/encoders/decoders/hwaccels/configuration flags in a runtime
+report stored on `AppState`. The FFmpeg profile hardware list now reuses that
+startup report instead of spawning `ffmpeg -hwaccels` per request. Docker
+delivery now stays in this repository with `docker/Dockerfile`,
+`docker-bake.hcl`, GHCR multi-arch release workflow coverage for
+`linux/amd64`, `linux/arm64`, and `linux/arm/v7`, and hardware-gated smoke
+scripts for NVENC, VAAPI, and Vulkan. Review outcome: ready for review.
+
+Next up: continue Phase 7 items from the master plan, prioritising the
+remaining admin/navigation placeholders, side-by-side benchmarking, long soak
+tests, and the follow-up needed to reconcile the older SVG-template wording
+with FFmpeg drawvg's VGS script model.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -276,6 +289,8 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-22 | GitHub Copilot (GPT-5.4) | Updated the ErsatzRS SVG wordmarks so the artwork branding reads `ErsatzRS` instead of `ErsatzTV` across the main logo variants. |
+| 2026-04-22 | Codex (GPT-5) | Phase 7 Slice 10 — added ADR 0008, structured FFmpeg/ffprobe 8.1 runtime checks with capability reports and cached hardware detection, in-repo FFmpeg 8.1 Docker multi-arch release scaffolding, GHCR manifest/capability-report workflow checks, and hardware smoke scripts. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added startup readiness and downgrade/schema checks: `ersatzrs-infra` now inspects `_sqlx_migrations` before migrations run so the web host can stay up and report unknown, dirty, or checksum-mismatched schema rows through `/healthz` and the Support badge, and the HDHR config keys now match ErsatzTV with legacy-key backfill. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added an explicit mediaserver bootstrap in `ersatzrs-infra` that ports the current ErsatzTV one-time defaults for the system Trakt playlist group, stock resolutions, default FFmpeg profile/config keys, and default channel; `ersatzrs-web` now uses that bootstrap and the lazy UI/Trakt seed paths were removed. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Started database-startup parity work: centralized database URL resolution in `ersatzrs-infra`, switched the default SQLite location to `~/.ersatzrs/ErsatzRS.db` for both web and scanner, added focused resolver tests, and updated the operator docs/examples. |

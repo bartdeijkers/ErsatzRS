@@ -13,7 +13,7 @@
    version="1.1"
    id="svg8"
    inkscape:version="1.0.1 (3bc2e813f5, 2020-09-07)"
-   sodipodi:docname="ersatztv-logo.svg">
+   sodipodi:docname="ersatzrs-logo.svg">
   <defs
      id="defs2" />
   <sodipodi:namedview
@@ -57,21 +57,25 @@
      id="layer1"
      transform="translate(-66.205082,-134.16488)">
     <g
-       aria-label="Etv"
+       aria-label="Ers"
        id="text78"
        style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.8px;line-height:1.25;font-family:Roboto;-inkscape-font-specification:'Roboto, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;letter-spacing:0px;word-spacing:0px;fill:#c0c000;fill-opacity:1;stroke:none;stroke-width:0.264583">
       <path
          d="m 66.205082,170.2805 v -36.11562 h 24.159765 v 6.02754 H 73.671293 v 8.60722 h 14.262695 v 5.8291 H 73.671293 v 9.64903 h 16.767968 v 6.00273 z"
          style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.8px;font-family:Roboto;-inkscape-font-specification:'Roboto, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#c0c000;fill-opacity:1;stroke-width:0.264583"
          id="path98" />
-      <path
-         d="m 107.75293,170.10687 q -2.00918,0.66973 -4.31601,0.66973 -3.522269,0 -5.605863,-1.83555 -2.083593,-1.83555 -2.083593,-6.10195 v -14.16348 h -3.943946 v -5.23379 h 3.943946 v -6.62285 h 7.168556 v 6.62285 h 4.56406 v 5.23379 h -4.56406 v 13.41934 q 0,1.68671 0.69453,2.23242 0.69453,0.5457 2.05879,0.5457 1.0914,0 2.08359,-0.19844 z"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.8px;font-family:Roboto;-inkscape-font-specification:'Roboto, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#00c0c0;fill-opacity:1;stroke-width:0.264583"
-         id="path100" />
-      <path
-         d="m 133.99629,143.44183 -9.05371,26.83867 h -6.82129 l -9.07852,-26.83867 h 7.51583 l 4.98574,18.03301 4.96093,-18.03301 z"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.8px;font-family:Roboto;-inkscape-font-specification:'Roboto, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#00c000;fill-opacity:1;stroke-width:0.264583"
-         id="path102" />
+      <text
+         xml:space="preserve"
+         x="91.803024"
+         y="170.2805"
+         textLength="42.193268"
+         lengthAdjust="spacingAndGlyphs"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:50.8px;line-height:1.25;font-family:Roboto, sans-serif;-inkscape-font-specification:'Roboto, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;letter-spacing:0px;word-spacing:0px;stroke:none;stroke-width:0.264583"
+         id="text100"><tspan
+           style="fill:#00c0c0;fill-opacity:1"
+           id="tspan100">R</tspan><tspan
+           style="fill:#00c000;fill-opacity:1"
+           id="tspan102">S</tspan></text>
     </g>
     <text
        xml:space="preserve"
