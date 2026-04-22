@@ -10,6 +10,12 @@ for commit messages.
 
 ### Added
 
+- Phase 7 Channels admin visual parity pass: the `/channels` list now uses
+  locally served Roboto fonts, closer ErsatzTV PaletteDark tokens, MudTable-like
+  row height and pager spacing, a styled Show Disabled switch, logo/language/
+  mode columns, and icon-only row actions. Added `artwork/ersatzrs_full.png`
+  as the full-width raster ErsatzRS wordmark asset.
+
 - Phase 7 FFmpeg 8.1 runtime and Docker multi-arch image support: ErsatzRS now
   checks both `ffmpeg` and `ffprobe` at startup, requires version 8.1 or newer,
   records filter/encoder/decoder/hwaccel/configuration capabilities in

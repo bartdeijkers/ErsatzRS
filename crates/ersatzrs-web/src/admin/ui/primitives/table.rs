@@ -197,6 +197,12 @@ where
                                 <span>
                                     {move || {
                                         let p = params.get();
+                                        format!("Rows per page: {}", p.page_size)
+                                    }}
+                                </span>
+                                <span>
+                                    {move || {
+                                        let p = params.get();
                                         let start = p.page * p.page_size + 1;
                                         let end = ((p.page + 1) * p.page_size)
                                             .min(u32::try_from(total_items).unwrap_or(u32::MAX));
@@ -212,7 +218,8 @@ where
                                         class=style::page_btn
                                         disabled=move || params.get().page == 0
                                         on:click=go_prev
-                                    >"‹ Prev"</button>
+                                        title="Previous page"
+                                    >"‹"</button>
                                     <button
                                         class=style::page_btn
                                         disabled=move || {
@@ -221,7 +228,8 @@ where
                                                 || u64::from((p.page + 1) * p.page_size) >= total_items
                                         }
                                         on:click=go_next
-                                    >"Next ›"</button>
+                                        title="Next page"
+                                    >"›"</button>
                                 </div>
                             </div>
                         }

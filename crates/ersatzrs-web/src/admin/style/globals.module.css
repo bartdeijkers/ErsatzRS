@@ -1,9 +1,43 @@
 /* Design tokens (from ErsatzTV PaletteDark) + base reset */
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 300;
+    font-display: swap;
+    src: url("/public/fonts/roboto-v50-latin-300.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/public/fonts/roboto-v50-latin-regular.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/public/fonts/roboto-v50-latin-500.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/public/fonts/roboto-v50-latin-700.woff2") format("woff2");
+}
+
 :root {
     --color-bg:          #272727;
     --color-surface:     #1f1f1f;
     --color-appbar:      #121212;
-    --color-border:      #374151;
+    --color-border:      rgba(255, 255, 255, 0.40);
+    --color-table-line:  rgba(255, 255, 255, 0.11);
+    --color-table-hover: rgba(255, 255, 255, 0.10);
     --color-primary:     #009000;
     --color-primary-h:   #00a800;
     --color-primary-20:  rgba(0, 144, 0, 0.20);
@@ -12,6 +46,9 @@
     --color-secondary-80: rgba(0, 144, 144, 0.80);
     --color-on-primary:  #ffffff;
     --color-muted:       rgba(255, 255, 255, 0.40);
+    --color-text-primary: rgba(255, 255, 255, 0.90);
+    --color-text-secondary: rgba(255, 255, 255, 0.80);
+    --color-action-default: rgba(255, 255, 255, 0.80);
     --color-error:       #ef4444;
     --color-error-20:    rgba(239, 68, 68, 0.20);
     --color-error-90:    rgba(239, 68, 68, 0.90);
@@ -32,10 +69,13 @@
 
 body {
     background-color: var(--color-bg);
-    color: var(--color-gray-200);
+    color: var(--color-text-primary);
     min-height: 100vh;
     margin: 0;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+    font-size: 0.875rem;
+    font-weight: 400;
+    letter-spacing: 0;
 }
 
 a {

@@ -26,10 +26,10 @@
 .main {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 1.5rem;
 }
 @media (min-width: 768px) {
-    .main { padding: 1.5rem; }
+    .main { padding: 1.875rem; }
 }
 
 .drawer-toggle {

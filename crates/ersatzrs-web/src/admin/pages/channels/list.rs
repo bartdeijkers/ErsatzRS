@@ -6,12 +6,13 @@ use crate::admin::server_fns::channels::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    icon::{Icon, IconName},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/list.module.css");
 
-const PAGE_SIZE: u32 = 25;
+const PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn ChannelsListPage() -> impl IntoView {
@@ -55,34 +56,76 @@ pub fn ChannelsListPage() -> impl IntoView {
             }
             .into_any()
         }),
+        Column::new("Logo", |ch: &ChannelListRow| {
+            let name = ch.name.clone();
+            let initials = logo_text(&name);
+            view! {
+                <div class=style::logo_cell aria-label=format!("{name} logo")>
+                    <span>{initials}</span>
+                    <small>"Etv"</small>
+                </div>
+            }
+            .into_any()
+        }),
         Column::new("Name", |ch: &ChannelListRow| {
             let n = ch.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Streaming Mode", |ch: &ChannelListRow| {
+        Column::new("Language", |ch: &ChannelListRow| {
+            let language = ch.preferred_audio_language.clone();
+            view! { <span>{language}</span> }.into_any()
+        }),
+        Column::new("Mode", |ch: &ChannelListRow| {
             let m = ch.streaming_mode_label.clone();
-            view! { <span class=style::cell_muted>{m}</span> }.into_any()
+            view! { <span>{m}</span> }.into_any()
         }),
         Column::new("FFmpeg Profile", |ch: &ChannelListRow| {
             let p = ch.ffmpeg_profile_name.clone();
-            view! { <span class=style::cell_muted>{p}</span> }.into_any()
+            view! { <span>{p}</span> }.into_any()
         }),
     ];
 
     let row_actions: RowActionsRenderer<ChannelListRow> = Box::new(move |ch| {
         let id = ch.id;
+        let number = ch.number.clone();
         let ch_clone = ch.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/channels/{id}") class=style::row_btn_edit>"Edit"</a>
+                <a
+                    href=format!("/iptv/channel/{number}.m3u8")
+                    target="_blank"
+                    class=style::row_btn_preview
+                    title="Preview channel"
+                    aria-label="Preview channel"
+                >
+                    <Icon name=IconName::Play size="1.25rem"/>
+                </a>
+                <a
+                    href=format!("/channels/{id}")
+                    class=style::row_btn_icon
+                    title="Edit channel"
+                    aria-label="Edit channel"
+                >
+                    <Icon name=IconName::Edit size="1.25rem"/>
+                </a>
+                <span
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_disabled)
+                    title="Troubleshoot channel"
+                    aria-label="Troubleshoot channel"
+                    aria-disabled="true"
+                >
+                    <Icon name=IconName::Search size="1.25rem"/>
+                </span>
                 <button
-                    class=style::row_btn_delete
+                    class=style::row_btn_icon
+                    title="Delete channel"
+                    aria-label="Delete channel"
                     on:click=move |_| {
                         delete_target.set(Some(ch_clone.clone()));
                         delete_open.set(true);
                     }
                 >
-                    "Delete"
+                    <Icon name=IconName::Delete size="1.25rem"/>
                 </button>
             </div>
         }
@@ -91,30 +134,46 @@ pub fn ChannelsListPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>"Channels"</h1>
-                <div class=style::toolbar_actions>
-                    <label class=style::show_disabled_label>
-                        <input
-                            type="checkbox"
-                            class=style::show_disabled_check
-                            prop:checked=move || show_disabled.get()
-                            on:change=move |e| show_disabled.set(event_target_checked(&e))
-                        />
-                        "Show disabled"
-                    </label>
-                    <a href="/channels/add" class=style::btn_add>"+ Add Channel"</a>
-                    <a href="/channels/numbers" class=style::btn_numbers>"Edit Numbers"</a>
-                </div>
+            <div class=style::action_bar>
+                <a href="/channels/add" class=style::btn_add>
+                    <Icon name=IconName::Add size="1.125rem"/>
+                    "Add Channel"
+                </a>
+                <a href="/channels/numbers" class=style::btn_numbers>
+                    <Icon name=IconName::Edit size="1.125rem"/>
+                    "Edit Numbers"
+                </a>
             </div>
 
-            <PagedTable
-                rows=rows_resource
-                total=total
-                params=params
-                columns=columns
-                row_actions=Some(row_actions)
-            />
+            <section class=style::content>
+                <h1 class=style::page_title>"Channels"</h1>
+                <div class=style::divider/>
+
+                <div class=style::table_panel>
+                    <div class=style::table_toolbar>
+                        <label class=style::switch_label>
+                            <input
+                                type="checkbox"
+                                class=style::switch_input
+                                prop:checked=move || show_disabled.get()
+                                on:change=move |e| show_disabled.set(event_target_checked(&e))
+                            />
+                            <span class=style::switch_track>
+                                <span class=style::switch_thumb/>
+                            </span>
+                            <span>"Show Disabled"</span>
+                        </label>
+                    </div>
+
+                    <PagedTable
+                        rows=rows_resource
+                        total=total
+                        params=params
+                        columns=columns
+                        row_actions=Some(row_actions)
+                    />
+                </div>
+            </section>
 
             {move || {
                 delete_target.get().map(|ch| {
@@ -136,5 +195,16 @@ pub fn ChannelsListPage() -> impl IntoView {
                 })
             }}
         </div>
+    }
+}
+
+fn logo_text(name: &str) -> String {
+    let mut words = name
+        .split_whitespace()
+        .filter_map(|word| word.chars().next());
+    match (words.next(), words.next()) {
+        (Some(first), Some(second)) => format!("{first}{second}").to_uppercase(),
+        (Some(first), None) => first.to_uppercase().to_string(),
+        _ => "TV".to_string(),
     }
 }

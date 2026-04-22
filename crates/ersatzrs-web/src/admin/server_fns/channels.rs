@@ -7,6 +7,7 @@ pub struct ChannelListRow {
     pub id: i64,
     pub number: String,
     pub name: String,
+    pub preferred_audio_language: String,
     pub is_enabled: bool,
     pub show_in_epg: bool,
     pub streaming_mode_label: String,
@@ -55,7 +56,8 @@ pub async fn list_channel_rows(
     let offset = i64::from(page) * i64::from(page_size);
 
     let rows = sqlx::query(
-        r#"SELECT c."Id", c."Number", c."Name", c."IsEnabled", c."ShowInEpg",
+        r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
+                  c."IsEnabled", c."ShowInEpg",
                   c."StreamingMode", COALESCE(p."Name", '') AS "ProfileName"
            FROM "Channel" c
            LEFT JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
@@ -77,6 +79,11 @@ pub async fn list_channel_rows(
                 id: row.try_get("Id").unwrap_or(0),
                 number: row.try_get("Number").unwrap_or_default(),
                 name: row.try_get("Name").unwrap_or_default(),
+                preferred_audio_language: language_label(
+                    row.try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+                        .unwrap_or_default()
+                        .as_deref(),
+                ),
                 is_enabled: row.try_get("IsEnabled").unwrap_or(true),
                 show_in_epg: row.try_get("ShowInEpg").unwrap_or(true),
                 streaming_mode_label: streaming_mode_label(mode),
@@ -260,10 +267,31 @@ pub async fn list_filler_presets_for_select() -> Result<Vec<(i64, String)>, Serv
 
 fn streaming_mode_label(mode: i32) -> String {
     match mode {
-        1 => "Transport Stream".to_string(),
+        1 => "MPEG-TS (Legacy)".to_string(),
         2 => "HLS Direct".to_string(),
         4 => "HLS Segmenter".to_string(),
-        5 => "Transport Stream Hybrid".to_string(),
+        5 => "MPEG-TS".to_string(),
         _ => format!("Unknown ({mode})"),
+    }
+}
+
+fn language_label(code: Option<&str>) -> String {
+    match code
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "" => String::new(),
+        "eng" | "en" => "English".to_string(),
+        "nld" | "dut" | "nl" => "Dutch".to_string(),
+        "deu" | "ger" | "de" => "German".to_string(),
+        "fra" | "fre" | "fr" => "French".to_string(),
+        "spa" | "es" => "Spanish".to_string(),
+        "ita" | "it" => "Italian".to_string(),
+        "jpn" | "ja" => "Japanese".to_string(),
+        "kor" | "ko" => "Korean".to_string(),
+        "zho" | "chi" | "zh" => "Chinese".to_string(),
+        value => value.to_string(),
     }
 }

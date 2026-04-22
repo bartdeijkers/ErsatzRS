@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-22 (Phase 7 follow-up — ersatzrs-web structure refactor)
+Last updated: 2026-04-22 (Phase 7 follow-up — channels UI visual parity)
 
 ## Current Phase
 
@@ -252,6 +252,13 @@ and style modules live under `src/admin/`. Static public asset buckets are
 reserved as `public/images/` and `public/js/`, while generated hydration assets
 remain served from `/pkg`.
 
+The Channels admin list now has a first-pass ErsatzTV visual parity pass:
+Roboto is served locally from `public/fonts`, dark-theme tokens mirror the
+MudBlazor `PaletteDark` colors more closely, the channel table uses
+ErsatzTV-like row height, divider, pager, switch, logo, language, mode, and
+icon-action spacing, and `artwork/ersatzrs_full.png` is available as the new
+full-width raster wordmark asset.
+
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
 write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
@@ -303,6 +310,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-22 | Codex (GPT-5) | Adjusted the Channels admin list toward the ErsatzTV screenshot with Roboto fonts, closer PaletteDark tokens, MudTable-like spacing, Show Disabled switch styling, logo/language/mode columns, icon-only actions, and the new `artwork/ersatzrs_full.png` asset. Gates: fmt, `cargo check -p ersatzrs-web --all-features`, and `cargo clippy -p ersatzrs-web --all-targets --all-features -- -D warnings`; live smoke was blocked by local FFmpeg 6.1.1 being below the required 8.1. |
 | 2026-04-22 | Codex (GPT-5) | Fixed admin shell sidebar/header parity with ErsatzTV: added the ErsatzRS logo beside the hamburger menu, moved the app bar above the sidebar so it spans the full viewport, switched the sidebar to the gray surface background, and made sidebar groups native collapsed-by-default details controls. Gates: fmt and `cargo check -p ersatzrs-web --all-features`; browser smoke checked with local FFmpeg 8.1. |
 | 2026-04-22 | Codex (GPT-5) | Completed the `ersatzrs-web` structure refactor: restored production Leptos config fallback, documented the target `host`/`transport`/`api`/`admin` layout with `public/images` and `public/js`, moved admin pages/server functions/UI/style under `src/admin`, moved IPTV/HDHR/dev streaming under `src/transport`, moved watermark upload endpoints under `src/api`, and split admin routes plus layout modules. |
 | 2026-04-22 | GitHub Copilot (GPT-5.4) | Continued the `ersatzrs-web` structure refactor by creating an explicit `src/admin/` boundary, moving the admin shell and home page out of `src/ui/`, splitting the home-page CSS into its own module, and broadening the stylance build watch to track future admin moves. |
