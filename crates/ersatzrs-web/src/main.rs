@@ -48,13 +48,7 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    match ersatzrs_ffmpeg::check_ffmpeg_version().await {
-        Ok(version) => tracing::info!("FFmpeg 8.1+ detected (found: {version})"),
-        Err(e) => {
-            tracing::error!(error = %e, "FFmpeg version check failed");
-            std::process::exit(1);
-        }
-    }
+    let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
 
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
         .await
@@ -87,6 +81,7 @@ async fn main() {
         startup.pool,
         startup.database_backend,
         startup.schema_status,
+        ffmpeg_runtime,
     )
     .await
     .expect("failed to build application state");
@@ -98,7 +93,12 @@ async fn main() {
     ));
     tokio::spawn(run_trakt_maintenance(app_state.pool.clone()));
 
-    let conf = get_configuration(Some(WEB_CRATE_CARGO_TOML)).expect("valid leptos config");
+    let conf = if Path::new(WEB_CRATE_CARGO_TOML).is_file() {
+        get_configuration(Some(WEB_CRATE_CARGO_TOML))
+    } else {
+        get_configuration(None)
+    }
+    .expect("valid leptos config");
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
     let pkg_dir = resolve_pkg_dir(&leptos_options);
@@ -162,10 +162,33 @@ async fn main() {
         .expect("server error");
 }
 
+async fn check_startup_ffmpeg_runtime() -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
+    match ersatzrs_ffmpeg::check_ffmpeg_runtime().await {
+        Ok(report) => {
+            tracing::info!(
+                ffmpeg = %report.ffmpeg.version,
+                ffprobe = %report.ffprobe.version,
+                ffmpeg_path = %report.ffmpeg.path,
+                ffprobe_path = %report.ffprobe.path,
+                "FFmpeg 8.1+ runtime detected"
+            );
+            for issue in report.issues.iter().filter(|issue| !issue.is_error()) {
+                tracing::warn!(?issue, "FFmpeg runtime capability warning");
+            }
+            report
+        }
+        Err(error) => {
+            tracing::error!(error = %error, "FFmpeg runtime check failed");
+            std::process::exit(1);
+        }
+    }
+}
+
 async fn build_app_state(
     pool: DbPool,
     database_backend: DatabaseBackend,
     schema_status: ersatzrs_infra::db::DatabaseSchemaStatus,
+    ffmpeg_runtime: ersatzrs_ffmpeg::FfmpegRuntimeReport,
 ) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
@@ -206,6 +229,7 @@ async fn build_app_state(
             database_ready: true,
             schema_status,
         },
+        ffmpeg_runtime,
         device_uuid,
         tuner_count,
         iptv_access_token_verifier,
@@ -280,7 +304,7 @@ fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
 }
 
 async fn healthz(axum::extract::State(state): axum::extract::State<AppState>) -> StatusCode {
-    if state.system_startup.is_ready() {
+    if state.system_startup.is_ready() && !state.ffmpeg_runtime.has_errors() {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE

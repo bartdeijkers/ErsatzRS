@@ -31,8 +31,8 @@ struct Args {
     provider: Provider,
     #[arg(long)]
     library_id: i64,
-    #[arg(long, default_value = "ffprobe")]
-    ffprobe_path: String,
+    #[arg(long)]
+    ffprobe_path: Option<String>,
     #[arg(long)]
     dry_run: bool,
 }
@@ -75,7 +75,10 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         pool,
         &LocalScanConfig {
             library_id: args.library_id,
-            ffprobe_path: args.ffprobe_path.clone(),
+            ffprobe_path: args
+                .ffprobe_path
+                .clone()
+                .unwrap_or_else(ffprobe_path_from_env),
         },
     )
     .await?;
@@ -367,6 +370,20 @@ async fn load_connection_address(
         .context("provider connection not found")
 }
 
+#[allow(clippy::disallowed_methods)]
+fn ffprobe_path_from_env() -> String {
+    [
+        "ErsatzRS_FFPROBE__PATH",
+        "ERSATZRS_FFPROBE__PATH",
+        "FFPROBE_PATH",
+        "ERSATZRS_FFPROBE",
+    ]
+    .iter()
+    .find_map(|key| std::env::var(key).ok())
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or_else(|| "ffprobe".to_owned())
+}
+
 #[cfg(all(test, not(feature = "mysql")))]
 mod tests {
     use super::{
@@ -500,7 +517,7 @@ mod tests {
         Args {
             provider: Provider::Plex,
             library_id: 5,
-            ffprobe_path: "ffprobe".to_owned(),
+            ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: false,
         }
     }
@@ -509,7 +526,7 @@ mod tests {
         Args {
             provider,
             library_id: 999,
-            ffprobe_path: "ffprobe".to_owned(),
+            ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: true,
         }
     }

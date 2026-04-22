@@ -245,6 +245,7 @@ pub async fn save_sequential_playout(id: i64, yaml_content: String) -> Result<()
 /// `PlayoutBuilder::default().build()` which routes Sequential playouts to
 /// `YamlPlayoutEngine`.  All errors are logged and swallowed — callers must
 /// not rely on success.
+#[cfg(feature = "ssr")]
 async fn rebuild_yaml_playout(
     repos: &ersatzrs_infra::repositories::Repositories,
     id: i64,

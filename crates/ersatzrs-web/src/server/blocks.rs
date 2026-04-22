@@ -8,6 +8,7 @@
 //! - Autocomplete helpers → [`search_collections_for_block`],
 //!   [`search_smart_collections_for_block`], [`search_shows_for_block`],
 //!   [`search_seasons_for_block`]
+#[cfg(feature = "ssr")]
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -496,6 +497,7 @@ fn duration_secs(duration: Option<&str>) -> i64 {
 }
 
 #[allow(clippy::too_many_lines)]
+#[cfg(feature = "ssr")]
 async fn query_items_for_preview(
     item: &BlockItemForm,
     pool: &DbPool,
@@ -622,6 +624,7 @@ async fn query_items_for_preview(
     }
 }
 
+#[cfg(feature = "ssr")]
 fn playback_order_clause(
     order: i32,
     is_episode: bool,

@@ -110,12 +110,9 @@ pub async fn scan_library(library_id: i64, kind: String) -> Result<(), ServerFnE
             }
             "Local" => {
                 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
-                #[allow(clippy::disallowed_methods)]
-                let ffprobe_path =
-                    std::env::var("FFPROBE_PATH").unwrap_or_else(|_| "ffprobe".to_string());
                 let config = LocalScanConfig {
                     library_id,
-                    ffprobe_path,
+                    ffprobe_path: ersatzrs_ffmpeg::ffprobe_path_from_env(),
                 };
                 log_err!(scan_local_library(&pool, &config).await);
             }

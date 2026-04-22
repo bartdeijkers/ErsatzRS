@@ -5,10 +5,42 @@ listed here and backed by ADRs.
 
 ## drawvg graphics instead of external renderer
 
-ErsatzRS uses FFmpeg 8.1 `drawvg` with SVG templates instead of recreating the
-external graphics-renderer process.
+ErsatzRS uses FFmpeg 8.1 `drawvg` instead of recreating ErsatzTV's external
+graphics-renderer process. `drawvg` executes VGS scripts, not SVG documents, so
+the older SVG-template wording in implementation notes represents a remaining
+graphics follow-up rather than a packaging/runtime decision.
 
 ADR: [0005](../adr/0005-drawvg-graphics-engine.md)
+
+Follow-up ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+
+## In-repository FFmpeg packaging
+
+ErsatzTV packages its FFmpeg integration in a separate `ErsatzTV-ffmpeg`
+repository. ErsatzRS intentionally keeps FFmpeg and ffprobe packaging in this
+repository so the application binaries, migrations, admin UI assets, FFmpeg
+8.1 build, and startup runtime checks are released together.
+
+The published Docker image is a redistributable multi-arch ErsatzRS image built
+from the official FFmpeg 8.1 source tarball. Release images must not enable
+`--enable-nonfree`, bundle the CUDA toolkit, include libnpp, or include
+non-redistributable codecs such as libfdk_aac.
+
+ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+
+## Explicit FFmpeg and ffprobe runtime checks
+
+ErsatzRS fails startup when `ffmpeg` or `ffprobe` is missing, older than 8.1,
+or lacks required CPU/drawvg/text/codec capabilities. The admin FFmpeg profile
+hardware list uses the startup capability report instead of probing
+`ffmpeg -hwaccels` per request.
+
+GPU acceleration support is advertised from what the runtime image actually
+reports. Host GPU access remains an operator responsibility: NVIDIA requires
+container GPU runtime support, while VAAPI and Vulkan require `/dev/dri`
+device passthrough. The `linux/arm/v7` image is CPU-only for this slice.
+
+ADR: [0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
 
 ## Collapsed initial schema
 

@@ -8,40 +8,46 @@ license.workspace = true
 name = "ersatzrs-web"
 path = "src/main.rs"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+thiserror = "2"
+tracing = "0.1"
+leptos = { version = "0.7", features = ["islands"] }
+leptos_router = "0.7"
+leptos_meta = "0.7"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+urlencoding = "2"
+gloo-timers = { version = "0.3", features = ["futures"] }
+stylance = "0.7"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
 ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "0.1.0" }
-thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["io"] }
 # Pinned to 0.7: leptos_axum 0.7 requires axum 0.7. Do not bump until leptos_axum is updated.
 axum = "0.7"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "fs"] }
-tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-leptos = { version = "0.7", features = ["ssr", "islands"] }
 leptos_axum = "0.7"
-leptos_router = { version = "0.7", features = ["ssr"] }
-leptos_meta = { version = "0.7", features = ["ssr"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
-gloo-timers = { version = "0.3", features = ["futures"] }
 quick-xml = "0.37"
-stylance = "0.7"
 base64 = "0.22.1"
 tempfile = "3.27.0"
 jsonwebtoken = "9"
 
-# WASM-only: file upload in islands. Feature-gated; never compiled for the SSR binary.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", features = ["macros", "sync", "time"] }
+# WASM-only: file upload in islands. Feature-gated; never compiled for the SSR binary.
 web-sys = { version = "0.3", features = ["File", "FileList", "FormData", "HtmlInputElement", "Blob"] }
 gloo-net = { version = "0.6", features = ["http"] }
 wasm-bindgen = "0.2"
@@ -61,12 +67,18 @@ reload-port = 3001
 browserquery = "defaults"
 watch = false
 env = "DEV"
+lib-features = ["hydrate"]
+lib-default-features = false
+bin-features = ["ssr"]
+bin-default-features = false
 
 [dev-dependencies]
 insta = "1"
 
 [features]
-default = []
+default = ["ssr"]
+hydrate = ["leptos/hydrate"]
+ssr = ["leptos/ssr", "leptos_router/ssr", "leptos_meta/ssr"]
 mysql = ["ersatzrs-infra/mysql", "ersatzrs-scanner/mysql"]
 mysql-integration = [
     "mysql",

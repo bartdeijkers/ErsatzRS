@@ -258,32 +258,28 @@ pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerF
 /// Returns `(integer, label)` pairs for hardware acceleration kinds supported
 /// by the local FFmpeg installation.  Ports `GetSupportedHardwareAccelerationKindsHandler`.
 ///
-/// Runs `ffmpeg -hwaccels -v quiet` and maps reported accelerator names to
-/// `HardwareAccelerationKind` integers.  Always includes `None (0)`.
+/// Uses the startup FFmpeg runtime report and maps reported accelerator names
+/// to `HardwareAccelerationKind` integers.  Always includes `None (0)`.
 /// V4L2M2M is excluded (commented out in the upstream handler too).
 #[server]
+#[allow(clippy::unused_async)]
 pub async fn list_supported_hw_accelerations() -> Result<Vec<(i32, String)>, ServerFnError> {
-    use tokio::process::Command;
+    use crate::state::AppState;
 
+    let state = expect_context::<AppState>();
+    let capabilities = &state.ffmpeg_runtime.capabilities;
     let mut result = vec![(0i32, "None".to_string())];
 
-    let output = Command::new("ffmpeg")
-        .args(["-hwaccels", "-v", "quiet"])
-        .output()
-        .await;
-
-    if let Ok(out) = output {
-        let text = String::from_utf8_lossy(&out.stdout);
-        for line in text.lines().skip(1) {
-            match line.trim() {
-                "cuda" => result.push((2, "NVENC".to_string())),
-                "qsv" => result.push((1, "QSV".to_string())),
-                "vaapi" => result.push((3, "VAAPI".to_string())),
-                "videotoolbox" => result.push((4, "VideoToolbox".to_string())),
-                "amf" => result.push((5, "AMF".to_string())),
-                "rkmpp" => result.push((7, "RKMPP".to_string())),
-                _ => {}
-            }
+    for (hwaccel, value, label) in [
+        ("qsv", 1, "QSV"),
+        ("cuda", 2, "NVENC"),
+        ("vaapi", 3, "VAAPI"),
+        ("videotoolbox", 4, "VideoToolbox"),
+        ("amf", 5, "AMF"),
+        ("rkmpp", 7, "RKMPP"),
+    ] {
+        if capabilities.has_hwaccel(hwaccel) {
+            result.push((value, label.to_string()));
         }
     }
 

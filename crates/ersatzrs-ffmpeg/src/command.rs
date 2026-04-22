@@ -11,7 +11,7 @@ impl FfmpegCommand {
     #[must_use]
     pub fn new(environment: Vec<EnvironmentVariable>, arguments: Vec<String>) -> Self {
         Self {
-            executable: "ffmpeg".to_owned(),
+            executable: crate::ffmpeg_path_from_env(),
             environment,
             arguments,
         }

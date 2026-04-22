@@ -10,6 +10,17 @@ for commit messages.
 
 ### Added
 
+- Phase 7 FFmpeg 8.1 runtime and Docker multi-arch image support: ErsatzRS now
+  checks both `ffmpeg` and `ffprobe` at startup, requires version 8.1 or newer,
+  records filter/encoder/decoder/hwaccel/configuration capabilities in
+  `AppState`, and reuses that report for FFmpeg profile hardware choices. The
+  in-repository Docker build now compiles FFmpeg 8.1 from the verified official
+  source tarball, includes redistributable CPU/NVENC/VAAPI/Vulkan/QSV runtime
+  capability checks where supported, publishes release scaffolding for
+  `linux/amd64`, `linux/arm64`, and CPU-only `linux/arm/v7`, and validates the
+  final runtime image with `ldd`, `ffmpeg`, `ffprobe`, `drawvg`, and container
+  `/healthz` smoke checks.
+
 - Phase 7 Slice 7 MySQL backend support: `ersatzrs-infra` can initialize
   SQLite or MySQL from `DATABASE_URL` when built with the `mysql` feature,
   `ersatzrs-web` and `ersatzrs-scanner` propagate the backend-aware pool, and

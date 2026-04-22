@@ -120,13 +120,14 @@ impl DatabaseSchemaStatus {
 }
 
 /// Resolve the startup database URL, preferring `DATABASE_URL` and otherwise
-/// defaulting SQLite to `~/.ersatzrs/ErsatzRS.db`.
+/// defaulting `SQLite` to `~/.ersatzrs/ErsatzRS.db`.
 ///
 /// # Errors
 ///
 /// Returns an error when the configured `DATABASE_URL` is not valid UTF-8, the
-/// current user's home directory cannot be determined, or the default SQLite
+/// current user's home directory cannot be determined, or the default `SQLite`
 /// data directory cannot be created.
+#[allow(clippy::disallowed_methods)]
 pub fn resolve_database_url() -> Result<String, DatabaseUrlError> {
     resolve_database_url_from_parts(
         std::env::var_os(DATABASE_URL_ENV_VAR),
@@ -218,7 +219,7 @@ pub async fn open_startup_database() -> Result<StartupDatabase, DatabaseBootstra
 }
 
 /// Open the mediaserver database and apply the upstream one-time defaults that
-/// ErsatzTV's `DbInitializer` seeds after migrations.
+/// `ErsatzTV`'s `DbInitializer` seeds after migrations.
 ///
 /// # Errors
 ///
@@ -340,8 +341,8 @@ pub async fn inspect_database_schema(
         return Ok(DatabaseSchemaStatus::default());
     }
 
-    let applied_rows = sqlx::query_as::<_, (i64, bool, Vec<u8>)>(
-        r#"SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version"#,
+    let applied_rows = sqlx::query_as::<_, (i64, i64, Vec<u8>)>(
+        r"SELECT version, CASE WHEN success THEN 1 ELSE 0 END AS success, checksum FROM _sqlx_migrations ORDER BY version",
     )
     .fetch_all(pool)
     .await?;
@@ -353,7 +354,7 @@ pub async fn inspect_database_schema(
 
     let dirty_version = applied_rows
         .iter()
-        .find_map(|(version, success, _checksum)| (!success).then_some(*version));
+        .find_map(|(version, success, _checksum)| (*success == 0).then_some(*version));
     let unknown_migrations = applied_rows
         .iter()
         .map(|(version, _success, _checksum)| *version)
@@ -382,14 +383,14 @@ async fn migrations_table_exists(
 ) -> Result<bool, sqlx::Error> {
     let exists: i64 = match database_backend {
         DatabaseBackend::Sqlite => sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'"#,
+            r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
         )
         .fetch_one(pool)
         .await?,
         #[cfg(feature = "mysql")]
         DatabaseBackend::MySql => sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM information_schema.tables
-               WHERE table_schema = DATABASE() AND table_name = '_sqlx_migrations'"#,
+            r"SELECT COUNT(*) FROM information_schema.tables
+               WHERE table_schema = DATABASE() AND table_name = '_sqlx_migrations'",
         )
         .fetch_one(pool)
         .await?,
@@ -482,11 +483,16 @@ async fn ensure_system_playlist_group(pool: &DbPool) -> Result<i64, sqlx::Error>
         return Ok(id);
     }
 
-    let result = sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 1)"#)
+    sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 1)"#)
         .bind(DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME)
         .execute(pool)
         .await?;
-    Ok(last_insert_id(result))
+
+    sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlaylistGroup" WHERE "IsSystem" = 1 ORDER BY "Id" LIMIT 1"#,
+    )
+    .fetch_one(pool)
+    .await
 }
 
 async fn ensure_default_resolution(pool: &DbPool) -> Result<i64, sqlx::Error> {
@@ -557,7 +563,7 @@ async fn ensure_default_ffmpeg_profile(
         return Ok(id);
     }
 
-    let result = sqlx::query(
+    sqlx::query(
         r#"INSERT INTO "FFmpegProfile" (
             "AudioBitrate", "AudioBufferSize", "AudioChannels", "AudioFormat",
             "AudioSampleRate", "BitDepth", "DeinterlaceVideo", "HardwareAcceleration",
@@ -602,7 +608,12 @@ async fn ensure_default_ffmpeg_profile(
     .execute(pool)
     .await?;
 
-    Ok(last_insert_id(result))
+    sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "FFmpegProfile" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(DEFAULT_FFMPEG_PROFILE_NAME)
+    .fetch_one(pool)
+    .await
 }
 
 async fn ensure_default_channel(pool: &DbPool, ffmpeg_profile_id: i64) -> Result<(), sqlx::Error> {
@@ -828,9 +839,9 @@ mod tests {
         let pool = init(&database_url).await.expect("initialize database");
 
         sqlx::query(
-            r#"INSERT INTO _sqlx_migrations
+            r"INSERT INTO _sqlx_migrations
                 (version, description, installed_on, success, checksum, execution_time)
-               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)"#,
+               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)",
         )
         .execute(&pool)
         .await
@@ -852,9 +863,9 @@ mod tests {
         let pool = init(&database_url).await.expect("initialize database");
 
         sqlx::query(
-            r#"INSERT INTO _sqlx_migrations
+            r"INSERT INTO _sqlx_migrations
                 (version, description, installed_on, success, checksum, execution_time)
-               VALUES (9998, 'dirty migration', CURRENT_TIMESTAMP, 0, X'02', 0)"#,
+               VALUES (9998, 'dirty migration', CURRENT_TIMESTAMP, 0, X'02', 0)",
         )
         .execute(&pool)
         .await
@@ -875,7 +886,7 @@ mod tests {
         let database_url = temp_sqlite_database_url();
         let pool = init(&database_url).await.expect("initialize database");
 
-        sqlx::query(r#"UPDATE _sqlx_migrations SET checksum = X'03' WHERE version = 1"#)
+        sqlx::query(r"UPDATE _sqlx_migrations SET checksum = X'03' WHERE version = 1")
             .execute(&pool)
             .await
             .expect("update checksum");
@@ -916,22 +927,22 @@ mod tests {
             .expect("connect database without migrations");
 
         sqlx::query(
-            r#"CREATE TABLE _sqlx_migrations (
+            r"CREATE TABLE _sqlx_migrations (
                 version BIGINT PRIMARY KEY,
                 description TEXT NOT NULL,
                 installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 success BOOLEAN NOT NULL,
                 checksum BLOB NOT NULL,
                 execution_time BIGINT NOT NULL
-            )"#,
+            )",
         )
         .execute(&pool)
         .await
         .expect("create migrations table");
         sqlx::query(
-            r#"INSERT INTO _sqlx_migrations
+            r"INSERT INTO _sqlx_migrations
                 (version, description, installed_on, success, checksum, execution_time)
-               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)"#,
+               VALUES (9999, 'future migration', CURRENT_TIMESTAMP, 1, X'01', 0)",
         )
         .execute(&pool)
         .await
@@ -945,7 +956,7 @@ mod tests {
         assert_eq!(startup.schema_status.unknown_migrations, vec![9999]);
 
         let resolution_table_count: i64 = sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Resolution'"#,
+            r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Resolution'",
         )
         .fetch_one(&startup.pool)
         .await

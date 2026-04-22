@@ -17,3 +17,129 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+  docker:
+    name: Publish Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize image metadata
+        run: |
+          echo "REGISTRY_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        uses: docker/bake-action@v5
+        with:
+          files: docker-bake.hcl
+          targets: ersatzrs
+          push: true
+
+      - name: Verify multi-arch manifest
+        run: |
+          docker buildx imagetools inspect "$REGISTRY_IMAGE:$VERSION" > manifest.txt
+          grep -q 'linux/amd64' manifest.txt
+          grep -q 'linux/arm64' manifest.txt
+          grep -q 'linux/arm/v7' manifest.txt
+
+      - name: Collect static FFmpeg capability reports
+        run: |
+          require_capability() {
+            local file="$1"
+            local name="$2"
+            if ! grep -wq "$name" "$file"; then
+              echo "missing required FFmpeg capability '$name' in $file" >&2
+              exit 1
+            fi
+          }
+
+          assert_common_capabilities() {
+            local slug="$1"
+            require_capability "capability-reports/${slug}-filters.txt" drawvg
+            require_capability "capability-reports/${slug}-filters.txt" subtitles
+            require_capability "capability-reports/${slug}-encoders.txt" aac
+            require_capability "capability-reports/${slug}-encoders.txt" ac3
+            require_capability "capability-reports/${slug}-encoders.txt" libx264
+            require_capability "capability-reports/${slug}-encoders.txt" libx265
+            require_capability "capability-reports/${slug}-encoders.txt" libsvtav1
+            require_capability "capability-reports/${slug}-decoders.txt" h264
+            require_capability "capability-reports/${slug}-decoders.txt" hevc
+            require_capability "capability-reports/${slug}-decoders.txt" av1
+          }
+
+          assert_gpu_capabilities() {
+            local platform="$1"
+            local slug="$2"
+            case "$platform" in
+              linux/amd64)
+                require_capability "capability-reports/${slug}-hwaccels.txt" cuda
+                require_capability "capability-reports/${slug}-hwaccels.txt" vaapi
+                require_capability "capability-reports/${slug}-hwaccels.txt" vulkan
+                require_capability "capability-reports/${slug}-hwaccels.txt" qsv
+                require_capability "capability-reports/${slug}-encoders.txt" h264_nvenc
+                require_capability "capability-reports/${slug}-encoders.txt" hevc_nvenc
+                require_capability "capability-reports/${slug}-encoders.txt" h264_vaapi
+                require_capability "capability-reports/${slug}-encoders.txt" hevc_vaapi
+                require_capability "capability-reports/${slug}-encoders.txt" h264_qsv
+                require_capability "capability-reports/${slug}-encoders.txt" hevc_qsv
+                require_capability "capability-reports/${slug}-decoders.txt" h264_cuvid
+                require_capability "capability-reports/${slug}-decoders.txt" hevc_cuvid
+                ;;
+              linux/arm64)
+                require_capability "capability-reports/${slug}-hwaccels.txt" vaapi
+                require_capability "capability-reports/${slug}-hwaccels.txt" vulkan
+                require_capability "capability-reports/${slug}-encoders.txt" h264_vaapi
+                require_capability "capability-reports/${slug}-encoders.txt" hevc_vaapi
+                ;;
+              linux/arm/v7)
+                ;;
+              *)
+                echo "unhandled platform '$platform'" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          mkdir -p capability-reports
+          for platform in linux/amd64 linux/arm64 linux/arm/v7; do
+            slug="${platform//\//-}"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -version \
+              > "capability-reports/${slug}-ffmpeg-version.txt"
+            docker run --rm --platform "$platform" --entrypoint ffprobe "$REGISTRY_IMAGE:$VERSION" -version \
+              > "capability-reports/${slug}-ffprobe-version.txt"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -filters \
+              > "capability-reports/${slug}-filters.txt"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -encoders \
+              > "capability-reports/${slug}-encoders.txt"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -decoders \
+              > "capability-reports/${slug}-decoders.txt"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -hwaccels \
+              > "capability-reports/${slug}-hwaccels.txt"
+            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" \
+              -hide_banner \
+              -f lavfi -i color=c=black:s=32x32:d=0.1 \
+              -vf "drawvg=script='rect 4 4 16 16 fill',format=yuv420p" \
+              -frames:v 1 -f null -
+            assert_common_capabilities "$slug"
+            assert_gpu_capabilities "$platform" "$slug"
+          done
+
+      - name: Upload FFmpeg capability reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-capability-reports
+          path: capability-reports/

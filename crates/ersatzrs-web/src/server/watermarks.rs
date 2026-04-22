@@ -507,7 +507,7 @@ pub async fn preview_watermark_placement(
         .map_err(|e| ServerFnError::new(format!("write svg: {e}")))?;
     let svg_path = tmp.path().to_string_lossy().to_string();
 
-    let out = Command::new("ffmpeg")
+    let out = Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
         .args([
             "-y",
             "-f",

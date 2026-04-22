@@ -17,9 +17,10 @@ pub async fn count_playout_warnings() -> Result<u32, ServerFnError> {
 /// Returns (error_count, warning_count) from the current startup/runtime
 /// health checks wired into the web host.
 #[server]
+#[allow(clippy::unused_async)]
 pub async fn count_health_issues() -> Result<(u32, u32), ServerFnError> {
     use crate::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.system_startup.health_issue_counts())
+    Ok(state.health_issue_counts())
 }

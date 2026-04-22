@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ersatzrs_core::hls::HlsSessionRegistry;
+use ersatzrs_ffmpeg::FfmpegRuntimeReport;
 use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus, DbPool};
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
@@ -34,6 +35,7 @@ pub struct AppState {
     pub pool: DbPool,
     pub database_backend: DatabaseBackend,
     pub system_startup: Arc<SystemStartup>,
+    pub ffmpeg_runtime: Arc<FfmpegRuntimeReport>,
     pub device_uuid: Uuid,
     pub tuner_count: i32,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
@@ -53,6 +55,7 @@ impl AppState {
         pool: DbPool,
         database_backend: DatabaseBackend,
         system_startup: SystemStartup,
+        ffmpeg_runtime: FfmpegRuntimeReport,
         device_uuid: Uuid,
         tuner_count: i32,
         iptv_access_token_verifier: IptvAccessTokenVerifier,
@@ -65,6 +68,7 @@ impl AppState {
             pool,
             database_backend,
             system_startup: Arc::new(system_startup),
+            ffmpeg_runtime: Arc::new(ffmpeg_runtime),
             device_uuid,
             tuner_count,
             hls_sessions,
@@ -86,9 +90,20 @@ impl AppState {
                 database_ready: true,
                 schema_status: DatabaseSchemaStatus::default(),
             },
+            FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             2,
             iptv_access_token_verifier,
+        )
+    }
+
+    #[must_use]
+    pub fn health_issue_counts(&self) -> (u32, u32) {
+        let (startup_errors, startup_warnings) = self.system_startup.health_issue_counts();
+        let (ffmpeg_errors, ffmpeg_warnings) = self.ffmpeg_runtime.issue_counts();
+        (
+            startup_errors.saturating_add(ffmpeg_errors),
+            startup_warnings.saturating_add(ffmpeg_warnings),
         )
     }
 }

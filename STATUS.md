@@ -231,7 +231,11 @@ startup report instead of spawning `ffmpeg -hwaccels` per request. Docker
 delivery now stays in this repository with `docker/Dockerfile`,
 `docker-bake.hcl`, GHCR multi-arch release workflow coverage for
 `linux/amd64`, `linux/arm64`, and `linux/arm/v7`, and hardware-gated smoke
-scripts for NVENC, VAAPI, and Vulkan. Review outcome: ready for review.
+scripts for NVENC, VAAPI, and Vulkan. Review blockers are closed: CI restored
+all-features test coverage, the release workflow now checks static GPU
+capability reports, Docker helper tools are pinned, the Bookworm FFmpeg 8.1
+build path handles Vulkan/SVT-AV1 correctly, and the Leptos hydration library
+target builds into the image. Review outcome: GO for the next Phase 7 slice.
 
 Next up: continue Phase 7 items from the master plan, prioritising the
 remaining admin/navigation placeholders, side-by-side benchmarking, long soak
@@ -290,6 +294,9 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | Date | Agent | Summary |
 | --- | --- | --- |
 | 2026-04-22 | GitHub Copilot (GPT-5.4) | Updated the ErsatzRS SVG wordmarks so the artwork branding reads `ErsatzRS` instead of `ErsatzTV` across the main logo variants. |
+| 2026-04-22 | Codex (GPT-5) | Fixed Docker startup after the FFmpeg packaging fix by making `ersatzrs-web` fall back to environment-based Leptos configuration when the build-stage Cargo manifest is absent, setting production `LEPTOS_*` image defaults, and smoke-testing the rebuilt container to healthy `/healthz`. |
+| 2026-04-22 | Codex (GPT-5) | Fixed the Docker runtime FFmpeg linkage gap by adding the missing `libwebpmux3` and `libva-x11-2` runtime libraries and final-image `ldd` plus `ffmpeg`/`ffprobe`/`drawvg` checks so unresolved FFmpeg shared libraries fail during image build. |
+| 2026-04-22 | Codex (GPT-5) | Phase 7 Slice 10 follow-up — fixed review blockers by restoring all-features CI coverage, adding static GPU capability assertions, pinning Docker helper tools, repairing the Bookworm FFmpeg 8.1 Vulkan/SVT-AV1 build path, adding the Leptos hydration library target, and validating the amd64 Docker check. |
 | 2026-04-22 | Codex (GPT-5) | Phase 7 Slice 10 — added ADR 0008, structured FFmpeg/ffprobe 8.1 runtime checks with capability reports and cached hardware detection, in-repo FFmpeg 8.1 Docker multi-arch release scaffolding, GHCR manifest/capability-report workflow checks, and hardware smoke scripts. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added startup readiness and downgrade/schema checks: `ersatzrs-infra` now inspects `_sqlx_migrations` before migrations run so the web host can stay up and report unknown, dirty, or checksum-mismatched schema rows through `/healthz` and the Support badge, and the HDHR config keys now match ErsatzTV with legacy-key backfill. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added an explicit mediaserver bootstrap in `ersatzrs-infra` that ports the current ErsatzTV one-time defaults for the system Trakt playlist group, stock resolutions, default FFmpeg profile/config keys, and default channel; `ersatzrs-web` now uses that bootstrap and the lazy UI/Trakt seed paths were removed. |

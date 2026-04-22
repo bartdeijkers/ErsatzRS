@@ -1,6 +1,7 @@
 //! Read-only playout timeline visualiser.
 #![allow(clippy::too_many_lines)]
 
+#[cfg(not(target_arch = "wasm32"))]
 use chrono::{Local, TimeZone, Timelike};
 use leptos::prelude::*;
 

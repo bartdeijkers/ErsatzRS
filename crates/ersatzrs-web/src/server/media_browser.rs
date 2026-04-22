@@ -514,6 +514,7 @@ pub async fn empty_trash() -> Result<u64, ServerFnError> {
     Ok(result.rows_affected())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_movies(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -550,6 +551,7 @@ async fn load_trash_movies(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_shows(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -586,6 +588,7 @@ async fn load_trash_shows(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_artists(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -619,6 +622,7 @@ async fn load_trash_artists(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_other_videos(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -654,6 +658,7 @@ async fn load_trash_other_videos(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_songs(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -691,6 +696,7 @@ async fn load_trash_songs(
         .collect())
 }
 
+#[cfg(feature = "ssr")]
 async fn load_trash_images(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {

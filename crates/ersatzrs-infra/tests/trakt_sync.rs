@@ -48,6 +48,7 @@ impl TraktApiClient for FakeTraktApi {
 #[tokio::test]
 async fn add_refresh_match_and_generate_playlist() {
     let pool = common::test_db().await;
+    seed_system_playlist_group(&pool).await;
     common::seed_media_graph(&pool).await;
     seed_movie_with_guid(&pool).await;
 
@@ -91,6 +92,15 @@ async fn add_refresh_match_and_generate_playlist() {
     assert_eq!(playlist_item.get::<i32, _>("CollectionType"), 10);
     assert_eq!(playlist_item.get::<i64, _>("MediaItemId"), 1);
     assert_eq!(playlist_item.get::<i32, _>("PlaybackOrder"), 1);
+}
+
+async fn seed_system_playlist_group(pool: &sqlx::SqlitePool) {
+    pool.execute(
+        r#"INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+           VALUES (99, 'Trakt Lists', 1)"#,
+    )
+    .await
+    .unwrap();
 }
 
 async fn seed_movie_with_guid(pool: &sqlx::SqlitePool) {

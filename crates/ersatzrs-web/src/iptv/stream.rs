@@ -342,7 +342,7 @@ mod tests {
             eprintln!("skipping: no Big Buck Bunny fixture found in testdata/");
             return;
         };
-        if tokio::process::Command::new("ffmpeg")
+        if tokio::process::Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
             .arg("-version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())

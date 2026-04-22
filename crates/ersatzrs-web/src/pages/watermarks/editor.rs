@@ -118,6 +118,7 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
         #[cfg(target_arch = "wasm32")]
         {
             use gloo_timers::future::TimeoutFuture;
+            use leptos::task::spawn_local;
             spawn_local(async move {
                 TimeoutFuture::new(400).await;
                 preview_key.set(Some(params));
@@ -294,6 +295,7 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                                 on:change=move |ev| {
                                     #[cfg(target_arch = "wasm32")]
                                     {
+                                        use leptos::task::spawn_local;
                                         use wasm_bindgen::JsCast;
                                         let target = ev.target().unwrap();
                                         let input = target
@@ -397,7 +399,6 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
 #[cfg(target_arch = "wasm32")]
 async fn upload_file(input: web_sys::HtmlInputElement) -> Option<(String, String)> {
     use gloo_net::http::Request;
-    use wasm_bindgen::JsCast;
     use web_sys::FormData;
 
     let files = input.files()?;
