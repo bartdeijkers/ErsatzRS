@@ -61,6 +61,12 @@ cargo deny check
 
 # Snapshot review (after test changes)
 cargo insta review
+
+# Free disk space: remove all build artifacts (~170 GB typical).
+# Run periodically or before compacting the WSL ext4.vhdx.
+# cargo-sweep is an alternative that prunes only old/unused artifacts:
+#   cargo install cargo-sweep && cargo sweep --time 30
+cargo clean
 ```
 
 Non-Rust checks available now:
