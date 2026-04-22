@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-22 (Phase 7 Slice 10 — FFmpeg runtime checks and multi-arch images)
+Last updated: 2026-04-22 (Phase 7 follow-up — ersatzrs-web structure refactor)
 
 ## Current Phase
 
@@ -242,6 +242,16 @@ remaining admin/navigation placeholders, side-by-side benchmarking, long soak
 tests, and the follow-up needed to reconcile the older SVG-template wording
 with FFmpeg drawvg's VGS script model.
 
+The `ersatzrs-web` structure refactor now has the target web-crate boundaries
+documented in [`docs/reference/web-crate-structure.md`](docs/reference/web-crate-structure.md).
+The crate has a thin `main.rs`; runtime startup, state, config, router
+composition, and background tasks live under `src/host/`; non-admin protocols
+live under `src/transport/`; plain axum admin APIs live under `src/api/`; and
+the Leptos admin app, routes, pages, server functions, layout, UI primitives,
+and style modules live under `src/admin/`. Static public asset buckets are
+reserved as `public/images/` and `public/js/`, while generated hydration assets
+remain served from `/pkg`.
+
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
 write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
@@ -251,7 +261,7 @@ block item targets, and deco break/template rows.
 
 ### Admin UI Route Coverage
 
-The NavDrawer in [`crates/ersatzrs-web/src/ui/layout.rs`](crates/ersatzrs-web/src/ui/layout.rs)
+The NavDrawer in [`crates/ersatzrs-web/src/admin/layout/nav.rs`](crates/ersatzrs-web/src/admin/layout/nav.rs)
 advertises the full ErsatzTV navigation tree, but several entries are
 intentional placeholders pending Phase 7. Authoritative per-link mapping lives
 in [`docs/reference/parity-matrix.md`](docs/reference/parity-matrix.md#admin-ui-route-coverage);
@@ -293,6 +303,10 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-22 | Codex (GPT-5) | Fixed admin shell sidebar/header parity with ErsatzTV: added the ErsatzRS logo beside the hamburger menu, moved the app bar above the sidebar so it spans the full viewport, switched the sidebar to the gray surface background, and made sidebar groups native collapsed-by-default details controls. Gates: fmt and `cargo check -p ersatzrs-web --all-features`; browser smoke checked with local FFmpeg 8.1. |
+| 2026-04-22 | Codex (GPT-5) | Completed the `ersatzrs-web` structure refactor: restored production Leptos config fallback, documented the target `host`/`transport`/`api`/`admin` layout with `public/images` and `public/js`, moved admin pages/server functions/UI/style under `src/admin`, moved IPTV/HDHR/dev streaming under `src/transport`, moved watermark upload endpoints under `src/api`, and split admin routes plus layout modules. |
+| 2026-04-22 | GitHub Copilot (GPT-5.4) | Continued the `ersatzrs-web` structure refactor by creating an explicit `src/admin/` boundary, moving the admin shell and home page out of `src/ui/`, splitting the home-page CSS into its own module, and broadening the stylance build watch to track future admin moves. |
+| 2026-04-22 | GitHub Copilot (GPT-5.4) | Started the `ersatzrs-web` structure refactor with a compile-safe host extraction: added a real library root, reduced `main.rs` to a thin wrapper, and moved startup, router composition, asset lookup, and background tasks into `src/host/` without changing route behavior. |
 | 2026-04-22 | GitHub Copilot (GPT-5.4) | Updated the ErsatzRS SVG wordmarks so the artwork branding reads `ErsatzRS` instead of `ErsatzTV` across the main logo variants. |
 | 2026-04-22 | Codex (GPT-5) | Fixed Docker startup after the FFmpeg packaging fix by making `ersatzrs-web` fall back to environment-based Leptos configuration when the build-stage Cargo manifest is absent, setting production `LEPTOS_*` image defaults, and smoke-testing the rebuilt container to healthy `/healthz`. |
 | 2026-04-22 | Codex (GPT-5) | Fixed the Docker runtime FFmpeg linkage gap by adding the missing `libwebpmux3` and `libva-x11-2` runtime libraries and final-image `ldd` plus `ffmpeg`/`ffprobe`/`drawvg` checks so unresolved FFmpeg shared libraries fail during image build. |

@@ -1,7 +1,5 @@
 fn main() {
-    println!("cargo:rerun-if-changed=src/ui");
-    println!("cargo:rerun-if-changed=src/pages");
-    println!("cargo:rerun-if-changed=src/style");
+    println!("cargo:rerun-if-changed=src/admin");
 
     let status = std::process::Command::new("stylance")
         .args([

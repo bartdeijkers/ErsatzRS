@@ -1,5 +1,0 @@
----
-source: crates/ersatzrs-web/src/iptv/guide.rs
-expression: output
----
-<?xml version="1.0" encoding="utf-8"?><tv generator-info-name="ersatzrs"><channel id="1"><display-name>Movies</display-name></channel><channel id="2"><display-name>Kids</display-name></channel><programme start="20260417200000 +0000" stop="20260417210000 +0000" channel="1"><title>Big Buck Bunny</title></programme><programme start="20260417210000 +0000" stop="20260417220000 +0000" channel="1"><title>Sintel</title></programme><programme start="20260417200000 +0000" stop="20260417203000 +0000" channel="2"><title>Pingu</title></programme><programme start="20260417203000 +0000" stop="20260417210000 +0000" channel="2"><title>Unknown</title></programme></tv>

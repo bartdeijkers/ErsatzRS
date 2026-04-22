@@ -1,0 +1,12 @@
+---
+source: crates/ersatzrs-web/src/transport/hdhr/http.rs
+expression: json
+---
+{
+  "ScanInProgress": 0,
+  "ScanPossible": 1,
+  "Source": "Cable",
+  "SourceList": [
+    "Cable"
+  ]
+}

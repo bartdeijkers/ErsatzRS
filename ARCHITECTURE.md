@@ -39,6 +39,10 @@ Rules:
 - `ersatzrs-infra` implements repository and provider traits from `ersatzrs-core`.
 - `ersatzrs-app` coordinates use cases and depends on traits, not concrete storage.
 - `ersatzrs-web` owns HTTP, Leptos, IPTV, HLS, and HDHomeRun endpoints.
+- `ersatzrs-web` follows the folder boundaries in
+  [docs/reference/web-crate-structure.md](docs/reference/web-crate-structure.md):
+  `host` for runtime, `transport` for IPTV/HDHomeRun-style protocols, `api` for
+  plain axum admin APIs, and `admin` for the Leptos UI.
 - `ersatzrs-scanner` owns scanner CLI concerns.
 - `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction.
 - Cycles are forbidden.

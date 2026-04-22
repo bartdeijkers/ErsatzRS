@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-web/src/transport/iptv/variant.rs
+expression: output
+---
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=12230400,RESOLUTION=1920x1080,CODECS="avc1.4D4028,mp4a.40.2"
+http://example.test:8080/iptv/session/1/hls.m3u8

@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-web/src/transport/iptv/variant.rs
+expression: output
+---
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=10000000
+http://example.test:8080/iptv/session/99/hls.m3u8

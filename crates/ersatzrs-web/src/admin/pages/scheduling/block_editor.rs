@@ -1,0 +1,725 @@
+//! Block editor — ports `Pages/BlockEditor.razor`.
+//!
+//! The entire editor is a single `#[island]` so all item-list mutations
+//! (add, remove, reorder, field changes) and the preview modal happen
+//! client-side without round-trips. The `#[server]` functions are called only
+//! for the initial data load (SSR) and for the save / preview actions.
+#![allow(clippy::too_many_lines, dead_code)]
+use leptos::prelude::*;
+use leptos_router::hooks::{use_navigate, use_params_map};
+use leptos_router::NavigateOptions;
+
+use crate::admin::server_fns::blocks::{
+    get_block, get_block_items, playback_order_label, preview_block_playout, save_block_with_items,
+    BlockForm, BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
+};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+
+stylance::import_crate_style!(style, "src/admin/pages/scheduling/block_editor.module.css");
+
+// ---------------------------------------------------------------------------
+// SSR wrapper
+// ---------------------------------------------------------------------------
+
+#[component]
+pub fn BlockEditorPage() -> impl IntoView {
+    let params = use_params_map();
+    let block_id =
+        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+
+    let block_data: Resource<Option<BlockForm>> =
+        Resource::new(
+            block_id,
+            |id| async move { get_block(id).await.unwrap_or(None) },
+        );
+
+    let items_data: Resource<Vec<BlockItemForm>> = Resource::new(block_id, |id| async move {
+        get_block_items(id).await.unwrap_or_default()
+    });
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            {move || {
+                let maybe_block = block_data.get();
+                let maybe_items = items_data.get();
+                match (maybe_block, maybe_items) {
+                    (Some(Some(block)), Some(items)) => view! {
+                        <BlockEditorIsland
+                            initial_block=block
+                            initial_items=items
+                        />
+                    }.into_any(),
+                    (Some(None), _) => view! {
+                        <p class=style::empty>"Block not found."</p>
+                    }.into_any(),
+                    _ => view! { <p class=style::empty>"Loading…"</p> }.into_any(),
+                }
+            }}
+        </Suspense>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Island — the fully hydrated editor
+// ---------------------------------------------------------------------------
+
+#[island]
+fn BlockEditorIsland(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) -> impl IntoView {
+    use crate::admin::server_fns::blocks::{collection_type, playback_order, stop_scheduling};
+
+    // ── Block metadata state ────────────────────────────────────────────
+    let block_id = initial_block.id;
+    let name = RwSignal::new(initial_block.name.clone());
+    let group_name = initial_block.group_name.clone();
+    let duration_hours = RwSignal::new(initial_block.minutes / 60);
+    let duration_minutes = RwSignal::new(initial_block.minutes % 60);
+    let stop_sched = RwSignal::new(initial_block.stop_scheduling);
+
+    // ── Items state ─────────────────────────────────────────────────────
+    let items: RwSignal<Vec<BlockItemForm>> = RwSignal::new(initial_items);
+
+    // ── Selected item index (into items vec) ────────────────────────────
+    let selected_idx: RwSignal<Option<usize>> = RwSignal::new(None);
+
+    // ── Preview modal ────────────────────────────────────────────────────
+    let preview_open = RwSignal::new(false);
+    let preview_rows: RwSignal<Vec<PlayoutPreviewRow>> = RwSignal::new(Vec::new());
+    let preview_pending = RwSignal::new(false);
+
+    // ── Actions ─────────────────────────────────────────────────────────
+    let save_action = Action::new(|form: &BlockWithItemsForm| {
+        let form = form.clone();
+        async move { save_block_with_items(form).await }
+    });
+
+    let toast = use_toast();
+    let navigate = use_navigate();
+
+    Effect::new(move |_| {
+        if let Some(res) = save_action.value().get() {
+            match res {
+                Ok(()) => {
+                    toast.push("Block saved.", ToastSeverity::Success);
+                    navigate("/blocks", NavigateOptions::default());
+                }
+                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+            }
+        }
+    });
+
+    let on_save = move |()| {
+        let minutes = duration_hours.get_untracked() * 60 + duration_minutes.get_untracked();
+        let form = BlockWithItemsForm {
+            id: block_id,
+            group_id: initial_block.group_id,
+            name: name.get_untracked().trim().to_string(),
+            minutes,
+            stop_scheduling: stop_sched.get_untracked(),
+            items: items.get_untracked(),
+        };
+        save_action.dispatch(form);
+    };
+
+    let on_preview = move |()| {
+        preview_rows.set(Vec::new());
+        preview_open.set(true);
+        preview_pending.set(true);
+        let id = block_id;
+        leptos::task::spawn_local(async move {
+            let result = preview_block_playout(id).await.unwrap_or_default();
+            preview_rows.set(result);
+            preview_pending.set(false);
+        });
+    };
+
+    // ── Item list operations ─────────────────────────────────────────────
+
+    let add_item = move |()| {
+        let next_idx = items
+            .get_untracked()
+            .iter()
+            .map(|i| i.index)
+            .max()
+            .unwrap_or(-1)
+            + 1;
+        let new_item = BlockItemForm {
+            id: 0,
+            index: next_idx,
+            collection_type: collection_type::COLLECTION,
+            playback_order: playback_order::CHRONOLOGICAL,
+            ..Default::default()
+        };
+        items.update(|v| v.push(new_item));
+        let new_sel = items.get_untracked().len().saturating_sub(1);
+        selected_idx.set(Some(new_sel));
+    };
+
+    let remove_item = move |idx: usize| {
+        items.update(|v| {
+            v.remove(idx);
+        });
+        selected_idx.set(None);
+    };
+
+    let move_up = move |idx: usize| {
+        items.update(|v| {
+            if idx == 0 {
+                return;
+            }
+            // Find the item with the next-lower index value
+            let cur_idx_val = v[idx].index;
+            if let Some(pos) = v
+                .iter()
+                .enumerate()
+                .filter(|(_, i)| i.index < cur_idx_val)
+                .max_by_key(|(_, i)| i.index)
+                .map(|(p, _)| p)
+            {
+                v[idx].index = v[pos].index;
+                v[pos].index = cur_idx_val;
+                v.sort_by_key(|i| i.index);
+            }
+        });
+    };
+
+    view! {
+        <div class=style::page>
+            // ── Sticky action bar ───────────────────────────────────────
+            <div class=style::action_bar>
+                <span class=style::action_bar_title>
+                    {group_name.clone()} " / " {move || name.get()}
+                </span>
+                <button
+                    class=style::btn_primary
+                    disabled=move || save_action.pending().get()
+                    on:click=move |_| on_save(())
+                >
+                    "Save Block"
+                </button>
+                <button
+                    class=style::btn_secondary
+                    on:click=move |_| add_item(())
+                >
+                    "+ Add Item"
+                </button>
+                <button
+                    class=style::btn_preview
+                    on:click=move |_| on_preview(())
+                >
+                    "Preview Playout"
+                </button>
+            </div>
+
+            <div class=style::content>
+                // ── Block metadata ──────────────────────────────────────
+                <div>
+                    <h2 class=style::section_title>"Block"</h2>
+                    <div class=style::form_grid>
+                        <div class=style::field>
+                            <label class=style::label>"Block Group"</label>
+                            <input class=style::input disabled=true prop:value=group_name.clone()/>
+                        </div>
+                        <div class=style::field>
+                            <label class=style::label>"Block Name"</label>
+                            <input
+                                class=style::input
+                                prop:value=move || name.get()
+                                on:input=move |e| name.set(event_target_value(&e))
+                            />
+                        </div>
+                        <div class=style::field>
+                            <label class=style::label>"Duration"</label>
+                            <div class=style::duration_row>
+                                <input
+                                    class=style::duration_input
+                                    type="number"
+                                    min="0"
+                                    prop:value=move || duration_hours.get().to_string()
+                                    on:input=move |e| {
+                                        if let Ok(h) = event_target_value(&e).parse::<i32>() {
+                                            duration_hours.set(h.max(0));
+                                        }
+                                    }
+                                />
+                                <span class=style::duration_unit>"h"</span>
+                                <select
+                                    class=style::select
+                                    prop:value=move || duration_minutes.get().to_string()
+                                    on:change=move |e| {
+                                        if let Ok(m) = event_target_value(&e).parse::<i32>() {
+                                            duration_minutes.set(m);
+                                        }
+                                    }
+                                >
+                                    {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+                                        .iter()
+                                        .map(|&m| view! {
+                                            <option value=m.to_string()>{m.to_string()}</option>
+                                        })
+                                        .collect_view()}
+                                </select>
+                                <span class=style::duration_unit>"min"</span>
+                            </div>
+                        </div>
+                        <div class=style::field>
+                            <label class=style::label>"Stop Scheduling"</label>
+                            <select
+                                class=style::select
+                                prop:value=move || stop_sched.get().to_string()
+                                on:change=move |e| {
+                                    if let Ok(v) = event_target_value(&e).parse::<i32>() {
+                                        stop_sched.set(v);
+                                    }
+                                }
+                            >
+                                <option value=stop_scheduling::AFTER_DURATION_END.to_string()>
+                                    "After Duration End"
+                                </option>
+                                <option value=stop_scheduling::BEFORE_DURATION_END.to_string()>
+                                    "Before Duration End"
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                // ── Block items table ───────────────────────────────────
+                <div>
+                    <h2 class=style::section_title>"Block Items"</h2>
+                    <div class=style::items_table_wrap>
+                        <table class=style::items_table>
+                            <thead>
+                                <tr>
+                                    <th>"Collection"</th>
+                                    <th>"Playback Order"</th>
+                                    <th>"EPG"</th>
+                                    <th>"No WM"</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {move || {
+                                    let current_items = items.get();
+                                    current_items
+                                        .into_iter()
+                                        .enumerate()
+                                        .map(|(idx, item)| {
+                                            let is_selected = selected_idx.get() == Some(idx);
+                                            let order_lbl = playback_order_label(
+                                                item.playback_order,
+                                                item.collection_type,
+                                            );
+                                            let col_name = item.collection_name.clone();
+                                            view! {
+                                                <tr
+                                                    class=if is_selected { style::row_selected } else { "" }
+                                                    on:click=move |_| {
+                                                        selected_idx.set(Some(idx));
+                                                    }
+                                                >
+                                                    <td>{col_name}</td>
+                                                    <td>{order_lbl}</td>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            prop:checked=item.include_in_program_guide
+                                                            on:change=move |e| {
+                                                                let checked = event_target_checked(&e);
+                                                                items.update(|v| {
+                                                                    if let Some(i) = v.get_mut(idx) {
+                                                                        i.include_in_program_guide = checked;
+                                                                    }
+                                                                });
+                                                            }
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            prop:checked=item.disable_watermarks
+                                                            on:change=move |e| {
+                                                                let checked = event_target_checked(&e);
+                                                                items.update(|v| {
+                                                                    if let Some(i) = v.get_mut(idx) {
+                                                                        i.disable_watermarks = checked;
+                                                                    }
+                                                                });
+                                                            }
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <div class=style::row_actions>
+                                                            <button
+                                                                class=style::icon_btn
+                                                                disabled=move || idx == 0
+                                                                on:click=move |_| move_up(idx)
+                                                                title="Move up"
+                                                            >
+                                                                "↑"
+                                                            </button>
+                                                            <button
+                                                                class=style::icon_btn
+                                                                disabled=move || idx + 1 >= items.get().len()
+                                                                on:click=move |_| {
+                                                                    items.update(|v| {
+                                                                        let cur = v[idx].index;
+                                                                        if let Some(pos) = v
+                                                                            .iter()
+                                                                            .enumerate()
+                                                                            .filter(|(_, i)| i.index > cur)
+                                                                            .min_by_key(|(_, i)| i.index)
+                                                                            .map(|(p, _)| p)
+                                                                        {
+                                                                            v[idx].index = v[pos].index;
+                                                                            v[pos].index = cur;
+                                                                            v.sort_by_key(|i| i.index);
+                                                                        }
+                                                                    });
+                                                                }
+                                                                title="Move down"
+                                                            >
+                                                                "↓"
+                                                            </button>
+                                                            <button
+                                                                class=format!("{} {}", style::icon_btn, style::icon_btn_delete)
+                                                                on:click=move |_| remove_item(idx)
+                                                                title="Remove"
+                                                            >
+                                                                "✕"
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()
+                                }}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                // ── Selected item editor ────────────────────────────────
+                {move || {
+                    selected_idx.get().and_then(|idx| {
+                        items.get().into_iter().nth(idx).map(|item| {
+                            view! { <ItemEditor item=item idx=idx items=items/> }
+                        })
+                    })
+                }}
+            </div>
+
+            // ── Preview modal ───────────────────────────────────────────
+            <Show when=move || preview_open.get()>
+                <div
+                    class=style::modal_backdrop
+                    on:click=move |_| preview_open.set(false)
+                />
+                <div class=style::modal_panel>
+                    <button
+                        class=style::modal_close
+                        on:click=move |_| preview_open.set(false)
+                    >
+                        "✕ Close"
+                    </button>
+                    <h2 class=style::modal_title>"Preview Block Playout"</h2>
+                    <Show when=move || preview_pending.get()>
+                        <p class=style::empty>"Computing preview…"</p>
+                    </Show>
+                    <Show when=move || !preview_pending.get() && preview_rows.get().is_empty()>
+                        <p class=style::empty>"No items to preview."</p>
+                    </Show>
+                    <Show when=move || !preview_pending.get() && !preview_rows.get().is_empty()>
+                        <table class=style::preview_table>
+                            <thead>
+                                <tr>
+                                    <th>"Start"</th>
+                                    <th>"Finish"</th>
+                                    <th>"Media Item"</th>
+                                    <th>"Duration"</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {move || preview_rows.get().into_iter().map(|r| view! {
+                                    <tr>
+                                        <td>{r.start}</td>
+                                        <td>{r.finish}</td>
+                                        <td>{r.title}</td>
+                                        <td>{r.duration}</td>
+                                    </tr>
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </Show>
+                </div>
+            </Show>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Item editor sub-component (inside the island, not a separate island)
+// ---------------------------------------------------------------------------
+
+#[component]
+fn ItemEditor(
+    item: BlockItemForm,
+    idx: usize,
+    items: RwSignal<Vec<BlockItemForm>>,
+) -> impl IntoView {
+    use crate::admin::server_fns::blocks::{
+        collection_type, playback_order, search_collections_for_block, search_seasons_for_block,
+        search_shows_for_block, search_smart_collections_for_block,
+    };
+
+    let col_type = RwSignal::new(item.collection_type);
+    let col_query = RwSignal::new(item.collection_name.clone());
+    let suggestions: RwSignal<Vec<(i64, String)>> = RwSignal::new(Vec::new());
+    let show_suggest = RwSignal::new(false);
+    let pb_order = RwSignal::new(item.playback_order);
+    let search_title = RwSignal::new(item.search_title.clone().unwrap_or_default());
+    let search_query_val = RwSignal::new(item.search_query.clone().unwrap_or_default());
+
+    // Sync local col_type → items list; skip the initial run so loaded
+    // item references are not wiped when the editor first mounts.
+    Effect::new(move |prev: Option<()>| {
+        let ct = col_type.get();
+        if prev.is_none() {
+            // First run: signal is already in sync with the loaded item.
+            return;
+        }
+        items.update(|v| {
+            if let Some(i) = v.get_mut(idx) {
+                i.collection_type = ct;
+                i.collection_id = None;
+                i.smart_collection_id = None;
+                i.media_item_id = None;
+                i.collection_name = String::new();
+            }
+        });
+        col_query.set(String::new());
+        suggestions.set(Vec::new());
+        show_suggest.set(false);
+    });
+
+    // Sync pb_order → items
+    Effect::new(move |_| {
+        let order = pb_order.get();
+        items.update(|v| {
+            if let Some(i) = v.get_mut(idx) {
+                i.playback_order = order;
+            }
+        });
+    });
+
+    // Sync search fields → items
+    Effect::new(move |_| {
+        let title = search_title.get();
+        let query = search_query_val.get();
+        items.update(|v| {
+            if let Some(i) = v.get_mut(idx) {
+                i.search_title = if title.is_empty() { None } else { Some(title) };
+                i.search_query = if query.is_empty() { None } else { Some(query) };
+                i.collection_name = i
+                    .search_title
+                    .clone()
+                    .or_else(|| i.search_query.clone())
+                    .unwrap_or_default();
+            }
+        });
+    });
+
+    // Fetch suggestions when col_query changes
+    Effect::new(move |_| {
+        let q = col_query.get();
+        let ct = col_type.get_untracked();
+        let trimmed = q.trim().to_string();
+        if trimmed.is_empty() {
+            suggestions.set(Vec::new());
+            show_suggest.set(false);
+            return;
+        }
+        show_suggest.set(true);
+        leptos::task::spawn_local(async move {
+            let results: Vec<(i64, String)> = match ct {
+                t if t == collection_type::COLLECTION => search_collections_for_block(trimmed)
+                    .await
+                    .unwrap_or_default(),
+                t if t == collection_type::SMART_COLLECTION => {
+                    search_smart_collections_for_block(trimmed)
+                        .await
+                        .unwrap_or_default()
+                }
+                t if t == collection_type::TELEVISION_SHOW => {
+                    search_shows_for_block(trimmed).await.unwrap_or_default()
+                }
+                t if t == collection_type::TELEVISION_SEASON => {
+                    search_seasons_for_block(trimmed).await.unwrap_or_default()
+                }
+                _ => vec![],
+            };
+            suggestions.set(results);
+        });
+    });
+
+    let select_suggestion = move |id: i64, name: String| {
+        let ct = col_type.get_untracked();
+        items.update(|v| {
+            if let Some(item) = v.get_mut(idx) {
+                item.collection_name.clone_from(&name);
+                match ct {
+                    t if t == collection_type::COLLECTION => {
+                        item.collection_id = Some(id);
+                    }
+                    t if t == collection_type::SMART_COLLECTION => {
+                        item.smart_collection_id = Some(id);
+                    }
+                    t if t == collection_type::TELEVISION_SHOW
+                        || t == collection_type::TELEVISION_SEASON =>
+                    {
+                        item.media_item_id = Some(id);
+                    }
+                    _ => {}
+                }
+            }
+        });
+        col_query.set(name);
+        suggestions.set(Vec::new());
+        show_suggest.set(false);
+    };
+
+    let playback_order_options = move || {
+        let ct = col_type.get();
+        match ct {
+            t if t == collection_type::TELEVISION_SHOW => vec![
+                (playback_order::SEASON_EPISODE, "Season, Episode"),
+                (playback_order::CHRONOLOGICAL, "Chronological"),
+                (playback_order::SHUFFLE, "Shuffle"),
+                (playback_order::RANDOM, "Random"),
+            ],
+            _ => vec![
+                (playback_order::CHRONOLOGICAL, "Chronological"),
+                (playback_order::SHUFFLE, "Shuffle"),
+                (playback_order::RANDOM, "Random"),
+            ],
+        }
+    };
+
+    let needs_autocomplete = move || {
+        let ct = col_type.get();
+        ct == collection_type::COLLECTION
+            || ct == collection_type::SMART_COLLECTION
+            || ct == collection_type::TELEVISION_SHOW
+            || ct == collection_type::TELEVISION_SEASON
+    };
+
+    view! {
+        <div class=style::item_editor>
+            <h3 style="font-size:0.875rem;font-weight:600;color:var(--color-gray-200);margin:0">
+                "Block Item"
+            </h3>
+
+            <div class=style::field>
+                <label class=style::label>"Collection Type"</label>
+                <select
+                    class=style::select
+                    prop:value=move || col_type.get().to_string()
+                    on:change=move |e| {
+                        if let Ok(v) = event_target_value(&e).parse::<i32>() {
+                            col_type.set(v);
+                        }
+                    }
+                >
+                    <option value=collection_type::COLLECTION.to_string()>"Collection"</option>
+                    <option value=collection_type::TELEVISION_SHOW.to_string()>"Television Show"</option>
+                    <option value=collection_type::TELEVISION_SEASON.to_string()>"Television Season"</option>
+                    <option value=collection_type::SMART_COLLECTION.to_string()>"Smart Collection"</option>
+                    <option value=collection_type::SEARCH_QUERY.to_string()>"Search Query"</option>
+                </select>
+            </div>
+
+            <Show when=needs_autocomplete>
+                <div class=style::field>
+                    <label class=style::label>"Collection"</label>
+                    <div class=style::autocomplete>
+                        <input
+                            class=style::autocomplete_input
+                            type="text"
+                            placeholder="Type to search…"
+                            prop:value=move || col_query.get()
+                            on:input=move |e| col_query.set(event_target_value(&e))
+                            on:blur=move |_| {
+                                // small delay so mousedown on list item fires first
+                                leptos::task::spawn_local(async move {
+                                    gloo_timers::future::TimeoutFuture::new(150).await;
+                                    show_suggest.set(false);
+                                });
+                            }
+                            on:focus=move |_| {
+                                if !col_query.get().trim().is_empty() {
+                                    show_suggest.set(true);
+                                }
+                            }
+                        />
+                        <Show when=move || show_suggest.get() && !suggestions.get().is_empty()>
+                            <ul class=style::autocomplete_list>
+                                {move || suggestions.get().into_iter().map(|(id, name)| {
+                                    let name_clone = name.clone();
+                                    view! {
+                                        <li
+                                            class=style::autocomplete_item
+                                            on:mousedown=move |e| {
+                                                e.prevent_default();
+                                                select_suggestion(id, name_clone.clone());
+                                            }
+                                        >
+                                            {name}
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        </Show>
+                    </div>
+                </div>
+            </Show>
+
+            <Show when=move || col_type.get() == collection_type::SEARCH_QUERY>
+                <div class=style::field>
+                    <label class=style::label>"Search Title (display)"</label>
+                    <input
+                        class=style::input
+                        placeholder="Optional display title…"
+                        prop:value=move || search_title.get()
+                        on:input=move |e| search_title.set(event_target_value(&e))
+                    />
+                </div>
+                <div class=style::field>
+                    <label class=style::label>"Search Query"</label>
+                    <input
+                        class=style::input
+                        placeholder="e.g. genre:action"
+                        prop:value=move || search_query_val.get()
+                        on:input=move |e| search_query_val.set(event_target_value(&e))
+                    />
+                </div>
+            </Show>
+
+            <div class=style::field>
+                <label class=style::label>"Playback Order"</label>
+                <select
+                    class=style::select
+                    prop:value=move || pb_order.get().to_string()
+                    on:change=move |e| {
+                        if let Ok(v) = event_target_value(&e).parse::<i32>() {
+                            pb_order.set(v);
+                        }
+                    }
+                >
+                    {move || playback_order_options().into_iter().map(|(v, lbl)| {
+                        view! { <option value=v.to_string()>{lbl}</option> }
+                    }).collect_view()}
+                </select>
+            </div>
+        </div>
+    }
+}

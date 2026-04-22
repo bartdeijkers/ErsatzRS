@@ -8,21 +8,17 @@
     clippy::new_without_default
 )]
 
-pub mod app;
-pub mod pages;
-pub mod server;
-pub mod ui;
+pub mod admin;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub mod hdhr;
+pub mod api;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod iptv;
+pub mod host;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod state;
+pub mod transport;
+
 #[cfg(not(target_arch = "wasm32"))]
-pub mod streaming;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod watermark_upload;
+pub use host::bootstrap::run;
 
 #[cfg(all(target_arch = "wasm32", feature = "hydrate"))]
 #[wasm_bindgen::prelude::wasm_bindgen]

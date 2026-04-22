@@ -1,0 +1,16 @@
+---
+source: crates/ersatzrs-web/src/transport/hdhr/http.rs
+expression: json
+---
+{
+  "DeviceAuth": "",
+  "DeviceID": "11111111-2222-3333-4444-555555555555",
+  "FirmwareName": "hdhomeruntc_atsc",
+  "FirmwareVersion": "20190621",
+  "FriendlyName": "ErsatzRS",
+  "LineupURL": "http://example.test:8080/lineup.json",
+  "Manufacturer": "ErsatzRS",
+  "ManufacturerURL": "https://github.com/ErsatzTV/ErsatzRS",
+  "ModelNumber": "HDTC-2US",
+  "TunerCount": 2
+}

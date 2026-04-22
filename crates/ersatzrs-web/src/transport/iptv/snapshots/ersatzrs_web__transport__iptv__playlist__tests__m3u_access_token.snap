@@ -1,0 +1,7 @@
+---
+source: crates/ersatzrs-web/src/transport/iptv/playlist.rs
+expression: output
+---
+#EXTM3U url-tvg="http://example.test:8080/iptv/xmltv.xml?access_token=secret" x-tvg-url="http://example.test:8080/iptv/xmltv.xml?access_token=secret"
+#EXTINF:0 tvg-id="C1.145.ersatztv.org" channel-id="AAAAAAAAAAAAAAAAAAAAAQ" channel-number="1" CUID="AAAAAAAAAAAAAAAAAAAAAQ" tvg-chno="1" tvg-name="Movies" tvg-logo="http://example.test:8080/iptv/logos/gen?text=Movies&access_token=secret" group-title="" tvc-stream-vcodec="h264" tvc-stream-acodec="aac", Movies
+http://example.test:8080/iptv/channel/1.m3u8?mode=segmenter&access_token=secret

@@ -1,0 +1,9 @@
+---
+source: crates/ersatzrs-web/src/transport/hdhr/http.rs
+expression: json
+---
+{
+  "GuideNumber": "5",
+  "GuideName": "Concert Classics",
+  "URL": "http://example.test:8080/iptv/channel/5.ts"
+}

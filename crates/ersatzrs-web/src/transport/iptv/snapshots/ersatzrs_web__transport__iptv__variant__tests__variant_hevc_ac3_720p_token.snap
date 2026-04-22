@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-web/src/transport/iptv/variant.rs
+expression: output
+---
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=6460800,RESOLUTION=1280x720,CODECS="hvc1.1.6.L93.B0,ac-3"
+https://example.test/iptv/session/42/hls.m3u8?access_token=abc123

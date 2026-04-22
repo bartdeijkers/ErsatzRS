@@ -1,0 +1,20 @@
+---
+source: crates/ersatzrs-web/src/transport/hdhr/http.rs
+expression: xml
+---
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+    <URLBase>http://example.test:8080</URLBase>
+    <specVersion>
+        <major>1</major>
+        <minor>0</minor>
+    </specVersion>
+    <device>
+        <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
+        <friendlyName>ErsatzRS</friendlyName>
+        <manufacturer>Silicondust</manufacturer>
+        <modelName>HDTC-2US</modelName>
+        <modelNumber>HDTC-2US</modelNumber>
+        <serialNumber>11111111-2222-3333-4444-555555555555</serialNumber>
+        <UDN>uuid:11111111-2222-3333-4444-555555555555</UDN>
+    </device>
+</root>

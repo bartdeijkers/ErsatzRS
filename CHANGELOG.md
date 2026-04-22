@@ -226,6 +226,10 @@ for commit messages.
 
 ### Fixed
 
+- Admin shell sidebar parity: the ErsatzRS logo now appears next to the
+  hamburger menu, the top app bar spans the full viewport width above the
+  sidebar, the sidebar uses the ErsatzTV gray surface, and sidebar groups
+  collapse by default without requiring browser hydration.
 - Template repository upsert no longer writes placeholder child rows that
   violate normalized foreign keys.
 - Docker healthcheck no longer depends on `wget`.
