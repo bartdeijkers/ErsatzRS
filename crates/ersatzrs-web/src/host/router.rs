@@ -53,7 +53,7 @@ pub fn build_app(app_state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
         )
         .route(
-            "/artwork/watermarks/:filename",
+            "/artwork/watermarks/{filename}",
             get(api::watermarks::serve_watermark_image),
         )
         .merge(build_iptv_router(&app_state))
@@ -77,17 +77,17 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
-        .route("/iptv/channel/:file", get(iptv::dispatch_channel_request))
+        .route("/iptv/channel/{file}", get(iptv::dispatch_channel_request))
         .route(
-            "/iptv/session/:channel_number/hls.m3u8",
+            "/iptv/session/{channel_number}/hls.m3u8",
             get(iptv::hls::get_session_playlist),
         )
         .route(
-            "/iptv/session/:channel_number/:filename",
+            "/iptv/session/{channel_number}/{filename}",
             get(iptv::hls::get_session_segment),
         )
         .route(
-            "/iptv/hls-direct/:file",
+            "/iptv/hls-direct/{file}",
             get(iptv::hls::get_hls_direct_stream),
         )
         .route_layer(middleware::from_fn_with_state(
