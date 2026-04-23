@@ -17,7 +17,7 @@ pub fn spawn_background_tasks(
 }
 
 async fn run_trakt_maintenance(pool: DbPool) {
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+    let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
     loop {
         interval.tick().await;
 
