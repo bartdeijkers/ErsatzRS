@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-23 (CI publish follow-up)
+Last updated: 2026-04-23 (Axum mergeability fix)
 
 ## Current Phase
 
@@ -320,6 +320,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-04-22 | Codex (GPT-5) | Fixed Docker startup after the FFmpeg packaging fix by making `ersatzrs-web` fall back to environment-based Leptos configuration when the build-stage Cargo manifest is absent, setting production `LEPTOS_*` image defaults, and smoke-testing the rebuilt container to healthy `/healthz`. |
 | 2026-04-22 | Codex (GPT-5) | Fixed the Docker runtime FFmpeg linkage gap by adding the missing `libwebpmux3` and `libva-x11-2` runtime libraries and final-image `ldd` plus `ffmpeg`/`ffprobe`/`drawvg` checks so unresolved FFmpeg shared libraries fail during image build. |
 | 2026-04-22 | Codex (GPT-5) | Phase 7 Slice 10 follow-up — fixed review blockers by restoring all-features CI coverage, adding static GPU capability assertions, pinning Docker helper tools, repairing the Bookworm FFmpeg 8.1 Vulkan/SVT-AV1 build path, adding the Leptos hydration library target, and validating the amd64 Docker check. |
+| 2026-04-23 | Codex (GPT-5) | Fixed the web crate's Axum/Leptos dependency alignment so Multipart uploads and Leptos router integration compile again with Axum 0.8, regenerating the lockfile and restoring green `clippy`/workspace test gates for the PR #5 merge path. |
 | 2026-04-22 | Codex (GPT-5) | Phase 7 Slice 10 — added ADR 0008, structured FFmpeg/ffprobe 8.1 runtime checks with capability reports and cached hardware detection, in-repo FFmpeg 8.1 Docker multi-arch release scaffolding, GHCR manifest/capability-report workflow checks, and hardware smoke scripts. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added startup readiness and downgrade/schema checks: `ersatzrs-infra` now inspects `_sqlx_migrations` before migrations run so the web host can stay up and report unknown, dirty, or checksum-mismatched schema rows through `/healthz` and the Support badge, and the HDHR config keys now match ErsatzTV with legacy-key backfill. |
 | 2026-04-21 | GitHub Copilot (GPT-5.4) | Added an explicit mediaserver bootstrap in `ersatzrs-infra` that ports the current ErsatzTV one-time defaults for the system Trakt playlist group, stock resolutions, default FFmpeg profile/config keys, and default channel; `ersatzrs-web` now uses that bootstrap and the lazy UI/Trakt seed paths were removed. |
