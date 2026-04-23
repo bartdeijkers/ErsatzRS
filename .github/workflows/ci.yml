@@ -10,7 +10,7 @@ jobs:
     name: Format
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
 
@@ -18,7 +18,7 @@ jobs:
     name: Clippy
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Stylance CLI
@@ -32,7 +32,7 @@ jobs:
     name: Test
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Stylance CLI
@@ -44,7 +44,7 @@ jobs:
     name: Cargo deny
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   commitlint:
@@ -52,7 +52,7 @@ jobs:
     runs-on: self-hosted
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
@@ -61,7 +61,7 @@ jobs:
     name: Documentation links
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check Markdown files exist
         run: |
           test -f README.md
@@ -75,7 +75,7 @@ jobs:
     name: Docker image (amd64)
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
       - name: Build amd64 image
         uses: docker/bake-action@v5
