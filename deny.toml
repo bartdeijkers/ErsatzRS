@@ -5,13 +5,6 @@ ignore = [
   # Transitive through Leptos 0.7/tachys/either_of. No safe upstream upgrade is
   # available yet; revisit when Leptos moves off paste.
   "RUSTSEC-2024-0436",
-  # async-std discontinued advisory. async-std is a dev-dependency only, pulled
-  # in transitively by httpmock → async-object-pool. No production code is
-  # affected; revisit when httpmock drops the async-object-pool dependency.
-  "RUSTSEC-2025-0052",
-  # Transitive through sqlx-mysql for MySQL support. No patched rsa release is
-  # available yet; revisit when sqlx-mysql removes or replaces this dependency.
-  "RUSTSEC-2023-0071",
 ]
 
 [licenses]
@@ -21,6 +14,8 @@ allow = [
   "BSL-1.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
+  # base16 via leptos/wasm_split_macros theme support.
+  "CC0-1.0",
   "GPL-3.0-or-later",
   "ISC",
   "MIT",
@@ -37,6 +32,71 @@ confidence-threshold = 0.8
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
+
+[[bans.skip]]
+name = "convert_case"
+version = "=0.6.0"
+reason = "Leptos currently pulls config 0.15 / leptos_config alongside newer proc-macro crates that use convert_case 0.11."
+
+[[bans.skip]]
+name = "getrandom"
+version = "=0.2.17"
+reason = "Current graph spans ring/rustls on 0.2, rand 0.9 on 0.3, and leptos/tempfile/uuid on 0.4."
+
+[[bans.skip]]
+name = "getrandom"
+version = "=0.3.4"
+reason = "Current graph spans ring/rustls on 0.2, rand 0.9 on 0.3, and leptos/tempfile/uuid on 0.4."
+
+[[bans.skip]]
+name = "hashbrown"
+version = "=0.15.5"
+reason = "sqlx 0.8 still uses hashbrown 0.15 while the Leptos/indexmap side of the graph uses 0.17."
+
+[[bans.skip]]
+name = "r-efi"
+version = "=5.3.0"
+reason = "Follows the split between getrandom 0.3 and getrandom 0.4 in the current upstream graph."
+
+[[bans.skip]]
+name = "serde_spanned"
+version = "=0.6.9"
+reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
+
+[[bans.skip]]
+name = "toml_datetime"
+version = "=0.6.11"
+reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
+
+[[bans.skip]]
+name = "thiserror"
+version = "=1.0.69"
+reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the workspace crates use thiserror 2."
+
+[[bans.skip]]
+name = "thiserror-impl"
+version = "=1.0.69"
+reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the workspace crates use thiserror 2."
+
+[[bans.skip]]
+name = "toml"
+version = "=0.8.23"
+reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
+
+[[bans.skip]]
+name = "winnow"
+version = "=0.5.40"
+reason = "stylance 0.8 still uses the older winnow 0.5 parser stack via toml 0.8."
+
+[[bans.skip]]
+name = "winnow"
+version = "=0.7.15"
+reason = "Comes from stylance's toml 0.8 stack; the rest of the web stack uses winnow 1.x through toml 1.x/config."
+
+[[bans.skip]]
+name = "windows-sys"
+version = "=0.52.0"
+reason = "Still pulled in transitively by ring 0.17 via jsonwebtoken/rustls; the rest of the graph is on windows-sys 0.61."
 
 [sources]
 unknown-registry = "deny"

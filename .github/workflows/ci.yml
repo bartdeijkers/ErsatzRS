@@ -22,7 +22,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.7.4 --locked
+        run: cargo install stylance-cli --version 0.8.0 --locked
       - name: Clippy (default / SQLite)
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Clippy (MySQL feature)
@@ -36,7 +36,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.7.4 --locked
+        run: cargo install stylance-cli --version 0.8.0 --locked
       - name: Test (all features)
         run: cargo test --workspace --all-features
 

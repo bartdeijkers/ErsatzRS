@@ -10,6 +10,13 @@ for commit messages.
 
 ### Added
 
+- Dependency and CI hardening for `cargo deny`: upgraded the web CSS toolchain
+  to `stylance`/`stylance-cli` 0.8, upgraded test HTTP mocking to
+  `httpmock` 0.8, refreshed the lockfile, allowed the transitive `CC0-1.0`
+  license used by Leptos theming, and aligned duplicate-version policy skips
+  with the current Leptos/Stylance dependency graph so `cargo deny check`
+  passes cleanly again.
+
 - Phase 7 Channels admin visual parity pass: the `/channels` list now uses
   locally served Roboto fonts, closer ErsatzTV PaletteDark tokens, MudTable-like
   row height and pager spacing, a styled Show Disabled switch, logo/language/
