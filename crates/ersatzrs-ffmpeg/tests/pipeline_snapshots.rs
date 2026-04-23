@@ -214,7 +214,7 @@ fn song_progress_filter_snapshot() {
     let filter = song_progress_filter(
         FrameSize::new(1920, 1080),
         Some(Duration::from_secs(30)),
-        Some(Duration::from_secs(120)),
+        Some(Duration::from_mins(2)),
     );
 
     insta::assert_snapshot!(filter);
