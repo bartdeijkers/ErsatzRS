@@ -32,8 +32,8 @@ ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
 ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["io"] }
-# Pinned to 0.7: leptos_axum 0.7 requires axum 0.7. Do not bump until leptos_axum is updated.
-axum = "0.7"
+# Keep axum aligned with leptos_axum and enable Multipart extraction for image upload routes.
+axum = { version = "0.8", features = ["multipart"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "fs"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
