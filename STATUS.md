@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-22 (Phase 7 follow-up — channels UI visual parity)
+Last updated: 2026-04-23 (CI publish follow-up)
 
 ## Current Phase
 
@@ -310,6 +310,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-23 | Codex (GPT-5) | Fixed the post-merge CI regressions by installing `stylance-cli` in the Clippy/Test jobs, ignoring the transitive `rsa` advisory for MySQL support, and verifying the workflow with local fmt/clippy/test/deny checks. |
 | 2026-04-22 | Codex (GPT-5) | Adjusted the Channels admin list toward the ErsatzTV screenshot with Roboto fonts, closer PaletteDark tokens, MudTable-like spacing, Show Disabled switch styling, logo/language/mode columns, icon-only actions, and the new `artwork/ersatzrs_full.png` asset. Gates: fmt, `cargo check -p ersatzrs-web --all-features`, and `cargo clippy -p ersatzrs-web --all-targets --all-features -- -D warnings`; live smoke was blocked by local FFmpeg 6.1.1 being below the required 8.1. |
 | 2026-04-22 | Codex (GPT-5) | Fixed admin shell sidebar/header parity with ErsatzTV: added the ErsatzRS logo beside the hamburger menu, moved the app bar above the sidebar so it spans the full viewport, switched the sidebar to the gray surface background, and made sidebar groups native collapsed-by-default details controls. Gates: fmt and `cargo check -p ersatzrs-web --all-features`; browser smoke checked with local FFmpeg 8.1. |
 | 2026-04-22 | Codex (GPT-5) | Completed the `ersatzrs-web` structure refactor: restored production Leptos config fallback, documented the target `host`/`transport`/`api`/`admin` layout with `public/images` and `public/js`, moved admin pages/server functions/UI/style under `src/admin`, moved IPTV/HDHR/dev streaming under `src/transport`, moved watermark upload endpoints under `src/api`, and split admin routes plus layout modules. |
