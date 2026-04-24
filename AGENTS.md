@@ -41,6 +41,10 @@ cargo test --workspace --all-features
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
 # FFmpeg 8.1+ must be available on PATH; pending migrations run automatically.
+# The admin UI's interactive buttons require Leptos hydration assets in
+# crates/ersatzrs-web/target/site/pkg. Build them first with:
+#   cargo install cargo-leptos --locked
+#   (cd crates/ersatzrs-web && cargo leptos build)
 cargo run --bin ersatzrs-web
 
 # Verify the server is up.

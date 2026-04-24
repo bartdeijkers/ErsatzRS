@@ -15,49 +15,58 @@ use crate::admin::ui::primitives::{
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/editor.module.css");
 
+type ChannelEditorPageData = (ChannelForm, Vec<(i64, String)>, Vec<(i64, String)>);
+
 #[component]
 pub fn ChannelEditorPage() -> impl IntoView {
     let params = use_params_map();
     let channel_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
-    let initial: Resource<ChannelForm> = Resource::new(channel_id, |id| async move {
-        match id {
-            Some(id) => get_channel_form(id).await.unwrap_or_default(),
-            None => ChannelForm::new_defaults(),
-        }
+    let data: Resource<ChannelEditorPageData> = Resource::new(channel_id, |id| async move {
+        let form = async move {
+            match id {
+                Some(id) => get_channel_form(id).await.unwrap_or_default(),
+                None => ChannelForm::new_defaults(),
+            }
+        };
+        let profiles = async { list_ffmpeg_profiles_for_select().await.unwrap_or_default() };
+        let fillers = async { list_filler_presets_for_select().await.unwrap_or_default() };
+        let (form, profiles, fillers) = tokio::join!(form, profiles, fillers);
+        (form, profiles, fillers)
     });
 
-    let profiles: Resource<Vec<(i64, String)>> = Resource::new(
-        || (),
-        |()| async { list_ffmpeg_profiles_for_select().await.unwrap_or_default() },
-    );
+    view! {
+        <Suspense fallback=|| view! { <p class=style::loading>"Loading..."</p> }>
+            {move || {
+                data.get().map(|(form, profiles, fillers)| {
+                    view! {
+                        <ChannelEditorIsland
+                            initial_form=form
+                            initial_profiles=profiles
+                            initial_fillers=fillers
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
+}
 
-    let fillers: Resource<Vec<(i64, String)>> = Resource::new(
-        || (),
-        |()| async { list_filler_presets_for_select().await.unwrap_or_default() },
-    );
-
-    let number = RwSignal::new(String::new());
-    let name = RwSignal::new(String::new());
-    let group = RwSignal::new(String::new());
-    let ffmpeg_profile_id = RwSignal::new(0i64);
-    let streaming_mode = RwSignal::new(1i32);
-    let is_enabled = RwSignal::new(true);
-    let show_in_epg = RwSignal::new(true);
-    let fallback_filler_id = RwSignal::new(0i64);
-
-    Effect::new(move |_| {
-        if let Some(f) = initial.get() {
-            number.set(f.number);
-            name.set(f.name);
-            group.set(f.group);
-            ffmpeg_profile_id.set(f.ffmpeg_profile_id);
-            streaming_mode.set(f.streaming_mode);
-            is_enabled.set(f.is_enabled);
-            show_in_epg.set(f.show_in_epg);
-            fallback_filler_id.set(f.fallback_filler_id);
-        }
-    });
+#[island]
+fn ChannelEditorIsland(
+    initial_form: ChannelForm,
+    initial_profiles: Vec<(i64, String)>,
+    initial_fillers: Vec<(i64, String)>,
+) -> impl IntoView {
+    let channel_id = initial_form.id;
+    let number = RwSignal::new(initial_form.number);
+    let name = RwSignal::new(initial_form.name);
+    let group = RwSignal::new(initial_form.group);
+    let ffmpeg_profile_id = RwSignal::new(initial_form.ffmpeg_profile_id);
+    let streaming_mode = RwSignal::new(initial_form.streaming_mode);
+    let is_enabled = RwSignal::new(initial_form.is_enabled);
+    let show_in_epg = RwSignal::new(initial_form.show_in_epg);
+    let fallback_filler_id = RwSignal::new(initial_form.fallback_filler_id);
 
     let number_err: RwSignal<Option<String>> = RwSignal::new(None);
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
@@ -107,7 +116,7 @@ pub fn ChannelEditorPage() -> impl IntoView {
 
         if valid {
             save_action.dispatch(ChannelForm {
-                id: channel_id().unwrap_or(0),
+                id: channel_id,
                 number: num,
                 name: nm,
                 group: group.get(),
@@ -121,7 +130,7 @@ pub fn ChannelEditorPage() -> impl IntoView {
     };
 
     let page_title = move || {
-        if channel_id().is_some() {
+        if channel_id != 0 {
             "Edit Channel"
         } else {
             "Add Channel"
@@ -171,7 +180,8 @@ pub fn ChannelEditorPage() -> impl IntoView {
                         items=streaming_mode_items
                     />
 
-                    {move || profiles.get().map(|mut items| {
+                    {{
+                        let mut items = initial_profiles;
                         if items.is_empty() {
                             view! {
                                 <p class=style::no_profiles>
@@ -189,9 +199,10 @@ pub fn ChannelEditorPage() -> impl IntoView {
                                 />
                             }.into_any()
                         }
-                    })}
+                    }}
 
-                    {move || fillers.get().map(|mut items| {
+                    {{
+                        let mut items = initial_fillers;
                         items.insert(0, (0i64, "None".to_string()));
                         view! {
                             <SelectField<i64>
@@ -200,7 +211,7 @@ pub fn ChannelEditorPage() -> impl IntoView {
                                 items=items
                             />
                         }
-                    })}
+                    }}
 
                     <div class=style::checkboxes>
                         <CheckBox label="Enabled" value=is_enabled/>

@@ -41,7 +41,7 @@ pub fn build_app(app_state: AppState) -> Router {
         leptos_router = leptos_router.nest_service("/pkg", ServeDir::new(pkg_dir));
     } else {
         tracing::warn!(
-            "Leptos pkg assets not found; serving SSR HTML only without browser hydration"
+            "Leptos pkg assets not found; admin actions that require browser hydration are disabled. Build assets with `(cd crates/ersatzrs-web && cargo leptos build)` before running ersatzrs-web."
         );
     }
 

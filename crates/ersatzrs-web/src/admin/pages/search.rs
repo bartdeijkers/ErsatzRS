@@ -10,6 +10,11 @@ stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.c
 
 #[component]
 pub fn SearchPage() -> impl IntoView {
+    view! { <SearchIsland/> }
+}
+
+#[island]
+fn SearchIsland() -> impl IntoView {
     let query_map = use_query_map();
     let query =
         Memo::new(move |_| query_map.with(|params| params.get("query").unwrap_or_default()));

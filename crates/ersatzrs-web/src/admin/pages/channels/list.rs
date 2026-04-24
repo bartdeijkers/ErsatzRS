@@ -16,6 +16,11 @@ const PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn ChannelsListPage() -> impl IntoView {
+    view! { <ChannelsListIsland/> }
+}
+
+#[island]
+fn ChannelsListIsland() -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
