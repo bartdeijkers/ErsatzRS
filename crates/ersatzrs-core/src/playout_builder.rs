@@ -4,9 +4,10 @@
 //! - `Block`      → [`BlockSchedulingEngine`]
 //! - `Sequential` → [`YamlPlayoutEngine`]
 //! - `Scripted`   → [`ScriptedSchedulingEngine`]
+//! - `ExternalJson` → [`ExternalJsonSchedulingEngine`]
 //!
-//! `Classic` and `ExternalJson` are not yet implemented; calls for those kinds
-//! return [`SchedulingError::UnsupportedScheduleKind`].
+//! `Classic` is not yet implemented; calls for that kind return
+//! [`SchedulingError::UnsupportedScheduleKind`].
 //!
 //! The C# entry point for the Classic engine is
 //! `ErsatzTV.Core/Scheduling/PlayoutBuilder.cs`.  Block, YAML, and Scripted
@@ -16,8 +17,8 @@
 use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::scheduling::{
-    BlockSchedulingEngine, SchedulingError, SchedulingRequest, SchedulingResult,
-    ScriptedSchedulingEngine, YamlPlayoutEngine,
+    BlockSchedulingEngine, ExternalJsonSchedulingEngine, SchedulingError, SchedulingRequest,
+    SchedulingResult, ScriptedSchedulingEngine, YamlPlayoutEngine,
 };
 
 /// Routes playout build requests to the engine registered for each
@@ -29,6 +30,7 @@ pub struct PlayoutBuilder {
     block: Box<dyn EngineDispatch + Send + Sync>,
     yaml: Box<dyn EngineDispatch + Send + Sync>,
     scripted: Box<dyn EngineDispatch + Send + Sync>,
+    external_json: Box<dyn EngineDispatch + Send + Sync>,
 }
 
 impl std::fmt::Debug for PlayoutBuilder {
@@ -43,6 +45,7 @@ impl Default for PlayoutBuilder {
             block: Box::new(BlockSchedulingEngine),
             yaml: Box::new(YamlPlayoutEngine),
             scripted: Box::new(ScriptedSchedulingEngine),
+            external_json: Box::new(ExternalJsonSchedulingEngine),
         }
     }
 }
@@ -54,11 +57,13 @@ impl PlayoutBuilder {
         block: Box<dyn EngineDispatch + Send + Sync>,
         yaml: Box<dyn EngineDispatch + Send + Sync>,
         scripted: Box<dyn EngineDispatch + Send + Sync>,
+        external_json: Box<dyn EngineDispatch + Send + Sync>,
     ) -> Self {
         Self {
             block,
             yaml,
             scripted,
+            external_json,
         }
     }
 
@@ -70,13 +75,14 @@ impl PlayoutBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `Classic`,
-    /// `ExternalJson`, and `None`, which are not implemented in Phase 3.
+    /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `Classic` and
+    /// `None`, which are not implemented in Phase 3.
     pub fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         match request.playout.schedule_kind {
             PlayoutScheduleKind::Block => self.block.schedule(request),
             PlayoutScheduleKind::Sequential => self.yaml.schedule(request),
             PlayoutScheduleKind::Scripted => self.scripted.schedule(request),
+            PlayoutScheduleKind::ExternalJson => self.external_json.schedule(request),
             kind => Err(SchedulingError::UnsupportedScheduleKind(kind)),
         }
     }
@@ -96,5 +102,33 @@ pub trait EngineDispatch {
 impl<E: crate::scheduling::PlayoutSchedulingEngine> EngineDispatch for E {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         crate::scheduling::PlayoutSchedulingEngine::schedule(self, request)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+    use ersatzrs_domain::{Playout, PlayoutScheduleKind};
+
+    use super::*;
+    use crate::scheduling::{PlayoutBuildMode, SchedulingReferenceData};
+
+    #[test]
+    fn external_json_build_is_successful_noop() {
+        let start = Utc::now();
+        let result = PlayoutBuilder::default()
+            .build(SchedulingRequest {
+                playout: Playout {
+                    schedule_kind: PlayoutScheduleKind::ExternalJson,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: SchedulingReferenceData::default(),
+            })
+            .expect("external json build should succeed");
+
+        assert_eq!(result, SchedulingResult::default());
     }
 }

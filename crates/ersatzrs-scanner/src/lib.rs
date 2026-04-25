@@ -4,8 +4,10 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, Utc};
-use ersatzrs_domain::{MediaChapter, MediaStream, MediaStreamKind, VideoScanKind};
-use ersatzrs_infra::db::{Db, DbPool};
+use ersatzrs_domain::{
+    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
+};
+use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
@@ -19,6 +21,8 @@ pub enum ScannerError {
     Ffprobe(#[from] FfprobeError),
     #[error("library {0} does not have local paths")]
     MissingLibraryPaths(i64),
+    #[error("local scan for {0:?} libraries is not implemented yet")]
+    UnsupportedLibraryMediaKind(LibraryMediaKind),
 }
 
 pub type Result<T> = std::result::Result<T, ScannerError>;
@@ -52,7 +56,18 @@ pub async fn scan_local_library(
     let extractor = FfprobeExtractor::new(config.ffprobe_path.clone());
     let mut report = LocalScanReport::default();
     for library_path in paths {
-        for path in collect_video_files(&library_path.path) {
+        if matches!(
+            library_path.media_kind,
+            LibraryMediaKind::Shows
+                | LibraryMediaKind::MusicVideos
+                | LibraryMediaKind::RemoteStreams
+        ) {
+            return Err(ScannerError::UnsupportedLibraryMediaKind(
+                library_path.media_kind,
+            ));
+        }
+
+        for path in collect_scannable_files(&library_path.path, library_path.media_kind) {
             let probed = extractor.extract(&path).await?;
             upsert_local_file(pool, &library_path, &path, probed).await?;
             report.scanned_files += 1;
@@ -65,7 +80,7 @@ pub async fn scan_local_library(
     Ok(report)
 }
 
-fn collect_video_files(root: &str) -> Vec<PathBuf> {
+fn collect_scannable_files(root: &str, media_kind: LibraryMediaKind) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut queue = VecDeque::from([PathBuf::from(root)]);
 
@@ -77,7 +92,7 @@ fn collect_video_files(root: &str) -> Vec<PathBuf> {
             let path = entry.path();
             if path.is_dir() {
                 queue.push_back(path);
-            } else if is_scannable_video(&path) {
+            } else if is_scannable_for_kind(&path, media_kind) {
                 files.push(path);
             }
         }
@@ -87,7 +102,7 @@ fn collect_video_files(root: &str) -> Vec<PathBuf> {
     files
 }
 
-fn is_scannable_video(path: &Path) -> bool {
+fn is_scannable_for_kind(path: &Path, media_kind: LibraryMediaKind) -> bool {
     if path
         .file_name()
         .and_then(|name| name.to_str())
@@ -96,21 +111,33 @@ fn is_scannable_video(path: &Path) -> bool {
         return false;
     }
 
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+
     matches!(
-        path.extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_ascii_lowercase)
-            .as_deref(),
-        Some("mp4" | "mkv" | "avi")
+        (media_kind, extension.as_deref()),
+        (
+            LibraryMediaKind::Movies | LibraryMediaKind::OtherVideos,
+            Some("mp4" | "mkv" | "avi" | "mov" | "m4v" | "webm")
+        ) | (
+            LibraryMediaKind::Songs,
+            Some("mp3" | "flac" | "m4a" | "aac" | "ogg" | "opus" | "wav")
+        ) | (
+            LibraryMediaKind::Images,
+            Some("jpg" | "jpeg" | "png" | "webp")
+        )
     )
 }
 
 async fn load_library_paths(pool: &DbPool, library_id: i64) -> Result<Vec<LocalLibraryPath>> {
     let rows = sqlx::query(
-        r#"SELECT "Id", "Path"
-           FROM "LibraryPath"
-           WHERE "LibraryId" = ?
-           ORDER BY "Id""#,
+        r#"SELECT "lp"."Id", "lp"."Path", "l"."MediaKind"
+           FROM "LibraryPath" AS "lp"
+           JOIN "Library" AS "l" ON "l"."Id" = "lp"."LibraryId"
+           WHERE "lp"."LibraryId" = ?
+           ORDER BY "lp"."Id""#,
     )
     .bind(library_id)
     .fetch_all(pool)
@@ -121,6 +148,7 @@ async fn load_library_paths(pool: &DbPool, library_id: i64) -> Result<Vec<LocalL
         .map(|row| LocalLibraryPath {
             id: row.get("Id"),
             path: row.get("Path"),
+            media_kind: decode_library_media_kind(&row),
         })
         .collect())
 }
@@ -136,7 +164,10 @@ async fn upsert_local_file(
     let path_hash = path_hash(&path_text);
 
     let maybe_existing = sqlx::query(
-        r#"SELECT "mf"."MediaVersionId", "mv"."OtherVideoId"
+        r#"SELECT "mf"."MediaVersionId",
+                  COALESCE(
+                    "mv"."MovieId", "mv"."OtherVideoId", "mv"."SongId", "mv"."ImageId"
+                  ) AS "MediaItemId"
            FROM "MediaFile" AS "mf"
            JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
            WHERE "mf"."PathHash" = ?"#,
@@ -147,17 +178,14 @@ async fn upsert_local_file(
 
     let (item_id, version_id) = if let Some(row) = maybe_existing {
         (
-            row.get::<Option<i64>, _>("OtherVideoId")
-                .unwrap_or_default(),
+            row.get::<Option<i64>, _>("MediaItemId").unwrap_or_default(),
             row.get::<i64, _>("MediaVersionId"),
         )
     } else {
         let item_id = insert_media_item(&mut tx, library_path.id).await?;
-        sqlx::query(r#"INSERT INTO "OtherVideo" ("Id") VALUES (?)"#)
-            .bind(item_id)
-            .execute(&mut *tx)
-            .await?;
-        let version_id = insert_media_version(&mut tx, item_id, &probed).await?;
+        insert_media_subtype(&mut tx, item_id, library_path.media_kind).await?;
+        let version_id =
+            insert_media_version(&mut tx, item_id, &probed, library_path.media_kind).await?;
         sqlx::query(
             r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
                VALUES (?, ?, ?)"#,
@@ -195,31 +223,69 @@ async fn insert_media_version(
     tx: &mut Transaction<'_, Db>,
     item_id: i64,
     probed: &FfprobeMediaVersion,
+    media_kind: LibraryMediaKind,
 ) -> Result<i64> {
     let version = &probed.version;
     let now = Utc::now();
-    let result = sqlx::query(
+    let owner_column = media_version_owner_column(media_kind)?;
+    let sql = format!(
         r#"INSERT INTO "MediaVersion" (
             "DateAdded", "DateUpdated", "DisplayAspectRatio", "Duration", "Height",
-            "Name", "OtherVideoId", "RFrameRate", "SampleAspectRatio",
+            "Name", "{owner_column}", "RFrameRate", "SampleAspectRatio",
             "VideoScanKind", "Width", "InterlacedRatio"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-    )
-    .bind(encode_datetime(version.date_added))
-    .bind(encode_datetime(now))
-    .bind(&version.display_aspect_ratio)
-    .bind(encode_duration(version.duration))
-    .bind(version.height)
-    .bind(&version.name)
-    .bind(item_id)
-    .bind(&version.r_frame_rate)
-    .bind(&version.sample_aspect_ratio)
-    .bind(encode_video_scan_kind(version.video_scan_kind))
-    .bind(version.width)
-    .bind(version.interlaced_ratio)
-    .execute(&mut **tx)
-    .await?;
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+    );
+    let result = sqlx::query(&sql)
+        .bind(encode_datetime(version.date_added))
+        .bind(encode_datetime(now))
+        .bind(&version.display_aspect_ratio)
+        .bind(encode_duration(version.duration))
+        .bind(version.height)
+        .bind(&version.name)
+        .bind(item_id)
+        .bind(&version.r_frame_rate)
+        .bind(&version.sample_aspect_ratio)
+        .bind(encode_video_scan_kind(version.video_scan_kind))
+        .bind(version.width)
+        .bind(version.interlaced_ratio)
+        .execute(&mut **tx)
+        .await?;
     Ok(ersatzrs_infra::db::last_insert_id(result))
+}
+
+async fn insert_media_subtype(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    media_kind: LibraryMediaKind,
+) -> Result<()> {
+    let table = match media_kind {
+        LibraryMediaKind::Movies => "Movie",
+        LibraryMediaKind::OtherVideos => "OtherVideo",
+        LibraryMediaKind::Songs => "Song",
+        LibraryMediaKind::Images => "Image",
+        LibraryMediaKind::Shows
+        | LibraryMediaKind::MusicVideos
+        | LibraryMediaKind::RemoteStreams => {
+            return Err(ScannerError::UnsupportedLibraryMediaKind(media_kind));
+        }
+    };
+    let sql = format!(r#"INSERT INTO "{table}" ("Id") VALUES (?)"#);
+    sqlx::query(&sql).bind(item_id).execute(&mut **tx).await?;
+    Ok(())
+}
+
+fn media_version_owner_column(media_kind: LibraryMediaKind) -> Result<&'static str> {
+    match media_kind {
+        LibraryMediaKind::Movies => Ok("MovieId"),
+        LibraryMediaKind::OtherVideos => Ok("OtherVideoId"),
+        LibraryMediaKind::Songs => Ok("SongId"),
+        LibraryMediaKind::Images => Ok("ImageId"),
+        LibraryMediaKind::Shows
+        | LibraryMediaKind::MusicVideos
+        | LibraryMediaKind::RemoteStreams => {
+            Err(ScannerError::UnsupportedLibraryMediaKind(media_kind))
+        }
+    }
 }
 
 async fn update_media_version(
@@ -382,11 +448,46 @@ fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
 struct LocalLibraryPath {
     id: i64,
     path: String,
+    media_kind: LibraryMediaKind,
+}
+
+fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
+    if let Ok(value) = row.try_get::<i32, _>("MediaKind") {
+        if value == 4 {
+            return LibraryMediaKind::OtherVideos;
+        }
+        return match value {
+            1 => LibraryMediaKind::Movies,
+            2 => LibraryMediaKind::Shows,
+            3 => LibraryMediaKind::MusicVideos,
+            5 => LibraryMediaKind::Songs,
+            6 => LibraryMediaKind::Images,
+            7 => LibraryMediaKind::RemoteStreams,
+            _ => LibraryMediaKind::OtherVideos,
+        };
+    }
+
+    let value = row.try_get::<String, _>("MediaKind").unwrap_or_default();
+    if value == "OtherVideos" {
+        return LibraryMediaKind::OtherVideos;
+    }
+
+    match value.as_str() {
+        "Movies" => LibraryMediaKind::Movies,
+        "Shows" => LibraryMediaKind::Shows,
+        "MusicVideos" => LibraryMediaKind::MusicVideos,
+        "Songs" => LibraryMediaKind::Songs,
+        "Images" => LibraryMediaKind::Images,
+        "RemoteStreams" => LibraryMediaKind::RemoteStreams,
+        _ => LibraryMediaKind::OtherVideos,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::path_hash;
+    use super::{is_scannable_for_kind, path_hash};
+    use ersatzrs_domain::LibraryMediaKind;
+    use std::path::Path;
 
     #[test]
     fn path_hash_matches_sha256sum_output() {
@@ -394,5 +495,25 @@ mod tests {
             path_hash("/media/movie.mkv"),
             "255ca6b14e280f5d5ca28f4e6e010b19038627dbd263a1d17556460b7ee06e24"
         );
+    }
+
+    #[test]
+    fn local_scanner_classifies_extensions_by_library_kind() {
+        assert!(is_scannable_for_kind(
+            Path::new("/media/movie.mkv"),
+            LibraryMediaKind::Movies
+        ));
+        assert!(is_scannable_for_kind(
+            Path::new("/media/song.flac"),
+            LibraryMediaKind::Songs
+        ));
+        assert!(is_scannable_for_kind(
+            Path::new("/media/image.webp"),
+            LibraryMediaKind::Images
+        ));
+        assert!(!is_scannable_for_kind(
+            Path::new("/media/song.flac"),
+            LibraryMediaKind::Movies
+        ));
     }
 }

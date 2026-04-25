@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-24 (admin hydration fix)
+Last updated: 2026-04-25 (non-web parity slice)
 
 ## Current Phase
 
@@ -263,8 +263,10 @@ Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
 write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
 Emby sync; the remaining high-risk slices are language and subtitle
-normalization, metadata joins, program schedule item subtypes, template items,
-block item targets, and deco break/template rows.
+normalization, metadata joins, full typed program schedule item repositories,
+template items, full typed block item repositories, and deco break/template
+rows. Program schedule and block root upserts now preserve existing child-item
+target/subtype fields instead of destructively replacing them.
 
 ### Admin UI Route Coverage
 
@@ -310,6 +312,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-04-25 | Codex (GPT-5) | Closed a focused non-web parity slice: ExternalJson playout builds now succeed as the ErsatzTV no-op, ProgramSchedule/Block upserts preserve existing item target fields, Jellyfin/Emby sync pages through movies/shows/seasons/episodes/collections, local scanning dispatches by library media kind for movies/other videos/songs/images, and focused core/infra/scanner tests plus clippy were run. |
 | 2026-04-24 | Codex (GPT-5) | Fixed the immediate admin hydration gap by moving Search, Channel list, and Channel editor browser-driven actions into Leptos islands, improving the missing `/pkg` asset warning, and documenting the required `cargo leptos build` workflow. Gates: fmt, web native/hydrate checks, workspace clippy, and `cargo test -p ersatzrs-web --all-features`. |
 | 2026-04-23 | Codex (GPT-5) | Fixed the post-merge CI regressions by installing `stylance-cli` in the Clippy/Test jobs, ignoring the transitive `rsa` advisory for MySQL support, and verifying the workflow with local fmt/clippy/test/deny checks. |
 | 2026-04-22 | Codex (GPT-5) | Adjusted the Channels admin list toward the ErsatzTV screenshot with Roboto fonts, closer PaletteDark tokens, MudTable-like spacing, Show Disabled switch styling, logo/language/mode columns, icon-only actions, and the new `artwork/ersatzrs_full.png` asset. Gates: fmt, `cargo check -p ersatzrs-web --all-features`, and `cargo clippy -p ersatzrs-web --all-targets --all-features -- -D warnings`; live smoke was blocked by local FFmpeg 6.1.1 being below the required 8.1. |

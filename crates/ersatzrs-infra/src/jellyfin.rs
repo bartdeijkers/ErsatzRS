@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::repositories::common::decode_enum_column;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
@@ -15,6 +16,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
+
+const JELLYFIN_PAGE_SIZE: i32 = 100;
 
 #[derive(Debug, Clone)]
 pub struct JellyfinService {
@@ -304,7 +307,7 @@ impl JellyfinService {
     }
 }
 
-/// Fetch one Jellyfin movie page and write mapped movie rows.
+/// Fetch Jellyfin movie pages and write mapped movie rows.
 ///
 /// # Errors
 ///
@@ -320,22 +323,36 @@ pub async fn sync_jellyfin_movie_library<S>(
 where
     S: JellyfinServiceTrait,
 {
-    let page = service
-        .fetch_movie_page(config, library_item_id, 0, 100)
-        .await?;
-    for item in &page.items {
-        let playback = service.stream_metadata(config, &item.item_id).await?;
-        upsert_jellyfin_movie(
-            pool,
-            media_source_id,
-            library_id,
-            library_item_id,
-            item,
-            &playback,
-        )
-        .await?;
+    let mut synced = 0;
+    let mut start_index = 0;
+
+    loop {
+        let page = service
+            .fetch_movie_page(config, library_item_id, start_index, JELLYFIN_PAGE_SIZE)
+            .await?;
+        let total_record_count = page.total_record_count;
+        let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        for item in &page.items {
+            let playback = service.stream_metadata(config, &item.item_id).await?;
+            upsert_jellyfin_movie(
+                pool,
+                media_source_id,
+                library_id,
+                library_item_id,
+                item,
+                &playback,
+            )
+            .await?;
+            synced += 1;
+        }
+
+        start_index += JELLYFIN_PAGE_SIZE;
+        if start_index >= total_record_count || page_len == 0 {
+            break;
+        }
     }
-    Ok(page.items.len())
+
+    Ok(synced)
 }
 
 /// Fetch Jellyfin shows, seasons, and episodes and write mapped media rows.
@@ -354,45 +371,95 @@ pub async fn sync_jellyfin_show_library<S>(
 where
     S: JellyfinServiceTrait,
 {
-    let shows = service
-        .fetch_show_page(config, library_item_id, 0, 100)
-        .await?;
     let mut synced = 0;
-    for show in &shows.items {
-        let show_id =
-            upsert_jellyfin_show(pool, media_source_id, library_id, library_item_id, show).await?;
-        let seasons = service
-            .fetch_season_page(config, &show.item_id, 0, 100)
-            .await?;
-        for season in &seasons.items {
-            let season_id = upsert_jellyfin_season(
-                pool,
-                media_source_id,
-                library_id,
+    let mut show_start_index = 0;
+
+    loop {
+        let shows = service
+            .fetch_show_page(
+                config,
                 library_item_id,
-                show_id,
-                season,
+                show_start_index,
+                JELLYFIN_PAGE_SIZE,
             )
             .await?;
-            let episodes = service
-                .fetch_episode_page(config, &season.item_id, 0, 100)
-                .await?;
-            for episode in &episodes.items {
-                let playback = service.stream_metadata(config, &episode.item_id).await?;
-                upsert_jellyfin_episode(
-                    pool,
-                    media_source_id,
-                    library_id,
-                    library_item_id,
-                    season_id,
-                    episode,
-                    &playback,
-                )
-                .await?;
-                synced += 1;
+        let show_total_count = shows.total_record_count;
+        let show_page_len = i32::try_from(shows.items.len()).unwrap_or(i32::MAX);
+        for show in &shows.items {
+            let show_id =
+                upsert_jellyfin_show(pool, media_source_id, library_id, library_item_id, show)
+                    .await?;
+            let mut season_start_index = 0;
+            loop {
+                let seasons = service
+                    .fetch_season_page(
+                        config,
+                        &show.item_id,
+                        season_start_index,
+                        JELLYFIN_PAGE_SIZE,
+                    )
+                    .await?;
+                let season_total_count = seasons.total_record_count;
+                let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
+                for season in &seasons.items {
+                    let season_id = upsert_jellyfin_season(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_item_id,
+                        show_id,
+                        season,
+                    )
+                    .await?;
+                    let mut episode_start_index = 0;
+                    loop {
+                        let episodes = service
+                            .fetch_episode_page(
+                                config,
+                                &season.item_id,
+                                episode_start_index,
+                                JELLYFIN_PAGE_SIZE,
+                            )
+                            .await?;
+                        let episode_total_count = episodes.total_record_count;
+                        let episode_page_len =
+                            i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
+                        for episode in &episodes.items {
+                            let playback =
+                                service.stream_metadata(config, &episode.item_id).await?;
+                            upsert_jellyfin_episode(
+                                pool,
+                                media_source_id,
+                                library_id,
+                                library_item_id,
+                                season_id,
+                                episode,
+                                &playback,
+                            )
+                            .await?;
+                            synced += 1;
+                        }
+
+                        episode_start_index += JELLYFIN_PAGE_SIZE;
+                        if episode_start_index >= episode_total_count || episode_page_len == 0 {
+                            break;
+                        }
+                    }
+                }
+
+                season_start_index += JELLYFIN_PAGE_SIZE;
+                if season_start_index >= season_total_count || season_page_len == 0 {
+                    break;
+                }
             }
         }
+
+        show_start_index += JELLYFIN_PAGE_SIZE;
+        if show_start_index >= show_total_count || show_page_len == 0 {
+            break;
+        }
     }
+
     Ok(synced)
 }
 
@@ -411,17 +478,56 @@ pub async fn sync_jellyfin_collection_library<S>(
 where
     S: JellyfinServiceTrait,
 {
-    let page = service
-        .fetch_collection_page(config, parent_id, 0, 100)
-        .await?;
-    for collection in &page.items {
-        let collection_id = upsert_jellyfin_collection(pool, media_source_id, collection).await?;
-        let items = service
-            .fetch_collection_items_page(config, &collection.item_id, 0, 100)
+    let mut synced = 0;
+    let mut collection_start_index = 0;
+
+    loop {
+        let page = service
+            .fetch_collection_page(
+                config,
+                parent_id,
+                collection_start_index,
+                JELLYFIN_PAGE_SIZE,
+            )
             .await?;
-        replace_collection_items(pool, collection_id, &items.items).await?;
+        let total_record_count = page.total_record_count;
+        let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        for collection in &page.items {
+            let collection_id =
+                upsert_jellyfin_collection(pool, media_source_id, collection).await?;
+            let mut item_start_index = 0;
+            let mut all_items = Vec::new();
+
+            loop {
+                let items = service
+                    .fetch_collection_items_page(
+                        config,
+                        &collection.item_id,
+                        item_start_index,
+                        JELLYFIN_PAGE_SIZE,
+                    )
+                    .await?;
+                let item_total_count = items.total_record_count;
+                let item_page_len = i32::try_from(items.items.len()).unwrap_or(i32::MAX);
+                all_items.extend(items.items);
+
+                item_start_index += JELLYFIN_PAGE_SIZE;
+                if item_start_index >= item_total_count || item_page_len == 0 {
+                    break;
+                }
+            }
+
+            replace_collection_items(pool, collection_id, &all_items).await?;
+            synced += 1;
+        }
+
+        collection_start_index += JELLYFIN_PAGE_SIZE;
+        if collection_start_index >= total_record_count || page_len == 0 {
+            break;
+        }
     }
-    Ok(page.items.len())
+
+    Ok(synced)
 }
 
 fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibrarySummary> {
@@ -456,7 +562,8 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
         kind: "jellyfin library",
         value: format!("library {library_id} not found"),
     })?;
-    let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
+    let kind: LibraryMediaKind =
+        decode_enum_column("jellyfin library media kind", &row, "MediaKind")?;
     let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
 
     let address: String = sqlx::query_scalar(
@@ -491,7 +598,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             })?;
 
     let service = JellyfinService::new();
-    if kind == 1 {
+    if kind == LibraryMediaKind::Shows {
         sync_jellyfin_show_library(
             pool,
             &service,

@@ -454,6 +454,18 @@ pub trait PlayoutSchedulingEngine {
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError>;
 }
 
+/// `ErsatzTV`'s external JSON playout builder is a no-op: external playout rows
+/// are owned by the external producer, so a build request succeeds without
+/// mutating generated items or runtime state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExternalJsonSchedulingEngine;
+
+impl PlayoutSchedulingEngine for ExternalJsonSchedulingEngine {
+    fn schedule(&self, _request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        Ok(SchedulingResult::default())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SchedulingError {
     #[error("missing schedule file")]
