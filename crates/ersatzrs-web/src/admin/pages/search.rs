@@ -1,33 +1,36 @@
 #![allow(dead_code)]
 
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_query_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_query_map;
 
 use crate::admin::server_fns::search::{search_media, SearchResultRow};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
 
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
+
 #[component]
 pub fn SearchPage() -> impl IntoView {
-    view! { <SearchIsland/> }
+    let query_map = use_query_map();
+    let initial_query = query_map.with_untracked(|params| params.get("query").unwrap_or_default());
+
+    view! { <SearchIsland initial_query/> }
 }
 
 #[island]
-fn SearchIsland() -> impl IntoView {
-    let query_map = use_query_map();
-    let query =
-        Memo::new(move |_| query_map.with(|params| params.get("query").unwrap_or_default()));
-    let input = RwSignal::new(query.get_untracked());
-    let navigate = use_navigate();
-    let keydown_navigate = navigate.clone();
-
-    Effect::new(move |_| {
-        input.set(query.get());
-    });
+fn SearchIsland(initial_query: String) -> impl IntoView {
+    let input = RwSignal::new(initial_query.clone());
 
     let data: Resource<(String, Vec<SearchResultRow>)> = Resource::new(
-        move || query.get(),
+        move || initial_query.clone(),
         move |query| async move {
             let rows = search_media(query.clone()).await.unwrap_or_default();
             (query, rows)
@@ -47,10 +50,7 @@ fn SearchIsland() -> impl IntoView {
                         if event.key() == "Enter" {
                             let query = input.get_untracked();
                             let encoded = urlencoding::encode(query.trim()).into_owned();
-                            keydown_navigate(
-                                &format!("/search?query={encoded}"),
-                                NavigateOptions::default(),
-                            );
+                            set_browser_location(&format!("/search?query={encoded}"));
                         }
                     }
                 />
@@ -60,10 +60,7 @@ fn SearchIsland() -> impl IntoView {
                     on:click=move |_| {
                         let query = input.get_untracked();
                         let encoded = urlencoding::encode(query.trim()).into_owned();
-                        navigate(
-                            &format!("/search?query={encoded}"),
-                            NavigateOptions::default(),
-                        );
+                        set_browser_location(&format!("/search?query={encoded}"));
                     }
                 >
                     "Search"

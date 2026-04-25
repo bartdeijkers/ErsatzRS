@@ -4,7 +4,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use crate::{
     admin::app::{shell, App},
@@ -23,6 +26,7 @@ pub fn build_app(app_state: AppState) -> Router {
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
     let pkg_dir = resolve_pkg_dir(&leptos_options);
+    let output_name = leptos_options.output_name.clone();
 
     let leptos_options_clone = leptos_options.clone();
     let app_state_for_leptos = app_state.clone();
@@ -38,6 +42,21 @@ pub fn build_app(app_state: AppState) -> Router {
 
     if let Some(pkg_dir) = pkg_dir {
         tracing::info!(pkg_dir = %pkg_dir.display(), "serving Leptos hydration assets");
+        let bg_wasm_name = format!("{output_name}_bg.wasm");
+        let cargo_leptos_wasm_name = format!("{output_name}.wasm");
+        let bg_wasm_path = pkg_dir.join(&bg_wasm_name);
+        let cargo_leptos_wasm_path = pkg_dir.join(&cargo_leptos_wasm_name);
+        if !bg_wasm_path.is_file() && cargo_leptos_wasm_path.is_file() {
+            tracing::info!(
+                from = %cargo_leptos_wasm_path.display(),
+                to = %format!("/pkg/{bg_wasm_name}"),
+                "serving cargo-leptos wasm output under wasm-bindgen filename"
+            );
+            leptos_router = leptos_router.route_service(
+                &format!("/pkg/{bg_wasm_name}"),
+                ServeFile::new(cargo_leptos_wasm_path),
+            );
+        }
         leptos_router = leptos_router.nest_service("/pkg", ServeDir::new(pkg_dir));
     } else {
         tracing::warn!(
@@ -47,6 +66,7 @@ pub fn build_app(app_state: AppState) -> Router {
 
     let api_router: Router = Router::new()
         .route("/healthz", get(super::bootstrap::healthz))
+        .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
             "/api/watermarks/image",
             post(api::watermarks::upload_watermark_image)

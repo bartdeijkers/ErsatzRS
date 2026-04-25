@@ -1,16 +1,9 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::server_fns::channels::{
-    get_channel_form, list_ffmpeg_profiles_for_select, list_filler_presets_for_select,
-    save_channel, ChannelForm,
-};
-use crate::admin::ui::primitives::{
-    button::{Button, ButtonVariant},
-    form::{CheckBox, SelectField, TextField},
-    toast::{use_toast, ToastSeverity},
+    get_channel_form, list_ffmpeg_profiles_for_select, list_filler_presets_for_select, ChannelForm,
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/editor.module.css");
@@ -72,26 +65,7 @@ fn ChannelEditorIsland(
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
     let profile_err: RwSignal<Option<String>> = RwSignal::new(None);
 
-    let navigate = use_navigate();
-    let toast = use_toast();
-
-    let save_action = Action::new(move |form: &ChannelForm| {
-        let form = form.clone();
-        async move { save_channel(form).await }
-    });
-
-    Effect::new(move |_| match save_action.value().get() {
-        Some(Ok(_)) => {
-            toast.push("Channel saved.", ToastSeverity::Success);
-            navigate("/channels", NavigateOptions::default());
-        }
-        Some(Err(e)) => {
-            toast.push(format!("Save failed: {e}"), ToastSeverity::Error);
-        }
-        None => {}
-    });
-
-    let on_save = move |()| {
+    let on_save = move || {
         let num = number.get();
         let nm = name.get();
         let pid = ffmpeg_profile_id.get();
@@ -114,19 +88,7 @@ fn ChannelEditorIsland(
             valid = false;
         }
 
-        if valid {
-            save_action.dispatch(ChannelForm {
-                id: channel_id,
-                number: num,
-                name: nm,
-                group: group.get(),
-                ffmpeg_profile_id: pid,
-                streaming_mode: streaming_mode.get(),
-                is_enabled: is_enabled.get(),
-                show_in_epg: show_in_epg.get(),
-                fallback_filler_id: fallback_filler_id.get(),
-            });
-        }
+        valid
     };
 
     let page_title = move || {
@@ -143,6 +105,12 @@ fn ChannelEditorIsland(
         (4, "HLS Segmenter".to_string()),
         (5, "Transport Stream Hybrid".to_string()),
     ];
+    let mut profile_items = initial_profiles;
+    let has_profiles = !profile_items.is_empty();
+    profile_items.insert(0, (0i64, "- Select profile -".to_string()));
+    let mut filler_items = initial_fillers;
+    filler_items.insert(0, (0i64, "None".to_string()));
+    let select_class = format!("{} {}", style::input, style::select);
 
     view! {
         <div class=style::page>
@@ -151,84 +119,174 @@ fn ChannelEditorIsland(
                 <h1 class=style::page_title>{page_title}</h1>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::loading>"Loading..."</p> }>
-                <div class=style::card>
-                    <div class=style::form_grid>
-                        <TextField
-                            label="Channel Number"
-                            value=number
+            <form method="post" action="/api/channels/save">
+            <input type="hidden" name="id" value=channel_id.to_string()/>
+            <div class=style::card>
+                <div class=style::form_grid>
+                    <div class=style::field>
+                        <label class=style::label>"Channel Number"</label>
+                        <input
+                            name="number"
+                            type="text"
                             placeholder="e.g. 1 or 2.1"
-                            error=Some(Signal::derive(move || number_err.get()))
+                            class=style::input
+                            value=number.get_untracked()
+                            prop:value=move || number.get()
+                            on:input=move |e| number.set(event_target_value(&e))
                         />
-                        <TextField
-                            label="Name"
-                            value=name
+                        <span class=style::error>{move || number_err.get().unwrap_or_default()}</span>
+                    </div>
+                    <div class=style::field>
+                        <label class=style::label>"Name"</label>
+                        <input
+                            name="name"
+                            type="text"
                             placeholder="My Channel"
-                            error=Some(Signal::derive(move || name_err.get()))
+                            class=style::input
+                            value=name.get_untracked()
+                            prop:value=move || name.get()
+                            on:input=move |e| name.set(event_target_value(&e))
                         />
+                        <span class=style::error>{move || name_err.get().unwrap_or_default()}</span>
                     </div>
+                </div>
 
-                    <TextField
-                        label="Group (optional)"
-                        value=group
+                <div class=style::field>
+                    <label class=style::label>"Group (optional)"</label>
+                    <input
+                        name="group"
+                        type="text"
                         placeholder="Leave blank for no group"
+                        class=style::input
+                        value=group.get_untracked()
+                        prop:value=move || group.get()
+                        on:input=move |e| group.set(event_target_value(&e))
                     />
-
-                    <SelectField<i32>
-                        label="Streaming Mode"
-                        value=streaming_mode
-                        items=streaming_mode_items
-                    />
-
-                    {{
-                        let mut items = initial_profiles;
-                        if items.is_empty() {
-                            view! {
-                                <p class=style::no_profiles>
-                                    "No FFmpeg profiles found. Create one first."
-                                </p>
-                            }.into_any()
-                        } else {
-                            items.insert(0, (0i64, "— Select profile —".to_string()));
-                            view! {
-                                <SelectField<i64>
-                                    label="FFmpeg Profile"
-                                    value=ffmpeg_profile_id
-                                    items=items
-                                    error=Some(Signal::derive(move || profile_err.get()))
-                                />
-                            }.into_any()
-                        }
-                    }}
-
-                    {{
-                        let mut items = initial_fillers;
-                        items.insert(0, (0i64, "None".to_string()));
-                        view! {
-                            <SelectField<i64>
-                                label="Fallback Filler Preset"
-                                value=fallback_filler_id
-                                items=items
-                            />
-                        }
-                    }}
-
-                    <div class=style::checkboxes>
-                        <CheckBox label="Enabled" value=is_enabled/>
-                        <CheckBox label="Show in EPG" value=show_in_epg/>
-                    </div>
+                    <span class=style::error></span>
                 </div>
 
-                <div class=style::form_actions>
-                    <Button
-                        variant=ButtonVariant::Primary
-                        on_click=Some(Callback::new(on_save))
+                <div class=style::field>
+                    <label class=style::label>"Streaming Mode"</label>
+                    <select
+                        name="streaming_mode"
+                        class=select_class.clone()
+                        prop:value=move || streaming_mode.get().to_string()
+                        on:change=move |e| {
+                            if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                streaming_mode.set(parsed);
+                            }
+                        }
                     >
-                        {move || if save_action.pending().get() { "Saving…" } else { "Save" }}
-                    </Button>
-                    <a href="/channels" class=style::cancel_link>"Cancel"</a>
+                        {streaming_mode_items
+                            .into_iter()
+                            .map(|(value, label)| {
+                                let selected = value == streaming_mode.get_untracked();
+                                view! {
+                                    <option value=value.to_string() selected=selected>{label}</option>
+                                }
+                            })
+                            .collect_view()}
+                    </select>
+                    <span class=style::error></span>
                 </div>
-            </Suspense>
+
+                <div class=style::field>
+                    <label class=style::label>"FFmpeg Profile"</label>
+                    <select
+                        name="ffmpeg_profile_id"
+                        class=select_class.clone()
+                        prop:value=move || ffmpeg_profile_id.get().to_string()
+                        on:change=move |e| {
+                            if let Ok(parsed) = event_target_value(&e).parse::<i64>() {
+                                ffmpeg_profile_id.set(parsed);
+                            }
+                        }
+                    >
+                        {profile_items
+                            .into_iter()
+                            .map(|(value, label)| {
+                                let selected = value == ffmpeg_profile_id.get_untracked();
+                                view! {
+                                    <option value=value.to_string() selected=selected>{label}</option>
+                                }
+                            })
+                            .collect_view()}
+                    </select>
+                    <span class=style::error>{move || profile_err.get().unwrap_or_default()}</span>
+                </div>
+
+                {(!has_profiles).then(|| view! {
+                    <p class=style::no_profiles>"No FFmpeg profiles found. Create one first."</p>
+                })}
+
+                <div class=style::field>
+                    <label class=style::label>"Fallback Filler Preset"</label>
+                    <select
+                        name="fallback_filler_id"
+                        class=select_class
+                        prop:value=move || fallback_filler_id.get().to_string()
+                        on:change=move |e| {
+                            if let Ok(parsed) = event_target_value(&e).parse::<i64>() {
+                                fallback_filler_id.set(parsed);
+                            }
+                        }
+                    >
+                        {filler_items
+                            .into_iter()
+                            .map(|(value, label)| {
+                                let selected = value == fallback_filler_id.get_untracked();
+                                view! {
+                                    <option value=value.to_string() selected=selected>{label}</option>
+                                }
+                            })
+                            .collect_view()}
+                    </select>
+                    <span class=style::error></span>
+                </div>
+
+                <div class=style::checkboxes>
+                    <label class=style::checkbox_label>
+                        <input
+                            name="is_enabled"
+                            type="checkbox"
+                            value="true"
+                            class=style::checkbox
+                            checked=is_enabled.get_untracked()
+                            prop:checked=move || is_enabled.get()
+                            on:change=move |e| is_enabled.set(event_target_checked(&e))
+                        />
+                        <span class=style::checkbox_text>"Enabled"</span>
+                    </label>
+                    <label class=style::checkbox_label>
+                        <input
+                            name="show_in_epg"
+                            type="checkbox"
+                            value="true"
+                            class=style::checkbox
+                            checked=show_in_epg.get_untracked()
+                            prop:checked=move || show_in_epg.get()
+                            on:change=move |e| show_in_epg.set(event_target_checked(&e))
+                        />
+                        <span class=style::checkbox_text>"Show in EPG"</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class=style::form_actions>
+                <button
+                    type="submit"
+                    class=style::btn_primary
+                    on:click=move |ev| {
+                        if !on_save() {
+                            ev.prevent_default();
+                        }
+                    }
+                >
+                    "Save"
+                </button>
+                <a href="/channels" class=style::cancel_link>"Cancel"</a>
+            </div>
+            </form>
         </div>
     }
 }
