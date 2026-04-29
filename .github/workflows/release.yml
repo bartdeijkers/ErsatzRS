@@ -139,7 +139,7 @@ jobs:
           done
 
       - name: Upload FFmpeg capability reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-capability-reports
           path: capability-reports/
