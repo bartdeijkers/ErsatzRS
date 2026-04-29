@@ -43,7 +43,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push multi-arch image
-        uses: docker/bake-action@v5
+        uses: docker/bake-action@v7
         with:
           files: docker-bake.hcl
           targets: ersatzrs
