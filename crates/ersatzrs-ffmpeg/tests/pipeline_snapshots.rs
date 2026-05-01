@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use ersatzrs_domain::WatermarkLocation;
 use ersatzrs_ffmpeg::{
-    lower_third_overlay, song_progress_filter, AmfPipelineBuilder, ComplexFilter, ConcatPlaylist,
-    DesiredVideoState, DrawvgOverlay, FilterChain, FrameSize, GraphicsTemplateRenderer, HlsOutput,
-    InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
-    QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceVideoCodec,
-    SourceVideoStream, SvgTemplate, V4l2m2mPipelineBuilder, VaapiPipelineBuilder,
-    VideoToolboxPipelineBuilder, WatermarkOverlay,
+    capability_report_for_tests, lower_third_overlay, song_progress_filter, AmfPipelineBuilder,
+    ComplexFilter, ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameSize,
+    GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
+    PipelineBuilder, PipelineRequest, QsvPipelineBuilder, RkmppPipelineBuilder,
+    SoftwarePipelineBuilder, SourceVideoCodec, SourceVideoStream, SvgTemplate,
+    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -73,6 +73,32 @@ fn vaapi_pipeline_snapshot() {
 fn qsv_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let request = h264_request(desired);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_falls_back_to_software_when_encoder_is_missing_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.encoders.remove("h264_qsv");
+    let request = h264_request(desired).with_runtime_capabilities(report);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_falls_back_to_software_when_decoder_is_missing_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.decoders.remove("h264_qsv");
+    let request = h264_request(desired).with_runtime_capabilities(report);
 
     let pipeline = QsvPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);

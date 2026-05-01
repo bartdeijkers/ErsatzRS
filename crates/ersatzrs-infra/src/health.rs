@@ -5,7 +5,11 @@ use ersatzrs_core::health::{
     HealthCheck, HealthCheckError, HealthCheckResult, HealthCheckService, HealthCheckStatus,
     HealthCheckSummary, Result,
 };
-use ersatzrs_ffmpeg::{FfmpegRuntimeIssue, FfmpegRuntimeReport, REQUIRED_MAJOR, REQUIRED_MINOR};
+use ersatzrs_domain::HardwareAccelerationKind;
+use ersatzrs_ffmpeg::{
+    FfmpegRuntimeIssue, FfmpegRuntimeReport, HardwareCapabilitiesFactory, REQUIRED_MAJOR,
+    REQUIRED_MINOR,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 
@@ -795,36 +799,27 @@ fn runtime_issue_name(issue: &FfmpegRuntimeIssue) -> String {
 }
 
 fn supported_acceleration_kinds(runtime: &FfmpegRuntimeReport) -> Vec<i32> {
+    let factory = HardwareCapabilitiesFactory::new(&runtime.capabilities);
     let mut result = Vec::new();
-    if runtime.capabilities.has_hwaccel("qsv") {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::Qsv) {
         result.push(HW_ACCEL_QSV);
     }
-    if runtime.capabilities.has_hwaccel("cuda") || runtime.capabilities.has_hwaccel("nvenc") {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::Nvenc) {
         result.push(HW_ACCEL_NVENC);
     }
-    if runtime.capabilities.has_hwaccel("vaapi") {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::Vaapi) {
         result.push(HW_ACCEL_VAAPI);
     }
-    if runtime.capabilities.has_hwaccel("videotoolbox") {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::VideoToolbox) {
         result.push(HW_ACCEL_VIDEOTOOLBOX);
     }
-    if runtime.capabilities.has_hwaccel("rkmpp") {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::Rkmpp) {
         result.push(HW_ACCEL_RKMPP);
     }
-    if runtime
-        .capabilities
-        .encoders
-        .iter()
-        .any(|encoder| encoder.ends_with("_amf"))
-    {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::Amf) {
         result.push(HW_ACCEL_AMF);
     }
-    if runtime
-        .capabilities
-        .encoders
-        .iter()
-        .any(|encoder| encoder.ends_with("_v4l2m2m"))
-    {
+    if factory.has_hardware_acceleration(HardwareAccelerationKind::V4l2m2m) {
         result.push(HW_ACCEL_V4L2M2M);
     }
     result

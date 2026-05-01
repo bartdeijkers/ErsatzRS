@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod capabilities;
 pub mod command;
 pub mod concat;
 pub mod decoder;
@@ -10,6 +11,7 @@ pub mod options;
 pub mod pipeline;
 pub mod version;
 
+pub use capabilities::*;
 pub use command::*;
 pub use concat::*;
 pub use decoder::*;

@@ -17,8 +17,8 @@ Last reviewed: 2026-05-01.
 | Completed | Slice 9 — Readiness + downgrade/schema checks | Landed before this non-web follow-up plan. |
 | Completed | Slice 10 — FFmpeg 8.1 runtime report + Docker delivery | Landed before this non-web follow-up plan; Slice 12 builds on the runtime report. |
 | Completed | Slice 11 — `PipelineRequest` source-codec metadata + decoder dispatch | Source video/audio metadata, known decoder table, hardware/source-codec dispatch, and argv snapshot updates are complete. |
+| Completed | Slice 12 — Capability detection + `AvailableEncoders/Decoders` | Runtime-report-backed hardware capability checks now gate encoder/decoder selection and fall back to software with snapshot coverage. |
 | Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks, and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
-| Open | Slice 12 — Capability detection + `AvailableEncoders/Decoders` | Not started in this plan; depends on the Slice 10 runtime report as input. |
 | Open | Slice 13 — Ontbrekende FFmpeg-filters | Not started in this plan. |
 | Open | Slice 14 — `ProgramScheduleItem` subtype repositories | Not started in this plan. |
 | Open | Slice 15 — Classic scheduling engine | Not started in this plan. |
@@ -214,13 +214,13 @@ vastgelegd.
    request; bevries argv waar verandering verwacht is.~~
 
 ### Slice 12 — Capability detection + `AvailableEncoders/Decoders`
-1. Voeg `crates/ersatzrs-ffmpeg/src/capabilities/` toe met `IHardwareCapabilities`-
+1. ~~Voeg `crates/ersatzrs-ffmpeg/src/capabilities/` toe met `IHardwareCapabilities`-
    tegenhangers per accel (`Nvidia`, `Qsv`, `Vaapi`, `Amf`, `Rkmpp`,
-   `Videotoolbox`, `V4l2m2m`).
-2. Hang ze aan de bestaande Slice 10 startup-runtime report.
-3. Vervang hardcoded encoder-selectie in `video_encoder()` door een
-   factory die capability + source-codec leest.
-4. Voeg fallback-laddertest met `insta` snapshot.
+   `Videotoolbox`, `V4l2m2m`).~~
+2. ~~Hang ze aan de bestaande Slice 10 startup-runtime report.~~
+3. ~~Vervang hardcoded encoder-selectie in `video_encoder()` door een
+   factory die capability + source-codec leest.~~
+4. ~~Voeg fallback-laddertest met `insta` snapshot.~~
 
 ### Slice 13 — Ontbrekende FFmpeg-filters
 Volgorde van high-ROI naar low:
