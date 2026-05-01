@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-25 (non-web parity slice)
+Last updated: 2026-05-01 (health check engine slice)
 
 ## Current Phase
 
@@ -221,6 +221,16 @@ backfills the upstream `hdhr.uuid` / `hdhr.tuner_count` config keys while
 remaining backward compatible with the earlier mixed-case keys. Review
 outcome: ready for review.
 
+Slice 16 has started for the non-web health-check engine. `ersatzrs-core` now
+owns ErsatzTV-compatible health result/status/summary contracts plus a
+`HealthCheckService` runner, while `ersatzrs-infra::health` provides the first
+SQL-backed checks for FFmpeg version/capabilities, hardware acceleration,
+VAAPI driver guidance, file-not-found/unavailable media state, empty schedules,
+zero-duration media, missing movie/episode metadata, and downgrade/schema
+readiness. Runs can be persisted to `ConfigElement` as `health.results` and
+`health.summary`; this must be kept current as porting work changes runtime
+capabilities or parity-sensitive persisted state.
+
 Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
 `ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
 ErsatzRS-specific path overrides with compatibility aliases, parses version
@@ -312,6 +322,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-01 | Codex (GPT-5) | Started Slice 16 health-check engine parity: added core health contracts/runner, infra SQL-backed checks for FFmpeg/runtime/schema/media/schedule conditions, `ConfigElement` persistence for `health.results`/`health.summary`, and updated AGENTS.md to keep health checks current with port progress. |
 | 2026-04-25 | Codex (GPT-5) | Closed a focused non-web parity slice: ExternalJson playout builds now succeed as the ErsatzTV no-op, ProgramSchedule/Block upserts preserve existing item target fields, Jellyfin/Emby sync pages through movies/shows/seasons/episodes/collections, local scanning dispatches by library media kind for movies/other videos/songs/images, and focused core/infra/scanner tests plus clippy were run. |
 | 2026-04-24 | Codex (GPT-5) | Fixed the immediate admin hydration gap by moving Search, Channel list, and Channel editor browser-driven actions into Leptos islands, improving the missing `/pkg` asset warning, and documenting the required `cargo leptos build` workflow. Gates: fmt, web native/hydrate checks, workspace clippy, and `cargo test -p ersatzrs-web --all-features`. |
 | 2026-04-23 | Codex (GPT-5) | Fixed the post-merge CI regressions by installing `stylance-cli` in the Clippy/Test jobs, ignoring the transitive `rsa` advisory for MySQL support, and verifying the workflow with local fmt/clippy/test/deny checks. |

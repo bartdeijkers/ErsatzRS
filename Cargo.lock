@@ -747,6 +747,7 @@ dependencies = [
  "serde_yaml",
  "sqlx",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

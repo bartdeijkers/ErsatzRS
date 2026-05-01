@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod health;
 pub mod hls;
 pub mod path_replacement;
 pub mod playout_builder;

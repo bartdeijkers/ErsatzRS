@@ -16,11 +16,16 @@ workspace, FFmpeg pipeline, playout scheduling engines, media source scanning,
 IPTV/HDHomeRun endpoints, and the admin UI slices through Trakt list
 integration are all in place. The current startup/runtime parity work now
 includes shared database URL resolution, explicit mediaserver bootstrap for
-default startup data, and initial readiness plus downgrade/schema checks wired
-into startup health reporting. The next priority is broader health /
-troubleshooting coverage and the remaining Phase 7 hardening items from the
-master plan. See [STATUS.md](STATUS.md) for the current checklist and session
-log.
+default startup data, initial readiness plus downgrade/schema checks wired
+into startup health reporting, and the first non-web ErsatzTV health-check
+engine slice in `ersatzrs-core::health` / `ersatzrs-infra::health`. Keep the
+health-check engine current whenever porting work changes FFmpeg capabilities,
+hardware acceleration support, schema readiness, media item state handling,
+metadata persistence, schedules, or provider availability; it is an explicit
+indicator for ErsatzTV port completeness. The next priority is broadening
+health / troubleshooting coverage and the remaining Phase 7 hardening items
+from the master plan. See [STATUS.md](STATUS.md) for the current checklist and
+session log.
 
 When adding code, follow the workspace layout from the plan's architecture and
 crate-layout section.
@@ -120,6 +125,16 @@ Read the relevant contract before changing that area:
 - [docs/adr/](docs/adr/) before changing architecture or behavior contracts.
 - [docs/reference/parity-matrix.md](docs/reference/parity-matrix.md) when
   moving a feature toward parity.
+
+## Health Check Parity
+
+The health-check engine is part of the port-completeness contract. The current
+non-web surface lives in `ersatzrs-core::health` and
+`ersatzrs-infra::health`, with latest run results persisted to `ConfigElement`
+under `health.results` and `health.summary`. When a feature changes runtime
+requirements or parity-sensitive persisted state, update or add the matching
+health check in the same slice so the health report remains an accurate
+indicator of ErsatzTV parity.
 
 ## Key architectural decisions (from the plan)
 
