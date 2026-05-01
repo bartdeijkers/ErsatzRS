@@ -19,7 +19,7 @@ Last reviewed: 2026-05-01.
 | Completed | Slice 11 — `PipelineRequest` source-codec metadata + decoder dispatch | Source video/audio metadata, known decoder table, hardware/source-codec dispatch, and argv snapshot updates are complete. |
 | Completed | Slice 12 — Capability detection + `AvailableEncoders/Decoders` | Runtime-report-backed hardware capability checks now gate encoder/decoder selection and fall back to software with snapshot coverage. |
 | Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks (incl. ported `FFmpegReports`), and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
-| Open | Slice 13 — Ontbrekende FFmpeg-filters | Not started in this plan. |
+| Completed | Slice 13 — Ontbrekende FFmpeg-filters | Loudnorm, hardware deinterlace (yadif_cuda/qsv/vaapi), tonemap (sw + cuda/qsv/vaapi), colorspace (bt.2020→bt.709 + bt.470bg), typed `hwupload`/`hwdownload`, and `framerate=fps:flags=-scd` filters are ported; `FrameState` carries `is_hdr` + `should_deinterlace` and the pipeline auto-emits deinterlace/tonemap/fps based on source metadata. |
 | Open | Slice 14 — `ProgramScheduleItem` subtype repositories | Not started in this plan. |
 | Open | Slice 15 — Classic scheduling engine | Not started in this plan. |
 | Open | Slice 17 — Background maintenance loops | Not started in this plan. |
@@ -62,13 +62,13 @@ Huidige Rust crate is plat (`pipeline/mod.rs` één file, `filter/{simple,comple
 | Decoder dispatch tables (per-codec hwaccel) | `Decoder/Cuvid/`, `Decoder/Qsv/`, `Decoder/V4l2m2m/`, `DecoderH264/Hevc/Av1/Mpeg{1,2,4}/Vp9/Vc1.cs` | Ontbreekt — `PipelineRequest` draagt geen source-codec metadata |
 | Capability factory + caching | `Capabilities/HardwareCapabilitiesFactory.cs`, `FFmpegKnownDecoder/Encoder/Filter/Format/HardwareAcceleration.cs` | Slice 10 introduceerde startup-runtime report; geen typed `IHardwareCapabilities`-traits met fallback |
 | `AvailableEncoders` factory + fallback | `Encoder/AvailableEncoders.cs`, `Encoder/Nvenc/Qsv/Amf/Vaapi/Rkmpp/V4l2m2m/VideoToolbox/` | Hardcoded match in `pipeline::video_encoder()` zonder capability-gating |
-| Filter: deinterlace per hwaccel | `Filter/YadifFilter.cs` + `Filter/Cuda/YadifCudaFilter.cs` + `Filter/Qsv/DeinterlaceQsvFilter.cs` + `Filter/Vaapi/DeinterlaceVaapiFilter.cs` | Alleen software yadif |
-| Filter: tonemap | `Filter/TonemapFilter.cs` (+ Cuda/Qsv/Vaapi varianten) | Ontbreekt |
-| Filter: normalize loudness | `Filter/NormalizeLoudnessFilter.cs` (loudnorm + aresample two-pass) | Ontbreekt |
-| Filter: colorspace migratie | `Filter/ColorspaceFilter.cs` (zscale + colorspace, bt.2020→bt.709) | Ontbreekt |
-| Filter: hardware up/download per accel | `Filter/HardwareUploadFilter.cs`, `HardwareDownloadFilter.cs`, `Cuda/CudaFormatFilter.cs`, `Qsv/QsvFormatFilter.cs`, `Vaapi/VaapiFormatFilter.cs` | Inline hwdownload binnen scaling, geen expliciete upload/download nodes |
-| Filter: framerate `fps`+`setpts` chain | `Filter/FrameRateFilter.cs` | `reset_pts_filter` aanwezig, geen fps-precisie/rounding |
-| `PipelineContext` flags (`is_hdr`, `should_deinterlace`) | `Pipeline/PipelineContext.cs` | `FrameState` mist deze velden |
+| Filter: deinterlace per hwaccel | `Filter/YadifFilter.cs` + `Filter/Cuda/YadifCudaFilter.cs` + `Filter/Qsv/DeinterlaceQsvFilter.cs` + `Filter/Vaapi/DeinterlaceVaapiFilter.cs` | Slice 13: software `yadif`, `yadif_cuda`, `deinterlace_qsv`, `deinterlace_vaapi` met dispatcher in `filter/deinterlace.rs` |
+| Filter: tonemap | `Filter/TonemapFilter.cs` (+ Cuda/Qsv/Vaapi varianten) | Slice 13: zscale-tonemap (sw), `libplacebo` cuda, `vpp_qsv=tonemap=1`, vaapi `tonemap_opencl` met dispatcher in `filter/tonemap.rs` |
+| Filter: normalize loudness | `Filter/NormalizeLoudnessFilter.cs` (loudnorm + aresample two-pass) | Slice 13: `normalize_loudness_filter` in `filter/audio.rs` |
+| Filter: colorspace migratie | `Filter/ColorspaceFilter.cs` (zscale + colorspace, bt.2020→bt.709) | Slice 13: `colorspace_filter` in `filter/colorspace.rs` met `ColorParams` (unknown/mixed/bt470bg/bt2020-ten paden) |
+| Filter: hardware up/download per accel | `Filter/HardwareUploadFilter.cs`, `HardwareDownloadFilter.cs`, `Cuda/CudaFormatFilter.cs`, `Qsv/QsvFormatFilter.cs`, `Vaapi/VaapiFormatFilter.cs` | Slice 13: typed `hardware_upload_filter`/`hardware_download_filter` in `filter/hardware.rs`; per-accel format helpers (`scale_cuda=format=...`, etc.) blijven in `pipeline/mod.rs` voor gebruik in scale-laag |
+| Filter: framerate `fps`+`setpts` chain | `Filter/FrameRateFilter.cs` | Slice 13: `frame_rate_filter` in `filter/framerate.rs` (`framerate=fps=N/D:flags=-scd` met hwdownload-prefix) |
+| `PipelineContext` flags (`is_hdr`, `should_deinterlace`) | `Pipeline/PipelineContext.cs` | Slice 13: `FrameState.is_hdr` + `FrameState.should_deinterlace` worden door `apply_source_video_filters` afgeleid uit `SourceVideoStream` |
 | Concat metadata (service name/provider, infinite loop, readrate) | `PipelineBuilderBase.Concat()` | `concat.rs` schrijft alleen ffconcat-file |
 
 ### B. Classic scheduling engine + schedule-item subtype writes — LARGE
@@ -225,19 +225,24 @@ vastgelegd.
 
 ### Slice 13 — Ontbrekende FFmpeg-filters
 Volgorde van high-ROI naar low:
-1. `NormalizeLoudnessFilter` (loudnorm + aresample two-pass) —
-   audio-parity is belangrijk voor live-streaming.
-2. Hardware deinterlace per accel (`yadif_cuda`, `deinterlace_qsv`,
-   `deinterlace_vaapi`).
-3. `TonemapFilter` (+ cuda/qsv/vaapi) — HDR is groeiend.
-4. `ColorspaceFilter` (zscale + bt.709 migratie).
-5. `HardwareUploadFilter` / `HardwareDownloadFilter` als typed nodes;
-   refactor inline hwdownload uit scaling.
-6. `FrameRateFilter` met fps-precisie/rounding.
+1. ~~`NormalizeLoudnessFilter` (loudnorm + aresample two-pass) —
+   audio-parity is belangrijk voor live-streaming.~~
+2. ~~Hardware deinterlace per accel (`yadif_cuda`, `deinterlace_qsv`,
+   `deinterlace_vaapi`).~~
+3. ~~`TonemapFilter` (+ cuda/qsv/vaapi) — HDR is groeiend.~~
+4. ~~`ColorspaceFilter` (zscale + bt.709 migratie).~~
+5. ~~`HardwareUploadFilter` / `HardwareDownloadFilter` als typed nodes;
+   refactor inline hwdownload uit scaling.~~
+6. ~~`FrameRateFilter` met fps-precisie/rounding.~~
 
-Elke filter krijgt een `insta`-snapshot in de bestaande `ersatzrs-ffmpeg`-
-testsuite voor zijn argv-fragment, plus een end-to-end pipeline-snapshot
-waar de filter wordt ingevoegd.
+Filters leven in `crates/ersatzrs-ffmpeg/src/filter/{audio,colorspace,
+deinterlace,framerate,hardware,tonemap}.rs`. Per-filter argv-fragment
+snapshots staan in `tests/snapshots/`; end-to-end pipeline snapshots dekken
+interlaced bron, HDR bron via NVENC, en fps-mismatch (zie
+`pipeline_emits_*` tests). `FrameState` draagt nu `is_hdr` +
+`should_deinterlace` en `build_transcode_pipeline` plaatst deinterlace,
+tonemap en frame_rate filters automatisch op basis van
+`SourceVideoStream`.
 
 ### Slice 14 — `ProgramScheduleItem` subtype repositories
 1. Schrijf full read/write voor `ProgramScheduleDurationItem`,

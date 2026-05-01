@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-01 (FFmpeg capability-gated encoder/decoder slice)
+Last updated: 2026-05-01 (Slice 13 FFmpeg filter parity)
 
 ## Current Phase
 
@@ -340,6 +340,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-01 | Claude Code (claude-opus-4-7) | Slice 13 FFmpeg filter parity: ported `NormalizeLoudnessFilter`, `FrameRateFilter`, `ColorspaceFilter`, hardware deinterlace (yadif/yadif_cuda/deinterlace_qsv/deinterlace_vaapi), tonemap (sw + cuda/qsv/vaapi), and typed `HardwareUploadFilter`/`HardwareDownloadFilter`. Split `filter/` into per-category modules (`audio`, `colorspace`, `deinterlace`, `framerate`, `hardware`, `tonemap`), extended `FrameState` with `is_hdr`/`should_deinterlace`, and made `build_transcode_pipeline` auto-emit deinterlace/tonemap/fps based on `SourceVideoStream`. 28 new insta snapshots cover per-filter argv plus end-to-end interlaced/HDR/fps-mismatch pipelines. |
 | 2026-05-01 | Claude Code (claude-opus-4-7) | Slice 16 health-check parity: ported ErsatzTV's `FFmpegReportsHealthCheck` (warns when `ffmpeg.save_reports` is enabled) into `ersatzrs-infra::health`, wired it into `make_health_check_service`, and added a unit test covering the default/disabled/enabled states. |
 | 2026-05-01 | Codex (GPT-5) | Completed Slice 12 FFmpeg capability gating: added report-backed hardware capability checks, wired runtime capabilities into pipeline encoder/decoder selection with software fallback snapshots, and aligned health hardware support detection. |
 | 2026-05-01 | Codex (GPT-5) | Completed Slice 11 FFmpeg source decoder dispatch: added source stream metadata to `PipelineRequest`, ported the known decoder table/selection logic, updated pipeline argv snapshots, and documented the parity/status change. |

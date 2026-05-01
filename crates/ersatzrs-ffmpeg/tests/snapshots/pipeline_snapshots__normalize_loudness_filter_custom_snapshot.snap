@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 282
+expression: filter
+---
+loudnorm=I=-23:TP=-1.5:LRA=11,aresample=44000

@@ -4,14 +4,16 @@ use ersatzrs_domain::{
 };
 
 use crate::{
-    closed_gop, fast_start, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
-    no_standard_input, no_stats, pipe_output, progress_to_stdout, select_video_decoder,
-    standard_format_flags, subtitle_overlay_filter, watermark_opacity_filter,
-    watermark_overlay_filter, CommandGenerator, ComplexFilter, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
-    HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
-    StreamKind, WatermarkOverlay,
+    closed_gop, deinterlace_filter, fast_start, frame_rate_filter, hide_banner, loglevel_error,
+    mpegts_output, no_autoscale, no_b_frames, no_standard_input, no_stats, pipe_output,
+    progress_to_stdout, select_video_decoder, standard_format_flags, subtitle_overlay_filter,
+    tonemap_filter_for, watermark_opacity_filter, watermark_overlay_filter, CommandGenerator,
+    ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate,
+    FrameSize, FrameState, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
+    PixelFormat, SourceVideoCodec, StreamKind, TonemapAlgorithm, WatermarkOverlay,
 };
+
+const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -340,16 +342,15 @@ fn build_transcode_pipeline(
     }
 
     let mut filter_chain = FilterChain::default();
-    let target_state =
+    let mut target_state =
         configure_hardware_acceleration(&mut request, &mut steps, effective_acceleration);
     add_video_decoder(&request, &mut steps, effective_acceleration);
-    filter_chain.video.push(video_scale_filter(
+    apply_source_video_filters(
+        &request,
         effective_acceleration,
-        &target_state,
-        request.desired.frame_size,
-        request.desired.frame_size,
-        request.desired.bit_depth,
-    ));
+        &mut target_state,
+        &mut filter_chain,
+    );
 
     if let Some(watermark) = &request.watermark {
         if let Some(input) = request
@@ -413,6 +414,94 @@ fn build_transcode_pipeline(
         steps,
         is_intel_vaapi_or_qsv: is_intel,
         filter_graph,
+    }
+}
+
+fn apply_source_video_filters(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    let is_transcode = request.desired.video_format != FFmpegProfileVideoFormat::Copy;
+
+    if let Some(source) = &request.source_video_stream {
+        target_state.should_deinterlace =
+            source.scan_kind == VideoScanKind::Interlaced && is_transcode;
+        target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
+    }
+
+    if target_state.should_deinterlace && !target_state.deinterlaced {
+        filter_chain.video.push(deinterlace_filter(
+            acceleration,
+            target_state,
+            QSV_EXTRA_HARDWARE_FRAMES,
+        ));
+        target_state.deinterlaced = true;
+        target_state.frame_data_location = deinterlace_output_location(acceleration);
+    }
+
+    if target_state.is_hdr && is_transcode {
+        filter_chain.video.push(tonemap_filter_for(
+            acceleration,
+            target_state,
+            request.desired.pixel_format(),
+            TonemapAlgorithm::default(),
+        ));
+        target_state.is_hdr = false;
+        target_state.pixel_format = request.desired.pixel_format();
+        target_state.frame_data_location = tonemap_output_location(acceleration);
+    }
+
+    filter_chain.video.push(video_scale_filter(
+        acceleration,
+        target_state,
+        request.desired.frame_size,
+        request.desired.frame_size,
+        request.desired.bit_depth,
+    ));
+
+    if let Some(desired_rate) = request.desired.frame_rate {
+        let needs_fps_filter = request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.frame_rate)
+            .is_some_and(|source_rate| source_rate != desired_rate);
+        if needs_fps_filter && is_transcode {
+            filter_chain
+                .video
+                .push(frame_rate_filter(target_state, desired_rate));
+        }
+    }
+}
+
+const fn deinterlace_output_location(
+    acceleration: HardwareAccelerationKind,
+) -> crate::FrameDataLocation {
+    match acceleration {
+        HardwareAccelerationKind::Nvenc
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::Vaapi => crate::FrameDataLocation::Hardware,
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => crate::FrameDataLocation::Software,
+    }
+}
+
+const fn tonemap_output_location(
+    acceleration: HardwareAccelerationKind,
+) -> crate::FrameDataLocation {
+    match acceleration {
+        HardwareAccelerationKind::Nvenc
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::Vaapi => crate::FrameDataLocation::Hardware,
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => crate::FrameDataLocation::Software,
     }
 }
 
