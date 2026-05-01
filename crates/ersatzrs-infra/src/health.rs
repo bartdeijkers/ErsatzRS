@@ -19,6 +19,8 @@ use crate::db::{DatabaseSchemaStatus, Db};
 pub const CONFIG_KEY_HEALTH_RESULTS: &str = "health.results";
 /// `ConfigElement` key containing the latest health check summary as JSON.
 pub const CONFIG_KEY_HEALTH_SUMMARY: &str = "health.summary";
+/// `ConfigElement` key controlling whether `ffmpeg` writes troubleshooting reports.
+const CONFIG_KEY_FFMPEG_SAVE_REPORTS: &str = "ffmpeg.save_reports";
 
 const STATUS_FILE_NOT_FOUND: i32 = 1;
 const STATUS_UNAVAILABLE: i32 = 2;
@@ -111,6 +113,7 @@ pub fn make_health_check_service(
         Box::new(DowngradeHealthCheck::new(schema_status)),
         Box::new(FFmpegVersionHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegCapabilitiesHealthCheck::new(ffmpeg_runtime.clone())),
+        Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(HardwareAccelerationHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),
@@ -215,6 +218,41 @@ impl HealthCheck for FFmpegCapabilitiesHealthCheck {
             ),
             "FFmpeg is missing required capabilities and will NOT work correctly",
         ))
+    }
+}
+
+struct FFmpegReportsHealthCheck {
+    pool: Pool<Db>,
+}
+
+impl FFmpegReportsHealthCheck {
+    fn new(pool: Pool<Db>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for FFmpegReportsHealthCheck {
+    fn title(&self) -> &'static str {
+        "FFmpeg Reports"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        let value = load_config(&self.pool, CONFIG_KEY_FFMPEG_SAVE_REPORTS).await?;
+        let enabled = value
+            .as_deref()
+            .is_some_and(|raw| raw.eq_ignore_ascii_case("true") || raw == "1");
+
+        if enabled {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Warning,
+                "FFmpeg troubleshooting reports are enabled and may use a lot of disk space",
+                "FFmpeg troubleshooting reports are enabled",
+            ));
+        }
+
+        Ok(HealthCheckResult::pass(self.title()))
     }
 }
 
@@ -892,6 +930,37 @@ mod tests {
             store.load_results().await.expect("load results").len(),
             run.results.len()
         );
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_reports_check_warns_when_save_reports_is_enabled() {
+        let pool = test_pool().await;
+        let check = FFmpegReportsHealthCheck::new(pool.clone());
+
+        // Default state: no config row.
+        let result = check.check().await.expect("default check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+
+        // Disabled.
+        upsert_config(&pool, CONFIG_KEY_FFMPEG_SAVE_REPORTS, "False")
+            .await
+            .expect("seed disabled save reports");
+        let result = check.check().await.expect("disabled check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+
+        // ErsatzTV writes booleans via `bool.ToString()`; accept the canonical
+        // capitalization plus a couple of common variants.
+        for raw in ["True", "true", "TRUE", "1"] {
+            upsert_config(&pool, CONFIG_KEY_FFMPEG_SAVE_REPORTS, raw)
+                .await
+                .expect("seed enabled save reports");
+            let result = check.check().await.expect("enabled check");
+            assert_eq!(result.status, HealthCheckStatus::Warning);
+            assert_eq!(
+                result.brief_message, "FFmpeg troubleshooting reports are enabled",
+                "raw value {raw} should warn",
+            );
+        }
     }
 
     #[tokio::test]

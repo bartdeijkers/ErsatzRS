@@ -18,7 +18,7 @@ Last reviewed: 2026-05-01.
 | Completed | Slice 10 — FFmpeg 8.1 runtime report + Docker delivery | Landed before this non-web follow-up plan; Slice 12 builds on the runtime report. |
 | Completed | Slice 11 — `PipelineRequest` source-codec metadata + decoder dispatch | Source video/audio metadata, known decoder table, hardware/source-codec dispatch, and argv snapshot updates are complete. |
 | Completed | Slice 12 — Capability detection + `AvailableEncoders/Decoders` | Runtime-report-backed hardware capability checks now gate encoder/decoder selection and fall back to software with snapshot coverage. |
-| Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks, and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
+| Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks (incl. ported `FFmpegReports`), and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
 | Open | Slice 13 — Ontbrekende FFmpeg-filters | Not started in this plan. |
 | Open | Slice 14 — `ProgramScheduleItem` subtype repositories | Not started in this plan. |
 | Open | Slice 15 — Classic scheduling engine | Not started in this plan. |
@@ -125,6 +125,7 @@ volledige ErsatzTV `IHardwareCapabilities`-factory met per-profiel probe.
 | --- | --- | --- |
 | FFmpegVersion | `Infrastructure/Health/Checks/FFmpegVersionHealthCheck.cs` | Geport tegen `FfmpegRuntimeReport`; startup blijft fail-fast |
 | FFmpegCapabilities | `FFmpegCapabilitiesHealthCheck.cs` | Geport tegen Slice-10 capability issues |
+| FFmpegReports | `FFmpegReportsHealthCheck.cs` | Geport tegen de `ffmpeg.save_reports` `ConfigElement`-flag |
 | HardwareAcceleration | `HardwareAccelerationHealthCheck.cs` | Eerste check geport: detecteert ondersteunde accel uit `hwaccels`/encoders en waarschuwt over kanaalprofielen zonder ondersteunde accel |
 | VaapiDriver | `VaapiDriverHealthCheck.cs` | Eerste check geport: actieve VAAPI-profielen, ontbrekende VAAPI capability en default-driver info; mist nog per-device/driver capability probe |
 | FileNotFound | `FileNotFoundHealthCheck.cs` | Geport tegen `MediaItem.State = FileNotFound` met voorbeeldpaden |

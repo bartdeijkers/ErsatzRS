@@ -241,12 +241,13 @@ warnings stay aligned with pipeline dispatch.
 Slice 16 has started for the non-web health-check engine. `ersatzrs-core` now
 owns ErsatzTV-compatible health result/status/summary contracts plus a
 `HealthCheckService` runner, while `ersatzrs-infra::health` provides the first
-SQL-backed checks for FFmpeg version/capabilities, hardware acceleration,
-VAAPI driver guidance, file-not-found/unavailable media state, empty schedules,
-zero-duration media, missing movie/episode metadata, and downgrade/schema
-readiness. Runs can be persisted to `ConfigElement` as `health.results` and
-`health.summary`; this must be kept current as porting work changes runtime
-capabilities or parity-sensitive persisted state.
+SQL-backed checks for FFmpeg version/capabilities, FFmpeg troubleshooting
+reports, hardware acceleration, VAAPI driver guidance, file-not-found/
+unavailable media state, empty schedules, zero-duration media, missing
+movie/episode metadata, and downgrade/schema readiness. Runs can be persisted
+to `ConfigElement` as `health.results` and `health.summary`; this must be kept
+current as porting work changes runtime capabilities or parity-sensitive
+persisted state.
 
 Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
 `ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
@@ -339,6 +340,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-01 | Claude Code (claude-opus-4-7) | Slice 16 health-check parity: ported ErsatzTV's `FFmpegReportsHealthCheck` (warns when `ffmpeg.save_reports` is enabled) into `ersatzrs-infra::health`, wired it into `make_health_check_service`, and added a unit test covering the default/disabled/enabled states. |
 | 2026-05-01 | Codex (GPT-5) | Completed Slice 12 FFmpeg capability gating: added report-backed hardware capability checks, wired runtime capabilities into pipeline encoder/decoder selection with software fallback snapshots, and aligned health hardware support detection. |
 | 2026-05-01 | Codex (GPT-5) | Completed Slice 11 FFmpeg source decoder dispatch: added source stream metadata to `PipelineRequest`, ported the known decoder table/selection logic, updated pipeline argv snapshots, and documented the parity/status change. |
 | 2026-05-01 | Codex (GPT-5) | Started Slice 16 health-check engine parity: added core health contracts/runner, infra SQL-backed checks for FFmpeg/runtime/schema/media/schedule conditions, `ConfigElement` persistence for `health.results`/`health.summary`, and updated AGENTS.md to keep health checks current with port progress. |
