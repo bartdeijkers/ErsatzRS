@@ -3,7 +3,7 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::BlockRepository;
-use ersatzrs_domain::Block;
+use ersatzrs_domain::{Block, BlockItem, CollectionType, PlaybackOrder};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
 
@@ -37,6 +37,58 @@ async fn block_repository_loads_items_and_lists_empty_navigation_fields() {
     assert_eq!(listed[0].id, 1);
     assert_eq!(listed[0].updated_ticks, 42);
     assert!(listed[0].item_ids.is_empty());
+}
+
+#[tokio::test]
+async fn block_repository_round_trips_typed_items_and_overlays() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    pool.execute(r#"INSERT INTO "BlockGroup" ("Id", "Name") VALUES (1, 'group')"#)
+        .await
+        .unwrap();
+    repos
+        .block
+        .upsert(&Block {
+            id: 1,
+            block_group_id: Some(1),
+            name: "block".to_owned(),
+            updated_ticks: 42,
+            duration: Duration::minutes(30),
+            ..Block::default()
+        })
+        .await
+        .unwrap();
+    seed_overlay_targets(&pool).await;
+
+    repos
+        .block
+        .upsert_item(&BlockItem {
+            id: 20,
+            block_id: 1,
+            collection_type: CollectionType::SearchQuery,
+            search_query: Some("title:news".to_owned()),
+            playback_order: PlaybackOrder::Shuffle,
+            sort_order: 4,
+            watermark_ids: vec![501],
+            graphics_element_ids: vec![601],
+            ..BlockItem::default()
+        })
+        .await
+        .unwrap();
+
+    let loaded = repos.block.get_item(20).await.unwrap();
+    assert_eq!(loaded.collection_type, CollectionType::SearchQuery);
+    assert_eq!(loaded.search_query, Some("title:news".to_owned()));
+    assert_eq!(loaded.playback_order, PlaybackOrder::Shuffle);
+    assert_eq!(loaded.sort_order, 4);
+    assert_eq!(loaded.watermark_ids, vec![501]);
+    assert_eq!(loaded.graphics_element_ids, vec![601]);
+
+    let listed = repos.block.list_items(1).await.unwrap();
+    assert_eq!(
+        listed.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![20]
+    );
 }
 
 #[tokio::test]
@@ -106,4 +158,20 @@ async fn block_repository_preserves_existing_item_target_fields() {
     );
     assert_eq!(row.get::<i64, _>("IncludeInProgramGuide"), 1);
     assert_eq!(row.get::<i64, _>("DisableWatermarks"), 1);
+}
+
+async fn seed_overlay_targets(pool: &sqlx::SqlitePool) {
+    pool.execute(
+        r#"INSERT INTO "ChannelWatermark" (
+            "Id", "DurationSeconds", "FrequencyMinutes", "HorizontalMarginPercent",
+            "ImageSource", "Location", "Mode", "Name", "Opacity",
+            "PlaceWithinSourceContent", "Size", "VerticalMarginPercent",
+            "WidthPercent", "ZIndex"
+        ) VALUES (501, 30, 10, 0.0, 0, 0, 1, 'wm', 100, 0, 0, 0.0, 10.0, 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "GraphicsElement" ("Id", "Kind", "Name") VALUES (601, 1, 'ge')"#)
+        .await
+        .unwrap();
 }

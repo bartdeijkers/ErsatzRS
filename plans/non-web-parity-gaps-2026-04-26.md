@@ -2,7 +2,7 @@
 
 ## Slice status overview
 
-Last reviewed: 2026-05-01.
+Last reviewed: 2026-05-02.
 
 | Status | Slices | Notes |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ Last reviewed: 2026-05-01.
 | Completed | Slice 12 — Capability detection + `AvailableEncoders/Decoders` | Runtime-report-backed hardware capability checks now gate encoder/decoder selection and fall back to software with snapshot coverage. |
 | Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks (incl. ported `FFmpegReports`), and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
 | Completed | Slice 13 — Ontbrekende FFmpeg-filters | Loudnorm, hardware deinterlace (yadif_cuda/qsv/vaapi), tonemap (sw + cuda/qsv/vaapi), colorspace (bt.2020→bt.709 + bt.470bg), typed `hwupload`/`hwdownload`, and `framerate=fps:flags=-scd` filters are ported; `FrameState` carries `is_hdr` + `should_deinterlace` and the pipeline auto-emits deinterlace/tonemap/fps based on source metadata. |
-| Open | Slice 14 — `ProgramScheduleItem` subtype repositories | Not started in this plan. |
+| Completed | Slice 14 — `ProgramScheduleItem` subtype repositories | Program schedule item subtype read/write, schedule item overlays, alternates, and typed block item target/overlay round-trips are complete in infra repositories with focused SQLite coverage. |
 | Open | Slice 15 — Classic scheduling engine | Not started in this plan. |
 | Open | Slice 17 — Background maintenance loops | Not started in this plan. |
 | Open | Slice 18 — Scanner deepening | Not started in this plan. |
@@ -245,15 +245,23 @@ tonemap en frame_rate filters automatisch op basis van
 `SourceVideoStream`.
 
 ### Slice 14 — `ProgramScheduleItem` subtype repositories
-1. Schrijf full read/write voor `ProgramScheduleDurationItem`,
+1. ~~Schrijf full read/write voor `ProgramScheduleDurationItem`,
    `ProgramScheduleFloodItem`, `ProgramScheduleMultipleItem`, `ProgramScheduleOneItem`
-   in [crates/ersatzrs-infra/src/repositories/program_schedule.rs](crates/ersatzrs-infra/src/repositories/program_schedule.rs).
-2. Voeg `ProgramScheduleItemWatermark` + `ProgramScheduleItemGraphicsElement`
-   join-rijen toe (parallel met de Block-overlay write parity).
-3. Voeg `ProgramScheduleAlternate` write toe.
-4. Schrijf `BlockItem` typed target round-trip (collection/show/season/
-   searchquery FK-velden) in [block.rs](crates/ersatzrs-infra/src/repositories/block.rs).
-5. Update `persistence-gap-matrix.md` rij voor rij.
+   in [crates/ersatzrs-infra/src/repositories/program_schedule.rs](crates/ersatzrs-infra/src/repositories/program_schedule.rs).~~
+2. ~~Voeg `ProgramScheduleItemWatermark` + `ProgramScheduleItemGraphicsElement`
+   join-rijen toe (parallel met de Block-overlay write parity).~~
+3. ~~Voeg `ProgramScheduleAlternate` write toe.~~
+4. ~~Schrijf `BlockItem` typed target round-trip (collection/show/season/
+   searchquery FK-velden) in [block.rs](crates/ersatzrs-infra/src/repositories/block.rs).~~
+5. ~~Update `persistence-gap-matrix.md` rij voor rij.~~
+
+Slice 14 landed on 2026-05-02. `ProgramScheduleRepository` now exposes typed
+item and alternate methods; `BlockRepository` exposes typed item methods.
+SQLite implementations write the duration/flood/multiple/one subtype rows,
+watermark/graphics join rows, EF-compatible alternate day/month converters,
+and block item target/overlay joins. Focused repository tests cover schedule
+subtype + overlay round-trips, alternate converter persistence, and block item
+target + overlay round-trips.
 
 ### Slice 15 — Classic scheduling engine
 1. Port `Core/Scheduling/ClassicSchedulingContext.cs` + `PlayoutModeSchedulerBase.cs`

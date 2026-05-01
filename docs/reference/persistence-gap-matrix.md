@@ -15,9 +15,9 @@ Scope:
 
 Current summary:
 
-- 75 tables have both read and write coverage.
-- 25 tables have read-only coverage.
-- 38 tables have no infra read/write coverage yet.
+- 84 tables have both read and write coverage.
+- 22 tables have read-only coverage.
+- 32 tables have no infra read/write coverage yet.
 
 Recommended order:
 
@@ -38,11 +38,11 @@ Recommended order:
 | `Artist` | Domain model plus scheduling container expansion | Partial: scheduling container expansion | No | Partial, env-gated scheduling decode if data exists | Artist containers may not expand consistently for music-video scheduling. | P1 media metadata/search joins |
 | `ArtistMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Artist search/container details are read-only. | P1 media metadata/search joins |
 | `Artwork` | Channel repository | Yes: Channel repository | Yes: Channel repository updates channel links | Yes, through channel decode | Channel icons can drift if artwork ownership is expanded beyond channel links. | P2 metadata/artwork owner repository |
-| `Block` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Yes: Block repository | Yes, env-gated direct decode | Covered scalar block shape; root upserts now preserve existing child item rows, but typed item repositories are still thin. | P1 block item subtype loading |
+| `Block` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Yes: Block repository | Yes, env-gated direct decode | Covered scalar block shape; root upserts preserve existing child item rows while typed item writes cover target and overlay joins. | P1 done in Slice 14 |
 | `BlockGroup` | Domain model only | No | No | No | Block editor cannot round-trip imported groups. | P2 group repositories |
-| `BlockItem` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Partial: Block repository preserves existing target/subtype fields and writes placeholder rows only for new item IDs | Yes, through block decode | New item IDs still need concrete typed writes for collection/media target fields. | P1 block item target round-trip |
-| `BlockItemGraphicsElement` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Block overlays are not editable/writable yet. | P1 block overlay joins |
-| `BlockItemWatermark` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Block watermarks are not editable/writable yet. | P1 block overlay joins |
+| `BlockItem` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Yes: Block repository typed item upserts cover collection/media/multi/smart/search target fields and preserve parent reorder semantics | Yes, through block decode | Low/medium; `IncludeInProgramGuide` and `DisableWatermarks` still live outside the compact domain item shape. | P1 done in Slice 14 |
+| `BlockItemGraphicsElement` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Yes: Block repository typed item upserts replace join rows | Partial, env-gated scheduling decode if data exists | Low; overlay join rows now round-trip through typed block item writes. | P1 done in Slice 14 |
+| `BlockItemWatermark` | Block repository and scheduling read model | Yes: Block repository, scheduling read model | Yes: Block repository typed item upserts replace join rows | Partial, env-gated scheduling decode if data exists | Low; watermark join rows now round-trip through typed block item writes. | P1 done in Slice 14 |
 | `Channel` | Channel repository | Yes: Channel repository | Yes: Channel repository | Yes, env-gated direct decode | Low; continue edge-case decode for enum/time fields. | P0 broaden real-world cases |
 | `ChannelWatermark` | Scheduling/deco references only | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Watermark definitions cannot be round-tripped outside references. | P2 watermark repository |
 | `Collection` | Collection repository and scheduling read model | Yes: Collection repository, scheduling read model | Yes: Collection repository | Yes, env-gated direct decode | Covered basic collection rows; custom playback order semantics remain thin. | P2 collection editor parity |
@@ -137,15 +137,15 @@ Recommended order:
 | `PlexPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Plex source decode | Low. | P0 broaden provider source decode |
 | `PlexSeason` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `PlexShow` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
-| `ProgramSchedule` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository | Yes, env-gated direct decode | Covered root fields; root upserts now preserve existing child item rows, but child subtypes are still missing. | P1 schedule item subtype repository |
-| `ProgramScheduleAlternate` | Program schedule repository | Yes: Program schedule repository | No | Yes, through program schedule decode | Alternate schedules are read-only. | P1 schedule item subtype repository |
-| `ProgramScheduleDurationItem` | Schema only | No | No | No | Duration schedule item behavior cannot round-trip. | P1 schedule item subtype repository |
-| `ProgramScheduleFloodItem` | Schema only | No | No | No | Flood schedule item behavior cannot round-trip. | P1 schedule item subtype repository |
-| `ProgramScheduleItem` | Program schedule repository | Yes: Program schedule repository | Partial: Program schedule repository preserves existing target/subtype fields and writes placeholder rows only for new item IDs | Yes, through program schedule decode | New item IDs still need concrete typed writes for target fields and duration/flood/multiple/one subtype rows. | P1 schedule item subtype repository |
-| `ProgramScheduleItemGraphicsElement` | Domain model only | No | No | No | Schedule item overlays are absent. | P1 schedule overlay joins |
-| `ProgramScheduleItemWatermark` | Domain model only | No | No | No | Schedule item watermarks are absent. | P1 schedule overlay joins |
-| `ProgramScheduleMultipleItem` | Schema only | No | No | No | Multiple-item schedule behavior cannot round-trip. | P1 schedule item subtype repository |
-| `ProgramScheduleOneItem` | Schema only | No | No | No | One-item schedule behavior cannot round-trip. | P1 schedule item subtype repository |
+| `ProgramSchedule` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository | Yes, env-gated direct decode | Covered root fields; root upserts preserve existing child item rows while typed item methods cover subtype and overlay writes. | P1 done in Slice 14 |
+| `ProgramScheduleAlternate` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository writes EF-compatible date-window rows and day/month converters | Yes, through program schedule decode | Low/medium; alternate schedule selection is consumed by the future Classic scheduler slice. | P1 done in Slice 14 |
+| `ProgramScheduleDurationItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Yes, through focused SQLite repository tests | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
+| `ProgramScheduleFloodItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Partial, typed write path covered; real-world decode remains env-gated when data exists | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
+| `ProgramScheduleItem` | Program schedule repository | Yes: Program schedule repository | Yes: Program schedule repository typed item upserts cover target fields, language/subtitle fields, start-time behavior, and subtype dispatch | Yes, through program schedule decode | Low/medium; filler preset and `SearchTitle` fields are still outside the compact domain item shape. | P1 done in Slice 14 |
+| `ProgramScheduleItemGraphicsElement` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert replaces join rows | Yes, through focused SQLite repository tests | Low; schedule item overlay join rows now round-trip. | P1 done in Slice 14 |
+| `ProgramScheduleItemWatermark` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert replaces join rows | Yes, through focused SQLite repository tests | Low; schedule item watermark join rows now round-trip. | P1 done in Slice 14 |
+| `ProgramScheduleMultipleItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Yes, through focused SQLite repository tests | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
+| `ProgramScheduleOneItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Partial, typed write path covered; real-world decode remains env-gated when data exists | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
 | `RemoteStream` | Scheduling read model | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Remote stream media rows lack owner repository. | P1 media polymorphic repository |
 | `RemoteStreamMetadata` | Domain model only | No | No | Partial, env-gated scheduling decode if data exists | Remote stream metadata decode is incomplete. | P1 media metadata/search joins |
 | `RerunCollection` | Domain model only | No | No | No | Rerun collection feature is not persisted. | P4 rerun collections |

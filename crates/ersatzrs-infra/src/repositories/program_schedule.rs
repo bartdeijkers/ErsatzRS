@@ -3,10 +3,16 @@ use std::collections::BTreeSet;
 use crate::db::{Db, DbRow};
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
-use ersatzrs_domain::{EntityId, ProgramSchedule};
+use ersatzrs_domain::{
+    EntityId, FixedStartTimeBehavior, PlayoutMode, ProgramSchedule, ProgramScheduleAlternate,
+    ProgramScheduleItem,
+};
 use sqlx::{Pool, Row, Transaction};
 
-use super::common::{decode_enum_column, encode_enum, load_ids, not_found};
+use super::common::{
+    decode_bool_column, decode_enum_column, decode_optional_duration_text,
+    decode_optional_enum_column, encode_duration, encode_enum, load_ids, not_found, replace_ids,
+};
 
 #[derive(Clone)]
 pub struct SqliteProgramScheduleRepository(pub Pool<crate::db::Db>);
@@ -105,7 +111,92 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
         tx.commit().await?;
         Ok(())
     }
+
+    async fn get_item(&self, id: EntityId) -> Result<ProgramScheduleItem> {
+        let row = sqlx::query(&format!("{ITEM_SELECT_SQL} WHERE psi.\"Id\" = ?"))
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("program schedule item", id, error))?;
+        map_program_schedule_item(&self.0, &row).await
+    }
+
+    async fn list_items(&self, schedule_id: EntityId) -> Result<Vec<ProgramScheduleItem>> {
+        let rows = sqlx::query(&format!(
+            "{ITEM_SELECT_SQL} WHERE psi.\"ProgramScheduleId\" = ? ORDER BY psi.\"Index\", psi.\"Id\""
+        ))
+        .bind(schedule_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            items.push(map_program_schedule_item(&self.0, &row).await?);
+        }
+        Ok(items)
+    }
+
+    async fn upsert_item(&self, item: &ProgramScheduleItem) -> Result<()> {
+        let mut tx = self.0.begin().await?;
+        upsert_program_schedule_item(&mut tx, item).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn delete_item(&self, id: EntityId) -> Result<()> {
+        sqlx::query(r#"DELETE FROM "ProgramScheduleItem" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&self.0)
+            .await?;
+        Ok(())
+    }
+
+    async fn list_alternates(
+        &self,
+        schedule_id: EntityId,
+    ) -> Result<Vec<ProgramScheduleAlternate>> {
+        let rows = sqlx::query(
+            r#"SELECT *
+             FROM "ProgramScheduleAlternate"
+             WHERE "ProgramScheduleId" = ?
+             ORDER BY "Index", "Id""#,
+        )
+        .bind(schedule_id)
+        .fetch_all(&self.0)
+        .await?;
+        rows.iter().map(map_program_schedule_alternate).collect()
+    }
+
+    async fn upsert_alternate(&self, alternate: &ProgramScheduleAlternate) -> Result<()> {
+        let mut tx = self.0.begin().await?;
+        upsert_program_schedule_alternate(&mut tx, alternate).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn delete_alternate(&self, id: EntityId) -> Result<()> {
+        sqlx::query(r#"DELETE FROM "ProgramScheduleAlternate" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&self.0)
+            .await?;
+        Ok(())
+    }
 }
+
+const ITEM_SELECT_SQL: &str = r#"SELECT psi.*,
+       psdi."Id" AS "DurationItemId",
+       psdi."PlayoutDuration",
+       psdi."TailMode",
+       psmi."Id" AS "MultipleItemId",
+       psmi."Count",
+       psmi."MultipleMode",
+       psoi."Id" AS "OneItemId",
+       psfi."Id" AS "FloodItemId"
+FROM "ProgramScheduleItem" AS psi
+LEFT JOIN "ProgramScheduleDurationItem" AS psdi ON psdi."Id" = psi."Id"
+LEFT JOIN "ProgramScheduleMultipleItem" AS psmi ON psmi."Id" = psi."Id"
+LEFT JOIN "ProgramScheduleOneItem" AS psoi ON psoi."Id" = psi."Id"
+LEFT JOIN "ProgramScheduleFloodItem" AS psfi ON psfi."Id" = psi."Id""#;
 
 async fn sync_program_schedule_item_ids(
     tx: &mut Transaction<'_, Db>,
@@ -142,18 +233,206 @@ async fn sync_program_schedule_item_ids(
             .execute(&mut **tx)
             .await?;
         } else {
+            let item = ProgramScheduleItem {
+                id,
+                program_schedule_id: schedule_id,
+                sort_order: index,
+                ..ProgramScheduleItem::default()
+            };
+            upsert_program_schedule_item(tx, &item).await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn upsert_program_schedule_item(
+    tx: &mut Transaction<'_, Db>,
+    item: &ProgramScheduleItem,
+) -> Result<()> {
+    let start_time = item.start_time.map(encode_duration);
+    let result = sqlx::query(
+        r#"UPDATE "ProgramScheduleItem"
+           SET "ProgramScheduleId" = ?,
+               "CollectionType" = ?,
+               "CollectionId" = ?,
+               "MediaItemId" = ?,
+               "MultiCollectionId" = ?,
+               "SmartCollectionId" = ?,
+               "RerunCollectionId" = ?,
+               "PlaylistId" = ?,
+               "SearchQuery" = ?,
+               "PlaybackOrder" = ?,
+               "FillWithGroupMode" = ?,
+               "GuideMode" = ?,
+               "MarathonGroupBy" = ?,
+               "MarathonShuffleGroups" = ?,
+               "MarathonShuffleItems" = ?,
+               "Index" = ?,
+               "StartTime" = ?,
+               "FixedStartTimeBehavior" = ?,
+               "CustomTitle" = ?,
+               "PreferredAudioLanguageCode" = ?,
+               "PreferredAudioTitle" = ?,
+               "PreferredSubtitleLanguageCode" = ?,
+               "SubtitleMode" = ?,
+               "SearchTitle" = NULL,
+               "FakeCollectionKey" = NULL,
+               "MarathonBatchSize" = NULL,
+               "PreRollFillerId" = NULL,
+               "MidRollFillerId" = NULL,
+               "PostRollFillerId" = NULL,
+               "TailFillerId" = NULL,
+               "FallbackFillerId" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(item.program_schedule_id)
+    .bind(encode_enum(item.collection_type))
+    .bind(item.collection_id)
+    .bind(item.media_item_id)
+    .bind(item.multi_collection_id)
+    .bind(item.smart_collection_id)
+    .bind(item.rerun_collection_id)
+    .bind(item.playlist_id)
+    .bind(item.search_query.as_deref())
+    .bind(encode_enum(item.playback_order))
+    .bind(encode_enum(item.fill_with_group_mode))
+    .bind(encode_enum(item.guide_mode))
+    .bind(encode_enum(item.marathon_group_by))
+    .bind(false)
+    .bind(item.marathon_shuffle_items)
+    .bind(item.sort_order)
+    .bind(start_time.as_deref())
+    .bind(item.fixed_start_time_behavior.map(encode_enum))
+    .bind(item.custom_title.as_deref())
+    .bind(item.preferred_audio_language_code.as_deref())
+    .bind(item.preferred_audio_title.as_deref())
+    .bind(item.preferred_subtitle_language_code.as_deref())
+    .bind(item.subtitle_mode.map(encode_enum))
+    .bind(item.id)
+    .execute(&mut **tx)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        sqlx::query(
+            r#"INSERT INTO "ProgramScheduleItem" (
+                "Id", "ProgramScheduleId", "CollectionType", "CollectionId",
+                "MediaItemId", "MultiCollectionId", "SmartCollectionId",
+                "RerunCollectionId", "PlaylistId", "SearchQuery",
+                "PlaybackOrder", "FillWithGroupMode", "GuideMode",
+                "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
+                "Index", "StartTime", "FixedStartTimeBehavior", "CustomTitle",
+                "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                "PreferredSubtitleLanguageCode", "SubtitleMode"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(item.id)
+        .bind(item.program_schedule_id)
+        .bind(encode_enum(item.collection_type))
+        .bind(item.collection_id)
+        .bind(item.media_item_id)
+        .bind(item.multi_collection_id)
+        .bind(item.smart_collection_id)
+        .bind(item.rerun_collection_id)
+        .bind(item.playlist_id)
+        .bind(item.search_query.as_deref())
+        .bind(encode_enum(item.playback_order))
+        .bind(encode_enum(item.fill_with_group_mode))
+        .bind(encode_enum(item.guide_mode))
+        .bind(encode_enum(item.marathon_group_by))
+        .bind(false)
+        .bind(item.marathon_shuffle_items)
+        .bind(item.sort_order)
+        .bind(start_time.as_deref())
+        .bind(item.fixed_start_time_behavior.map(encode_enum))
+        .bind(item.custom_title.as_deref())
+        .bind(item.preferred_audio_language_code.as_deref())
+        .bind(item.preferred_audio_title.as_deref())
+        .bind(item.preferred_subtitle_language_code.as_deref())
+        .bind(item.subtitle_mode.map(encode_enum))
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    sync_program_schedule_item_subtype(tx, item).await?;
+    replace_ids(
+        tx,
+        r#"DELETE FROM "ProgramScheduleItemWatermark" WHERE "ProgramScheduleItemId" = ?"#,
+        r#"REPLACE INTO "ProgramScheduleItemWatermark" ("ProgramScheduleItemId", "WatermarkId") VALUES (?, ?)"#,
+        item.id,
+        &item.watermark_ids,
+    )
+    .await?;
+    replace_ids(
+        tx,
+        r#"DELETE FROM "ProgramScheduleItemGraphicsElement" WHERE "ProgramScheduleItemId" = ?"#,
+        r#"REPLACE INTO "ProgramScheduleItemGraphicsElement" ("ProgramScheduleItemId", "GraphicsElementId") VALUES (?, ?)"#,
+        item.id,
+        &item.graphics_element_ids,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn sync_program_schedule_item_subtype(
+    tx: &mut Transaction<'_, Db>,
+    item: &ProgramScheduleItem,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "ProgramScheduleDurationItem" WHERE "Id" = ?"#)
+        .bind(item.id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "ProgramScheduleMultipleItem" WHERE "Id" = ?"#)
+        .bind(item.id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "ProgramScheduleOneItem" WHERE "Id" = ?"#)
+        .bind(item.id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "ProgramScheduleFloodItem" WHERE "Id" = ?"#)
+        .bind(item.id)
+        .execute(&mut **tx)
+        .await?;
+
+    match item.playout_mode {
+        PlayoutMode::Duration => {
             sqlx::query(
-                r#"INSERT INTO "ProgramScheduleItem" (
-                    "ProgramScheduleId", "Id", "CollectionType", "PlaybackOrder",
-                    "FillWithGroupMode", "GuideMode", "MarathonGroupBy",
-                    "MarathonShuffleGroups", "MarathonShuffleItems", "Index"
-                 ) VALUES (?, ?, 0, 0, 0, 0, 0, 0, 0, ?)"#,
+                r#"INSERT INTO "ProgramScheduleDurationItem" (
+                    "Id", "PlayoutDuration", "TailMode"
+                 ) VALUES (?, ?, ?)"#,
             )
-            .bind(schedule_id)
-            .bind(id)
-            .bind(index)
+            .bind(item.id)
+            .bind(encode_duration(item.duration.unwrap_or_default()))
+            .bind(encode_enum(item.tail_mode))
             .execute(&mut **tx)
             .await?;
+        }
+        PlayoutMode::Multiple => {
+            sqlx::query(
+                r#"INSERT INTO "ProgramScheduleMultipleItem" (
+                    "Id", "Count", "MultipleMode"
+                 ) VALUES (?, ?, ?)"#,
+            )
+            .bind(item.id)
+            .bind(item.multiple_count.as_deref())
+            .bind(encode_enum(item.multiple_mode))
+            .execute(&mut **tx)
+            .await?;
+        }
+        PlayoutMode::One => {
+            sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
+                .bind(item.id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        PlayoutMode::Flood => {
+            sqlx::query(r#"INSERT INTO "ProgramScheduleFloodItem" ("Id") VALUES (?)"#)
+                .bind(item.id)
+                .execute(&mut **tx)
+                .await?;
         }
     }
 
@@ -188,4 +467,217 @@ fn map_program_schedule(row: &DbRow) -> Result<ProgramSchedule> {
         playout_ids: Vec::new(),
         alternate_ids: Vec::new(),
     })
+}
+
+async fn map_program_schedule_item(
+    pool: &Pool<crate::db::Db>,
+    row: &DbRow,
+) -> Result<ProgramScheduleItem> {
+    let id = row.try_get::<EntityId, _>("Id")?;
+    let duration_text = row
+        .try_get::<Option<String>, _>("PlayoutDuration")
+        .ok()
+        .flatten();
+    let duration = decode_optional_duration_text(duration_text.as_deref());
+    let playout_mode = if row
+        .try_get::<Option<EntityId>, _>("DurationItemId")
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        PlayoutMode::Duration
+    } else if row
+        .try_get::<Option<EntityId>, _>("MultipleItemId")
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        PlayoutMode::Multiple
+    } else if row
+        .try_get::<Option<EntityId>, _>("OneItemId")
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        PlayoutMode::One
+    } else if row
+        .try_get::<Option<EntityId>, _>("FloodItemId")
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        PlayoutMode::Flood
+    } else {
+        PlayoutMode::Duration
+    };
+
+    Ok(ProgramScheduleItem {
+        id,
+        program_schedule_id: row.try_get("ProgramScheduleId")?,
+        collection_type: decode_enum_column("program schedule item collection_type", row, "CollectionType")?,
+        collection_id: row.try_get("CollectionId")?,
+        media_item_id: row.try_get("MediaItemId")?,
+        multi_collection_id: row.try_get("MultiCollectionId")?,
+        smart_collection_id: row.try_get("SmartCollectionId")?,
+        rerun_collection_id: row.try_get("RerunCollectionId")?,
+        playlist_id: row.try_get("PlaylistId")?,
+        search_query: row.try_get("SearchQuery")?,
+        playout_mode,
+        playback_order: decode_enum_column("program schedule item playback_order", row, "PlaybackOrder")?,
+        multiple_mode: decode_optional_enum_column("program schedule item multiple_mode", row, "MultipleMode")?
+            .unwrap_or_default(),
+        multiple_count: row.try_get::<Option<String>, _>("Count").ok().flatten(),
+        duration,
+        start_type: if row.try_get::<Option<String>, _>("StartTime")?.is_some() {
+            ersatzrs_domain::StartType::Fixed
+        } else {
+            ersatzrs_domain::StartType::Dynamic
+        },
+        start_time: decode_optional_duration_text(row.try_get::<Option<String>, _>("StartTime")?.as_deref()),
+        fixed_start_time_behavior: decode_optional_enum_column::<FixedStartTimeBehavior>(
+            "program schedule item fixed_start_time_behavior",
+            row,
+            "FixedStartTimeBehavior",
+        )?,
+        guide_mode: decode_enum_column("program schedule item guide_mode", row, "GuideMode")?,
+        tail_mode: decode_optional_enum_column("program schedule item tail_mode", row, "TailMode")?
+            .unwrap_or_default(),
+        fill_with_group_mode: decode_enum_column(
+            "program schedule item fill_with_group_mode",
+            row,
+            "FillWithGroupMode",
+        )?,
+        marathon_group_by: decode_enum_column("program schedule item marathon_group_by", row, "MarathonGroupBy")?,
+        marathon_shuffle_items: decode_bool_column(row, "MarathonShuffleItems")?,
+        custom_title: row.try_get("CustomTitle")?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle")?,
+        preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
+        subtitle_mode: decode_optional_enum_column("program schedule item subtitle_mode", row, "SubtitleMode")?,
+        sort_order: row.try_get("Index")?,
+        watermark_ids: load_ids(
+            pool,
+            r#"SELECT "WatermarkId" FROM "ProgramScheduleItemWatermark" WHERE "ProgramScheduleItemId" = ? ORDER BY "WatermarkId""#,
+            id,
+        )
+        .await?,
+        graphics_element_ids: load_ids(
+            pool,
+            r#"SELECT "GraphicsElementId" FROM "ProgramScheduleItemGraphicsElement" WHERE "ProgramScheduleItemId" = ? ORDER BY "GraphicsElementId""#,
+            id,
+        )
+        .await?,
+    })
+}
+
+fn map_program_schedule_alternate(row: &DbRow) -> Result<ProgramScheduleAlternate> {
+    Ok(ProgramScheduleAlternate {
+        id: row.try_get("Id")?,
+        program_schedule_id: row.try_get("ProgramScheduleId")?,
+        playout_id: Some(row.try_get("PlayoutId")?),
+        sort_order: row.try_get("Index")?,
+        days_of_week: decode_string_list(row.try_get::<Option<String>, _>("DaysOfWeek")?),
+        days_of_month: decode_int_list(row.try_get::<Option<String>, _>("DaysOfMonth")?),
+        months_of_year: decode_int_list(row.try_get::<Option<String>, _>("MonthsOfYear")?),
+        limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
+        start_month: row.try_get("StartMonth")?,
+        start_day: row.try_get("StartDay")?,
+        start_year: row.try_get("StartYear")?,
+        end_month: row.try_get("EndMonth")?,
+        end_day: row.try_get("EndDay")?,
+        end_year: row.try_get("EndYear")?,
+    })
+}
+
+async fn upsert_program_schedule_alternate(
+    tx: &mut Transaction<'_, Db>,
+    alternate: &ProgramScheduleAlternate,
+) -> Result<()> {
+    let result = sqlx::query(
+        r#"UPDATE "ProgramScheduleAlternate"
+           SET "PlayoutId" = ?,
+               "ProgramScheduleId" = ?,
+               "Index" = ?,
+               "DaysOfWeek" = ?,
+               "DaysOfMonth" = ?,
+               "MonthsOfYear" = ?,
+               "LimitToDateRange" = ?,
+               "StartMonth" = ?,
+               "StartDay" = ?,
+               "StartYear" = ?,
+               "EndMonth" = ?,
+               "EndDay" = ?,
+               "EndYear" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(alternate.playout_id)
+    .bind(alternate.program_schedule_id)
+    .bind(alternate.sort_order)
+    .bind(encode_string_list(&alternate.days_of_week))
+    .bind(encode_int_list(&alternate.days_of_month))
+    .bind(encode_int_list(&alternate.months_of_year))
+    .bind(alternate.limit_to_date_range)
+    .bind(alternate.start_month)
+    .bind(alternate.start_day)
+    .bind(alternate.start_year)
+    .bind(alternate.end_month)
+    .bind(alternate.end_day)
+    .bind(alternate.end_year)
+    .bind(alternate.id)
+    .execute(&mut **tx)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        sqlx::query(
+            r#"INSERT INTO "ProgramScheduleAlternate" (
+                "Id", "PlayoutId", "ProgramScheduleId", "Index", "DaysOfWeek",
+                "DaysOfMonth", "MonthsOfYear", "LimitToDateRange", "StartMonth",
+                "StartDay", "StartYear", "EndMonth", "EndDay", "EndYear"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(alternate.id)
+        .bind(alternate.playout_id)
+        .bind(alternate.program_schedule_id)
+        .bind(alternate.sort_order)
+        .bind(encode_string_list(&alternate.days_of_week))
+        .bind(encode_int_list(&alternate.days_of_month))
+        .bind(encode_int_list(&alternate.months_of_year))
+        .bind(alternate.limit_to_date_range)
+        .bind(alternate.start_month)
+        .bind(alternate.start_day)
+        .bind(alternate.start_year)
+        .bind(alternate.end_month)
+        .bind(alternate.end_day)
+        .bind(alternate.end_year)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+fn decode_int_list(value: Option<String>) -> Vec<i32> {
+    value
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|part| part.parse::<i32>().ok())
+        .collect()
+}
+
+fn encode_int_list(value: &[i32]) -> String {
+    value
+        .iter()
+        .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn decode_string_list(value: Option<String>) -> Vec<String> {
+    value
+        .and_then(|inner| serde_json::from_str(&inner).ok())
+        .unwrap_or_default()
+}
+
+fn encode_string_list(value: &[String]) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "[]".to_owned())
 }
