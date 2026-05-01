@@ -6,14 +6,20 @@ use ersatzrs_ffmpeg::{
     lower_third_overlay, song_progress_filter, AmfPipelineBuilder, ComplexFilter, ConcatPlaylist,
     DesiredVideoState, DrawvgOverlay, FilterChain, FrameSize, GraphicsTemplateRenderer, HlsOutput,
     InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
-    QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder, SvgTemplate,
-    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkOverlay,
+    QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceVideoCodec,
+    SourceVideoStream, SvgTemplate, V4l2m2mPipelineBuilder, VaapiPipelineBuilder,
+    VideoToolboxPipelineBuilder, WatermarkOverlay,
 };
+
+fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
+    PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264))
+}
 
 #[test]
 fn software_pipeline_single_video_mpegts_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -24,7 +30,7 @@ fn software_pipeline_single_video_mpegts_snapshot() {
 #[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
@@ -44,7 +50,7 @@ fn software_pipeline_hls_snapshot() {
 #[test]
 fn nvenc_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -55,7 +61,7 @@ fn nvenc_pipeline_snapshot() {
 #[test]
 fn vaapi_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = VaapiPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -66,7 +72,7 @@ fn vaapi_pipeline_snapshot() {
 #[test]
 fn qsv_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = QsvPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -77,7 +83,7 @@ fn qsv_pipeline_snapshot() {
 #[test]
 fn qsv_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
@@ -97,7 +103,7 @@ fn qsv_pipeline_hls_snapshot() {
 #[test]
 fn videotoolbox_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = VideoToolboxPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -108,7 +114,7 @@ fn videotoolbox_pipeline_snapshot() {
 #[test]
 fn amf_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = AmfPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -119,7 +125,7 @@ fn amf_pipeline_snapshot() {
 #[test]
 fn v4l2m2m_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = V4l2m2mPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -130,7 +136,7 @@ fn v4l2m2m_pipeline_snapshot() {
 #[test]
 fn rkmpp_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = RkmppPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
