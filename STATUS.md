@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 17 background maintenance loops — review remediation)
+Last updated: 2026-05-02 (Slice 18 scanner etag skip)
 
 ## Current Phase
 
@@ -46,9 +46,13 @@ integration snapshots against in-memory and real-world databases.
 
 **Phase 4 — complete.** Local scan via ffprobe, path replacement, paged
 Plex/Jellyfin/Emby sync, provider collection sync, DB-backed provider
-credentials, SHA256 `MediaFile.PathHash`, and the dry-run/test remediations
-are landed; `ersatzrs-scanner --provider <local|jellyfin|plex|emby> --library-id
-<id>` dispatches correctly.
+credentials, SHA256 `MediaFile.PathHash`, the dry-run/test remediations, and
+provider etag skip for unchanged normal-state Plex/Jellyfin/Emby movie and
+episode rows are landed; `ersatzrs-scanner --provider
+<local|jellyfin|plex|emby> --library-id <id>` dispatches correctly. Slice 18
+scanner deepening remains partial: PathInfo writes, real-world Plex collection
+coverage, library subtype update/delete, and music video / remote stream owner
+writes are still open.
 
 The Phase 4 remediation list is now closed:
 
@@ -368,6 +372,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Codex (GPT-5) | Started Slice 18 scanner deepening: added etag-based skip for unchanged normal-state Plex/Jellyfin/Emby movie and episode sync paths, avoiding Jellyfin/Emby PlaybackInfo lookups and preserving existing media rows when etags match; updated the slice plan and added focused provider tests. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Closed remaining Slice 17 review findings: library refresh dispatcher now spawns `ersatzrs-scanner` as a subprocess (provider per library inferred via media-source subtype joins, with sibling-binary discovery and an explicit override for tests/operators); failed/missing-binary cases counted in `MaintenancePassReport.libraries_failed`. Channel-lock `ConfigElement` invention removed; ported ErsatzTV's `IEntityLocker.LockPlayout` to a process-local `ersatzrs-core::locking::EntityLocker` shared by `run_maintenance_once`, plus an RAII `PlayoutLockGuard`. Dropped the `_assert_playout_send_sync` dead code. New tests cover scanner spawn (success + non-zero exit) and the in-memory playout-lock skip. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Remediated Slice 17 review findings: replaced the broken local datetime encoder with the canonical EF-format helper so playout `LastBuild` and library `LastScan` cutoff comparisons work; switched `LibraryRefreshInterval` to ErsatzTV's `scanner.library_refresh_interval` key, hour units, and `0`-disabled semantics; gated each maintenance loop in `run_maintenance_once` on its own cadence (collapsed `*_loop_ran` bools to `MaintenanceLoopFlags`); honoured `playout.days_to_build`; added a `DailyRebuildTime`-aware `PlayoutBuildMode::Reset` path with channel-number ordering; replaced the invented image/log retention with ErsatzTV's parity-correct channel-guide XML pruning. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 17 background maintenance loops: added `ersatzrs-scheduler`, core loop interval planning, SQL-backed playout/library/provider/search dispatch, cache cleanup, automatic health persistence, and focused infra tests. |

@@ -169,6 +169,49 @@ async fn jellyfin_sync_pages_movie_library_beyond_first_result_window() {
 }
 
 #[tokio::test]
+async fn jellyfin_sync_skips_unchanged_movie_etag_before_playback_lookup() {
+    let server = MockServer::start_async().await;
+    let items = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-1")
+                .query_param("includeItemTypes", "Movie");
+            then.status(200).json_body(movie_page_json(
+                1,
+                "movie-skip",
+                "/srv/media/unchanged.mkv",
+            ));
+        })
+        .await;
+    let playback = mock_jellyfin_playback(&server, "movie-skip").await;
+
+    let pool = common::test_db().await;
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: server.base_url(),
+        authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
+    };
+
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/srv/media/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/kept.mkv");
+    assert_eq!(playback.calls_async().await, 1);
+    assert_eq!(items.calls_async().await, 2);
+}
+
+#[tokio::test]
 async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
     let server = MockServer::start_async().await;
     mock_movie(&server).await;
@@ -466,6 +509,14 @@ async fn provider_library_item_id(pool: &SqlitePool, table: &str, id: i64) -> Op
         .await
         .unwrap()
         .get("Value")
+}
+
+async fn media_file_path(pool: &SqlitePool) -> String {
+    sqlx::query(r#"SELECT "Path" FROM "MediaFile" LIMIT 1"#)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Path")
 }
 
 async fn jellyfin_projected_rows(pool: &SqlitePool) -> serde_json::Value {

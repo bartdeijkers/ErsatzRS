@@ -366,6 +366,11 @@ where
         let total_record_count = page.total_record_count;
         let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
         for item in &page.items {
+            if item_etag_matches(pool, "EmbyMovie", &item.item_id, item.etag.as_deref()).await? {
+                synced += 1;
+                continue;
+            }
+
             let playback = service.stream_metadata(config, &item.item_id).await?;
             upsert_emby_movie(
                 pool,
@@ -448,6 +453,18 @@ where
                         let episode_page_len =
                             i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
                         for episode in &episodes.items {
+                            if item_etag_matches(
+                                pool,
+                                "EmbyEpisode",
+                                &episode.item_id,
+                                episode.etag.as_deref(),
+                            )
+                            .await?
+                            {
+                                synced += 1;
+                                continue;
+                            }
+
                             let playback =
                                 service.stream_metadata(config, &episode.item_id).await?;
                             upsert_emby_episode(
@@ -991,6 +1008,27 @@ async fn find_emby_media_item(
         .fetch_optional(&mut **tx)
         .await?
         .map(|row| row.get("Id")))
+}
+
+async fn item_etag_matches(
+    pool: &DbPool,
+    table: &str,
+    item_id: &str,
+    etag: Option<&str>,
+) -> Result<bool> {
+    let sql = format!(
+        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
+           FROM "{table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
+           WHERE "{table}"."ItemId" = ?"#
+    );
+    let Some(row) = sqlx::query(&sql).bind(item_id).fetch_optional(pool).await? else {
+        return Ok(false);
+    };
+
+    let existing_etag: Option<String> = row.try_get("Etag")?;
+    let state: i64 = row.try_get("State")?;
+    Ok(state == 0 && existing_etag.as_deref() == etag)
 }
 
 async fn ensure_emby_library(

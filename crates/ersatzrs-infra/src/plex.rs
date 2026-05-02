@@ -700,6 +700,11 @@ pub async fn sync_plex_movie_library(
 
     while start_index < total_size {
         for item in &page.items {
+            if item_etag_matches(pool, "PlexMovie", &item.key, item.etag.as_deref()).await? {
+                synced += 1;
+                continue;
+            }
+
             upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
             synced += 1;
         }
@@ -769,6 +774,18 @@ pub async fn sync_plex_show_library(
 
                     while episode_start_index < episode_total_size {
                         for episode in &episodes.items {
+                            if item_etag_matches(
+                                pool,
+                                "PlexEpisode",
+                                &episode.key,
+                                episode.etag.as_deref(),
+                            )
+                            .await?
+                            {
+                                synced += 1;
+                                continue;
+                            }
+
                             upsert_plex_episode(
                                 pool,
                                 media_source_id,
@@ -1348,6 +1365,27 @@ async fn find_plex_media_item(
         .fetch_optional(&mut **tx)
         .await?
         .map(|row| row.get("Id")))
+}
+
+async fn item_etag_matches(
+    pool: &DbPool,
+    table: &str,
+    key: &str,
+    etag: Option<&str>,
+) -> Result<bool> {
+    let sql = format!(
+        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
+           FROM "{table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
+           WHERE "{table}"."Key" = ?"#
+    );
+    let Some(row) = sqlx::query(&sql).bind(key).fetch_optional(pool).await? else {
+        return Ok(false);
+    };
+
+    let existing_etag: Option<String> = row.try_get("Etag")?;
+    let state: i64 = row.try_get("State")?;
+    Ok(state == 0 && existing_etag.as_deref() == etag)
 }
 
 async fn ensure_simple_media_item(

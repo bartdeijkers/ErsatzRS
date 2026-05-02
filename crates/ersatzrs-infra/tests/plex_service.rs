@@ -94,6 +94,49 @@ async fn plex_sync_paginates_movie_library() {
 }
 
 #[tokio::test]
+async fn plex_sync_skips_unchanged_movie_etag_writes() {
+    let server = MockServer::start_async().await;
+    let page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/1/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/100", "/library/parts/10", "/media/unchanged.mkv", 100)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/media/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/kept.mkv");
+    assert_eq!(page.calls_async().await, 2);
+}
+
+#[tokio::test]
 async fn plex_sync_maps_mock_show_response_to_media_rows() {
     let server = MockServer::start_async().await;
     mock_plex_show_pages(&server).await;
@@ -358,6 +401,14 @@ async fn provider_library_key(
         .await
         .unwrap()
         .get("Value")
+}
+
+async fn media_file_path(pool: &SqlitePool) -> String {
+    sqlx::query(r#"SELECT "Path" FROM "MediaFile" LIMIT 1"#)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Path")
 }
 
 async fn plex_movie_rows(pool: &SqlitePool) -> serde_json::Value {

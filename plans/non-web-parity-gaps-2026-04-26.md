@@ -23,7 +23,7 @@ Last reviewed: 2026-05-02.
 | Completed | Slice 14 — `ProgramScheduleItem` subtype repositories | Program schedule item subtype read/write, schedule item overlays, alternates, and typed block item target/overlay round-trips are complete in infra repositories with focused SQLite coverage. |
 | Completed | Slice 15 — Classic scheduling engine | Classic One/Multiple/Duration/Flood scheduling is wired into `PlayoutBuilder`, with fixed-start behavior, persisted schedule/media reference-data loading, anchors, fill-group index persistence inputs, and focused core/SQLite coverage. |
 | Completed | Slice 17 — Background maintenance loops | `ersatzrs-scheduler` now owns runtime-independent maintenance passes for playout builds, library refresh dispatch, provider polling, cache cleanup, search-index dispatch, and automatic persisted health runs. |
-| Open | Slice 18 — Scanner deepening | Not started in this plan. |
+| Partial | Slice 18 — Scanner deepening | Etag-based skip is now in place for Plex/Jellyfin/Emby movie and episode sync paths; PathInfo writes, real-world Plex collection coverage, library subtype update/delete, and music video / remote stream owner writes remain open. |
 | Open | Slice 19 — Search index hardening | Not started in this plan. |
 | Open | Slice 20 — Config + ADR-afronding | Not started in this plan. |
 | Open | Slice 21 — Phase 7 closure: benchmarks + soak | Not started in this plan; closure slice depends on the earlier slices. |
@@ -160,8 +160,11 @@ Phase 4 is gesloten, maar deze gaten staan nog open:
 - **Provider PathInfo tabellen** — `PlexPathInfo`, `JellyfinPathInfo`, `EmbyPathInfo`
   (alle "Schema only" in persistence-gap-matrix). Vereist voor SMB/NFS-mapping
   buiten path-replacement.
-- **Etag-based skip** — Provider sync schrijft geen etags terug, dus elke
-  scan is een volledige refresh.
+- **Etag-based skip** — Slice 18 now skips unchanged normal-state Plex,
+  Jellyfin, and Emby movie/episode rows by comparing provider etags before
+  rewriting media rows; Jellyfin/Emby also avoid the PlaybackInfo request on
+  a matching etag. Show/season collection traversal still runs so children are
+  not hidden behind a parent etag.
 - **`MediaChapter`/`MediaStream`/`MediaFile` velden** — basisrijen worden
   geschreven, maar full color/profile/subtitle parity is partieel.
 - **Plex collection sync real-world coverage** — alleen mock-tests.
@@ -368,7 +371,10 @@ invented image/log retention windows were dropped.
 ### Slice 18 — Scanner deepening
 1. PathInfo tabellen + repository writes (`PlexPathInfo`, `JellyfinPathInfo`,
    `EmbyPathInfo`).
-2. Etag-based skip optimisatie in alle drie de provider-sync paden.
+2. ~~Etag-based skip optimisatie in alle drie de provider-sync paden.~~
+   Landed for normal-state Plex/Jellyfin/Emby movies and episodes; unchanged
+   Jellyfin/Emby items skip `PlaybackInfo` lookup, and unchanged provider rows
+   keep existing `MediaVersion`/`MediaFile`/stream/chapter data untouched.
 3. Real-world Plex collection-sync coverage (env-gated test corpus).
 4. Library subtype update/delete + cascade.
 5. Music video / Remote stream owner writes (uitbreiden van
