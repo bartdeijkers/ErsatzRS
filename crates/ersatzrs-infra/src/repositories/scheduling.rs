@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::db::DbRow;
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, NaiveTime, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Utc};
 use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
 use ersatzrs_core::scheduling::{
     classic_schedule_item_key, BlockDefinition, BlockTemplate, BlockTemplateItem,
@@ -14,12 +14,13 @@ use ersatzrs_core::scheduling::{
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
 use ersatzrs_domain::{
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
+    ProgramScheduleItem,
 };
 use sqlx::{Pool, Row};
 
 use super::common::{
-    decode_datetime, decode_duration_text, decode_enum_column, decode_message,
+    decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
     decode_optional_datetime, decode_optional_enum_column, load_ids,
 };
 
@@ -61,9 +62,10 @@ impl SqliteSchedulingContentRepository {
     pub async fn classic_reference_data(
         &self,
         playout_id: EntityId,
+        start: DateTime<Utc>,
         max_playout_offset: Duration,
     ) -> Result<SchedulingReferenceData> {
-        let schedule_id = sqlx::query_scalar::<_, Option<EntityId>>(
+        let default_schedule_id = sqlx::query_scalar::<_, Option<EntityId>>(
             r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = ?"#,
         )
         .bind(playout_id)
@@ -76,6 +78,9 @@ impl SqliteSchedulingContentRepository {
 
         let schedule_repo =
             super::program_schedule::SqliteProgramScheduleRepository(self.0.clone());
+        let schedule_id = self
+            .active_classic_schedule_id(playout_id, default_schedule_id, start)
+            .await?;
         let schedule = schedule_repo.get_with_items(schedule_id).await?;
         let schedule_items = schedule_repo.list_items(schedule_id).await?;
 
@@ -102,6 +107,38 @@ impl SqliteSchedulingContentRepository {
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+    }
+
+    async fn active_classic_schedule_id(
+        &self,
+        playout_id: EntityId,
+        default_schedule_id: EntityId,
+        start: DateTime<Utc>,
+    ) -> Result<EntityId> {
+        let alternates = self.program_schedule_alternates(playout_id).await?;
+        Ok(alternates
+            .iter()
+            .find(|alternate| alternate_applies_to(alternate, start))
+            .map_or(default_schedule_id, |alternate| {
+                alternate.program_schedule_id
+            }))
+    }
+
+    async fn program_schedule_alternates(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<ProgramScheduleAlternate>> {
+        let rows = sqlx::query(
+            r#"SELECT *
+             FROM "ProgramScheduleAlternate"
+             WHERE "PlayoutId" = ?
+             ORDER BY "Index", "Id""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter().map(map_program_schedule_alternate).collect()
     }
 
     /// Prepare SQL-backed reference data for block scheduling.
@@ -1974,6 +2011,108 @@ fn map_playout_history(row: &DbRow) -> Result<PlayoutHistory> {
         details: row.try_get("Details")?,
         is_current_child: row.try_get("IsCurrentChild")?,
     })
+}
+
+fn map_program_schedule_alternate(row: &DbRow) -> Result<ProgramScheduleAlternate> {
+    Ok(ProgramScheduleAlternate {
+        id: row.try_get("Id")?,
+        program_schedule_id: row.try_get("ProgramScheduleId")?,
+        playout_id: row.try_get("PlayoutId")?,
+        sort_order: row.try_get("Index")?,
+        days_of_week: decode_string_list(row.try_get::<Option<String>, _>("DaysOfWeek")?),
+        days_of_month: decode_int_list(row.try_get::<Option<String>, _>("DaysOfMonth")?),
+        months_of_year: decode_int_list(row.try_get::<Option<String>, _>("MonthsOfYear")?),
+        limit_to_date_range: decode_bool_column(row, "LimitToDateRange")?,
+        start_month: row.try_get("StartMonth")?,
+        start_day: row.try_get("StartDay")?,
+        start_year: row.try_get("StartYear")?,
+        end_month: row.try_get("EndMonth")?,
+        end_day: row.try_get("EndDay")?,
+        end_year: row.try_get("EndYear")?,
+    })
+}
+
+fn alternate_applies_to(alternate: &ProgramScheduleAlternate, start: DateTime<Utc>) -> bool {
+    let date = start.date_naive();
+    let day_of_week = i32::try_from(date.weekday().num_days_from_sunday()).unwrap_or_default();
+    if !alternate.days_of_week.is_empty()
+        && !alternate
+            .days_of_week
+            .iter()
+            .any(|value| day_of_week_matches(value, day_of_week))
+    {
+        return false;
+    }
+    if !alternate.days_of_month.is_empty()
+        && !alternate
+            .days_of_month
+            .contains(&i32::try_from(date.day()).unwrap_or_default())
+    {
+        return false;
+    }
+    if !alternate.months_of_year.is_empty()
+        && !alternate
+            .months_of_year
+            .contains(&i32::try_from(date.month()).unwrap_or_default())
+    {
+        return false;
+    }
+    if !alternate.limit_to_date_range {
+        return true;
+    }
+
+    let Some(range_start) = NaiveDate::from_ymd_opt(
+        alternate.start_year.unwrap_or(date.year()),
+        u32::try_from(alternate.start_month).unwrap_or_default(),
+        u32::try_from(alternate.start_day).unwrap_or_default(),
+    ) else {
+        return false;
+    };
+    let Some(range_end) = NaiveDate::from_ymd_opt(
+        alternate.end_year.unwrap_or(date.year()),
+        u32::try_from(alternate.end_month).unwrap_or_default(),
+        u32::try_from(alternate.end_day).unwrap_or_default(),
+    ) else {
+        return false;
+    };
+
+    if range_start <= range_end {
+        date >= range_start && date <= range_end
+    } else {
+        date >= range_start || date <= range_end
+    }
+}
+
+fn day_of_week_matches(value: &str, day_of_week: i32) -> bool {
+    value.trim().parse::<i32>().map_or_else(
+        |_| {
+            matches!(
+                (value.trim().to_ascii_lowercase().as_str(), day_of_week),
+                ("sunday", 0)
+                    | ("monday", 1)
+                    | ("tuesday", 2)
+                    | ("wednesday", 3)
+                    | ("thursday", 4)
+                    | ("friday", 5)
+                    | ("saturday", 6)
+            )
+        },
+        |parsed| parsed == day_of_week,
+    )
+}
+
+fn decode_int_list(value: Option<String>) -> Vec<i32> {
+    value
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|part| part.parse::<i32>().ok())
+        .collect()
+}
+
+fn decode_string_list(value: Option<String>) -> Vec<String> {
+    value
+        .and_then(|inner| serde_json::from_str(&inner).ok())
+        .unwrap_or_default()
 }
 
 fn block_item_content_key(id: EntityId) -> String {

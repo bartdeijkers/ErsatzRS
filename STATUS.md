@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 15 classic scheduling engine)
+Last updated: 2026-05-02 (Slice 15 classic scheduling engine remediation)
 
 ## Current Phase
 
@@ -306,9 +306,13 @@ schedule anchor/fill-group state through the existing `SchedulingResult`
 persistence path. `SqliteSchedulingContentRepository::classic_reference_data`
 loads Classic schedules from imported SQLite databases, including typed
 schedule items, collection media, existing playout state, program schedule
-anchors, and fill-group indices. Remaining deeper Classic parity is limited to
-schedule-item filler preset fields and advanced grouped/fill-group enumerator
-behavior that are not yet represented on the Rust domain model.
+anchors, fill-group indices, and date-matched Classic schedule alternates. The
+post-review pass also tightened shuffled schedule item order, persisted media
+anchor seed reuse, count-expression Multiple sizing, playback-order preparation,
+guide-group advancement after multi-item modes, and Classic `CollectionKey`
+parity. Remaining deeper Classic parity is limited to schedule-item filler
+preset fields and generated fake group schedule items for full fill-with-group
+enumerator behavior that are not yet represented on the Rust domain model.
 
 ### Admin UI Route Coverage
 
@@ -354,6 +358,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Codex (GPT-5) | Remediated Slice 15 Classic scheduler review findings: fixed schedule/media enumerator state drift, alternate schedule selection, fill-group index advancement, Multiple count expressions, guide-group advancement, and Classic collection-key parity; reran workspace clippy/tests. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 15 classic scheduling parity: added `ClassicSchedulingEngine` for One/Multiple/Duration/Flood, fixed-start handling, `PlayoutBuilder` Classic dispatch, SQL-backed Classic reference-data loading, focused core snapshot tests, and SQLite integration coverage. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 14 persistence parity: added typed program schedule item and block item repository methods, wrote schedule item subtype/overlay rows plus EF-compatible alternates, wrote block item target/overlay joins, updated the persistence gap matrix and slice plan, and added focused SQLite repository tests. |
 | 2026-05-01 | Claude Code (claude-opus-4-7) | Slice 13 FFmpeg filter parity: ported `NormalizeLoudnessFilter`, `FrameRateFilter`, `ColorspaceFilter`, hardware deinterlace (yadif/yadif_cuda/deinterlace_qsv/deinterlace_vaapi), tonemap (sw + cuda/qsv/vaapi), and typed `HardwareUploadFilter`/`HardwareDownloadFilter`. Split `filter/` into per-category modules (`audio`, `colorspace`, `deinterlace`, `framerate`, `hardware`, `tonemap`), extended `FrameState` with `is_hdr`/`should_deinterlace`, and made `build_transcode_pipeline` auto-emit deinterlace/tonemap/fps based on `SourceVideoStream`. 28 new insta snapshots cover per-filter argv plus end-to-end interlaced/HDR/fps-mismatch pipelines. |

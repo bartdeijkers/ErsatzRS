@@ -283,9 +283,14 @@ persists next-anchor state through `SchedulingResult`, and produces
 `apply_build_result` path. `SqliteSchedulingContentRepository` now exposes
 `classic_reference_data`, loading the active `ProgramSchedule`, typed
 `ProgramScheduleItem` rows, collection media, existing playout items/history,
-program schedule anchors, and fill-group indices. Remaining deeper parity is
-limited to features not yet represented on the Rust domain item model (notably
-pre/mid/post/tail/fallback filler preset fields and advanced grouped/fill-group
+program schedule anchors, and fill-group indices. A post-review remediation on
+2026-05-02 tightened port parity for shuffled schedule item order, alternate
+Classic schedule selection, persisted media anchor seeds, fill-group index
+advancement, count-expression `Multiple` sizing, playback order preparation,
+guide-group advancement after multi-item modes, and the Classic `CollectionKey`
+omission. Remaining deeper parity is limited to features not yet represented on
+the Rust domain item model (notably pre/mid/post/tail/fallback filler preset
+fields and generated fake group schedule items for full fill-with-group
 enumerator behavior).
 
 ### Slice 16 — Health check engine

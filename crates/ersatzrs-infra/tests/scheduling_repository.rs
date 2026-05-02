@@ -461,7 +461,11 @@ async fn scheduling_repository_loads_classic_reference_data_from_sql() {
 
     let reference_data = repos
         .scheduling
-        .classic_reference_data(901, Duration::hours(1))
+        .classic_reference_data(
+            901,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            Duration::hours(1),
+        )
         .await
         .unwrap();
 

@@ -1430,7 +1430,7 @@ fn expr_parse_factor(chars: &[u8], pos: usize, count: i64, random: i64) -> (i64,
 }
 
 /// Evaluate a count expression (see module-level helpers above).
-fn eval_count_expression(expr: &str, enumerator_len: usize, seed: u64) -> usize {
+pub(super) fn eval_count_expression(expr: &str, enumerator_len: usize, seed: u64) -> usize {
     let count = i64::try_from(enumerator_len).unwrap_or(i64::MAX);
     let random: i64 = if enumerator_len > 0 {
         let r = seed

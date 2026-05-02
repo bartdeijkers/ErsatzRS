@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
-    playout_item, MediaEnumerator, PlayoutSchedulingEngine, SchedulingCollectionKey,
-    SchedulingError, SchedulingMediaItem, SchedulingReferenceData, SchedulingRequest,
-    SchedulingResult,
+    playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlayoutSchedulingEngine,
+    SchedulingCollectionKey, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
+    SchedulingRequest, SchedulingResult,
 };
 
 /// ErsatzTV-compatible scheduler for Classic program schedules.
@@ -98,8 +98,11 @@ impl ClassicSchedulingEngine {
 struct ClassicContext {
     request: SchedulingRequest,
     schedule_items: Vec<ProgramScheduleItem>,
+    schedule_order: Vec<usize>,
     state: ClassicState,
     media: BTreeMap<String, MediaEnumerator>,
+    media_states: BTreeMap<String, CollectionEnumeratorState>,
+    fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
     result: SchedulingResult,
     next_anchor_id: EntityId,
     next_fill_group_id: EntityId,
@@ -112,8 +115,10 @@ impl ClassicContext {
         state: ClassicState,
     ) -> Self {
         let mut media = BTreeMap::new();
+        let mut media_states = BTreeMap::new();
         for item in &schedule_items {
             let key = item_key(item);
+            let seed = request.playout.seed;
             let mut enumerator = MediaEnumerator::new(
                 key.clone(),
                 request
@@ -121,24 +126,61 @@ impl ClassicContext {
                     .media_items_for_source(&super::SchedulingContentSource::direct(&key)),
             )
             .with_playback_order(item.playback_order);
-            sort_enumerator_items(&mut enumerator, item.playback_order);
+            prepare_enumerator_items(
+                &mut enumerator,
+                item.playback_order,
+                u64::try_from(request.playout.seed).unwrap_or_default(),
+            );
+            if request.reference_data.classic_random_start_point && !enumerator.is_empty() {
+                let index =
+                    usize::try_from(request.playout.seed).unwrap_or_default() % enumerator.len();
+                enumerator.set_index(index);
+                media_states.insert(
+                    key.clone(),
+                    CollectionEnumeratorState {
+                        seed,
+                        index: i32::try_from(index).unwrap_or_default(),
+                    },
+                );
+            } else {
+                media_states.insert(key.clone(), CollectionEnumeratorState { seed, index: 0 });
+            }
             media.insert(key, enumerator);
         }
 
         let remove_before = state.current_time;
+        let mut fill_group_states = BTreeMap::new();
+        for index in &request.reference_data.existing_fill_group_indices {
+            fill_group_states.insert(index.program_schedule_item_id, index.enumerator_state);
+        }
+        for item in &schedule_items {
+            if item.fill_with_group_mode != FillWithGroupMode::None {
+                fill_group_states
+                    .entry(item.id)
+                    .or_insert(CollectionEnumeratorState {
+                        seed: request.playout.seed,
+                        index: 0,
+                    });
+            }
+        }
 
-        Self {
+        let mut context = Self {
             request,
             schedule_items,
+            schedule_order: Vec::new(),
             state,
             media,
+            media_states,
+            fill_group_states,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
             },
             next_anchor_id: 0,
             next_fill_group_id: 0,
-        }
+        };
+        context.refresh_schedule_order();
+        context
     }
 
     fn apply_existing_collection_anchors(&mut self) {
@@ -177,7 +219,10 @@ impl ClassicContext {
                 fake_collection_key: anchor.fake_collection_key.clone(),
             });
             if let Some(enumerator) = self.media.get_mut(&key) {
+                let seed = u64::try_from(anchor.enumerator_state.seed).unwrap_or_default();
+                prepare_enumerator_items(enumerator, enumerator.playback_order, seed);
                 enumerator.set_index(usize::try_from(anchor.enumerator_state.index).unwrap_or(0));
+                self.media_states.insert(key, anchor.enumerator_state);
             }
         }
     }
@@ -234,6 +279,7 @@ impl ClassicContext {
         if self.schedule_current_media_item(schedule_item, item_start_time, None, "One") {
             self.advance_schedule_item();
             self.advance_media(schedule_item);
+            self.advance_fill_group(schedule_item);
             self.state.current_time = self
                 .result
                 .added_items
@@ -258,9 +304,13 @@ impl ClassicContext {
             return;
         }
 
+        let start_len = self.result.added_items.len();
         if self.state.multiple_remaining.is_none() {
-            self.state.multiple_remaining =
-                Some(multiple_count(schedule_item, self.media(schedule_item)));
+            self.state.multiple_remaining = Some(multiple_count(
+                schedule_item,
+                self.media(schedule_item),
+                self.media_seed(schedule_item),
+            ));
         }
         self.state.current_time = first_start;
 
@@ -290,19 +340,23 @@ impl ClassicContext {
         if self.state.multiple_remaining == Some(0) {
             self.state.multiple_remaining = None;
             self.advance_schedule_item();
+            self.advance_fill_group(schedule_item);
         }
 
         self.state.current_time = self
             .state
             .current_time
             .min(self.filler_start_after(next_schedule_item));
+        self.decrement_guide_group_if_multi_item_group(start_len);
         self.state.next_guide_group += 1;
     }
 
     fn schedule_duration(&mut self, schedule_item: &ProgramScheduleItem) {
+        let start_len = self.result.added_items.len();
         let duration = schedule_item.duration.unwrap_or_else(Duration::zero);
         if duration <= Duration::zero() {
             self.advance_schedule_item();
+            self.advance_fill_group(schedule_item);
             return;
         }
 
@@ -371,6 +425,7 @@ impl ClassicContext {
                 .unwrap_or(self.state.current_time);
             self.state.duration_finish = None;
             self.advance_schedule_item();
+            self.advance_fill_group(schedule_item);
         } else if matches!(
             schedule_item.tail_mode,
             TailMode::Offline | TailMode::Filler
@@ -379,6 +434,7 @@ impl ClassicContext {
                 self.state.current_time = until;
             }
         }
+        self.decrement_guide_group_if_multi_item_group(start_len);
         self.state.next_guide_group += 1;
     }
 
@@ -388,6 +444,7 @@ impl ClassicContext {
         next_schedule_item: &ProgramScheduleItem,
     ) {
         let mut scheduled_any = false;
+        let start_len = self.result.added_items.len();
         while self.state.current_time < self.request.finish {
             let item_start_time = self.start_time_after(schedule_item, false);
             if item_start_time >= self.request.finish {
@@ -449,7 +506,9 @@ impl ClassicContext {
         self.state.in_flood = scheduled_any && self.state.current_time >= self.request.finish;
         if !self.state.in_flood && scheduled_any {
             self.advance_schedule_item();
+            self.advance_fill_group(schedule_item);
         }
+        self.decrement_guide_group_if_multi_item_group(start_len);
         self.state.next_guide_group += 1;
     }
 
@@ -486,9 +545,13 @@ impl ClassicContext {
             self.media
                 .get(&key)
                 .map_or(("Random", self.request.playout.seed, 0), |enumerator| {
+                    let seed = self
+                        .media_states
+                        .get(&key)
+                        .map_or_else(|| self.request.playout.seed, |state| state.seed);
                     (
                         enumerator.scheduling_context_name(),
-                        self.request.playout.seed,
+                        seed,
                         i32::try_from(enumerator.current_index()).unwrap_or_default(),
                     )
                 });
@@ -528,7 +591,6 @@ impl ClassicContext {
         item.preferred_subtitle_language_code
             .clone_from(&schedule_item.preferred_subtitle_language_code);
         item.subtitle_mode = schedule_item.subtitle_mode;
-        item.collection_key = Some(key.clone());
 
         self.result.added_history.push(history(
             self.request.playout.id,
@@ -606,7 +668,10 @@ impl ClassicContext {
                 search_query: key.search_query,
                 fake_collection_key: key.fake_collection_key,
                 enumerator_state: CollectionEnumeratorState {
-                    seed: self.request.playout.seed,
+                    seed: self
+                        .media_states
+                        .get(&key_string)
+                        .map_or_else(|| self.request.playout.seed, |state| state.seed),
                     index: i32::try_from(enumerator.current_index()).unwrap_or_default(),
                 },
             });
@@ -640,31 +705,46 @@ impl ClassicContext {
                 id,
                 playout_id: self.request.playout.id,
                 program_schedule_item_id: schedule_item.id,
-                enumerator_state: CollectionEnumeratorState {
-                    seed: self.request.playout.seed,
-                    index: 0,
-                },
+                enumerator_state: self.fill_group_states.get(&schedule_item.id).map_or_else(
+                    || CollectionEnumeratorState {
+                        seed: self.request.playout.seed,
+                        index: 0,
+                    },
+                    |state| *state,
+                ),
             });
         }
         result
     }
 
     fn current_schedule_index(&self) -> usize {
-        let len = self.schedule_items.len();
+        let len = self.schedule_order.len();
         if len == 0 {
             0
         } else {
-            usize::try_from(self.state.schedule_state.index).unwrap_or(0) % len
+            self.schedule_order[usize::try_from(self.state.schedule_state.index).unwrap_or(0) % len]
         }
     }
 
     fn peek_schedule_index(&self, offset: usize) -> usize {
-        (self.current_schedule_index() + offset) % self.schedule_items.len()
+        let len = self.schedule_order.len();
+        let logical_index =
+            (usize::try_from(self.state.schedule_state.index).unwrap_or(0) + offset) % len;
+        self.schedule_order[logical_index]
     }
 
     fn advance_schedule_item(&mut self) {
         let len = i32::try_from(self.schedule_items.len()).unwrap_or(1).max(1);
-        self.state.schedule_state.index = (self.state.schedule_state.index + 1) % len;
+        let next = self.state.schedule_state.index + 1;
+        if next >= len {
+            self.state.schedule_state.index = 0;
+            if self.request.reference_data.classic_shuffle_schedule_items {
+                self.state.schedule_state.seed = next_i32_seed(self.state.schedule_state.seed);
+                self.refresh_schedule_order();
+            }
+        } else {
+            self.state.schedule_state.index = next;
+        }
         self.state.in_flood = false;
     }
 
@@ -677,13 +757,37 @@ impl ClassicContext {
         })
     }
 
-    fn media_mut(&mut self, schedule_item: &ProgramScheduleItem) -> Option<&mut MediaEnumerator> {
-        self.media.get_mut(&item_key(schedule_item))
-    }
-
     fn advance_media(&mut self, schedule_item: &ProgramScheduleItem) {
-        if let Some(enumerator) = self.media_mut(schedule_item) {
+        let key = item_key(schedule_item);
+        if let Some(enumerator) = self.media.get_mut(&key) {
             enumerator.advance();
+            let index = i32::try_from(enumerator.current_index()).unwrap_or_default();
+            let should_reshuffle = enumerator.current_index() == 0
+                && matches!(
+                    enumerator.playback_order,
+                    PlaybackOrder::Random
+                        | PlaybackOrder::Shuffle
+                        | PlaybackOrder::ShuffleInOrder
+                        | PlaybackOrder::RandomRotation
+                        | PlaybackOrder::Marathon
+                        | PlaybackOrder::MultiEpisodeShuffle
+                );
+            let playback_order = enumerator.playback_order;
+            let mut next_seed = None;
+            if let Some(state) = self.media_states.get_mut(&key) {
+                state.index = index;
+                if should_reshuffle {
+                    state.seed = next_i32_seed(state.seed);
+                    next_seed = Some(state.seed);
+                }
+            }
+            if let Some(seed) = next_seed {
+                prepare_enumerator_items(
+                    enumerator,
+                    playback_order,
+                    u64::try_from(seed).unwrap_or_default(),
+                );
+            }
         }
     }
 
@@ -710,6 +814,45 @@ impl ClassicContext {
         self.request
             .reference_data
             .classic_fixed_start_time_behavior
+    }
+
+    fn media_seed(&self, schedule_item: &ProgramScheduleItem) -> u64 {
+        self.media_states
+            .get(&item_key(schedule_item))
+            .map_or_else(|| self.request.playout.seed, |state| state.seed)
+            .try_into()
+            .unwrap_or_default()
+    }
+
+    fn refresh_schedule_order(&mut self) {
+        self.schedule_order = (0..self.schedule_items.len()).collect();
+        if self.request.reference_data.classic_shuffle_schedule_items {
+            let seed = u64::try_from(self.state.schedule_state.seed).unwrap_or_default();
+            shuffle_with_seed(&mut self.schedule_order, seed);
+        }
+    }
+
+    fn advance_fill_group(&mut self, schedule_item: &ProgramScheduleItem) {
+        if schedule_item.fill_with_group_mode == FillWithGroupMode::None {
+            return;
+        }
+        let Some(state) = self.fill_group_states.get_mut(&schedule_item.id) else {
+            return;
+        };
+        state.index = state.index.saturating_add(1);
+        if schedule_item.fill_with_group_mode == FillWithGroupMode::FillWithShuffledGroups {
+            state.seed = next_i32_seed(state.seed);
+        }
+    }
+
+    fn decrement_guide_group_if_multi_item_group(&mut self, start_len: usize) {
+        let groups = self.result.added_items[start_len..]
+            .iter()
+            .map(|item| item.guide_group)
+            .collect::<BTreeSet<_>>();
+        if groups.len() > 1 {
+            self.state.next_guide_group -= 1;
+        }
     }
 }
 
@@ -812,15 +955,22 @@ fn seconds_since_midnight(value: DateTime<Utc>) -> Duration {
     Duration::seconds(i64::from(value.time().num_seconds_from_midnight()))
 }
 
-fn multiple_count(schedule_item: &ProgramScheduleItem, enumerator: &MediaEnumerator) -> i32 {
-    if schedule_item.multiple_mode == MultipleMode::CollectionSize {
-        return i32::try_from(enumerator.len()).unwrap_or(i32::MAX).max(1);
-    }
-    schedule_item
-        .multiple_count
-        .as_deref()
-        .and_then(|value| value.trim().parse::<i32>().ok())
-        .unwrap_or(1)
+fn multiple_count(
+    schedule_item: &ProgramScheduleItem,
+    enumerator: &MediaEnumerator,
+    seed: u64,
+) -> i32 {
+    let evaluated = schedule_item.multiple_count.as_deref().map_or(0, |value| {
+        yaml::eval_count_expression(value, enumerator.len(), seed)
+    });
+    let fallback = match schedule_item.multiple_mode {
+        MultipleMode::CollectionSize
+        | MultipleMode::PlaylistItemSize
+        | MultipleMode::MultiEpisodeGroupSize => enumerator.len(),
+        MultipleMode::Count => 1,
+    };
+    i32::try_from(if evaluated == 0 { fallback } else { evaluated })
+        .unwrap_or(i32::MAX)
         .max(1)
 }
 
@@ -855,7 +1005,11 @@ fn anchor_matches_key(
         && anchor.fake_collection_key == key.fake_collection_key
 }
 
-fn sort_enumerator_items(enumerator: &mut MediaEnumerator, playback_order: PlaybackOrder) {
+fn prepare_enumerator_items(
+    enumerator: &mut MediaEnumerator,
+    playback_order: PlaybackOrder,
+    seed: u64,
+) {
     match playback_order {
         PlaybackOrder::Chronological => enumerator.items.sort_by(|left, right| {
             left.release_date
@@ -871,8 +1025,22 @@ fn sort_enumerator_items(enumerator: &mut MediaEnumerator, playback_order: Playb
                 .then(left.release_date.cmp(&right.release_date))
                 .then(left.id.cmp(&right.id))
         }),
-        _ => {}
+        PlaybackOrder::Random
+        | PlaybackOrder::Shuffle
+        | PlaybackOrder::ShuffleInOrder
+        | PlaybackOrder::RandomRotation
+        | PlaybackOrder::Marathon
+        | PlaybackOrder::MultiEpisodeShuffle => shuffle_with_seed(&mut enumerator.items, seed),
+        PlaybackOrder::None => {}
     }
+}
+
+fn next_i32_seed(seed: i32) -> i32 {
+    let next = u64::try_from(seed)
+        .unwrap_or_default()
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    (next >> 33) as i32
 }
 
 trait DirectContentResolver {
@@ -1002,6 +1170,111 @@ mod tests {
             result.anchor.and_then(|anchor| anchor.duration_finish),
             None
         );
+    }
+
+    #[test]
+    fn classic_reuses_existing_anchor_seed_and_omits_collection_key() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                id: 900,
+                playout_id: 50,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                enumerator_state: CollectionEnumeratorState { seed: 42, index: 1 },
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(10)),
+                SchedulingMediaItem::new(102, Duration::minutes(10)),
+            ],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let item = result.added_items.first().expect("scheduled item");
+        assert!(item.collection_key.is_none());
+        assert!(item
+            .scheduling_context
+            .as_deref()
+            .is_some_and(|context| context.contains("\"Seed\":42")));
+        assert_eq!(
+            result
+                .program_schedule_anchors
+                .first()
+                .map(|anchor| anchor.enumerator_state.seed),
+            Some(next_i32_seed(42))
+        );
+    }
+
+    #[test]
+    fn classic_preserves_and_advances_fill_group_state() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            fill_with_group_mode: FillWithGroupMode::FillWithShuffledGroups,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            existing_fill_group_indices: vec![PlayoutScheduleItemFillGroupIndex {
+                id: 700,
+                playout_id: 50,
+                program_schedule_item_id: 1,
+                enumerator_state: CollectionEnumeratorState { seed: 11, index: 4 },
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![SchedulingMediaItem::new(101, Duration::minutes(10))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let state = result
+            .fill_group_indices
+            .first()
+            .map(|index| index.enumerator_state)
+            .expect("fill group state");
+        assert_eq!(state.index, 5);
+        assert_ne!(state.seed, 11);
     }
 
     fn schedule_item(
