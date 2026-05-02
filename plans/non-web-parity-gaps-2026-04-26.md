@@ -1,6 +1,6 @@
 # Remaining non-web parity gaps between ErsatzTV and ErsatzRS
 
-Last reviewed: 2026-05-02. Slice 19 closed 2026-05-02.
+Last reviewed: 2026-05-02. Slice 20 closed 2026-05-02.
 
 This plan only tracks Phase 7 non-web parity work that is still open. Historical
 slice details have been removed. See `STATUS.md` and the git history when
@@ -22,7 +22,6 @@ closed-slice context is needed.
 | Status | Slice | Remaining work |
 | --- | --- | --- |
 | Partial | Slice 16 — Health check engine | Web/admin consumption of persisted health data, real provider connectivity checks, and deeper typed hardware probes. |
-| Open | Slice 20 — Config and ADR closure | Remaining `ConfigElement` keys, subsystem logging levels, XMLTV block behavior ownership, and final ADRs. |
 | Open | Slice 21 — Phase 7 closure | Side-by-side benchmarks, 24-hour soak coverage, and final status/parity documentation. |
 
 ## Remaining Gaps
@@ -47,31 +46,6 @@ Primary files:
 - `crates/ersatzrs-infra/src/health.rs`
 - `crates/ersatzrs-ffmpeg/src/version.rs`
 - `crates/ersatzrs-web/` only for the final web consumption handoff
-
-### Slice 20 — Config and ADR Closure
-
-The remaining configuration/decision cleanup is:
-
-1. Honor `FFmpegGlobalWatermarkId` in playout build.
-2. Honor `FFmpegGlobalFallbackFillerId` in playout build.
-3. Add per-subsystem logging level keys:
-   - `log.minimum_level.scanning`
-   - `log.minimum_level.scheduling`
-   - `log.minimum_level.searching`
-   - `log.minimum_level.streaming`
-   - `log.minimum_level.http`
-
-4. Move `XmltvBlockBehavior` ownership into core/infra so guide-generation
-   behavior is not hidden in the transport layer.
-5. Write the final ADR for the Classic scheduling engine port.
-
-Primary files:
-
-- `crates/ersatzrs-core/src/playout_builder.rs`
-- `crates/ersatzrs-core/`
-- `crates/ersatzrs-infra/`
-- `docs/adr/`
-- `docs/reference/parity-matrix.md`
 
 ### Slice 21 — Phase 7 Closure
 
@@ -107,9 +81,10 @@ The remaining open persistence items that matter for the slices above are:
 - Template/deco follow-up if later parity review shows those fields are used
   by the remaining non-web paths: `TemplateItem`, full `Deco` field
   round-trip, and read/write coverage for deco break/template rows.
-- Playout overlays: confirm `PlayoutItemGraphicsElement` and
-  `PlayoutItemWatermark` field usage after global watermark/fallback filler
-  config is wired.
+- Playout overlays: `FFmpegGlobalWatermarkId` now flows through playout build
+  post-processing when no item-specific watermark is set; revisit only if later
+  FFmpeg rendering parity requires deeper `PlayoutItemGraphicsElement` or
+  `PlayoutItemWatermark` behavior.
 
 Keep `docs/reference/persistence-gap-matrix.md` synchronized when closing any
 of these rows.

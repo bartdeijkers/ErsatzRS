@@ -414,7 +414,7 @@ async fn build_playout(
                 .await?
         }
         PlayoutScheduleKind::Scripted | PlayoutScheduleKind::ExternalJson => {
-            ersatzrs_core::scheduling::SchedulingReferenceData::default()
+            scheduling.configured_playout_options().await?
         }
         PlayoutScheduleKind::None => return Ok(()),
     };

@@ -198,6 +198,16 @@ pub struct SchedulingReferenceData {
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
     pub max_playout_offset: Duration,
+    pub global_watermark_id: Option<EntityId>,
+    pub global_fallback: Option<SchedulingFallbackPreset>,
+}
+
+/// Configured fallback filler media available to the playout post-processor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulingFallbackPreset {
+    pub id: EntityId,
+    pub allow_watermarks: bool,
+    pub media_items: Vec<SchedulingMediaItem>,
 }
 
 impl SchedulingReferenceData {

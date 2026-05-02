@@ -8,8 +8,8 @@ use ersatzrs_core::scheduling::{
     classic_schedule_item_key, BlockDefinition, BlockTemplate, BlockTemplateItem,
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
-    SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
-    SchedulingPlaylistItem, SchedulingReferenceData,
+    SchedulingContentRepository, SchedulingContentSource, SchedulingFallbackPreset,
+    SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{
     search_page_map, SearchDocument, SearchExpression, SearchPageMap, SearchProviderGuid,
@@ -17,7 +17,8 @@ use ersatzrs_core::search::{
 use ersatzrs_domain::{
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
-    ProgramScheduleItem,
+    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
 
@@ -94,7 +95,7 @@ impl SqliteSchedulingContentRepository {
             );
         }
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             classic_schedule_id: Some(schedule.id),
             classic_schedule_name: Some(schedule.name),
@@ -109,6 +110,7 @@ impl SqliteSchedulingContentRepository {
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
     }
 
     async fn active_classic_schedule_id(
@@ -162,7 +164,7 @@ impl SqliteSchedulingContentRepository {
             .await?;
         let effective_blocks = EffectiveBlock::from_templates(&schedules, start, days_to_build);
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             effective_blocks,
             existing_items: self.playout_items(playout_id).await?,
@@ -170,6 +172,7 @@ impl SqliteSchedulingContentRepository {
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
     }
 
     /// Prepare SQL-backed reference data for a YAML/Sequential scripted
@@ -204,13 +207,89 @@ impl SqliteSchedulingContentRepository {
             media_by_key.insert(item.key.clone(), items);
         }
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             existing_items: self.playout_items(playout_id).await?,
             existing_history: self.playout_history(playout_id).await?,
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
+    }
+
+    /// Load only persisted playout-wide config reference data.
+    ///
+    /// This is used by schedule kinds whose engine does not need SQL-backed
+    /// content expansion for its own instructions, but still participates in
+    /// global watermark/fallback behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when config or fallback filler queries fail.
+    pub async fn configured_playout_options(&self) -> Result<SchedulingReferenceData> {
+        self.with_configured_playout_options(SchedulingReferenceData::default())
+            .await
+    }
+
+    async fn with_configured_playout_options(
+        &self,
+        mut reference_data: SchedulingReferenceData,
+    ) -> Result<SchedulingReferenceData> {
+        reference_data.global_watermark_id = self
+            .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+            .await?;
+        reference_data.global_fallback = self.global_fallback_preset().await?;
+        Ok(reference_data)
+    }
+
+    async fn global_fallback_preset(&self) -> Result<Option<SchedulingFallbackPreset>> {
+        let Some(filler_id) = self
+            .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let row = sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
+            .bind(filler_id)
+            .fetch_optional(&self.0)
+            .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let collection_key = SchedulingCollectionKey {
+            collection_type: decode_enum_column(
+                "global fallback filler collection_type",
+                &row,
+                "CollectionType",
+            )?,
+            collection_id: row.try_get("CollectionId")?,
+            media_item_id: row.try_get("MediaItemId")?,
+            multi_collection_id: row.try_get("MultiCollectionId")?,
+            smart_collection_id: row.try_get("SmartCollectionId")?,
+            playlist_id: row.try_get("PlaylistId")?,
+            ..SchedulingCollectionKey::default()
+        };
+
+        let media_items = self.items_for_collection_key(&collection_key, 0).await?;
+        Ok(Some(SchedulingFallbackPreset {
+            id: filler_id,
+            allow_watermarks: row.try_get("AllowWatermarks")?,
+            media_items,
+        }))
+    }
+
+    async fn load_config_entity_id(&self, key: &str) -> Result<Option<EntityId>> {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(&self.0)
+        .await?;
+
+        Ok(value.and_then(|value| value.trim().parse::<EntityId>().ok()))
     }
 
     /// Resolve playable media items for a scheduling content source.

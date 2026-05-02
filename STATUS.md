@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 19 search hardening closed)
+Last updated: 2026-05-02 (Slice 20 config and ADR closure closed)
 
 ## Current Phase
 
@@ -343,6 +343,18 @@ parity. Remaining deeper Classic parity is limited to schedule-item filler
 preset fields and generated fake group schedule items for full fill-with-group
 enumerator behavior that are not yet represented on the Rust domain model.
 
+Slice 20 closed the remaining non-web config and ADR cleanup. ErsatzTV
+`ConfigElement` keys for global watermark and global fallback filler now feed
+playout build post-processing: generated items inherit
+`ffmpeg.global_watermark_id` when no item watermark is set, and generated gaps
+can be filled from `ffmpeg.global_fallback_filler_id`. The mediaserver
+bootstrap seeds `log.minimum_level` plus scanning/scheduling/searching/
+streaming/http subsystem keys, and `ersatzrs-web`, `ersatzrs-scanner`, and
+`ersatzrs-scheduler` load those keys into `tracing` filters on startup. XMLTV
+block behavior moved into core/infra (`XmltvBlockBehavior` and
+`xmltv.block_behavior`) so the transport layer only renders projected guide
+programmes. ADR 0010 records the Classic scheduling engine port decision.
+
 ### Admin UI Route Coverage
 
 The NavDrawer in [`crates/ersatzrs-web/src/admin/layout/nav.rs`](crates/ersatzrs-web/src/admin/layout/nav.rs)
@@ -387,6 +399,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Codex (GPT-5) | Closed Slice 20 config and ADR cleanup: wired global watermark/fallback filler config into playout build post-processing, seeded and loaded subsystem logging levels, moved XMLTV block behavior into core/infra, added ADR 0010 for Classic scheduling, and updated parity docs. |
 | 2026-05-02 | Codex (GPT-5) | Closed Slice 19 search hardening: added Lucene-like normalization/modifier behavior, fuzzy/proximity/boost parsing, numeric chapter/duration fields, SQL-backed page maps, image/remote-stream search documents, ADR 0009 dropping Elasticsearch, and updated parity/status docs. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Closed Slice 18 scanner deepening: extended `MediaStream` writes (and the ffprobe / Plex / Jellyfin / Emby projections) with `Profile`, `PixelFormat`, `ColorRange`/`ColorSpace`/`ColorTransfer`/`ColorPrimaries`, `BitsPerRawSample`, `AttachedPic`, and attachment `FileName`/`MimeType`; decoded `LibraryOptions.PathInfos` from Jellyfin/Emby into new `JellyfinPathInfo`/`EmbyPathInfo` writers (`PlexPathInfo` does not exist in ErsatzTV); added `sync_plex_libraries`/`sync_jellyfin_libraries`/`sync_emby_libraries` for full add/update/delete cascade with `ShouldSyncItems` parity; ported per-folder `Artist` resolution to write `MusicVideo`/`MusicVideoMetadata`, and added `.yml`/`.yaml` walking to write `RemoteStream`/`RemoteStreamMetadata` from local scans; added a multi-page Plex collection corpus test exercising unicode names and mixed item types. Updated plan/persistence-gap-matrix/parity-matrix. |
 | 2026-05-02 | Codex (GPT-5) | Remediated Slice 18 scanner review findings: added deep-scan propagation for CLI/admin provider scans, scoped provider etag skip/upsert lookups to the current library, restored found provider rows to `Normal` on non-skip updates, and added focused provider regression tests. |

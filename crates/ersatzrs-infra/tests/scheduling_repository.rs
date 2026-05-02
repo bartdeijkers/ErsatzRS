@@ -10,7 +10,8 @@ use ersatzrs_core::scheduling::{
 };
 use ersatzrs_domain::{
     CollectionType, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind, ProgramSchedule,
-    ProgramScheduleItem,
+    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
@@ -88,6 +89,49 @@ async fn scheduling_repository_resolves_sql_content_sources() {
     assert_eq!(
         show.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![12, 13]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_loads_global_playout_config() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+
+    pool.execute(
+        r#"INSERT INTO "FillerPreset" (
+               "Id", "Name", "FillerMode", "FillerKind", "CollectionType",
+               "CollectionId", "AllowWatermarks", "UseChaptersAsMediaItems"
+           ) VALUES (77, 'Global Fallback', 1, 0, 'Collection', 1, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+        .bind("55")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+        .bind("77")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let reference_data = repos.scheduling.configured_playout_options().await.unwrap();
+
+    assert_eq!(reference_data.global_watermark_id, Some(55));
+    let fallback = reference_data.global_fallback.unwrap();
+    assert_eq!(fallback.id, 77);
+    assert!(!fallback.allow_watermarks);
+    assert_eq!(
+        fallback
+            .media_items
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
     );
 }
 
