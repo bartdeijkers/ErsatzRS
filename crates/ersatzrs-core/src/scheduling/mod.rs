@@ -1,4 +1,5 @@
 mod block;
+mod classic;
 mod scripted;
 mod yaml;
 
@@ -7,9 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
-    CollectionType, EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory,
-    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    PlayoutScheduleKind,
+    CollectionType, EntityId, FixedStartTimeBehavior, PlaybackOrder, Playout, PlayoutAnchor,
+    PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ pub use block::{
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
+pub use classic::{classic_schedule_item_key, ClassicSchedulingContext, ClassicSchedulingEngine};
 pub use scripted::ScriptedSchedulingEngine;
 pub use yaml::{
     YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
@@ -185,6 +187,14 @@ pub struct SchedulingReferenceData {
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
     pub graphics_ids_by_path: BTreeMap<String, EntityId>,
     pub effective_blocks: Vec<EffectiveBlock>,
+    pub classic_schedule_id: Option<EntityId>,
+    pub classic_schedule_name: Option<String>,
+    pub classic_schedule_items: Vec<ProgramScheduleItem>,
+    pub classic_shuffle_schedule_items: bool,
+    pub classic_random_start_point: bool,
+    pub classic_fixed_start_time_behavior: FixedStartTimeBehavior,
+    pub existing_program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    pub existing_fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
     pub max_playout_offset: Duration,

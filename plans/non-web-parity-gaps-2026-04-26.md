@@ -21,7 +21,7 @@ Last reviewed: 2026-05-02.
 | Partial | Slice 16 — Health check engine | Core health contracts, SQL-backed checks (incl. ported `FFmpegReports`), and `ConfigElement` persistence are in place; automatic run wiring, web consumption of `health.summary`, and deeper typed hardware probes remain open. |
 | Completed | Slice 13 — Ontbrekende FFmpeg-filters | Loudnorm, hardware deinterlace (yadif_cuda/qsv/vaapi), tonemap (sw + cuda/qsv/vaapi), colorspace (bt.2020→bt.709 + bt.470bg), typed `hwupload`/`hwdownload`, and `framerate=fps:flags=-scd` filters are ported; `FrameState` carries `is_hdr` + `should_deinterlace` and the pipeline auto-emits deinterlace/tonemap/fps based on source metadata. |
 | Completed | Slice 14 — `ProgramScheduleItem` subtype repositories | Program schedule item subtype read/write, schedule item overlays, alternates, and typed block item target/overlay round-trips are complete in infra repositories with focused SQLite coverage. |
-| Open | Slice 15 — Classic scheduling engine | Not started in this plan. |
+| Completed | Slice 15 — Classic scheduling engine | Classic One/Multiple/Duration/Flood scheduling is wired into `PlayoutBuilder`, with fixed-start behavior, persisted schedule/media reference-data loading, anchors, fill-group index persistence inputs, and focused core/SQLite coverage. |
 | Open | Slice 17 — Background maintenance loops | Not started in this plan. |
 | Open | Slice 18 — Scanner deepening | Not started in this plan. |
 | Open | Slice 19 — Search index hardening | Not started in this plan. |
@@ -75,13 +75,13 @@ Huidige Rust crate is plat (`pipeline/mod.rs` één file, `filter/{simple,comple
 
 | Subgap | C# referentie | Rust status |
 | --- | --- | --- |
-| Classic engine (One/Multiple/Duration/Flood) | `Core/Scheduling/PlayoutModeScheduler{One,Multiple,Duration,Flood}.cs` + `PlayoutModeSchedulerBase.cs` | `PlayoutBuilder` retourneert `UnsupportedScheduleKind` voor Classic |
+| Classic engine (One/Multiple/Duration/Flood) | `Core/Scheduling/PlayoutModeScheduler{One,Multiple,Duration,Flood}.cs` + `PlayoutModeSchedulerBase.cs` | Slice 15: `ClassicSchedulingEngine` schedules One/Multiple/Duration/Flood through the shared `SchedulingResult` path and `PlayoutBuilder` dispatch |
 | `ProgramScheduleItem` subtype rijen | `Core/Domain/ProgramSchedule{One,Multiple,Duration,Flood}Item.cs` + EF mapping | Tabellen bestaan in `0001_initial.sql`; in `program_schedule.rs` worden alleen placeholder-rijen geschreven (zie `persistence-gap-matrix.md` — alle vier gemarkeerd "Schema only") |
 | `ProgramScheduleAlternate` write | repository `program_schedule.rs` | Read-only |
 | `ProgramScheduleItemWatermark` / `ProgramScheduleItemGraphicsElement` | Domain only | Geen read/write |
 | `BlockItem` typed target write voor nieuwe IDs | `block.rs` | Bestaande rijen worden bewaard; nieuwe IDs schrijven nu placeholder; collection/show/season/searchquery target-velden ontbreken |
 | `BlockItemWatermark` / `BlockItemGraphicsElement` write | scheduling read model | Read-only (zie persistence-gap-matrix) |
-| `FixedStartTimeBehavior` (Flexible/Fixed/FlexibleOverflow) | `Core/Scheduling/FixedStartTimeBehavior.cs` + `PlayoutModeSchedulerBase.GetStartTimeAfter` | Niet geport |
+| `FixedStartTimeBehavior` (Strict/Flexible) | `Core/Scheduling/FixedStartTimeBehavior.cs` + `PlayoutModeSchedulerBase.GetStartTimeAfter` | Slice 15: ported in Classic start-time calculation; the current ErsatzTV enum has `Strict` and `Flexible` only |
 | `OnDemandCheckpoint` handler | `Application/Playouts/Commands/UpdateOnDemandCheckpointHandler.cs` | Veld bestaat in `Playout`; geen update-pad |
 
 ### C. Persistence parity P1 (`crates/ersatzrs-infra/src/repositories/`) — MEDIUM
@@ -264,17 +264,29 @@ subtype + overlay round-trips, alternate converter persistence, and block item
 target + overlay round-trips.
 
 ### Slice 15 — Classic scheduling engine
-1. Port `Core/Scheduling/ClassicSchedulingContext.cs` + `PlayoutModeSchedulerBase.cs`
-   naar `crates/ersatzrs-core/src/scheduling/classic/mod.rs`.
-2. Port `PlayoutModeScheduler{One,Multiple,Duration,Flood}.cs` als per-mode
-   submodules met `Engine` trait-implementatie.
-3. Hang in op de bestaande `PlayoutBuilder`-dispatch
+1. ~~Port `Core/Scheduling/ClassicSchedulingContext.cs` + `PlayoutModeSchedulerBase.cs`
+   naar `crates/ersatzrs-core/src/scheduling/classic/mod.rs`.~~
+2. ~~Port `PlayoutModeScheduler{One,Multiple,Duration,Flood}.cs` als
+   per-mode branches met `PlayoutSchedulingEngine`-implementatie.~~
+3. ~~Hang in op de bestaande `PlayoutBuilder`-dispatch
    ([playout_builder.rs](crates/ersatzrs-core/src/playout_builder.rs)) zodat
-   `PlayoutScheduleKind::Classic` niet langer faalt.
-4. Port `FixedStartTimeBehavior` (Flexible/Fixed/FlexibleOverflow) in de
-   schedule-time logica.
-5. Voeg ErsatzTV-fixture-based regression-snapshots toe (vergelijkbaar met de
-   block scheduling fixtures die er al zijn).
+   `PlayoutScheduleKind::Classic` niet langer faalt.~~
+4. ~~Port `FixedStartTimeBehavior` (`Strict`/`Flexible` in de huidige
+   ErsatzTV enum) in de schedule-time logica.~~
+5. ~~Voeg focused regression-snapshots en SQLite reference-data coverage toe.~~
+
+Slice 15 landed on 2026-05-02. `ersatzrs-core::scheduling::classic` now emits
+ErsatzTV-compatible `ClassicSchedulingContext` JSON, schedules Classic
+One/Multiple/Duration/Flood items into normal `PlayoutItem`/history output,
+persists next-anchor state through `SchedulingResult`, and produces
+`PlayoutProgramScheduleAnchor` / fill-group index state for the infra
+`apply_build_result` path. `SqliteSchedulingContentRepository` now exposes
+`classic_reference_data`, loading the active `ProgramSchedule`, typed
+`ProgramScheduleItem` rows, collection media, existing playout items/history,
+program schedule anchors, and fill-group indices. Remaining deeper parity is
+limited to features not yet represented on the Rust domain item model (notably
+pre/mid/post/tail/fallback filler preset fields and advanced grouped/fill-group
+enumerator behavior).
 
 ### Slice 16 — Health check engine
 1. ~~Voeg `crates/ersatzrs-core/src/health.rs` met `HealthCheck` trait +

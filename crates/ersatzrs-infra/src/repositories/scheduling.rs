@@ -3,15 +3,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::db::DbRow;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, NaiveTime, Utc};
-use ersatzrs_core::repositories::Result;
+use ersatzrs_core::repositories::{ProgramScheduleRepository, Result};
 use ersatzrs_core::scheduling::{
-    BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
-    EffectiveBlockItem, EffectiveBreakContent, EffectiveDeco, EffectiveDecoSelection,
-    EffectiveDecoTemplateItem, SchedulingCollectionKey, SchedulingContentRepository,
-    SchedulingContentSource, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
+    classic_schedule_item_key, BlockDefinition, BlockTemplate, BlockTemplateItem,
+    BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
+    EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
+    SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
+    SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
-use ersatzrs_domain::{CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem};
+use ersatzrs_domain::{
+    CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
+};
 use sqlx::{Pool, Row};
 
 use super::common::{
@@ -48,6 +52,58 @@ impl SchedulingContentRepository for SqliteSchedulingContentRepository {
 }
 
 impl SqliteSchedulingContentRepository {
+    /// Prepare SQL-backed reference data for Classic program scheduling.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the playout has no program schedule, when the
+    /// schedule cannot be loaded, or when any `SQLite` query fails.
+    pub async fn classic_reference_data(
+        &self,
+        playout_id: EntityId,
+        max_playout_offset: Duration,
+    ) -> Result<SchedulingReferenceData> {
+        let schedule_id = sqlx::query_scalar::<_, Option<EntityId>>(
+            r#"SELECT "ProgramScheduleId" FROM "Playout" WHERE "Id" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_optional(&self.0)
+        .await?
+        .flatten()
+        .ok_or_else(|| {
+            super::common::decode_message("classic playout", "missing program schedule")
+        })?;
+
+        let schedule_repo =
+            super::program_schedule::SqliteProgramScheduleRepository(self.0.clone());
+        let schedule = schedule_repo.get_with_items(schedule_id).await?;
+        let schedule_items = schedule_repo.list_items(schedule_id).await?;
+
+        let mut media_by_key = BTreeMap::new();
+        for item in &schedule_items {
+            media_by_key.insert(
+                classic_schedule_item_key(item),
+                self.items_for_program_schedule_item(item).await?,
+            );
+        }
+
+        Ok(SchedulingReferenceData {
+            media_by_key,
+            classic_schedule_id: Some(schedule.id),
+            classic_schedule_name: Some(schedule.name),
+            classic_schedule_items: schedule_items,
+            classic_shuffle_schedule_items: schedule.shuffle_schedule_items,
+            classic_random_start_point: schedule.random_start_point,
+            classic_fixed_start_time_behavior: schedule.fixed_start_time_behavior,
+            existing_program_schedule_anchors: self.program_schedule_anchors(playout_id).await?,
+            existing_fill_group_indices: self.fill_group_indices(playout_id).await?,
+            existing_items: self.playout_items(playout_id).await?,
+            existing_history: self.playout_history(playout_id).await?,
+            max_playout_offset,
+            ..SchedulingReferenceData::default()
+        })
+    }
+
     /// Prepare SQL-backed reference data for block scheduling.
     ///
     /// # Errors
@@ -471,6 +527,26 @@ impl SqliteSchedulingContentRepository {
         self.load_media_item(id)
             .await
             .map(|item| item.into_iter().collect())
+    }
+
+    async fn items_for_program_schedule_item(
+        &self,
+        item: &ProgramScheduleItem,
+    ) -> Result<Vec<SchedulingMediaItem>> {
+        self.items_for_collection_key(
+            &SchedulingCollectionKey {
+                collection_type: item.collection_type,
+                collection_id: item.collection_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                media_item_id: item.media_item_id,
+                playlist_id: item.playlist_id,
+                search_query: item.search_query.clone(),
+                fake_collection_key: None,
+            },
+            0,
+        )
+        .await
     }
 
     async fn expand_media_ids(
@@ -1557,6 +1633,96 @@ impl SqliteSchedulingContentRepository {
         .await?;
 
         rows.iter().map(map_playout_history).collect()
+    }
+
+    async fn program_schedule_anchors(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<PlayoutProgramScheduleAnchor>> {
+        let rows = sqlx::query(
+            r#"SELECT "a".*,
+                      "s"."Seed" AS "EnumeratorSeed",
+                      "s"."Index" AS "EnumeratorIndex"
+             FROM "PlayoutProgramScheduleAnchor" AS "a"
+             LEFT JOIN "CollectionEnumeratorState" AS "s"
+                ON "s"."PlayoutProgramScheduleAnchorId" = "a"."Id"
+             WHERE "a"."PlayoutId" = ?
+             ORDER BY "a"."Id""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(PlayoutProgramScheduleAnchor {
+                    id: row.try_get("Id")?,
+                    playout_id: row.try_get("PlayoutId")?,
+                    anchor_date: decode_optional_datetime(
+                        "playout program schedule anchor anchor_date",
+                        row.try_get::<Option<String>, _>("AnchorDate")?,
+                    )?,
+                    collection_type: decode_enum_column(
+                        "playout program schedule anchor collection_type",
+                        row,
+                        "CollectionType",
+                    )?,
+                    collection_id: row.try_get("CollectionId")?,
+                    multi_collection_id: row.try_get("MultiCollectionId")?,
+                    smart_collection_id: row.try_get("SmartCollectionId")?,
+                    rerun_collection_id: row.try_get("RerunCollectionId")?,
+                    media_item_id: row.try_get("MediaItemId")?,
+                    playlist_id: row.try_get("PlaylistId")?,
+                    search_query: row.try_get("SearchQuery")?,
+                    fake_collection_key: row.try_get("FakeCollectionKey")?,
+                    enumerator_state: CollectionEnumeratorState {
+                        seed: row
+                            .try_get::<Option<i32>, _>("EnumeratorSeed")?
+                            .unwrap_or_default(),
+                        index: row
+                            .try_get::<Option<i32>, _>("EnumeratorIndex")?
+                            .unwrap_or_default(),
+                    },
+                })
+            })
+            .collect()
+    }
+
+    async fn fill_group_indices(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<PlayoutScheduleItemFillGroupIndex>> {
+        let rows = sqlx::query(
+            r#"SELECT "i".*,
+                      "s"."Seed" AS "EnumeratorSeed",
+                      "s"."Index" AS "EnumeratorIndex"
+             FROM "PlayoutScheduleItemFillGroupIndex" AS "i"
+             LEFT JOIN "FillGroupEnumeratorState" AS "s"
+                ON "s"."PlayoutScheduleItemFillGroupIndexId" = "i"."Id"
+             WHERE "i"."PlayoutId" = ?
+             ORDER BY "i"."Id""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(PlayoutScheduleItemFillGroupIndex {
+                    id: row.try_get("Id")?,
+                    playout_id: row.try_get("PlayoutId")?,
+                    program_schedule_item_id: row.try_get("ProgramScheduleItemId")?,
+                    enumerator_state: CollectionEnumeratorState {
+                        seed: row
+                            .try_get::<Option<i32>, _>("EnumeratorSeed")?
+                            .unwrap_or_default(),
+                        index: row
+                            .try_get::<Option<i32>, _>("EnumeratorIndex")?
+                            .unwrap_or_default(),
+                    },
+                })
+            })
+            .collect()
     }
 }
 

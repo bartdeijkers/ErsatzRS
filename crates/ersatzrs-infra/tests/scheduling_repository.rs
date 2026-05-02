@@ -2,11 +2,16 @@
 mod common;
 
 use chrono::{Duration, TimeZone, Utc};
+use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{
-    BlockSchedulingEngine, PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
+    classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
     SchedulingContentSource, SchedulingRequest,
 };
-use ersatzrs_domain::{CollectionType, PlaybackOrder, Playout};
+use ersatzrs_domain::{
+    CollectionType, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind, ProgramSchedule,
+    ProgramScheduleItem,
+};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
 
@@ -368,7 +373,7 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
             .iter()
             .map(|item| item.id)
             .collect::<Vec<_>>(),
-        vec![12, 13, 20]
+        vec![20]
     );
 
     let deco = block.deco.as_ref().unwrap();
@@ -416,6 +421,88 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
     assert_eq!(
         reference_data.existing_history[0].key,
         "persisted-block-history"
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_loads_classic_reference_data_from_sql() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 901).await;
+
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 301,
+            name: "Classic Prime".to_owned(),
+            item_ids: vec![401],
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    let item = ProgramScheduleItem {
+        id: 401,
+        program_schedule_id: 301,
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        playout_mode: PlayoutMode::One,
+        playback_order: PlaybackOrder::SeasonEpisode,
+        sort_order: 1,
+        ..ProgramScheduleItem::default()
+    };
+    repos.program_schedule.upsert_item(&item).await.unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (901, 901, 301, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(901, Duration::hours(1))
+        .await
+        .unwrap();
+
+    assert_eq!(reference_data.classic_schedule_id, Some(301));
+    assert_eq!(reference_data.classic_schedule_items.len(), 1);
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get(&classic_schedule_item_key(
+                &reference_data.classic_schedule_items[0]
+            ))
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
+    );
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let result = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 901,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 123,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>(),
+        vec![20]
     );
 }
 

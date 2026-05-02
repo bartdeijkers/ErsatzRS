@@ -2,12 +2,10 @@
 //!
 //! Mirrors the C# `IPlayoutBuilder` dispatch hierarchy:
 //! - `Block`      → [`BlockSchedulingEngine`]
+//! - `Classic`    → [`ClassicSchedulingEngine`]
 //! - `Sequential` → [`YamlPlayoutEngine`]
 //! - `Scripted`   → [`ScriptedSchedulingEngine`]
 //! - `ExternalJson` → [`ExternalJsonSchedulingEngine`]
-//!
-//! `Classic` is not yet implemented; calls for that kind return
-//! [`SchedulingError::UnsupportedScheduleKind`].
 //!
 //! The C# entry point for the Classic engine is
 //! `ErsatzTV.Core/Scheduling/PlayoutBuilder.cs`.  Block, YAML, and Scripted
@@ -17,8 +15,8 @@
 use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::scheduling::{
-    BlockSchedulingEngine, ExternalJsonSchedulingEngine, SchedulingError, SchedulingRequest,
-    SchedulingResult, ScriptedSchedulingEngine, YamlPlayoutEngine,
+    BlockSchedulingEngine, ClassicSchedulingEngine, ExternalJsonSchedulingEngine, SchedulingError,
+    SchedulingRequest, SchedulingResult, ScriptedSchedulingEngine, YamlPlayoutEngine,
 };
 
 /// Routes playout build requests to the engine registered for each
@@ -27,6 +25,7 @@ use crate::scheduling::{
 /// Construct via [`PlayoutBuilder::default`] to use the built-in engines, or
 /// via [`PlayoutBuilder::new`] to inject custom implementations.
 pub struct PlayoutBuilder {
+    classic: Box<dyn EngineDispatch + Send + Sync>,
     block: Box<dyn EngineDispatch + Send + Sync>,
     yaml: Box<dyn EngineDispatch + Send + Sync>,
     scripted: Box<dyn EngineDispatch + Send + Sync>,
@@ -42,6 +41,7 @@ impl std::fmt::Debug for PlayoutBuilder {
 impl Default for PlayoutBuilder {
     fn default() -> Self {
         Self {
+            classic: Box::new(ClassicSchedulingEngine),
             block: Box::new(BlockSchedulingEngine),
             yaml: Box::new(YamlPlayoutEngine),
             scripted: Box::new(ScriptedSchedulingEngine),
@@ -54,12 +54,14 @@ impl PlayoutBuilder {
     /// Construct a builder with one engine per supported schedule kind.
     #[must_use]
     pub fn new(
+        classic: Box<dyn EngineDispatch + Send + Sync>,
         block: Box<dyn EngineDispatch + Send + Sync>,
         yaml: Box<dyn EngineDispatch + Send + Sync>,
         scripted: Box<dyn EngineDispatch + Send + Sync>,
         external_json: Box<dyn EngineDispatch + Send + Sync>,
     ) -> Self {
         Self {
+            classic,
             block,
             yaml,
             scripted,
@@ -75,15 +77,18 @@ impl PlayoutBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `Classic` and
-    /// `None`, which are not implemented in Phase 3.
+    /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `None`, which
+    /// is not a buildable schedule kind.
     pub fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
         match request.playout.schedule_kind {
+            PlayoutScheduleKind::Classic => self.classic.schedule(request),
             PlayoutScheduleKind::Block => self.block.schedule(request),
             PlayoutScheduleKind::Sequential => self.yaml.schedule(request),
             PlayoutScheduleKind::Scripted => self.scripted.schedule(request),
             PlayoutScheduleKind::ExternalJson => self.external_json.schedule(request),
-            kind => Err(SchedulingError::UnsupportedScheduleKind(kind)),
+            PlayoutScheduleKind::None => Err(SchedulingError::UnsupportedScheduleKind(
+                PlayoutScheduleKind::None,
+            )),
         }
     }
 }
