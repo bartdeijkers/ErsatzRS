@@ -86,7 +86,11 @@ pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
 /// The actual sync work runs in a spawned tokio task.
 #[server]
 #[allow(clippy::unused_async)]
-pub async fn scan_library(library_id: i64, kind: String) -> Result<(), ServerFnError> {
+pub async fn scan_library(
+    library_id: i64,
+    kind: String,
+    deep_scan: bool,
+) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -101,12 +105,25 @@ pub async fn scan_library(library_id: i64, kind: String) -> Result<(), ServerFnE
             };
         }
         match kind.as_str() {
-            "Plex" => log_err!(ersatzrs_infra::plex::sync_library_by_id(&pool, library_id).await),
+            "Plex" => log_err!(
+                ersatzrs_infra::plex::sync_library_by_id_with_options(&pool, library_id, deep_scan)
+                    .await
+            ),
             "Jellyfin" => {
-                log_err!(ersatzrs_infra::jellyfin::sync_library_by_id(&pool, library_id).await);
+                log_err!(
+                    ersatzrs_infra::jellyfin::sync_library_by_id_with_options(
+                        &pool, library_id, deep_scan
+                    )
+                    .await
+                );
             }
             "Emby" => {
-                log_err!(ersatzrs_infra::emby::sync_library_by_id(&pool, library_id).await);
+                log_err!(
+                    ersatzrs_infra::emby::sync_library_by_id_with_options(
+                        &pool, library_id, deep_scan
+                    )
+                    .await
+                );
             }
             "Local" => {
                 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};

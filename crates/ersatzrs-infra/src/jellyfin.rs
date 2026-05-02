@@ -319,6 +319,7 @@ pub async fn sync_jellyfin_movie_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: JellyfinServiceTrait,
@@ -333,7 +334,15 @@ where
         let total_record_count = page.total_record_count;
         let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
         for item in &page.items {
-            if item_etag_matches(pool, "JellyfinMovie", &item.item_id, item.etag.as_deref()).await?
+            if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "JellyfinMovie",
+                    library_id,
+                    &item.item_id,
+                    item.etag.as_deref(),
+                )
+                .await?
             {
                 synced += 1;
                 continue;
@@ -373,6 +382,7 @@ pub async fn sync_jellyfin_show_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: JellyfinServiceTrait,
@@ -431,13 +441,15 @@ where
                         let episode_page_len =
                             i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
                         for episode in &episodes.items {
-                            if item_etag_matches(
-                                pool,
-                                "JellyfinEpisode",
-                                &episode.item_id,
-                                episode.etag.as_deref(),
-                            )
-                            .await?
+                            if !deep_scan
+                                && item_etag_matches(
+                                    pool,
+                                    "JellyfinEpisode",
+                                    library_id,
+                                    &episode.item_id,
+                                    episode.etag.as_deref(),
+                                )
+                                .await?
                             {
                                 synced += 1;
                                 continue;
@@ -569,6 +581,22 @@ fn project_library(response: JellyfinLibraryResponse) -> Option<JellyfinLibraryS
 ///
 /// Returns an error when config loading, the Jellyfin API, or database writes fail.
 pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
+    sync_library_by_id_with_options(pool, library_id, false).await
+}
+
+/// Loads configuration from the database and synchronizes one Jellyfin library.
+///
+/// `deep_scan` bypasses provider etag skip and refreshes existing rows even
+/// when the upstream etag is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Jellyfin API, or database writes fail.
+pub async fn sync_library_by_id_with_options(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -624,6 +652,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     } else {
@@ -634,6 +663,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     }
@@ -1017,6 +1047,7 @@ async fn find_jellyfin_media_item(
 async fn item_etag_matches(
     pool: &DbPool,
     table: &str,
+    library_id: i64,
     item_id: &str,
     etag: Option<&str>,
 ) -> Result<bool> {
@@ -1024,9 +1055,15 @@ async fn item_etag_matches(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
            FROM "{table}"
            INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
-           WHERE "{table}"."ItemId" = ?"#
+           INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           WHERE "{table}"."ItemId" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
-    let Some(row) = sqlx::query(&sql).bind(item_id).fetch_optional(pool).await? else {
+    let Some(row) = sqlx::query(&sql)
+        .bind(item_id)
+        .bind(library_id)
+        .fetch_optional(pool)
+        .await?
+    else {
         return Ok(false);
     };
 
@@ -1093,14 +1130,29 @@ async fn ensure_jellyfin_movie_item(
     library_path_id: i64,
     item: &JellyfinMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinMovie" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "JellyfinMovie"."Id"
+           FROM "JellyfinMovie"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "JellyfinMovie"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "JellyfinMovie"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinMovie" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1130,10 +1182,20 @@ async fn ensure_jellyfin_show_item(
     library_path_id: i64,
     item: &JellyfinShowItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinShow" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "JellyfinShow"."Id"
+           FROM "JellyfinShow"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "JellyfinShow"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "JellyfinShow"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinShow" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1173,10 +1235,20 @@ async fn ensure_jellyfin_season_item(
     show_id: i64,
     item: &JellyfinSeasonItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinSeason" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "JellyfinSeason"."Id"
+           FROM "JellyfinSeason"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "JellyfinSeason"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "JellyfinSeason"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinSeason" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1224,10 +1296,20 @@ async fn ensure_jellyfin_episode_item(
     season_id: i64,
     item: &JellyfinMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "JellyfinEpisode" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "JellyfinEpisode"."Id"
+           FROM "JellyfinEpisode"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "JellyfinEpisode"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "JellyfinEpisode"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "JellyfinEpisode" SET "Etag" = ? WHERE "Id" = ?"#)

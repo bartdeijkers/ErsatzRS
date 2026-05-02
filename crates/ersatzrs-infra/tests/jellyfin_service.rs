@@ -92,7 +92,7 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
     let libraries_result = service.list_libraries(&config).await.unwrap();
     assert_eq!(libraries_result[0].item_id, "library-1");
 
-    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
 
@@ -156,7 +156,7 @@ async fn jellyfin_sync_pages_movie_library_beyond_first_result_window() {
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
 
-    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
 
@@ -193,7 +193,7 @@ async fn jellyfin_sync_skips_unchanged_movie_etag_before_playback_lookup() {
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
 
-    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
     sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/srv/media/kept.mkv'"#)
@@ -201,7 +201,7 @@ async fn jellyfin_sync_skips_unchanged_movie_etag_before_playback_lookup() {
         .await
         .unwrap();
 
-    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+    let synced = sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
 
@@ -209,6 +209,48 @@ async fn jellyfin_sync_skips_unchanged_movie_etag_before_playback_lookup() {
     assert_eq!(media_file_path(&pool).await, "/srv/media/kept.mkv");
     assert_eq!(playback.calls_async().await, 1);
     assert_eq!(items.calls_async().await, 2);
+}
+
+#[tokio::test]
+async fn jellyfin_sync_restores_non_normal_movie_with_matching_etag() {
+    let server = MockServer::start_async().await;
+    let _items = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-1")
+                .query_param("includeItemTypes", "Movie");
+            then.status(200).json_body(movie_page_json(
+                1,
+                "movie-restore",
+                "/srv/media/restored.mkv",
+            ));
+        })
+        .await;
+    let playback = mock_jellyfin_playback(&server, "movie-restore").await;
+
+    let pool = common::test_db().await;
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: server.base_url(),
+        authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
+    };
+
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaItem" SET "State" = 2"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
+        .await
+        .unwrap();
+
+    assert_eq!(media_item_state(&pool).await, 0);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/restored.mkv");
+    assert_eq!(playback.calls_async().await, 2);
 }
 
 #[tokio::test]
@@ -254,7 +296,7 @@ async fn jellyfin_sync_maps_mock_collection_response_to_collection_rows() {
         address: server.base_url(),
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
-    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1")
+    sync_jellyfin_movie_library(&pool, &service, &config, 1, 1, "library-1", false)
         .await
         .unwrap();
 
@@ -379,7 +421,7 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
         authorization_header: "MediaBrowser Token=\"test\"".to_owned(),
     };
 
-    let synced = sync_jellyfin_show_library(&pool, &service, &config, 1, 1, "library-shows")
+    let synced = sync_jellyfin_show_library(&pool, &service, &config, 1, 1, "library-shows", false)
         .await
         .unwrap();
 
@@ -517,6 +559,14 @@ async fn media_file_path(pool: &SqlitePool) -> String {
         .await
         .unwrap()
         .get("Path")
+}
+
+async fn media_item_state(pool: &SqlitePool) -> i64 {
+    sqlx::query(r#"SELECT "State" FROM "MediaItem" LIMIT 1"#)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("State")
 }
 
 async fn jellyfin_projected_rows(pool: &SqlitePool) -> serde_json::Value {

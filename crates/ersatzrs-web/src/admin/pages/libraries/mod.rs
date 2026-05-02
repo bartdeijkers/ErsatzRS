@@ -13,10 +13,11 @@ pub fn LibrariesPage() -> impl IntoView {
         |()| async move { list_libraries().await.unwrap_or_default() },
     );
 
-    let scan_action = Action::new(|(id, kind): &(i64, String)| {
+    let scan_action = Action::new(|(id, kind, deep_scan): &(i64, String, bool)| {
         let id = *id;
         let kind = kind.clone();
-        async move { scan_library(id, kind).await }
+        let deep_scan = *deep_scan;
+        async move { scan_library(id, kind, deep_scan).await }
     });
 
     let toast = use_toast();
@@ -105,6 +106,7 @@ pub fn LibrariesPage() -> impl IntoView {
                                                                                         .dispatch((
                                                                                             id,
                                                                                             kind_deep.clone(),
+                                                                                            true,
                                                                                         ));
                                                                                 }
                                                                             >
@@ -117,10 +119,11 @@ pub fn LibrariesPage() -> impl IntoView {
                                                                     disabled=scanning
                                                                     on:click=move |_| {
                                                                         scan_action
-                                                                            .dispatch((
-                                                                                id,
-                                                                                kind_scan.clone(),
-                                                                            ));
+                                                                        .dispatch((
+                                                                            id,
+                                                                            kind_scan.clone(),
+                                                                            false,
+                                                                        ));
                                                                     }
                                                                 >
                                                                     "Scan"

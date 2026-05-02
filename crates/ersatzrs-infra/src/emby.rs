@@ -352,6 +352,7 @@ pub async fn sync_emby_movie_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
@@ -366,7 +367,16 @@ where
         let total_record_count = page.total_record_count;
         let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
         for item in &page.items {
-            if item_etag_matches(pool, "EmbyMovie", &item.item_id, item.etag.as_deref()).await? {
+            if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "EmbyMovie",
+                    library_id,
+                    &item.item_id,
+                    item.etag.as_deref(),
+                )
+                .await?
+            {
                 synced += 1;
                 continue;
             }
@@ -405,6 +415,7 @@ pub async fn sync_emby_show_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
@@ -453,13 +464,15 @@ where
                         let episode_page_len =
                             i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
                         for episode in &episodes.items {
-                            if item_etag_matches(
-                                pool,
-                                "EmbyEpisode",
-                                &episode.item_id,
-                                episode.etag.as_deref(),
-                            )
-                            .await?
+                            if !deep_scan
+                                && item_etag_matches(
+                                    pool,
+                                    "EmbyEpisode",
+                                    library_id,
+                                    &episode.item_id,
+                                    episode.etag.as_deref(),
+                                )
+                                .await?
                             {
                                 synced += 1;
                                 continue;
@@ -585,6 +598,22 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
 ///
 /// Returns an error when config loading, the Emby API, or database writes fail.
 pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
+    sync_library_by_id_with_options(pool, library_id, false).await
+}
+
+/// Loads configuration from the database and synchronizes one Emby library.
+///
+/// `deep_scan` bypasses provider etag skip and refreshes existing rows even
+/// when the upstream etag is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Emby API, or database writes fail.
+pub async fn sync_library_by_id_with_options(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -635,6 +664,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     } else {
@@ -645,6 +675,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     }
@@ -1013,6 +1044,7 @@ async fn find_emby_media_item(
 async fn item_etag_matches(
     pool: &DbPool,
     table: &str,
+    library_id: i64,
     item_id: &str,
     etag: Option<&str>,
 ) -> Result<bool> {
@@ -1020,9 +1052,15 @@ async fn item_etag_matches(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
            FROM "{table}"
            INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
-           WHERE "{table}"."ItemId" = ?"#
+           INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           WHERE "{table}"."ItemId" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
-    let Some(row) = sqlx::query(&sql).bind(item_id).fetch_optional(pool).await? else {
+    let Some(row) = sqlx::query(&sql)
+        .bind(item_id)
+        .bind(library_id)
+        .fetch_optional(pool)
+        .await?
+    else {
         return Ok(false);
     };
 
@@ -1089,14 +1127,29 @@ async fn ensure_emby_movie_item(
     library_path_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyMovie" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyMovie"."Id"
+           FROM "EmbyMovie"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyMovie"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyMovie"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyMovie" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1126,10 +1179,20 @@ async fn ensure_emby_show_item(
     library_path_id: i64,
     item: &EmbyShowItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyShow" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyShow"."Id"
+           FROM "EmbyShow"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyShow"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyShow"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyShow" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1169,10 +1232,20 @@ async fn ensure_emby_season_item(
     show_id: i64,
     item: &EmbySeasonItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbySeason" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbySeason"."Id"
+           FROM "EmbySeason"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbySeason"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbySeason"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbySeason" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1220,10 +1293,20 @@ async fn ensure_emby_episode_item(
     season_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyEpisode" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyEpisode"."Id"
+           FROM "EmbyEpisode"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyEpisode"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyEpisode"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyEpisode" SET "Etag" = ? WHERE "Id" = ?"#)

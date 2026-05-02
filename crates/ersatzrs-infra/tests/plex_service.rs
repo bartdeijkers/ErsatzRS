@@ -20,7 +20,7 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
         .await
         .unwrap();
 
@@ -83,7 +83,7 @@ async fn plex_sync_paginates_movie_library() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 3, "3")
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 3, "3", false)
         .await
         .unwrap();
 
@@ -119,7 +119,7 @@ async fn plex_sync_skips_unchanged_movie_etag_writes() {
         token: "plex-token".to_owned(),
     };
 
-    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
         .await
         .unwrap();
     sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/media/kept.mkv'"#)
@@ -127,13 +127,76 @@ async fn plex_sync_skips_unchanged_movie_etag_writes() {
         .await
         .unwrap();
 
-    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
         .await
         .unwrap();
 
     assert_eq!(synced, 1);
     assert_eq!(media_file_path(&pool).await, "/media/kept.mkv");
-    assert_eq!(page.calls_async().await, 2);
+
+    let deep_synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", true)
+        .await
+        .unwrap();
+
+    assert_eq!(deep_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/unchanged.mkv");
+    assert_eq!(page.calls_async().await, 3);
+}
+
+#[tokio::test]
+async fn plex_sync_scopes_matching_etags_to_the_current_library() {
+    let server = MockServer::start_async().await;
+    let first_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/1/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/shared", "/library/parts/10", "/media/shared.mkv", 100)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let second_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/2/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/shared", "/library/parts/20", "/media/shared-2.mkv", 200)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
+        .await
+        .unwrap();
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 2, "2", false)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(count(&pool, "PlexMovie").await, 2);
+    assert_eq!(count(&pool, "MediaFile").await, 2);
+    assert_eq!(first_page.calls_async().await, 1);
+    assert_eq!(second_page.calls_async().await, 1);
 }
 
 #[tokio::test]
@@ -147,7 +210,7 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_show_library(&pool, &service, &config, 1, 1, "2")
+    let synced = sync_plex_show_library(&pool, &service, &config, 1, 1, "2", false)
         .await
         .unwrap();
 
@@ -220,7 +283,7 @@ async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
         token: "plex-token".to_owned(),
     };
 
-    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4")
+    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4", false)
         .await
         .unwrap();
 

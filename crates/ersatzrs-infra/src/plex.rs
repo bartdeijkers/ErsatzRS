@@ -690,6 +690,7 @@ pub async fn sync_plex_movie_library(
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
+    deep_scan: bool,
 ) -> Result<usize> {
     let mut synced = 0;
     let mut start_index = 0;
@@ -700,7 +701,16 @@ pub async fn sync_plex_movie_library(
 
     while start_index < total_size {
         for item in &page.items {
-            if item_etag_matches(pool, "PlexMovie", &item.key, item.etag.as_deref()).await? {
+            if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "PlexMovie",
+                    library_id,
+                    &item.key,
+                    item.etag.as_deref(),
+                )
+                .await?
+            {
                 synced += 1;
                 continue;
             }
@@ -732,6 +742,7 @@ pub async fn sync_plex_show_library(
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
+    deep_scan: bool,
 ) -> Result<usize> {
     let mut synced = 0;
     let mut show_start_index = 0;
@@ -774,13 +785,15 @@ pub async fn sync_plex_show_library(
 
                     while episode_start_index < episode_total_size {
                         for episode in &episodes.items {
-                            if item_etag_matches(
-                                pool,
-                                "PlexEpisode",
-                                &episode.key,
-                                episode.etag.as_deref(),
-                            )
-                            .await?
+                            if !deep_scan
+                                && item_etag_matches(
+                                    pool,
+                                    "PlexEpisode",
+                                    library_id,
+                                    &episode.key,
+                                    episode.etag.as_deref(),
+                                )
+                                .await?
                             {
                                 synced += 1;
                                 continue;
@@ -1190,10 +1203,20 @@ async fn ensure_plex_season_item(
     show_id: i64,
     item: &PlexSeasonItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexSeason" WHERE "Key" = ?"#)
-        .bind(&item.key)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "PlexSeason"."Id"
+           FROM "PlexSeason"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "PlexSeason"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "PlexSeason"."Key" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.key)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexSeason" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1204,6 +1227,11 @@ async fn ensure_plex_season_item(
         sqlx::query(r#"UPDATE "Season" SET "ShowId" = ?, "SeasonNumber" = ? WHERE "Id" = ?"#)
             .bind(show_id)
             .bind(item.season_number)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1231,10 +1259,20 @@ async fn ensure_plex_episode_item(
     season_id: i64,
     item: &PlexMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexEpisode" WHERE "Key" = ?"#)
-        .bind(&item.key)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "PlexEpisode"."Id"
+           FROM "PlexEpisode"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "PlexEpisode"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "PlexEpisode"."Key" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.key)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1244,6 +1282,11 @@ async fn ensure_plex_episode_item(
             .await?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1370,6 +1413,7 @@ async fn find_plex_media_item(
 async fn item_etag_matches(
     pool: &DbPool,
     table: &str,
+    library_id: i64,
     key: &str,
     etag: Option<&str>,
 ) -> Result<bool> {
@@ -1377,9 +1421,15 @@ async fn item_etag_matches(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
            FROM "{table}"
            INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
-           WHERE "{table}"."Key" = ?"#
+           INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           WHERE "{table}"."Key" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
-    let Some(row) = sqlx::query(&sql).bind(key).fetch_optional(pool).await? else {
+    let Some(row) = sqlx::query(&sql)
+        .bind(key)
+        .bind(library_id)
+        .fetch_optional(pool)
+        .await?
+    else {
         return Ok(false);
     };
 
@@ -1397,9 +1447,18 @@ async fn ensure_simple_media_item(
     key: &str,
     etag: Option<&String>,
 ) -> Result<i64> {
-    let select_sql =
-        format!(r#"SELECT "Id" FROM "{provider_table}" WHERE "{provider_key_column}" = ?"#);
+    let select_sql = format!(
+        r#"SELECT "{provider_table}"."Id"
+           FROM "{provider_table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{provider_table}"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "{provider_table}"."{provider_key_column}" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#
+    );
     if let Some(row) = sqlx::query(&select_sql)
+        .bind(library_path_id)
         .bind(key)
         .fetch_optional(&mut **tx)
         .await?
@@ -1582,6 +1641,22 @@ async fn replace_streams(
 ///
 /// Returns an error when config loading, the Plex API, or database writes fail.
 pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
+    sync_library_by_id_with_options(pool, library_id, false).await
+}
+
+/// Loads all configuration from the database and synchronizes one Plex library.
+///
+/// `deep_scan` bypasses provider etag skip and refreshes existing rows even
+/// when the upstream etag is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+pub async fn sync_library_by_id_with_options(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l
@@ -1640,6 +1715,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
                 media_source_id,
                 library_id,
                 &library_key,
+                deep_scan,
             )
             .await
         }
@@ -1651,6 +1727,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
                 media_source_id,
                 library_id,
                 &library_key,
+                deep_scan,
             )
             .await
         }

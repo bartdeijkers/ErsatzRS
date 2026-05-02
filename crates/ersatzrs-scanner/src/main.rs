@@ -35,6 +35,8 @@ struct Args {
     ffprobe_path: Option<String>,
     #[arg(long)]
     dry_run: bool,
+    #[arg(long)]
+    deep_scan: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -109,6 +111,7 @@ async fn scan_jellyfin(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             media_source_id,
             args.library_id,
             &parent_id,
+            args.deep_scan,
         )
         .await?
     } else {
@@ -119,6 +122,7 @@ async fn scan_jellyfin(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             media_source_id,
             args.library_id,
             &parent_id,
+            args.deep_scan,
         )
         .await?
     };
@@ -146,6 +150,7 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
                 media_source_id,
                 args.library_id,
                 &library_key,
+                args.deep_scan,
             )
             .await?
         }
@@ -157,6 +162,7 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
                 media_source_id,
                 args.library_id,
                 &library_key,
+                args.deep_scan,
             )
             .await?
         }
@@ -188,6 +194,7 @@ async fn scan_emby(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             media_source_id,
             args.library_id,
             &parent_id,
+            args.deep_scan,
         )
         .await?
     } else {
@@ -198,6 +205,7 @@ async fn scan_emby(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             media_source_id,
             args.library_id,
             &parent_id,
+            args.deep_scan,
         )
         .await?
     };
