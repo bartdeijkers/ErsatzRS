@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 20 config and ADR closure closed)
+Last updated: 2026-05-03 (Slice 16 health-check engine closed)
 
 ## Current Phase
 
@@ -249,16 +249,19 @@ requested hardware encoder or decoder is unavailable. The health-check
 hardware support helper now uses the same capability factory so support
 warnings stay aligned with pipeline dispatch.
 
-Slice 16 has started for the non-web health-check engine. `ersatzrs-core` now
-owns ErsatzTV-compatible health result/status/summary contracts plus a
-`HealthCheckService` runner, while `ersatzrs-infra::health` provides the first
-SQL-backed checks for FFmpeg version/capabilities, FFmpeg troubleshooting
-reports, hardware acceleration, VAAPI driver guidance, file-not-found/
-unavailable media state, empty schedules, zero-duration media, missing
-movie/episode metadata, and downgrade/schema readiness. Runs can be persisted
-to `ConfigElement` as `health.results` and `health.summary`; this must be kept
-current as porting work changes runtime capabilities or parity-sensitive
-persisted state.
+Slice 16 is complete for the non-web health-check engine. `ersatzrs-core` owns
+ErsatzTV-compatible health result/status/summary contracts plus a
+`HealthCheckService` runner, while `ersatzrs-infra::health` provides SQL-backed
+checks for FFmpeg version/capabilities, FFmpeg troubleshooting reports,
+hardware acceleration, VAAPI driver guidance, VAAPI device existence,
+provider connectivity (reading `maintenance.provider_connectivity`),
+file-not-found/unavailable media state, empty schedules, zero-duration media,
+missing movie/episode metadata, and downgrade/schema readiness. Runs persist to
+`ConfigElement` as `health.results` and `health.summary`. The admin web layer
+exposes `/system/health` rendering the persisted snapshot and the navigation
+health badge now combines the persisted parity summary with startup/runtime
+counts. This must be kept current as porting work changes runtime capabilities
+or parity-sensitive persisted state.
 
 Slice 17 is complete. The new `ersatzrs-scheduler` binary runs
 runtime-independent maintenance work as a sibling to `ersatzrs-web` and
@@ -399,6 +402,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-03 | Claude Code (claude-opus-4-7) | Closed Slice 16 health-check engine: added `ProviderConnectivityHealthCheck` reading the maintenance-loop persisted `maintenance.provider_connectivity` poll (with friendly Plex/Jellyfin/Emby `ServerName` lookup), `VaapiDeviceHealthCheck` validating the configured profile `VaapiDevice` exists on disk, exposed `ProviderConnectivityResult`/`PROVIDER_CONNECTIVITY_KEY` for cross-crate use, added a `/system/health` admin page rendering the persisted `health.results` snapshot, and made the navigation health badge combine the persisted parity summary with the existing startup/runtime counts; new infra unit tests for both checks. |
 | 2026-05-02 | Codex (GPT-5) | Closed Slice 20 config and ADR cleanup: wired global watermark/fallback filler config into playout build post-processing, seeded and loaded subsystem logging levels, moved XMLTV block behavior into core/infra, added ADR 0010 for Classic scheduling, and updated parity docs. |
 | 2026-05-02 | Codex (GPT-5) | Closed Slice 19 search hardening: added Lucene-like normalization/modifier behavior, fuzzy/proximity/boost parsing, numeric chapter/duration fields, SQL-backed page maps, image/remote-stream search documents, ADR 0009 dropping Elasticsearch, and updated parity/status docs. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Closed Slice 18 scanner deepening: extended `MediaStream` writes (and the ffprobe / Plex / Jellyfin / Emby projections) with `Profile`, `PixelFormat`, `ColorRange`/`ColorSpace`/`ColorTransfer`/`ColorPrimaries`, `BitsPerRawSample`, `AttachedPic`, and attachment `FileName`/`MimeType`; decoded `LibraryOptions.PathInfos` from Jellyfin/Emby into new `JellyfinPathInfo`/`EmbyPathInfo` writers (`PlexPathInfo` does not exist in ErsatzTV); added `sync_plex_libraries`/`sync_jellyfin_libraries`/`sync_emby_libraries` for full add/update/delete cascade with `ShouldSyncItems` parity; ported per-folder `Artist` resolution to write `MusicVideo`/`MusicVideoMetadata`, and added `.yml`/`.yaml` walking to write `RemoteStream`/`RemoteStreamMetadata` from local scans; added a multi-page Plex collection corpus test exercising unicode names and mixed item types. Updated plan/persistence-gap-matrix/parity-matrix. |

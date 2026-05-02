@@ -13,7 +13,7 @@ use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{PlayoutBuildMode, SchedulingError, SchedulingRequest};
 use ersatzrs_domain::{EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 use thiserror::Error;
 use tokio::process::Command;
@@ -30,7 +30,8 @@ use crate::repositories::{SqlitePlayoutRepository, SqliteSchedulingContentReposi
 const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
 const CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD: &str = "playout.days_to_build";
 const LOOP_RUN_PREFIX: &str = "maintenance.loop.";
-const PROVIDER_CONNECTIVITY_KEY: &str = "maintenance.provider_connectivity";
+/// `ConfigElement` key holding the latest provider connectivity poll results.
+pub const PROVIDER_CONNECTIVITY_KEY: &str = "maintenance.provider_connectivity";
 const LIBRARY_DISPATCH_KEY: &str = "maintenance.library_refresh.last_dispatch";
 const LIBRARY_DISPATCHED_IDS_KEY: &str = "maintenance.library_refresh.dispatched_ids";
 const SEARCH_INDEX_DISPATCH_KEY: &str = "maintenance.search_index.last_dispatch";
@@ -590,7 +591,7 @@ async fn poll_provider_connectivity(pool: &Pool<Db>) -> Result<ProviderPollRepor
             }
         };
         results.push(ProviderConnectivityResult {
-            provider: endpoint.provider,
+            provider: endpoint.provider.to_owned(),
             media_source_id: endpoint.media_source_id,
             url: endpoint.url,
             reachable,
@@ -775,12 +776,18 @@ struct ProviderEndpoint {
     url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct ProviderConnectivityResult {
-    provider: &'static str,
-    media_source_id: EntityId,
-    url: String,
-    reachable: bool,
+/// Persisted provider connectivity poll result row, written under
+/// [`PROVIDER_CONNECTIVITY_KEY`] and read by the health check engine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderConnectivityResult {
+    /// Provider tag: `plex`, `jellyfin`, or `emby`.
+    pub provider: String,
+    /// `MediaSource` row id the connection belongs to.
+    pub media_source_id: EntityId,
+    /// Connection URL probed by the maintenance loop.
+    pub url: String,
+    /// Whether the last probe responded reachably.
+    pub reachable: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

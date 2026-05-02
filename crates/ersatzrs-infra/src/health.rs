@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
 
 use crate::db::{DatabaseSchemaStatus, Db};
+use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
 pub const CONFIG_KEY_HEALTH_RESULTS: &str = "health.results";
@@ -104,6 +105,7 @@ impl SqlHealthCheckStore {
 
 /// Build the current `ErsatzTV` parity health check set.
 #[must_use]
+#[allow(clippy::needless_pass_by_value)]
 pub fn make_health_check_service(
     pool: Pool<Db>,
     ffmpeg_runtime: FfmpegRuntimeReport,
@@ -124,7 +126,15 @@ pub fn make_health_check_service(
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
-        Box::new(VaapiDriverHealthCheck::new(pool, ffmpeg_runtime)),
+        Box::new(VaapiDriverHealthCheck::new(
+            pool.clone(),
+            ffmpeg_runtime.clone(),
+        )),
+        Box::new(VaapiDeviceHealthCheck::new(
+            pool.clone(),
+            ffmpeg_runtime.clone(),
+        )),
+        Box::new(ProviderConnectivityHealthCheck::new(pool)),
     ])
 }
 
@@ -669,6 +679,187 @@ impl HealthCheck for DowngradeHealthCheck {
     }
 }
 
+struct VaapiDeviceHealthCheck {
+    pool: Pool<Db>,
+    runtime: FfmpegRuntimeReport,
+}
+
+impl VaapiDeviceHealthCheck {
+    fn new(pool: Pool<Db>, runtime: FfmpegRuntimeReport) -> Self {
+        Self { pool, runtime }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for VaapiDeviceHealthCheck {
+    fn title(&self) -> &'static str {
+        "VAAPI Device"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        if !self.runtime.capabilities.has_hwaccel("vaapi") {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        }
+
+        let rows = sqlx::query(
+            r#"SELECT DISTINCT p."Name", p."VaapiDevice"
+               FROM "Channel" c
+               INNER JOIN "FFmpegProfile" p ON p."Id" = c."FFmpegProfileId"
+               WHERE p."HardwareAcceleration" = ?
+                 AND p."VaapiDevice" IS NOT NULL
+                 AND p."VaapiDevice" != ''
+               ORDER BY p."Name", p."Id""#,
+        )
+        .bind(HW_ACCEL_VAAPI)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+
+        if rows.is_empty() {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        }
+
+        let missing: Vec<String> = rows
+            .iter()
+            .filter_map(|row| {
+                let device = row
+                    .try_get::<Option<String>, _>("VaapiDevice")
+                    .ok()
+                    .flatten()?;
+                if Path::new(&device).exists() {
+                    None
+                } else {
+                    let name = row
+                        .try_get::<Option<String>, _>("Name")
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| "Unnamed".to_owned());
+                    Some(format!("{name} ({device})"))
+                }
+            })
+            .collect();
+
+        if missing.is_empty() {
+            return Ok(HealthCheckResult::pass(self.title()));
+        }
+
+        Ok(HealthCheckResult::new(
+            self.title(),
+            HealthCheckStatus::Fail,
+            format!(
+                "FFmpeg Profile{} configured for VAAPI {} a device that does not exist on disk: {}",
+                if missing.len() > 1 { "s" } else { "" },
+                if missing.len() > 1 {
+                    "reference"
+                } else {
+                    "references"
+                },
+                missing.join(", ")
+            ),
+            "Configured VAAPI device does not exist",
+        ))
+    }
+}
+
+struct ProviderConnectivityHealthCheck {
+    pool: Pool<Db>,
+}
+
+impl ProviderConnectivityHealthCheck {
+    fn new(pool: Pool<Db>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for ProviderConnectivityHealthCheck {
+    fn title(&self) -> &'static str {
+        "Provider Connectivity"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        let Some(value) = load_config(&self.pool, PROVIDER_CONNECTIVITY_KEY).await? else {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        };
+        let results: Vec<ProviderConnectivityResult> = serde_json::from_str(&value)
+            .map_err(|error| HealthCheckError::Serialization(error.to_string()))?;
+
+        if results.is_empty() {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        }
+
+        let unreachable: Vec<&ProviderConnectivityResult> =
+            results.iter().filter(|result| !result.reachable).collect();
+        if unreachable.is_empty() {
+            return Ok(HealthCheckResult::pass(self.title()));
+        }
+
+        let mut descriptions: Vec<String> = Vec::with_capacity(unreachable.len());
+        for result in &unreachable {
+            let name = source_name(&self.pool, &result.provider, result.media_source_id)
+                .await?
+                .unwrap_or_else(|| format!("MediaSource {}", result.media_source_id));
+            descriptions.push(format!(
+                "{} ({name}: {})",
+                provider_label(&result.provider),
+                result.url
+            ));
+        }
+
+        Ok(HealthCheckResult::new(
+            self.title(),
+            HealthCheckStatus::Warning,
+            format!(
+                "{} provider connection{} unreachable on the last poll: {}",
+                unreachable.len(),
+                if unreachable.len() > 1 {
+                    "s are"
+                } else {
+                    " is"
+                },
+                descriptions.join(", ")
+            ),
+            format!(
+                "{} provider connection{} unreachable",
+                unreachable.len(),
+                if unreachable.len() > 1 {
+                    "s are"
+                } else {
+                    " is"
+                }
+            ),
+        ))
+    }
+}
+
+async fn source_name(
+    pool: &Pool<Db>,
+    provider: &str,
+    id: ersatzrs_domain::EntityId,
+) -> Result<Option<String>> {
+    let sql = match provider {
+        "plex" => r#"SELECT "ServerName" AS "Name" FROM "PlexMediaSource" WHERE "Id" = ?"#,
+        "jellyfin" => r#"SELECT "ServerName" AS "Name" FROM "JellyfinMediaSource" WHERE "Id" = ?"#,
+        "emby" => r#"SELECT "ServerName" AS "Name" FROM "EmbyMediaSource" WHERE "Id" = ?"#,
+        _ => return Ok(None),
+    };
+    let row = sqlx::query(sql)
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(sqlx_error)?;
+    Ok(row.and_then(|row| row.try_get::<Option<String>, _>("Name").ok().flatten()))
+}
+
+fn provider_label(provider: &str) -> &str {
+    match provider {
+        "plex" => "Plex",
+        "jellyfin" => "Jellyfin",
+        "emby" => "Emby",
+        other => other,
+    }
+}
+
 async fn media_state_result(
     pool: &Pool<Db>,
     title: &str,
@@ -1008,6 +1199,87 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn provider_connectivity_check_warns_when_endpoints_are_unreachable() {
+        let pool = test_pool().await;
+        let check = ProviderConnectivityHealthCheck::new(pool.clone());
+
+        // No persisted poll yet → not applicable.
+        let result = check.check().await.expect("default check");
+        assert_eq!(result.status, HealthCheckStatus::NotApplicable);
+
+        // Seed a Plex media source so the check can resolve a friendly server name.
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (60)"#)
+            .await
+            .expect("seed media source");
+        pool.execute(
+            r#"INSERT INTO "PlexMediaSource" ("Id", "ServerName", "ClientIdentifier")
+               VALUES (60, 'Living Room Plex', 'cid-60')"#,
+        )
+        .await
+        .expect("seed plex media source");
+
+        let payload = serde_json::to_string(&vec![
+            ProviderConnectivityResult {
+                provider: "plex".to_owned(),
+                media_source_id: 60,
+                url: "http://10.0.0.5:32400".to_owned(),
+                reachable: false,
+            },
+            ProviderConnectivityResult {
+                provider: "jellyfin".to_owned(),
+                media_source_id: 70,
+                url: "http://10.0.0.6:8096".to_owned(),
+                reachable: true,
+            },
+        ])
+        .expect("encode connectivity results");
+        upsert_config(&pool, PROVIDER_CONNECTIVITY_KEY, &payload)
+            .await
+            .expect("seed connectivity results");
+
+        let result = check.check().await.expect("warning check");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(result.brief_message, "1 provider connection is unreachable");
+        assert!(
+            result.message.contains("Living Room Plex"),
+            "expected friendly source name in {}",
+            result.message
+        );
+
+        // All reachable → pass.
+        let payload = serde_json::to_string(&vec![ProviderConnectivityResult {
+            provider: "plex".to_owned(),
+            media_source_id: 60,
+            url: "http://10.0.0.5:32400".to_owned(),
+            reachable: true,
+        }])
+        .expect("encode connectivity results");
+        upsert_config(&pool, PROVIDER_CONNECTIVITY_KEY, &payload)
+            .await
+            .expect("seed connectivity results");
+        let result = check.check().await.expect("pass check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn vaapi_device_check_fails_when_device_is_missing() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_vaapi_profile_and_channel(&pool, "/dev/dri/renderD-does-not-exist").await;
+
+        let mut report = FfmpegRuntimeReport::for_tests();
+        report.capabilities.hwaccels = BTreeSet::from(["vaapi".to_owned()]);
+        let check = VaapiDeviceHealthCheck::new(pool, report);
+
+        let result = check.check().await.expect("device check");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            result.brief_message,
+            "Configured VAAPI device does not exist"
+        );
+    }
+
     fn assert_result(
         results: &[HealthCheckResult],
         title: &str,
@@ -1157,5 +1429,44 @@ mod tests {
         )
         .await
         .expect("seed playout");
+    }
+
+    async fn seed_vaapi_profile_and_channel(pool: &Pool<Db>, vaapi_device: &str) {
+        pool.execute(
+            r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "IsCustom", "Width", "Height")
+               VALUES (60, '1920x1080', 0, 1920, 1080)"#,
+        )
+        .await
+        .expect("seed resolution");
+        let vaapi = HW_ACCEL_VAAPI;
+        let device = vaapi_device;
+        let profile_sql = format!(
+            r#"INSERT INTO "FFmpegProfile" (
+                "Id", "AudioBitrate", "AudioBufferSize", "AudioChannels", "AudioFormat",
+                "AudioSampleRate", "BitDepth", "HardwareAcceleration", "Name",
+                "NormalizeFramerate", "NormalizeLoudnessMode", "ResolutionId",
+                "ScalingBehavior", "ThreadCount", "VaapiDevice", "VaapiDriver",
+                "VideoBitrate", "VideoBufferSize", "VideoFormat"
+               ) VALUES (
+                60, 192, 384, 2, 1, 48, 0, {vaapi}, 'Vaapi', 0, 0, 60, 0, 0,
+                '{device}', 0, 2000, 4000, 1
+               )"#,
+        );
+        pool.execute(profile_sql.as_str())
+            .await
+            .expect("seed vaapi profile");
+        pool.execute(
+            r#"INSERT INTO "Channel" (
+                "Id", "UniqueId", "Number", "SortNumber", "Name", "FFmpegProfileId",
+                "IdleBehavior", "MusicVideoCreditsMode", "PlayoutMode", "PlayoutSource",
+                "SongVideoMode", "StreamingMode", "StreamSelectorMode", "SubtitleMode",
+                "TranscodeMode"
+               ) VALUES (
+                60, '00000000-0000-0000-0000-000000000060', '60', 60.0, 'Vaapi', 60,
+                0, 0, 1, 0, 0, 1, 0, 0, 0
+               )"#,
+        )
+        .await
+        .expect("seed channel");
     }
 }

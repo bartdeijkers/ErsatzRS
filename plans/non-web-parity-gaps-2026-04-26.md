@@ -1,6 +1,6 @@
 # Remaining non-web parity gaps between ErsatzTV and ErsatzRS
 
-Last reviewed: 2026-05-02. Slice 20 closed 2026-05-02.
+Last reviewed: 2026-05-03. Slice 16 closed 2026-05-03.
 
 This plan only tracks Phase 7 non-web parity work that is still open. Historical
 slice details have been removed. See `STATUS.md` and the git history when
@@ -21,31 +21,9 @@ closed-slice context is needed.
 
 | Status | Slice | Remaining work |
 | --- | --- | --- |
-| Partial | Slice 16 — Health check engine | Web/admin consumption of persisted health data, real provider connectivity checks, and deeper typed hardware probes. |
 | Open | Slice 21 — Phase 7 closure | Side-by-side benchmarks, 24-hour soak coverage, and final status/parity documentation. |
 
 ## Remaining Gaps
-
-### Slice 16 — Health Check Engine
-
-Remaining work:
-
-1. Wire the admin health badge/page to the persisted `health.summary` and
-   `health.results`, or explicitly run the health engine from the web layer
-   when web scope is open again.
-2. Replace the current state-based provider availability check with real
-   Plex/Jellyfin/Emby connectivity polling equivalent to ErsatzTV's provider
-   online/offline checks.
-3. Deepen `HardwareAcceleration` and `VaapiDriver` checks once the current
-   runtime capability report is expanded with per-profile/per-device probes
-   comparable to ErsatzTV's `IHardwareCapabilities` factory.
-
-Primary files:
-
-- `crates/ersatzrs-core/src/health.rs`
-- `crates/ersatzrs-infra/src/health.rs`
-- `crates/ersatzrs-ffmpeg/src/version.rs`
-- `crates/ersatzrs-web/` only for the final web consumption handoff
 
 ### Slice 21 — Phase 7 Closure
 
