@@ -16,11 +16,10 @@ async fn cache_cleanup_empties_transcode_folder() {
         .await
         .unwrap();
 
-    let report = clean_caches(&CacheCleanupConfig::from_paths(
-        Some(transcode_dir.clone()),
-        None,
-        None,
-    ))
+    let report = clean_caches(
+        &CacheCleanupConfig::from_paths(Some(transcode_dir.clone()), None),
+        &[],
+    )
     .await
     .unwrap();
 
