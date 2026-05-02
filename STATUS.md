@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 15 classic scheduling engine remediation)
+Last updated: 2026-05-02 (Slice 17 background maintenance loops)
 
 ## Current Phase
 
@@ -249,6 +249,16 @@ to `ConfigElement` as `health.results` and `health.summary`; this must be kept
 current as porting work changes runtime capabilities or parity-sensitive
 persisted state.
 
+Slice 17 is complete. The new `ersatzrs-scheduler` binary runs
+runtime-independent maintenance work as a sibling to `ersatzrs-web` and
+`ersatzrs-scanner`: periodic playout builds with channel lock markers,
+due-library refresh dispatch using `Scanner.LibraryRefreshInterval`, provider
+connectivity polling for Plex/Jellyfin/Emby connections, transcode/image/log
+cache cleanup, search-index rebuild dispatch markers, and automatic persisted
+health runs after successful FFmpeg runtime probing. Loop timestamps and
+dispatcher state are stored in `ConfigElement` under `maintenance.*`; health
+results continue to use `health.results` and `health.summary`.
+
 Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
 `ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
 ErsatzRS-specific path overrides with compatibility aliases, parses version
@@ -265,10 +275,10 @@ capability reports, Docker helper tools are pinned, the Bookworm FFmpeg 8.1
 build path handles Vulkan/SVT-AV1 correctly, and the Leptos hydration library
 target builds into the image. Review outcome: GO for the next Phase 7 slice.
 
-Next up: continue Phase 7 items from the master plan, prioritising the
-remaining admin/navigation placeholders, side-by-side benchmarking, long soak
-tests, and the follow-up needed to reconcile the older SVG-template wording
-with FFmpeg drawvg's VGS script model.
+Next up: continue Phase 7 items from the master plan without starting a new
+slice in this session. The remaining non-web priorities are scanner deepening,
+search-index hardening, config/ADR closure, side-by-side benchmarking, and
+long soak tests.
 
 The `ersatzrs-web` structure refactor now has the target web-crate boundaries
 documented in [`docs/reference/web-crate-structure.md`](docs/reference/web-crate-structure.md).
@@ -358,6 +368,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Codex (GPT-5) | Completed Slice 17 background maintenance loops: added `ersatzrs-scheduler`, core loop interval planning, SQL-backed playout/library/provider/search dispatch, cache cleanup, automatic health persistence, and focused infra tests. |
 | 2026-05-02 | Codex (GPT-5) | Remediated Slice 15 Classic scheduler review findings: fixed schedule/media enumerator state drift, alternate schedule selection, fill-group index advancement, Multiple count expressions, guide-group advancement, and Classic collection-key parity; reran workspace clippy/tests. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 15 classic scheduling parity: added `ClassicSchedulingEngine` for One/Multiple/Duration/Flood, fixed-start handling, `PlayoutBuilder` Classic dispatch, SQL-backed Classic reference-data loading, focused core snapshot tests, and SQLite integration coverage. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 14 persistence parity: added typed program schedule item and block item repository methods, wrote schedule item subtype/overlay rows plus EF-compatible alternates, wrote block item target/overlay joins, updated the persistence gap matrix and slice plan, and added focused SQLite repository tests. |

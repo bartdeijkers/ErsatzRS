@@ -8,6 +8,7 @@ members = [
     "crates/ersatzrs-app",
     "crates/ersatzrs-web",
     "crates/ersatzrs-scanner",
+    "crates/ersatzrs-scheduler",
 ]
 
 [workspace.lints.rust]

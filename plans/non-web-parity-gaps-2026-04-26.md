@@ -22,7 +22,7 @@ Last reviewed: 2026-05-02.
 | Completed | Slice 13 — Ontbrekende FFmpeg-filters | Loudnorm, hardware deinterlace (yadif_cuda/qsv/vaapi), tonemap (sw + cuda/qsv/vaapi), colorspace (bt.2020→bt.709 + bt.470bg), typed `hwupload`/`hwdownload`, and `framerate=fps:flags=-scd` filters are ported; `FrameState` carries `is_hdr` + `should_deinterlace` and the pipeline auto-emits deinterlace/tonemap/fps based on source metadata. |
 | Completed | Slice 14 — `ProgramScheduleItem` subtype repositories | Program schedule item subtype read/write, schedule item overlays, alternates, and typed block item target/overlay round-trips are complete in infra repositories with focused SQLite coverage. |
 | Completed | Slice 15 — Classic scheduling engine | Classic One/Multiple/Duration/Flood scheduling is wired into `PlayoutBuilder`, with fixed-start behavior, persisted schedule/media reference-data loading, anchors, fill-group index persistence inputs, and focused core/SQLite coverage. |
-| Open | Slice 17 — Background maintenance loops | Not started in this plan. |
+| Completed | Slice 17 — Background maintenance loops | `ersatzrs-scheduler` now owns runtime-independent maintenance passes for playout builds, library refresh dispatch, provider polling, cache cleanup, search-index dispatch, and automatic persisted health runs. |
 | Open | Slice 18 — Scanner deepening | Not started in this plan. |
 | Open | Slice 19 — Search index hardening | Not started in this plan. |
 | Open | Slice 20 — Config + ADR-afronding | Not started in this plan. |
@@ -312,13 +312,24 @@ enumerator behavior).
    `IHardwareCapabilities`-tegenhanger en per-device probes heeft.
 
 ### Slice 17 — Background maintenance loops
-1. Maak nieuwe binary `ersatzrs-scheduler` (broeder van `ersatzrs-web` en
-   `ersatzrs-scanner`) met de runtime-onafhankelijke loops.
-2. Periodic playout reset/build (30 min, respect channel locks).
-3. Library refresh dispatcher (`Scanner.LibraryRefreshInterval`).
-4. Provider connectivity polling (Plex/Jellyfin/Emby).
-5. Cache cleanup (transcode folder, image cache, log rotation).
-6. Search-index rebuild dispatcher (gekoppeld aan F-laag wanneer geschikt).
+1. ~~Maak nieuwe binary `ersatzrs-scheduler` (broeder van `ersatzrs-web` en
+   `ersatzrs-scanner`) met de runtime-onafhankelijke loops.~~
+2. ~~Periodic playout reset/build (30 min, respect channel locks).~~
+3. ~~Library refresh dispatcher (`Scanner.LibraryRefreshInterval`).~~
+4. ~~Provider connectivity polling (Plex/Jellyfin/Emby).~~
+5. ~~Cache cleanup (transcode folder, image cache, log rotation).~~
+6. ~~Search-index rebuild dispatcher (gekoppeld aan F-laag wanneer geschikt).~~
+
+Slice 17 landed a new `crates/ersatzrs-scheduler` crate plus
+`ersatzrs-core::maintenance`, `ersatzrs-infra::maintenance`, and
+`ersatzrs-infra::cache_cleanup`. The scheduler supports `--run-once` and loop
+mode, stores loop timestamps under `maintenance.loop.*` in `ConfigElement`,
+uses `Scanner.LibraryRefreshInterval` for due-library dispatch, records
+provider reachability under `maintenance.provider_connectivity`, respects
+channel lock markers (`maintenance.channel_lock.{id}` / `channel.lock.{id}`),
+and runs the Slice 16 health engine into `health.results` / `health.summary`
+after successful FFmpeg runtime probing. Search indexing remains a dispatcher
+marker until Slice 19 deepens the in-process index layer.
 
 ### Slice 18 — Scanner deepening
 1. PathInfo tabellen + repository writes (`PlexPathInfo`, `JellyfinPathInfo`,
