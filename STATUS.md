@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 17 background maintenance loops)
+Last updated: 2026-05-02 (Slice 17 background maintenance loops — review remediation)
 
 ## Current Phase
 
@@ -368,6 +368,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Claude Code (claude-opus-4-7) | Remediated Slice 17 review findings: replaced the broken local datetime encoder with the canonical EF-format helper so playout `LastBuild` and library `LastScan` cutoff comparisons work; switched `LibraryRefreshInterval` to ErsatzTV's `scanner.library_refresh_interval` key, hour units, and `0`-disabled semantics; gated each maintenance loop in `run_maintenance_once` on its own cadence (collapsed `*_loop_ran` bools to `MaintenanceLoopFlags`); honoured `playout.days_to_build`; added a `DailyRebuildTime`-aware `PlayoutBuildMode::Reset` path with channel-number ordering; replaced the invented image/log retention with ErsatzTV's parity-correct channel-guide XML pruning. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 17 background maintenance loops: added `ersatzrs-scheduler`, core loop interval planning, SQL-backed playout/library/provider/search dispatch, cache cleanup, automatic health persistence, and focused infra tests. |
 | 2026-05-02 | Codex (GPT-5) | Remediated Slice 15 Classic scheduler review findings: fixed schedule/media enumerator state drift, alternate schedule selection, fill-group index advancement, Multiple count expressions, guide-group advancement, and Classic collection-key parity; reran workspace clippy/tests. |
 | 2026-05-02 | Codex (GPT-5) | Completed Slice 15 classic scheduling parity: added `ClassicSchedulingEngine` for One/Multiple/Duration/Flood, fixed-start handling, `PlayoutBuilder` Classic dispatch, SQL-backed Classic reference-data loading, focused core snapshot tests, and SQLite integration coverage. |

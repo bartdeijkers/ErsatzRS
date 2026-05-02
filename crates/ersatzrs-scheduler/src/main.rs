@@ -14,12 +14,9 @@ struct Args {
     /// Override the transcode cache folder cleaned by the cache loop.
     #[arg(long)]
     transcode_dir: Option<PathBuf>,
-    /// Override the image cache folder inspected by the cache loop.
+    /// Override the channel-guide cache folder pruned by the cache loop.
     #[arg(long)]
-    image_cache_dir: Option<PathBuf>,
-    /// Override the log folder used by the log rotation loop.
-    #[arg(long)]
-    log_dir: Option<PathBuf>,
+    channel_guide_dir: Option<PathBuf>,
     /// Outer scheduler tick in seconds.
     #[arg(long, default_value_t = 60)]
     tick_seconds: u64,
@@ -37,8 +34,7 @@ async fn main() -> anyhow::Result<()> {
         run_once: args.run_once,
         tick: StdDuration::from_secs(args.tick_seconds),
         transcode_dir: args.transcode_dir,
-        image_cache_dir: args.image_cache_dir,
-        log_dir: args.log_dir,
+        channel_guide_dir: args.channel_guide_dir,
     })
     .await
     .context("run scheduler")

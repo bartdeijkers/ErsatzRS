@@ -324,12 +324,32 @@ Slice 17 landed a new `crates/ersatzrs-scheduler` crate plus
 `ersatzrs-core::maintenance`, `ersatzrs-infra::maintenance`, and
 `ersatzrs-infra::cache_cleanup`. The scheduler supports `--run-once` and loop
 mode, stores loop timestamps under `maintenance.loop.*` in `ConfigElement`,
-uses `Scanner.LibraryRefreshInterval` for due-library dispatch, records
-provider reachability under `maintenance.provider_connectivity`, respects
-channel lock markers (`maintenance.channel_lock.{id}` / `channel.lock.{id}`),
-and runs the Slice 16 health engine into `health.results` / `health.summary`
-after successful FFmpeg runtime probing. Search indexing remains a dispatcher
-marker until Slice 19 deepens the in-process index layer.
+uses ErsatzTV's `scanner.library_refresh_interval` (hours, `0` ⇒ disabled) for
+due-library dispatch, records provider reachability under
+`maintenance.provider_connectivity`, respects channel lock markers
+(`maintenance.channel_lock.{id}` / `channel.lock.{id}`), and runs the Slice 16
+health engine into `health.results` / `health.summary` after successful
+FFmpeg runtime probing. Search indexing remains a dispatcher marker until
+Slice 19 deepens the in-process index layer.
+
+A post-review remediation on 2026-05-02 fixed three port-parity bugs and
+two behavior gaps: the scheduler now reuses the canonical EF datetime encoder
+(`crates/ersatzrs-infra/src/repositories/common.rs`) so the `LastBuild` /
+`LastScan` cutoff comparisons against EF-stored text columns work; the
+library refresh config aligns with `ErsatzTV.Core/Domain/ConfigElementKey.cs`
+(`scanner.library_refresh_interval`, hours, `0` ⇒ disabled, clamped to
+`[0, 999_999]`); each maintenance loop in `run_maintenance_once` is now gated
+on its own cadence (the `*_loop_ran` bools collapsed into a single
+`MaintenanceLoopFlags` bitmask). The build window now honours
+`playout.days_to_build` (default `2` days, parity with
+`PlayoutBuilder.cs:420`), playouts whose `DailyRebuildTime` is within five
+minutes of now are queued with `PlayoutBuildMode::Reset` (parity with
+`SchedulerService.ResetPlayouts`), and due playouts are ordered by parsed
+`Channel.Number` rather than `Playout.Id`. The cache cleanup loop now
+mirrors `CacheCleanerService`: the transcode folder is fully emptied, the
+channel-guide cache folder is pruned of orphaned per-channel XML files
+(retaining `*channels*` and `{number}.xml` for active channels), and the
+invented image/log retention windows were dropped.
 
 ### Slice 18 — Scanner deepening
 1. PathInfo tabellen + repository writes (`PlexPathInfo`, `JellyfinPathInfo`,

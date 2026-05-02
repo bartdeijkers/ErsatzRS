@@ -1,38 +1,32 @@
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Duration, Utc};
 use thiserror::Error;
 use tokio::fs;
 
 /// Cache folders maintained by the scheduler binary.
+///
+/// Mirrors `ErsatzTV.Services.RunOnce.CacheCleanerService`:
+///
+/// - `transcode_dir` is fully emptied on every pass (parity with
+///   `localFileSystem.EmptyFolder(FileSystemLayout.TranscodeFolder)`).
+/// - `channel_guide_dir` is pruned: anything that does not contain
+///   `channels` and is not in the keeper list (typically `"{number}.xml"`)
+///   is deleted (parity with `CacheCleanerService.cs:64-83`).
 #[derive(Debug, Clone, Default)]
 pub struct CacheCleanupConfig {
     /// Transcode cache contents are removed on every cleanup pass.
     pub transcode_dir: Option<PathBuf>,
-    /// Image cache entries older than `image_max_age` are removed.
-    pub image_cache_dir: Option<PathBuf>,
-    /// Log files older than `log_max_age` are removed.
-    pub log_dir: Option<PathBuf>,
-    /// Maximum age for image cache files.
-    pub image_max_age: Duration,
-    /// Maximum age for rotated log files.
-    pub log_max_age: Duration,
+    /// Channel-guide cache folder pruned of orphaned per-channel XML files.
+    pub channel_guide_dir: Option<PathBuf>,
 }
 
 impl CacheCleanupConfig {
-    /// Build a cleanup config from optional paths and default retention.
+    /// Build a cleanup config from optional paths.
     #[must_use]
-    pub fn from_paths(
-        transcode_dir: Option<PathBuf>,
-        image_cache_dir: Option<PathBuf>,
-        log_dir: Option<PathBuf>,
-    ) -> Self {
+    pub fn from_paths(transcode_dir: Option<PathBuf>, channel_guide_dir: Option<PathBuf>) -> Self {
         Self {
             transcode_dir,
-            image_cache_dir,
-            log_dir,
-            image_max_age: Duration::days(30),
-            log_max_age: Duration::days(14),
+            channel_guide_dir,
         }
     }
 }
@@ -42,10 +36,8 @@ impl CacheCleanupConfig {
 pub struct CacheCleanupReport {
     /// Number of files removed from the transcode folder.
     pub transcode_files_removed: usize,
-    /// Number of old image-cache files removed.
-    pub image_files_removed: usize,
-    /// Number of old log files removed.
-    pub log_files_removed: usize,
+    /// Number of orphaned channel-guide XML files removed.
+    pub channel_guide_files_removed: usize,
 }
 
 /// Errors raised while cleaning cache folders.
@@ -62,7 +54,11 @@ pub enum CacheCleanupError {
     },
 }
 
-/// Clean transcode, image cache, and log folders.
+/// Clean configured cache folders.
+///
+/// `channel_guide_keepers` is the set of XML file names that must be retained
+/// in the channel-guide cache folder (typically `"{channel_number}.xml"` for
+/// every active channel).
 ///
 /// # Errors
 ///
@@ -70,21 +66,17 @@ pub enum CacheCleanupError {
 /// selected for removal cannot be deleted.
 pub async fn clean_caches(
     config: &CacheCleanupConfig,
+    channel_guide_keepers: &[String],
 ) -> Result<CacheCleanupReport, CacheCleanupError> {
-    let now = Utc::now();
     let mut report = CacheCleanupReport::default();
 
     if let Some(path) = &config.transcode_dir {
         report.transcode_files_removed = remove_all_files(path).await?;
     }
 
-    if let Some(path) = &config.image_cache_dir {
-        report.image_files_removed =
-            remove_files_older_than(path, now, config.image_max_age).await?;
-    }
-
-    if let Some(path) = &config.log_dir {
-        report.log_files_removed = remove_files_older_than(path, now, config.log_max_age).await?;
+    if let Some(path) = &config.channel_guide_dir {
+        report.channel_guide_files_removed =
+            prune_channel_guide_dir(path, channel_guide_keepers).await?;
     }
 
     Ok(report)
@@ -99,42 +91,59 @@ async fn remove_all_files(root: &Path) -> Result<usize, CacheCleanupError> {
     Ok(removed)
 }
 
-async fn remove_files_older_than(
+async fn prune_channel_guide_dir(
     root: &Path,
-    now: DateTime<Utc>,
-    max_age: Duration,
+    keepers: &[String],
 ) -> Result<usize, CacheCleanupError> {
-    let mut removed = 0;
-    for file in list_files(root).await? {
-        let metadata = fs::metadata(&file)
-            .await
-            .map_err(|source| CacheCleanupError::Io {
-                path: file.clone(),
-                source,
-            })?;
-        let modified = metadata
-            .modified()
-            .map_err(|source| CacheCleanupError::Io {
-                path: file.clone(),
-                source,
-            })
-            .map(DateTime::<Utc>::from)?;
-        if now.signed_duration_since(modified) >= max_age {
-            remove_file(&file).await?;
-            removed += 1;
-        }
+    if !directory_exists(root).await? {
+        return Ok(0);
     }
-    Ok(removed)
-}
 
-async fn list_files(root: &Path) -> Result<Vec<PathBuf>, CacheCleanupError> {
-    if !fs::try_exists(root)
+    let mut entries = fs::read_dir(root)
+        .await
+        .map_err(|source| CacheCleanupError::Io {
+            path: root.to_path_buf(),
+            source,
+        })?;
+
+    let mut removed = 0;
+    while let Some(entry) = entries
+        .next_entry()
         .await
         .map_err(|source| CacheCleanupError::Io {
             path: root.to_path_buf(),
             source,
         })?
     {
+        let entry_path = entry.path();
+        let file_type = entry
+            .file_type()
+            .await
+            .map_err(|source| CacheCleanupError::Io {
+                path: entry_path.clone(),
+                source,
+            })?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let Some(name) = entry_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        if name.contains("channels") || keepers.iter().any(|keeper| keeper == &name) {
+            continue;
+        }
+        remove_file(&entry_path).await?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+async fn list_files(root: &Path) -> Result<Vec<PathBuf>, CacheCleanupError> {
+    if !directory_exists(root).await? {
         return Ok(Vec::new());
     }
 
@@ -172,6 +181,15 @@ async fn list_files(root: &Path) -> Result<Vec<PathBuf>, CacheCleanupError> {
         }
     }
     Ok(result)
+}
+
+async fn directory_exists(root: &Path) -> Result<bool, CacheCleanupError> {
+    fs::try_exists(root)
+        .await
+        .map_err(|source| CacheCleanupError::Io {
+            path: root.to_path_buf(),
+            source,
+        })
 }
 
 async fn remove_file(path: &Path) -> Result<(), CacheCleanupError> {

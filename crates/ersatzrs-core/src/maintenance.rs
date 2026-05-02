@@ -4,12 +4,18 @@ use chrono::{DateTime, Duration, Utc};
 pub const PLAYOUT_BUILD_INTERVAL: Duration = Duration::minutes(30);
 /// Default provider connectivity poll cadence.
 pub const PROVIDER_POLL_INTERVAL: Duration = Duration::minutes(5);
-/// Default cache cleanup cadence after startup.
+/// Default cache cleanup cadence.
 pub const CACHE_CLEANUP_INTERVAL: Duration = Duration::hours(24);
 /// Default search index dispatcher cadence.
 pub const SEARCH_INDEX_REBUILD_INTERVAL: Duration = Duration::hours(24);
-/// Default library refresh cadence when `Scanner.LibraryRefreshInterval` is unset.
-pub const DEFAULT_LIBRARY_REFRESH_INTERVAL: Duration = Duration::hours(24);
+/// Default library refresh cadence when `scanner.library_refresh_interval` is unset.
+///
+/// Matches `ErsatzTV.Application.Configuration.Queries.GetLibraryRefreshIntervalHandler`,
+/// which defaults to `0` (refresh disabled). The Rust port therefore returns an
+/// empty interval when the config value is missing or zero, and `is_due` always
+/// reports `false` for an empty interval — i.e. the scanner is opted in by
+/// configuration, not by default.
+pub const DEFAULT_LIBRARY_REFRESH_INTERVAL: Duration = Duration::zero();
 
 /// One periodic background loop tracked by the scheduler binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,8 +28,15 @@ pub struct MaintenanceLoop {
 
 impl MaintenanceLoop {
     /// Returns whether this loop is due at `now`.
+    ///
+    /// A loop with a non-positive interval is considered disabled and is never
+    /// due (matches `ErsatzTV`'s `libraryRefreshInterval > 0` gate in
+    /// `CallLocalLibraryScannerHandler.ScanIsRequired`).
     #[must_use]
     pub fn is_due(&self, last_run: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+        if self.interval <= Duration::zero() {
+            return false;
+        }
         last_run.is_none_or(|last_run| now.signed_duration_since(last_run) >= self.interval)
     }
 }
@@ -55,13 +68,23 @@ pub fn maintenance_loops(library_refresh_interval: Duration) -> Vec<MaintenanceL
     ]
 }
 
-/// Parse `Scanner.LibraryRefreshInterval` minutes from config.
+/// Parse `scanner.library_refresh_interval` hours from `ConfigElement`.
+///
+/// `ErsatzTV` stores this value as an integer hour count, treats `0` as
+/// "refresh disabled", and clamps to `[0, 999_999]`. See
+/// `CallLocalLibraryScannerHandler.ScanIsRequired` for the canonical
+/// implementation.
 #[must_use]
 pub fn scanner_library_refresh_interval(value: Option<&str>) -> Duration {
-    value
+    let hours = value
         .and_then(|value| value.trim().parse::<i64>().ok())
-        .filter(|minutes| *minutes > 0)
-        .map_or(DEFAULT_LIBRARY_REFRESH_INTERVAL, Duration::minutes)
+        .unwrap_or(0)
+        .clamp(0, 999_999);
+    if hours <= 0 {
+        DEFAULT_LIBRARY_REFRESH_INTERVAL
+    } else {
+        Duration::hours(hours)
+    }
 }
 
 #[cfg(test)]
@@ -84,18 +107,36 @@ mod tests {
     }
 
     #[test]
-    fn scanner_interval_defaults_to_twenty_four_hours() {
+    fn disabled_loop_is_never_due() {
+        let now = DateTime::parse_from_rfc3339("2026-05-02T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let disabled = MaintenanceLoop {
+            name: "library_refresh",
+            interval: Duration::zero(),
+        };
+        assert!(!disabled.is_due(None, now));
+        assert!(!disabled.is_due(Some(now - Duration::days(7)), now));
+    }
+
+    #[test]
+    fn scanner_interval_uses_hours_and_treats_zero_as_disabled() {
         assert_eq!(
-            scanner_library_refresh_interval(Some("15")),
-            Duration::minutes(15)
+            scanner_library_refresh_interval(Some("6")),
+            Duration::hours(6)
         );
         assert_eq!(
             scanner_library_refresh_interval(Some("0")),
-            DEFAULT_LIBRARY_REFRESH_INTERVAL
+            Duration::zero()
         );
         assert_eq!(
             scanner_library_refresh_interval(Some("nope")),
-            DEFAULT_LIBRARY_REFRESH_INTERVAL
+            Duration::zero()
+        );
+        assert_eq!(scanner_library_refresh_interval(None), Duration::zero());
+        assert_eq!(
+            scanner_library_refresh_interval(Some("9999999")),
+            Duration::hours(999_999)
         );
     }
 }
