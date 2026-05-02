@@ -1,4 +1,9 @@
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
+use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
 use ersatzrs_core::maintenance::{
     scanner_library_refresh_interval, MaintenanceLoop, CACHE_CLEANUP_INTERVAL,
     PLAYOUT_BUILD_INTERVAL, PROVIDER_POLL_INTERVAL, SEARCH_INDEX_REBUILD_INTERVAL,
@@ -6,11 +11,12 @@ use ersatzrs_core::maintenance::{
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{PlayoutBuildMode, SchedulingError, SchedulingRequest};
-use ersatzrs_domain::{EntityId, Playout, PlayoutBuildStatus, PlayoutScheduleKind};
+use ersatzrs_domain::{EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
 use serde::Serialize;
 use sqlx::{Pool, Row};
 use thiserror::Error;
+use tokio::process::Command;
 use tracing::{debug, warn};
 
 use crate::cache_cleanup::{
@@ -37,15 +43,19 @@ const DAILY_REBUILD_TOLERANCE: Duration = Duration::minutes(5);
 pub struct MaintenancePassReport {
     /// Playouts successfully built.
     pub playouts_built: usize,
-    /// Playouts skipped because a channel lock marker is present.
+    /// Playouts skipped because their `EntityLocker` lock is currently held
+    /// by another in-process worker.
     pub playouts_skipped_locked: usize,
     /// Playouts whose build failed.
     pub playouts_failed: usize,
     /// Playouts queued for `PlayoutBuildMode::Reset` because their
     /// `DailyRebuildTime` is within the tolerance window.
     pub playouts_reset: usize,
-    /// Libraries due for refresh and dispatched.
+    /// Libraries that completed a scan during this pass.
     pub libraries_dispatched: usize,
+    /// Libraries that the dispatcher could not finish (subprocess failure or
+    /// missing scanner binary). The detailed reason is logged.
+    pub libraries_failed: usize,
     /// Provider endpoints polled.
     pub providers_polled: usize,
     /// Provider endpoints that responded with a reachable status.
@@ -58,6 +68,19 @@ pub struct MaintenancePassReport {
     pub loops_ran: MaintenanceLoopFlags,
     /// Health warning/error counts after the automatic run.
     pub health_summary: Option<ersatzrs_core::health::HealthCheckSummary>,
+}
+
+/// How the maintenance pass should dispatch a due library refresh.
+#[derive(Debug, Clone, Default)]
+pub struct LibraryDispatchConfig {
+    /// Path to the `ersatzrs-scanner` binary. When `None`, the dispatcher tries
+    /// to find a sibling binary next to `std::env::current_exe()` (matching
+    /// `ErsatzTV`'s `CallLibraryScannerHandler` resolution) and otherwise falls
+    /// back to spawning `ersatzrs-scanner` from `PATH`. When set, the path is
+    /// used verbatim (useful for tests and operator overrides).
+    pub scanner_command: Option<PathBuf>,
+    /// Extra arguments appended after `--provider <kind> --library-id <id>`.
+    pub extra_args: Vec<OsString>,
 }
 
 /// Set of loops that executed during a [`run_maintenance_once`] pass.
@@ -131,6 +154,24 @@ pub enum MaintenanceError {
     /// HTTP client setup failed.
     #[error(transparent)]
     Http(#[from] reqwest::Error),
+    /// Failed to spawn or wait on the `ersatzrs-scanner` subprocess.
+    #[error("scanner subprocess io error: {0}")]
+    Io(#[source] std::io::Error),
+    /// `ersatzrs-scanner` exited with a non-zero status during a library
+    /// refresh dispatch.
+    #[error(
+        "ersatzrs-scanner failed for {provider} library {library_id} (status {status:?}): {stderr}"
+    )]
+    ScannerFailed {
+        /// Provider kind passed to the scanner (`local`/`plex`/`jellyfin`/`emby`).
+        provider: String,
+        /// Library row id that the scanner was dispatched against.
+        library_id: EntityId,
+        /// Subprocess exit code, if any.
+        status: Option<i32>,
+        /// Trimmed stderr from the failed subprocess.
+        stderr: String,
+    },
 }
 
 /// Result alias for maintenance operations.
@@ -147,6 +188,8 @@ pub type Result<T> = std::result::Result<T, MaintenanceError>;
 pub async fn run_maintenance_once(
     pool: Pool<Db>,
     cache_config: &CacheCleanupConfig,
+    library_dispatch: &LibraryDispatchConfig,
+    locker: &EntityLocker,
     schema_status: DatabaseSchemaStatus,
 ) -> Result<MaintenancePassReport> {
     let now = Utc::now();
@@ -154,7 +197,7 @@ pub async fn run_maintenance_once(
     let mut report = MaintenancePassReport::default();
 
     if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
-        let playout_report = build_due_playouts(&pool, now).await?;
+        let playout_report = build_due_playouts(&pool, locker, now).await?;
         report.playouts_built = playout_report.built;
         report.playouts_skipped_locked = playout_report.skipped_locked;
         report.playouts_failed = playout_report.failed;
@@ -164,8 +207,11 @@ pub async fn run_maintenance_once(
     }
 
     if loop_due(&pool, "library_refresh", library_refresh_interval, now).await? {
-        report.libraries_dispatched =
-            dispatch_due_library_refreshes(&pool, library_refresh_interval, now).await?;
+        let library_report =
+            dispatch_due_library_refreshes(&pool, library_refresh_interval, library_dispatch, now)
+                .await?;
+        report.libraries_dispatched = library_report.completed;
+        report.libraries_failed = library_report.failed;
         report.loops_ran.set(MaintenanceLoopFlags::LIBRARY_REFRESH);
         record_loop_run(&pool, "library_refresh", now).await?;
     }
@@ -266,10 +312,14 @@ async fn loop_due(
     Ok(definition.is_due(last_run, now))
 }
 
-async fn build_due_playouts(pool: &Pool<Db>, now: DateTime<Utc>) -> Result<PlayoutBuildReport> {
+async fn build_due_playouts(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    now: DateTime<Utc>,
+) -> Result<PlayoutBuildReport> {
     let cutoff = encode_datetime(now - PLAYOUT_BUILD_INTERVAL);
     let rows = sqlx::query(
-        r#"SELECT "p"."Id", "p"."ChannelId", "p"."DailyRebuildTime", "c"."Number"
+        r#"SELECT "p"."Id", "p"."DailyRebuildTime", "c"."Number"
            FROM "Playout" AS "p"
            JOIN "Channel" AS "c" ON "c"."Id" = "p"."ChannelId"
            LEFT JOIN "PlayoutBuildStatus" AS "pbs" ON "pbs"."PlayoutId" = "p"."Id"
@@ -288,7 +338,6 @@ async fn build_due_playouts(pool: &Pool<Db>, now: DateTime<Utc>) -> Result<Playo
                 .unwrap_or_default();
             Ok::<_, MaintenanceError>(DuePlayout {
                 playout_id: row.try_get("Id")?,
-                channel_id: row.try_get("ChannelId")?,
                 daily_rebuild_time: row.try_get::<Option<String>, _>("DailyRebuildTime")?,
                 channel_number: number,
             })
@@ -298,10 +347,13 @@ async fn build_due_playouts(pool: &Pool<Db>, now: DateTime<Utc>) -> Result<Playo
 
     let mut report = PlayoutBuildReport::default();
     for entry in due {
-        if is_channel_locked(pool, entry.channel_id).await? {
+        // Mirror `EntityLocker.LockPlayout` from
+        // `ErsatzTV.Infrastructure.Locking.EntityLocker`: skip silently when
+        // another worker already owns this playout's lock.
+        let Some(_guard) = PlayoutLockGuard::try_acquire(locker, entry.playout_id) else {
             report.skipped_locked += 1;
             continue;
-        }
+        };
 
         let mode = if daily_rebuild_due(entry.daily_rebuild_time.as_deref(), now) {
             report.reset_queued += 1;
@@ -389,12 +441,24 @@ async fn build_playout(
 async fn dispatch_due_library_refreshes(
     pool: &Pool<Db>,
     interval: Duration,
+    config: &LibraryDispatchConfig,
     now: DateTime<Utc>,
-) -> Result<usize> {
+) -> Result<LibraryDispatchReport> {
     let cutoff = encode_datetime(now - interval);
     let rows = sqlx::query(
-        r#"SELECT "l"."Id"
+        r#"SELECT "l"."Id" AS "Id",
+                  CASE
+                      WHEN "pms"."Id" IS NOT NULL THEN 'plex'
+                      WHEN "jms"."Id" IS NOT NULL THEN 'jellyfin'
+                      WHEN "ems"."Id" IS NOT NULL THEN 'emby'
+                      WHEN "lms"."Id" IS NOT NULL THEN 'local'
+                      ELSE NULL
+                  END AS "Provider"
            FROM "Library" AS "l"
+           LEFT JOIN "PlexMediaSource"     AS "pms" ON "pms"."Id" = "l"."MediaSourceId"
+           LEFT JOIN "JellyfinMediaSource" AS "jms" ON "jms"."Id" = "l"."MediaSourceId"
+           LEFT JOIN "EmbyMediaSource"     AS "ems" ON "ems"."Id" = "l"."MediaSourceId"
+           LEFT JOIN "LocalMediaSource"    AS "lms" ON "lms"."Id" = "l"."MediaSourceId"
            WHERE "l"."LastScan" IS NULL OR "l"."LastScan" <= ?
            ORDER BY "l"."Id""#,
     )
@@ -402,18 +466,107 @@ async fn dispatch_due_library_refreshes(
     .fetch_all(pool)
     .await?;
 
-    let ids = rows
-        .iter()
-        .map(|row| row.try_get::<EntityId, _>("Id"))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut due = Vec::with_capacity(rows.len());
+    let mut due_ids = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id: EntityId = row.try_get("Id")?;
+        let provider: Option<String> = row.try_get("Provider")?;
+        due_ids.push(id);
+        due.push(DueLibrary { id, provider });
+    }
+
     upsert_config(pool, LIBRARY_DISPATCH_KEY, &encode_datetime(now)).await?;
     upsert_config(
         pool,
         LIBRARY_DISPATCHED_IDS_KEY,
-        &serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_owned()),
+        &serde_json::to_string(&due_ids).unwrap_or_else(|_| "[]".to_owned()),
     )
     .await?;
-    Ok(ids.len())
+
+    if due.is_empty() {
+        return Ok(LibraryDispatchReport::default());
+    }
+
+    let Some(scanner) = resolve_scanner_command(config) else {
+        warn!(
+            "skipping library refresh dispatch: ersatzrs-scanner binary not found near \
+             current_exe and no scanner_command override was provided"
+        );
+        return Ok(LibraryDispatchReport {
+            completed: 0,
+            failed: due.len(),
+        });
+    };
+
+    let mut report = LibraryDispatchReport::default();
+    for entry in due {
+        let Some(provider) = entry.provider.as_deref() else {
+            warn!(
+                library_id = entry.id,
+                "skipping library refresh: media source has no Plex/Jellyfin/Emby/Local subtype row"
+            );
+            report.failed += 1;
+            continue;
+        };
+        match run_scanner(&scanner, provider, entry.id, &config.extra_args).await {
+            Ok(()) => report.completed += 1,
+            Err(error) => {
+                warn!(library_id = entry.id, provider, %error, "library refresh dispatch failed");
+                report.failed += 1;
+            }
+        }
+    }
+    Ok(report)
+}
+
+fn resolve_scanner_command(config: &LibraryDispatchConfig) -> Option<PathBuf> {
+    if let Some(explicit) = &config.scanner_command {
+        return Some(explicit.clone());
+    }
+    let current_exe = std::env::current_exe().ok()?;
+    let parent = current_exe.parent()?;
+    let candidate = parent.join(scanner_binary_name());
+    if candidate.exists() {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+fn scanner_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "ersatzrs-scanner.exe"
+    } else {
+        "ersatzrs-scanner"
+    }
+}
+
+async fn run_scanner(
+    scanner: &Path,
+    provider: &str,
+    library_id: EntityId,
+    extra_args: &[OsString],
+) -> Result<()> {
+    let mut command = Command::new(scanner);
+    command
+        .arg("--provider")
+        .arg(provider)
+        .arg("--library-id")
+        .arg(library_id.to_string())
+        .args(extra_args)
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+
+    let output = command.output().await.map_err(MaintenanceError::Io)?;
+    if !output.status.success() {
+        return Err(MaintenanceError::ScannerFailed {
+            provider: provider.to_owned(),
+            library_id,
+            status: output.status.code(),
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    Ok(())
 }
 
 async fn poll_provider_connectivity(pool: &Pool<Db>) -> Result<ProviderPollReport> {
@@ -525,29 +678,6 @@ async fn append_endpoints(
     Ok(())
 }
 
-async fn is_channel_locked(pool: &Pool<Db>, channel_id: EntityId) -> Result<bool> {
-    let lock_keys = [
-        format!("maintenance.channel_lock.{channel_id}"),
-        format!("channel.lock.{channel_id}"),
-    ];
-    for key in lock_keys {
-        let value = sqlx::query_scalar::<_, Option<String>>(
-            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
-        )
-        .bind(key)
-        .fetch_optional(pool)
-        .await?
-        .flatten();
-        if value
-            .as_deref()
-            .is_some_and(|value| matches!(value, "1" | "true" | "True" | "TRUE"))
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 async fn record_loop_run(pool: &Pool<Db>, loop_name: &str, now: DateTime<Utc>) -> Result<()> {
     upsert_config(pool, &loop_run_key(loop_name), &encode_datetime(now)).await
 }
@@ -634,7 +764,6 @@ struct PlayoutBuildReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DuePlayout {
     playout_id: EntityId,
-    channel_id: EntityId,
     daily_rebuild_time: Option<String>,
     channel_number: String,
 }
@@ -660,5 +789,14 @@ struct ProviderPollReport {
     reachable: usize,
 }
 
-#[allow(dead_code)]
-fn _assert_playout_send_sync(_: &Playout) {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DueLibrary {
+    id: EntityId,
+    provider: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct LibraryDispatchReport {
+    completed: usize,
+    failed: usize,
+}

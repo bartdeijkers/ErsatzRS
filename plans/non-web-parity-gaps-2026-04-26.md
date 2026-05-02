@@ -332,8 +332,22 @@ health engine into `health.results` / `health.summary` after successful
 FFmpeg runtime probing. Search indexing remains a dispatcher marker until
 Slice 19 deepens the in-process index layer.
 
-A post-review remediation on 2026-05-02 fixed three port-parity bugs and
-two behavior gaps: the scheduler now reuses the canonical EF datetime encoder
+A second post-review remediation on 2026-05-02 closed the remaining medium
+findings: the library refresh dispatcher now spawns `ersatzrs-scanner` as a
+subprocess (provider inferred via Plex/Jellyfin/Emby/Local media-source
+subtype joins, sibling-binary discovery next to `current_exe`, and a
+`scanner_command` override for tests/operators); subprocess failures are
+counted in `MaintenancePassReport.libraries_failed`. The
+`ConfigElement`-based `channel_lock` invention was removed in favour of a
+direct port of `ErsatzTV.Infrastructure.Locking.EntityLocker`'s
+`IEntityLocker.LockPlayout`/`UnlockPlayout`/`IsPlayoutLocked` surface as a
+process-local `ersatzrs_core::locking::EntityLocker` (with an RAII
+`PlayoutLockGuard`); `run_maintenance_once` now takes the locker as a
+parameter so the scheduler can share it across passes — parity with
+`ErsatzTV`'s singleton — and dead `_assert_playout_send_sync` code is gone.
+
+A first post-review remediation on 2026-05-02 fixed three port-parity bugs
+and two behavior gaps: the scheduler now reuses the canonical EF datetime encoder
 (`crates/ersatzrs-infra/src/repositories/common.rs`) so the `LastBuild` /
 `LastScan` cutoff comparisons against EF-stored text columns work; the
 library refresh config aligns with `ErsatzTV.Core/Domain/ConfigElementKey.cs`

@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
@@ -17,6 +18,13 @@ struct Args {
     /// Override the channel-guide cache folder pruned by the cache loop.
     #[arg(long)]
     channel_guide_dir: Option<PathBuf>,
+    /// Override the path to the `ersatzrs-scanner` binary used by the library
+    /// refresh dispatcher.
+    #[arg(long = "scanner-command")]
+    scanner_path: Option<PathBuf>,
+    /// Extra arguments forwarded to every scanner invocation.
+    #[arg(long = "scanner-arg")]
+    scanner_extra: Vec<OsString>,
     /// Outer scheduler tick in seconds.
     #[arg(long, default_value_t = 60)]
     tick_seconds: u64,
@@ -35,6 +43,8 @@ async fn main() -> anyhow::Result<()> {
         tick: StdDuration::from_secs(args.tick_seconds),
         transcode_dir: args.transcode_dir,
         channel_guide_dir: args.channel_guide_dir,
+        scanner_command: args.scanner_path,
+        scanner_extra_args: args.scanner_extra,
     })
     .await
     .context("run scheduler")

@@ -1,14 +1,18 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
+use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
-use ersatzrs_infra::maintenance::{run_maintenance_once, MaintenancePassReport};
+use ersatzrs_infra::maintenance::{
+    run_maintenance_once, LibraryDispatchConfig, MaintenancePassReport,
+};
 use tokio::time::{interval, MissedTickBehavior};
 use tracing::{info, warn};
 
 /// Scheduler CLI options after argument parsing.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SchedulerOptions {
     /// Run a single pass and exit.
     pub run_once: bool,
@@ -18,6 +22,11 @@ pub struct SchedulerOptions {
     pub transcode_dir: Option<PathBuf>,
     /// Optional channel-guide cache folder pruned of orphaned XML files.
     pub channel_guide_dir: Option<PathBuf>,
+    /// Override path to the `ersatzrs-scanner` binary used by the library
+    /// refresh dispatcher.
+    pub scanner_command: Option<PathBuf>,
+    /// Extra arguments appended to every scanner invocation.
+    pub scanner_extra_args: Vec<OsString>,
 }
 
 /// Run the background scheduler.
@@ -31,10 +40,23 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     let startup = db::bootstrap_media_server_database().await?;
     let cache_config =
         CacheCleanupConfig::from_paths(options.transcode_dir, options.channel_guide_dir);
+    let library_dispatch = LibraryDispatchConfig {
+        scanner_command: options.scanner_command,
+        extra_args: options.scanner_extra_args,
+    };
+    // Single in-process `EntityLocker` shared across maintenance passes,
+    // matching ErsatzTV's `IEntityLocker` singleton.
+    let locker = EntityLocker::new();
 
     if options.run_once {
-        let report =
-            run_maintenance_once(startup.pool, &cache_config, startup.schema_status).await?;
+        let report = run_maintenance_once(
+            startup.pool,
+            &cache_config,
+            &library_dispatch,
+            &locker,
+            startup.schema_status,
+        )
+        .await?;
         log_report(&report);
         return Ok(());
     }
@@ -53,6 +75,8 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 match run_maintenance_once(
                     startup.pool.clone(),
                     &cache_config,
+                    &library_dispatch,
+                    &locker,
                     startup.schema_status.clone(),
                 )
                 .await
@@ -74,6 +98,7 @@ fn log_report(report: &MaintenancePassReport) {
         playouts_reset = report.playouts_reset,
         library_loop_ran = report.loops_ran.library_refresh(),
         libraries_dispatched = report.libraries_dispatched,
+        libraries_failed = report.libraries_failed,
         provider_loop_ran = report.loops_ran.provider_poll(),
         providers_polled = report.providers_polled,
         providers_reachable = report.providers_reachable,
