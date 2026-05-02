@@ -99,7 +99,7 @@ pub async fn scan_local_library(
 /// pairs for each scannable video file, where `artist_folder` is the
 /// top-level directory under the library root that owns the file.
 ///
-/// Mirrors ErsatzTV's per-artist sub-folder layout: each immediate
+/// Mirrors `ErsatzTV`'s per-artist sub-folder layout: each immediate
 /// subdirectory of the library path is treated as one artist, matching
 /// `MusicVideoFolderScanner.ListSubdirectories` behavior.
 fn collect_music_video_files(root: &str) -> Vec<(String, PathBuf)> {
@@ -145,7 +145,7 @@ fn collect_music_video_files(root: &str) -> Vec<(String, PathBuf)> {
 }
 
 /// Walks the remote-stream library root and yields `.yml`/`.yaml` definition
-/// files. ErsatzTV's `RemoteStreamFolderScanner` parses the same extensions.
+/// files. `ErsatzTV`'s `RemoteStreamFolderScanner` parses the same extensions.
 fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut queue = VecDeque::from([PathBuf::from(root)]);

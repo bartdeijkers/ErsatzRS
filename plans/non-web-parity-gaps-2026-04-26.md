@@ -1,6 +1,6 @@
 # Remaining non-web parity gaps between ErsatzTV and ErsatzRS
 
-Last reviewed: 2026-05-02. Slice 18 closed 2026-05-02.
+Last reviewed: 2026-05-02. Slice 19 closed 2026-05-02.
 
 This plan only tracks Phase 7 non-web parity work that is still open. Historical
 slice details have been removed. See `STATUS.md` and the git history when
@@ -22,7 +22,6 @@ closed-slice context is needed.
 | Status | Slice | Remaining work |
 | --- | --- | --- |
 | Partial | Slice 16 — Health check engine | Web/admin consumption of persisted health data, real provider connectivity checks, and deeper typed hardware probes. |
-| Open | Slice 19 — Search index hardening | Metadata-backed fields, analyzer parity, fuzzy/proximity/boost/page-map behavior, and the ADR confirming Elasticsearch is not ported. |
 | Open | Slice 20 — Config and ADR closure | Remaining `ConfigElement` keys, subsystem logging levels, XMLTV block behavior ownership, and final ADRs. |
 | Open | Slice 21 — Phase 7 closure | Side-by-side benchmarks, 24-hour soak coverage, and final status/parity documentation. |
 
@@ -49,32 +48,6 @@ Primary files:
 - `crates/ersatzrs-ffmpeg/src/version.rs`
 - `crates/ersatzrs-web/` only for the final web consumption handoff
 
-### Slice 19 — Search Index Hardening
-
-The current Rust search path is still much smaller than ErsatzTV's Lucene
-implementation. The remaining work is:
-
-1. Index Director, Writer, and Chapter fields after the scanner/metadata joins
-   needed by Slice 18 are available.
-2. Add analyzer parity:
-   - lowercasing
-   - accent folding
-   - language-aware stemming where ErsatzTV depends on it
-
-3. Add fuzzy, proximity, boost, and page-map behavior for pageable results.
-4. Decide whether the in-process index remains SQL-backed or moves to a
-   Tantivy-style implementation. Treat Tantivy as an optional implementation
-   detail, not a parity requirement by itself.
-5. Write the ADR that explicitly drops the Elasticsearch backend from the
-   ErsatzRS parity target.
-
-Primary files:
-
-- `crates/ersatzrs-core/src/search.rs`
-- `crates/ersatzrs-infra/src/repositories/metadata.rs`
-- `docs/adr/`
-- `docs/reference/parity-matrix.md`
-
 ### Slice 20 — Config and ADR Closure
 
 The remaining configuration/decision cleanup is:
@@ -90,9 +63,7 @@ The remaining configuration/decision cleanup is:
 
 4. Move `XmltvBlockBehavior` ownership into core/infra so guide-generation
    behavior is not hidden in the transport layer.
-5. Write the final ADRs:
-   - Classic scheduling engine ported
-   - Elasticsearch backend dropped
+5. Write the final ADR for the Classic scheduling engine port.
 
 Primary files:
 
@@ -126,10 +97,9 @@ verified. The remaining closure work is:
 
 The remaining open persistence items that matter for the slices above are:
 
-- Media metadata/search joins: `Actor`, `Genre`, `Tag`, `Studio`, `Mood`,
-  `Style`, `Director`, `Writer`, `MetadataGuid`, `MusicVideoArtist`,
-  `MusicVideoMetadata`, `OtherVideoMetadata`, `SeasonMetadata`,
-  `ShowMetadata`, `SongMetadata`, and `ArtistMetadata`.
+- Remaining media metadata joins not covered by the closed scanner/search
+  slices: `Mood`, `Style`, `MusicVideoArtist`, plus any table-level read/write
+  gaps still listed in `docs/reference/persistence-gap-matrix.md`.
 - Polymorphic media owners still needed by scanner/search parity:
   `Image`, `ImageMetadata`, `ImageFolderDuration`, `MusicVideo`,
   `RemoteStream`, `RemoteStreamMetadata`, and `Song`.

@@ -279,7 +279,7 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
     let stream_fields = repos
         .scheduling
         .media_items_for_source(&SchedulingContentSource::Search(
-            "director:\"Director One\" AND writer:\"Writer One\" AND language_tag:eng AND sub_language_tag:nld AND video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080"
+            "director:\"Director One\" AND writer:\"Writer One\" AND language_tag:eng AND sub_language_tag:nld AND video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080 AND chapters:2"
                 .to_owned(),
         ))
         .await
@@ -288,6 +288,42 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
         stream_fields.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![20]
     );
+
+    let fuzzy_boosted = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "title:feture~1^3 AND minutes:[59 TO 61]".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        fuzzy_boosted.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![20]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_search_documents_page_returns_page_map() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    let (page, total, page_map) = repos
+        .scheduling
+        .search_documents_page("type:movie OR type:episode", 0, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(total, 4);
+    assert_eq!(
+        page.iter().map(|doc| doc.media_item_id).collect::<Vec<_>>(),
+        vec![21, 20]
+    );
+    let page_map = page_map.expect("page map");
+    assert_eq!(page_map.page_map[&'#'], 1);
+    assert_eq!(page_map.page_map[&'b'], 1);
+    assert_eq!(page_map.page_map[&'g'], 2);
 }
 
 #[tokio::test]
@@ -686,6 +722,15 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
             (1, 0, 'h264', 1, NULL, 0, 1, 0, 200),
             (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200),
             (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaChapter" (
+            "Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title"
+         ) VALUES
+            (1, 200, 0, '00:00:00', '00:30:00', 'First Half'),
+            (2, 200, 1, '00:30:00', '01:00:00', 'Second Half')"#,
     )
     .await
     .unwrap();

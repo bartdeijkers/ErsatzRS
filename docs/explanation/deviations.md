@@ -56,6 +56,15 @@ MySQL support behind a Cargo feature flag.
 
 ADR: [0006](../adr/0006-sqlx-over-sea-orm.md)
 
+## SQL-backed search without Elasticsearch
+
+ErsatzRS keeps search in process and SQL-backed for the parity target. The core
+search parser/evaluator preserves the Lucene-style behavior needed by
+scheduling, smart collections, and admin search, but ErsatzRS does not port
+ErsatzTV's experimental Elasticsearch backend.
+
+ADR: [0009](../adr/0009-sql-backed-search-and-no-elasticsearch.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

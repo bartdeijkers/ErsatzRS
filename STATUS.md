@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 18 scanner deepening closed)
+Last updated: 2026-05-02 (Slice 19 search hardening closed)
 
 ## Current Phase
 
@@ -270,6 +270,15 @@ health runs after successful FFmpeg runtime probing. Loop timestamps and
 dispatcher state are stored in `ConfigElement` under `maintenance.*`; health
 results continue to use `health.results` and `health.summary`.
 
+Slice 19 is complete for the non-web search parity target. The core search
+parser/evaluator now lowercases and accent-folds text, consumes Lucene boost
+syntax, handles fuzzy terms, phrase slop, numeric exact/range fields, wildcards,
+and jump-letter page maps. The SQL-backed search projection now carries
+Director, Writer, chapter count, duration, image, and remote-stream documents
+alongside the existing metadata/stream/provider GUID fields. ADR 0009 records
+the decision to keep search in process and SQL-backed while deliberately
+dropping ErsatzTV's experimental Elasticsearch backend.
+
 Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
 `ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
 ErsatzRS-specific path overrides with compatibility aliases, parses version
@@ -287,9 +296,8 @@ build path handles Vulkan/SVT-AV1 correctly, and the Leptos hydration library
 target builds into the image. Review outcome: GO for the next Phase 7 slice.
 
 Next up: continue Phase 7 items from the master plan without starting a new
-slice in this session. The remaining non-web priorities are scanner deepening,
-search-index hardening, config/ADR closure, side-by-side benchmarking, and
-long soak tests.
+slice in this session. The remaining non-web priorities are config/ADR closure,
+side-by-side benchmarking, and long soak tests.
 
 The `ersatzrs-web` structure refactor now has the target web-crate boundaries
 documented in [`docs/reference/web-crate-structure.md`](docs/reference/web-crate-structure.md).
@@ -379,6 +387,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-02 | Codex (GPT-5) | Closed Slice 19 search hardening: added Lucene-like normalization/modifier behavior, fuzzy/proximity/boost parsing, numeric chapter/duration fields, SQL-backed page maps, image/remote-stream search documents, ADR 0009 dropping Elasticsearch, and updated parity/status docs. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Closed Slice 18 scanner deepening: extended `MediaStream` writes (and the ffprobe / Plex / Jellyfin / Emby projections) with `Profile`, `PixelFormat`, `ColorRange`/`ColorSpace`/`ColorTransfer`/`ColorPrimaries`, `BitsPerRawSample`, `AttachedPic`, and attachment `FileName`/`MimeType`; decoded `LibraryOptions.PathInfos` from Jellyfin/Emby into new `JellyfinPathInfo`/`EmbyPathInfo` writers (`PlexPathInfo` does not exist in ErsatzTV); added `sync_plex_libraries`/`sync_jellyfin_libraries`/`sync_emby_libraries` for full add/update/delete cascade with `ShouldSyncItems` parity; ported per-folder `Artist` resolution to write `MusicVideo`/`MusicVideoMetadata`, and added `.yml`/`.yaml` walking to write `RemoteStream`/`RemoteStreamMetadata` from local scans; added a multi-page Plex collection corpus test exercising unicode names and mixed item types. Updated plan/persistence-gap-matrix/parity-matrix. |
 | 2026-05-02 | Codex (GPT-5) | Remediated Slice 18 scanner review findings: added deep-scan propagation for CLI/admin provider scans, scoped provider etag skip/upsert lookups to the current library, restored found provider rows to `Normal` on non-skip updates, and added focused provider regression tests. |
 | 2026-05-02 | Codex (GPT-5) | Started Slice 18 scanner deepening: added etag-based skip for unchanged normal-state Plex/Jellyfin/Emby movie and episode sync paths, avoiding Jellyfin/Emby PlaybackInfo lookups and preserving existing media rows when etags match; updated the slice plan and added focused provider tests. |

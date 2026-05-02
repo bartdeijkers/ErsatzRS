@@ -11,7 +11,9 @@ use ersatzrs_core::scheduling::{
     SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
     SchedulingPlaylistItem, SchedulingReferenceData,
 };
-use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
+use ersatzrs_core::search::{
+    search_page_map, SearchDocument, SearchExpression, SearchPageMap, SearchProviderGuid,
+};
 use ersatzrs_domain::{
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
@@ -725,18 +727,7 @@ impl SqliteSchedulingContentRepository {
     }
 
     async fn search_items(&self, query: &str) -> Result<Vec<SchedulingMediaItem>> {
-        let expression = SearchExpression::parse(query);
-        let documents = self.search_documents().await?;
-        let mut hits = documents
-            .into_iter()
-            .filter(|document| expression.matches(document))
-            .collect::<Vec<_>>();
-
-        hits.sort_by(|left, right| {
-            search_sort_title(left)
-                .cmp(&search_sort_title(right))
-                .then_with(|| left.media_item_id.cmp(&right.media_item_id))
-        });
+        let (hits, _, _) = self.search_documents_page(query, 0, 0).await?;
 
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
@@ -751,6 +742,41 @@ impl SqliteSchedulingContentRepository {
         }
 
         Ok(items)
+    }
+
+    /// Return sorted search documents plus total hit count and a Lucene-style page map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the SQL-backed search projection cannot be loaded.
+    pub async fn search_documents_page(
+        &self,
+        query: &str,
+        skip: usize,
+        limit: usize,
+    ) -> Result<(Vec<SearchDocument>, usize, Option<SearchPageMap>)> {
+        let expression = SearchExpression::parse(query);
+        let documents = self.search_documents().await?;
+        let mut hits = documents
+            .into_iter()
+            .filter(|document| expression.matches(document))
+            .collect::<Vec<_>>();
+
+        hits.sort_by(|left, right| {
+            search_sort_title(left)
+                .cmp(&search_sort_title(right))
+                .then_with(|| left.media_item_id.cmp(&right.media_item_id))
+        });
+
+        let total_count = hits.len();
+        let page_map = (limit > 0 && limit < 10_000).then(|| search_page_map(hits.iter(), limit));
+        let selected = if limit == 0 {
+            hits.into_iter().skip(skip).collect()
+        } else {
+            hits.into_iter().skip(skip).take(limit).collect()
+        };
+
+        Ok((selected, total_count, page_map))
     }
 
     async fn search_documents(&self) -> Result<Vec<SearchDocument>> {
@@ -839,6 +865,8 @@ impl SqliteSchedulingContentRepository {
             subtitle_codecs: stream_languages.subtitle_codecs,
             width: stream_languages.width,
             height: stream_languages.height,
+            chapter_counts: stream_languages.chapter_counts,
+            durations_seconds: stream_languages.durations_seconds,
             show_title: row.try_get("show_title")?,
             show_genres: self.show_lookup_values("Genre", show_id).await?,
             show_tags: self.show_lookup_values("Tag", show_id).await?,
@@ -961,7 +989,7 @@ impl SqliteSchedulingContentRepository {
             return Ok(result);
         };
         let version_sql = format!(
-            r#"SELECT "Id", "Width", "Height"
+            r#"SELECT "Id", "Width", "Height", "Duration"
              FROM "MediaVersion"
              WHERE "{version_fk}" = ?
              ORDER BY "Id""#
@@ -980,7 +1008,26 @@ impl SqliteSchedulingContentRepository {
             result.height = row.try_get("Height").ok();
         }
 
+        for row in &version_rows {
+            if let Ok(duration) = row.try_get::<String, _>("Duration") {
+                let seconds = decode_duration_text(&duration).num_seconds();
+                result.durations_seconds.push(seconds);
+            }
+        }
+
         for version_id in version_ids {
+            let chapter_count = sqlx::query_scalar::<_, i64>(
+                r#"SELECT COUNT(*)
+                 FROM "MediaChapter"
+                 WHERE "MediaVersionId" = ?"#,
+            )
+            .bind(version_id)
+            .fetch_one(&self.0)
+            .await?;
+            result
+                .chapter_counts
+                .push(i32::try_from(chapter_count).unwrap_or(i32::MAX));
+
             let rows = sqlx::query(
                 r#"SELECT "MediaStreamKind", "Codec", "Language"
                  FROM "MediaStream"
@@ -1898,6 +1945,38 @@ FROM (
         NULL AS "season_number",
         NULL AS "episode_number"
     FROM "SongMetadata" AS "som"
+    UNION ALL
+    SELECT
+        "im"."ImageId" AS "item_id",
+        'image' AS "media_kind",
+        'Image' AS "metadata_kind",
+        "im"."Id" AS "metadata_id",
+        "im"."Title" AS "title",
+        "im"."OriginalTitle" AS "original_title",
+        "im"."SortTitle" AS "sort_title",
+        "im"."Year" AS "year",
+        "im"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "ImageMetadata" AS "im"
+    UNION ALL
+    SELECT
+        "rsm"."RemoteStreamId" AS "item_id",
+        'remote_stream' AS "media_kind",
+        'RemoteStream' AS "metadata_kind",
+        "rsm"."Id" AS "metadata_id",
+        "rsm"."Title" AS "title",
+        "rsm"."OriginalTitle" AS "original_title",
+        "rsm"."SortTitle" AS "sort_title",
+        "rsm"."Year" AS "year",
+        "rsm"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "RemoteStreamMetadata" AS "rsm"
 )
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
@@ -2193,6 +2272,8 @@ struct StreamSearchFields {
     subtitle_codecs: Vec<String>,
     width: Option<i32>,
     height: Option<i32>,
+    chapter_counts: Vec<i32>,
+    durations_seconds: Vec<i64>,
 }
 
 fn metadata_fk(metadata_kind: &str) -> Option<&'static str> {

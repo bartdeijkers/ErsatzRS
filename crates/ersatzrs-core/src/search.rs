@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Datelike, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +40,9 @@ pub enum SearchField {
     SubtitleCodec,
     Width,
     Height,
+    Chapters,
+    Minutes,
+    Seconds,
     MediaKind,
     ShowTitle,
     ShowGenre,
@@ -54,6 +59,14 @@ pub enum SearchField {
 pub enum SearchValue {
     Text(String),
     Wildcard(String),
+    Fuzzy {
+        value: String,
+        max_edits: usize,
+    },
+    Phrase {
+        value: String,
+        slop: usize,
+    },
     Range {
         start: Option<String>,
         end: Option<String>,
@@ -86,6 +99,8 @@ pub struct SearchDocument {
     pub subtitle_codecs: Vec<String>,
     pub width: Option<i32>,
     pub height: Option<i32>,
+    pub chapter_counts: Vec<i32>,
+    pub durations_seconds: Vec<i64>,
     pub show_title: Option<String>,
     pub show_genres: Vec<String>,
     pub show_tags: Vec<String>,
@@ -100,6 +115,11 @@ pub struct SearchDocument {
 pub struct SearchProviderGuid {
     pub source: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchPageMap {
+    pub page_map: BTreeMap<char, usize>,
 }
 
 impl SearchExpression {
@@ -131,17 +151,24 @@ impl SearchTerm {
         match &self.value {
             SearchValue::Text(expected) => values
                 .iter()
-                .any(|actual| text_matches(actual, expected, false)),
+                .any(|actual| self.field.text_matches(actual, expected, false)),
             SearchValue::Wildcard(pattern) => values
                 .iter()
-                .any(|actual| text_matches(actual, pattern, true)),
+                .any(|actual| self.field.text_matches(actual, pattern, true)),
+            SearchValue::Fuzzy { value, max_edits } => values
+                .iter()
+                .any(|actual| fuzzy_matches(actual, value, *max_edits)),
+            SearchValue::Phrase { value, slop } => values
+                .iter()
+                .any(|actual| phrase_matches(actual, value, *slop)),
             SearchValue::Range {
                 start,
                 end,
                 inclusive,
-            } => values
-                .iter()
-                .any(|actual| range_matches(actual, start.as_deref(), end.as_deref(), *inclusive)),
+            } => values.iter().any(|actual| {
+                self.field
+                    .range_matches(actual, start.as_deref(), end.as_deref(), *inclusive)
+            }),
         }
     }
 }
@@ -190,6 +217,21 @@ impl SearchField {
                 .height
                 .map(|height| height.to_string())
                 .into_iter()
+                .collect(),
+            Self::Chapters => document
+                .chapter_counts
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            Self::Minutes => document
+                .durations_seconds
+                .iter()
+                .map(|seconds| ((*seconds + 59) / 60).to_string())
+                .collect(),
+            Self::Seconds => document
+                .durations_seconds
+                .iter()
+                .map(ToString::to_string)
                 .collect(),
             Self::MediaKind => vec![document.media_kind.clone()],
             Self::ShowTitle => option_values([document.show_title.as_deref()]),
@@ -247,6 +289,9 @@ impl SearchField {
             "video_codec" => Self::VideoCodec,
             "audio_codec" => Self::AudioCodec,
             "subtitle_codec" | "sub_codec" => Self::SubtitleCodec,
+            "chapters" => Self::Chapters,
+            "minutes" => Self::Minutes,
+            "seconds" => Self::Seconds,
             "width" => Self::Width,
             "height" => Self::Height,
             "type" | "kind" | "media_kind" => Self::MediaKind,
@@ -262,6 +307,46 @@ impl SearchField {
             source => Self::ProviderGuid(Some(source.to_owned())),
         }
     }
+
+    fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            Self::Year
+                | Self::Width
+                | Self::Height
+                | Self::Chapters
+                | Self::Minutes
+                | Self::Seconds
+                | Self::SeasonNumber
+                | Self::EpisodeNumber
+        )
+    }
+
+    fn text_matches(&self, actual: &str, expected: &str, wildcard: bool) -> bool {
+        if self.is_numeric() && !wildcard {
+            return actual
+                .parse::<i64>()
+                .ok()
+                .zip(expected.parse::<i64>().ok())
+                .is_some_and(|(actual, expected)| actual == expected);
+        }
+
+        text_matches(actual, expected, wildcard)
+    }
+
+    fn range_matches(
+        &self,
+        actual: &str,
+        start: Option<&str>,
+        end: Option<&str>,
+        inclusive: bool,
+    ) -> bool {
+        if self.is_numeric() {
+            return numeric_range_matches(actual, start, end, inclusive);
+        }
+
+        range_matches(actual, start, end, inclusive)
+    }
 }
 
 fn option_values<const N: usize>(values: [Option<&str>; N]) -> Vec<String> {
@@ -273,13 +358,116 @@ fn option_values<const N: usize>(values: [Option<&str>; N]) -> Vec<String> {
 }
 
 fn text_matches(actual: &str, expected: &str, wildcard: bool) -> bool {
-    let actual = actual.to_ascii_lowercase();
-    let expected = expected.to_ascii_lowercase();
+    let actual = normalize_search_text(actual);
+    let expected = normalize_search_text(expected);
     if wildcard || expected.contains('*') || expected.contains('?') {
         wildcard_matches(&actual, &expected)
     } else {
-        actual.contains(&expected)
+        expected.split_whitespace().all(|token| {
+            actual
+                .split_whitespace()
+                .any(|actual| actual.contains(token))
+        })
     }
+}
+
+fn fuzzy_matches(actual: &str, expected: &str, max_edits: usize) -> bool {
+    let expected = normalize_search_text(expected);
+    let expected_tokens = expected.split_whitespace().collect::<Vec<_>>();
+    if expected_tokens.is_empty() {
+        return false;
+    }
+
+    let actual = normalize_search_text(actual);
+    let actual_tokens = actual.split_whitespace().collect::<Vec<_>>();
+    expected_tokens.iter().all(|expected| {
+        actual_tokens
+            .iter()
+            .any(|actual| levenshtein_distance(actual, expected) <= max_edits)
+    })
+}
+
+fn phrase_matches(actual: &str, expected: &str, slop: usize) -> bool {
+    let actual = normalize_search_text(actual);
+    let expected = normalize_search_text(expected);
+    let expected_tokens = expected.split_whitespace().collect::<Vec<_>>();
+    if expected_tokens.is_empty() {
+        return false;
+    }
+
+    if slop == 0 {
+        return actual.contains(&expected);
+    }
+
+    let actual_tokens = actual.split_whitespace().collect::<Vec<_>>();
+    let Some(first) = expected_tokens.first() else {
+        return false;
+    };
+
+    actual_tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, token)| *token == first)
+        .any(|(start, _)| phrase_matches_from(&actual_tokens, &expected_tokens, start, slop))
+}
+
+fn phrase_matches_from(
+    actual_tokens: &[&str],
+    expected_tokens: &[&str],
+    start: usize,
+    slop: usize,
+) -> bool {
+    let mut cursor = start;
+    let mut consumed_slop = 0usize;
+    for expected in expected_tokens.iter().skip(1) {
+        let Some((found, _)) = actual_tokens
+            .iter()
+            .enumerate()
+            .skip(cursor + 1)
+            .find(|(_, actual)| *actual == expected)
+        else {
+            return false;
+        };
+        consumed_slop += found.saturating_sub(cursor + 1);
+        if consumed_slop > slop {
+            return false;
+        }
+        cursor = found;
+    }
+    true
+}
+
+fn numeric_range_matches(
+    actual: &str,
+    start: Option<&str>,
+    end: Option<&str>,
+    inclusive: bool,
+) -> bool {
+    let Some(actual) = actual.parse::<i64>().ok() else {
+        return false;
+    };
+
+    let start_matches = start
+        .filter(|value| *value != "*")
+        .and_then(|value| value.parse::<i64>().ok())
+        .is_none_or(|start| {
+            if inclusive {
+                actual >= start
+            } else {
+                actual > start
+            }
+        });
+    let end_matches = end
+        .filter(|value| *value != "*")
+        .and_then(|value| value.parse::<i64>().ok())
+        .is_none_or(|end| {
+            if inclusive {
+                actual <= end
+            } else {
+                actual < end
+            }
+        });
+    start_matches && end_matches
 }
 
 fn range_matches(actual: &str, start: Option<&str>, end: Option<&str>, inclusive: bool) -> bool {
@@ -302,11 +490,10 @@ fn range_matches(actual: &str, start: Option<&str>, end: Option<&str>, inclusive
 }
 
 fn normalize_range_value(value: &str) -> String {
-    value
+    normalize_search_text(value)
         .chars()
         .filter(char::is_ascii_alphanumeric)
         .collect::<String>()
-        .to_ascii_lowercase()
 }
 
 fn wildcard_matches(actual: &str, pattern: &str) -> bool {
@@ -340,6 +527,67 @@ fn wildcard_matches(actual: &str, pattern: &str) -> bool {
     pi == pattern.len()
 }
 
+fn normalize_search_text(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for ch in value.chars().flat_map(char::to_lowercase) {
+        if let Some(folded) = fold_accent(ch) {
+            normalized.push_str(folded);
+        } else {
+            normalized.push(ch);
+        }
+    }
+    normalized
+}
+
+fn fold_accent(ch: char) -> Option<&'static str> {
+    match ch {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => Some("a"),
+        'æ' => Some("ae"),
+        'ç' | 'ć' | 'ĉ' | 'ċ' | 'č' => Some("c"),
+        'ď' | 'đ' => Some("d"),
+        'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => Some("e"),
+        'ƒ' => Some("f"),
+        'ĝ' | 'ğ' | 'ġ' | 'ģ' => Some("g"),
+        'ĥ' | 'ħ' => Some("h"),
+        'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ı' => Some("i"),
+        'ĵ' => Some("j"),
+        'ķ' | 'ĸ' => Some("k"),
+        'ĺ' | 'ļ' | 'ľ' | 'ŀ' | 'ł' => Some("l"),
+        'ñ' | 'ń' | 'ņ' | 'ň' | 'ŉ' => Some("n"),
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => Some("o"),
+        'œ' => Some("oe"),
+        'ŕ' | 'ŗ' | 'ř' => Some("r"),
+        'ś' | 'ŝ' | 'ş' | 'š' | 'ß' => Some("s"),
+        'ţ' | 'ť' | 'ŧ' => Some("t"),
+        'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => Some("u"),
+        'ŵ' => Some("w"),
+        'ý' | 'ÿ' | 'ŷ' => Some("y"),
+        'ź' | 'ż' | 'ž' => Some("z"),
+        _ => None,
+    }
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    let right_len = right.chars().count();
+    let mut costs = (0..=right_len).collect::<Vec<_>>();
+
+    for (left_index, left_ch) in left.chars().enumerate() {
+        let mut previous = costs[0];
+        costs[0] = left_index + 1;
+        for (right_index, right_ch) in right.chars().enumerate() {
+            let current = costs[right_index + 1];
+            costs[right_index + 1] = if left_ch == right_ch {
+                previous
+            } else {
+                1 + previous.min(current).min(costs[right_index])
+            };
+            previous = current;
+        }
+    }
+
+    costs[right_len]
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Token {
     Word(String),
@@ -351,6 +599,7 @@ enum Token {
     RightBracket,
     LeftBrace,
     RightBrace,
+    Caret,
     To,
     And,
     Or,
@@ -444,15 +693,49 @@ impl SearchParser {
         let value = match value_token {
             Some(Token::LeftBracket) => self.parse_range(true),
             Some(Token::LeftBrace) => self.parse_range(false),
-            Some(Token::Phrase(value) | Token::Word(value)) if value.contains(['*', '?']) => {
-                SearchValue::Wildcard(value)
-            }
-            Some(Token::Phrase(value) | Token::Word(value)) => SearchValue::Text(value),
+            Some(Token::Phrase(value)) => self.parse_text_value(value, true),
+            Some(Token::Word(value)) => self.parse_text_value(value, false),
             Some(other) => SearchValue::Text(token_text(&other)),
             None => SearchValue::Text(String::new()),
         };
 
+        self.consume_boost();
+
         SearchExpression::Term(SearchTerm { field, value })
+    }
+
+    fn parse_text_value(&mut self, mut value: String, quoted: bool) -> SearchValue {
+        let mut slop = 0usize;
+        let mut fuzzy = None;
+
+        if quoted {
+            if let Some(Token::Word(modifier)) = self.tokens.get(self.position).cloned() {
+                if let Some(rest) = modifier.strip_prefix('~') {
+                    self.position += 1;
+                    let (slop_text, _) = split_boost(rest);
+                    slop = slop_text.parse::<usize>().unwrap_or(0);
+                }
+            }
+        } else if let Some((head, rest)) = value.rsplit_once('~') {
+            let head = head.to_owned();
+            let rest = rest.to_owned();
+            value = head;
+            let (fuzzy_text, _) = split_boost(&rest);
+            fuzzy = Some(parse_fuzzy_edits(fuzzy_text));
+        }
+
+        let (value, _) = split_boost(&value);
+        let value = value.to_owned();
+
+        if value.contains(['*', '?']) {
+            SearchValue::Wildcard(value)
+        } else if let Some(max_edits) = fuzzy {
+            SearchValue::Fuzzy { value, max_edits }
+        } else if quoted {
+            SearchValue::Phrase { value, slop }
+        } else {
+            SearchValue::Text(value)
+        }
     }
 
     fn parse_range(&mut self, inclusive: bool) -> SearchValue {
@@ -508,6 +791,12 @@ impl SearchParser {
         }
     }
 
+    fn consume_boost(&mut self) {
+        if self.consume(&Token::Caret) {
+            let _ = self.advance();
+        }
+    }
+
     fn check(&self, expected: &Token) -> bool {
         self.tokens
             .get(self.position)
@@ -533,6 +822,7 @@ fn tokenize(query: &str) -> Vec<Token> {
             ']' => tokens.push(Token::RightBracket),
             '{' => tokens.push(Token::LeftBrace),
             '}' => tokens.push(Token::RightBrace),
+            '^' => tokens.push(Token::Caret),
             '+' => tokens.push(Token::Plus),
             '-' => tokens.push(Token::Minus),
             '"' | '\'' => {
@@ -575,6 +865,28 @@ fn word_token(value: String) -> Token {
     }
 }
 
+fn split_boost(value: &str) -> (&str, Option<&str>) {
+    value
+        .split_once('^')
+        .map_or((value, None), |(head, tail)| (head, Some(tail)))
+}
+
+fn parse_fuzzy_edits(value: &str) -> usize {
+    if value.is_empty() {
+        return 2;
+    }
+
+    value.parse::<usize>().map_or_else(
+        |_| {
+            value
+                .parse::<f32>()
+                .ok()
+                .map_or(2, |similarity| if similarity >= 0.5 { 2 } else { 1 })
+        },
+        |edits| edits.min(2),
+    )
+}
+
 fn token_text(token: &Token) -> String {
     match token {
         Token::Word(value) | Token::Phrase(value) => value.clone(),
@@ -585,12 +897,75 @@ fn token_text(token: &Token) -> String {
         Token::RightBracket => "]".to_owned(),
         Token::LeftBrace => "{".to_owned(),
         Token::RightBrace => "}".to_owned(),
+        Token::Caret => "^".to_owned(),
         Token::To => "TO".to_owned(),
         Token::And => "AND".to_owned(),
         Token::Or => "OR".to_owned(),
         Token::Not => "NOT".to_owned(),
         Token::Plus => "+".to_owned(),
         Token::Minus => "-".to_owned(),
+    }
+}
+
+#[must_use]
+pub fn search_page_map<'a, I>(documents: I, limit: usize) -> SearchPageMap
+where
+    I: IntoIterator<Item = &'a SearchDocument>,
+{
+    let letters = "#abcdefghijklmnopqrstuvwxyz".chars().collect::<Vec<_>>();
+    let mut page_map = letters
+        .iter()
+        .copied()
+        .map(|letter| (letter, 0usize))
+        .collect::<BTreeMap<_, _>>();
+    let documents = documents.into_iter().collect::<Vec<_>>();
+
+    if limit == 0 || documents.is_empty() {
+        return SearchPageMap { page_map };
+    }
+
+    let mut current = 0usize;
+    let mut page = 0usize;
+    while current < documents.len() {
+        page += 1;
+        current = (current + limit).min(documents.len());
+        let jump_letter = jump_letter(documents[current - 1]);
+        let Some(jump_index) = letters.iter().position(|letter| *letter == jump_letter) else {
+            continue;
+        };
+
+        for letter in letters.iter().copied().take(jump_index + 1) {
+            page_map.entry(letter).and_modify(|value| {
+                if *value == 0 {
+                    *value = page;
+                }
+            });
+        }
+    }
+
+    let max_page = page_map.values().copied().max().unwrap_or_default();
+    for value in page_map.values_mut().filter(|value| **value == 0) {
+        *value = max_page;
+    }
+
+    SearchPageMap { page_map }
+}
+
+fn jump_letter(document: &SearchDocument) -> char {
+    let letter = document
+        .sort_title
+        .as_deref()
+        .or(document.title.as_deref())
+        .unwrap_or_default()
+        .chars()
+        .next()
+        .unwrap_or('#')
+        .to_ascii_lowercase();
+
+    if letter.is_ascii_lowercase() {
+        letter
+    } else {
+        '#'
     }
 }
 
@@ -625,6 +1000,8 @@ mod tests {
             subtitle_codecs: vec!["srt".to_owned()],
             width: Some(1920),
             height: Some(1080),
+            chapter_counts: vec![3],
+            durations_seconds: vec![3661],
             show_title: Some("Not a Show".to_owned()),
             provider_guids: vec![SearchProviderGuid {
                 source: "tmdb".to_owned(),
@@ -662,5 +1039,48 @@ mod tests {
             )
             .matches(&doc)
         );
+    }
+
+    #[test]
+    fn analyzer_matches_case_accents_fuzzy_proximity_and_boosts() {
+        let mut doc = document();
+        doc.title = Some("Amélie has a Great Long Escape".to_owned());
+        assert!(SearchExpression::parse("title:amelie").matches(&doc));
+        assert!(SearchExpression::parse("title:escap~1").matches(&doc));
+        assert!(SearchExpression::parse("title:\"great escape\"~2").matches(&doc));
+        assert!(SearchExpression::parse("title:Great^4").matches(&doc));
+    }
+
+    #[test]
+    fn matches_numeric_chapter_duration_ranges_and_exact_terms() {
+        let doc = document();
+        assert!(SearchExpression::parse("chapters:3 AND minutes:62").matches(&doc));
+        assert!(SearchExpression::parse("seconds:[3600 TO 3700]").matches(&doc));
+        assert!(!SearchExpression::parse("width:192").matches(&doc));
+    }
+
+    #[test]
+    fn builds_lucene_style_jump_letter_page_map() {
+        let docs = [
+            SearchDocument {
+                sort_title: Some("alpha".to_owned()),
+                ..SearchDocument::default()
+            },
+            SearchDocument {
+                sort_title: Some("delta".to_owned()),
+                ..SearchDocument::default()
+            },
+            SearchDocument {
+                sort_title: Some("zulu".to_owned()),
+                ..SearchDocument::default()
+            },
+        ];
+
+        let map = search_page_map(docs.iter(), 2);
+        assert_eq!(map.page_map[&'#'], 1);
+        assert_eq!(map.page_map[&'a'], 1);
+        assert_eq!(map.page_map[&'d'], 1);
+        assert_eq!(map.page_map[&'e'], 2);
+        assert_eq!(map.page_map[&'z'], 2);
     }
 }
