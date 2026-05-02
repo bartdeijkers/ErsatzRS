@@ -5,8 +5,8 @@ use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
     EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
-    EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService as EmbyServiceTrait,
-    EmbyShowItem, EmbyShowPage, RepositoryError, Result,
+    EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage,
+    EmbyService as EmbyServiceTrait, EmbyShowItem, EmbyShowPage, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
@@ -583,10 +583,30 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
         "tvshows" => LibraryMediaKind::Shows,
         _ => return None,
     };
+    let path_infos = response
+        .library_options
+        .map(|options| {
+            options
+                .path_infos
+                .into_iter()
+                .filter_map(|info| {
+                    let network_path = info.network_path?;
+                    if network_path.trim().is_empty() {
+                        return None;
+                    }
+                    Some(EmbyPathInfo {
+                        path: info.path.unwrap_or_default(),
+                        network_path,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     Some(EmbyLibrarySummary {
         item_id: response.item_id?,
         name: response.name.unwrap_or_default(),
         media_kind,
+        path_infos,
     })
 }
 
@@ -831,10 +851,15 @@ fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStream> {
         _ => return None,
     };
 
+    let is_video = matches!(kind, MediaStreamKind::Video);
     Some(MediaStream {
         index: stream.index,
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
+        profile: stream
+            .profile
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
         language: stream.language,
         title: stream.title,
         default: stream.is_default,
@@ -842,6 +867,40 @@ fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStream> {
         channels: stream.channels,
         width: stream.width,
         height: stream.height,
+        pixel_format: if is_video {
+            stream.pixel_format.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_range: if is_video {
+            stream.color_range.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_space: if is_video {
+            stream.color_space.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_transfer: if is_video {
+            stream
+                .color_transfer
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_primaries: if is_video {
+            stream
+                .color_primaries
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        bits_per_raw_sample: if is_video {
+            stream.bit_depth.unwrap_or_default()
+        } else {
+            0
+        },
         ..MediaStream::default()
     })
 }
@@ -1067,6 +1126,181 @@ async fn item_etag_matches(
     let existing_etag: Option<String> = row.try_get("Etag")?;
     let state: i64 = row.try_get("State")?;
     Ok(state == 0 && existing_etag.as_deref() == etag)
+}
+
+/// Synchronizes the set of Emby libraries for a media source.
+///
+/// Adds incoming libraries that have no `ItemId` match, deletes existing
+/// libraries that the server no longer reports (cascading through
+/// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind`,
+/// `Name`, and `EmbyPathInfo` rows for libraries that the server still
+/// reports. Mirrors `MediaSourceRepository.UpdateLibraries` for Emby in
+/// ErsatzTV. The `MediaKind` is only updated when `ShouldSyncItems` is
+/// false to avoid invalidating an in-progress sync.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn sync_emby_libraries(
+    pool: &DbPool,
+    media_source_id: i64,
+    incoming: &[EmbyLibrarySummary],
+) -> Result<()> {
+    let existing_rows = sqlx::query(
+        r#"SELECT "el"."Id" AS "Id", "el"."ItemId" AS "ItemId",
+                  "el"."ShouldSyncItems" AS "ShouldSyncItems",
+                  "l"."MediaKind" AS "MediaKind"
+           FROM "EmbyLibrary" AS "el"
+           JOIN "Library" AS "l" ON "l"."Id" = "el"."Id"
+           WHERE "l"."MediaSourceId" = ?"#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("Id"),
+                row.try_get::<Option<String>, _>("ItemId")
+                    .unwrap_or_default(),
+                row.try_get::<i64, _>("ShouldSyncItems").unwrap_or_default() != 0,
+                row.try_get::<i32, _>("MediaKind").unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    for incoming_library in incoming {
+        let position = existing.iter().position(|(_, item_id, _, _)| {
+            item_id.as_deref() == Some(incoming_library.item_id.as_str())
+        });
+        if let Some(index) = position {
+            let (id, _, should_sync, current_kind) = existing.swap_remove(index);
+            let target_kind = encode_library_media_kind(incoming_library.media_kind);
+            if !should_sync && target_kind != current_kind {
+                sqlx::query(r#"UPDATE "Library" SET "MediaKind" = ?, "Name" = ? WHERE "Id" = ?"#)
+                    .bind(target_kind)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            } else {
+                sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            replace_emby_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
+        } else {
+            let result = sqlx::query(
+                r#"INSERT INTO "Library" ("Name", "MediaKind", "MediaSourceId")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(&incoming_library.name)
+            .bind(encode_library_media_kind(incoming_library.media_kind))
+            .bind(media_source_id)
+            .execute(&mut *tx)
+            .await?;
+            let id = crate::db::last_insert_id(result);
+            sqlx::query(
+                r#"INSERT INTO "EmbyLibrary" ("Id", "ItemId", "ShouldSyncItems")
+                   VALUES (?, ?, 0)"#,
+            )
+            .bind(id)
+            .bind(&incoming_library.item_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                .bind(id)
+                .bind(format!("emby://{id}"))
+                .execute(&mut *tx)
+                .await?;
+            replace_emby_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
+        }
+    }
+
+    for (id, _, _, _) in existing {
+        sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+fn encode_library_media_kind(kind: LibraryMediaKind) -> i32 {
+    match kind {
+        LibraryMediaKind::Movies => 1,
+        LibraryMediaKind::Shows => 2,
+        LibraryMediaKind::MusicVideos => 3,
+        LibraryMediaKind::OtherVideos => 4,
+        LibraryMediaKind::Songs => 5,
+        LibraryMediaKind::Images => 6,
+        LibraryMediaKind::RemoteStreams => 7,
+    }
+}
+
+async fn replace_emby_path_infos_in_tx(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    library_id: i64,
+    path_infos: &[EmbyPathInfo],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "EmbyPathInfo" WHERE "EmbyLibraryId" = ?"#)
+        .bind(library_id)
+        .execute(&mut **tx)
+        .await?;
+    for info in path_infos {
+        sqlx::query(
+            r#"INSERT INTO "EmbyPathInfo" ("EmbyLibraryId", "Path", "NetworkPath")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&info.path)
+        .bind(&info.network_path)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Replaces all `EmbyPathInfo` rows for a library with the supplied set.
+///
+/// Used to mirror ErsatzTV path mapping for SMB/NFS shares where the Emby
+/// server reports its local path and the network path that ErsatzRS should
+/// rewrite onto. Network-only path infos with empty `NetworkPath` are
+/// filtered out by the projection.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn replace_emby_path_infos(
+    pool: &DbPool,
+    library_id: i64,
+    path_infos: &[EmbyPathInfo],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"DELETE FROM "EmbyPathInfo" WHERE "EmbyLibraryId" = ?"#)
+        .bind(library_id)
+        .execute(&mut *tx)
+        .await?;
+    for info in path_infos {
+        sqlx::query(
+            r#"INSERT INTO "EmbyPathInfo" ("EmbyLibraryId", "Path", "NetworkPath")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&info.path)
+        .bind(&info.network_path)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 async fn ensure_emby_library(
@@ -1452,12 +1686,15 @@ async fn replace_streams(
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
-                "Index", "Codec", "MediaStreamKind", "Language", "Channels",
-                "Title", "Default", "Forced", "MediaVersionId"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
+                "Title", "Default", "Forced", "MediaVersionId",
+                "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
+        .bind(&stream.profile)
         .bind(encode_stream_kind(stream.kind))
         .bind(&stream.language)
         .bind(stream.channels.unwrap_or_default())
@@ -1465,6 +1702,15 @@ async fn replace_streams(
         .bind(stream.default)
         .bind(stream.forced)
         .bind(version_id)
+        .bind(&stream.pixel_format)
+        .bind(&stream.color_range)
+        .bind(&stream.color_space)
+        .bind(&stream.color_transfer)
+        .bind(&stream.color_primaries)
+        .bind(stream.bits_per_raw_sample)
+        .bind(stream.attached_pic)
+        .bind(&stream.file_name)
+        .bind(&stream.mime_type)
         .execute(&mut **tx)
         .await?;
     }
@@ -1554,6 +1800,21 @@ struct EmbyLibraryResponse {
     name: Option<String>,
     collection_type: Option<String>,
     item_id: Option<String>,
+    library_options: Option<EmbyLibraryOptionsResponse>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyLibraryOptionsResponse {
+    #[serde(default)]
+    path_infos: Vec<EmbyPathInfoResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyPathInfoResponse {
+    path: Option<String>,
+    network_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1606,6 +1867,7 @@ struct EmbyMediaStreamResponse {
     #[serde(rename = "Type")]
     stream_type: Option<String>,
     codec: Option<String>,
+    profile: Option<String>,
     language: Option<String>,
     height: Option<i32>,
     width: Option<i32>,
@@ -1621,6 +1883,12 @@ struct EmbyMediaStreamResponse {
     channels: Option<i32>,
     real_frame_rate: Option<f64>,
     title: Option<String>,
+    pixel_format: Option<String>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_transfer: Option<String>,
+    color_primaries: Option<String>,
+    bit_depth: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]

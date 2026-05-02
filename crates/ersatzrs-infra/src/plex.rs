@@ -1095,10 +1095,15 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         3 if !stream.embedded_in_video => MediaStreamKind::Subtitle,
         _ => return None,
     };
+    let is_video = matches!(kind, MediaStreamKind::Video);
     Some(MediaStream {
         index: stream.index.unwrap_or(stream.id),
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
+        profile: stream
+            .profile
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
         language: stream.language_code,
         title: stream.title,
         default: stream.default,
@@ -1106,8 +1111,149 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         channels: stream.channels,
         width: stream.width,
         height: stream.height,
+        color_range: if is_video {
+            stream.color_range.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_space: if is_video {
+            stream.color_space.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_transfer: if is_video {
+            stream.color_trc.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_primaries: if is_video {
+            stream
+                .color_primaries
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        bits_per_raw_sample: if is_video {
+            stream.bit_depth.unwrap_or_default()
+        } else {
+            0
+        },
         ..MediaStream::default()
     })
+}
+
+/// Synchronizes the set of Plex libraries for a media source.
+///
+/// Adds incoming libraries that have no `Key` match, deletes existing
+/// libraries that the server no longer reports (cascading through
+/// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind` and
+/// `Name` for libraries that the server still reports. Mirrors
+/// `MediaSourceRepository.UpdateLibraries` for Plex in ErsatzTV. The
+/// `MediaKind` is only updated when `ShouldSyncItems` is false to avoid
+/// invalidating an in-progress sync.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn sync_plex_libraries(
+    pool: &DbPool,
+    media_source_id: i64,
+    incoming: &[PlexLibrarySummary],
+) -> Result<()> {
+    let existing_rows = sqlx::query(
+        r#"SELECT "pl"."Id" AS "Id", "pl"."Key" AS "Key",
+                  "pl"."ShouldSyncItems" AS "ShouldSyncItems",
+                  "l"."MediaKind" AS "MediaKind"
+           FROM "PlexLibrary" AS "pl"
+           JOIN "Library" AS "l" ON "l"."Id" = "pl"."Id"
+           WHERE "l"."MediaSourceId" = ?"#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("Id"),
+                row.try_get::<Option<String>, _>("Key").unwrap_or_default(),
+                row.try_get::<i64, _>("ShouldSyncItems").unwrap_or_default() != 0,
+                row.try_get::<i32, _>("MediaKind").unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    for incoming_library in incoming {
+        let position = existing
+            .iter()
+            .position(|(_, key, _, _)| key.as_deref() == Some(incoming_library.key.as_str()));
+        if let Some(index) = position {
+            let (id, _, should_sync, current_kind) = existing.swap_remove(index);
+            let target_kind = encode_library_media_kind(incoming_library.media_kind);
+            if !should_sync && target_kind != current_kind {
+                sqlx::query(r#"UPDATE "Library" SET "MediaKind" = ?, "Name" = ? WHERE "Id" = ?"#)
+                    .bind(target_kind)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            } else {
+                sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        } else {
+            let result = sqlx::query(
+                r#"INSERT INTO "Library" ("Name", "MediaKind", "MediaSourceId")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(&incoming_library.name)
+            .bind(encode_library_media_kind(incoming_library.media_kind))
+            .bind(media_source_id)
+            .execute(&mut *tx)
+            .await?;
+            let id = crate::db::last_insert_id(result);
+            sqlx::query(
+                r#"INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
+                   VALUES (?, ?, 0)"#,
+            )
+            .bind(id)
+            .bind(&incoming_library.key)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                .bind(id)
+                .bind(format!("plex://{id}"))
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    for (id, _, _, _) in existing {
+        sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+fn encode_library_media_kind(kind: LibraryMediaKind) -> i32 {
+    match kind {
+        LibraryMediaKind::Movies => 1,
+        LibraryMediaKind::Shows => 2,
+        LibraryMediaKind::MusicVideos => 3,
+        LibraryMediaKind::OtherVideos => 4,
+        LibraryMediaKind::Songs => 5,
+        LibraryMediaKind::Images => 6,
+        LibraryMediaKind::RemoteStreams => 7,
+    }
 }
 
 async fn ensure_plex_library(
@@ -1613,12 +1759,15 @@ async fn replace_streams(
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
-                "Index", "Codec", "MediaStreamKind", "Language", "Channels",
-                "Title", "Default", "Forced", "MediaVersionId"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
+                "Title", "Default", "Forced", "MediaVersionId",
+                "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
+        .bind(&stream.profile)
         .bind(encode_stream_kind(stream.kind))
         .bind(&stream.language)
         .bind(stream.channels.unwrap_or_default())
@@ -1626,6 +1775,15 @@ async fn replace_streams(
         .bind(stream.default)
         .bind(stream.forced)
         .bind(version_id)
+        .bind(&stream.pixel_format)
+        .bind(&stream.color_range)
+        .bind(&stream.color_space)
+        .bind(&stream.color_transfer)
+        .bind(&stream.color_primaries)
+        .bind(stream.bits_per_raw_sample)
+        .bind(stream.attached_pic)
+        .bind(&stream.file_name)
+        .bind(&stream.mime_type)
         .execute(&mut **tx)
         .await?;
     }
@@ -1957,10 +2115,16 @@ struct PlexStreamResponse {
     title: Option<String>,
     stream_type: Option<i32>,
     codec: Option<String>,
+    profile: Option<String>,
     channels: Option<i32>,
     width: Option<i32>,
     height: Option<i32>,
     pixel_aspect_ratio: Option<String>,
     scan_type: Option<String>,
     frame_rate: Option<String>,
+    bit_depth: Option<i32>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_trc: Option<String>,
+    color_primaries: Option<String>,
 }

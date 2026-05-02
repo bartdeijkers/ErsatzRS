@@ -15,9 +15,16 @@ Scope:
 
 Current summary:
 
-- 84 tables have both read and write coverage.
-- 22 tables have read-only coverage.
-- 32 tables have no infra read/write coverage yet.
+- 89 tables have both read and write coverage.
+- 19 tables have read-only coverage.
+- 30 tables have no infra read/write coverage yet.
+
+Phase 7 Slice 18 added write coverage for `EmbyPathInfo`, `JellyfinPathInfo`,
+`MusicVideo`, `MusicVideoMetadata`, `RemoteStream`, and `RemoteStreamMetadata`,
+and broadened existing write coverage for `EmbyLibrary`, `JellyfinLibrary`,
+`PlexLibrary` (full add/update/delete cascade) plus `MediaStream` (profile,
+color, pixel-format, bits-per-raw-sample, attached-pic, attachment file
+name/mime fields).
 
 Recommended order:
 
@@ -61,10 +68,10 @@ Recommended order:
 | `EmbyCollection` | Emby collection sync | Yes: Emby collection sync lookup by item id | Yes: Emby collection sync | No | Collection identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden provider scanner tables |
 | `EmbyConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `EmbyEpisode` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
-| `EmbyLibrary` | Emby sync bootstrap and scanner dispatch | Yes: scanner dispatch and Emby sync bootstrap | Yes: Emby sync bootstrap | No | Library subtype rows can now be created for provider scans; full update/delete remains thin. | P3 provider library subtype update parity |
+| `EmbyLibrary` | Emby sync bootstrap, scanner dispatch, and full library set sync | Yes: scanner dispatch and Emby sync bootstrap | Yes: `sync_emby_libraries` adds/updates/deletes library subtype rows with `Library` cascade and respects `ShouldSyncItems` before changing `MediaKind` | No | Library subtype rows now round-trip through full add/update/delete; verify imported real-world libraries when sample data is available. | P3 broaden real-world decode |
 | `EmbyMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `EmbyMovie` | Emby movie sync | Yes: Emby sync lookup by item id | Yes: Emby movie sync | No | Movie provider identity rows now persist during mock-covered sync. | P3 broaden provider scanner tables |
-| `EmbyPathInfo` | Schema only | No | No | No | Provider path scanning state is absent. | P3 provider scanner tables |
+| `EmbyPathInfo` | Emby library list sync | Yes: read by `sync_emby_libraries` to compute path-info diffs | Yes: `replace_emby_path_infos` and library list sync | No | Path mapping for SMB/NFS shares now round-trips from `LibraryOptions.PathInfos`; broaden real-world decode when sample data exists. | P3 broaden real-world decode |
 | `EmbyPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Emby source decode | Low. | P0 broaden provider source decode |
 | `EmbySeason` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `EmbyShow` | Emby show library sync | Yes: Emby sync lookup by item id | Yes: Emby show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
@@ -81,10 +88,10 @@ Recommended order:
 | `JellyfinCollection` | Jellyfin collection sync | Yes: Jellyfin collection sync lookup by item id | Yes: Jellyfin collection sync | No | Collection identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden provider scanner tables |
 | `JellyfinConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `JellyfinEpisode` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
-| `JellyfinLibrary` | Library repository subtype check plus Jellyfin sync bootstrap | Yes: Library repository subtype lookup and Jellyfin sync bootstrap | Yes: Jellyfin sync bootstrap | Yes, through library decode | Library subtype rows can now be created for movie sync; full library update/delete remains thin. | P3 provider library subtype update parity |
+| `JellyfinLibrary` | Library repository subtype check, Jellyfin sync bootstrap, and full library set sync | Yes: Library repository subtype lookup and Jellyfin sync bootstrap | Yes: `sync_jellyfin_libraries` adds/updates/deletes library subtype rows with `Library` cascade and respects `ShouldSyncItems` before changing `MediaKind` | Yes, through library decode | Library subtype rows now round-trip through full add/update/delete. | P3 broaden real-world decode |
 | `JellyfinMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `JellyfinMovie` | Jellyfin movie sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin movie sync | No | Movie provider identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden Jellyfin scanner tables |
-| `JellyfinPathInfo` | Schema only | No | No | No | Provider path scanning state is absent. | P3 provider scanner tables |
+| `JellyfinPathInfo` | Jellyfin library list sync | Yes: read by `sync_jellyfin_libraries` to compute path-info diffs | Yes: `replace_jellyfin_path_infos` and library list sync | No | Path mapping for SMB/NFS shares now round-trips from `LibraryOptions.PathInfos`; broaden real-world decode when sample data exists. | P3 broaden real-world decode |
 | `JellyfinPathReplacement` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through Jellyfin source decode | Low. | P0 broaden provider source decode |
 | `JellyfinSeason` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Season provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
 | `JellyfinShow` | Jellyfin show library sync | Yes: Jellyfin sync lookup by item id | Yes: Jellyfin show library sync | No | Show provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
@@ -98,7 +105,7 @@ Recommended order:
 | `MediaFile` | Media item repository path lookup plus scanner/sync writes | Yes: Media item repository and scanner/sync row lookup | Yes: local scanner and Jellyfin/Emby movie sync | Yes, through media item path/decode when present | File rows now persist for local and provider scans; path-hash compatibility should be compared against ErsatzTV samples. | P3 broaden provider/local scanner coverage |
 | `MediaItem` | Media item repository and scheduling read model | Yes: media item/scheduling read paths | Yes: Media item repository | Yes, env-gated direct decode | Covered scalar item state; polymorphic subtypes are incomplete. | P1 media polymorphic repository |
 | `MediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, through provider source decode | Low. | P0 retain decode |
-| `MediaStream` | ffprobe extraction, local scanner, Jellyfin/Emby sync | Yes: scanner/sync tests assert persisted rows | Yes: local scanner and Jellyfin/Emby movie sync | No | Stream rows are now populated for scanned media; full color/profile/subtitle fields remain partial. | P3 broaden provider/local scanner coverage |
+| `MediaStream` | ffprobe extraction, local scanner, Plex/Jellyfin/Emby sync | Yes: scanner/sync tests assert persisted rows | Yes: local scanner and Plex/Jellyfin/Emby sync now write `Profile`, `PixelFormat`, `ColorRange`/`ColorSpace`/`ColorTransfer`/`ColorPrimaries`, `BitsPerRawSample`, `AttachedPic`, and attachment `FileName`/`MimeType` columns | No | Stream rows now cover the full ErsatzTV `MediaStream` field surface; broaden real-world decode when sample data exists. | P3 broaden real-world decode |
 | `MediaVersion` | Media item repository, scheduling read model, scanner/sync writes | Yes: media item/scheduling read paths plus scanner/sync row lookup | Yes: local scanner and Jellyfin/Emby movie sync | Yes, through media item/scheduling decode | Version rows now persist for local movies/other videos/songs/images and provider scans; unsupported local music-video/remote-stream owners remain. | P3 broaden provider/local scanner coverage |
 | `MetadataGuid` | Scheduling search/GUID lookup | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | GUID resolution is read-only and not complete across owner repos. | P1 media metadata/search joins |
 | `Mood` | Domain model only | No | No | No | Music metadata/search facet parity is absent. | P1 media metadata/search joins |
@@ -107,9 +114,9 @@ Recommended order:
 | `MultiCollection` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Multi-collection editor persistence is absent. | P2 collection editor parity |
 | `MultiCollectionItem` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Multi-collection contents are read-only. | P2 collection editor parity |
 | `MultiCollectionSmartItem` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Multi-collection smart contents are read-only. | P2 collection editor parity |
-| `MusicVideo` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Music-video rows cannot be created by current metadata writes. | P1 media polymorphic repository |
+| `MusicVideo` | Scheduling read model and local scanner | Yes: Scheduling read model | Yes: local scanner walks per-artist subfolders and writes music-video rows linked to upserted `Artist`/`ArtistMetadata` | Partial, env-gated scheduling decode if data exists | Music-video rows now round-trip from local scans; provider syncs still skip music-video libraries. | P3 broaden provider music-video coverage |
 | `MusicVideoArtist` | Domain model only | No | No | No | Music-video artist joins are not decoded. | P1 media metadata/search joins |
-| `MusicVideoMetadata` | Metadata repository and scheduling read model | Yes: metadata/scheduling read paths | No | Yes, env-gated direct decode | No write path; artist joins are empty. | P1 media metadata/search joins |
+| `MusicVideoMetadata` | Metadata repository, scheduling read model, and local scanner | Yes: metadata/scheduling read paths | Yes: local scanner writes a fallback metadata row using the file stem as `Title` | Yes, env-gated direct decode | Title rows now write; artist joins remain empty until the metadata slice ports `MusicVideoArtist`. | P1 media metadata/search joins |
 | `OtherVideo` | Scheduling read model plus local scanner | Yes: scheduling read model and local scanner write test | Yes: local scanner | Partial, env-gated scheduling decode if data exists | Other-video rows can now be created by local scans; metadata owner fields remain absent. | P3 broaden local scanner coverage |
 | `OtherVideoMetadata` | Scheduling read model | Yes: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Other-video metadata has no owner repository. | P1 media metadata/search joins |
 | `Playlist` | Collection repository and scheduling read model | Yes: collection/scheduling read paths | No | Yes, env-gated direct decode | Playlist editor writes are absent. | P2 playlist repository writes |
@@ -129,7 +136,7 @@ Recommended order:
 | `PlexCollection` | Domain model only | No | No | No | Plex collection scanner data cannot round-trip. | P3 provider scanner tables |
 | `PlexConnection` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `PlexEpisode` | Plex show library sync | Yes: Plex sync lookup by key | Yes: Plex show library sync | No | Episode provider identity rows now persist during mock-covered show sync. | P3 broaden provider scanner tables |
-| `PlexLibrary` | Library repository subtype check plus Plex sync bootstrap | Yes: Library repository subtype lookup and scanner dispatch | Yes: Plex sync bootstrap | Yes, through library decode | Library subtype rows can now be created for provider scans; full update/delete remains thin. | P3 provider library subtype writes |
+| `PlexLibrary` | Library repository subtype check, Plex sync bootstrap, and full library set sync | Yes: Library repository subtype lookup and scanner dispatch | Yes: `sync_plex_libraries` adds/updates/deletes library subtype rows with `Library` cascade and respects `ShouldSyncItems` before changing `MediaKind` | Yes, through library decode | Library subtype rows now round-trip through full add/update/delete. | P3 broaden real-world decode |
 | `PlexMediaFile` | Plex sync | Yes: Plex sync writes and tests project rows | Yes: Plex movie/show sync | No | Plex part identity rows now persist during mock-covered sync; real-world decode should be added once sample data exists. | P3 broaden Plex scanner tables |
 | `PlexMediaSource` | Media source repository | Yes: Media source repository | Yes: Media source repository | Yes, env-gated direct decode | Low. | P0 broaden provider source decode |
 | `PlexMovie` | Plex movie sync | Yes: Plex sync lookup by key | Yes: Plex movie sync | No | Movie provider identity rows now persist during mock-covered sync. | P3 broaden provider scanner tables |
@@ -146,8 +153,8 @@ Recommended order:
 | `ProgramScheduleItemWatermark` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert replaces join rows | Yes, through focused SQLite repository tests | Low; schedule item watermark join rows now round-trip. | P1 done in Slice 14 |
 | `ProgramScheduleMultipleItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Yes, through focused SQLite repository tests | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
 | `ProgramScheduleOneItem` | Program schedule repository | Yes: Program schedule repository typed item load | Yes: Program schedule repository typed item upsert | Partial, typed write path covered; real-world decode remains env-gated when data exists | Low/medium; Classic scheduling behavior still lands in Slice 15. | P1 done in Slice 14 |
-| `RemoteStream` | Scheduling read model | Partial: Scheduling read model | No | Partial, env-gated scheduling decode if data exists | Remote stream media rows lack owner repository. | P1 media polymorphic repository |
-| `RemoteStreamMetadata` | Domain model only | No | No | Partial, env-gated scheduling decode if data exists | Remote stream metadata decode is incomplete. | P1 media metadata/search joins |
+| `RemoteStream` | Scheduling read model and local scanner | Partial: Scheduling read model | Yes: local scanner writes remote-stream rows for `.yml`/`.yaml` definition files under the library path | Partial, env-gated scheduling decode if data exists | Remote-stream rows now round-trip from local scans; YAML body fields (`Url`/`Script`/`Duration`/`IsLive`) still default and need a YAML-driven update. | P1 remote-stream YAML field parity |
+| `RemoteStreamMetadata` | Local scanner | No direct read | Yes: local scanner writes a fallback metadata row using the file stem as `Title` | Partial, env-gated scheduling decode if data exists | Title/date rows now write; richer metadata (plot/release date) remains absent until the metadata slice covers remote-stream nfo files. | P1 media metadata/search joins |
 | `RerunCollection` | Domain model only | No | No | No | Rerun collection feature is not persisted. | P4 rerun collections |
 | `RerunHistory` | Domain model only | No | No | No | Rerun history parity is absent. | P4 rerun collections |
 | `Resolution` | Domain model only | No | No | No | Stream/dimension search and transcode decisions cannot use imported rows. | P1 media stream repository |
