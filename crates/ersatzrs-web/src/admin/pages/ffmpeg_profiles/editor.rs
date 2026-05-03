@@ -10,8 +10,7 @@
 //!   newly-created profile's editor at `/ffmpeg/{id}`.
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
@@ -22,6 +21,16 @@ use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, Tex
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/ffmpeg_profiles/editor.module.css");
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ---------------------------------------------------------------------------
 // SSR wrapper
@@ -84,7 +93,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
 /// selected video format.  Within the accordion, VAAPI-specific fields
 /// (device, display, driver, pad mode) appear when `HardwareAcceleration == 3`
 /// and QSV extra-hardware-frames appear when `HardwareAcceleration == 1`.
-#[island]
+#[component]
 fn FfmpegProfileEditorIsland(
     initial_form: FfmpegProfileForm,
     initial_resolutions: Vec<(i64, String)>,
@@ -153,14 +162,12 @@ fn FfmpegProfileEditorIsland(
         async move { copy_ffmpeg_profile(id, new_name).await }
     });
 
-    let navigate = use_navigate();
-    let navigate2 = navigate.clone();
     let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
-                Ok(_) => navigate("/ffmpeg", NavigateOptions::default()),
+                Ok(_) => set_browser_location("/ffmpeg"),
                 Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
             }
         }
@@ -172,7 +179,7 @@ fn FfmpegProfileEditorIsland(
                 Ok(new_id) => {
                     toast.push("Profile copied.", ToastSeverity::Success);
                     copy_open.set(false);
-                    navigate2(&format!("/ffmpeg/{new_id}"), NavigateOptions::default());
+                    set_browser_location(&format!("/ffmpeg/{new_id}"));
                 }
                 Err(e) => toast.push(format!("Copy failed: {e}"), ToastSeverity::Error),
             }
@@ -302,7 +309,9 @@ fn FfmpegProfileEditorIsland(
 
     // ── View ─────────────────────────────────────────────────────────────
     view! {
-        <div class=style::page>
+        <Suspense fallback=|| ()>
+        <form method="post" action="/api/ffmpeg/save" class=style::page>
+            <input type="hidden" name="id" value=profile_id.to_string()/>
             // ── Breadcrumb ────────────────────────────────────────────
             <div class=style::breadcrumb>
                 <a href="/ffmpeg" class=style::back_link>"← FFmpeg Profiles"</a>
@@ -313,6 +322,7 @@ fn FfmpegProfileEditorIsland(
             <div class=style::action_bar>
                 <button
                     class=style::btn_primary
+                    type="submit"
                     disabled=move || save_action.pending().get()
                     on:click=move |_| {
                         save_action.dispatch(build_form());
@@ -325,6 +335,7 @@ fn FfmpegProfileEditorIsland(
                     view! {
                         <button
                             class=style::btn_secondary
+                            type="button"
                             on:click=move |_| {
                                 copy_name.set(format!("{} (Copy)", name.get_untracked()));
                                 copy_open.set(true);
@@ -347,7 +358,7 @@ fn FfmpegProfileEditorIsland(
             <div class=style::section>
                 <h2 class=style::section_title>"General"</h2>
                 <div class=style::form_grid>
-                    <TextField label="Name" value=name/>
+                    <TextField label="Name" value=name name=Some("name")/>
                     <NumberField label="Thread Count (0 = auto)" value=thread_count min=Some(0)/>
                 </div>
                 <SelectField<i64>
@@ -523,6 +534,7 @@ fn FfmpegProfileEditorIsland(
             >
                 <TextField label="New Profile Name" value=copy_name/>
             </Modal>
-        </div>
+        </form>
+        </Suspense>
     }
 }

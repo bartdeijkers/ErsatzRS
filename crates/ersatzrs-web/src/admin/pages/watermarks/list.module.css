@@ -52,6 +52,11 @@
     text-decoration: none;
 }
 .btn-add:hover { background-color: var(--color-primary-h); }
+.btn-add::before {
+    content: "+";
+    font-size: 1.25rem;
+    line-height: 1;
+}
 
 .row-actions {
     display: inline-flex;
@@ -73,6 +78,16 @@
 }
 
 .row-btn-icon:hover { background-color: var(--color-table-hover); }
+
+.row-btn-edit::before { content: "✎"; }
+.row-btn-copy::before { content: "⧉"; }
+.row-btn-delete::before { content: "×"; }
+.row-btn-edit::before,
+.row-btn-copy::before,
+.row-btn-delete::before {
+    font-size: 1.25rem;
+    line-height: 1;
+}
 
 .cell-muted {
     color: var(--color-muted);

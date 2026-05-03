@@ -1,7 +1,5 @@
-use leptos::prelude::*;
-
 /// A curated set of SVG icons (subset of Material / Lucide).
-/// Usage: `<Icon name=IconName::Add/>` or `<Icon name=IconName::Add size="1rem"/>`.
+/// Usage: `<span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>`.
 #[allow(dead_code)] // Variants are reserved for upcoming page components.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IconName {
@@ -32,14 +30,17 @@ pub enum IconName {
     Tune,
 }
 
-#[component]
-pub fn Icon(
-    name: IconName,
-    /// CSS length value for width and height, e.g. "1rem", "1.25rem".
-    #[prop(default = "1.25rem")]
-    size: &'static str,
-) -> impl IntoView {
-    let path = match name {
+/// Returns inline style for a static icon span.
+#[must_use]
+pub fn icon_style(name: IconName, size: &'static str) -> String {
+    let mask = icon_mask_url(icon_path(name));
+    format!(
+        "display:inline-block;width:{size};height:{size};flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:{mask} center / contain no-repeat;-webkit-mask:{mask} center / contain no-repeat"
+    )
+}
+
+fn icon_path(name: IconName) -> &'static str {
+    match name {
         IconName::Add => "M12 5v14M5 12h14",
         IconName::Edit => "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
         IconName::Delete => "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
@@ -65,21 +66,12 @@ pub fn Icon(
         IconName::Download => "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
         IconName::MoreVert => "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
         IconName::Tune => "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
-    };
-
-    view! {
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            style=format!("width:{size};height:{size};flex-shrink:0")
-            aria-hidden="true"
-        >
-            <path d=path/>
-        </svg>
     }
+}
+
+fn icon_mask_url(path: &str) -> String {
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="{path}" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>"#
+    );
+    format!("url(\"data:image/svg+xml,{}\")", urlencoding::encode(&svg))
 }

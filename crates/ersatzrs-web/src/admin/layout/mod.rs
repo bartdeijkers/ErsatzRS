@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 use crate::admin::layout::nav::NavDrawer;
-use crate::admin::ui::primitives::icon::{Icon, IconName};
+use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 mod badges;
 mod nav;
@@ -31,7 +31,7 @@ fn TopBar() -> impl IntoView {
     view! {
         <header class=style::topbar>
             <label for="nav-toggle" class=style::hamburger title="Toggle navigation">
-                <Icon name=IconName::Menu size="1.25rem"/>
+                <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
             </label>
 
             <a href="/" class=style::logo>

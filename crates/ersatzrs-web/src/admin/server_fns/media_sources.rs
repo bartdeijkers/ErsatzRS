@@ -151,7 +151,7 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
 }
 
 #[cfg(feature = "ssr")]
-async fn save_local_library_with_pool(
+pub(crate) async fn save_local_library_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     form: LocalLibraryForm,
 ) -> Result<i64, ServerFnError> {

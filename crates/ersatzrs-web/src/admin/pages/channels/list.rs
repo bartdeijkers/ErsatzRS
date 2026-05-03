@@ -6,7 +6,6 @@ use crate::admin::server_fns::channels::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
-    icon::{Icon, IconName},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
 };
 
@@ -19,7 +18,7 @@ pub fn ChannelsListPage() -> impl IntoView {
     view! { <ChannelsListIsland/> }
 }
 
-#[island]
+#[component]
 fn ChannelsListIsland() -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
@@ -123,36 +122,28 @@ fn ChannelsListIsland() -> impl IntoView {
                     class=style::row_btn_preview
                     title="Preview channel"
                     aria-label="Preview channel"
-                >
-                    <Icon name=IconName::Play size="1.25rem"/>
-                </a>
+                ></a>
                 <a
                     href=format!("/channels/{id}")
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
                     title="Edit channel"
                     aria-label="Edit channel"
-                >
-                    <Icon name=IconName::Edit size="1.25rem"/>
-                </a>
+                ></a>
                 <span
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_disabled)
+                    class=format!("{} {} {}", style::row_btn_icon, style::row_btn_search, style::row_btn_disabled)
                     title="Troubleshoot channel"
                     aria-label="Troubleshoot channel"
                     aria-disabled="true"
-                >
-                    <Icon name=IconName::Search size="1.25rem"/>
-                </span>
+                ></span>
                 <button
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
                     title="Delete channel"
                     aria-label="Delete channel"
                     on:click=move |_| {
                         delete_target.set(Some(ch_clone.clone()));
                         delete_open.set(true);
                     }
-                >
-                    <Icon name=IconName::Delete size="1.25rem"/>
-                </button>
+                ></button>
             </div>
         }
         .into_any()
@@ -162,11 +153,9 @@ fn ChannelsListIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::action_bar>
                 <a href="/channels/add" class=style::btn_add>
-                    <Icon name=IconName::Add size="1.125rem"/>
                     "Add Channel"
                 </a>
                 <a href="/channels/numbers" class=style::btn_numbers>
-                    <Icon name=IconName::Edit size="1.125rem"/>
                     "Edit Numbers"
                 </a>
             </div>

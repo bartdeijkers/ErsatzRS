@@ -7,7 +7,6 @@ use crate::admin::server_fns::watermarks::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     form::TextField,
-    icon::{Icon, IconName},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{use_toast, ToastSeverity},
 };
@@ -115,14 +114,12 @@ pub fn WatermarksListPage() -> impl IntoView {
             <div class=style::row_actions>
                 <a
                     href=format!("/watermarks/{id}")
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
                     title="Edit watermark"
                     aria-label="Edit watermark"
-                >
-                    <Icon name=IconName::Edit size="1.25rem"/>
-                </a>
+                ></a>
                 <button
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_copy)
                     title="Copy watermark"
                     aria-label="Copy watermark"
                     on:click=move |_| {
@@ -130,20 +127,16 @@ pub fn WatermarksListPage() -> impl IntoView {
                         copy_name.set(format!("Copy of {}", r_for_copy.name));
                         copy_open.set(true);
                     }
-                >
-                    <Icon name=IconName::Copy size="1.25rem"/>
-                </button>
+                ></button>
                 <button
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
                     title="Delete watermark"
                     aria-label="Delete watermark"
                     on:click=move |_| {
                         delete_target.set(Some(r_for_delete.clone()));
                         delete_open.set(true);
                     }
-                >
-                    <Icon name=IconName::Delete size="1.25rem"/>
-                </button>
+                ></button>
             </div>
         }
         .into_any()
@@ -160,7 +153,6 @@ pub fn WatermarksListPage() -> impl IntoView {
         <div class=style::page>
             <div class=style::action_bar>
                 <a href="/watermarks/add" class=style::btn_add>
-                    <Icon name=IconName::Add size="1.125rem"/>
                     "Add Watermark"
                 </a>
             </div>
