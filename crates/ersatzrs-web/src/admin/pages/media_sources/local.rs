@@ -199,13 +199,12 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                                 }
                             }).collect::<Vec<_>>()}
                         </select>
-                        {if lib_id != 0 {
-                            view! {
-                                <input type="hidden" name="media_kind" value=initial_form.media_kind.to_string()/>
-                            }.into_any()
-                        } else {
-                            ().into_any()
-                        }}
+                        <input
+                            type="hidden"
+                            name="media_kind"
+                            value=initial_form.media_kind.to_string()
+                            disabled=lib_id == 0
+                        />
                     </div>
 
                     <div class=style::form_section>

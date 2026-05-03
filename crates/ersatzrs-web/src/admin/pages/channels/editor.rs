@@ -15,18 +15,19 @@ pub fn ChannelEditorPage() -> impl IntoView {
     let params = use_params_map();
     let channel_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
-    let data: Resource<ChannelEditorPageData> = Resource::new(channel_id, |id| async move {
-        let form = async move {
-            match id {
-                Some(id) => get_channel_form(id).await.unwrap_or_default(),
-                None => ChannelForm::new_defaults(),
-            }
-        };
-        let profiles = async { list_ffmpeg_profiles_for_select().await.unwrap_or_default() };
-        let fillers = async { list_filler_presets_for_select().await.unwrap_or_default() };
-        let (form, profiles, fillers) = tokio::join!(form, profiles, fillers);
-        (form, profiles, fillers)
-    });
+    let data: Resource<ChannelEditorPageData> =
+        Resource::new_blocking(channel_id, |id| async move {
+            let form = async move {
+                match id {
+                    Some(id) => get_channel_form(id).await.unwrap_or_default(),
+                    None => ChannelForm::new_defaults(),
+                }
+            };
+            let profiles = async { list_ffmpeg_profiles_for_select().await.unwrap_or_default() };
+            let fillers = async { list_filler_presets_for_select().await.unwrap_or_default() };
+            let (form, profiles, fillers) = tokio::join!(form, profiles, fillers);
+            (form, profiles, fillers)
+        });
 
     view! {
         <Suspense fallback=|| view! { <p class=style::loading>"Loading..."</p> }>
@@ -39,13 +40,14 @@ pub fn ChannelEditorPage() -> impl IntoView {
                             initial_fillers=fillers
                         />
                     }
+                    .into_any()
                 })
             }}
         </Suspense>
     }
 }
 
-#[island]
+#[component]
 fn ChannelEditorIsland(
     initial_form: ChannelForm,
     initial_profiles: Vec<(i64, String)>,
@@ -91,12 +93,10 @@ fn ChannelEditorIsland(
         valid
     };
 
-    let page_title = move || {
-        if channel_id != 0 {
-            "Edit Channel"
-        } else {
-            "Add Channel"
-        }
+    let page_title = if channel_id != 0 {
+        "Edit Channel"
+    } else {
+        "Add Channel"
     };
 
     let streaming_mode_items: Vec<(i32, String)> = vec![
@@ -113,15 +113,16 @@ fn ChannelEditorIsland(
     let select_class = format!("{} {}", style::input, style::select);
 
     view! {
-        <div class=style::page>
-            <div class=style::breadcrumb>
-                <a href="/channels" class=style::back_link>"← Channels"</a>
-                <h1 class=style::page_title>{page_title}</h1>
-            </div>
+        <>
+            <div class=style::page>
+                <div class=style::breadcrumb>
+                    <a href="/channels" class=style::back_link>"← Channels"</a>
+                    <h1 class=style::page_title inner_html=page_title></h1>
+                </div>
 
-            <form method="post" action="/api/channels/save">
-            <input type="hidden" name="id" value=channel_id.to_string()/>
-            <div class=style::card>
+                <form method="post" action="/api/channels/save">
+                <input type="hidden" name="id" value=channel_id.to_string()/>
+                <div class=style::card>
                 <div class=style::form_grid>
                     <div class=style::field>
                         <label class=style::label>"Channel Number"</label>
@@ -134,7 +135,10 @@ fn ChannelEditorIsland(
                             prop:value=move || number.get()
                             on:input=move |e| number.set(event_target_value(&e))
                         />
-                        <span class=style::error>{move || number_err.get().unwrap_or_default()}</span>
+                        <span
+                            class=style::error
+                            inner_html=move || number_err.get().unwrap_or_default()
+                        ></span>
                     </div>
                     <div class=style::field>
                         <label class=style::label>"Name"</label>
@@ -147,7 +151,10 @@ fn ChannelEditorIsland(
                             prop:value=move || name.get()
                             on:input=move |e| name.set(event_target_value(&e))
                         />
-                        <span class=style::error>{move || name_err.get().unwrap_or_default()}</span>
+                        <span
+                            class=style::error
+                            inner_html=move || name_err.get().unwrap_or_default()
+                        ></span>
                     </div>
                 </div>
 
@@ -212,12 +219,15 @@ fn ChannelEditorIsland(
                             })
                             .collect_view()}
                     </select>
-                    <span class=style::error>{move || profile_err.get().unwrap_or_default()}</span>
+                    <span
+                        class=style::error
+                        inner_html=move || profile_err.get().unwrap_or_default()
+                    ></span>
                 </div>
 
-                {(!has_profiles).then(|| view! {
-                    <p class=style::no_profiles>"No FFmpeg profiles found. Create one first."</p>
-                })}
+                <p class=style::no_profiles hidden=has_profiles>
+                    "No FFmpeg profiles found. Create one first."
+                </p>
 
                 <div class=style::field>
                     <label class=style::label>"Fallback Filler Preset"</label>
@@ -286,7 +296,8 @@ fn ChannelEditorIsland(
                 </button>
                 <a href="/channels" class=style::cancel_link>"Cancel"</a>
             </div>
-            </form>
-        </div>
+                </form>
+            </div>
+        </>
     }
 }
