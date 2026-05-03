@@ -7,7 +7,8 @@ pub struct LibraryRow {
     pub name: String,
     /// "Local", "Plex", "Jellyfin", or "Emby"
     pub kind: String,
-    /// Raw DB integer: 0=Movies 1=Shows 2=MusicVideos 3=OtherVideos 4=Songs 5=Images 6=RemoteStreams
+    /// Raw DB integer matching `ErsatzTV`'s `LibraryMediaKind`:
+    /// 1=Movies 2=Shows 3=MusicVideos 4=OtherVideos 5=Songs 6=Images 7=RemoteStreams
     pub media_kind: i64,
     /// Populated for remote providers; None for Local.
     pub source_name: Option<String>,
@@ -17,13 +18,13 @@ pub struct LibraryRow {
 impl LibraryRow {
     pub fn media_kind_label(&self) -> &'static str {
         match self.media_kind {
-            0 => "Movies",
-            1 => "Shows",
-            2 => "Music Videos",
-            3 => "Other Videos",
-            4 => "Songs",
-            5 => "Images",
-            6 => "Remote Streams",
+            1 => "Movies",
+            2 => "Shows",
+            3 => "Music Videos",
+            4 => "Other Videos",
+            5 => "Songs",
+            6 => "Images",
+            7 => "Remote Streams",
             _ => "Unknown",
         }
     }
