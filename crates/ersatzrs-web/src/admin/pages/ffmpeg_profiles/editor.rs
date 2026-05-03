@@ -39,16 +39,16 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     #[allow(clippy::type_complexity)]
     let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
         Resource::new(profile_id, |maybe_id| async move {
-            let (resolutions, hw_accels) = tokio::join!(
-                list_resolutions_for_select(),
-                list_supported_hw_accelerations(),
-            );
+            let (resolutions, form) = tokio::join!(list_resolutions_for_select(), async {
+                match maybe_id {
+                    None => Some(FfmpegProfileForm::new_defaults()),
+                    Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
+                }
+            });
             let resolutions = resolutions.unwrap_or_default();
+            let selected_hw = form.as_ref().map(|f| f.hardware_acceleration);
+            let hw_accels = list_supported_hw_accelerations(selected_hw).await;
             let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
-            let form = match maybe_id {
-                None => Some(FfmpegProfileForm::new_defaults()),
-                Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
-            };
             form.map(|f| (f, resolutions, hw_accels))
         });
 

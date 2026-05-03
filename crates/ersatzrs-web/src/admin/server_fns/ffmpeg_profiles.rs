@@ -263,27 +263,72 @@ pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerF
 /// V4L2M2M is excluded (commented out in the upstream handler too).
 #[server]
 #[allow(clippy::unused_async)]
-pub async fn list_supported_hw_accelerations() -> Result<Vec<(i32, String)>, ServerFnError> {
+pub async fn list_supported_hw_accelerations(
+    selected: Option<i32>,
+) -> Result<Vec<(i32, String)>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let capabilities = &state.ffmpeg_runtime.capabilities;
+    Ok(hw_acceleration_select_items(
+        &state.ffmpeg_runtime.capabilities,
+        selected,
+    ))
+}
+
+#[cfg(feature = "ssr")]
+fn hw_acceleration_select_items(
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+    selected: Option<i32>,
+) -> Vec<(i32, String)> {
     let mut result = vec![(0i32, "None".to_string())];
 
-    for (hwaccel, value, label) in [
-        ("qsv", 1, "QSV"),
-        ("cuda", 2, "NVENC"),
-        ("vaapi", 3, "VAAPI"),
-        ("videotoolbox", 4, "VideoToolbox"),
-        ("amf", 5, "AMF"),
-        ("rkmpp", 7, "RKMPP"),
+    for (value, label, supported) in [
+        (
+            1,
+            "QSV",
+            capabilities.has_hwaccel("qsv")
+                || capabilities.has_encoder("h264_qsv")
+                || capabilities.has_encoder("hevc_qsv")
+                || capabilities.has_encoder("av1_qsv"),
+        ),
+        (
+            2,
+            "NVENC",
+            capabilities.has_hwaccel("cuda")
+                || capabilities.has_encoder("h264_nvenc")
+                || capabilities.has_encoder("hevc_nvenc")
+                || capabilities.has_encoder("av1_nvenc"),
+        ),
+        (
+            3,
+            "VAAPI",
+            capabilities.has_hwaccel("vaapi")
+                || capabilities.has_encoder("h264_vaapi")
+                || capabilities.has_encoder("hevc_vaapi")
+                || capabilities.has_encoder("av1_vaapi"),
+        ),
+        (4, "VideoToolbox", capabilities.has_hwaccel("videotoolbox")),
+        (
+            5,
+            "AMF",
+            capabilities.has_encoder("h264_amf")
+                || capabilities.has_encoder("hevc_amf")
+                || capabilities.has_encoder("av1_amf"),
+        ),
+        (7, "RKMPP", capabilities.has_hwaccel("rkmpp")),
     ] {
-        if capabilities.has_hwaccel(hwaccel) {
+        if supported {
             result.push((value, label.to_string()));
         }
     }
 
-    Ok(result)
+    if let Some(selected) = selected {
+        if selected != 0 && !result.iter().any(|(value, _)| *value == selected) {
+            result.push((selected, format!("{} (not available)", hw_label(selected))));
+        }
+    }
+
+    result
 }
 
 /// Loads a profile into [`FfmpegProfileForm`]. Returns `None` if not found.
@@ -678,4 +723,41 @@ pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, Serve
     }
 
     Ok(ersatzrs_infra::db::last_insert_id(result))
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use ersatzrs_ffmpeg::FfmpegCapabilityReport;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn hardware_acceleration_options_include_encoder_backed_gpu_choices() {
+        let capabilities = FfmpegCapabilityReport {
+            hwaccels: BTreeSet::from(["vulkan".to_string()]),
+            encoders: BTreeSet::from(["h264_nvenc".to_string(), "hevc_vaapi".to_string()]),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        let items = hw_acceleration_select_items(&capabilities, None);
+
+        assert!(items.contains(&(0, "None".to_string())));
+        assert!(items.contains(&(2, "NVENC".to_string())));
+        assert!(items.contains(&(3, "VAAPI".to_string())));
+    }
+
+    #[test]
+    fn hardware_acceleration_options_preserve_saved_unavailable_value() {
+        let capabilities = FfmpegCapabilityReport::default();
+
+        let items = hw_acceleration_select_items(&capabilities, Some(2));
+
+        assert_eq!(
+            items,
+            vec![
+                (0, "None".to_string()),
+                (2, "NVENC (not available)".to_string())
+            ]
+        );
+    }
 }

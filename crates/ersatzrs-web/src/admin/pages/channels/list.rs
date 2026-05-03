@@ -56,19 +56,40 @@ fn ChannelsListIsland() -> impl IntoView {
         Column::new("Number", |ch: &ChannelListRow| {
             let n = ch.number.clone();
             let enabled = ch.is_enabled;
+            let show_in_epg = ch.show_in_epg;
+            let label = if !enabled {
+                format!("(D) {n}")
+            } else if !show_in_epg {
+                format!("(H) {n}")
+            } else {
+                n
+            };
+            let title = if !enabled {
+                "Channel disabled"
+            } else if !show_in_epg {
+                "Channel hidden from EPG"
+            } else {
+                ""
+            };
             view! {
-                <span class=if enabled { "" } else { style::cell_disabled }>{n}</span>
+                <span
+                    class=if enabled { "" } else { style::cell_disabled }
+                    title=title
+                >
+                    {label}
+                </span>
             }
             .into_any()
         }),
         Column::new("Logo", |ch: &ChannelListRow| {
             let name = ch.name.clone();
-            let initials = logo_text(&name);
+            let encoded = urlencoding::encode(&name).into_owned();
             view! {
-                <div class=style::logo_cell aria-label=format!("{name} logo")>
-                    <span>{initials}</span>
-                    <small>"Etv"</small>
-                </div>
+                <img
+                    src=format!("/iptv/logos/gen?text={encoded}")
+                    class=style::logo_img
+                    alt=format!("{name} logo")
+                />
             }
             .into_any()
         }),
@@ -200,16 +221,5 @@ fn ChannelsListIsland() -> impl IntoView {
                 })
             }}
         </div>
-    }
-}
-
-fn logo_text(name: &str) -> String {
-    let mut words = name
-        .split_whitespace()
-        .filter_map(|word| word.chars().next());
-    match (words.next(), words.next()) {
-        (Some(first), Some(second)) => format!("{first}{second}").to_uppercase(),
-        (Some(first), None) => first.to_uppercase().to_string(),
-        _ => "TV".to_string(),
     }
 }

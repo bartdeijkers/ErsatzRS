@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-03 (Slice 16 health-check engine closed)
+Last updated: 2026-05-03 (UX/UI Slice 1 closed)
 
 ## Current Phase
 
@@ -319,6 +319,17 @@ ErsatzTV-like row height, divider, pager, switch, logo, language, mode, and
 icon-action spacing, and `artwork/ersatzrs_full.png` is available as the new
 full-width raster wordmark asset.
 
+UX/UI Slice 1 is closed. Channels and watermarks now share the ErsatzTV-style
+top action strip, constrained content area, divider, and icon row actions;
+channel rows render generated logo images via `/iptv/logos/gen` and show
+disabled/hidden number markers. Local library create/update now normalizes
+server filesystem paths before validation, accepts `file://` path input,
+deduplicates normalized paths, and writes atomically. FFmpeg profile edit keeps
+saved hardware acceleration settings visible even when the current runtime
+cannot use them, and the hardware list now considers both reported hwaccels and
+hardware encoder names. Vulkan is documented as a runtime/toolchain capability,
+not an ErsatzTV profile enum value.
+
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
 write coverage improved through ffprobe, local scanning, Jellyfin, Plex, and
@@ -402,6 +413,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-03 | Codex (GPT-5) | Closed UX/UI Slice 1: aligned channel/watermark list layout with ErsatzTV, added generated IPTV logo rendering, fixed local library path normalization/atomic persistence, preserved saved FFmpeg hardware values in the profile editor, and updated UX/parity/deviation docs. |
 | 2026-05-03 | Claude Code (claude-opus-4-7) | Closed Slice 16 health-check engine: added `ProviderConnectivityHealthCheck` reading the maintenance-loop persisted `maintenance.provider_connectivity` poll (with friendly Plex/Jellyfin/Emby `ServerName` lookup), `VaapiDeviceHealthCheck` validating the configured profile `VaapiDevice` exists on disk, exposed `ProviderConnectivityResult`/`PROVIDER_CONNECTIVITY_KEY` for cross-crate use, added a `/system/health` admin page rendering the persisted `health.results` snapshot, and made the navigation health badge combine the persisted parity summary with the existing startup/runtime counts; new infra unit tests for both checks. |
 | 2026-05-02 | Codex (GPT-5) | Closed Slice 20 config and ADR cleanup: wired global watermark/fallback filler config into playout build post-processing, seeded and loaded subsystem logging levels, moved XMLTV block behavior into core/infra, added ADR 0010 for Classic scheduling, and updated parity docs. |
 | 2026-05-02 | Codex (GPT-5) | Closed Slice 19 search hardening: added Lucene-like normalization/modifier behavior, fuzzy/proximity/boost parsing, numeric chapter/duration fields, SQL-backed page maps, image/remote-stream search documents, ADR 0009 dropping Elasticsearch, and updated parity/status docs. |

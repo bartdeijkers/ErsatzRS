@@ -97,6 +97,7 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
+        .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))
         .route("/iptv/channel/{file}", get(iptv::dispatch_channel_request))
         .route(
             "/iptv/session/{channel_number}/hls.m3u8",
