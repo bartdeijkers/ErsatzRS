@@ -361,11 +361,35 @@ pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> 
 }
 
 /// Creates or updates the Jellyfin connection and stores the API key.
+///
+/// Mirrors ErsatzTV's `SaveJellyfinSecretsHandler`: validates the API key by
+/// calling `/System/Info` first, persists the connection with the real server
+/// name, then triggers a background library list refresh + sync. If the
+/// validation call fails the entire save is rejected so the user sees the
+/// error in the form instead of silently storing a bad key.
 #[server]
 pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
+    use ersatzrs_infra::jellyfin::{
+        fetch_server_information, format_jellyfin_auth_header, sync_jellyfin_libraries,
+        JellyfinService,
+    };
 
     let state = expect_context::<AppState>();
+
+    let address = form.address.trim().trim_end_matches('/').to_string();
+    let api_key = form.api_key.trim().to_string();
+    if address.is_empty() {
+        return Err(ServerFnError::new("Address is required."));
+    }
+    if api_key.is_empty() {
+        return Err(ServerFnError::new("API key is required."));
+    }
+
+    let info = fetch_server_information(&address, &api_key)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Could not reach Jellyfin: {e}")))?;
 
     let source_id = if form.source_id == 0 {
         let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
@@ -374,16 +398,19 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(
-            r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName") VALUES (?, 'Jellyfin')"#,
+            r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName", "OperatingSystem")
+               VALUES (?, ?, ?)"#,
         )
         .bind(ms_id)
+        .bind(&info.server_name)
+        .bind(&info.operating_system)
         .execute(&state.pool)
         .await?;
 
         sqlx::query(
             r#"INSERT INTO "JellyfinConnection" ("Address", "JellyfinMediaSourceId") VALUES (?, ?)"#,
         )
-        .bind(&form.address)
+        .bind(&address)
         .bind(ms_id)
         .execute(&state.pool)
         .await?;
@@ -391,12 +418,22 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         ms_id
     } else {
         sqlx::query(
+            r#"UPDATE "JellyfinMediaSource" SET "ServerName" = ?, "OperatingSystem" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&info.server_name)
+        .bind(&info.operating_system)
+        .bind(form.source_id)
+        .execute(&state.pool)
+        .await?;
+
+        sqlx::query(
             r#"UPDATE "JellyfinConnection" SET "Address" = ?
                WHERE "JellyfinMediaSourceId" = ?
                AND "Id" = (SELECT MIN("Id") FROM "JellyfinConnection"
                            WHERE "JellyfinMediaSourceId" = ?)"#,
         )
-        .bind(&form.address)
+        .bind(&address)
         .bind(form.source_id)
         .bind(form.source_id)
         .execute(&state.pool)
@@ -406,12 +443,31 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
     };
 
     sqlx::query(
-        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('jellyfin.current_server_api_key', ?)
-           "#,
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value")
+           VALUES ('jellyfin.current_server_api_key', ?)"#,
     )
-    .bind(&form.api_key)
+    .bind(&api_key)
     .execute(&state.pool)
     .await?;
+
+    // Mirrors ErsatzTV's SynchronizeJellyfinMediaSources channel write: fetch
+    // the library list now so the libraries page is populated immediately
+    // after save.
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: address.clone(),
+        authorization_header: format_jellyfin_auth_header(api_key),
+    };
+    match service.list_libraries(&config).await {
+        Ok(libraries) => {
+            if let Err(e) = sync_jellyfin_libraries(&state.pool, source_id, &libraries).await {
+                tracing::warn!(error = %e, "failed to upsert jellyfin libraries");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to fetch jellyfin libraries after save");
+        }
+    }
 
     Ok(source_id)
 }

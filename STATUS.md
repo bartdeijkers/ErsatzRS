@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-03 (UX/UI Slice 1 closed)
+Last updated: 2026-05-03 (admin islands hydration fixes)
 
 ## Current Phase
 
@@ -399,6 +399,20 @@ parity ahead of the corresponding pages.
 
 ### Known TODOs from Phase 0
 
+- **Admin pages with dead `on:*` handlers (islands hydration gap).** The app
+  uses `hydrate_islands()`, so `on:click` / `on:input` / `on:change` handlers
+  declared at the top level of a `#[component]` page are never wired up in
+  the browser. Libraries (`/media/libraries`) and the Plex sources page
+  (`/media/sources/plex`) are fixed; the same anti-pattern still affects
+  `EmbySourcesPage`, `EmbyConnectionPage`, `EmbyLibrariesPage`,
+  `EmbyPathsPage`, `JellyfinSourcesPage`, `JellyfinConnectionPage`,
+  `JellyfinLibrariesPage`, `JellyfinPathsPage`, `LocalLibrariesPage`,
+  `PlexLibrariesPage`, `PlexPathsPage`, `CollectionsPage`,
+  `SmartCollectionsPage`, `TraktListsPage`, `TraktListEditorPage`,
+  `TrashPage`, `WatermarksListPage`, `FfmpegProfilesListPage`, `BlocksPage`,
+  `PlayoutsPage`, `ChannelsListPage`, and `ChannelEditorPage`. Fix by
+  wrapping the interactive part in a `#[island]` per the
+  `LibrariesPage`/`PlexSourcesPage` pattern.
 - Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.
 - Replace bash `/dev/tcp` HEALTHCHECK with a purpose-built `ersatzrs-healthcheck` binary.
 - `axum = "0.7"` pinned to match `leptos_axum 0.7` — bump both when leptos_axum upgrades to axum 0.8.
@@ -413,6 +427,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-03 | Claude Code (claude-opus-4-7) | Fixed the dead `Scan` / `Deep Scan` buttons on `/media/libraries` (and the `Sign out of Plex` button on `/media/sources/plex`) by wrapping each page's interactive body in a `#[island]`, since `hydrate_islands()` never wires `on:click` declared at the top level of plain `#[component]` pages. Also stabilized the per-row libraries DOM (always-rendered Deep Scan/Scan/spinner toggled via reactive `style:display` and `disabled`) so hydration cannot fall back to inert SSR markup. Documented the broader latent gap in Phase 0 TODOs. |
 | 2026-05-03 | Codex (GPT-5) | Fixed the admin hydration crash by removing the prop-bearing channel editor island from the island hydrator path and keeping the local library media-kind hidden input in a stable SSR/CSR DOM shape. |
 | 2026-05-03 | Codex (GPT-5) | Closed UX/UI Slice 1: aligned channel/watermark list layout with ErsatzTV, added generated IPTV logo rendering, fixed local library path normalization/atomic persistence, preserved saved FFmpeg hardware values in the profile editor, and updated UX/parity/deviation docs. |
 | 2026-05-03 | Claude Code (claude-opus-4-7) | Closed Slice 16 health-check engine: added `ProviderConnectivityHealthCheck` reading the maintenance-loop persisted `maintenance.provider_connectivity` poll (with friendly Plex/Jellyfin/Emby `ServerName` lookup), `VaapiDeviceHealthCheck` validating the configured profile `VaapiDevice` exists on disk, exposed `ProviderConnectivityResult`/`PROVIDER_CONNECTIVITY_KEY` for cross-crate use, added a `/system/health` admin page rendering the persisted `health.results` snapshot, and made the navigation health badge combine the persisted parity summary with the existing startup/runtime counts; new infra unit tests for both checks. |

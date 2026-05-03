@@ -18,6 +18,11 @@ stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.modul
 
 #[component]
 pub fn PlexSourcesPage() -> impl IntoView {
+    view! { <PlexSourcesIsland/> }
+}
+
+#[island]
+fn PlexSourcesIsland() -> impl IntoView {
     let rows: Resource<Vec<PlexSourceRow>> = Resource::new(
         || (),
         |()| async { list_plex_sources().await.unwrap_or_default() },

@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::libraries::list_locked_libraries;
 use crate::admin::server_fns::libraries::{list_libraries, scan_library, LibraryRow};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -8,6 +10,11 @@ stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module
 
 #[component]
 pub fn LibrariesPage() -> impl IntoView {
+    view! { <LibrariesIsland/> }
+}
+
+#[island]
+fn LibrariesIsland() -> impl IntoView {
     let libs: Resource<Vec<LibraryRow>> = Resource::new(
         || (),
         |()| async move { list_libraries().await.unwrap_or_default() },
@@ -29,6 +36,27 @@ pub fn LibrariesPage() -> impl IntoView {
             }
         }
     });
+
+    // Poll the entity locker so each row knows whether its scan task is still
+    // running. Mirrors ETV's `IEntityLocker.OnLibraryChanged` poll loop, but
+    // implemented client-side with `gloo-timers` (no SignalR). The interval
+    // is short enough that the spinner appears responsive but long enough to
+    // avoid hammering SQLite during a scan.
+    let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(ids) = list_locked_libraries().await {
+                        locked.set(ids);
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
+    let is_locked = move |id: i64| locked.with(|ids| ids.contains(&id));
 
     let scanning = move || scan_action.pending().get();
 
@@ -95,39 +123,39 @@ pub fn LibrariesPage() -> impl IntoView {
                                                         </td>
                                                         <td>
                                                             <div class=style::actions>
-                                                                {is_remote
-                                                                    .then(move || {
-                                                                        view! {
-                                                                            <button
-                                                                                class=style::btn_scan
-                                                                                disabled=scanning
-                                                                                on:click=move |_| {
-                                                                                    scan_action
-                                                                                        .dispatch((
-                                                                                            id,
-                                                                                            kind_deep.clone(),
-                                                                                            true,
-                                                                                        ));
-                                                                                }
-                                                                            >
-                                                                                "Deep Scan"
-                                                                            </button>
-                                                                        }
-                                                                    })}
                                                                 <button
                                                                     class=style::btn_scan
-                                                                    disabled=scanning
+                                                                    style:display=move || {
+                                                                        if is_remote { "" } else { "none" }
+                                                                    }
+                                                                    disabled=move || {
+                                                                        scanning() || is_locked(id)
+                                                                    }
                                                                     on:click=move |_| {
-                                                                        scan_action
-                                                                        .dispatch((
-                                                                            id,
-                                                                            kind_scan.clone(),
-                                                                            false,
-                                                                        ));
+                                                                        scan_action.dispatch((id, kind_deep.clone(), true));
+                                                                    }
+                                                                >
+                                                                    "Deep Scan"
+                                                                </button>
+                                                                <button
+                                                                    class=style::btn_scan
+                                                                    disabled=move || {
+                                                                        scanning() || is_locked(id)
+                                                                    }
+                                                                    on:click=move |_| {
+                                                                        scan_action.dispatch((id, kind_scan.clone(), false));
                                                                     }
                                                                 >
                                                                     "Scan"
                                                                 </button>
+                                                                <span
+                                                                    class=style::spinner
+                                                                    style:display=move || {
+                                                                        if is_locked(id) { "inline-block" } else { "none" }
+                                                                    }
+                                                                    title="Scanning…"
+                                                                    aria-label="Scanning"
+                                                                />
                                                             </div>
                                                         </td>
                                                     </tr>

@@ -239,6 +239,15 @@ for commit messages.
 
 ### Fixed
 
+- Admin libraries page (`/media/libraries`) `Scan` and `Deep Scan` buttons,
+  and Plex sources page (`/media/sources/plex`) `Sign out of Plex` button
+  are now wired to their click handlers. The pages were plain `#[component]`
+  views, so the click handlers declared at the top level were dropped on
+  hydration (the app uses `hydrate_islands()`); both interactive bodies are
+  now wrapped in a `#[island]` (`LibrariesIsland`, `PlexSourcesIsland`).
+  The libraries row also keeps a stable DOM (always-rendered Deep Scan/Scan
+  buttons + spinner toggled via reactive `style:display` and `disabled`)
+  so hydration cannot fall back to inert SSR markup.
 - Admin shell sidebar parity: the ErsatzRS logo now appears next to the
   hamburger menu, the top app bar spans the full viewport width above the
   sidebar, the sidebar uses the ErsatzTV gray surface, and sidebar groups

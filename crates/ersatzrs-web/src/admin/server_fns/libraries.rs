@@ -84,7 +84,9 @@ pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
 }
 
 /// Fires a background scan for a single library. Returns immediately.
-/// The actual sync work runs in a spawned tokio task.
+/// The actual sync work runs in a spawned tokio task. The library is marked
+/// as locked in `AppState::entity_locker` for the duration of the scan so the
+/// UI can render an indeterminate spinner while it runs.
 #[server]
 #[allow(clippy::unused_async)]
 pub async fn scan_library(
@@ -96,6 +98,12 @@ pub async fn scan_library(
 
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
+    let locker = state.entity_locker.clone();
+
+    if !locker.lock_library(library_id) {
+        // Already scanning — mirror ETV's no-op when the library is locked.
+        return Ok(());
+    }
 
     tokio::task::spawn(async move {
         macro_rules! log_err {
@@ -138,7 +146,19 @@ pub async fn scan_library(
                 tracing::warn!(kind = other, "unknown library kind in scan_library");
             }
         }
+        locker.unlock_library(library_id);
     });
 
     Ok(())
+}
+
+/// Returns the ids of libraries currently being scanned. Polled by the
+/// libraries page to drive the per-row "scanning" spinner.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.entity_locker.locked_libraries())
 }

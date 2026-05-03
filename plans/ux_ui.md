@@ -24,3 +24,19 @@ to make ErsatzRS behave exactly the same as, or better than, ErsatzTV.
   by the bundled FFmpeg. Vulkan remains a runtime/image capability used by
   FFmpeg filters and packaging, not an ErsatzTV `HardwareAccelerationKind`
   profile enum value.
+
+
+### Slice 2
+
+- [x] Library 'Scan' button now shows an indeterminate spinner while a scan
+  is running, mirroring ErsatzTV's `IEntityLocker`-driven spinner. Server
+  side, scans register the library id with `EntityLocker` for the lifetime
+  of the spawned task; the libraries page polls `list_locked_libraries`
+  every 1.5 s and swaps the row's action buttons for a spinning indicator
+  while the lock is held.
+- [x] Adding a Jellyfin API key now mirrors ErsatzTV's
+  `SaveJellyfinSecretsHandler`: the connection is validated against
+  `/System/Info` before any rows are written, the real `ServerName` and
+  `OperatingSystem` are stored on `JellyfinMediaSource`, and a library list
+  refresh + upsert (via `sync_jellyfin_libraries`) is triggered immediately
+  on save so the libraries page is populated without a manual refresh.
