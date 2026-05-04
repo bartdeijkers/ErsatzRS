@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-03 (admin islands hydration fixes)
+Last updated: 2026-05-04 (scripted admin hydration E2E migration)
 
 ## Current Phase
 
@@ -404,21 +404,26 @@ Tracking the per-page conversion from `#[component]` interactive bodies to
 in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17` and
 `pages/media_sources/plex.rs`.
 
+The first scripted Playwright migration on 2026-05-04 found marker-node
+hydration mismatches on the pages marked ❌ below. Those rows have island
+wiring present, but the browser tests prove their handlers are not reliable
+yet.
+
 | Page                          | Status | Notes                                                          |
 | ----------------------------- | ------ | -------------------------------------------------------------- |
-| `LibrariesPage`               | ✅     | Reference pattern. Lock-state polling.                         |
-| `SearchPage`                  | ✅     |                                                                |
+| `LibrariesPage`               | ❌     | Playwright hydration mismatch; lock-state polling present.      |
+| `SearchPage`                  | ❌     | Playwright hydration mismatch.                                  |
 | `PlexSourcesPage`             | ✅     | OAuth PIN island.                                              |
 | `WatermarksEditorPage`        | ✅     |                                                                |
 | `BlockEditorPage`             | ✅     |                                                                |
 | `YamlEditorPage`              | ✅     |                                                                |
 | `TimelinePage` (`/playouts`)  | ✅     | Read-only SVG island; selection is the gap (Slice F).          |
 | `CollectionsPage`             | ✅     | Autocomplete island.                                           |
-| `ChannelsListPage`            | ✅     | Slice A — `PagedTable` islanding canary worked top-down.       |
-| `FfmpegProfilesListPage`      | ✅     | Slice B — wrapper + island split.                              |
-| `FfmpegProfileEditorPage`     | ✅     | Slice B — inner island annotation flipped.                     |
-| `ChannelEditorPage`           | ✅     | Slice C — inner island annotation flipped.                     |
-| `LocalLibrariesPage`          | ✅     | Slice D — wrapper + island; static HTML add-form unchanged.    |
+| `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
+| `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
+| `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
+| `ChannelEditorPage`           | ❌     | Playwright hydration mismatch.                                  |
+| `LocalLibrariesPage`          | ❌     | Playwright hydration mismatch; static HTML add-form unchanged.  |
 | `JellyfinSourcesPage` etc.    | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `PlayoutsPage` row selection  | ⏳     | Slice F — lift selection to URL query param.                   |
@@ -437,8 +442,8 @@ in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17` and
 | `EmbyLibrariesPage`           | ⏳     |                                                                |
 | `EmbyPathsPage`               | ⏳     |                                                                |
 
-Tick a row when both the wiring change and the matching playbook in
-[TEST.md](TEST.md) have landed.
+Tick a row when both the wiring change and the matching Playwright test in
+[TEST.md](TEST.md) pass.
 
 ### Known TODOs from Phase 0
 
@@ -460,6 +465,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-04 | Codex (GPT-5) | Migrated the admin hydration playbooks from `TEST.md` to `@playwright/test` under `tests/e2e/`, added the SQLite E2E seed fixture, fixed `/ffmpeg/profiles` route precedence, and marked the scripted hydration baseline red because Playwright now catches marker-node mismatches on the migrated pages. |
 | 2026-05-03 | Claude Code (claude-opus-4-7) | Fixed the dead `Scan` / `Deep Scan` buttons on `/media/libraries` (and the `Sign out of Plex` button on `/media/sources/plex`) by wrapping each page's interactive body in a `#[island]`, since `hydrate_islands()` never wires `on:click` declared at the top level of plain `#[component]` pages. Also stabilized the per-row libraries DOM (always-rendered Deep Scan/Scan/spinner toggled via reactive `style:display` and `disabled`) so hydration cannot fall back to inert SSR markup. Documented the broader latent gap in Phase 0 TODOs. |
 | 2026-05-03 | Codex (GPT-5) | Fixed the admin hydration crash by removing the prop-bearing channel editor island from the island hydrator path and keeping the local library media-kind hidden input in a stable SSR/CSR DOM shape. |
 | 2026-05-03 | Codex (GPT-5) | Closed UX/UI Slice 1: aligned channel/watermark list layout with ErsatzTV, added generated IPTV logo rendering, fixed local library path normalization/atomic persistence, preserved saved FFmpeg hardware values in the profile editor, and updated UX/parity/deviation docs. |

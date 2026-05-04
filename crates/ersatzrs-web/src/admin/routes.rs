@@ -71,10 +71,6 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=FfmpegProfileEditorPage
             />
             <Route
-                path=(StaticSegment("ffmpeg"), ParamSegment("id"))
-                view=FfmpegProfileEditorPage
-            />
-            <Route
                 path=(StaticSegment("ffmpeg"), StaticSegment("profiles"))
                 view=FfmpegProfilesListPage
             />
@@ -88,6 +84,10 @@ pub fn AdminRoutes() -> impl IntoView {
             />
             <Route
                 path=(StaticSegment("ffmpeg"), StaticSegment("profiles"), ParamSegment("id"))
+                view=FfmpegProfileEditorPage
+            />
+            <Route
+                path=(StaticSegment("ffmpeg"), ParamSegment("id"))
                 view=FfmpegProfileEditorPage
             />
 

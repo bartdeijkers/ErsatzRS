@@ -55,6 +55,9 @@ node_modules/
 package-lock.json
 dist/
 pkg/
+tests/e2e/.playwright-report/
+tests/e2e/.tmp/
+test-results/
 # CSS bundle rebuilt by build.rs via stylance-cli
 crates/ersatzrs-web/public/bundle.css
 

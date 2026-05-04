@@ -14,7 +14,7 @@ For build commands and the dev loop, see [BUILD.md](BUILD.md).
 | Snapshot         | `insta` in `ersatzrs-ffmpeg`, `ersatzrs-infra`           | Generated FFmpeg argv, filter graphs, playout build round-trips.                |
 | Integration      | `tests/` per crate                                       | Database repositories, external clients (Plex/Jellyfin/Emby/Trakt), ffprobe.    |
 | MySQL backend    | `--features mysql-integration`                           | Same integration tests, run against MariaDB via testcontainers.                 |
-| Hydration smoke  | This file — Playwright MCP playbooks (see below).        | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
+| Hydration smoke  | `@playwright/test` under `tests/e2e/`.                   | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
 | CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, cargo-deny, commitlint, docker bake.                         |
 
 References:
@@ -33,9 +33,12 @@ References:
 - **Local dev**: layers 1–3 by default (`cargo test --workspace`). Add
   `--all-features` to include the MySQL integration locally — it pulls a
   MariaDB image so it is slow on a cold cache.
-- **Hydration smoke (this file)**: agent-driven, runs from a Claude Code
-  session against a live `./run.sh dev` server. Not in CI yet — see
-  "Future: scripted Playwright runner" below.
+- **Hydration smoke**: `npm run test:e2e` runs `@playwright/test` against a
+  live ErsatzRS server. The Playwright config starts `./run.sh build` when no
+  server is already listening on `127.0.0.1:8409`; set `E2E_BASE_URL` to point
+  at an existing server. The runner uses an isolated SQLite db at
+  `tests/e2e/.tmp/ErsatzRS.db` unless `DATABASE_URL` / `ERSATZRS_DB_PATH` are
+  already set.
 
 ## Hydration rules (read before writing islands)
 
@@ -62,209 +65,70 @@ stabilisation. Apply them every time you wire interactive UI:
    `libraries/mod.rs:39-56`: `gloo_timers::future::TimeoutFuture::new(1500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
 
-## Playbook format
+## Admin UI E2E
 
-A playbook is a numbered Markdown sequence the agent runs through the
-`mcp__plugin_playwright_playwright__browser_*` MCP tools. Each playbook is a
-small reproducible script that asserts hydration works and the server fn
-fires.
+The old Markdown playbooks have been migrated to `@playwright/test`:
 
-Template:
+- Config: [playwright.config.ts](playwright.config.ts)
+- Shared fixtures: [tests/e2e/fixtures.ts](tests/e2e/fixtures.ts)
+- Admin hydration suite: [tests/e2e/admin-hydration.spec.ts](tests/e2e/admin-hydration.spec.ts)
+- Seed fixture: [tests/fixtures/seed_admin.sql](tests/fixtures/seed_admin.sql)
 
-```markdown
-## Page: <route>
+Commands:
 
-**Setup:** seed `<fixture-name>` (or `none` if the page does not need data).
+```bash
+# Install the local Playwright dependency once.
+npm install
+npx playwright install chromium
 
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/<route>`
-2. `browser_snapshot` → assert <element> is present and in the expected state.
-3. `browser_click` → <accessibility-name of the control>.
-4. `browser_console_messages` → assert no `failed_to_cast_marker_node`
-   and no uncaught JS errors.
-5. `browser_wait_for` → assert <user-visible side effect> within <N> seconds.
+# Run headless.
+npm run test:e2e
 
-**Acceptance:**
-- Server log (`./run.sh log`) shows <server fn name> invocation.
-- <UI state assertion>.
-- No hydration errors in console.
+# Run headed for debugging.
+npm run test:e2e:headed
 ```
 
-## Per-page playbook index
+The Playwright `page` fixture records browser console errors and page errors,
+then fails the test on hydration-related failures such as
+`failed_to_cast_marker_node`. Tests call `seedAdmin()` before each destructive
+case so each scenario starts from the same SQLite fixture.
 
-Add a row when a slice lands. Link the playbook source if it grows past the
-short form below — long playbooks live in `docs/playbooks/<page>.md`.
+Current baseline: `npx playwright test` starts the server and runs the migrated
+suite, but the specs fail on Leptos hydration marker mismatches before some
+handlers attach. Treat those failures as product bugs in the affected page
+islands, not as harness gaps.
+
+## Per-page E2E index
+
+Add a row when a slice lands. Link to the owning spec and keep the status in
+sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 
 | Route                   | Status   | Playbook                                                                                  |
 | ----------------------- | -------- | ----------------------------------------------------------------------------------------- |
-| `/media/libraries`      | ✅       | Inline below.                                                                             |
-| `/search`               | ✅       | Inline below.                                                                             |
-| `/channels`             | ✅       | Inline below.                                                                             |
-| `/channels/:id`         | ✅       | Inline below.                                                                             |
-| `/channels/add`         | ✅       | Same playbook as `/channels/:id`.                                                         |
-| `/ffmpeg/profiles`      | ✅       | Inline below.                                                                             |
-| `/ffmpeg/profiles/:id`  | ✅       | Inline below.                                                                             |
-| `/media/sources/local`  | ✅       | Inline below.                                                                             |
+| `/media/libraries`      | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/search`               | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/channels`             | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/channels/:id`         | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/channels/add`         | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/ffmpeg/profiles`      | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/ffmpeg/profiles/:id`  | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
+| `/media/sources/local`  | ❌       | `tests/e2e/admin-hydration.spec.ts`; hydration mismatch.                                  |
 | `/media/sources/jellyfin`| TODO    | Awaits mock server.                                                                       |
 | `/media/sources/emby`   | TODO     | Awaits mock server.                                                                       |
 | `/playouts`             | TODO     | Needs URL-driven selection refactor.                                                      |
 
-### Page: `/media/libraries`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`).
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/media/libraries`.
-2. `browser_snapshot` → assert table renders one local library row with the
-   "Scan" button enabled and "Deep Scan" hidden (local library only).
-3. `browser_click` → "Scan" on row 1.
-4. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-5. `browser_wait_for` → toast text "Scan queued" within 2s.
-6. `browser_snapshot` → assert spinner appears on the row (lock polling).
-
-**Acceptance:**
-- `ersatzrs.log` shows `scan_library` invocation with `elapsed_ms` tracing.
-- Spinner clears within ~30s for the small fixture; library row shows
-  updated item count after refetch.
-- No hydration errors.
-
-### Page: `/channels`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`).
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/channels`.
-2. `browser_snapshot` → assert table renders the seeded channel row with
-   "Edit" / "Delete" controls in the actions cell.
-3. `browser_click` → "Delete channel" on row 1.
-4. `browser_snapshot` → assert the `DeleteDialog` is visible and shows the
-   channel name.
-5. `browser_click` → "Delete" inside the dialog.
-6. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-7. `browser_wait_for` → row count decremented and the row no longer present
-   within 2s (the resource refetches via the `delete_action` effect).
-
-**Acceptance:**
-- `ersatzrs.log` shows `delete_channel` invocation.
-- Counter at the top of the table reflects the new total.
-- `Show Disabled` toggle still flips visibility (proves checkbox `on:change`
-  fires post-hydration).
-
-### Page: `/search`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`).
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/search`.
-2. `browser_type` → search input "test".
-3. `browser_press_key` → Enter.
-4. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-5. `browser_wait_for` → result list renders within 2s.
-
-**Acceptance:**
-- `ersatzrs.log` shows `search_media` invocation.
-- Result list contains the seeded item titles.
-
-### Page: `/ffmpeg/profiles`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`) — includes one
-seeded ffmpeg profile.
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/ffmpeg/profiles`.
-2. `browser_snapshot` → assert table renders the seeded profile row with
-   "Edit" / "Delete" buttons.
-3. `browser_click` → "Delete" on row 1.
-4. `browser_snapshot` → assert `DeleteDialog` shows the profile name.
-5. `browser_click` → "Delete" inside the dialog.
-6. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-7. `browser_wait_for` → row disappears within 2s.
-
-**Acceptance:**
-- `ersatzrs.log` shows `delete_ffmpeg_profile` invocation.
-- Total count above the table reflects the new total.
-
-### Page: `/ffmpeg/profiles/:id`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`).
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/ffmpeg/profiles/1`.
-2. `browser_snapshot` → assert form fields populate from the seeded profile;
-   the hardware-acceleration accordion is hidden when `normalize_video` is
-   off and visible when on.
-3. `browser_click` → toggle "Normalize Video" checkbox.
-4. `browser_snapshot` → assert hardware accordion appears (style:display
-   toggles, no DOM remount).
-5. `browser_click` → "Save".
-6. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-7. `browser_wait_for` → toast text "Saved" within 2s.
-
-**Acceptance:**
-- `ersatzrs.log` shows `save_ffmpeg_profile` invocation.
-- Reloading the page preserves the new `normalize_video` value.
-- "Copy Profile" button opens the modal and creates a new profile that
-  navigates to its own editor at `/ffmpeg/profiles/{new_id}`.
-
-### Page: `/channels/:id`
-
-**Setup:** seed `local-library-testdata` (`./run.sh seed`) — includes one
-seeded channel + ffmpeg profile.
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/channels/1`.
-2. `browser_snapshot` → assert form fields populate (number, name, ffmpeg
-   profile dropdown contains seeded profile).
-3. `browser_type` → change "Name" field.
-4. `browser_select_option` → change "Streaming Mode" to "HLS Segmenter".
-5. `browser_click` → "Save".
-6. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-7. `browser_wait_for` → redirect to `/channels` within 2s.
-8. `browser_snapshot` → assert the renamed channel appears in the list.
-
-**Acceptance:**
-- `ersatzrs.log` shows the channel form POST handler invocation.
-- Required-field validation fires before submit if Number, Name, or FFmpeg
-  Profile are empty (no DOM rebuild — error spans toggle via signal).
-- The same playbook applies to `/channels/add` (use `LocalLibraryForm
-  ::new_defaults` defaults; expect a new row to appear in `/channels`
-  after save).
-
-### Page: `/media/sources/local`
-
-**Setup:** none — the page is the entry point for adding a library.
-
-**Steps:**
-1. `browser_navigate` → `http://127.0.0.1:8409/media/sources/local`.
-2. `browser_click` → "+ Add Library".
-3. `browser_type` → fill "Name" with `Test Library`, "Library Paths" with
-   the absolute path to `testdata/`.
-4. `browser_click` → "Add".
-5. `browser_wait_for` → redirect to `/media/sources/local` within 2s.
-6. `browser_snapshot` → assert the new row is present in the table.
-7. `browser_click` → "Delete" on the new row.
-8. `browser_click` → "Delete" inside the dialog.
-9. `browser_console_messages` → assert no `failed_to_cast_marker_node`.
-10. `browser_wait_for` → row disappears within 2s.
-
-**Acceptance:**
-- The add flow uses the static HTML form (no JS required); the delete flow
-  goes through the `LocalLibrariesIsland` and the `DeleteDialog`.
-- `ersatzrs.log` shows `delete_local_library` invocation.
-- After add, `/media/libraries` shows the new library (overlap with the
-  libraries playbook).
-
 ## Fixture strategy
 
-- **Media files** — reuse `testdata/` already in the repo. Do not commit
-  copyrighted media; tiny silent samples only.
+- **Media files** — reuse `tests/fixtures/media/` for E2E fixtures. Do not
+  commit copyrighted media; tiny silent samples only.
 - **Admin database seed** — `tests/fixtures/seed_admin.sql` is the canonical
-  fixture for hydration playbooks. It applies after `sqlx::migrate!` against
-  the SQLite db at `~/.ersatzrs/ErsatzRS.db` (override with
-  `ERSATZRS_DB_PATH`). `./run.sh seed` runs it. Keep it minimal:
-  - 1 local library pointing at `testdata/`.
+  fixture for hydration tests. It applies after `sqlx::migrate!` against
+  the SQLite db selected by `ERSATZRS_DB_PATH`. `./run.sh seed` runs it.
+  Keep it minimal:
+  - 1 local library pointing at `tests/fixtures/media/`.
   - 1 channel.
   - 1 ffmpeg profile.
+  - 1 searchable movie row.
   - 1 sequential playout.
 - **External services (Plex/Jellyfin/Emby/Trakt)** — `httpmock` helper used in
   `ersatzrs-infra` and `ersatzrs-scanner` integration tests. Add a shared
@@ -278,13 +142,5 @@ seeded channel + ffmpeg profile.
    in the relevant crate, follow `docs/how-to/snapshot-tests.md`.
 3. **Repository or external client behaviour** → integration test under
    `crates/<crate>/tests/`, reuse `httpmock` patterns.
-4. **Admin UI behaviour** → add a playbook entry above plus the matching row
-   in the index.
-
-## Future: scripted Playwright runner
-
-When the agent-driven loop becomes a bottleneck, migrate the playbooks to
-`@playwright/test` under `tests/e2e/`. The numbered steps are already in the
-right shape — each becomes a `test()` block, the MCP tool calls map 1:1 to
-the JS Playwright API, and `browser_console_messages` becomes
-`page.on('console', ...)`. Until then, this file is the source of truth.
+4. **Admin UI behaviour** → add or extend a `tests/e2e/*.spec.ts` test plus
+   the matching row in the E2E index above.
