@@ -543,6 +543,7 @@ mod tests {
             library_id: 5,
             ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: false,
+            deep_scan: false,
         }
     }
 
@@ -552,6 +553,7 @@ mod tests {
             library_id: 999,
             ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: true,
+            deep_scan: false,
         }
     }
 

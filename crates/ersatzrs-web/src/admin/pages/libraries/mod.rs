@@ -19,7 +19,6 @@ fn LibrariesIsland() -> impl IntoView {
         || (),
         |()| async move { list_libraries().await.unwrap_or_default() },
     );
-
     let scan_action = Action::new(|(id, kind, deep_scan): &(i64, String, bool)| {
         let id = *id;
         let kind = kind.clone();
@@ -39,9 +38,7 @@ fn LibrariesIsland() -> impl IntoView {
 
     // Poll the entity locker so each row knows whether its scan task is still
     // running. Mirrors ETV's `IEntityLocker.OnLibraryChanged` poll loop, but
-    // implemented client-side with `gloo-timers` (no SignalR). The interval
-    // is short enough that the spinner appears responsive but long enough to
-    // avoid hammering SQLite during a scan.
+    // implemented client-side with `gloo-timers` (no SignalR).
     let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
@@ -57,7 +54,6 @@ fn LibrariesIsland() -> impl IntoView {
         }
     });
     let is_locked = move |id: i64| locked.with(|ids| ids.contains(&id));
-
     let scanning = move || scan_action.pending().get();
 
     view! {
@@ -68,10 +64,6 @@ fn LibrariesIsland() -> impl IntoView {
             }>
                 {move || {
                     libs.get().map(|rows| {
-                        let has_server = rows
-                            .iter()
-                            .any(|r| r.kind == "Plex" || r.kind == "Jellyfin" || r.kind == "Emby");
-
                         if rows.is_empty() {
                             return view! {
                                 <p class=style::empty>
@@ -87,7 +79,7 @@ fn LibrariesIsland() -> impl IntoView {
                                     <thead>
                                         <tr>
                                             <th>"Kind"</th>
-                                            {has_server.then(|| view! { <th>"Server"</th> })}
+                                            <th>"Server"</th>
                                             <th>"Name"</th>
                                             <th>"Media Kind"</th>
                                             <th/>
@@ -102,25 +94,13 @@ fn LibrariesIsland() -> impl IntoView {
                                                 let is_remote = kind != "Local";
                                                 let kind_scan = kind.clone();
                                                 let kind_deep = kind.clone();
+                                                let srv = lib.source_name.clone().unwrap_or_default();
                                                 view! {
                                                     <tr>
                                                         <td>{kind}</td>
-                                                        {has_server
-                                                            .then(|| {
-                                                                let srv = lib
-                                                                    .source_name
-                                                                    .clone()
-                                                                    .unwrap_or_default();
-                                                                view! {
-                                                                    <td class=style::cell_muted>
-                                                                        {srv}
-                                                                    </td>
-                                                                }
-                                                            })}
+                                                        <td class=style::cell_muted>{srv}</td>
                                                         <td>{lib.name.clone()}</td>
-                                                        <td class=style::cell_muted>
-                                                            {lib.media_kind_label()}
-                                                        </td>
+                                                        <td class=style::cell_muted>{lib.media_kind_label()}</td>
                                                         <td>
                                                             <div class=style::actions>
                                                                 <button
@@ -128,9 +108,7 @@ fn LibrariesIsland() -> impl IntoView {
                                                                     style:display=move || {
                                                                         if is_remote { "" } else { "none" }
                                                                     }
-                                                                    disabled=move || {
-                                                                        scanning() || is_locked(id)
-                                                                    }
+                                                                    disabled=move || scanning() || is_locked(id)
                                                                     on:click=move |_| {
                                                                         scan_action.dispatch((id, kind_deep.clone(), true));
                                                                     }
@@ -139,9 +117,7 @@ fn LibrariesIsland() -> impl IntoView {
                                                                 </button>
                                                                 <button
                                                                     class=style::btn_scan
-                                                                    disabled=move || {
-                                                                        scanning() || is_locked(id)
-                                                                    }
+                                                                    disabled=move || scanning() || is_locked(id)
                                                                     on:click=move |_| {
                                                                         scan_action.dispatch((id, kind_scan.clone(), false));
                                                                     }

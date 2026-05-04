@@ -397,22 +397,55 @@ the summary below is the readiness view.
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
 
+### Admin UI Hydration Parity
+
+Tracking the per-page conversion from `#[component]` interactive bodies to
+`#[island]`. See [TEST.md](TEST.md) hydration rules and the reference patterns
+in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17` and
+`pages/media_sources/plex.rs`.
+
+| Page                          | Status | Notes                                                          |
+| ----------------------------- | ------ | -------------------------------------------------------------- |
+| `LibrariesPage`               | ✅     | Reference pattern. Lock-state polling.                         |
+| `SearchPage`                  | ✅     |                                                                |
+| `PlexSourcesPage`             | ✅     | OAuth PIN island.                                              |
+| `WatermarksEditorPage`        | ✅     |                                                                |
+| `BlockEditorPage`             | ✅     |                                                                |
+| `YamlEditorPage`              | ✅     |                                                                |
+| `TimelinePage` (`/playouts`)  | ✅     | Read-only SVG island; selection is the gap (Slice F).          |
+| `CollectionsPage`             | ✅     | Autocomplete island.                                           |
+| `ChannelsListPage`            | ✅     | Slice A — `PagedTable` islanding canary worked top-down.       |
+| `FfmpegProfilesListPage`      | ✅     | Slice B — wrapper + island split.                              |
+| `FfmpegProfileEditorPage`     | ✅     | Slice B — inner island annotation flipped.                     |
+| `ChannelEditorPage`           | ✅     | Slice C — inner island annotation flipped.                     |
+| `LocalLibrariesPage`          | ✅     | Slice D — wrapper + island; static HTML add-form unchanged.    |
+| `JellyfinSourcesPage` etc.    | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
+| `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
+| `PlayoutsPage` row selection  | ⏳     | Slice F — lift selection to URL query param.                   |
+| `BlocksPage`                  | ⏳     | Group add/delete buttons.                                      |
+| `WatermarksListPage`          | ⏳     | DeleteDialog action.                                           |
+| `TraktListsPage`              | ⏳     |                                                                |
+| `TraktListEditorPage`         | ⏳     |                                                                |
+| `SmartCollectionsPage`        | ⏳     |                                                                |
+| `TrashPage`                   | ⏳     |                                                                |
+| `PlexLibrariesPage`           | ⏳     |                                                                |
+| `PlexPathsPage`               | ⏳     |                                                                |
+| `JellyfinConnectionPage`      | ⏳     |                                                                |
+| `JellyfinLibrariesPage`       | ⏳     |                                                                |
+| `JellyfinPathsPage`           | ⏳     |                                                                |
+| `EmbyConnectionPage`          | ⏳     |                                                                |
+| `EmbyLibrariesPage`           | ⏳     |                                                                |
+| `EmbyPathsPage`               | ⏳     |                                                                |
+
+Tick a row when both the wiring change and the matching playbook in
+[TEST.md](TEST.md) have landed.
+
 ### Known TODOs from Phase 0
 
-- **Admin pages with dead `on:*` handlers (islands hydration gap).** The app
-  uses `hydrate_islands()`, so `on:click` / `on:input` / `on:change` handlers
-  declared at the top level of a `#[component]` page are never wired up in
-  the browser. Libraries (`/media/libraries`) and the Plex sources page
-  (`/media/sources/plex`) are fixed; the same anti-pattern still affects
-  `EmbySourcesPage`, `EmbyConnectionPage`, `EmbyLibrariesPage`,
-  `EmbyPathsPage`, `JellyfinSourcesPage`, `JellyfinConnectionPage`,
-  `JellyfinLibrariesPage`, `JellyfinPathsPage`, `LocalLibrariesPage`,
-  `PlexLibrariesPage`, `PlexPathsPage`, `CollectionsPage`,
-  `SmartCollectionsPage`, `TraktListsPage`, `TraktListEditorPage`,
-  `TrashPage`, `WatermarksListPage`, `FfmpegProfilesListPage`, `BlocksPage`,
-  `PlayoutsPage`, `ChannelsListPage`, and `ChannelEditorPage`. Fix by
-  wrapping the interactive part in a `#[island]` per the
-  `LibrariesPage`/`PlexSourcesPage` pattern.
+- **Admin pages with dead `on:*` handlers (islands hydration gap).** Tracking
+  is now in the "Admin UI Hydration Parity" table above. The fix pattern is
+  documented in [TEST.md](TEST.md) and proven on `LibrariesPage` /
+  `PlexSourcesPage`. Each row is one slice; ship wiring + playbook together.
 - Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.
 - Replace bash `/dev/tcp` HEALTHCHECK with a purpose-built `ersatzrs-healthcheck` binary.
 - `axum = "0.7"` pinned to match `leptos_axum 0.7` — bump both when leptos_axum upgrades to axum 0.8.

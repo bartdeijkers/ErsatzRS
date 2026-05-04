@@ -18,7 +18,7 @@ pub fn ChannelsListPage() -> impl IntoView {
     view! { <ChannelsListIsland/> }
 }
 
-#[component]
+#[island]
 fn ChannelsListIsland() -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));

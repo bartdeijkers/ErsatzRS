@@ -100,12 +100,16 @@ pub async fn scan_library(
     let pool = state.pool.clone();
     let locker = state.entity_locker.clone();
 
+    tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
+
     if !locker.lock_library(library_id) {
-        // Already scanning — mirror ETV's no-op when the library is locked.
+        tracing::info!(library_id, "scan_library: already locked, no-op");
         return Ok(());
     }
 
     tokio::task::spawn(async move {
+        let started = std::time::Instant::now();
+        tracing::info!(library_id, kind = %kind, "library scan started");
         macro_rules! log_err {
             ($res:expr) => {
                 if let Err(e) = $res {
@@ -147,6 +151,11 @@ pub async fn scan_library(
             }
         }
         locker.unlock_library(library_id);
+        tracing::info!(
+            library_id,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "library scan finished"
+        );
     });
 
     Ok(())

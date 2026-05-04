@@ -14,6 +14,11 @@ const PAGE_SIZE: u32 = 25;
 
 #[component]
 pub fn FfmpegProfilesListPage() -> impl IntoView {
+    view! { <FfmpegProfilesListIsland/> }
+}
+
+#[island]
+fn FfmpegProfilesListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
     let rows_resource: Resource<Vec<FfmpegProfileListRow>> = Resource::new(

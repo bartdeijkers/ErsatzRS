@@ -47,7 +47,7 @@ pub fn ChannelEditorPage() -> impl IntoView {
     }
 }
 
-#[component]
+#[island]
 fn ChannelEditorIsland(
     initial_form: ChannelForm,
     initial_profiles: Vec<(i64, String)>,

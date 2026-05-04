@@ -17,6 +17,11 @@ stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.modul
 
 #[component]
 pub fn LocalLibrariesPage() -> impl IntoView {
+    view! { <LocalLibrariesIsland/> }
+}
+
+#[island]
+fn LocalLibrariesIsland() -> impl IntoView {
     let rows: Resource<Vec<LocalLibraryRow>> = Resource::new(
         || (),
         |()| async { list_local_libraries().await.unwrap_or_default() },

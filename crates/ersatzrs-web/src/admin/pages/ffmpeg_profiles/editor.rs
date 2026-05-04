@@ -93,7 +93,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
 /// selected video format.  Within the accordion, VAAPI-specific fields
 /// (device, display, driver, pad mode) appear when `HardwareAcceleration == 3`
 /// and QSV extra-hardware-frames appear when `HardwareAcceleration == 1`.
-#[component]
+#[island]
 fn FfmpegProfileEditorIsland(
     initial_form: FfmpegProfileForm,
     initial_resolutions: Vec<(i64, String)>,
