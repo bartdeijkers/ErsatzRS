@@ -57,10 +57,10 @@ point to this ADR when explaining the dropped backend.
 
 ## References
 
-- [Master plan](../../plans/sequential-dancing-valiant.md)
-- [Non-web parity gaps](../../plans/non-web-parity-gaps-2026-04-26.md)
+- [Project contracts and status](../../plans/INDEX.md)
+- [Current phase status](../../STATUS.md)
 - [Parity matrix](../reference/parity-matrix.md)
-- `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Search/LuceneSearchIndex.cs`
-- `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Search/SearchQueryParser.cs`
-- `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Search/CustomMultiFieldQueryParser.cs`
-- `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Search/ElasticSearchIndex.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/LuceneSearchIndex.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/SearchQueryParser.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/CustomMultiFieldQueryParser.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/ElasticSearchIndex.cs`

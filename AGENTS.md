@@ -5,9 +5,17 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ## Project
 
-ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](/home/bart/ErsatzTV/) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
+ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
 
-The authoritative implementation plan lives at **[/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md](/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md)** - read it before starting non-trivial work. It contains the phase breakdown, crate layout, risks, and per-phase verification criteria.
+The authoritative project state lives across three documents - read the
+relevant ones before starting non-trivial work:
+
+- **[STATUS.md](STATUS.md)** for the current phase, checklist, gaps, and the
+  session log.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** for the crate layout and
+  dependency rules.
+- **[plans/INDEX.md](plans/INDEX.md)** for locked decisions, the contract
+  index, and deferred work.
 
 ## Current status
 
@@ -23,12 +31,11 @@ health-check engine current whenever porting work changes FFmpeg capabilities,
 hardware acceleration support, schema readiness, media item state handling,
 metadata persistence, schedules, or provider availability; it is an explicit
 indicator for ErsatzTV port completeness. The next priority is broadening
-health / troubleshooting coverage and the remaining Phase 7 hardening items
-from the master plan. See [STATUS.md](STATUS.md) for the current checklist and
-session log.
+health / troubleshooting coverage and the remaining Phase 7 hardening items.
+See [STATUS.md](STATUS.md) for the current checklist and session log.
 
-When adding code, follow the workspace layout from the plan's architecture and
-crate-layout section.
+When adding code, follow the workspace layout in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Commands
 
@@ -149,26 +156,27 @@ indicator of ErsatzTV parity.
 - **UI:** Leptos (full-stack Rust, SSR + islands hydration). Start server-rendered; add interactivity only where needed.
 - **FFmpeg integration:** CLI spawn via `tokio::process::Command` - same model as ErsatzTV's `CliWrap` usage. **No libav bindings.** FFmpeg 8.1 is a hard runtime requirement (for the `drawvg` filter); detect on startup and fail fast on older versions.
 - **Graphics engine:** use FFmpeg 8.1's `drawvg` filter with SVG templates in `assets/` as the replacement for ErsatzTV's `ScriptGraphicsElement` + external renderer pipe. This is the main "why Rust rewrite" win - do not reintroduce an external graphics process.
-- **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of [TvContext.cs](/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs) (99 DbSets) and evolve from there.
+- **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` (99 DbSets) and evolve from there.
 - **Web host:** `axum` + `tower` + `tokio`. Leptos mounts via `leptos_axum`.
 - **CQRS:** no MediatR equivalent - plain `async fn` handlers in `ersatzrs-app`, repository traits in `ersatzrs-core`, sqlx impls in `ersatzrs-infra`.
-- **Scheduling:** three engines to port from [ErsatzTV.Core/Scheduling/](/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/) behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), and Scripted (`mlua` for Lua 5.4).
+- **Scheduling:** three engines to port from `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), and Scripted (`mlua` for Lua 5.4).
 - **Binaries:** `ersatzrs-web` (server) and `ersatzrs-scanner` (library scanner) - two binaries sharing the core crates.
 
 ## Porting workflow
 
 This is primarily a porting project, not greenfield design. When implementing a feature:
 
-1. **Find the ErsatzTV source first.** The plan's critical-file table maps features to the authoritative C# files under `/home/bart/ErsatzTV/`. Read the C# before writing Rust.
+1. **Find the ErsatzTV source first.** The critical-file table in [PORTING.md](PORTING.md) maps features to the authoritative C# files under `$ERSATZTV_SRC/`. Read the C# before writing Rust.
 2. **Preserve patterns, not syntax.** ErsatzTV's FFmpeg pipeline builders, filter label routing (`ComplexFilter.cs`), and `ffconcat`/`resetpts` concat handling are version-agnostic and should be mirrored closely in structure. LanguageExt `Option`/`Either` map to native `Option`/`Result`; `anyhow`/`thiserror` for errors. Follow the Rust ↔ C# parity and SQL rules in [STYLE.md](STYLE.md) — in particular, keep ErsatzTV JSON shapes, database identifier casing, and EF-style `PK_/FK_/IX_` names intact.
 3. **Snapshot-test generated FFmpeg argv** the way ErsatzTV's `ErsatzTV.FFmpeg.Tests` does - use `insta`. This is the primary regression gate for the pipeline crate.
 4. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, ErsatzRS should emit a `drawvg` filter node instead.
 
 ## Reference paths (on this machine)
 
-- ErsatzTV source tree: `/home/bart/ErsatzTV/`
-- Implementation plan: `/home/bart/ErsatzRS/plans/sequential-dancing-valiant.md`
-- HDHR protocol notes (internal to ErsatzTV repo): `/home/bart/ErsatzTV/hdhr.md`
+- ErsatzTV source tree: `$ERSATZTV_SRC/` (see [PORTING.md](PORTING.md) for the env-var contract)
+- Project contract index: [plans/INDEX.md](plans/INDEX.md)
+- Current phase status: [STATUS.md](STATUS.md)
+- HDHR protocol notes (internal to ErsatzTV repo): `$ERSATZTV_SRC/hdhr.md`
 
 ## Session Handoff
 

@@ -130,7 +130,8 @@ POST; drawvg placement preview (320×180 PNG via FFmpeg, debounced 400 ms).
 Phase 6.7 delivered the FFmpeg Profile editor.
 
 **Phase 7 — in progress.** Full HLS parity is intentionally scheduled into
-Phase 7 rather than Phase 5; see `plans/defer-hls-parity-to-phase-7.md`.
+Phase 7 rather than Phase 5; see the Phase 7 slice log below for the current
+HLS port progress.
 
 Phase 7 Slice 1 through Slice 4 are landed. Slice 1 ported the HLS entry surface:
 `/iptv/channels.m3u` emits mode-aware URL suffixes (HLS segmenter →

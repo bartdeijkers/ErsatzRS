@@ -9,7 +9,7 @@ This is a read-only workflow.
 
 ## Workflow
 
-1. Read the requested source file or directory under `/home/bart/ErsatzTV/`.
+1. Read the requested source file or directory under `$ERSATZTV_SRC/`.
 2. Identify public types, methods, dependencies, and collaborators.
 3. Explain where the code sits in ErsatzTV's architecture.
 4. Call out behavior that matters for ErsatzRS parity.

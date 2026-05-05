@@ -56,8 +56,8 @@ final Slice 21 import verification.
 
 ## References
 
-- [Master plan](../../plans/sequential-dancing-valiant.md)
-- [Non-web parity gaps](../../plans/non-web-parity-gaps-2026-04-26.md)
+- [Project contracts and status](../../plans/INDEX.md)
+- [Current phase status](../../STATUS.md)
 - [Parity matrix](../reference/parity-matrix.md)
-- `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/`
-- `/home/bart/ErsatzTV/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`
+- `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutBuilder.cs`
