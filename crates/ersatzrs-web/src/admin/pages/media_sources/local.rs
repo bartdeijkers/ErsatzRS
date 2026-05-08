@@ -94,21 +94,21 @@ fn LocalLibrariesIsland() -> impl IntoView {
                 row_actions=Some(row_actions)
             />
 
-            {move || {
-                delete_target.get().map(|r| {
-                    let name = r.name.clone();
-                    view! {
-                        <DeleteDialog
-                            open=delete_open
-                            entity_name=name
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed { delete_action.dispatch(r.id); }
-                                else { delete_open.set(false); }
-                            })
-                        />
+            // DeleteDialog is always rendered; visibility is controlled via `open`.
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|r| r.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(r) = delete_target.get_untracked() {
+                        if confirmed { delete_action.dispatch(r.id); }
+                        else { delete_open.set(false); }
+                    } else {
+                        delete_open.set(false);
                     }
                 })
-            }}
+            />
         </div>
         </Suspense>
     }

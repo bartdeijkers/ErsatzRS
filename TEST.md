@@ -51,6 +51,9 @@ stabilisation. Apply them every time you wire interactive UI:
    always-render plus `style:display=move || if cond { "" } else { "none" }` and
    `disabled=move || !cond`. Conditional sub-trees crash hydration with
    `failed_to_cast_marker_node`. **Never use `<Show>` inside `#[island]`.**
+   This applies to `#[component]`s called inside islands too (e.g. `ItemEditor` inside
+   `BlockEditorIsland`). The `Modal` and `DeleteDialog` primitives use `style:display`
+   internally — never reintroduce `<Show>` in them.
    Reference: `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs`.
 3. **No prop-bearing islands across `Suspense` boundaries.** If the parent
    page hydrates props from a server resource, have the island own a
@@ -59,10 +62,11 @@ stabilisation. Apply them every time you wire interactive UI:
    and deserialized immediately on the client. Pass only a plain id (e.g. `i64`)
    from the page wrapper to the island. Reference: `ChannelEditorIsland` and
    `FfmpegProfileEditorIsland`.
-4. **`DeleteDialog` always rendered.** Use `Signal<String>` for `entity_name` and
-   keep the dialog in the DOM at all times — control visibility via the `open:
-   RwSignal<bool>` signal. Never conditionally render a dialog via
-   `delete_target.get().map(|...| view!{<DeleteDialog .../>})`.
+4. **`DeleteDialog` always rendered.** `DeleteDialog` takes `entity_name: Signal<String>`
+   (a reactive signal, not a `String`). Keep the dialog in the DOM at all times — control
+   visibility via the `open: RwSignal<bool>` signal. Never conditionally render a dialog via
+   `delete_target.get().map(|...| view!{<DeleteDialog .../>})`. Derive the name as
+   `Signal::derive(move || delete_target.get().map(|t| t.name.clone()).unwrap_or_default())`.
 5. **Server-state polling pattern.** When the UI needs a server-driven signal
    (e.g. lock state), copy the wasm32-gated `Effect` from
    `libraries/mod.rs:39-56`: `gloo_timers::future::TimeoutFuture::new(1500)`
@@ -96,9 +100,17 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/ffmpeg/profiles`       | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/ffmpeg/profiles/:id`   | ✅     | Island owns blocking resource, no Suspense wrapper.                     |
 | `/media/sources/local`   | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
-| `/media/sources/jellyfin`| TODO   | Awaits mock server.                                                     |
-| `/media/sources/emby`    | TODO   | Awaits mock server.                                                     |
+| `/media/sources/jellyfin`| ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
+| `/media/sources/emby`    | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/playouts`              | TODO   | Needs URL-driven selection refactor.                                    |
+| `/media/sources/plex`    | ✅     | Stable DOM shape, `PlexSignInIsland` all-arms always rendered.          |
+| `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered.                  |
+| `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`.                    |
+| `/playouts/sequential/:id`| ✅    | Stable DOM shape, validation error banner always rendered.              |
+| `/watermarks`            | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
+| `/watermarks/:id`        | ✅     | Stable DOM shape, all conditional sections via `style:display`.         |
+| `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
+| `/media/collections/:id` | ✅     | `MembersSection` autocomplete list via `style:display`.                 |
 
 ## Fixture strategy
 

@@ -213,7 +213,7 @@ pub fn ComponentsPage() -> impl IntoView {
                 </Modal>
                 <DeleteDialog
                     open=delete_open
-                    entity_name="News Channel".to_string()
+                    entity_name=Signal::derive(|| "News Channel".to_string())
                     on_confirm=Callback::new(move |confirmed| {
                         if confirmed {
                             toast.push("Channel deleted.", ToastSeverity::Success);

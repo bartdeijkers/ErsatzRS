@@ -190,25 +190,25 @@ fn ChannelsListIsland() -> impl IntoView {
                 </div>
             </section>
 
-            {move || {
-                delete_target.get().map(|ch| {
-                    let name = ch.name.clone();
-                    let id = ch.id;
-                    view! {
-                        <DeleteDialog
-                            open=delete_open
-                            entity_name=name
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(id);
-                                } else {
-                                    delete_open.set(false);
-                                }
-                            })
-                        />
+            // DeleteDialog is always rendered; visibility is controlled via `open`.
+            // A stable DOM shape is required to avoid failed_to_cast_marker_node on hydration.
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|ch| ch.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(ch) = delete_target.get_untracked() {
+                        if confirmed {
+                            delete_action.dispatch(ch.id);
+                        } else {
+                            delete_open.set(false);
+                        }
+                    } else {
+                        delete_open.set(false);
                     }
                 })
-            }}
+            />
         </div>
     }
 }

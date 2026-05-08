@@ -114,7 +114,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
 
             <DeleteDialog
                 open=delete_open
-                entity_name=Signal::derive(move || delete_name.get()).get()
+                entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         if let Some(p) = delete_target.get_untracked() {
