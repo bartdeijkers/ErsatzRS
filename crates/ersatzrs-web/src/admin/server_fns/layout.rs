@@ -56,15 +56,27 @@ pub struct AdminHealthSnapshot {
 #[server]
 pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError> {
     use crate::host::state::AppState;
-    use ersatzrs_core::health::HealthCheckStatus as S;
-    use ersatzrs_infra::health::SqlHealthCheckStore;
+    use ersatzrs_core::health::{HealthCheckStatus as S, HealthCheckSummary};
+    use ersatzrs_infra::health::{make_health_check_service, SqlHealthCheckStore};
 
     let state = expect_context::<AppState>();
     let store = SqlHealthCheckStore::new(state.pool.clone());
-    let results = store.load_results().await.unwrap_or_default();
-    let summary = store.load_summary().await.unwrap_or_default();
+
+    let mut results = store.load_results().await.unwrap_or_default();
+    let mut summary = store.load_summary().await.unwrap_or_default();
+    if results.is_empty() {
+        let service = make_health_check_service(
+            state.pool.clone(),
+            state.ffmpeg_runtime.as_ref().clone(),
+            state.system_startup.schema_status.clone(),
+        );
+        results = service.perform_health_checks().await;
+        summary = HealthCheckSummary::from_results(&results);
+    }
+
     let rows = results
         .into_iter()
+        .filter(|result| result.status != S::NotApplicable)
         .map(|result| {
             let status = match result.status {
                 S::Pass => "Pass",

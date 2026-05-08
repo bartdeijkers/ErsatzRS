@@ -96,7 +96,7 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
 #[component]
 fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
     view! {
-        <details class=style::nav_group>
+        <details class=style::nav_group open>
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
                     <span>"Support"</span>

@@ -48,7 +48,6 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
         <table style="width:100%;border-collapse:collapse;font-size:0.875rem">
             <thead>
                 <tr style="border-bottom:1px solid var(--color-border);color:var(--color-gray-300);text-align:left">
-                    <th style="padding:0.5rem 0.75rem;font-weight:600">"Status"</th>
                     <th style="padding:0.5rem 0.75rem;font-weight:600">"Check"</th>
                     <th style="padding:0.5rem 0.75rem;font-weight:600">"Message"</th>
                 </tr>
@@ -72,17 +71,25 @@ fn render_row(row: AdminHealthRow) -> AnyView {
 
     view! {
         <tr style="border-bottom:1px solid var(--color-border-subtle)">
-            <td style="padding:0.5rem 0.75rem;vertical-align:top">
-                <span style=format!("color:{color};font-weight:600")>{row.status}</span>
-            </td>
             <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-100)">
-                {row.title}
+                <div style="align-items:center;display:flex;gap:0.5rem">
+                    <span
+                        aria-label=row.status.clone()
+                        title=row.status
+                        style=format!("background:{color};border-radius:999px;display:inline-block;flex:0 0 auto;height:0.65rem;width:0.65rem")
+                    ></span>
+                    <span>{row.title}</span>
+                </div>
             </td>
             <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-300)">
-                {message}
-                {link.map(|href| view! {
-                    " "<a href=href.clone() target="_blank" rel="noopener" style="color:var(--color-primary)">"More"</a>
-                })}
+                {match link {
+                    Some(href) => view! {
+                        <a href=href.clone() target=link_target(&href) rel="noopener" style="color:var(--color-primary)">
+                            {message}
+                        </a>
+                    }.into_any(),
+                    None => view! { <span>{message}</span> }.into_any(),
+                }}
             </td>
         </tr>
     }
@@ -91,10 +98,18 @@ fn render_row(row: AdminHealthRow) -> AnyView {
 
 fn status_color(status: &str) -> &'static str {
     match status {
-        "Fail" => "var(--color-error)",
-        "Warning" => "var(--color-warning)",
-        "Info" => "var(--color-primary)",
-        "Pass" => "var(--color-success)",
+        "Fail" => "var(--color-error, #f44336)",
+        "Warning" => "var(--color-warning, #ff9800)",
+        "Info" => "var(--color-primary, #00c0c0)",
+        "Pass" => "var(--color-success, #4caf50)",
         _ => "var(--color-muted)",
+    }
+}
+
+fn link_target(href: &str) -> &'static str {
+    if href.starts_with("http://") || href.starts_with("https://") {
+        "_blank"
+    } else {
+        "_self"
     }
 }

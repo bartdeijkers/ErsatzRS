@@ -6,10 +6,7 @@ use super::style;
 pub(super) fn PlayoutWarningBadge() -> impl IntoView {
     use crate::admin::server_fns::layout::count_playout_warnings;
 
-    let count = Resource::new(
-        || (),
-        |()| async move { count_playout_warnings().await.unwrap_or(0) },
-    );
+    let count = LocalResource::new(|| async move { count_playout_warnings().await.unwrap_or(0) });
 
     // Always render the span; hide it when count == 0 to keep a stable DOM shape.
     view! {
@@ -35,10 +32,8 @@ pub(super) fn PlayoutWarningBadge() -> impl IntoView {
 pub(super) fn HealthBadge() -> impl IntoView {
     use crate::admin::server_fns::layout::count_health_issues;
 
-    let issues = Resource::new(
-        || (),
-        |()| async move { count_health_issues().await.unwrap_or((0, 0)) },
-    );
+    let issues =
+        LocalResource::new(|| async move { count_health_issues().await.unwrap_or((0, 0)) });
 
     // Always render both spans; show at most one at a time via style:display.
     // Error span takes priority over warnings span when both are non-zero.
