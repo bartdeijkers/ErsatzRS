@@ -40,7 +40,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 leptos_axum = "0.8"
 sqlx = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
-quick-xml = "0.37"
+quick-xml = "0.39"
 base64 = "0.22.1"
 tempfile = "3.27.0"
 jsonwebtoken = "9"
