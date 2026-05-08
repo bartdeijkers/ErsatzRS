@@ -55,8 +55,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
                 }
             });
             let resolutions = resolutions.unwrap_or_default();
-            let selected_hw = form.as_ref().map(|f| f.hardware_acceleration);
-            let hw_accels = list_supported_hw_accelerations(selected_hw).await;
+            let hw_accels = list_supported_hw_accelerations().await;
             let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
             form.map(|f| (f, resolutions, hw_accels))
         });
