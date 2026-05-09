@@ -85,6 +85,51 @@ Trade-offs:
   generates more codegen artifacts. On WSL2, `cargo clean` periodically (and
   consider `cargo install cargo-sweep && cargo sweep --time 30`).
 
+## Cross-compiling
+
+ErsatzRS targets the same six RIDs as ErsatzTV (`linux-x64`, `linux-arm64`,
+`linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). The targets are pinned in
+[`rust-toolchain.toml`](rust-toolchain.toml) so `rustup` installs all of them
+on first use.
+
+For the targets the host can't compile natively, use
+[`cross`](https://github.com/cross-rs/cross). Configuration lives in
+[`Cross.toml`](Cross.toml). `cross` requires a working Docker or Podman.
+
+```bash
+cargo install cross --git https://github.com/cross-rs/cross --locked
+
+# Linux ARM64 (linux-arm64)
+cross build --workspace --target aarch64-unknown-linux-gnu
+
+# Linux ARMv7 (linux-arm)
+cross build --workspace --target armv7-unknown-linux-gnueabihf
+
+# Windows x86-64 (win-x64) — uses MinGW for cross-from-Linux verification.
+# Native Windows CI runners use the MSVC target instead.
+cross build --workspace --target x86_64-pc-windows-gnu
+```
+
+macOS targets are **not** supported by `cross`. Build them on a real macOS
+host (or `macos-latest` / `macos-13` GitHub runners):
+
+```bash
+cargo build --workspace --target aarch64-apple-darwin   # osx-arm64
+cargo build --workspace --target x86_64-apple-darwin    # osx-x64
+```
+
+Notes:
+
+- The workspace uses `reqwest` with `rustls-tls` only; no OpenSSL native libs
+  are needed, so the default `cross` images work without `pre-build` apt
+  packages.
+- `SQLX_OFFLINE=true` is exported via [`.cargo/config.toml`](.cargo/config.toml)
+  and passed through `Cross.toml`'s `passthrough` list. The shipped `.sqlx/`
+  cache is required.
+- `cargo-leptos` and the WASM hydration bundle are **only** built on the
+  Linux host that ships the release. The other RIDs ship the SSR binary
+  plus the prebuilt `target/site/` assets from that host build.
+
 ## Compile-cost notes
 
 The two crates that dominate cold build time:
