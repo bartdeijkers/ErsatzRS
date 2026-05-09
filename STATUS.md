@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-09 (Support troubleshooting page parity)
+Last updated: 2026-05-09 (Support logs file parity)
 
 ## Current Phase
 
@@ -470,6 +470,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 | 2026-05-08 | Codex (GPT-5) | Fixed `/system/health` Support parity to render the ErsatzTV-style health table from persisted or live check results, filter `NotApplicable` rows, and keep the Support nav group expanded by default. |
 | 2026-05-09 | Codex (GPT-5) | Added the `/system/logs` Support route with the ErsatzTV-style heading, Search field, Timestamp/Level/Message table, and pager surface used by the scripted Support parity criteria. |
 | 2026-05-09 | Codex (GPT-5) | Added the `/system/troubleshooting` Support route with ErsatzTV-style Tools, General, NVIDIA, and QSV tabs plus copyable diagnostic report placeholders for the scripted Support parity criteria. |
+| 2026-05-09 | Codex (GPT-5) | Made `/system/logs` read the newest OS-local app-data log file and render recent runtime entries at the configured tracing level, matching ErsatzTV's newest-log-file Support page behavior. |
 | 2026-05-06 | Claude Code (claude-opus-4-7) | Brought the `/ffmpeg/:id` editor to behavior parity with `Pages/FFmpegEditor.razor`: reactive Video Profile select with `main`/`high`/`high444p`-vs-`high10` options that disable when not H264 / HW unsupported; AV1 video format option gated to NVENC/VAAPI/QSV; Tonemap hidden under QSV; QSV Extra Hardware Frames shown only under QSV; Pad Mode visible with `NormalizeVideo` and disabled unless VAAPI; Linux-only VAAPI driver/display sub-rows and shared VAAPI/QSV device dropdown with reactive label; new `load_editor_preflight` server fn enumerates `/dev/dri/render*` and the OS gate; added a `ReactiveSelectField` primitive in `admin/ui/primitives/form.rs` so dynamic option lists no longer recreate the SelectField subtree. Replaced `<Show>` blocks with `style:display` per `TEST.md` rule 2 for stable DOM shape. Hydration mismatch on admin `:id` pages remains a project-wide systemic issue (see TEST.md per-page index — `/media/libraries`, `/channels/:id`, `/ffmpeg/profiles/:id` all ❌). |
 | 2026-05-04 | Codex (GPT-5) | Migrated the admin hydration playbooks from `TEST.md` to `@playwright/test` under `tests/e2e/`, added the SQLite E2E seed fixture, fixed `/ffmpeg/profiles` route precedence, and marked the scripted hydration baseline red because Playwright now catches marker-node mismatches on the migrated pages. |
 | 2026-05-03 | Claude Code (claude-opus-4-7) | Fixed the dead `Scan` / `Deep Scan` buttons on `/media/libraries` (and the `Sign out of Plex` button on `/media/sources/plex`) by wrapping each page's interactive body in a `#[island]`, since `hydrate_islands()` never wires `on:click` declared at the top level of plain `#[component]` pages. Also stabilized the per-row libraries DOM (always-rendered Deep Scan/Scan/spinner toggled via reactive `style:display` and `disabled`) so hydration cannot fall back to inert SSR markup. Documented the broader latent gap in Phase 0 TODOs. |

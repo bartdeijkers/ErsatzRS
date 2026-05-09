@@ -117,7 +117,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/collections/:id` | ✅     | `MembersSection` autocomplete list via `style:display`.                 |
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
-| `/system/logs`           | ✅     | Static ErsatzTV-style log table/search/pager surface; no file-backed rows yet. |
+| `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |
 
 ## Fixture strategy

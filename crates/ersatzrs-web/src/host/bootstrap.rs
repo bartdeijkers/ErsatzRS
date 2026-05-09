@@ -1,6 +1,11 @@
 use axum::http::StatusCode;
 use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
+use std::{
+    fs::{File, OpenOptions},
+    io::{self, Write},
+    path::PathBuf,
+};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -85,12 +90,72 @@ async fn init_logging(pool: &DbPool) {
         .await
         .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
 
+    let writer = FileAndStdoutWriter::new(ersatzrs_infra::logging::default_log_file_path());
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_new(filter)
                 .unwrap_or_else(|_| EnvFilter::new(ersatzrs_infra::logging::default_filter())),
         )
+        .with_ansi(false)
+        .with_writer(writer)
         .init();
+}
+
+#[derive(Clone)]
+struct FileAndStdoutWriter {
+    path: PathBuf,
+}
+
+impl FileAndStdoutWriter {
+    fn new(path: PathBuf) -> Self {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        Self { path }
+    }
+
+    fn open_file(&self) -> io::Result<File> {
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+    }
+}
+
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for FileAndStdoutWriter {
+    type Writer = FileAndStdout;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        FileAndStdout {
+            file: self.open_file().ok(),
+            stdout: io::stdout(),
+        }
+    }
+}
+
+struct FileAndStdout {
+    file: Option<File>,
+    stdout: io::Stdout,
+}
+
+impl Write for FileAndStdout {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.stdout.write_all(buf)?;
+        if let Some(file) = self.file.as_mut() {
+            let _ = file.write_all(buf);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stdout.flush()?;
+        if let Some(file) = self.file.as_mut() {
+            let _ = file.flush();
+        }
+        Ok(())
+    }
 }
 
 async fn check_startup_ffmpeg_runtime() -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
