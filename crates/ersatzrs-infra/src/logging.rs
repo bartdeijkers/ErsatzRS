@@ -129,12 +129,13 @@ pub fn default_filter() -> &'static str {
     DEFAULT_LEVEL
 }
 
-/// Default application log folder, matching ErsatzRS' SQLite app data folder.
+/// Default application log folder, matching `ErsatzRS`' `SQLite` app data folder.
 #[must_use]
 pub fn default_log_dir() -> PathBuf {
-    BaseDirs::new()
-        .map(|base_dirs| base_dirs.data_local_dir().join("ErsatzRS").join("logs"))
-        .unwrap_or_else(|| Path::new(".").join("logs"))
+    BaseDirs::new().map_or_else(
+        || Path::new(".").join("logs"),
+        |base_dirs| base_dirs.data_local_dir().join("ErsatzRS").join("logs"),
+    )
 }
 
 /// Default file shown by the admin `/system/logs` page.
