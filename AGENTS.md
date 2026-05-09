@@ -17,6 +17,28 @@ relevant ones before starting non-trivial work:
 - **[plans/INDEX.md](plans/INDEX.md)** for locked decisions, the contract
   index, and deferred work.
 
+## Supported Platforms
+
+ErsatzRS targets the same set of platforms as ErsatzTV. All six must build and run correctly:
+
+| Rust target triple | RID | OS | Architecture |
+|---|---|---|---|
+| `x86_64-unknown-linux-gnu` | `linux-x64` | Linux | x86-64 |
+| `aarch64-unknown-linux-gnu` | `linux-arm64` | Linux | AArch64 |
+| `armv7-unknown-linux-gnueabihf` | `linux-arm` | Linux | ARMv7 |
+| `x86_64-apple-darwin` | `osx-x64` | macOS | x86-64 |
+| `aarch64-apple-darwin` | `osx-arm64` | macOS | Apple Silicon |
+| `x86_64-pc-windows-msvc` | `win-x64` | Windows | x86-64 |
+
+**Platform parity rule:** No Rust source file may hard-code an OS or architecture assumption
+outside of a `#[cfg(target_os = …)]` / `#[cfg(target_arch = …)]` guard, and every such
+guard must have a correct counterpart for all other supported platforms or must be
+explicitly documented as intentional (e.g. a Unix-only integration test that is skipped on
+Windows). Leptos `#[cfg(target_arch = "wasm32")]` island splits are exempt — they are
+required by the SSR/WASM hydration model and do not affect native targets.
+
+Use the `platform-parity-fixer` agent to audit and remediate platform-specific code.
+
 ## Current status
 
 **Phase 7 — Hardening and Parity Completion** (Phases 0–6 complete). The Cargo
