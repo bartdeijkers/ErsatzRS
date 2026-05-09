@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-04 (scripted admin hydration E2E migration)
+Last updated: 2026-05-09 (Support troubleshooting page parity)
 
 ## Current Phase
 
@@ -226,9 +226,8 @@ Slice 9 ports the first explicit readiness and downgrade/schema-check surface.
 inspects `_sqlx_migrations` for unknown versions, partially applied rows, and
 checksum mismatches, and only runs migrations plus default bootstrap when that
 schema state is clean. `ersatzrs-web` now captures that startup state, returns
-`503 Service Unavailable` from `/healthz` when the schema is not ready, logs
-downgrade / dirty-migration findings at startup, and feeds the existing
-Support nav badge from the same counts. The web startup path also now reads and
+`503 Service Unavailable` from `/healthz` when the schema is not ready, and
+logs downgrade / dirty-migration findings at startup. The web startup path also now reads and
 backfills the upstream `hdhr.uuid` / `hdhr.tuner_count` config keys while
 remaining backward compatible with the earlier mixed-case keys. Review
 outcome: ready for review.
@@ -259,10 +258,11 @@ provider connectivity (reading `maintenance.provider_connectivity`),
 file-not-found/unavailable media state, empty schedules, zero-duration media,
 missing movie/episode metadata, and downgrade/schema readiness. Runs persist to
 `ConfigElement` as `health.results` and `health.summary`. The admin web layer
-exposes `/system/health` rendering the persisted snapshot and the navigation
-health badge now combines the persisted parity summary with startup/runtime
-counts. This must be kept current as porting work changes runtime capabilities
-or parity-sensitive persisted state.
+exposes `/system/health` rendering the persisted snapshot or, when none exists,
+the live health service with `NotApplicable` rows filtered like ErsatzTV, and
+the same persisted parity summary feeds the health detail surface. This must be
+kept current as porting work changes runtime capabilities or parity-sensitive
+persisted state.
 
 Slice 17 is complete. The new `ersatzrs-scheduler` binary runs
 runtime-independent maintenance work as a sibling to `ersatzrs-web` and
@@ -386,15 +386,14 @@ the summary below is the readiness view.
 `/media/browser/images` (alias `/media/images`), `/media/music/artists`,
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
 `/media/smart-collections`, `/media/trakt/lists`, `/search`, `/blocks`
-(alias for `/scheduling/blocks`), `/playouts` and
-`/playouts/sequential/:id`.
+(alias for `/scheduling/blocks`), `/playouts`, `/playouts/sequential/:id`,
+`/system/health`, `/system/logs`, and `/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
 `/media/remote/streams`, `/media/multi-collections`, `/media/rerun-collections`,
 `/media/playlists`, `/media/filler/presets`,
-`/schedules`, `/templates`, `/decos`, `/deco-templates`,
-`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`, and
-`/system/{health,logs,troubleshooting}`. These should not be read as Phase 6
+`/schedules`, `/templates`, `/decos`, `/deco-templates`, and
+`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
 
@@ -466,6 +465,11 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-08 | Codex (GPT-5) | Added the `.claude/agents/support-parity-fixer.md` project agent to drive the Support Playwright parity failures to green while following the repo contracts, ErsatzTV source-first workflow, and Leptos hydration rules. |
+| 2026-05-08 | Codex (GPT-5) | Captured the live ErsatzTV Legacy Support page criteria and added scripted Playwright coverage for `/system/health`, `/system/logs`, and `/system/troubleshooting`, including the visible health-check row set and troubleshooting report tabs. |
+| 2026-05-08 | Codex (GPT-5) | Fixed `/system/health` Support parity to render the ErsatzTV-style health table from persisted or live check results, filter `NotApplicable` rows, and keep the Support nav group expanded by default. |
+| 2026-05-09 | Codex (GPT-5) | Added the `/system/logs` Support route with the ErsatzTV-style heading, Search field, Timestamp/Level/Message table, and pager surface used by the scripted Support parity criteria. |
+| 2026-05-09 | Codex (GPT-5) | Added the `/system/troubleshooting` Support route with ErsatzTV-style Tools, General, NVIDIA, and QSV tabs plus copyable diagnostic report placeholders for the scripted Support parity criteria. |
 | 2026-05-06 | Claude Code (claude-opus-4-7) | Brought the `/ffmpeg/:id` editor to behavior parity with `Pages/FFmpegEditor.razor`: reactive Video Profile select with `main`/`high`/`high444p`-vs-`high10` options that disable when not H264 / HW unsupported; AV1 video format option gated to NVENC/VAAPI/QSV; Tonemap hidden under QSV; QSV Extra Hardware Frames shown only under QSV; Pad Mode visible with `NormalizeVideo` and disabled unless VAAPI; Linux-only VAAPI driver/display sub-rows and shared VAAPI/QSV device dropdown with reactive label; new `load_editor_preflight` server fn enumerates `/dev/dri/render*` and the OS gate; added a `ReactiveSelectField` primitive in `admin/ui/primitives/form.rs` so dynamic option lists no longer recreate the SelectField subtree. Replaced `<Show>` blocks with `style:display` per `TEST.md` rule 2 for stable DOM shape. Hydration mismatch on admin `:id` pages remains a project-wide systemic issue (see TEST.md per-page index — `/media/libraries`, `/channels/:id`, `/ffmpeg/profiles/:id` all ❌). |
 | 2026-05-04 | Codex (GPT-5) | Migrated the admin hydration playbooks from `TEST.md` to `@playwright/test` under `tests/e2e/`, added the SQLite E2E seed fixture, fixed `/ffmpeg/profiles` route precedence, and marked the scripted hydration baseline red because Playwright now catches marker-node mismatches on the migrated pages. |
 | 2026-05-03 | Claude Code (claude-opus-4-7) | Fixed the dead `Scan` / `Deep Scan` buttons on `/media/libraries` (and the `Sign out of Plex` button on `/media/sources/plex`) by wrapping each page's interactive body in a `#[island]`, since `hydrate_islands()` never wires `on:click` declared at the top level of plain `#[component]` pages. Also stabilized the per-row libraries DOM (always-rendered Deep Scan/Scan/spinner toggled via reactive `style:display` and `disabled`) so hydration cannot fall back to inert SSR markup. Documented the broader latent gap in Phase 0 TODOs. |

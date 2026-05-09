@@ -38,7 +38,9 @@ use crate::admin::pages::scheduling::blocks::BlocksPage;
 use crate::admin::pages::scheduling::playouts::PlayoutsPage;
 use crate::admin::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::admin::pages::search::SearchPage;
-use crate::admin::pages::system::{health::HealthPage, logs::LogsPage};
+use crate::admin::pages::system::{
+    health::HealthPage, logs::LogsPage, troubleshooting::TroubleshootingPage,
+};
 use crate::admin::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
 
 stylance::import_crate_style!(style, "src/admin/app.module.css");
@@ -113,6 +115,10 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=HealthPage
             />
             <Route path=(StaticSegment("system"), StaticSegment("logs")) view=LogsPage/>
+            <Route
+                path=(StaticSegment("system"), StaticSegment("troubleshooting"))
+                view=TroubleshootingPage
+            />
             <Route path=(StaticSegment("blocks"), ParamSegment("id")) view=BlockEditorPage/>
             <Route path=(StaticSegment("scheduling"), StaticSegment("blocks")) view=BlocksPage/>
             <Route
