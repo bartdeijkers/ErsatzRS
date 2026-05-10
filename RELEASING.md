@@ -29,5 +29,5 @@ git push origin v0.1.0
 3. Move `[Unreleased]` entries in `CHANGELOG.md` into a dated version section.
 4. Create a new empty `[Unreleased]` section.
 5. Tag the release.
-6. Let the release workflow create artifacts.
+6. Let the release workflow create binary archives and publish the Docker image.
 7. Verify the GitHub release notes match the changelog.
