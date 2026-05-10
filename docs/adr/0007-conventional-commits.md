@@ -27,4 +27,4 @@ and scope for every commit.
 ## References
 
 - [../../CONTRIBUTING.md](../../CONTRIBUTING.md)
-- [../../commitlint.config.js](../../commitlint.config.js)
+- [../../commitlint.config.cjs](../../commitlint.config.cjs)

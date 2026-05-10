@@ -21,7 +21,7 @@ chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 urlencoding = "2"
-gloo-timers = { version = "0.3", features = ["futures"] }
+gloo-timers = { version = "0.4", features = ["futures"] }
 stylance = "0.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -40,7 +40,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 leptos_axum = "0.8"
 sqlx = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
-quick-xml = "0.37"
+quick-xml = "0.39"
 base64 = "0.22.1"
 tempfile = "3.27.0"
 jsonwebtoken = "9"
