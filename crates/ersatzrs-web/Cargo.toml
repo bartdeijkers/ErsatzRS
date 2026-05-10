@@ -43,7 +43,7 @@ uuid = { version = "1", features = ["v4"] }
 quick-xml = "0.39"
 base64 = "0.22.1"
 tempfile = "3.27.0"
-jsonwebtoken = "10"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", features = ["macros", "sync", "time"] }
