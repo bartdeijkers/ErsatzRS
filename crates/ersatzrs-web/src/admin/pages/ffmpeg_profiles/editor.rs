@@ -10,8 +10,7 @@
 //!   newly-created profile's editor at `/ffmpeg/{id}`.
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
@@ -22,6 +21,16 @@ use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, Tex
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/ffmpeg_profiles/editor.module.css");
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ---------------------------------------------------------------------------
 // SSR wrapper
@@ -39,16 +48,15 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     #[allow(clippy::type_complexity)]
     let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
         Resource::new(profile_id, |maybe_id| async move {
-            let (resolutions, hw_accels) = tokio::join!(
-                list_resolutions_for_select(),
-                list_supported_hw_accelerations(),
-            );
+            let (resolutions, form) = tokio::join!(list_resolutions_for_select(), async {
+                match maybe_id {
+                    None => Some(FfmpegProfileForm::new_defaults()),
+                    Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
+                }
+            });
             let resolutions = resolutions.unwrap_or_default();
+            let hw_accels = list_supported_hw_accelerations().await;
             let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
-            let form = match maybe_id {
-                None => Some(FfmpegProfileForm::new_defaults()),
-                Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
-            };
             form.map(|f| (f, resolutions, hw_accels))
         });
 
@@ -153,14 +161,12 @@ fn FfmpegProfileEditorIsland(
         async move { copy_ffmpeg_profile(id, new_name).await }
     });
 
-    let navigate = use_navigate();
-    let navigate2 = navigate.clone();
     let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
-                Ok(_) => navigate("/ffmpeg", NavigateOptions::default()),
+                Ok(_) => set_browser_location("/ffmpeg"),
                 Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
             }
         }
@@ -172,7 +178,7 @@ fn FfmpegProfileEditorIsland(
                 Ok(new_id) => {
                     toast.push("Profile copied.", ToastSeverity::Success);
                     copy_open.set(false);
-                    navigate2(&format!("/ffmpeg/{new_id}"), NavigateOptions::default());
+                    set_browser_location(&format!("/ffmpeg/{new_id}"));
                 }
                 Err(e) => toast.push(format!("Copy failed: {e}"), ToastSeverity::Error),
             }
@@ -302,7 +308,8 @@ fn FfmpegProfileEditorIsland(
 
     // ── View ─────────────────────────────────────────────────────────────
     view! {
-        <div class=style::page>
+        <form method="post" action="/api/ffmpeg/save" class=style::page>
+            <input type="hidden" name="id" value=profile_id.to_string()/>
             // ── Breadcrumb ────────────────────────────────────────────
             <div class=style::breadcrumb>
                 <a href="/ffmpeg" class=style::back_link>"← FFmpeg Profiles"</a>
@@ -313,6 +320,7 @@ fn FfmpegProfileEditorIsland(
             <div class=style::action_bar>
                 <button
                     class=style::btn_primary
+                    type="submit"
                     disabled=move || save_action.pending().get()
                     on:click=move |_| {
                         save_action.dispatch(build_form());
@@ -321,33 +329,27 @@ fn FfmpegProfileEditorIsland(
                     {save_label}
                 </button>
 
-                {if profile_id != 0 {
-                    view! {
-                        <button
-                            class=style::btn_secondary
-                            on:click=move |_| {
-                                copy_name.set(format!("{} (Copy)", name.get_untracked()));
-                                copy_open.set(true);
-                            }
-                        >
-                            "Copy Profile"
-                        </button>
-                        <a href="/ffmpeg" class=style::cancel_link>"Cancel"</a>
+                // "Copy Profile" button — always rendered; hidden for new profiles.
+                <button
+                    class=style::btn_secondary
+                    type="button"
+                    style:display=if profile_id != 0 { "" } else { "none" }
+                    disabled=profile_id == 0
+                    on:click=move |_| {
+                        copy_name.set(format!("{} (Copy)", name.get_untracked()));
+                        copy_open.set(true);
                     }
-                    .into_any()
-                } else {
-                    view! {
-                        <a href="/ffmpeg" class=style::cancel_link>"Cancel"</a>
-                    }
-                    .into_any()
-                }}
+                >
+                    "Copy Profile"
+                </button>
+                <a href="/ffmpeg" class=style::cancel_link>"Cancel"</a>
             </div>
 
             // ── General section ───────────────────────────────────────
             <div class=style::section>
                 <h2 class=style::section_title>"General"</h2>
                 <div class=style::form_grid>
-                    <TextField label="Name" value=name/>
+                    <TextField label="Name" value=name name=Some("name")/>
                     <NumberField label="Thread Count (0 = auto)" value=thread_count min=Some(0)/>
                 </div>
                 <SelectField<i64>
@@ -374,101 +376,98 @@ fn FfmpegProfileEditorIsland(
                 <h2 class=style::section_title>"Video"</h2>
                 <CheckBox label="Normalize Video" value=normalize_video/>
 
-                <Show when=move || show_hw_section.get()>
-                    {move || view! {
+                // Video normalization fields — always rendered; hidden when normalize_video is off.
+                // Stable DOM shape avoids hydration mismatches.
+                <div style:display=move || if show_hw_section.get() { "" } else { "none" }>
+                    <SelectField<i32>
+                        label="Video Format"
+                        value=video_format
+                        items=mk_video_format_items()
+                    />
+
+                    // Hardware acceleration sub-panel.
+                    <div class=style::hw_section>
+                        <h3 class=style::subsection_title>"Hardware Acceleration"</h3>
                         <SelectField<i32>
-                            label="Video Format"
-                            value=video_format
-                            items=mk_video_format_items()
+                            label="Acceleration Kind"
+                            value=hardware_acceleration
+                            items=mk_hw_accel_items()
                         />
+                        // QSV extra frames — always rendered; hidden for non-QSV accelerators.
+                        <div style:display=move || if show_qsv_frames.get() { "" } else { "none" }>
+                            <NumberField
+                                label="QSV Extra Hardware Frames"
+                                value=qsv_extra_hardware_frames
+                                min=Some(0)
+                            />
+                        </div>
+                        // VAAPI fields — always rendered; hidden for non-VAAPI accelerators.
+                        <div style:display=move || if show_vaapi_fields.get() { "" } else { "none" }>
+                            <TextField label="VAAPI Device Path" value=vaapi_device/>
+                            <TextField label="VAAPI Display" value=vaapi_display/>
+                            <SelectField<i32>
+                                label="VAAPI Driver"
+                                value=vaapi_driver
+                                items=mk_vaapi_driver_items()
+                            />
+                            <SelectField<i32>
+                                label="Pad Mode"
+                                value=pad_mode
+                                items=mk_pad_mode_items()
+                            />
+                        </div>
+                    </div>
 
-                        // Hardware acceleration sub-panel (always shown when
-                        // normalize_video is on; VAAPI/QSV rows conditional within).
-                        <div class=style::hw_section>
-                            <h3 class=style::subsection_title>"Hardware Acceleration"</h3>
-                            <SelectField<i32>
-                                label="Acceleration Kind"
-                                value=hardware_acceleration
-                                items=mk_hw_accel_items()
-                            />
-                            <Show when=move || show_qsv_frames.get()>
-                                {move || view! {
-                                    <NumberField
-                                        label="QSV Extra Hardware Frames"
-                                        value=qsv_extra_hardware_frames
-                                        min=Some(0)
-                                    />
-                                }}
-                            </Show>
-                            <Show when=move || show_vaapi_fields.get()>
-                                {move || view! {
-                                    <TextField label="VAAPI Device Path" value=vaapi_device/>
-                                    <TextField label="VAAPI Display" value=vaapi_display/>
-                                    <SelectField<i32>
-                                        label="VAAPI Driver"
-                                        value=vaapi_driver
-                                        items=mk_vaapi_driver_items()
-                                    />
-                                    <SelectField<i32>
-                                        label="Pad Mode"
-                                        value=pad_mode
-                                        items=mk_pad_mode_items()
-                                    />
-                                }}
-                            </Show>
-                        </div>
-
-                        <div class=style::form_row>
-                            <NumberField label="Video Bitrate (kBit/s)" value=video_bitrate min=Some(0)/>
-                            <NumberField label="Video Buffer Size (kBit)" value=video_buffer_size min=Some(0)/>
-                        </div>
-                        <div class=style::form_row>
-                            <TextField label="Video Profile" value=video_profile/>
-                            // Preset options vary by hw/format/depth (AvailablePresets.ForAccelAndFormat).
-                            // Re-rendered reactively; the Effect above clears a stale preset value.
-                            {move || {
-                                let hw = hardware_acceleration.get();
-                                let vf = video_format.get();
-                                let bd = bit_depth.get();
-                                let mut items: Vec<(String, String)> =
-                                    vec![(String::new(), "(None)".to_string())];
-                                for p in presets_for_profile(hw, vf, bd) {
-                                    items.push((p.to_string(), p.to_string()));
-                                }
-                                view! {
-                                    <SelectField<String>
-                                        label="Video Preset"
-                                        value=video_preset
-                                        items=items
-                                    />
-                                }
-                            }}
-                        </div>
-                        <div class=style::form_row>
-                            <SelectField<i32>
-                                label="Bit Depth"
-                                value=bit_depth
-                                items=vec![
-                                    (0i32, "8-bit".to_string()),
-                                    (1i32, "10-bit".to_string()),
-                                ]
-                            />
-                            <SelectField<i32>
-                                label="Tonemap Algorithm"
-                                value=tonemap_algorithm
-                                items=vec![
-                                    (0i32, "Linear".to_string()),
-                                    (1i32, "Clip".to_string()),
-                                    (2i32, "Gamma".to_string()),
-                                    (3i32, "Reinhard".to_string()),
-                                    (4i32, "Mobius".to_string()),
-                                    (5i32, "Hable".to_string()),
-                                ]
-                            />
-                        </div>
-                        <CheckBox label="Allow B-Frames" value=allow_b_frames/>
-                    }}
-                </Show>
+                    <div class=style::form_row>
+                        <NumberField label="Video Bitrate (kBit/s)" value=video_bitrate min=Some(0)/>
+                        <NumberField label="Video Buffer Size (kBit)" value=video_buffer_size min=Some(0)/>
+                    </div>
+                    <div class=style::form_row>
+                        <TextField label="Video Profile" value=video_profile/>
+                        // Preset options vary by hw/format/depth (AvailablePresets.ForAccelAndFormat).
+                        // Re-rendered reactively; the Effect above clears a stale preset value.
+                        {move || {
+                            let hw = hardware_acceleration.get();
+                            let vf = video_format.get();
+                            let bd = bit_depth.get();
+                            let mut items: Vec<(String, String)> =
+                                vec![(String::new(), "(None)".to_string())];
+                            for p in presets_for_profile(hw, vf, bd) {
+                                items.push((p.to_string(), p.to_string()));
+                            }
+                            view! {
+                                <SelectField<String>
+                                    label="Video Preset"
+                                    value=video_preset
+                                    items=items
+                                />
+                            }
+                        }}
+                    </div>
+                    <div class=style::form_row>
+                        <SelectField<i32>
+                            label="Bit Depth"
+                            value=bit_depth
+                            items=vec![
+                                (0i32, "8-bit".to_string()),
+                                (1i32, "10-bit".to_string()),
+                            ]
+                        />
+                        <SelectField<i32>
+                            label="Tonemap Algorithm"
+                            value=tonemap_algorithm
+                            items=vec![
+                                (0i32, "Linear".to_string()),
+                                (1i32, "Clip".to_string()),
+                                (2i32, "Gamma".to_string()),
+                                (3i32, "Reinhard".to_string()),
+                                (4i32, "Mobius".to_string()),
+                                (5i32, "Hable".to_string()),
+                            ]
+                        />
+                    </div>
+                    <CheckBox label="Allow B-Frames" value=allow_b_frames/>
+                </div>
             </div>
 
             // ── Audio section ─────────────────────────────────────────
@@ -476,36 +475,34 @@ fn FfmpegProfileEditorIsland(
                 <h2 class=style::section_title>"Audio"</h2>
                 <CheckBox label="Normalize Audio" value=normalize_audio/>
 
-                <Show when=move || normalize_audio.get()>
-                    {move || view! {
-                        <SelectField<i32>
-                            label="Audio Format"
-                            value=audio_format
-                            items=mk_audio_format_items()
-                        />
-                        <div class=style::form_row>
-                            <NumberField label="Audio Bitrate (kBit/s)" value=audio_bitrate min=Some(0)/>
-                            <NumberField label="Audio Buffer Size (kBit)" value=audio_buffer_size min=Some(0)/>
-                        </div>
-                        <div class=style::form_row>
-                            <NumberField label="Channels" value=audio_channels min=Some(1)/>
-                            <NumberField label="Sample Rate (kHz)" value=audio_sample_rate min=Some(0)/>
-                        </div>
-                        <SelectField<i32>
-                            label="Normalize Loudness"
-                            value=normalize_loudness_mode
-                            items=vec![
-                                (0i32, "Off".to_string()),
-                                (1i32, "LoudNorm".to_string()),
-                            ]
-                        />
-                        <Show when=move || show_loudness_target.get()>
-                            {move || view! {
-                                <TextField label="Target Loudness (LUFS)" value=target_loudness/>
-                            }}
-                        </Show>
-                    }}
-                </Show>
+                // Audio normalization fields — always rendered; hidden when normalize_audio is off.
+                <div style:display=move || if normalize_audio.get() { "" } else { "none" }>
+                    <SelectField<i32>
+                        label="Audio Format"
+                        value=audio_format
+                        items=mk_audio_format_items()
+                    />
+                    <div class=style::form_row>
+                        <NumberField label="Audio Bitrate (kBit/s)" value=audio_bitrate min=Some(0)/>
+                        <NumberField label="Audio Buffer Size (kBit)" value=audio_buffer_size min=Some(0)/>
+                    </div>
+                    <div class=style::form_row>
+                        <NumberField label="Channels" value=audio_channels min=Some(1)/>
+                        <NumberField label="Sample Rate (kHz)" value=audio_sample_rate min=Some(0)/>
+                    </div>
+                    <SelectField<i32>
+                        label="Normalize Loudness"
+                        value=normalize_loudness_mode
+                        items=vec![
+                            (0i32, "Off".to_string()),
+                            (1i32, "LoudNorm".to_string()),
+                        ]
+                    />
+                    // Target loudness — always rendered; hidden when LoudNorm is not selected.
+                    <div style:display=move || if show_loudness_target.get() { "" } else { "none" }>
+                        <TextField label="Target Loudness (LUFS)" value=target_loudness/>
+                    </div>
+                </div>
             </div>
 
             // ── Copy Profile modal ────────────────────────────────────
@@ -523,6 +520,6 @@ fn FfmpegProfileEditorIsland(
             >
                 <TextField label="New Profile Name" value=copy_name/>
             </Modal>
-        </div>
+        </form>
     }
 }

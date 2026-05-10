@@ -1135,7 +1135,7 @@ async fn item_etag_matches(
 /// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind`,
 /// `Name`, and `EmbyPathInfo` rows for libraries that the server still
 /// reports. Mirrors `MediaSourceRepository.UpdateLibraries` for Emby in
-/// ErsatzTV. The `MediaKind` is only updated when `ShouldSyncItems` is
+/// `ErsatzTV`. The `MediaKind` is only updated when `ShouldSyncItems` is
 /// false to avoid invalidating an in-progress sync.
 ///
 /// # Errors
@@ -1270,8 +1270,8 @@ async fn replace_emby_path_infos_in_tx(
 
 /// Replaces all `EmbyPathInfo` rows for a library with the supplied set.
 ///
-/// Used to mirror ErsatzTV path mapping for SMB/NFS shares where the Emby
-/// server reports its local path and the network path that ErsatzRS should
+/// Used to mirror `ErsatzTV` path mapping for SMB/NFS shares where the Emby
+/// server reports its local path and the network path that `ErsatzRS` should
 /// rewrite onto. Network-only path infos with empty `NetworkPath` are
 /// filtered out by the projection.
 ///

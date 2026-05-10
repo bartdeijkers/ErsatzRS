@@ -29,4 +29,5 @@ components must be built or adapted.
 
 ## References
 
-- [../../plans/sequential-dancing-valiant.md](../../plans/sequential-dancing-valiant.md)
+- [Project contracts and status](../../plans/INDEX.md)
+- [Current phase status](../../STATUS.md)

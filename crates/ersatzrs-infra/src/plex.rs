@@ -1148,7 +1148,7 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
 /// libraries that the server no longer reports (cascading through
 /// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind` and
 /// `Name` for libraries that the server still reports. Mirrors
-/// `MediaSourceRepository.UpdateLibraries` for Plex in ErsatzTV. The
+/// `MediaSourceRepository.UpdateLibraries` for Plex in `ErsatzTV`. The
 /// `MediaKind` is only updated when `ShouldSyncItems` is false to avoid
 /// invalidating an in-progress sync.
 ///

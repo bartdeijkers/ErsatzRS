@@ -135,25 +135,23 @@ pub fn SmartCollectionsPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            {move || {
-                delete_target.get().map(|row| {
-                    let id = row.id;
-                    let name = row.name.clone();
-                    view! {
-                        <DeleteDialog
-                            open=delete_open
-                            entity_name=name
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(id);
-                                } else {
-                                    delete_open.set(false);
-                                }
-                            })
-                        />
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|row| row.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(row) = delete_target.get_untracked() {
+                        if confirmed {
+                            delete_action.dispatch(row.id);
+                        } else {
+                            delete_open.set(false);
+                        }
+                    } else {
+                        delete_open.set(false);
                     }
                 })
-            }}
+            />
         </div>
     }
 }

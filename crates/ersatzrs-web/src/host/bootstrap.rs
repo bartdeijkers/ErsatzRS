@@ -1,6 +1,11 @@
 use axum::http::StatusCode;
 use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
+use std::{
+    fs::{File, OpenOptions},
+    io::{self, Write},
+    path::PathBuf,
+};
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -15,20 +20,20 @@ const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
 
 pub async fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
-    let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
-
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
         .await
         .expect("database initialisation failed");
+
+    init_logging(&startup.pool).await;
+
     tracing::info!(
         database_url = %startup.database_url,
         ?startup.database_backend,
         "database initialised"
     );
+
+    let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
+
     if let Some(version) = startup.schema_status.dirty_version {
         tracing::error!(
             version,
@@ -75,6 +80,82 @@ pub async fn run() {
     axum::serve(listener, app.into_make_service())
         .await
         .expect("server error");
+}
+
+async fn init_logging(pool: &DbPool) {
+    #[allow(clippy::disallowed_methods)]
+    let base_filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
+    let filter = ersatzrs_infra::logging::logging_filter_from_database(pool, base_filter)
+        .await
+        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
+
+    let writer = FileAndStdoutWriter::new(ersatzrs_infra::logging::default_log_file_path());
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_new(filter)
+                .unwrap_or_else(|_| EnvFilter::new(ersatzrs_infra::logging::default_filter())),
+        )
+        .with_ansi(false)
+        .with_writer(writer)
+        .init();
+}
+
+#[derive(Clone)]
+struct FileAndStdoutWriter {
+    path: PathBuf,
+}
+
+impl FileAndStdoutWriter {
+    fn new(path: PathBuf) -> Self {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        Self { path }
+    }
+
+    fn open_file(&self) -> io::Result<File> {
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+    }
+}
+
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for FileAndStdoutWriter {
+    type Writer = FileAndStdout;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        FileAndStdout {
+            file: self.open_file().ok(),
+            stdout: io::stdout(),
+        }
+    }
+}
+
+struct FileAndStdout {
+    file: Option<File>,
+    stdout: io::Stdout,
+}
+
+impl Write for FileAndStdout {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.stdout.write_all(buf)?;
+        if let Some(file) = self.file.as_mut() {
+            let _ = file.write_all(buf);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stdout.flush()?;
+        if let Some(file) = self.file.as_mut() {
+            let _ = file.flush();
+        }
+        Ok(())
+    }
 }
 
 async fn check_startup_ffmpeg_runtime() -> ersatzrs_ffmpeg::FfmpegRuntimeReport {

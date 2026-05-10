@@ -8,14 +8,17 @@ use ersatzrs_core::scheduling::{
     classic_schedule_item_key, BlockDefinition, BlockTemplate, BlockTemplateItem,
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
-    SchedulingContentRepository, SchedulingContentSource, SchedulingMediaItem,
-    SchedulingPlaylistItem, SchedulingReferenceData,
+    SchedulingContentRepository, SchedulingContentSource, SchedulingFallbackPreset,
+    SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
-use ersatzrs_core::search::{SearchDocument, SearchExpression, SearchProviderGuid};
+use ersatzrs_core::search::{
+    search_page_map, SearchDocument, SearchExpression, SearchPageMap, SearchProviderGuid,
+};
 use ersatzrs_domain::{
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
-    ProgramScheduleItem,
+    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
 
@@ -92,7 +95,7 @@ impl SqliteSchedulingContentRepository {
             );
         }
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             classic_schedule_id: Some(schedule.id),
             classic_schedule_name: Some(schedule.name),
@@ -107,6 +110,7 @@ impl SqliteSchedulingContentRepository {
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
     }
 
     async fn active_classic_schedule_id(
@@ -160,7 +164,7 @@ impl SqliteSchedulingContentRepository {
             .await?;
         let effective_blocks = EffectiveBlock::from_templates(&schedules, start, days_to_build);
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             effective_blocks,
             existing_items: self.playout_items(playout_id).await?,
@@ -168,6 +172,7 @@ impl SqliteSchedulingContentRepository {
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
     }
 
     /// Prepare SQL-backed reference data for a YAML/Sequential scripted
@@ -202,13 +207,89 @@ impl SqliteSchedulingContentRepository {
             media_by_key.insert(item.key.clone(), items);
         }
 
-        Ok(SchedulingReferenceData {
+        self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
             existing_items: self.playout_items(playout_id).await?,
             existing_history: self.playout_history(playout_id).await?,
             max_playout_offset,
             ..SchedulingReferenceData::default()
         })
+        .await
+    }
+
+    /// Load only persisted playout-wide config reference data.
+    ///
+    /// This is used by schedule kinds whose engine does not need SQL-backed
+    /// content expansion for its own instructions, but still participates in
+    /// global watermark/fallback behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when config or fallback filler queries fail.
+    pub async fn configured_playout_options(&self) -> Result<SchedulingReferenceData> {
+        self.with_configured_playout_options(SchedulingReferenceData::default())
+            .await
+    }
+
+    async fn with_configured_playout_options(
+        &self,
+        mut reference_data: SchedulingReferenceData,
+    ) -> Result<SchedulingReferenceData> {
+        reference_data.global_watermark_id = self
+            .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+            .await?;
+        reference_data.global_fallback = self.global_fallback_preset().await?;
+        Ok(reference_data)
+    }
+
+    async fn global_fallback_preset(&self) -> Result<Option<SchedulingFallbackPreset>> {
+        let Some(filler_id) = self
+            .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let row = sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
+            .bind(filler_id)
+            .fetch_optional(&self.0)
+            .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let collection_key = SchedulingCollectionKey {
+            collection_type: decode_enum_column(
+                "global fallback filler collection_type",
+                &row,
+                "CollectionType",
+            )?,
+            collection_id: row.try_get("CollectionId")?,
+            media_item_id: row.try_get("MediaItemId")?,
+            multi_collection_id: row.try_get("MultiCollectionId")?,
+            smart_collection_id: row.try_get("SmartCollectionId")?,
+            playlist_id: row.try_get("PlaylistId")?,
+            ..SchedulingCollectionKey::default()
+        };
+
+        let media_items = self.items_for_collection_key(&collection_key, 0).await?;
+        Ok(Some(SchedulingFallbackPreset {
+            id: filler_id,
+            allow_watermarks: row.try_get("AllowWatermarks")?,
+            media_items,
+        }))
+    }
+
+    async fn load_config_entity_id(&self, key: &str) -> Result<Option<EntityId>> {
+        let value = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+        )
+        .bind(key)
+        .fetch_optional(&self.0)
+        .await?;
+
+        Ok(value.and_then(|value| value.trim().parse::<EntityId>().ok()))
     }
 
     /// Resolve playable media items for a scheduling content source.
@@ -725,18 +806,7 @@ impl SqliteSchedulingContentRepository {
     }
 
     async fn search_items(&self, query: &str) -> Result<Vec<SchedulingMediaItem>> {
-        let expression = SearchExpression::parse(query);
-        let documents = self.search_documents().await?;
-        let mut hits = documents
-            .into_iter()
-            .filter(|document| expression.matches(document))
-            .collect::<Vec<_>>();
-
-        hits.sort_by(|left, right| {
-            search_sort_title(left)
-                .cmp(&search_sort_title(right))
-                .then_with(|| left.media_item_id.cmp(&right.media_item_id))
-        });
+        let (hits, _, _) = self.search_documents_page(query, 0, 0).await?;
 
         let mut items = Vec::new();
         let mut seen = BTreeSet::new();
@@ -751,6 +821,41 @@ impl SqliteSchedulingContentRepository {
         }
 
         Ok(items)
+    }
+
+    /// Return sorted search documents plus total hit count and a Lucene-style page map.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the SQL-backed search projection cannot be loaded.
+    pub async fn search_documents_page(
+        &self,
+        query: &str,
+        skip: usize,
+        limit: usize,
+    ) -> Result<(Vec<SearchDocument>, usize, Option<SearchPageMap>)> {
+        let expression = SearchExpression::parse(query);
+        let documents = self.search_documents().await?;
+        let mut hits = documents
+            .into_iter()
+            .filter(|document| expression.matches(document))
+            .collect::<Vec<_>>();
+
+        hits.sort_by(|left, right| {
+            search_sort_title(left)
+                .cmp(&search_sort_title(right))
+                .then_with(|| left.media_item_id.cmp(&right.media_item_id))
+        });
+
+        let total_count = hits.len();
+        let page_map = (limit > 0 && limit < 10_000).then(|| search_page_map(hits.iter(), limit));
+        let selected = if limit == 0 {
+            hits.into_iter().skip(skip).collect()
+        } else {
+            hits.into_iter().skip(skip).take(limit).collect()
+        };
+
+        Ok((selected, total_count, page_map))
     }
 
     async fn search_documents(&self) -> Result<Vec<SearchDocument>> {
@@ -839,6 +944,8 @@ impl SqliteSchedulingContentRepository {
             subtitle_codecs: stream_languages.subtitle_codecs,
             width: stream_languages.width,
             height: stream_languages.height,
+            chapter_counts: stream_languages.chapter_counts,
+            durations_seconds: stream_languages.durations_seconds,
             show_title: row.try_get("show_title")?,
             show_genres: self.show_lookup_values("Genre", show_id).await?,
             show_tags: self.show_lookup_values("Tag", show_id).await?,
@@ -961,7 +1068,7 @@ impl SqliteSchedulingContentRepository {
             return Ok(result);
         };
         let version_sql = format!(
-            r#"SELECT "Id", "Width", "Height"
+            r#"SELECT "Id", "Width", "Height", "Duration"
              FROM "MediaVersion"
              WHERE "{version_fk}" = ?
              ORDER BY "Id""#
@@ -980,7 +1087,26 @@ impl SqliteSchedulingContentRepository {
             result.height = row.try_get("Height").ok();
         }
 
+        for row in &version_rows {
+            if let Ok(duration) = row.try_get::<String, _>("Duration") {
+                let seconds = decode_duration_text(&duration).num_seconds();
+                result.durations_seconds.push(seconds);
+            }
+        }
+
         for version_id in version_ids {
+            let chapter_count = sqlx::query_scalar::<_, i64>(
+                r#"SELECT COUNT(*)
+                 FROM "MediaChapter"
+                 WHERE "MediaVersionId" = ?"#,
+            )
+            .bind(version_id)
+            .fetch_one(&self.0)
+            .await?;
+            result
+                .chapter_counts
+                .push(i32::try_from(chapter_count).unwrap_or(i32::MAX));
+
             let rows = sqlx::query(
                 r#"SELECT "MediaStreamKind", "Codec", "Language"
                  FROM "MediaStream"
@@ -1898,6 +2024,38 @@ FROM (
         NULL AS "season_number",
         NULL AS "episode_number"
     FROM "SongMetadata" AS "som"
+    UNION ALL
+    SELECT
+        "im"."ImageId" AS "item_id",
+        'image' AS "media_kind",
+        'Image' AS "metadata_kind",
+        "im"."Id" AS "metadata_id",
+        "im"."Title" AS "title",
+        "im"."OriginalTitle" AS "original_title",
+        "im"."SortTitle" AS "sort_title",
+        "im"."Year" AS "year",
+        "im"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "ImageMetadata" AS "im"
+    UNION ALL
+    SELECT
+        "rsm"."RemoteStreamId" AS "item_id",
+        'remote_stream' AS "media_kind",
+        'RemoteStream' AS "metadata_kind",
+        "rsm"."Id" AS "metadata_id",
+        "rsm"."Title" AS "title",
+        "rsm"."OriginalTitle" AS "original_title",
+        "rsm"."SortTitle" AS "sort_title",
+        "rsm"."Year" AS "year",
+        "rsm"."ReleaseDate" AS "release_date",
+        NULL AS "show_id",
+        NULL AS "show_title",
+        NULL AS "season_number",
+        NULL AS "episode_number"
+    FROM "RemoteStreamMetadata" AS "rsm"
 )
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
@@ -2193,6 +2351,8 @@ struct StreamSearchFields {
     subtitle_codecs: Vec<String>,
     width: Option<i32>,
     height: Option<i32>,
+    chapter_counts: Vec<i32>,
+    durations_seconds: Vec<i64>,
 }
 
 fn metadata_fk(metadata_kind: &str) -> Option<&'static str> {

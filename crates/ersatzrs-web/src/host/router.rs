@@ -68,6 +68,14 @@ pub fn build_app(app_state: AppState) -> Router {
         .route("/healthz", get(super::bootstrap::healthz))
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
+            "/api/ffmpeg/save",
+            post(api::ffmpeg_profiles::save_ffmpeg_profile_form),
+        )
+        .route(
+            "/api/media-sources/local/save",
+            post(api::media_sources::save_local_library_form),
+        )
+        .route(
             "/api/watermarks/image",
             post(api::watermarks::upload_watermark_image)
                 .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
@@ -90,6 +98,10 @@ pub fn build_app(app_state: AppState) -> Router {
         )
         .merge(api_router)
         .merge(leptos_router)
+        .route_service(
+            "/favicon.ico",
+            ServeFile::new(format!("{WEB_PUBLIC_DIR}/images/ersatzrs.png")),
+        )
         .layer(TraceLayer::new_for_http())
 }
 
@@ -97,6 +109,7 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
+        .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))
         .route("/iptv/channel/{file}", get(iptv::dispatch_channel_request))
         .route(
             "/iptv/session/{channel_number}/hls.m3u8",

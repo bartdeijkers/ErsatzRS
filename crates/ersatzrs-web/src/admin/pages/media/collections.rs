@@ -129,25 +129,23 @@ pub fn CollectionsPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            {move || {
-                delete_target.get().map(|row| {
-                    let id = row.id;
-                    let name = row.name.clone();
-                    view! {
-                        <DeleteDialog
-                            open=delete_open
-                            entity_name=name
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(id);
-                                } else {
-                                    delete_open.set(false);
-                                }
-                            })
-                        />
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|row| row.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(row) = delete_target.get_untracked() {
+                        if confirmed {
+                            delete_action.dispatch(row.id);
+                        } else {
+                            delete_open.set(false);
+                        }
+                    } else {
+                        delete_open.set(false);
                     }
                 })
-            }}
+            />
         </div>
     }
 }
@@ -324,27 +322,30 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
                         }
                     }
                 />
-                <Show when=move || show_suggest.get() && !suggestions.get().is_empty()>
-                    <ul class=style::autocomplete_list>
-                        {move || suggestions.get().into_iter().map(|s| {
-                            let title = s.title.clone();
-                            let kind = s.kind.clone();
-                            let item_id = s.id;
-                            view! {
-                                <li
-                                    class=style::autocomplete_item
-                                    on:mousedown=move |e| {
-                                        e.prevent_default();
-                                        add_action.dispatch((collection_id, item_id));
-                                    }
-                                >
-                                    <span class=style::kind_badge>{kind}</span>
-                                    <span>{title}</span>
-                                </li>
-                            }
-                        }).collect_view()}
-                    </ul>
-                </Show>
+                <ul
+                    class=style::autocomplete_list
+                    style:display=move || {
+                        if show_suggest.get() && !suggestions.get().is_empty() { "" } else { "none" }
+                    }
+                >
+                    {move || suggestions.get().into_iter().map(|s| {
+                        let title = s.title.clone();
+                        let kind = s.kind.clone();
+                        let item_id = s.id;
+                        view! {
+                            <li
+                                class=style::autocomplete_item
+                                on:mousedown=move |e| {
+                                    e.prevent_default();
+                                    add_action.dispatch((collection_id, item_id));
+                                }
+                            >
+                                <span class=style::kind_badge>{kind}</span>
+                                <span>{title}</span>
+                            </li>
+                        }
+                    }).collect_view()}
+                </ul>
             </div>
 
             <Suspense fallback=move || view! { <p class=style::empty>"Loading members…"</p> }>

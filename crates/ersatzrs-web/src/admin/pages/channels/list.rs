@@ -6,7 +6,6 @@ use crate::admin::server_fns::channels::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
-    icon::{Icon, IconName},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
 };
 
@@ -56,19 +55,40 @@ fn ChannelsListIsland() -> impl IntoView {
         Column::new("Number", |ch: &ChannelListRow| {
             let n = ch.number.clone();
             let enabled = ch.is_enabled;
+            let show_in_epg = ch.show_in_epg;
+            let label = if !enabled {
+                format!("(D) {n}")
+            } else if !show_in_epg {
+                format!("(H) {n}")
+            } else {
+                n
+            };
+            let title = if !enabled {
+                "Channel disabled"
+            } else if !show_in_epg {
+                "Channel hidden from EPG"
+            } else {
+                ""
+            };
             view! {
-                <span class=if enabled { "" } else { style::cell_disabled }>{n}</span>
+                <span
+                    class=if enabled { "" } else { style::cell_disabled }
+                    title=title
+                >
+                    {label}
+                </span>
             }
             .into_any()
         }),
         Column::new("Logo", |ch: &ChannelListRow| {
             let name = ch.name.clone();
-            let initials = logo_text(&name);
+            let encoded = urlencoding::encode(&name).into_owned();
             view! {
-                <div class=style::logo_cell aria-label=format!("{name} logo")>
-                    <span>{initials}</span>
-                    <small>"Etv"</small>
-                </div>
+                <img
+                    src=format!("/iptv/logos/gen?text={encoded}")
+                    class=style::logo_img
+                    alt=format!("{name} logo")
+                />
             }
             .into_any()
         }),
@@ -102,36 +122,28 @@ fn ChannelsListIsland() -> impl IntoView {
                     class=style::row_btn_preview
                     title="Preview channel"
                     aria-label="Preview channel"
-                >
-                    <Icon name=IconName::Play size="1.25rem"/>
-                </a>
+                ></a>
                 <a
                     href=format!("/channels/{id}")
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
                     title="Edit channel"
                     aria-label="Edit channel"
-                >
-                    <Icon name=IconName::Edit size="1.25rem"/>
-                </a>
+                ></a>
                 <span
-                    class=format!("{} {}", style::row_btn_icon, style::row_btn_disabled)
+                    class=format!("{} {} {}", style::row_btn_icon, style::row_btn_search, style::row_btn_disabled)
                     title="Troubleshoot channel"
                     aria-label="Troubleshoot channel"
                     aria-disabled="true"
-                >
-                    <Icon name=IconName::Search size="1.25rem"/>
-                </span>
+                ></span>
                 <button
-                    class=style::row_btn_icon
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
                     title="Delete channel"
                     aria-label="Delete channel"
                     on:click=move |_| {
                         delete_target.set(Some(ch_clone.clone()));
                         delete_open.set(true);
                     }
-                >
-                    <Icon name=IconName::Delete size="1.25rem"/>
-                </button>
+                ></button>
             </div>
         }
         .into_any()
@@ -141,11 +153,9 @@ fn ChannelsListIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::action_bar>
                 <a href="/channels/add" class=style::btn_add>
-                    <Icon name=IconName::Add size="1.125rem"/>
                     "Add Channel"
                 </a>
                 <a href="/channels/numbers" class=style::btn_numbers>
-                    <Icon name=IconName::Edit size="1.125rem"/>
                     "Edit Numbers"
                 </a>
             </div>
@@ -180,36 +190,25 @@ fn ChannelsListIsland() -> impl IntoView {
                 </div>
             </section>
 
-            {move || {
-                delete_target.get().map(|ch| {
-                    let name = ch.name.clone();
-                    let id = ch.id;
-                    view! {
-                        <DeleteDialog
-                            open=delete_open
-                            entity_name=name
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(id);
-                                } else {
-                                    delete_open.set(false);
-                                }
-                            })
-                        />
+            // DeleteDialog is always rendered; visibility is controlled via `open`.
+            // A stable DOM shape is required to avoid failed_to_cast_marker_node on hydration.
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|ch| ch.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(ch) = delete_target.get_untracked() {
+                        if confirmed {
+                            delete_action.dispatch(ch.id);
+                        } else {
+                            delete_open.set(false);
+                        }
+                    } else {
+                        delete_open.set(false);
                     }
                 })
-            }}
+            />
         </div>
-    }
-}
-
-fn logo_text(name: &str) -> String {
-    let mut words = name
-        .split_whitespace()
-        .filter_map(|word| word.chars().next());
-    match (words.next(), words.next()) {
-        (Some(first), Some(second)) => format!("{first}{second}").to_uppercase(),
-        (Some(first), None) => first.to_uppercase().to_string(),
-        _ => "TV".to_string(),
     }
 }

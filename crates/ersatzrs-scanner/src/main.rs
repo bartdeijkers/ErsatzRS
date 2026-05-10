@@ -50,13 +50,12 @@ enum Provider {
 #[tokio::main]
 #[allow(clippy::disallowed_methods)]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
     let args = Args::parse();
     let startup = db::open_startup_database()
         .await
         .context("initialize database")?;
+    init_logging(&startup.pool).await;
+
     let pool = startup.pool;
 
     match args.provider {
@@ -66,6 +65,23 @@ async fn main() -> anyhow::Result<()> {
         Provider::Emby => scan_emby(&pool, &args).await?,
     }
     Ok(())
+}
+
+#[allow(clippy::disallowed_methods)]
+async fn init_logging(pool: &DbPool) {
+    let base_filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
+    let filter = ersatzrs_infra::logging::logging_filter_from_database(pool, base_filter)
+        .await
+        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_new(filter).unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new(ersatzrs_infra::logging::default_filter())
+            }),
+        )
+        .init();
 }
 
 async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
@@ -527,6 +543,7 @@ mod tests {
             library_id: 5,
             ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: false,
+            deep_scan: false,
         }
     }
 
@@ -536,6 +553,7 @@ mod tests {
             library_id: 999,
             ffprobe_path: Some("ffprobe".to_owned()),
             dry_run: true,
+            deep_scan: false,
         }
     }
 

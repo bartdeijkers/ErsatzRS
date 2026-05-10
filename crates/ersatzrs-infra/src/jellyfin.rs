@@ -715,12 +715,70 @@ async fn load_jellyfin_api_key(pool: &DbPool, address: &str) -> Result<String> {
     })
 }
 
-fn format_jellyfin_auth_header(value: String) -> String {
+/// Builds a Jellyfin `Authorization` header from a raw API key.
+///
+/// Mirrors `JellyfinConnectionParameters.AuthorizationHeader` in `ErsatzTV`
+/// (`MediaBrowser Token=<api_key>`). Already-formatted headers pass through.
+#[must_use]
+pub fn format_jellyfin_auth_header(value: String) -> String {
     if value.contains("Token=") || value.starts_with("MediaBrowser ") {
         value
     } else {
         format!("MediaBrowser Token=\"{value}\"")
     }
+}
+
+/// Server identity returned by Jellyfin's `/System/Info` endpoint. Used to
+/// validate a freshly-saved API key/address pair before persisting it as the
+/// active connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinServerInformation {
+    pub server_name: String,
+    pub operating_system: String,
+}
+
+/// Calls `/System/Info` on the Jellyfin server and returns the basic server
+/// identity. Mirrors `JellyfinApiClient.GetServerInformation` in `ErsatzTV`;
+/// used by the connection editor to validate the API key before saving.
+///
+/// # Errors
+///
+/// Returns an error when the request fails, times out (5 s like `ErsatzTV`),
+/// or the response cannot be parsed.
+pub async fn fetch_server_information(
+    address: &str,
+    api_key: &str,
+) -> std::result::Result<JellyfinServerInformation, String> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct SystemInfoResponse {
+        #[serde(default)]
+        server_name: Option<String>,
+        #[serde(default)]
+        operating_system: Option<String>,
+    }
+
+    let url = format!("{}/System/Info", address.trim_end_matches('/'));
+    let header = format_jellyfin_auth_header(api_key.to_owned());
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .get(url)
+        .header("Authorization", header)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Jellyfin returned HTTP {}", response.status()));
+    }
+    let body: SystemInfoResponse = response.json().await.map_err(|e| e.to_string())?;
+    Ok(JellyfinServerInformation {
+        server_name: body.server_name.unwrap_or_else(|| "Jellyfin".to_string()),
+        operating_system: body.operating_system.unwrap_or_default(),
+    })
 }
 
 fn project_show(item: JellyfinLibraryItemResponse) -> Option<JellyfinShowItem> {
@@ -1139,7 +1197,7 @@ async fn item_etag_matches(
 /// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind`,
 /// `Name`, and `JellyfinPathInfo` rows for libraries that the server still
 /// reports. Mirrors `MediaSourceRepository.UpdateLibraries` for Jellyfin in
-/// ErsatzTV. The `MediaKind` is only updated when `ShouldSyncItems` is
+/// `ErsatzTV`. The `MediaKind` is only updated when `ShouldSyncItems` is
 /// false to avoid invalidating an in-progress sync.
 ///
 /// # Errors
@@ -1274,8 +1332,8 @@ async fn replace_jellyfin_path_infos_in_tx(
 
 /// Replaces all `JellyfinPathInfo` rows for a library with the supplied set.
 ///
-/// Used to mirror ErsatzTV path mapping for SMB/NFS shares where the Jellyfin
-/// server reports its local path and the network path that ErsatzRS should
+/// Used to mirror `ErsatzTV` path mapping for SMB/NFS shares where the Jellyfin
+/// server reports its local path and the network path that `ErsatzRS` should
 /// rewrite onto. Network-only path infos with empty `NetworkPath` are
 /// filtered out by the projection.
 ///

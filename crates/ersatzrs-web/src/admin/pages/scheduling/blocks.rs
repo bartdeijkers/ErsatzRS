@@ -311,36 +311,35 @@ pub fn BlocksPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            // ── Delete dialogs ──────────────────────────────────────────
-            {move || del_group_target.get().map(|grp| {
-                let id = grp.id;
-                let name = grp.name.clone();
-                view! {
-                    <DeleteDialog
-                        open=del_group_open
-                        entity_name=name
-                        on_confirm=Callback::new(move |confirmed: bool| {
-                            if confirmed { del_group_action.dispatch(id); }
-                            else { del_group_open.set(false); }
-                        })
-                    />
-                }
-            })}
-
-            {move || del_block_target.get().map(|b| {
-                let id = b.id;
-                let name = b.name.clone();
-                view! {
-                    <DeleteDialog
-                        open=del_block_open
-                        entity_name=name
-                        on_confirm=Callback::new(move |confirmed: bool| {
-                            if confirmed { del_block_action.dispatch(id); }
-                            else { del_block_open.set(false); }
-                        })
-                    />
-                }
-            })}
+            // ── Delete dialogs — always rendered; visibility via `open` signal ──
+            <DeleteDialog
+                open=del_group_open
+                entity_name=Signal::derive(move || {
+                    del_group_target.get().map(|grp| grp.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(grp) = del_group_target.get_untracked() {
+                        if confirmed { del_group_action.dispatch(grp.id); }
+                        else { del_group_open.set(false); }
+                    } else {
+                        del_group_open.set(false);
+                    }
+                })
+            />
+            <DeleteDialog
+                open=del_block_open
+                entity_name=Signal::derive(move || {
+                    del_block_target.get().map(|b| b.name.clone()).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some(b) = del_block_target.get_untracked() {
+                        if confirmed { del_block_action.dispatch(b.id); }
+                        else { del_block_open.set(false); }
+                    } else {
+                        del_block_open.set(false);
+                    }
+                })
+            />
         </div>
     }
 }

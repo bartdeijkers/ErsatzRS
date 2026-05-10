@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-02 (Slice 18 scanner deepening closed)
+Last updated: 2026-05-10 (platform parity across six RIDs)
 
 ## Current Phase
 
@@ -130,7 +130,8 @@ POST; drawvg placement preview (320×180 PNG via FFmpeg, debounced 400 ms).
 Phase 6.7 delivered the FFmpeg Profile editor.
 
 **Phase 7 — in progress.** Full HLS parity is intentionally scheduled into
-Phase 7 rather than Phase 5; see `plans/defer-hls-parity-to-phase-7.md`.
+Phase 7 rather than Phase 5; see the Phase 7 slice log below for the current
+HLS port progress.
 
 Phase 7 Slice 1 through Slice 4 are landed. Slice 1 ported the HLS entry surface:
 `/iptv/channels.m3u` emits mode-aware URL suffixes (HLS segmenter →
@@ -225,9 +226,8 @@ Slice 9 ports the first explicit readiness and downgrade/schema-check surface.
 inspects `_sqlx_migrations` for unknown versions, partially applied rows, and
 checksum mismatches, and only runs migrations plus default bootstrap when that
 schema state is clean. `ersatzrs-web` now captures that startup state, returns
-`503 Service Unavailable` from `/healthz` when the schema is not ready, logs
-downgrade / dirty-migration findings at startup, and feeds the existing
-Support nav badge from the same counts. The web startup path also now reads and
+`503 Service Unavailable` from `/healthz` when the schema is not ready, and
+logs downgrade / dirty-migration findings at startup. The web startup path also now reads and
 backfills the upstream `hdhr.uuid` / `hdhr.tuner_count` config keys while
 remaining backward compatible with the earlier mixed-case keys. Review
 outcome: ready for review.
@@ -249,15 +249,19 @@ requested hardware encoder or decoder is unavailable. The health-check
 hardware support helper now uses the same capability factory so support
 warnings stay aligned with pipeline dispatch.
 
-Slice 16 has started for the non-web health-check engine. `ersatzrs-core` now
-owns ErsatzTV-compatible health result/status/summary contracts plus a
-`HealthCheckService` runner, while `ersatzrs-infra::health` provides the first
-SQL-backed checks for FFmpeg version/capabilities, FFmpeg troubleshooting
-reports, hardware acceleration, VAAPI driver guidance, file-not-found/
-unavailable media state, empty schedules, zero-duration media, missing
-movie/episode metadata, and downgrade/schema readiness. Runs can be persisted
-to `ConfigElement` as `health.results` and `health.summary`; this must be kept
-current as porting work changes runtime capabilities or parity-sensitive
+Slice 16 is complete for the non-web health-check engine. `ersatzrs-core` owns
+ErsatzTV-compatible health result/status/summary contracts plus a
+`HealthCheckService` runner, while `ersatzrs-infra::health` provides SQL-backed
+checks for FFmpeg version/capabilities, FFmpeg troubleshooting reports,
+hardware acceleration, VAAPI driver guidance, VAAPI device existence,
+provider connectivity (reading `maintenance.provider_connectivity`),
+file-not-found/unavailable media state, empty schedules, zero-duration media,
+missing movie/episode metadata, and downgrade/schema readiness. Runs persist to
+`ConfigElement` as `health.results` and `health.summary`. The admin web layer
+exposes `/system/health` rendering the persisted snapshot or, when none exists,
+the live health service with `NotApplicable` rows filtered like ErsatzTV, and
+the same persisted parity summary feeds the health detail surface. This must be
+kept current as porting work changes runtime capabilities or parity-sensitive
 persisted state.
 
 Slice 17 is complete. The new `ersatzrs-scheduler` binary runs
@@ -269,6 +273,15 @@ cache cleanup, search-index rebuild dispatch markers, and automatic persisted
 health runs after successful FFmpeg runtime probing. Loop timestamps and
 dispatcher state are stored in `ConfigElement` under `maintenance.*`; health
 results continue to use `health.results` and `health.summary`.
+
+Slice 19 is complete for the non-web search parity target. The core search
+parser/evaluator now lowercases and accent-folds text, consumes Lucene boost
+syntax, handles fuzzy terms, phrase slop, numeric exact/range fields, wildcards,
+and jump-letter page maps. The SQL-backed search projection now carries
+Director, Writer, chapter count, duration, image, and remote-stream documents
+alongside the existing metadata/stream/provider GUID fields. ADR 0009 records
+the decision to keep search in process and SQL-backed while deliberately
+dropping ErsatzTV's experimental Elasticsearch backend.
 
 Slice 10 lands ADR 0008 and the first in-repo FFmpeg 8.1 image delivery pass.
 `ersatzrs-ffmpeg` now checks both `ffmpeg` and `ffprobe` at startup, honors the
@@ -287,9 +300,8 @@ build path handles Vulkan/SVT-AV1 correctly, and the Leptos hydration library
 target builds into the image. Review outcome: GO for the next Phase 7 slice.
 
 Next up: continue Phase 7 items from the master plan without starting a new
-slice in this session. The remaining non-web priorities are scanner deepening,
-search-index hardening, config/ADR closure, side-by-side benchmarking, and
-long soak tests.
+slice in this session. The remaining non-web priorities are config/ADR closure,
+side-by-side benchmarking, and long soak tests.
 
 The `ersatzrs-web` structure refactor now has the target web-crate boundaries
 documented in [`docs/reference/web-crate-structure.md`](docs/reference/web-crate-structure.md).
@@ -307,6 +319,17 @@ MudBlazor `PaletteDark` colors more closely, the channel table uses
 ErsatzTV-like row height, divider, pager, switch, logo, language, mode, and
 icon-action spacing, and `artwork/ersatzrs_full.png` is available as the new
 full-width raster wordmark asset.
+
+UX/UI Slice 1 is closed. Channels and watermarks now share the ErsatzTV-style
+top action strip, constrained content area, divider, and icon row actions;
+channel rows render generated logo images via `/iptv/logos/gen` and show
+disabled/hidden number markers. Local library create/update now normalizes
+server filesystem paths before validation, accepts `file://` path input,
+deduplicates normalized paths, and writes atomically. FFmpeg profile edit keeps
+saved hardware acceleration settings visible even when the current runtime
+cannot use them, and the hardware list now considers both reported hwaccels and
+hardware encoder names. Vulkan is documented as a runtime/toolchain capability,
+not an ErsatzTV profile enum value.
 
 Persistence parity gaps remain tracked per table in
 `docs/reference/persistence-gap-matrix.md`. Media version/file/stream/chapter
@@ -335,6 +358,37 @@ parity. Remaining deeper Classic parity is limited to schedule-item filler
 preset fields and generated fake group schedule items for full fill-with-group
 enumerator behavior that are not yet represented on the Rust domain model.
 
+Slice 20 closed the remaining non-web config and ADR cleanup. ErsatzTV
+`ConfigElement` keys for global watermark and global fallback filler now feed
+playout build post-processing: generated items inherit
+`ffmpeg.global_watermark_id` when no item watermark is set, and generated gaps
+can be filled from `ffmpeg.global_fallback_filler_id`. The mediaserver
+bootstrap seeds `log.minimum_level` plus scanning/scheduling/searching/
+streaming/http subsystem keys, and `ersatzrs-web`, `ersatzrs-scanner`, and
+`ersatzrs-scheduler` load those keys into `tracing` filters on startup. XMLTV
+block behavior moved into core/infra (`XmltvBlockBehavior` and
+`xmltv.block_behavior`) so the transport layer only renders projected guide
+programmes. ADR 0010 records the Classic scheduling engine port decision.
+
+**Platform support — at parity with ErsatzTV across all six RIDs.** Every
+PR/push runs a 6-cell `platforms` matrix in `.github/workflows/ci.yml` that
+builds the workspace for `linux-x64`, `linux-arm64`, `linux-arm`, `osx-arm64`,
+`osx-x64`, and `win-x64`, and runs the test suite on the natively-built cells
+(linux-x64 on `ubuntu-latest`, osx-arm64 on `macos-latest`, win-x64 on
+`windows-latest`). The two ARM Linux cells use cross-rs via
+[`Cross.toml`](Cross.toml); osx-x64 cross-compiles from `macos-latest` because
+the Intel `macos-13` runners are scarce and being deprecated. Tag pushes now
+attach `ersatzrs-<tag>-<rid>.tar.gz` (or `.zip` for win-x64) per RID through
+the new `binaries` matrix in [`release.yml`](.github/workflows/release.yml),
+sitting alongside the existing Docker publish path. Windows contributors use
+[`run.cmd`](run.cmd) and [`run.ps1`](run.ps1) which mirror the bash
+`run.sh` subcommands. Audit results: only one source-level fix was needed —
+splitting the unix-only ffmpeg version-check test helpers into a
+`#[cfg(all(test, unix))] mod unix_tests` so the parser tests still compile on
+Windows. The `platform-parity-fixer` agent in
+[`.claude/agents/`](.claude/agents/platform-parity-fixer.md) encodes the audit
+procedure and the false-positive catalogue for future regressions.
+
 ### Admin UI Route Coverage
 
 The NavDrawer in [`crates/ersatzrs-web/src/admin/layout/nav.rs`](crates/ersatzrs-web/src/admin/layout/nav.rs)
@@ -351,20 +405,71 @@ the summary below is the readiness view.
 `/media/browser/images` (alias `/media/images`), `/media/music/artists`,
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
 `/media/smart-collections`, `/media/trakt/lists`, `/search`, `/blocks`
-(alias for `/scheduling/blocks`), `/playouts` and
-`/playouts/sequential/:id`.
+(alias for `/scheduling/blocks`), `/playouts`, `/playouts/sequential/:id`,
+`/system/health`, `/system/logs`, and `/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
 `/media/remote/streams`, `/media/multi-collections`, `/media/rerun-collections`,
 `/media/playlists`, `/media/filler/presets`,
-`/schedules`, `/templates`, `/decos`, `/deco-templates`,
-`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`, and
-`/system/{health,logs,troubleshooting}`. These should not be read as Phase 6
+`/schedules`, `/templates`, `/decos`, `/deco-templates`, and
+`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
 
+### Admin UI Hydration Parity
+
+Tracking the per-page conversion from `#[component]` interactive bodies to
+`#[island]`. See [TEST.md](TEST.md) hydration rules and the reference patterns
+in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17` and
+`pages/media_sources/plex.rs`.
+
+The first scripted Playwright migration on 2026-05-04 found marker-node
+hydration mismatches on the pages marked ❌ below. Those rows have island
+wiring present, but the browser tests prove their handlers are not reliable
+yet.
+
+| Page                          | Status | Notes                                                          |
+| ----------------------------- | ------ | -------------------------------------------------------------- |
+| `LibrariesPage`               | ❌     | Playwright hydration mismatch; lock-state polling present.      |
+| `SearchPage`                  | ❌     | Playwright hydration mismatch.                                  |
+| `PlexSourcesPage`             | ✅     | OAuth PIN island.                                              |
+| `WatermarksEditorPage`        | ✅     |                                                                |
+| `BlockEditorPage`             | ✅     |                                                                |
+| `YamlEditorPage`              | ✅     |                                                                |
+| `TimelinePage` (`/playouts`)  | ✅     | Read-only SVG island; selection is the gap (Slice F).          |
+| `CollectionsPage`             | ✅     | Autocomplete island.                                           |
+| `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
+| `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
+| `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
+| `ChannelEditorPage`           | ❌     | Playwright hydration mismatch.                                  |
+| `LocalLibrariesPage`          | ❌     | Playwright hydration mismatch; static HTML add-form unchanged.  |
+| `JellyfinSourcesPage` etc.    | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
+| `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
+| `PlayoutsPage` row selection  | ⏳     | Slice F — lift selection to URL query param.                   |
+| `BlocksPage`                  | ⏳     | Group add/delete buttons.                                      |
+| `WatermarksListPage`          | ⏳     | DeleteDialog action.                                           |
+| `TraktListsPage`              | ⏳     |                                                                |
+| `TraktListEditorPage`         | ⏳     |                                                                |
+| `SmartCollectionsPage`        | ⏳     |                                                                |
+| `TrashPage`                   | ⏳     |                                                                |
+| `PlexLibrariesPage`           | ⏳     |                                                                |
+| `PlexPathsPage`               | ⏳     |                                                                |
+| `JellyfinConnectionPage`      | ⏳     |                                                                |
+| `JellyfinLibrariesPage`       | ⏳     |                                                                |
+| `JellyfinPathsPage`           | ⏳     |                                                                |
+| `EmbyConnectionPage`          | ⏳     |                                                                |
+| `EmbyLibrariesPage`           | ⏳     |                                                                |
+| `EmbyPathsPage`               | ⏳     |                                                                |
+
+Tick a row when both the wiring change and the matching Playwright test in
+[TEST.md](TEST.md) pass.
+
 ### Known TODOs from Phase 0
 
+- **Admin pages with dead `on:*` handlers (islands hydration gap).** Tracking
+  is now in the "Admin UI Hydration Parity" table above. The fix pattern is
+  documented in [TEST.md](TEST.md) and proven on `LibrariesPage` /
+  `PlexSourcesPage`. Each row is one slice; ship wiring + playbook together.
 - Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.
 - Replace bash `/dev/tcp` HEALTHCHECK with a purpose-built `ersatzrs-healthcheck` binary.
 - `axum = "0.7"` pinned to match `leptos_axum 0.7` — bump both when leptos_axum upgrades to axum 0.8.
@@ -379,6 +484,21 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-10 | Claude Code (claude-opus-4-7) | Closed the platform-parity slice. Added the `platform-parity-fixer` project agent and Supported Platforms section in AGENTS.md, split unix-only ffmpeg test helpers into `#[cfg(all(test, unix))] mod unix_tests`, added `Cross.toml` for cross-rs ARM/Windows builds, made `ersatzrs-web/build.rs` warn-and-skip when stylance-cli is unavailable so cross builds succeed, expanded the CI matrix with a 6-cell `platforms` job (linux-x64/arm64/arm via cross, osx-arm64 native, osx-x64 cross from Apple Silicon, win-x64 MSVC, all green on real runners), added a `binaries` matrix to release.yml that attaches `ersatzrs-<tag>-<rid>.tar.gz`/`.zip` to GitHub releases per RID, ported `run.sh` to `run.ps1` plus a `run.cmd` shim for Windows contributors, ignored RUSTSEC-2023-0071 with rationale, and updated parity-matrix.md to mark platform support at parity with ErsatzTV. |
+| 2026-05-08 | Codex (GPT-5) | Added the `.claude/agents/support-parity-fixer.md` project agent to drive the Support Playwright parity failures to green while following the repo contracts, ErsatzTV source-first workflow, and Leptos hydration rules. |
+| 2026-05-08 | Codex (GPT-5) | Captured the live ErsatzTV Legacy Support page criteria and added scripted Playwright coverage for `/system/health`, `/system/logs`, and `/system/troubleshooting`, including the visible health-check row set and troubleshooting report tabs. |
+| 2026-05-08 | Codex (GPT-5) | Fixed `/system/health` Support parity to render the ErsatzTV-style health table from persisted or live check results, filter `NotApplicable` rows, and keep the Support nav group expanded by default. |
+| 2026-05-09 | Codex (GPT-5) | Added the `/system/logs` Support route with the ErsatzTV-style heading, Search field, Timestamp/Level/Message table, and pager surface used by the scripted Support parity criteria. |
+| 2026-05-09 | Codex (GPT-5) | Added the `/system/troubleshooting` Support route with ErsatzTV-style Tools, General, NVIDIA, and QSV tabs plus copyable diagnostic report placeholders for the scripted Support parity criteria. |
+| 2026-05-09 | Codex (GPT-5) | Made `/system/logs` read the newest OS-local app-data log file and render recent runtime entries at the configured tracing level, matching ErsatzTV's newest-log-file Support page behavior. |
+| 2026-05-06 | Claude Code (claude-opus-4-7) | Brought the `/ffmpeg/:id` editor to behavior parity with `Pages/FFmpegEditor.razor`: reactive Video Profile select with `main`/`high`/`high444p`-vs-`high10` options that disable when not H264 / HW unsupported; AV1 video format option gated to NVENC/VAAPI/QSV; Tonemap hidden under QSV; QSV Extra Hardware Frames shown only under QSV; Pad Mode visible with `NormalizeVideo` and disabled unless VAAPI; Linux-only VAAPI driver/display sub-rows and shared VAAPI/QSV device dropdown with reactive label; new `load_editor_preflight` server fn enumerates `/dev/dri/render*` and the OS gate; added a `ReactiveSelectField` primitive in `admin/ui/primitives/form.rs` so dynamic option lists no longer recreate the SelectField subtree. Replaced `<Show>` blocks with `style:display` per `TEST.md` rule 2 for stable DOM shape. Hydration mismatch on admin `:id` pages remains a project-wide systemic issue (see TEST.md per-page index — `/media/libraries`, `/channels/:id`, `/ffmpeg/profiles/:id` all ❌). |
+| 2026-05-04 | Codex (GPT-5) | Migrated the admin hydration playbooks from `TEST.md` to `@playwright/test` under `tests/e2e/`, added the SQLite E2E seed fixture, fixed `/ffmpeg/profiles` route precedence, and marked the scripted hydration baseline red because Playwright now catches marker-node mismatches on the migrated pages. |
+| 2026-05-03 | Claude Code (claude-opus-4-7) | Fixed the dead `Scan` / `Deep Scan` buttons on `/media/libraries` (and the `Sign out of Plex` button on `/media/sources/plex`) by wrapping each page's interactive body in a `#[island]`, since `hydrate_islands()` never wires `on:click` declared at the top level of plain `#[component]` pages. Also stabilized the per-row libraries DOM (always-rendered Deep Scan/Scan/spinner toggled via reactive `style:display` and `disabled`) so hydration cannot fall back to inert SSR markup. Documented the broader latent gap in Phase 0 TODOs. |
+| 2026-05-03 | Codex (GPT-5) | Fixed the admin hydration crash by removing the prop-bearing channel editor island from the island hydrator path and keeping the local library media-kind hidden input in a stable SSR/CSR DOM shape. |
+| 2026-05-03 | Codex (GPT-5) | Closed UX/UI Slice 1: aligned channel/watermark list layout with ErsatzTV, added generated IPTV logo rendering, fixed local library path normalization/atomic persistence, preserved saved FFmpeg hardware values in the profile editor, and updated UX/parity/deviation docs. |
+| 2026-05-03 | Claude Code (claude-opus-4-7) | Closed Slice 16 health-check engine: added `ProviderConnectivityHealthCheck` reading the maintenance-loop persisted `maintenance.provider_connectivity` poll (with friendly Plex/Jellyfin/Emby `ServerName` lookup), `VaapiDeviceHealthCheck` validating the configured profile `VaapiDevice` exists on disk, exposed `ProviderConnectivityResult`/`PROVIDER_CONNECTIVITY_KEY` for cross-crate use, added a `/system/health` admin page rendering the persisted `health.results` snapshot, and made the navigation health badge combine the persisted parity summary with the existing startup/runtime counts; new infra unit tests for both checks. |
+| 2026-05-02 | Codex (GPT-5) | Closed Slice 20 config and ADR cleanup: wired global watermark/fallback filler config into playout build post-processing, seeded and loaded subsystem logging levels, moved XMLTV block behavior into core/infra, added ADR 0010 for Classic scheduling, and updated parity docs. |
+| 2026-05-02 | Codex (GPT-5) | Closed Slice 19 search hardening: added Lucene-like normalization/modifier behavior, fuzzy/proximity/boost parsing, numeric chapter/duration fields, SQL-backed page maps, image/remote-stream search documents, ADR 0009 dropping Elasticsearch, and updated parity/status docs. |
 | 2026-05-02 | Claude Code (claude-opus-4-7) | Closed Slice 18 scanner deepening: extended `MediaStream` writes (and the ffprobe / Plex / Jellyfin / Emby projections) with `Profile`, `PixelFormat`, `ColorRange`/`ColorSpace`/`ColorTransfer`/`ColorPrimaries`, `BitsPerRawSample`, `AttachedPic`, and attachment `FileName`/`MimeType`; decoded `LibraryOptions.PathInfos` from Jellyfin/Emby into new `JellyfinPathInfo`/`EmbyPathInfo` writers (`PlexPathInfo` does not exist in ErsatzTV); added `sync_plex_libraries`/`sync_jellyfin_libraries`/`sync_emby_libraries` for full add/update/delete cascade with `ShouldSyncItems` parity; ported per-folder `Artist` resolution to write `MusicVideo`/`MusicVideoMetadata`, and added `.yml`/`.yaml` walking to write `RemoteStream`/`RemoteStreamMetadata` from local scans; added a multi-page Plex collection corpus test exercising unicode names and mixed item types. Updated plan/persistence-gap-matrix/parity-matrix. |
 | 2026-05-02 | Codex (GPT-5) | Remediated Slice 18 scanner review findings: added deep-scan propagation for CLI/admin provider scans, scoped provider etag skip/upsert lookups to the current library, restored found provider rows to `Normal` on non-skip updates, and added focused provider regression tests. |
 | 2026-05-02 | Codex (GPT-5) | Started Slice 18 scanner deepening: added etag-based skip for unchanged normal-state Plex/Jellyfin/Emby movie and episode sync paths, avoiding Jellyfin/Emby PlaybackInfo lookups and preserving existing media rows when etags match; updated the slice plan and added focused provider tests. |

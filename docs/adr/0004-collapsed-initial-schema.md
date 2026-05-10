@@ -26,5 +26,5 @@ starts from the intended ErsatzRS baseline.
 
 ## References
 
-- `/home/bart/ErsatzTV/ErsatzTV.Infrastructure/Data/TvContext.cs`
+- `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs`
 - [Migration guide](../how-to/add-migration.md)

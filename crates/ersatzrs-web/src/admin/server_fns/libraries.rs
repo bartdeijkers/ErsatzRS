@@ -7,7 +7,8 @@ pub struct LibraryRow {
     pub name: String,
     /// "Local", "Plex", "Jellyfin", or "Emby"
     pub kind: String,
-    /// Raw DB integer: 0=Movies 1=Shows 2=MusicVideos 3=OtherVideos 4=Songs 5=Images 6=RemoteStreams
+    /// Raw DB integer matching `ErsatzTV`'s `LibraryMediaKind`:
+    /// 1=Movies 2=Shows 3=MusicVideos 4=OtherVideos 5=Songs 6=Images 7=RemoteStreams
     pub media_kind: i64,
     /// Populated for remote providers; None for Local.
     pub source_name: Option<String>,
@@ -17,13 +18,13 @@ pub struct LibraryRow {
 impl LibraryRow {
     pub fn media_kind_label(&self) -> &'static str {
         match self.media_kind {
-            0 => "Movies",
-            1 => "Shows",
-            2 => "Music Videos",
-            3 => "Other Videos",
-            4 => "Songs",
-            5 => "Images",
-            6 => "Remote Streams",
+            1 => "Movies",
+            2 => "Shows",
+            3 => "Music Videos",
+            4 => "Other Videos",
+            5 => "Songs",
+            6 => "Images",
+            7 => "Remote Streams",
             _ => "Unknown",
         }
     }
@@ -83,7 +84,9 @@ pub async fn list_libraries() -> Result<Vec<LibraryRow>, ServerFnError> {
 }
 
 /// Fires a background scan for a single library. Returns immediately.
-/// The actual sync work runs in a spawned tokio task.
+/// The actual sync work runs in a spawned tokio task. The library is marked
+/// as locked in `AppState::entity_locker` for the duration of the scan so the
+/// UI can render an indeterminate spinner while it runs.
 #[server]
 #[allow(clippy::unused_async)]
 pub async fn scan_library(
@@ -95,8 +98,18 @@ pub async fn scan_library(
 
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
+    let locker = state.entity_locker.clone();
+
+    tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
+
+    if !locker.lock_library(library_id) {
+        tracing::info!(library_id, "scan_library: already locked, no-op");
+        return Ok(());
+    }
 
     tokio::task::spawn(async move {
+        let started = std::time::Instant::now();
+        tracing::info!(library_id, kind = %kind, "library scan started");
         macro_rules! log_err {
             ($res:expr) => {
                 if let Err(e) = $res {
@@ -137,7 +150,24 @@ pub async fn scan_library(
                 tracing::warn!(kind = other, "unknown library kind in scan_library");
             }
         }
+        locker.unlock_library(library_id);
+        tracing::info!(
+            library_id,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "library scan finished"
+        );
     });
 
     Ok(())
+}
+
+/// Returns the ids of libraries currently being scanned. Polled by the
+/// libraries page to drive the per-row "scanning" spinner.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.entity_locker.locked_libraries())
 }
