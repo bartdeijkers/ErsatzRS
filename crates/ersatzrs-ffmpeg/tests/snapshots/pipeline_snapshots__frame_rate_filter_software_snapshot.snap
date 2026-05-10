@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 494
+expression: "frame_rate_filter(&software_state(), FrameRate::new(60, 1))"
+---
+framerate=fps=60/1:flags=-scd

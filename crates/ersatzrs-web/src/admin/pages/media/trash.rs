@@ -212,43 +212,37 @@ pub fn TrashPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            {move || {
-                single_delete_target.get().map(|(item_id, item_title)| {
-                    view! {
-                        <DeleteDialog
-                            open=single_delete_open
-                            entity_name=item_title
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(vec![item_id]);
-                                } else {
-                                    single_delete_open.set(false);
-                                }
-                            })
-                        />
+            <DeleteDialog
+                open=single_delete_open
+                entity_name=Signal::derive(move || {
+                    single_delete_target.get().map(|(_, title)| title).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some((item_id, _)) = single_delete_target.get_untracked() {
+                        if confirmed {
+                            delete_action.dispatch(vec![item_id]);
+                        } else {
+                            single_delete_open.set(false);
+                        }
+                    } else {
+                        single_delete_open.set(false);
                     }
                 })
-            }}
-
-            {move || {
-                let count = selected_count.get();
-                (count > 0).then(|| {
-                    let ids = selected_ids.with(|set| set.iter().copied().collect::<Vec<_>>());
-                    view! {
-                        <DeleteDialog
-                            open=bulk_delete_open
-                            entity_name=format!("{count} selected items")
-                            on_confirm=Callback::new(move |confirmed: bool| {
-                                if confirmed {
-                                    delete_action.dispatch(ids.clone());
-                                } else {
-                                    bulk_delete_open.set(false);
-                                }
-                            })
-                        />
+            />
+            <DeleteDialog
+                open=bulk_delete_open
+                entity_name=Signal::derive(move || {
+                    format!("{} selected items", selected_count.get())
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if confirmed {
+                        let ids = selected_ids.with(|set| set.iter().copied().collect::<Vec<_>>());
+                        delete_action.dispatch(ids);
+                    } else {
+                        bulk_delete_open.set(false);
                     }
                 })
-            }}
+            />
 
             <Modal
                 open=empty_trash_open

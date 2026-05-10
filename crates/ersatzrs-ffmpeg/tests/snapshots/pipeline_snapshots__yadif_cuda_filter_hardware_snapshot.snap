@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 302
+expression: "yadif_cuda_filter(&hardware_state(PixelFormat::Nv12))"
+---
+yadif_cuda

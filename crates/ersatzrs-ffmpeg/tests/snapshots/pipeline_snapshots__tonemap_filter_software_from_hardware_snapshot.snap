@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 355
+expression: "tonemap_filter(&hardware_state(PixelFormat::Cuda), PixelFormat::Yuv420P,\nTonemapAlgorithm::Hable,)"
+---
+hwdownload,format=p010le,zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p

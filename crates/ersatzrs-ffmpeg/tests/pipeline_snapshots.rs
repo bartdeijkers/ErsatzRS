@@ -1,19 +1,41 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use ersatzrs_domain::WatermarkLocation;
+use ersatzrs_domain::{HardwareAccelerationKind, VideoScanKind, WatermarkLocation};
 use ersatzrs_ffmpeg::{
-    lower_third_overlay, song_progress_filter, AmfPipelineBuilder, ComplexFilter, ConcatPlaylist,
-    DesiredVideoState, DrawvgOverlay, FilterChain, FrameSize, GraphicsTemplateRenderer, HlsOutput,
-    InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
-    QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder, SvgTemplate,
-    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkOverlay,
+    capability_report_for_tests, colorspace_filter, deinterlace_filter, deinterlace_qsv_filter,
+    deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter, hardware_upload_filter,
+    lower_third_overlay, normalize_loudness_filter, song_progress_filter, tonemap_cuda_filter,
+    tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter, yadif_cuda_filter, yadif_filter,
+    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
+    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
+    GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
+    PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder, RkmppPipelineBuilder,
+    SoftwarePipelineBuilder, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
+    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder,
+    WatermarkOverlay,
 };
+
+fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
+    PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264))
+}
+
+fn software_state() -> FrameState {
+    FrameState::new(FrameSize::new(1920, 1080))
+}
+
+fn hardware_state(pixel_format: PixelFormat) -> FrameState {
+    let mut state = software_state();
+    state.frame_data_location = FrameDataLocation::Hardware;
+    state.pixel_format = pixel_format;
+    state
+}
 
 #[test]
 fn software_pipeline_single_video_mpegts_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -24,7 +46,7 @@ fn software_pipeline_single_video_mpegts_snapshot() {
 #[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
@@ -44,7 +66,7 @@ fn software_pipeline_hls_snapshot() {
 #[test]
 fn nvenc_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -55,7 +77,7 @@ fn nvenc_pipeline_snapshot() {
 #[test]
 fn vaapi_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = VaapiPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -66,7 +88,33 @@ fn vaapi_pipeline_snapshot() {
 #[test]
 fn qsv_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_falls_back_to_software_when_encoder_is_missing_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.encoders.remove("h264_qsv");
+    let request = h264_request(desired).with_runtime_capabilities(report);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn qsv_pipeline_falls_back_to_software_when_decoder_is_missing_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.decoders.remove("h264_qsv");
+    let request = h264_request(desired).with_runtime_capabilities(report);
 
     let pipeline = QsvPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -77,7 +125,7 @@ fn qsv_pipeline_snapshot() {
 #[test]
 fn qsv_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let mut request = h264_request(desired);
     request.state.output_format = OutputFormat::Hls;
     request.state.hls = Some(HlsOutput {
         segment_template: "/tmp/channel-1/%05d.ts".to_owned(),
@@ -97,7 +145,7 @@ fn qsv_pipeline_hls_snapshot() {
 #[test]
 fn videotoolbox_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = VideoToolboxPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -108,7 +156,7 @@ fn videotoolbox_pipeline_snapshot() {
 #[test]
 fn amf_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = AmfPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -119,7 +167,7 @@ fn amf_pipeline_snapshot() {
 #[test]
 fn v4l2m2m_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = V4l2m2mPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -130,7 +178,7 @@ fn v4l2m2m_pipeline_snapshot() {
 #[test]
 fn rkmpp_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired);
+    let request = h264_request(desired);
 
     let pipeline = RkmppPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -218,6 +266,299 @@ fn song_progress_filter_snapshot() {
     );
 
     insta::assert_snapshot!(filter);
+}
+
+#[test]
+fn normalize_loudness_filter_default_snapshot() {
+    let filter = normalize_loudness_filter(AudioFilter::LoudNorm, None, None);
+
+    insta::assert_snapshot!(filter);
+}
+
+#[test]
+fn normalize_loudness_filter_custom_snapshot() {
+    let filter = normalize_loudness_filter(AudioFilter::LoudNorm, Some(-23.0), Some(44));
+
+    insta::assert_snapshot!(filter);
+}
+
+#[test]
+fn yadif_filter_software_snapshot() {
+    insta::assert_snapshot!(yadif_filter(&software_state()));
+}
+
+#[test]
+fn yadif_filter_hardware_nv12_snapshot() {
+    insta::assert_snapshot!(yadif_filter(&hardware_state(PixelFormat::Nv12)));
+}
+
+#[test]
+fn yadif_cuda_filter_software_snapshot() {
+    insta::assert_snapshot!(yadif_cuda_filter(&software_state()));
+}
+
+#[test]
+fn yadif_cuda_filter_hardware_snapshot() {
+    insta::assert_snapshot!(yadif_cuda_filter(&hardware_state(PixelFormat::Nv12)));
+}
+
+#[test]
+fn deinterlace_qsv_filter_software_snapshot() {
+    insta::assert_snapshot!(deinterlace_qsv_filter(&software_state(), 64));
+}
+
+#[test]
+fn deinterlace_qsv_filter_hardware_snapshot() {
+    insta::assert_snapshot!(deinterlace_qsv_filter(
+        &hardware_state(PixelFormat::Nv12),
+        64
+    ));
+}
+
+#[test]
+fn deinterlace_vaapi_filter_software_snapshot() {
+    insta::assert_snapshot!(deinterlace_vaapi_filter(&software_state()));
+}
+
+#[test]
+fn deinterlace_vaapi_filter_hardware_snapshot() {
+    insta::assert_snapshot!(deinterlace_vaapi_filter(&hardware_state(
+        PixelFormat::Vaapi
+    )));
+}
+
+#[test]
+fn deinterlace_filter_dispatch_snapshots() {
+    let cases = [
+        (HardwareAccelerationKind::None, software_state()),
+        (
+            HardwareAccelerationKind::Nvenc,
+            hardware_state(PixelFormat::Nv12),
+        ),
+        (HardwareAccelerationKind::Qsv, software_state()),
+        (
+            HardwareAccelerationKind::Vaapi,
+            hardware_state(PixelFormat::Vaapi),
+        ),
+    ];
+    let rendered = cases
+        .iter()
+        .map(|(accel, state)| format!("{accel:?} => {}", deinterlace_filter(*accel, state, 64)))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn tonemap_filter_software_snapshot() {
+    insta::assert_snapshot!(tonemap_filter(
+        &software_state(),
+        PixelFormat::Yuv420P,
+        TonemapAlgorithm::Hable,
+    ));
+}
+
+#[test]
+fn tonemap_filter_software_from_hardware_snapshot() {
+    insta::assert_snapshot!(tonemap_filter(
+        &hardware_state(PixelFormat::Cuda),
+        PixelFormat::Yuv420P,
+        TonemapAlgorithm::Hable,
+    ));
+}
+
+#[test]
+fn tonemap_cuda_filter_eight_bit_snapshot() {
+    insta::assert_snapshot!(tonemap_cuda_filter(
+        PixelFormat::Yuv420P,
+        TonemapAlgorithm::Hable,
+    ));
+}
+
+#[test]
+fn tonemap_cuda_filter_ten_bit_snapshot() {
+    insta::assert_snapshot!(tonemap_cuda_filter(
+        PixelFormat::Yuv420P10Le,
+        TonemapAlgorithm::Hable,
+    ));
+}
+
+#[test]
+fn tonemap_qsv_filter_snapshot() {
+    insta::assert_snapshot!(tonemap_qsv_filter());
+}
+
+#[test]
+fn tonemap_vaapi_filter_snapshot() {
+    insta::assert_snapshot!(tonemap_vaapi_filter(TonemapAlgorithm::Hable));
+}
+
+#[test]
+fn colorspace_filter_unknown_software_snapshot() {
+    let params = ColorParams {
+        is_unknown: true,
+        ..ColorParams::default()
+    };
+    insta::assert_snapshot!(colorspace_filter(
+        &software_state(),
+        &params,
+        PixelFormat::Yuv420P,
+        false,
+        false,
+    ));
+}
+
+#[test]
+fn colorspace_filter_bt2020_eight_bit_snapshot() {
+    let params = ColorParams {
+        is_bt2020_ten: true,
+        color_space: Some("bt2020nc".to_owned()),
+        color_transfer: Some("smpte2084".to_owned()),
+        color_primaries: Some("bt2020".to_owned()),
+        color_range: Some("tv".to_owned()),
+        ..ColorParams::default()
+    };
+    insta::assert_snapshot!(colorspace_filter(
+        &hardware_state(PixelFormat::Cuda),
+        &params,
+        PixelFormat::Yuv420P,
+        false,
+        false,
+    ));
+}
+
+#[test]
+fn colorspace_filter_bt470_bg_snapshot() {
+    let params = ColorParams {
+        is_bt470_bg: true,
+        ..ColorParams::default()
+    };
+    insta::assert_snapshot!(colorspace_filter(
+        &software_state(),
+        &params,
+        PixelFormat::Yuv420P,
+        false,
+        false,
+    ));
+}
+
+#[test]
+fn colorspace_filter_mixed_input_overrides_snapshot() {
+    let params = ColorParams {
+        is_mixed: true,
+        color_range: Some("tv".to_owned()),
+        color_space: Some("bt709".to_owned()),
+        color_transfer: Some("reserved".to_owned()),
+        color_primaries: Some(String::new()),
+        ..ColorParams::default()
+    };
+    insta::assert_snapshot!(colorspace_filter(
+        &software_state(),
+        &params,
+        PixelFormat::Yuv420P,
+        true,
+        false,
+    ));
+}
+
+#[test]
+fn hardware_upload_filter_snapshots() {
+    let rendered = [
+        HardwareAccelerationKind::None,
+        HardwareAccelerationKind::Nvenc,
+        HardwareAccelerationKind::Qsv,
+        HardwareAccelerationKind::Vaapi,
+        HardwareAccelerationKind::Amf,
+        HardwareAccelerationKind::VideoToolbox,
+        HardwareAccelerationKind::V4l2m2m,
+        HardwareAccelerationKind::Rkmpp,
+    ]
+    .into_iter()
+    .map(|accel| format!("{accel:?} => {}", hardware_upload_filter(accel, 64)))
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn hardware_download_filter_snapshots() {
+    let rendered = [
+        ("software", software_state()),
+        ("vaapi", hardware_state(PixelFormat::Vaapi)),
+        ("cuda", hardware_state(PixelFormat::Cuda)),
+        ("nv12", hardware_state(PixelFormat::Nv12)),
+    ]
+    .into_iter()
+    .map(|(name, state)| format!("{name} => {}", hardware_download_filter(&state)))
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn frame_rate_filter_software_snapshot() {
+    insta::assert_snapshot!(frame_rate_filter(&software_state(), FrameRate::new(60, 1)));
+}
+
+#[test]
+fn frame_rate_filter_hardware_snapshot() {
+    insta::assert_snapshot!(frame_rate_filter(
+        &hardware_state(PixelFormat::Nv12),
+        FrameRate::new(60, 1),
+    ));
+}
+
+#[test]
+fn pipeline_emits_deinterlace_for_interlaced_source_snapshot() {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+    source.scan_kind = VideoScanKind::Interlaced;
+    let request = PipelineRequest::new(
+        InputFile::video("/media/movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_emits_tonemap_for_hdr_source_snapshot() {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.color_params = SourceColorParams {
+        is_hdr: true,
+        is_bt2020_ten: true,
+    };
+    let request = PipelineRequest::new(
+        InputFile::video("/media/hdr-movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_emits_frame_rate_filter_when_source_differs_snapshot() {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+    source.frame_rate = Some(FrameRate::new(25, 1));
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.frame_rate = Some(FrameRate::new(60, 1));
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
 }
 
 #[test]

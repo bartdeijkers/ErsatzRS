@@ -15,6 +15,13 @@ pub struct JellyfinLibrarySummary {
     pub item_id: String,
     pub name: String,
     pub media_kind: LibraryMediaKind,
+    pub path_infos: Vec<JellyfinPathInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JellyfinPathInfo {
+    pub path: String,
+    pub network_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

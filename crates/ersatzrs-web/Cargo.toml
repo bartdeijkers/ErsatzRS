@@ -22,7 +22,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 urlencoding = "2"
 gloo-timers = { version = "0.3", features = ["futures"] }
-stylance = "0.7"
+stylance = "0.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
@@ -38,7 +38,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "fs"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 leptos_axum = "0.8"
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+sqlx = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 quick-xml = "0.37"
 base64 = "0.22.1"
@@ -65,7 +65,7 @@ assets-dir = "public"
 site-addr = "0.0.0.0:8409"
 reload-port = 3001
 browserquery = "defaults"
-watch = false
+watch = true
 env = "DEV"
 lib-features = ["hydrate"]
 lib-default-features = false

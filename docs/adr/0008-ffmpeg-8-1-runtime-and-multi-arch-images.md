@@ -88,8 +88,8 @@ does not make existing SVG templates valid VGS scripts.
 
 ## References
 
-- [Master plan](../../plans/sequential-dancing-valiant.md)
-- [Defer full HLS parity to Phase 7](../../plans/defer-hls-parity-to-phase-7.md)
+- [Project contracts and status](../../plans/INDEX.md)
+- [Current phase status](../../STATUS.md)
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0005: Use drawvg for in-stream graphics](0005-drawvg-graphics-engine.md)
 - [ErsatzTV-ffmpeg](https://github.com/ErsatzTV/ersatztv-ffmpeg)

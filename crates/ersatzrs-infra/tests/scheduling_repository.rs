@@ -2,11 +2,17 @@
 mod common;
 
 use chrono::{Duration, TimeZone, Utc};
+use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{
-    BlockSchedulingEngine, PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
+    classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
     SchedulingContentSource, SchedulingRequest,
 };
-use ersatzrs_domain::{CollectionType, PlaybackOrder, Playout};
+use ersatzrs_domain::{
+    CollectionType, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind, ProgramSchedule,
+    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
 
@@ -83,6 +89,49 @@ async fn scheduling_repository_resolves_sql_content_sources() {
     assert_eq!(
         show.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![12, 13]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_loads_global_playout_config() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+
+    pool.execute(
+        r#"INSERT INTO "FillerPreset" (
+               "Id", "Name", "FillerMode", "FillerKind", "CollectionType",
+               "CollectionId", "AllowWatermarks", "UseChaptersAsMediaItems"
+           ) VALUES (77, 'Global Fallback', 1, 0, 'Collection', 1, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+        .bind("55")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+        .bind("77")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let reference_data = repos.scheduling.configured_playout_options().await.unwrap();
+
+    assert_eq!(reference_data.global_watermark_id, Some(55));
+    let fallback = reference_data.global_fallback.unwrap();
+    assert_eq!(fallback.id, 77);
+    assert!(!fallback.allow_watermarks);
+    assert_eq!(
+        fallback
+            .media_items
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
     );
 }
 
@@ -274,7 +323,7 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
     let stream_fields = repos
         .scheduling
         .media_items_for_source(&SchedulingContentSource::Search(
-            "director:\"Director One\" AND writer:\"Writer One\" AND language_tag:eng AND sub_language_tag:nld AND video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080"
+            "director:\"Director One\" AND writer:\"Writer One\" AND language_tag:eng AND sub_language_tag:nld AND video_codec:h264 AND audio_codec:aac AND subtitle_codec:srt AND width:1920 AND height:1080 AND chapters:2"
                 .to_owned(),
         ))
         .await
@@ -283,6 +332,42 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
         stream_fields.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![20]
     );
+
+    let fuzzy_boosted = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "title:feture~1^3 AND minutes:[59 TO 61]".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        fuzzy_boosted.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![20]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_search_documents_page_returns_page_map() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    let (page, total, page_map) = repos
+        .scheduling
+        .search_documents_page("type:movie OR type:episode", 0, 2)
+        .await
+        .unwrap();
+
+    assert_eq!(total, 4);
+    assert_eq!(
+        page.iter().map(|doc| doc.media_item_id).collect::<Vec<_>>(),
+        vec![21, 20]
+    );
+    let page_map = page_map.expect("page map");
+    assert_eq!(page_map.page_map[&'#'], 1);
+    assert_eq!(page_map.page_map[&'b'], 1);
+    assert_eq!(page_map.page_map[&'g'], 2);
 }
 
 #[tokio::test]
@@ -368,7 +453,7 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
             .iter()
             .map(|item| item.id)
             .collect::<Vec<_>>(),
-        vec![12, 13, 20]
+        vec![20]
     );
 
     let deco = block.deco.as_ref().unwrap();
@@ -416,6 +501,92 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
     assert_eq!(
         reference_data.existing_history[0].key,
         "persisted-block-history"
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_loads_classic_reference_data_from_sql() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 901).await;
+
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 301,
+            name: "Classic Prime".to_owned(),
+            item_ids: vec![401],
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    let item = ProgramScheduleItem {
+        id: 401,
+        program_schedule_id: 301,
+        collection_type: CollectionType::Collection,
+        collection_id: Some(1),
+        playout_mode: PlayoutMode::One,
+        playback_order: PlaybackOrder::SeasonEpisode,
+        sort_order: 1,
+        ..ProgramScheduleItem::default()
+    };
+    repos.program_schedule.upsert_item(&item).await.unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (901, 901, 301, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(
+            901,
+            Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap(),
+            Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(reference_data.classic_schedule_id, Some(301));
+    assert_eq!(reference_data.classic_schedule_items.len(), 1);
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get(&classic_schedule_item_key(
+                &reference_data.classic_schedule_items[0]
+            ))
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![12, 13, 20]
+    );
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let result = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 901,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 123,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>(),
+        vec![20]
     );
 }
 
@@ -595,6 +766,15 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
             (1, 0, 'h264', 1, NULL, 0, 1, 0, 200),
             (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200),
             (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaChapter" (
+            "Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title"
+         ) VALUES
+            (1, 200, 0, '00:00:00', '00:30:00', 'First Half'),
+            (2, 200, 1, '00:30:00', '01:00:00', 'Second Half')"#,
     )
     .await
     .unwrap();

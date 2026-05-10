@@ -266,24 +266,24 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                         items=image_source_items
                     />
 
-                    <Show when=move || show_custom_image.get()>
+                    // Custom image fields — always rendered; hidden when not using custom source.
+                    <div style:display=move || if show_custom_image.get() { "" } else { "none" }>
                         // Image preview (when an image is already uploaded)
-                        {move || {
-                            image_path
-                                .get()
-                                .map(|p| {
-                                    view! {
-                                        <div class=style::img_preview_row>
-                                            <span class=style::field_label>"Current image"</span>
-                                            <img
-                                                src=format!("/artwork/watermarks/{p}")
-                                                class=style::img_preview
-                                                alt="watermark preview"
-                                            />
-                                        </div>
-                                    }
-                                })
-                        }}
+                        <div
+                            class=style::img_preview_row
+                            style:display=move || if image_path.get().is_some() { "" } else { "none" }
+                        >
+                            <span class=style::field_label>"Current image"</span>
+                            <img
+                                src=move || {
+                                    image_path.get()
+                                        .map(|p| format!("/artwork/watermarks/{p}"))
+                                        .unwrap_or_default()
+                                }
+                                class=style::img_preview
+                                alt="watermark preview"
+                            />
+                        </div>
 
                         // File upload input
                         <div class=style::upload_row>
@@ -292,6 +292,7 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                                 type="file"
                                 accept="image/*"
                                 class=style::file_input
+                                disabled=move || !show_custom_image.get()
                                 on:change=move |ev| {
                                     #[cfg(target_arch = "wasm32")]
                                     {
@@ -312,11 +313,12 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                                 }
                             />
                         </div>
-                    </Show>
+                    </div>
                 </div>
             </div>
 
-            <Show when=move || show_placement_fields.get()>
+            // Placement section — always rendered; hidden when mode == 0 (None).
+            <div style:display=move || if show_placement_fields.get() { "" } else { "none" }>
                 <div class=style::section>
                     <h2 class=style::section_title>"Placement"</h2>
                     <div class=style::fields>
@@ -343,28 +345,33 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                 <div class=style::section>
                     <h2 class=style::section_title>"Placement Preview"</h2>
                     <Suspense fallback=move || {
-                        view! { <p class=style::preview_loading>"Generating preview…"</p> }
+                        view! { <p class=style::preview_loading>"Generating preview\u{2026}"</p> }
                     }>
-                        {move || {
-                            preview_resource
-                                .get()
-                                .flatten()
-                                .filter(|url| !url.is_empty())
-                                .map(|url| {
-                                    view! {
-                                        <img
-                                            src=url
-                                            class=style::preview_img
-                                            alt="watermark placement preview"
-                                        />
-                                    }
-                                })
-                        }}
+                        // Always-rendered image; src is empty when no preview available.
+                        <img
+                            src=move || {
+                                preview_resource
+                                    .get()
+                                    .flatten()
+                                    .filter(|url| !url.is_empty())
+                                    .unwrap_or_default()
+                            }
+                            class=style::preview_img
+                            style:display=move || {
+                                let has_preview = preview_resource
+                                    .get()
+                                    .flatten()
+                                    .is_some_and(|url| !url.is_empty());
+                                if has_preview { "" } else { "none" }
+                            }
+                            alt="watermark placement preview"
+                        />
                     </Suspense>
                 </div>
-            </Show>
+            </div>
 
-            <Show when=move || show_intermittent.get()>
+            // Intermittent timing section — always rendered; hidden when mode != 2.
+            <div style:display=move || if show_intermittent.get() { "" } else { "none" }>
                 <div class=style::section>
                     <h2 class=style::section_title>"Intermittent Timing"</h2>
                     <div class=style::fields>
@@ -380,16 +387,17 @@ fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
                         />
                     </div>
                 </div>
-            </Show>
+            </div>
 
-            <Show when=move || show_opacity_expr.get()>
+            // Opacity expression section — always rendered; hidden when mode != 3.
+            <div style:display=move || if show_opacity_expr.get() { "" } else { "none" }>
                 <div class=style::section>
                     <h2 class=style::section_title>"Opacity Expression"</h2>
                     <div class=style::fields>
                         <TextField label="Expression" value=opacity_expression/>
                     </div>
                 </div>
-            </Show>
+            </div>
         </div>
     }
 }

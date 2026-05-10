@@ -1,15 +1,19 @@
 use ersatzrs_domain::{
     FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileVideoFormat,
-    HardwareAccelerationKind,
+    HardwareAccelerationKind, VideoScanKind,
 };
 
 use crate::{
-    closed_gop, fast_start, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
-    no_standard_input, no_stats, pipe_output, progress_to_stdout, standard_format_flags,
-    subtitle_overlay_filter, watermark_opacity_filter, watermark_overlay_filter, CommandGenerator,
-    ComplexFilter, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, InputFile,
-    InputKind, PipelineStep, PixelFormat, StreamKind, WatermarkOverlay,
+    closed_gop, deinterlace_filter, fast_start, frame_rate_filter, hide_banner, loglevel_error,
+    mpegts_output, no_autoscale, no_b_frames, no_standard_input, no_stats, pipe_output,
+    progress_to_stdout, select_video_decoder, standard_format_flags, subtitle_overlay_filter,
+    tonemap_filter_for, watermark_opacity_filter, watermark_overlay_filter, CommandGenerator,
+    ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate,
+    FrameSize, FrameState, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
+    PixelFormat, SourceVideoCodec, StreamKind, TonemapAlgorithm, WatermarkOverlay,
 };
+
+const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -59,6 +63,9 @@ pub struct PipelineRequest {
     pub inputs: Vec<InputFile>,
     pub state: FfmpegState,
     pub desired: DesiredVideoState,
+    pub source_video_stream: Option<SourceVideoStream>,
+    pub source_audio_streams: Vec<SourceAudioStream>,
+    pub runtime_capabilities: Option<FfmpegCapabilityReport>,
     pub watermark: Option<WatermarkOverlay>,
     pub drawvg_filters: Vec<String>,
 }
@@ -71,10 +78,95 @@ impl PipelineRequest {
             inputs: vec![input, InputFile::audio(path)],
             state: FfmpegState::default(),
             desired,
+            source_video_stream: None,
+            source_audio_streams: Vec::new(),
+            runtime_capabilities: None,
             watermark: None,
             drawvg_filters: Vec::new(),
         }
     }
+
+    #[must_use]
+    pub fn with_source_video_stream(mut self, stream: SourceVideoStream) -> Self {
+        self.source_video_stream = Some(stream);
+        self
+    }
+
+    #[must_use]
+    pub fn with_source_audio_streams(mut self, streams: Vec<SourceAudioStream>) -> Self {
+        self.source_audio_streams = streams;
+        self
+    }
+
+    #[must_use]
+    pub fn with_runtime_capabilities(mut self, report: FfmpegCapabilityReport) -> Self {
+        self.runtime_capabilities = Some(report);
+        self
+    }
+}
+
+/// Source video stream metadata used for ErsatzTV-style decoder dispatch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceVideoStream {
+    pub codec: SourceVideoCodec,
+    pub profile: Option<String>,
+    pub pixel_format: Option<PixelFormat>,
+    pub color_params: SourceColorParams,
+    pub scan_kind: VideoScanKind,
+    pub frame_rate: Option<FrameRate>,
+}
+
+impl SourceVideoStream {
+    #[must_use]
+    pub const fn new(codec: SourceVideoCodec) -> Self {
+        Self {
+            codec,
+            profile: None,
+            pixel_format: None,
+            color_params: SourceColorParams {
+                is_hdr: false,
+                is_bt2020_ten: false,
+            },
+            scan_kind: VideoScanKind::Unknown,
+            frame_rate: None,
+        }
+    }
+}
+
+/// Source audio stream metadata reserved for audio decoder dispatch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceAudioStream {
+    pub codec: SourceAudioCodec,
+    pub channels: Option<u32>,
+    pub sample_rate: Option<u32>,
+}
+
+impl SourceAudioStream {
+    #[must_use]
+    pub const fn new(codec: SourceAudioCodec) -> Self {
+        Self {
+            codec,
+            channels: None,
+            sample_rate: None,
+        }
+    }
+}
+
+/// Source audio codecs understood by the pipeline request model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceAudioCodec {
+    Aac,
+    AacLatm,
+    Ac3,
+    Dts,
+    Unknown,
+}
+
+/// Source color metadata that affects later filter and decoder choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SourceColorParams {
+    pub is_hdr: bool,
+    pub is_bt2020_ten: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,6 +309,7 @@ fn build_transcode_pipeline(
     mut request: PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> FFmpegPipeline {
+    let effective_acceleration = effective_video_acceleration(&request, acceleration);
     let mut steps = vec![
         no_standard_input(),
         hide_banner(),
@@ -249,14 +342,15 @@ fn build_transcode_pipeline(
     }
 
     let mut filter_chain = FilterChain::default();
-    let target_state = configure_hardware_acceleration(&mut request, &mut steps, acceleration);
-    filter_chain.video.push(video_scale_filter(
-        acceleration,
-        &target_state,
-        request.desired.frame_size,
-        request.desired.frame_size,
-        request.desired.bit_depth,
-    ));
+    let mut target_state =
+        configure_hardware_acceleration(&mut request, &mut steps, effective_acceleration);
+    add_video_decoder(&request, &mut steps, effective_acceleration);
+    apply_source_video_filters(
+        &request,
+        effective_acceleration,
+        &mut target_state,
+        &mut filter_chain,
+    );
 
     if let Some(watermark) = &request.watermark {
         if let Some(input) = request
@@ -299,17 +393,22 @@ fn build_transcode_pipeline(
     }
 
     let is_intel = matches!(
-        acceleration,
+        effective_acceleration,
         HardwareAccelerationKind::Vaapi | HardwareAccelerationKind::Qsv
     );
     let complex = ComplexFilter::build(&request.inputs, filter_chain, is_intel);
     let filter_graph = complex.filter_graph.clone();
 
-    steps.push(video_encoder(acceleration, &request.desired));
+    steps.push(video_encoder(effective_acceleration, &request.desired));
     steps.push(PipelineStep::complex_filter(complex.options));
     steps.push(audio_encoder(&request.desired));
 
-    add_output_options(&mut steps, &request.state, &request.desired, acceleration);
+    add_output_options(
+        &mut steps,
+        &request.state,
+        &request.desired,
+        effective_acceleration,
+    );
 
     FFmpegPipeline {
         steps,
@@ -318,38 +417,160 @@ fn build_transcode_pipeline(
     }
 }
 
+fn apply_source_video_filters(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    let is_transcode = request.desired.video_format != FFmpegProfileVideoFormat::Copy;
+
+    if let Some(source) = &request.source_video_stream {
+        target_state.should_deinterlace =
+            source.scan_kind == VideoScanKind::Interlaced && is_transcode;
+        target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
+    }
+
+    if target_state.should_deinterlace && !target_state.deinterlaced {
+        filter_chain.video.push(deinterlace_filter(
+            acceleration,
+            target_state,
+            QSV_EXTRA_HARDWARE_FRAMES,
+        ));
+        target_state.deinterlaced = true;
+        target_state.frame_data_location = deinterlace_output_location(acceleration);
+    }
+
+    if target_state.is_hdr && is_transcode {
+        filter_chain.video.push(tonemap_filter_for(
+            acceleration,
+            target_state,
+            request.desired.pixel_format(),
+            TonemapAlgorithm::default(),
+        ));
+        target_state.is_hdr = false;
+        target_state.pixel_format = request.desired.pixel_format();
+        target_state.frame_data_location = tonemap_output_location(acceleration);
+    }
+
+    filter_chain.video.push(video_scale_filter(
+        acceleration,
+        target_state,
+        request.desired.frame_size,
+        request.desired.frame_size,
+        request.desired.bit_depth,
+    ));
+
+    if let Some(desired_rate) = request.desired.frame_rate {
+        let needs_fps_filter = request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.frame_rate)
+            .is_some_and(|source_rate| source_rate != desired_rate);
+        if needs_fps_filter && is_transcode {
+            filter_chain
+                .video
+                .push(frame_rate_filter(target_state, desired_rate));
+        }
+    }
+}
+
+const fn deinterlace_output_location(
+    acceleration: HardwareAccelerationKind,
+) -> crate::FrameDataLocation {
+    match acceleration {
+        HardwareAccelerationKind::Nvenc
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::Vaapi => crate::FrameDataLocation::Hardware,
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => crate::FrameDataLocation::Software,
+    }
+}
+
+const fn tonemap_output_location(
+    acceleration: HardwareAccelerationKind,
+) -> crate::FrameDataLocation {
+    match acceleration {
+        HardwareAccelerationKind::Nvenc
+        | HardwareAccelerationKind::Qsv
+        | HardwareAccelerationKind::Vaapi => crate::FrameDataLocation::Hardware,
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => crate::FrameDataLocation::Software,
+    }
+}
+
+fn effective_video_acceleration(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+) -> HardwareAccelerationKind {
+    let Some(report) = &request.runtime_capabilities else {
+        return acceleration;
+    };
+
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return acceleration;
+    }
+
+    let capabilities = HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
+    let can_encode = capabilities.can_encode(&request.desired) == FfmpegCapability::Hardware;
+    let can_decode = request
+        .source_video_stream
+        .as_ref()
+        .is_none_or(|source| capabilities.can_decode(source) == FfmpegCapability::Hardware);
+
+    if can_encode && can_decode {
+        capabilities.acceleration()
+    } else {
+        HardwareAccelerationKind::None
+    }
+}
+
+fn add_video_decoder(
+    request: &PipelineRequest,
+    steps: &mut Vec<PipelineStep>,
+    acceleration: HardwareAccelerationKind,
+) {
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return;
+    }
+
+    let Some(source) = &request.source_video_stream else {
+        return;
+    };
+
+    let decode_acceleration = if let Some(report) = &request.runtime_capabilities {
+        let capabilities = HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
+        if capabilities.can_decode(source) == FfmpegCapability::Hardware {
+            capabilities.acceleration()
+        } else {
+            HardwareAccelerationKind::None
+        }
+    } else {
+        acceleration
+    };
+
+    if let Some(decoder) = select_video_decoder(decode_acceleration, source.codec) {
+        let options = decoder.input_options();
+        if !options.is_empty() {
+            steps.push(PipelineStep::global("video_decoder", options));
+        }
+    }
+}
+
 fn video_encoder(
     acceleration: HardwareAccelerationKind,
     desired: &DesiredVideoState,
 ) -> PipelineStep {
-    let name = match (acceleration, desired.video_format) {
-        (_, FFmpegProfileVideoFormat::Copy) => "copy",
-        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::H264) => "h264_qsv",
-        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Hevc) => "hevc_qsv",
-        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2_qsv",
-        (HardwareAccelerationKind::Qsv, FFmpegProfileVideoFormat::Av1) => "av1_qsv",
-        (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::H264) => "h264_nvenc",
-        (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Hevc) => "hevc_nvenc",
-        (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Av1) => "av1_nvenc",
-        (HardwareAccelerationKind::Amf, FFmpegProfileVideoFormat::H264) => "h264_amf",
-        (HardwareAccelerationKind::Amf, FFmpegProfileVideoFormat::Hevc) => "hevc_amf",
-        (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::H264) => "h264_vaapi",
-        (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::Hevc) => "hevc_vaapi",
-        (HardwareAccelerationKind::Vaapi, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2_vaapi",
-        (HardwareAccelerationKind::VideoToolbox, FFmpegProfileVideoFormat::H264) => {
-            "h264_videotoolbox"
-        }
-        (HardwareAccelerationKind::VideoToolbox, FFmpegProfileVideoFormat::Hevc) => {
-            "hevc_videotoolbox"
-        }
-        (HardwareAccelerationKind::V4l2m2m, FFmpegProfileVideoFormat::H264) => "h264_v4l2m2m",
-        (HardwareAccelerationKind::V4l2m2m, FFmpegProfileVideoFormat::Hevc) => "hevc_v4l2m2m",
-        (HardwareAccelerationKind::Rkmpp, FFmpegProfileVideoFormat::H264) => "h264_rkmpp",
-        (HardwareAccelerationKind::Rkmpp, FFmpegProfileVideoFormat::Hevc) => "hevc_rkmpp",
-        (_, FFmpegProfileVideoFormat::Hevc) => "libx265",
-        (_, FFmpegProfileVideoFormat::Mpeg2Video) => "mpeg2video",
-        (_, FFmpegProfileVideoFormat::Av1) => "libsvtav1",
-        (_, FFmpegProfileVideoFormat::H264 | FFmpegProfileVideoFormat::None) => "libx264",
+    let name = match desired.video_format {
+        FFmpegProfileVideoFormat::Copy => "copy",
+        _ => crate::hardware_encoder_name(acceleration, desired.video_format)
+            .unwrap_or_else(|| software_video_encoder_name(desired.video_format)),
     };
 
     let mut extra = Vec::new();
@@ -383,6 +604,17 @@ fn video_encoder(
     }
 
     PipelineStep::encoder(name, StreamKind::Video, extra)
+}
+
+const fn software_video_encoder_name(format: FFmpegProfileVideoFormat) -> &'static str {
+    match format {
+        FFmpegProfileVideoFormat::Hevc => "libx265",
+        FFmpegProfileVideoFormat::Mpeg2Video => "mpeg2video",
+        FFmpegProfileVideoFormat::Av1 => "libsvtav1",
+        FFmpegProfileVideoFormat::H264
+        | FFmpegProfileVideoFormat::None
+        | FFmpegProfileVideoFormat::Copy => "libx264",
+    }
 }
 
 fn video_profile_option(

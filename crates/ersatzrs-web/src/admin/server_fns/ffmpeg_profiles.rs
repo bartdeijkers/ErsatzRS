@@ -255,11 +255,15 @@ pub async fn list_resolutions_for_select() -> Result<Vec<(i64, String)>, ServerF
         .collect())
 }
 
-/// Returns `(integer, label)` pairs for hardware acceleration kinds supported
-/// by the local FFmpeg installation.  Ports `GetSupportedHardwareAccelerationKindsHandler`.
+/// Returns `(integer, label)` pairs for all hardware acceleration kinds,
+/// annotating each with whether it is detected in the local FFmpeg installation.
 ///
-/// Uses the startup FFmpeg runtime report and maps reported accelerator names
-/// to `HardwareAccelerationKind` integers.  Always includes `None (0)`.
+/// All standard options are always present so users can configure a profile for
+/// hardware that will be available at playout time even when the current host
+/// lacks that hardware.  Options whose FFmpeg support is not detected are
+/// labelled "(not available on this system)" to signal that the profile will
+/// fall back to software encoding on this host.
+///
 /// V4L2M2M is excluded (commented out in the upstream handler too).
 #[server]
 #[allow(clippy::unused_async)]
@@ -267,23 +271,61 @@ pub async fn list_supported_hw_accelerations() -> Result<Vec<(i32, String)>, Ser
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let capabilities = &state.ffmpeg_runtime.capabilities;
-    let mut result = vec![(0i32, "None".to_string())];
+    Ok(hw_acceleration_select_items(
+        &state.ffmpeg_runtime.capabilities,
+    ))
+}
 
-    for (hwaccel, value, label) in [
-        ("qsv", 1, "QSV"),
-        ("cuda", 2, "NVENC"),
-        ("vaapi", 3, "VAAPI"),
-        ("videotoolbox", 4, "VideoToolbox"),
-        ("amf", 5, "AMF"),
-        ("rkmpp", 7, "RKMPP"),
-    ] {
-        if capabilities.has_hwaccel(hwaccel) {
-            result.push((value, label.to_string()));
-        }
-    }
-
-    Ok(result)
+#[cfg(feature = "ssr")]
+fn hw_acceleration_select_items(
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> Vec<(i32, String)> {
+    [
+        (0i32, "None", true),
+        (
+            1,
+            "QSV",
+            capabilities.has_hwaccel("qsv")
+                || capabilities.has_encoder("h264_qsv")
+                || capabilities.has_encoder("hevc_qsv")
+                || capabilities.has_encoder("av1_qsv"),
+        ),
+        (
+            2,
+            "NVENC",
+            capabilities.has_hwaccel("cuda")
+                || capabilities.has_encoder("h264_nvenc")
+                || capabilities.has_encoder("hevc_nvenc")
+                || capabilities.has_encoder("av1_nvenc"),
+        ),
+        (
+            3,
+            "VAAPI",
+            capabilities.has_hwaccel("vaapi")
+                || capabilities.has_encoder("h264_vaapi")
+                || capabilities.has_encoder("hevc_vaapi")
+                || capabilities.has_encoder("av1_vaapi"),
+        ),
+        (4, "VideoToolbox", capabilities.has_hwaccel("videotoolbox")),
+        (
+            5,
+            "AMF",
+            capabilities.has_encoder("h264_amf")
+                || capabilities.has_encoder("hevc_amf")
+                || capabilities.has_encoder("av1_amf"),
+        ),
+        (7, "RKMPP", capabilities.has_hwaccel("rkmpp")),
+    ]
+    .into_iter()
+    .map(|(value, label, supported)| {
+        let display = if supported {
+            label.to_string()
+        } else {
+            format!("{label} (not available on this system)")
+        };
+        (value, display)
+    })
+    .collect()
 }
 
 /// Loads a profile into [`FfmpegProfileForm`]. Returns `None` if not found.
@@ -678,4 +720,65 @@ pub async fn copy_ffmpeg_profile(id: i64, new_name: String) -> Result<i64, Serve
     }
 
     Ok(ersatzrs_infra::db::last_insert_id(result))
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use ersatzrs_ffmpeg::FfmpegCapabilityReport;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn hardware_acceleration_options_always_includes_all_standard_options() {
+        // Even with no hardware capabilities detected, all standard options appear.
+        let capabilities = FfmpegCapabilityReport::default();
+
+        let items = hw_acceleration_select_items(&capabilities);
+        let values: Vec<i32> = items.iter().map(|(v, _)| *v).collect();
+
+        assert!(values.contains(&0), "None must always be present");
+        assert!(values.contains(&1), "QSV must always be present");
+        assert!(values.contains(&2), "NVENC must always be present");
+        assert!(values.contains(&3), "VAAPI must always be present");
+        assert!(values.contains(&4), "VideoToolbox must always be present");
+        assert!(values.contains(&5), "AMF must always be present");
+        assert!(values.contains(&7), "RKMPP must always be present");
+    }
+
+    #[test]
+    fn hardware_acceleration_options_label_unsupported_as_not_available() {
+        // No GPU hardware detected — all non-None options are labelled accordingly.
+        let capabilities = FfmpegCapabilityReport::default();
+
+        let items = hw_acceleration_select_items(&capabilities);
+
+        assert_eq!(items[0], (0, "None".to_string()));
+        assert!(
+            items
+                .iter()
+                .any(|(v, label)| *v == 2 && label.contains("not available")),
+            "NVENC should be labelled 'not available' when no GPU is detected"
+        );
+    }
+
+    #[test]
+    fn hardware_acceleration_options_label_detected_hardware_without_suffix() {
+        // When GPU hardware is present the label has no '(not available)' suffix.
+        let capabilities = FfmpegCapabilityReport {
+            hwaccels: BTreeSet::from(["vulkan".to_string()]),
+            encoders: BTreeSet::from(["h264_nvenc".to_string(), "hevc_vaapi".to_string()]),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        let items = hw_acceleration_select_items(&capabilities);
+
+        assert!(
+            items.contains(&(2, "NVENC".to_string())),
+            "NVENC should appear without a suffix when h264_nvenc encoder is present"
+        );
+        assert!(
+            items.contains(&(3, "VAAPI".to_string())),
+            "VAAPI should appear without a suffix when hevc_vaapi encoder is present"
+        );
+    }
 }

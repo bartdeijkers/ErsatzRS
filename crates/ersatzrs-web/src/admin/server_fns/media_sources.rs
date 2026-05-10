@@ -147,37 +147,27 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_local_library_with_pool(&state.pool, form).await
+}
 
-    // Validate that all paths exist on the server filesystem, mirroring
-    // LocalLibraryEditor.razor AddLibraryPath's Directory.Exists check.
-    for p in &form.paths {
-        let trimmed = p.path.trim();
-        if !trimmed.is_empty() && !std::path::Path::new(trimmed).is_dir() {
-            return Err(ServerFnError::new(format!(
-                "Path does not exist: {trimmed}"
-            )));
-        }
-    }
+#[cfg(feature = "ssr")]
+pub(crate) async fn save_local_library_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: LocalLibraryForm,
+) -> Result<i64, ServerFnError> {
+    let normalized_paths = normalize_local_library_paths(&form.paths)?;
 
-    // Deduplicate paths using normalized (trimmed) comparison, mirroring
-    // NormalizePath deduplication in LocalLibraryEditor.razor.
-    let mut seen = std::collections::HashSet::new();
-    let unique_paths: Vec<&str> = form
-        .paths
-        .iter()
-        .map(|p| p.path.trim().trim_end_matches('/'))
-        .filter(|p| !p.is_empty() && seen.insert(*p))
-        .collect();
+    let mut tx = pool.begin().await?;
 
     if form.id == 0 {
-        let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
-            .execute(&state.pool)
+        let ms = sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (NULL)"#)
+            .execute(&mut *tx)
             .await?;
         let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (?)"#)
             .bind(ms_id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
 
         let lib = sqlx::query(
@@ -186,47 +176,92 @@ pub async fn save_local_library(form: LocalLibraryForm) -> Result<i64, ServerFnE
         .bind(ms_id)
         .bind(form.media_kind)
         .bind(&form.name)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
         let lib_id = ersatzrs_infra::db::last_insert_id(lib);
 
         sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
             .bind(lib_id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
 
-        for trimmed in &unique_paths {
+        for trimmed in &normalized_paths {
             sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
                 .bind(lib_id)
                 .bind(trimmed)
-                .execute(&state.pool)
+                .execute(&mut *tx)
                 .await?;
         }
 
+        tx.commit().await?;
         Ok(lib_id)
     } else {
         sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(&form.name)
             .bind(form.id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
 
         // Replace all paths: delete then reinsert the full deduplicated list.
         sqlx::query(r#"DELETE FROM "LibraryPath" WHERE "LibraryId" = ?"#)
             .bind(form.id)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
 
-        for trimmed in &unique_paths {
+        for trimmed in &normalized_paths {
             sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
                 .bind(form.id)
                 .bind(trimmed)
-                .execute(&state.pool)
+                .execute(&mut *tx)
                 .await?;
         }
 
+        tx.commit().await?;
         Ok(form.id)
     }
+}
+
+fn normalize_local_library_paths(paths: &[LocalLibraryPath]) -> Result<Vec<String>, ServerFnError> {
+    let mut seen = std::collections::HashSet::new();
+    let mut normalized = Vec::new();
+
+    for path in paths {
+        let Some(candidate) = normalize_local_library_path(&path.path) else {
+            continue;
+        };
+
+        if !std::path::Path::new(&candidate).is_dir() {
+            return Err(ServerFnError::new(format!(
+                "Path does not exist: {candidate}"
+            )));
+        }
+
+        if seen.insert(candidate.clone()) {
+            normalized.push(candidate);
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn normalize_local_library_path(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let uri_path = trimmed
+        .strip_prefix("file://localhost")
+        .or_else(|| trimmed.strip_prefix("file://"))
+        .unwrap_or(trimmed);
+    let decoded = urlencoding::decode(uri_path)
+        .map_or_else(|_| uri_path.to_string(), std::borrow::Cow::into_owned);
+    let path = std::path::Path::new(&decoded);
+    let normalized = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let text = normalized.to_string_lossy();
+    let text = text.trim_end_matches(['/', '\\']);
+
+    (!text.is_empty()).then(|| text.to_string())
 }
 
 #[server]
@@ -326,11 +361,35 @@ pub async fn get_jellyfin_connection() -> Result<ConnectionForm, ServerFnError> 
 }
 
 /// Creates or updates the Jellyfin connection and stores the API key.
+///
+/// Mirrors ErsatzTV's `SaveJellyfinSecretsHandler`: validates the API key by
+/// calling `/System/Info` first, persists the connection with the real server
+/// name, then triggers a background library list refresh + sync. If the
+/// validation call fails the entire save is rejected so the user sees the
+/// error in the form instead of silently storing a bad key.
 #[server]
 pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
+    use ersatzrs_infra::jellyfin::{
+        fetch_server_information, format_jellyfin_auth_header, sync_jellyfin_libraries,
+        JellyfinService,
+    };
 
     let state = expect_context::<AppState>();
+
+    let address = form.address.trim().trim_end_matches('/').to_string();
+    let api_key = form.api_key.trim().to_string();
+    if address.is_empty() {
+        return Err(ServerFnError::new("Address is required."));
+    }
+    if api_key.is_empty() {
+        return Err(ServerFnError::new("API key is required."));
+    }
+
+    let info = fetch_server_information(&address, &api_key)
+        .await
+        .map_err(|e| ServerFnError::new(format!("Could not reach Jellyfin: {e}")))?;
 
     let source_id = if form.source_id == 0 {
         let ms = sqlx::query(r#"INSERT INTO "MediaSource" DEFAULT VALUES"#)
@@ -339,16 +398,19 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         let ms_id = ersatzrs_infra::db::last_insert_id(ms);
 
         sqlx::query(
-            r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName") VALUES (?, 'Jellyfin')"#,
+            r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName", "OperatingSystem")
+               VALUES (?, ?, ?)"#,
         )
         .bind(ms_id)
+        .bind(&info.server_name)
+        .bind(&info.operating_system)
         .execute(&state.pool)
         .await?;
 
         sqlx::query(
             r#"INSERT INTO "JellyfinConnection" ("Address", "JellyfinMediaSourceId") VALUES (?, ?)"#,
         )
-        .bind(&form.address)
+        .bind(&address)
         .bind(ms_id)
         .execute(&state.pool)
         .await?;
@@ -356,12 +418,22 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
         ms_id
     } else {
         sqlx::query(
+            r#"UPDATE "JellyfinMediaSource" SET "ServerName" = ?, "OperatingSystem" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&info.server_name)
+        .bind(&info.operating_system)
+        .bind(form.source_id)
+        .execute(&state.pool)
+        .await?;
+
+        sqlx::query(
             r#"UPDATE "JellyfinConnection" SET "Address" = ?
                WHERE "JellyfinMediaSourceId" = ?
                AND "Id" = (SELECT MIN("Id") FROM "JellyfinConnection"
                            WHERE "JellyfinMediaSourceId" = ?)"#,
         )
-        .bind(&form.address)
+        .bind(&address)
         .bind(form.source_id)
         .bind(form.source_id)
         .execute(&state.pool)
@@ -371,12 +443,31 @@ pub async fn save_jellyfin_connection(form: ConnectionForm) -> Result<i64, Serve
     };
 
     sqlx::query(
-        r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES ('jellyfin.current_server_api_key', ?)
-           "#,
+        r#"REPLACE INTO "ConfigElement" ("Key", "Value")
+           VALUES ('jellyfin.current_server_api_key', ?)"#,
     )
-    .bind(&form.api_key)
+    .bind(&api_key)
     .execute(&state.pool)
     .await?;
+
+    // Mirrors ErsatzTV's SynchronizeJellyfinMediaSources channel write: fetch
+    // the library list now so the libraries page is populated immediately
+    // after save.
+    let service = JellyfinService::new();
+    let config = JellyfinConnectionConfig {
+        address: address.clone(),
+        authorization_header: format_jellyfin_auth_header(api_key),
+    };
+    match service.list_libraries(&config).await {
+        Ok(libraries) => {
+            if let Err(e) = sync_jellyfin_libraries(&state.pool, source_id, &libraries).await {
+                tracing::warn!(error = %e, "failed to upsert jellyfin libraries");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to fetch jellyfin libraries after save");
+        }
+    }
 
     Ok(source_id)
 }
@@ -1058,5 +1149,71 @@ pub fn media_kind_label(kind: i32) -> &'static str {
         6 => "Images",
         7 => "Remote Streams",
         _ => "Unknown",
+    }
+}
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+mod tests {
+    use super::*;
+    use sqlx::Row;
+
+    #[tokio::test]
+    async fn local_library_save_normalizes_and_persists_existing_paths() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("local-library.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+        let media_dir = tempfile::tempdir().expect("temp media dir");
+        let raw_path = format!("{}/", media_dir.path().display());
+
+        let id = save_local_library_with_pool(
+            &pool,
+            LocalLibraryForm {
+                id: 0,
+                name: "Movies".to_string(),
+                media_kind: 1,
+                paths: vec![
+                    LocalLibraryPath {
+                        id: 0,
+                        path: raw_path,
+                    },
+                    LocalLibraryPath {
+                        id: 0,
+                        path: format!("file://{}", media_dir.path().display()),
+                    },
+                ],
+            },
+        )
+        .await
+        .expect("save local library");
+
+        let paths = sqlx::query(r#"SELECT "Path" FROM "LibraryPath" WHERE "LibraryId" = ?"#)
+            .bind(id)
+            .fetch_all(&pool)
+            .await
+            .expect("load paths");
+
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            paths[0].try_get::<String, _>("Path").expect("path"),
+            media_dir
+                .path()
+                .canonicalize()
+                .expect("canonical path")
+                .display()
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn local_library_path_normalization_accepts_file_uri_input() {
+        assert_eq!(
+            normalize_local_library_path("file:///mnt/d/downloads/movies/"),
+            Some("/mnt/d/downloads/movies".to_string())
+        );
     }
 }
