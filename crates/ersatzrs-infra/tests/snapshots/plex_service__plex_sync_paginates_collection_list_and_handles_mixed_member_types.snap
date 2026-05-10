@@ -1,0 +1,25 @@
+---
+source: crates/ersatzrs-infra/tests/plex_service.rs
+assertion_line: 481
+expression: plex_collection_rows(&pool).await
+---
+[
+  {
+    "collection_key": "910",
+    "custom_index": 0,
+    "media_key": "/library/metadata/400",
+    "name": "Action — Greatest Hits"
+  },
+  {
+    "collection_key": "911",
+    "custom_index": 0,
+    "media_key": "/library/metadata/401",
+    "name": "Holiday Marathon 🎉"
+  },
+  {
+    "collection_key": "910",
+    "custom_index": 1,
+    "media_key": "/library/metadata/401",
+    "name": "Action — Greatest Hits"
+  }
+]

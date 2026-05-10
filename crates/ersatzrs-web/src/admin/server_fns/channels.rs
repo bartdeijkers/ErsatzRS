@@ -147,11 +147,22 @@ pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_channel_with_pool(&state.pool, form)
+        .await
+        .map_err(Into::into)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_channel_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: ChannelForm,
+) -> Result<i64, sqlx::Error> {
     let sort_number: f64 = form.number.parse().unwrap_or(0.0);
-    let group: Option<&str> = if form.group.is_empty() {
-        None
+    let group_trimmed = form.group.trim();
+    let group = if group_trimmed.is_empty() {
+        "ErsatzTV"
     } else {
-        Some(&form.group)
+        group_trimmed
     };
     let filler_id: Option<i64> = if form.fallback_filler_id == 0 {
         None
@@ -179,7 +190,7 @@ pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
         .bind(form.is_enabled)
         .bind(form.show_in_epg)
         .bind(filler_id)
-        .execute(&state.pool)
+        .execute(pool)
         .await?;
 
         Ok(ersatzrs_infra::db::last_insert_id(result))
@@ -201,7 +212,7 @@ pub async fn save_channel(form: ChannelForm) -> Result<i64, ServerFnError> {
         .bind(form.show_in_epg)
         .bind(filler_id)
         .bind(form.id)
-        .execute(&state.pool)
+        .execute(pool)
         .await?;
 
         Ok(form.id)

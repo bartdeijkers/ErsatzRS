@@ -1,0 +1,9 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 341
+expression: rendered
+---
+None => yadif=1
+Nvenc => yadif_cuda
+Qsv => format=nv12,hwupload=extra_hw_frames=64,deinterlace_qsv
+Vaapi => deinterlace_vaapi

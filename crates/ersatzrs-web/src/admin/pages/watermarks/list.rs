@@ -112,26 +112,31 @@ pub fn WatermarksListPage() -> impl IntoView {
         let r_for_copy = r.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/watermarks/{id}") class=style::row_btn_edit>"Edit"</a>
+                <a
+                    href=format!("/watermarks/{id}")
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
+                    title="Edit watermark"
+                    aria-label="Edit watermark"
+                ></a>
                 <button
-                    class=style::row_btn_copy
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_copy)
+                    title="Copy watermark"
+                    aria-label="Copy watermark"
                     on:click=move |_| {
                         copy_source.set(Some(r_for_copy.clone()));
                         copy_name.set(format!("Copy of {}", r_for_copy.name));
                         copy_open.set(true);
                     }
-                >
-                    "Copy"
-                </button>
+                ></button>
                 <button
-                    class=style::row_btn_delete
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
+                    title="Delete watermark"
+                    aria-label="Delete watermark"
                     on:click=move |_| {
                         delete_target.set(Some(r_for_delete.clone()));
                         delete_open.set(true);
                     }
-                >
-                    "Delete"
-                </button>
+                ></button>
             </div>
         }
         .into_any()
@@ -146,24 +151,28 @@ pub fn WatermarksListPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>"Watermarks"</h1>
-                <div class=style::toolbar_actions>
-                    <a href="/watermarks/add" class=style::btn_add>"Add Watermark"</a>
-                </div>
+            <div class=style::action_bar>
+                <a href="/watermarks/add" class=style::btn_add>
+                    "Add Watermark"
+                </a>
             </div>
 
-            <PagedTable
-                rows=rows_resource
-                columns=columns
-                row_actions=Some(row_actions)
-                params=params
-                total=total
-            />
+            <section class=style::content>
+                <h1 class=style::page_title>"Watermarks"</h1>
+                <div class=style::divider/>
+
+                <PagedTable
+                    rows=rows_resource
+                    columns=columns
+                    row_actions=Some(row_actions)
+                    params=params
+                    total=total
+                />
+            </section>
 
             <DeleteDialog
                 open=delete_open
-                entity_name=Signal::derive(move || delete_name.get()).get()
+                entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         if let Some(r) = delete_target.get_untracked() {

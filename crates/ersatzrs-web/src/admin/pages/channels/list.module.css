@@ -113,6 +113,11 @@
     text-decoration: none;
 }
 .btn-add:hover { background-color: var(--color-primary-h); }
+.btn-add::before {
+    content: "+";
+    font-size: 1.25rem;
+    line-height: 1;
+}
 
 .btn-numbers {
     display: inline-flex;
@@ -129,6 +134,11 @@
     text-decoration: none;
 }
 .btn-numbers:hover { background-color: var(--color-secondary); }
+.btn-numbers::before {
+    content: "✎";
+    font-size: 1rem;
+    line-height: 1;
+}
 
 .row-actions {
     display: inline-flex;
@@ -158,33 +168,28 @@
     color: #ff6f83;
 }
 
+.row-btn-preview::before { content: "▶"; }
+.row-btn-edit::before { content: "✎"; }
+.row-btn-search::before { content: "⌕"; }
+.row-btn-delete::before { content: "×"; }
+.row-btn-preview::before,
+.row-btn-edit::before,
+.row-btn-search::before,
+.row-btn-delete::before {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
 .row-btn-disabled {
     opacity: 0.4;
     pointer-events: none;
 }
 
-.logo-cell {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 6.75rem;
-    height: 3.125rem;
-    overflow: hidden;
-    background-color: #050505;
-    color: #f5f5f5;
-    font-size: 1.125rem;
-    font-weight: 500;
-    line-height: 1;
-}
-
-.logo-cell small {
-    position: absolute;
-    right: 0.25rem;
-    bottom: 0.25rem;
-    color: var(--color-primary-h);
-    font-size: 0.625rem;
-    font-weight: 700;
+.logo-img {
+    display: block;
+    max-width: 9rem;
+    max-height: 3.125rem;
+    object-fit: contain;
 }
 
 .cell-disabled {

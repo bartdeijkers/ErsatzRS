@@ -10,7 +10,7 @@ project context, architecture, porting workflow, and contract index.
 - **Status:** Phase 0 bootstrap, partially complete. No Cargo.toml yet. See
   [STATUS.md](../../STATUS.md) for the checklist and session log.
 - **Plan:** [plans/sequential-dancing-valiant.md](../../plans/sequential-dancing-valiant.md)
-- **ErsatzTV source:** `/home/bart/ErsatzTV/`
+- **ErsatzTV source:** `$ERSATZTV_SRC/`
 
 ## Key Commands (once Cargo workspace exists)
 

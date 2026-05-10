@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 287
+expression: yadif_filter(&software_state())
+---
+yadif=1

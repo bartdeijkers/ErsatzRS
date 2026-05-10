@@ -31,7 +31,8 @@ created, the repository is intentionally focused on project contracts:
 - [Testing contract](docs/how-to/testing.md)
 - [Documentation contract](docs/CONTRIBUTING.md)
 - [ADRs](docs/adr/)
-- [Roadmap plan](plans/sequential-dancing-valiant.md)
+- [Project contracts and status](plans/INDEX.md)
+- [Current phase status](STATUS.md)
 
 ## Documentation
 

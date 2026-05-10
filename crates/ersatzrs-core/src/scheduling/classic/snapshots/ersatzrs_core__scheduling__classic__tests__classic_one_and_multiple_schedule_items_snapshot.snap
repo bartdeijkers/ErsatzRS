@@ -1,0 +1,56 @@
+---
+source: crates/ersatzrs-core/src/scheduling/classic/mod.rs
+assertion_line: 1098
+expression: snapshot(&result)
+---
+{
+  "anchor": {
+    "duration_finish": null,
+    "in_flood": false,
+    "index": 1,
+    "multiple_remaining": null,
+    "next_guide_group": 5,
+    "next_start": "2026-04-26T06:55:00Z"
+  },
+  "items": [
+    {
+      "context": "{\"Scheduler\":\"One\",\"ScheduleId\":10,\"ItemId\":1,\"Enumerator\":\"Chronological\",\"Seed\":7,\"Index\":0}",
+      "finish": "2026-04-26T06:20:00Z",
+      "guide_group": 1,
+      "media_item_id": 101,
+      "start": "2026-04-26T06:00:00Z"
+    },
+    {
+      "context": "{\"Scheduler\":\"Multiple\",\"ScheduleId\":10,\"ItemId\":2,\"Enumerator\":\"Chronological\",\"Seed\":7,\"Index\":0}",
+      "finish": "2026-04-26T06:30:00Z",
+      "guide_group": 2,
+      "media_item_id": 201,
+      "start": "2026-04-26T06:20:00Z"
+    },
+    {
+      "context": "{\"Scheduler\":\"Multiple\",\"ScheduleId\":10,\"ItemId\":2,\"Enumerator\":\"Chronological\",\"Seed\":7,\"Index\":1}",
+      "finish": "2026-04-26T06:40:00Z",
+      "guide_group": 3,
+      "media_item_id": 202,
+      "start": "2026-04-26T06:30:00Z"
+    },
+    {
+      "context": "{\"Scheduler\":\"One\",\"ScheduleId\":10,\"ItemId\":1,\"Enumerator\":\"Chronological\",\"Seed\":7,\"Index\":1}",
+      "finish": "2026-04-26T07:05:00Z",
+      "guide_group": 4,
+      "media_item_id": 102,
+      "start": "2026-04-26T06:40:00Z"
+    }
+  ],
+  "program_schedule_anchors": [
+    {
+      "collection_id": 1,
+      "index": 0
+    },
+    {
+      "collection_id": 2,
+      "index": 2
+    }
+  ],
+  "warnings": []
+}

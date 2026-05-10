@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use super::icon::IconName;
+use super::icon::{icon_style, IconName};
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/button.module.css");
 
@@ -83,7 +83,7 @@ pub fn IconButton(
             title=title
             on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
         >
-            <super::icon::Icon name=icon size="1rem"/>
+            <span style=icon_style(icon, "1rem") aria-hidden="true"></span>
         </button>
     }
 }

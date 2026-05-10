@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 317
+expression: deinterlace_vaapi_filter(&software_state())
+---
+format=nv12|p010le|vaapi,hwupload,deinterlace_vaapi

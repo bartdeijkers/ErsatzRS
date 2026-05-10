@@ -1,11 +1,12 @@
 use crate::db::DbPool;
+use crate::repositories::common::decode_enum_column;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
     EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
-    EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService as EmbyServiceTrait,
-    EmbyShowItem, EmbyShowPage, RepositoryError, Result,
+    EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage,
+    EmbyService as EmbyServiceTrait, EmbyShowItem, EmbyShowPage, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
@@ -14,6 +15,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
+
+const EMBY_PAGE_SIZE: i32 = 100;
 
 #[derive(Debug, Clone)]
 pub struct EmbyService {
@@ -337,7 +340,7 @@ impl EmbyService {
     }
 }
 
-/// Fetch one Emby movie page and write mapped movie rows.
+/// Fetch Emby movie pages and write mapped movie rows.
 ///
 /// # Errors
 ///
@@ -349,26 +352,55 @@ pub async fn sync_emby_movie_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
 {
-    let page = service
-        .fetch_movie_page(config, library_item_id, 0, 100)
-        .await?;
-    for item in &page.items {
-        let playback = service.stream_metadata(config, &item.item_id).await?;
-        upsert_emby_movie(
-            pool,
-            media_source_id,
-            library_id,
-            library_item_id,
-            item,
-            &playback,
-        )
-        .await?;
+    let mut synced = 0;
+    let mut start_index = 0;
+
+    loop {
+        let page = service
+            .fetch_movie_page(config, library_item_id, start_index, EMBY_PAGE_SIZE)
+            .await?;
+        let total_record_count = page.total_record_count;
+        let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        for item in &page.items {
+            if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "EmbyMovie",
+                    library_id,
+                    &item.item_id,
+                    item.etag.as_deref(),
+                )
+                .await?
+            {
+                synced += 1;
+                continue;
+            }
+
+            let playback = service.stream_metadata(config, &item.item_id).await?;
+            upsert_emby_movie(
+                pool,
+                media_source_id,
+                library_id,
+                library_item_id,
+                item,
+                &playback,
+            )
+            .await?;
+            synced += 1;
+        }
+
+        start_index += EMBY_PAGE_SIZE;
+        if start_index >= total_record_count || page_len == 0 {
+            break;
+        }
     }
-    Ok(page.items.len())
+
+    Ok(synced)
 }
 
 /// Fetch Emby shows, seasons, and episodes and write mapped media rows.
@@ -383,49 +415,104 @@ pub async fn sync_emby_show_library<S>(
     media_source_id: i64,
     library_id: i64,
     library_item_id: &str,
+    deep_scan: bool,
 ) -> Result<usize>
 where
     S: EmbyServiceTrait,
 {
-    let shows = service
-        .fetch_show_page(config, library_item_id, 0, 100)
-        .await?;
     let mut synced = 0;
-    for show in &shows.items {
-        let show_id =
-            upsert_emby_show(pool, media_source_id, library_id, library_item_id, show).await?;
-        let seasons = service
-            .fetch_season_page(config, &show.item_id, 0, 100)
+    let mut show_start_index = 0;
+
+    loop {
+        let shows = service
+            .fetch_show_page(config, library_item_id, show_start_index, EMBY_PAGE_SIZE)
             .await?;
-        for season in &seasons.items {
-            let season_id = upsert_emby_season(
-                pool,
-                media_source_id,
-                library_id,
-                library_item_id,
-                show_id,
-                season,
-            )
-            .await?;
-            let episodes = service
-                .fetch_episode_page(config, &show.item_id, &season.item_id, 0, 100)
-                .await?;
-            for episode in &episodes.items {
-                let playback = service.stream_metadata(config, &episode.item_id).await?;
-                upsert_emby_episode(
-                    pool,
-                    media_source_id,
-                    library_id,
-                    library_item_id,
-                    season_id,
-                    episode,
-                    &playback,
-                )
-                .await?;
-                synced += 1;
+        let show_total_count = shows.total_record_count;
+        let show_page_len = i32::try_from(shows.items.len()).unwrap_or(i32::MAX);
+        for show in &shows.items {
+            let show_id =
+                upsert_emby_show(pool, media_source_id, library_id, library_item_id, show).await?;
+            let mut season_start_index = 0;
+            loop {
+                let seasons = service
+                    .fetch_season_page(config, &show.item_id, season_start_index, EMBY_PAGE_SIZE)
+                    .await?;
+                let season_total_count = seasons.total_record_count;
+                let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
+                for season in &seasons.items {
+                    let season_id = upsert_emby_season(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_item_id,
+                        show_id,
+                        season,
+                    )
+                    .await?;
+                    let mut episode_start_index = 0;
+                    loop {
+                        let episodes = service
+                            .fetch_episode_page(
+                                config,
+                                &show.item_id,
+                                &season.item_id,
+                                episode_start_index,
+                                EMBY_PAGE_SIZE,
+                            )
+                            .await?;
+                        let episode_total_count = episodes.total_record_count;
+                        let episode_page_len =
+                            i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
+                        for episode in &episodes.items {
+                            if !deep_scan
+                                && item_etag_matches(
+                                    pool,
+                                    "EmbyEpisode",
+                                    library_id,
+                                    &episode.item_id,
+                                    episode.etag.as_deref(),
+                                )
+                                .await?
+                            {
+                                synced += 1;
+                                continue;
+                            }
+
+                            let playback =
+                                service.stream_metadata(config, &episode.item_id).await?;
+                            upsert_emby_episode(
+                                pool,
+                                media_source_id,
+                                library_id,
+                                library_item_id,
+                                season_id,
+                                episode,
+                                &playback,
+                            )
+                            .await?;
+                            synced += 1;
+                        }
+
+                        episode_start_index += EMBY_PAGE_SIZE;
+                        if episode_start_index >= episode_total_count || episode_page_len == 0 {
+                            break;
+                        }
+                    }
+                }
+
+                season_start_index += EMBY_PAGE_SIZE;
+                if season_start_index >= season_total_count || season_page_len == 0 {
+                    break;
+                }
             }
         }
+
+        show_start_index += EMBY_PAGE_SIZE;
+        if show_start_index >= show_total_count || show_page_len == 0 {
+            break;
+        }
     }
+
     Ok(synced)
 }
 
@@ -444,17 +531,50 @@ pub async fn sync_emby_collection_library<S>(
 where
     S: EmbyServiceTrait,
 {
-    let page = service
-        .fetch_collection_page(config, parent_id, 0, 100)
-        .await?;
-    for collection in &page.items {
-        let collection_id = upsert_emby_collection(pool, media_source_id, collection).await?;
-        let items = service
-            .fetch_collection_items_page(config, &collection.item_id, 0, 100)
+    let mut synced = 0;
+    let mut collection_start_index = 0;
+
+    loop {
+        let page = service
+            .fetch_collection_page(config, parent_id, collection_start_index, EMBY_PAGE_SIZE)
             .await?;
-        replace_collection_items(pool, collection_id, &items.items).await?;
+        let total_record_count = page.total_record_count;
+        let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        for collection in &page.items {
+            let collection_id = upsert_emby_collection(pool, media_source_id, collection).await?;
+            let mut item_start_index = 0;
+            let mut all_items = Vec::new();
+
+            loop {
+                let items = service
+                    .fetch_collection_items_page(
+                        config,
+                        &collection.item_id,
+                        item_start_index,
+                        EMBY_PAGE_SIZE,
+                    )
+                    .await?;
+                let item_total_count = items.total_record_count;
+                let item_page_len = i32::try_from(items.items.len()).unwrap_or(i32::MAX);
+                all_items.extend(items.items);
+
+                item_start_index += EMBY_PAGE_SIZE;
+                if item_start_index >= item_total_count || item_page_len == 0 {
+                    break;
+                }
+            }
+
+            replace_collection_items(pool, collection_id, &all_items).await?;
+            synced += 1;
+        }
+
+        collection_start_index += EMBY_PAGE_SIZE;
+        if collection_start_index >= total_record_count || page_len == 0 {
+            break;
+        }
     }
-    Ok(page.items.len())
+
+    Ok(synced)
 }
 
 fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> {
@@ -463,10 +583,30 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
         "tvshows" => LibraryMediaKind::Shows,
         _ => return None,
     };
+    let path_infos = response
+        .library_options
+        .map(|options| {
+            options
+                .path_infos
+                .into_iter()
+                .filter_map(|info| {
+                    let network_path = info.network_path?;
+                    if network_path.trim().is_empty() {
+                        return None;
+                    }
+                    Some(EmbyPathInfo {
+                        path: info.path.unwrap_or_default(),
+                        network_path,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     Some(EmbyLibrarySummary {
         item_id: response.item_id?,
         name: response.name.unwrap_or_default(),
         media_kind,
+        path_infos,
     })
 }
 
@@ -478,6 +618,22 @@ fn project_library(response: EmbyLibraryResponse) -> Option<EmbyLibrarySummary> 
 ///
 /// Returns an error when config loading, the Emby API, or database writes fail.
 pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
+    sync_library_by_id_with_options(pool, library_id, false).await
+}
+
+/// Loads configuration from the database and synchronizes one Emby library.
+///
+/// `deep_scan` bypasses provider etag skip and refreshes existing rows even
+/// when the upstream etag is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Emby API, or database writes fail.
+pub async fn sync_library_by_id_with_options(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -489,7 +645,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
         kind: "emby library",
         value: format!("library {library_id} not found"),
     })?;
-    let kind: i64 = row.try_get("MediaKind").unwrap_or(0);
+    let kind: LibraryMediaKind = decode_enum_column("emby library media kind", &row, "MediaKind")?;
     let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
 
     let address: String = sqlx::query_scalar(
@@ -520,7 +676,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             })?;
 
     let service = EmbyService::new();
-    if kind == 1 {
+    if kind == LibraryMediaKind::Shows {
         sync_emby_show_library(
             pool,
             &service,
@@ -528,6 +684,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     } else {
@@ -538,6 +695,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
             media_source_id,
             library_id,
             &parent_id,
+            deep_scan,
         )
         .await
     }
@@ -693,10 +851,15 @@ fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStream> {
         _ => return None,
     };
 
+    let is_video = matches!(kind, MediaStreamKind::Video);
     Some(MediaStream {
         index: stream.index,
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
+        profile: stream
+            .profile
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
         language: stream.language,
         title: stream.title,
         default: stream.is_default,
@@ -704,6 +867,40 @@ fn project_stream(stream: EmbyMediaStreamResponse) -> Option<MediaStream> {
         channels: stream.channels,
         width: stream.width,
         height: stream.height,
+        pixel_format: if is_video {
+            stream.pixel_format.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_range: if is_video {
+            stream.color_range.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_space: if is_video {
+            stream.color_space.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_transfer: if is_video {
+            stream
+                .color_transfer
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_primaries: if is_video {
+            stream
+                .color_primaries
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        bits_per_raw_sample: if is_video {
+            stream.bit_depth.unwrap_or_default()
+        } else {
+            0
+        },
         ..MediaStream::default()
     })
 }
@@ -903,6 +1100,209 @@ async fn find_emby_media_item(
         .map(|row| row.get("Id")))
 }
 
+async fn item_etag_matches(
+    pool: &DbPool,
+    table: &str,
+    library_id: i64,
+    item_id: &str,
+    etag: Option<&str>,
+) -> Result<bool> {
+    let sql = format!(
+        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
+           FROM "{table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
+           INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           WHERE "{table}"."ItemId" = ? AND "LibraryPath"."LibraryId" = ?"#
+    );
+    let Some(row) = sqlx::query(&sql)
+        .bind(item_id)
+        .bind(library_id)
+        .fetch_optional(pool)
+        .await?
+    else {
+        return Ok(false);
+    };
+
+    let existing_etag: Option<String> = row.try_get("Etag")?;
+    let state: i64 = row.try_get("State")?;
+    Ok(state == 0 && existing_etag.as_deref() == etag)
+}
+
+/// Synchronizes the set of Emby libraries for a media source.
+///
+/// Adds incoming libraries that have no `ItemId` match, deletes existing
+/// libraries that the server no longer reports (cascading through
+/// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind`,
+/// `Name`, and `EmbyPathInfo` rows for libraries that the server still
+/// reports. Mirrors `MediaSourceRepository.UpdateLibraries` for Emby in
+/// `ErsatzTV`. The `MediaKind` is only updated when `ShouldSyncItems` is
+/// false to avoid invalidating an in-progress sync.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn sync_emby_libraries(
+    pool: &DbPool,
+    media_source_id: i64,
+    incoming: &[EmbyLibrarySummary],
+) -> Result<()> {
+    let existing_rows = sqlx::query(
+        r#"SELECT "el"."Id" AS "Id", "el"."ItemId" AS "ItemId",
+                  "el"."ShouldSyncItems" AS "ShouldSyncItems",
+                  "l"."MediaKind" AS "MediaKind"
+           FROM "EmbyLibrary" AS "el"
+           JOIN "Library" AS "l" ON "l"."Id" = "el"."Id"
+           WHERE "l"."MediaSourceId" = ?"#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("Id"),
+                row.try_get::<Option<String>, _>("ItemId")
+                    .unwrap_or_default(),
+                row.try_get::<i64, _>("ShouldSyncItems").unwrap_or_default() != 0,
+                row.try_get::<i32, _>("MediaKind").unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    for incoming_library in incoming {
+        let position = existing.iter().position(|(_, item_id, _, _)| {
+            item_id.as_deref() == Some(incoming_library.item_id.as_str())
+        });
+        if let Some(index) = position {
+            let (id, _, should_sync, current_kind) = existing.swap_remove(index);
+            let target_kind = encode_library_media_kind(incoming_library.media_kind);
+            if !should_sync && target_kind != current_kind {
+                sqlx::query(r#"UPDATE "Library" SET "MediaKind" = ?, "Name" = ? WHERE "Id" = ?"#)
+                    .bind(target_kind)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            } else {
+                sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            replace_emby_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
+        } else {
+            let result = sqlx::query(
+                r#"INSERT INTO "Library" ("Name", "MediaKind", "MediaSourceId")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(&incoming_library.name)
+            .bind(encode_library_media_kind(incoming_library.media_kind))
+            .bind(media_source_id)
+            .execute(&mut *tx)
+            .await?;
+            let id = crate::db::last_insert_id(result);
+            sqlx::query(
+                r#"INSERT INTO "EmbyLibrary" ("Id", "ItemId", "ShouldSyncItems")
+                   VALUES (?, ?, 0)"#,
+            )
+            .bind(id)
+            .bind(&incoming_library.item_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                .bind(id)
+                .bind(format!("emby://{id}"))
+                .execute(&mut *tx)
+                .await?;
+            replace_emby_path_infos_in_tx(&mut tx, id, &incoming_library.path_infos).await?;
+        }
+    }
+
+    for (id, _, _, _) in existing {
+        sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+fn encode_library_media_kind(kind: LibraryMediaKind) -> i32 {
+    match kind {
+        LibraryMediaKind::Movies => 1,
+        LibraryMediaKind::Shows => 2,
+        LibraryMediaKind::MusicVideos => 3,
+        LibraryMediaKind::OtherVideos => 4,
+        LibraryMediaKind::Songs => 5,
+        LibraryMediaKind::Images => 6,
+        LibraryMediaKind::RemoteStreams => 7,
+    }
+}
+
+async fn replace_emby_path_infos_in_tx(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    library_id: i64,
+    path_infos: &[EmbyPathInfo],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "EmbyPathInfo" WHERE "EmbyLibraryId" = ?"#)
+        .bind(library_id)
+        .execute(&mut **tx)
+        .await?;
+    for info in path_infos {
+        sqlx::query(
+            r#"INSERT INTO "EmbyPathInfo" ("EmbyLibraryId", "Path", "NetworkPath")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&info.path)
+        .bind(&info.network_path)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Replaces all `EmbyPathInfo` rows for a library with the supplied set.
+///
+/// Used to mirror `ErsatzTV` path mapping for SMB/NFS shares where the Emby
+/// server reports its local path and the network path that `ErsatzRS` should
+/// rewrite onto. Network-only path infos with empty `NetworkPath` are
+/// filtered out by the projection.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn replace_emby_path_infos(
+    pool: &DbPool,
+    library_id: i64,
+    path_infos: &[EmbyPathInfo],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"DELETE FROM "EmbyPathInfo" WHERE "EmbyLibraryId" = ?"#)
+        .bind(library_id)
+        .execute(&mut *tx)
+        .await?;
+    for info in path_infos {
+        sqlx::query(
+            r#"INSERT INTO "EmbyPathInfo" ("EmbyLibraryId", "Path", "NetworkPath")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&info.path)
+        .bind(&info.network_path)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 async fn ensure_emby_library(
     tx: &mut Transaction<'_, crate::db::Db>,
     media_source_id: i64,
@@ -961,14 +1361,29 @@ async fn ensure_emby_movie_item(
     library_path_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyMovie" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyMovie"."Id"
+           FROM "EmbyMovie"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyMovie"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyMovie"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyMovie" SET "Etag" = ? WHERE "Id" = ?"#)
             .bind(&item.etag)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -998,10 +1413,20 @@ async fn ensure_emby_show_item(
     library_path_id: i64,
     item: &EmbyShowItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyShow" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyShow"."Id"
+           FROM "EmbyShow"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyShow"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyShow"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyShow" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1041,10 +1466,20 @@ async fn ensure_emby_season_item(
     show_id: i64,
     item: &EmbySeasonItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbySeason" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbySeason"."Id"
+           FROM "EmbySeason"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbySeason"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbySeason"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbySeason" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1092,10 +1527,20 @@ async fn ensure_emby_episode_item(
     season_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "EmbyEpisode" WHERE "ItemId" = ?"#)
-        .bind(&item.item_id)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "EmbyEpisode"."Id"
+           FROM "EmbyEpisode"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "EmbyEpisode"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "EmbyEpisode"."ItemId" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.item_id)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "EmbyEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1241,12 +1686,15 @@ async fn replace_streams(
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
-                "Index", "Codec", "MediaStreamKind", "Language", "Channels",
-                "Title", "Default", "Forced", "MediaVersionId"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
+                "Title", "Default", "Forced", "MediaVersionId",
+                "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
+        .bind(&stream.profile)
         .bind(encode_stream_kind(stream.kind))
         .bind(&stream.language)
         .bind(stream.channels.unwrap_or_default())
@@ -1254,6 +1702,15 @@ async fn replace_streams(
         .bind(stream.default)
         .bind(stream.forced)
         .bind(version_id)
+        .bind(&stream.pixel_format)
+        .bind(&stream.color_range)
+        .bind(&stream.color_space)
+        .bind(&stream.color_transfer)
+        .bind(&stream.color_primaries)
+        .bind(stream.bits_per_raw_sample)
+        .bind(stream.attached_pic)
+        .bind(&stream.file_name)
+        .bind(&stream.mime_type)
         .execute(&mut **tx)
         .await?;
     }
@@ -1343,6 +1800,21 @@ struct EmbyLibraryResponse {
     name: Option<String>,
     collection_type: Option<String>,
     item_id: Option<String>,
+    library_options: Option<EmbyLibraryOptionsResponse>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyLibraryOptionsResponse {
+    #[serde(default)]
+    path_infos: Vec<EmbyPathInfoResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyPathInfoResponse {
+    path: Option<String>,
+    network_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1395,6 +1867,7 @@ struct EmbyMediaStreamResponse {
     #[serde(rename = "Type")]
     stream_type: Option<String>,
     codec: Option<String>,
+    profile: Option<String>,
     language: Option<String>,
     height: Option<i32>,
     width: Option<i32>,
@@ -1410,6 +1883,12 @@ struct EmbyMediaStreamResponse {
     channels: Option<i32>,
     real_frame_rate: Option<f64>,
     title: Option<String>,
+    pixel_format: Option<String>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_transfer: Option<String>,
+    color_primaries: Option<String>,
+    bit_depth: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -48,14 +48,20 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 
 fn resolve_hydration_assets(options: &LeptosOptions) -> Option<PathBuf> {
     let js_name = format!("{}.js", options.output_name);
-    let wasm_name = format!("{}_bg.wasm", options.output_name);
+    let wasm_names = [
+        format!("{}_bg.wasm", options.output_name),
+        format!("{}.wasm", options.output_name),
+    ];
     let site_root = options.site_root.to_string();
     let site_pkg_dir = options.site_pkg_dir.to_string();
 
     candidate_site_roots(site_root)
         .into_iter()
         .map(|root| root.join(&site_pkg_dir))
-        .find(|pkg_dir| pkg_dir.join(&js_name).is_file() && pkg_dir.join(&wasm_name).is_file())
+        .find(|pkg_dir| {
+            pkg_dir.join(&js_name).is_file()
+                && wasm_names.iter().any(|name| pkg_dir.join(name).is_file())
+        })
 }
 
 fn candidate_site_roots(site_root: impl AsRef<Path>) -> Vec<PathBuf> {

@@ -1,0 +1,157 @@
+//! SQL-backed XMLTV guide projection.
+
+use chrono::{DateTime, Utc};
+use ersatzrs_core::xmltv::{
+    project_programmes, XmltvBlockBehavior, XmltvGuideItem, XmltvProgramme,
+};
+use ersatzrs_domain::{FillerKind, CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR};
+use sqlx::{Pool, Row};
+
+use crate::db::Db;
+use crate::repositories::common::{decode_enum_column, decode_optional_datetime};
+
+const UNKNOWN_TITLE: &str = "Unknown";
+
+/// Load XMLTV programme rows and apply the persisted XMLTV block behavior.
+///
+/// # Errors
+///
+/// Returns an error when a database row cannot be loaded or decoded.
+pub async fn load_xmltv_programmes(
+    pool: &Pool<Db>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<XmltvProgramme>, sqlx::Error> {
+    let behavior = load_xmltv_block_behavior(pool).await?;
+    let items = load_guide_items(pool, start, finish).await?;
+    Ok(project_programmes(&items, behavior))
+}
+
+async fn load_xmltv_block_behavior(pool: &Pool<Db>) -> Result<XmltvBlockBehavior, sqlx::Error> {
+    let value =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR)
+            .fetch_optional(pool)
+            .await?;
+
+    Ok(value
+        .as_deref()
+        .and_then(XmltvBlockBehavior::parse)
+        .unwrap_or_default())
+}
+
+async fn load_guide_items(
+    pool: &Pool<Db>,
+    start: DateTime<Utc>,
+    finish: DateTime<Utc>,
+) -> Result<Vec<XmltvGuideItem>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"SELECT
+               c."Number" AS "Number",
+               pi."Start" AS "Start",
+               pi."Finish" AS "Finish",
+               pi."GuideStart" AS "GuideStart",
+               pi."GuideFinish" AS "GuideFinish",
+               pi."GuideGroup" AS "GuideGroup",
+               pi."FillerKind" AS "FillerKind",
+               pi."CustomTitle" AS "CustomTitle",
+               COALESCE(
+                   (SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = pi."MediaItemId" LIMIT 1),
+                   (SELECT "Title" FROM "EpisodeMetadata" WHERE "EpisodeId" = pi."MediaItemId" LIMIT 1),
+                   (SELECT "Title" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = pi."MediaItemId" LIMIT 1),
+                   (SELECT "Title" FROM "SongMetadata" WHERE "SongId" = pi."MediaItemId" LIMIT 1),
+                   (SELECT "Title" FROM "OtherVideoMetadata" WHERE "OtherVideoId" = pi."MediaItemId" LIMIT 1),
+                   (SELECT "Title" FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" = pi."MediaItemId" LIMIT 1)
+               ) AS "Title"
+           FROM "PlayoutItem" pi
+           JOIN "Playout" p ON p."Id" = pi."PlayoutId"
+           JOIN "Channel" c ON c."Id" = p."ChannelId"
+           WHERE c."IsEnabled" = 1
+             AND c."ShowInEpg" = 1
+             AND pi."Start" < ?
+             AND pi."Finish" > ?
+           ORDER BY c."Number", pi."GuideStart", pi."GuideFinish", pi."GuideGroup", pi."Start", pi."Id""#,
+    )
+    .bind(encode_datetime(finish))
+    .bind(encode_datetime(start))
+    .fetch_all(pool)
+    .await?;
+
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        let start_text: String = row.try_get("Start")?;
+        let finish_text: String = row.try_get("Finish")?;
+        let custom_title: Option<String> = row.try_get("CustomTitle")?;
+        let metadata_title: Option<String> = row.try_get("Title")?;
+
+        let start = parse_datetime(&start_text).ok_or_else(|| {
+            sqlx::Error::Decode(format!("invalid PlayoutItem Start: {start_text}").into())
+        })?;
+        let finish = parse_datetime(&finish_text).ok_or_else(|| {
+            sqlx::Error::Decode(format!("invalid PlayoutItem Finish: {finish_text}").into())
+        })?;
+        let title = custom_title
+            .and_then(|title| (!title.trim().is_empty()).then_some(title))
+            .or(metadata_title)
+            .filter(|title| !title.trim().is_empty())
+            .unwrap_or_else(|| UNKNOWN_TITLE.to_owned());
+
+        let filler_kind: FillerKind =
+            decode_enum_column("xmltv filler_kind", &row, "FillerKind")
+                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?;
+
+        items.push(XmltvGuideItem {
+            channel_number: row.try_get("Number")?,
+            start,
+            finish,
+            guide_start: decode_optional_datetime("xmltv guide_start", row.try_get("GuideStart")?)
+                .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+            guide_finish: decode_optional_datetime(
+                "xmltv guide_finish",
+                row.try_get("GuideFinish")?,
+            )
+            .map_err(|error| sqlx::Error::Decode(error.to_string().into()))?,
+            guide_group: row.try_get("GuideGroup")?,
+            filler_kind,
+            title,
+        });
+    }
+
+    Ok(items)
+}
+
+fn encode_datetime(value: DateTime<Utc>) -> String {
+    value.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
+    chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f"))
+        .ok()
+        .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_missing_or_named_block_behavior() {
+        assert_eq!(
+            XmltvBlockBehavior::parse("SplitTimeEvenly"),
+            Some(XmltvBlockBehavior::SplitTimeEvenly)
+        );
+        assert_eq!(
+            XmltvBlockBehavior::parse("UseActualTimes"),
+            Some(XmltvBlockBehavior::UseActualTimes)
+        );
+    }
+
+    #[test]
+    fn parses_sql_datetime_shapes() {
+        assert!(parse_datetime("2026-04-17 20:00:00").is_some());
+        assert!(parse_datetime("2026-04-17T20:00:00").is_some());
+        assert!(parse_datetime("2026-04-17 20:00:00.123").is_some());
+    }
+}

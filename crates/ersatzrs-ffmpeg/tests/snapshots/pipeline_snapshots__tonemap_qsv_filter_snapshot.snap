@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 380
+expression: tonemap_qsv_filter()
+---
+vpp_qsv=tonemap=1
