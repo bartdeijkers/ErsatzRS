@@ -839,7 +839,6 @@ Encoders:
         assert!(issues[0].is_error());
         assert!(!issues[3].is_error());
     }
-
 }
 
 #[cfg(all(test, unix))]

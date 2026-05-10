@@ -73,10 +73,14 @@ jobs:
             cross: false
             test: true
           - rid: osx-x64
-            runner: macos-13
+            # macos-13 (Intel) runners are scarce and being deprecated.
+            # Build the x86_64-apple-darwin target from the Apple Silicon
+            # macos-latest runner instead; cargo cross-compiles natively
+            # because Apple ships both architectures' SDKs in Xcode.
+            runner: macos-latest
             target: x86_64-apple-darwin
             cross: false
-            test: true
+            test: false
           - rid: win-x64
             runner: windows-latest
             target: x86_64-pc-windows-msvc

@@ -88,13 +88,15 @@ Trade-offs:
 ## Cross-compiling
 
 ErsatzRS targets the same six RIDs as ErsatzTV (`linux-x64`, `linux-arm64`,
-`linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). The targets are pinned in
-[`rust-toolchain.toml`](rust-toolchain.toml) so `rustup` installs all of them
-on first use.
+`linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). Targets are installed on
+demand: CI installs the matching target per matrix cell, and locally you add
+them with `rustup target add`.
 
 For the targets the host can't compile natively, use
 [`cross`](https://github.com/cross-rs/cross). Configuration lives in
-[`Cross.toml`](Cross.toml). `cross` requires a working Docker or Podman.
+[`Cross.toml`](Cross.toml). `cross` requires a working Docker or Podman, and
+its containers ship the target stdlib already so no `rustup target add` is
+needed when cross-building.
 
 ```bash
 cargo install cross --git https://github.com/cross-rs/cross --locked
