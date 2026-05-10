@@ -6,7 +6,7 @@ use crate::admin::ui::primitives::{
     button::{Button, ButtonVariant, IconButton, LinkButton},
     dialog::{DeleteDialog, Modal},
     form::{CheckBox, NumberField, SelectField, TextArea, TextField},
-    icon::{Icon, IconName},
+    icon::{icon_style, IconName},
     table::{Column, PageParams, PagedTable},
     toast::{use_toast, ToastContainer, ToastSeverity},
 };
@@ -76,20 +76,20 @@ pub fn ComponentsPage() -> impl IntoView {
                     "Icons"
                 </h2>
                 <div style="display:flex;flex-wrap:wrap;gap:1rem;color:var(--color-gray-300)">
-                    <Icon name=IconName::Add size="1.5rem"/>
-                    <Icon name=IconName::Edit size="1.5rem"/>
-                    <Icon name=IconName::Delete size="1.5rem"/>
-                    <Icon name=IconName::Save size="1.5rem"/>
-                    <Icon name=IconName::Menu size="1.5rem"/>
-                    <Icon name=IconName::Close size="1.5rem"/>
-                    <span style="color:var(--color-warning)"><Icon name=IconName::Warning size="1.5rem"/></span>
-                    <span style="color:var(--color-error)"><Icon name=IconName::Error size="1.5rem"/></span>
-                    <span style="color:var(--color-success)"><Icon name=IconName::Check size="1.5rem"/></span>
-                    <Icon name=IconName::Search size="1.5rem"/>
-                    <Icon name=IconName::Settings size="1.5rem"/>
-                    <span style="color:var(--color-primary)"><Icon name=IconName::Play size="1.5rem"/></span>
-                    <Icon name=IconName::Stop size="1.5rem"/>
-                    <Icon name=IconName::Refresh size="1.5rem"/>
+                    <span style=icon_style(IconName::Add, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Edit, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Delete, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Save, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Menu, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Close, "1.5rem") aria-hidden="true"></span>
+                    <span style="color:var(--color-warning)"><span style=icon_style(IconName::Warning, "1.5rem") aria-hidden="true"></span></span>
+                    <span style="color:var(--color-error)"><span style=icon_style(IconName::Error, "1.5rem") aria-hidden="true"></span></span>
+                    <span style="color:var(--color-success)"><span style=icon_style(IconName::Check, "1.5rem") aria-hidden="true"></span></span>
+                    <span style=icon_style(IconName::Search, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Settings, "1.5rem") aria-hidden="true"></span>
+                    <span style="color:var(--color-primary)"><span style=icon_style(IconName::Play, "1.5rem") aria-hidden="true"></span></span>
+                    <span style=icon_style(IconName::Stop, "1.5rem") aria-hidden="true"></span>
+                    <span style=icon_style(IconName::Refresh, "1.5rem") aria-hidden="true"></span>
                 </div>
             </section>
 
@@ -122,11 +122,11 @@ pub fn ComponentsPage() -> impl IntoView {
                 </h2>
                 <div style="display:flex;align-items:center;gap:1.5rem">
                     <div style="position:relative;display:inline-flex">
-                        <span style="color:var(--color-warning)"><Icon name=IconName::Warning size="1.5rem"/></span>
+                        <span style="color:var(--color-warning)"><span style=icon_style(IconName::Warning, "1.5rem") aria-hidden="true"></span></span>
                         <Badge count=badge_count.into()/>
                     </div>
                     <div style="position:relative;display:inline-flex">
-                        <span style="color:var(--color-error)"><Icon name=IconName::Error size="1.5rem"/></span>
+                        <span style="color:var(--color-error)"><span style=icon_style(IconName::Error, "1.5rem") aria-hidden="true"></span></span>
                         <Badge count=Signal::derive(|| 99u32)/>
                     </div>
                     <Button
@@ -213,7 +213,7 @@ pub fn ComponentsPage() -> impl IntoView {
                 </Modal>
                 <DeleteDialog
                     open=delete_open
-                    entity_name="News Channel".to_string()
+                    entity_name=Signal::derive(|| "News Channel".to_string())
                     on_confirm=Callback::new(move |confirmed| {
                         if confirmed {
                             toast.push("Channel deleted.", ToastSeverity::Success);

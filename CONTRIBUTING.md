@@ -13,6 +13,10 @@ changes the ErsatzTV parity contract.
 - Prefer contracts already in this repository over ad hoc decisions.
 - Do not introduce secrets, tokens, private media paths, or personal library data
   into source, fixtures, logs, snapshots, or documentation.
+- Do not commit absolute filesystem paths from a maintainer's machine
+  (`/home/<user>/...`, `/Users/<user>/...`, `C:\Users\...`). Use repo-relative
+  paths for ErsatzRS, and the documented `$ERSATZTV_SRC` env var for upstream
+  ErsatzTV source — see [PORTING.md](PORTING.md).
 
 ## Development Setup
 

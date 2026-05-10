@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 297
+expression: yadif_cuda_filter(&software_state())
+---
+hwupload_cuda,yadif_cuda

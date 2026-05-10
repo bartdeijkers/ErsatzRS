@@ -55,6 +55,7 @@ node_modules/
 package-lock.json
 dist/
 pkg/
+test-results/
 # CSS bundle rebuilt by build.rs via stylance-cli
 crates/ersatzrs-web/public/bundle.css
 
@@ -78,3 +79,4 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+.playwright-mcp/

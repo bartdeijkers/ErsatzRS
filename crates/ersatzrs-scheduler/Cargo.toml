@@ -1,0 +1,36 @@
+[package]
+name = "ersatzrs-scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4", features = ["derive"] }
+ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
+ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
+ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
+sqlx = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+mysql = ["ersatzrs-infra/mysql"]
+mysql-integration = ["mysql", "ersatzrs-infra/mysql-integration"]
+
+[lib]
+name = "ersatzrs_scheduler"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ersatzrs-scheduler"
+path = "src/main.rs"
+
+[lints]
+workspace = true

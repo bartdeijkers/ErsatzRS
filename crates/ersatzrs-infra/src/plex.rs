@@ -690,6 +690,7 @@ pub async fn sync_plex_movie_library(
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
+    deep_scan: bool,
 ) -> Result<usize> {
     let mut synced = 0;
     let mut start_index = 0;
@@ -700,6 +701,20 @@ pub async fn sync_plex_movie_library(
 
     while start_index < total_size {
         for item in &page.items {
+            if !deep_scan
+                && item_etag_matches(
+                    pool,
+                    "PlexMovie",
+                    library_id,
+                    &item.key,
+                    item.etag.as_deref(),
+                )
+                .await?
+            {
+                synced += 1;
+                continue;
+            }
+
             upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
             synced += 1;
         }
@@ -727,6 +742,7 @@ pub async fn sync_plex_show_library(
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
+    deep_scan: bool,
 ) -> Result<usize> {
     let mut synced = 0;
     let mut show_start_index = 0;
@@ -769,6 +785,20 @@ pub async fn sync_plex_show_library(
 
                     while episode_start_index < episode_total_size {
                         for episode in &episodes.items {
+                            if !deep_scan
+                                && item_etag_matches(
+                                    pool,
+                                    "PlexEpisode",
+                                    library_id,
+                                    &episode.key,
+                                    episode.etag.as_deref(),
+                                )
+                                .await?
+                            {
+                                synced += 1;
+                                continue;
+                            }
+
                             upsert_plex_episode(
                                 pool,
                                 media_source_id,
@@ -1065,10 +1095,15 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         3 if !stream.embedded_in_video => MediaStreamKind::Subtitle,
         _ => return None,
     };
+    let is_video = matches!(kind, MediaStreamKind::Video);
     Some(MediaStream {
         index: stream.index.unwrap_or(stream.id),
         kind,
         codec: stream.codec.map(|codec| codec.to_ascii_lowercase()),
+        profile: stream
+            .profile
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
         language: stream.language_code,
         title: stream.title,
         default: stream.default,
@@ -1076,8 +1111,149 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         channels: stream.channels,
         width: stream.width,
         height: stream.height,
+        color_range: if is_video {
+            stream.color_range.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_space: if is_video {
+            stream.color_space.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_transfer: if is_video {
+            stream.color_trc.map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        color_primaries: if is_video {
+            stream
+                .color_primaries
+                .map(|value| value.to_ascii_lowercase())
+        } else {
+            None
+        },
+        bits_per_raw_sample: if is_video {
+            stream.bit_depth.unwrap_or_default()
+        } else {
+            0
+        },
         ..MediaStream::default()
     })
+}
+
+/// Synchronizes the set of Plex libraries for a media source.
+///
+/// Adds incoming libraries that have no `Key` match, deletes existing
+/// libraries that the server no longer reports (cascading through
+/// `Library`/`MediaItem`/`LibraryPath`), and refreshes the `MediaKind` and
+/// `Name` for libraries that the server still reports. Mirrors
+/// `MediaSourceRepository.UpdateLibraries` for Plex in `ErsatzTV`. The
+/// `MediaKind` is only updated when `ShouldSyncItems` is false to avoid
+/// invalidating an in-progress sync.
+///
+/// # Errors
+///
+/// Returns an error when the database write fails.
+pub async fn sync_plex_libraries(
+    pool: &DbPool,
+    media_source_id: i64,
+    incoming: &[PlexLibrarySummary],
+) -> Result<()> {
+    let existing_rows = sqlx::query(
+        r#"SELECT "pl"."Id" AS "Id", "pl"."Key" AS "Key",
+                  "pl"."ShouldSyncItems" AS "ShouldSyncItems",
+                  "l"."MediaKind" AS "MediaKind"
+           FROM "PlexLibrary" AS "pl"
+           JOIN "Library" AS "l" ON "l"."Id" = "pl"."Id"
+           WHERE "l"."MediaSourceId" = ?"#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut existing: Vec<(i64, Option<String>, bool, i32)> = existing_rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("Id"),
+                row.try_get::<Option<String>, _>("Key").unwrap_or_default(),
+                row.try_get::<i64, _>("ShouldSyncItems").unwrap_or_default() != 0,
+                row.try_get::<i32, _>("MediaKind").unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    let mut tx = pool.begin().await?;
+    for incoming_library in incoming {
+        let position = existing
+            .iter()
+            .position(|(_, key, _, _)| key.as_deref() == Some(incoming_library.key.as_str()));
+        if let Some(index) = position {
+            let (id, _, should_sync, current_kind) = existing.swap_remove(index);
+            let target_kind = encode_library_media_kind(incoming_library.media_kind);
+            if !should_sync && target_kind != current_kind {
+                sqlx::query(r#"UPDATE "Library" SET "MediaKind" = ?, "Name" = ? WHERE "Id" = ?"#)
+                    .bind(target_kind)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            } else {
+                sqlx::query(r#"UPDATE "Library" SET "Name" = ? WHERE "Id" = ?"#)
+                    .bind(&incoming_library.name)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        } else {
+            let result = sqlx::query(
+                r#"INSERT INTO "Library" ("Name", "MediaKind", "MediaSourceId")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(&incoming_library.name)
+            .bind(encode_library_media_kind(incoming_library.media_kind))
+            .bind(media_source_id)
+            .execute(&mut *tx)
+            .await?;
+            let id = crate::db::last_insert_id(result);
+            sqlx::query(
+                r#"INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
+                   VALUES (?, ?, 0)"#,
+            )
+            .bind(id)
+            .bind(&incoming_library.key)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+                .bind(id)
+                .bind(format!("plex://{id}"))
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    for (id, _, _, _) in existing {
+        sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+fn encode_library_media_kind(kind: LibraryMediaKind) -> i32 {
+    match kind {
+        LibraryMediaKind::Movies => 1,
+        LibraryMediaKind::Shows => 2,
+        LibraryMediaKind::MusicVideos => 3,
+        LibraryMediaKind::OtherVideos => 4,
+        LibraryMediaKind::Songs => 5,
+        LibraryMediaKind::Images => 6,
+        LibraryMediaKind::RemoteStreams => 7,
+    }
 }
 
 async fn ensure_plex_library(
@@ -1173,10 +1349,20 @@ async fn ensure_plex_season_item(
     show_id: i64,
     item: &PlexSeasonItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexSeason" WHERE "Key" = ?"#)
-        .bind(&item.key)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "PlexSeason"."Id"
+           FROM "PlexSeason"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "PlexSeason"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "PlexSeason"."Key" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.key)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexSeason" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1187,6 +1373,11 @@ async fn ensure_plex_season_item(
         sqlx::query(r#"UPDATE "Season" SET "ShowId" = ?, "SeasonNumber" = ? WHERE "Id" = ?"#)
             .bind(show_id)
             .bind(item.season_number)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1214,10 +1405,20 @@ async fn ensure_plex_episode_item(
     season_id: i64,
     item: &PlexMediaItem,
 ) -> Result<i64> {
-    if let Some(row) = sqlx::query(r#"SELECT "Id" FROM "PlexEpisode" WHERE "Key" = ?"#)
-        .bind(&item.key)
-        .fetch_optional(&mut **tx)
-        .await?
+    if let Some(row) = sqlx::query(
+        r#"SELECT "PlexEpisode"."Id"
+           FROM "PlexEpisode"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "PlexEpisode"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "PlexEpisode"."Key" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#,
+    )
+    .bind(library_path_id)
+    .bind(&item.key)
+    .fetch_optional(&mut **tx)
+    .await?
     {
         let id = row.get("Id");
         sqlx::query(r#"UPDATE "PlexEpisode" SET "Etag" = ? WHERE "Id" = ?"#)
@@ -1227,6 +1428,11 @@ async fn ensure_plex_episode_item(
             .await?;
         sqlx::query(r#"UPDATE "Episode" SET "SeasonId" = ? WHERE "Id" = ?"#)
             .bind(season_id)
+            .bind(id)
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
+            .bind(library_path_id)
             .bind(id)
             .execute(&mut **tx)
             .await?;
@@ -1350,6 +1556,34 @@ async fn find_plex_media_item(
         .map(|row| row.get("Id")))
 }
 
+async fn item_etag_matches(
+    pool: &DbPool,
+    table: &str,
+    library_id: i64,
+    key: &str,
+    etag: Option<&str>,
+) -> Result<bool> {
+    let sql = format!(
+        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
+           FROM "{table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
+           INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           WHERE "{table}"."Key" = ? AND "LibraryPath"."LibraryId" = ?"#
+    );
+    let Some(row) = sqlx::query(&sql)
+        .bind(key)
+        .bind(library_id)
+        .fetch_optional(pool)
+        .await?
+    else {
+        return Ok(false);
+    };
+
+    let existing_etag: Option<String> = row.try_get("Etag")?;
+    let state: i64 = row.try_get("State")?;
+    Ok(state == 0 && existing_etag.as_deref() == etag)
+}
+
 async fn ensure_simple_media_item(
     tx: &mut Transaction<'_, crate::db::Db>,
     base_table: &str,
@@ -1359,9 +1593,18 @@ async fn ensure_simple_media_item(
     key: &str,
     etag: Option<&String>,
 ) -> Result<i64> {
-    let select_sql =
-        format!(r#"SELECT "Id" FROM "{provider_table}" WHERE "{provider_key_column}" = ?"#);
+    let select_sql = format!(
+        r#"SELECT "{provider_table}"."Id"
+           FROM "{provider_table}"
+           INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{provider_table}"."Id"
+           INNER JOIN "LibraryPath" existing_path
+             ON existing_path."Id" = "MediaItem"."LibraryPathId"
+           INNER JOIN "LibraryPath" current_path ON current_path."Id" = ?
+           WHERE "{provider_table}"."{provider_key_column}" = ?
+             AND existing_path."LibraryId" = current_path."LibraryId""#
+    );
     if let Some(row) = sqlx::query(&select_sql)
+        .bind(library_path_id)
         .bind(key)
         .fetch_optional(&mut **tx)
         .await?
@@ -1516,12 +1759,15 @@ async fn replace_streams(
     for stream in streams {
         sqlx::query(
             r#"INSERT INTO "MediaStream" (
-                "Index", "Codec", "MediaStreamKind", "Language", "Channels",
-                "Title", "Default", "Forced", "MediaVersionId"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
+                "Title", "Default", "Forced", "MediaVersionId",
+                "PixelFormat", "ColorRange", "ColorSpace", "ColorTransfer", "ColorPrimaries",
+                "BitsPerRawSample", "AttachedPic", "FileName", "MimeType"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(stream.index)
         .bind(&stream.codec)
+        .bind(&stream.profile)
         .bind(encode_stream_kind(stream.kind))
         .bind(&stream.language)
         .bind(stream.channels.unwrap_or_default())
@@ -1529,6 +1775,15 @@ async fn replace_streams(
         .bind(stream.default)
         .bind(stream.forced)
         .bind(version_id)
+        .bind(&stream.pixel_format)
+        .bind(&stream.color_range)
+        .bind(&stream.color_space)
+        .bind(&stream.color_transfer)
+        .bind(&stream.color_primaries)
+        .bind(stream.bits_per_raw_sample)
+        .bind(stream.attached_pic)
+        .bind(&stream.file_name)
+        .bind(&stream.mime_type)
         .execute(&mut **tx)
         .await?;
     }
@@ -1544,6 +1799,22 @@ async fn replace_streams(
 ///
 /// Returns an error when config loading, the Plex API, or database writes fail.
 pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize> {
+    sync_library_by_id_with_options(pool, library_id, false).await
+}
+
+/// Loads all configuration from the database and synchronizes one Plex library.
+///
+/// `deep_scan` bypasses provider etag skip and refreshes existing rows even
+/// when the upstream etag is unchanged.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+pub async fn sync_library_by_id_with_options(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l
@@ -1602,6 +1873,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
                 media_source_id,
                 library_id,
                 &library_key,
+                deep_scan,
             )
             .await
         }
@@ -1613,6 +1885,7 @@ pub async fn sync_library_by_id(pool: &DbPool, library_id: i64) -> Result<usize>
                 media_source_id,
                 library_id,
                 &library_key,
+                deep_scan,
             )
             .await
         }
@@ -1842,10 +2115,16 @@ struct PlexStreamResponse {
     title: Option<String>,
     stream_type: Option<i32>,
     codec: Option<String>,
+    profile: Option<String>,
     channels: Option<i32>,
     width: Option<i32>,
     height: Option<i32>,
     pixel_aspect_ratio: Option<String>,
     scan_type: Option<String>,
     frame_rate: Option<String>,
+    bit_depth: Option<i32>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_trc: Option<String>,
+    color_primaries: Option<String>,
 }

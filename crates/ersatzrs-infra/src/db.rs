@@ -5,6 +5,12 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uuid::Uuid;
 
+use ersatzrs_domain::{
+    CONFIG_KEY_MINIMUM_LOG_LEVEL, CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING, CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
+};
+
 #[cfg(feature = "mysql")]
 use sqlx::any::{AnyPoolOptions, AnyRow};
 #[cfg(not(feature = "mysql"))]
@@ -468,6 +474,17 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Err
     )
     .await?;
 
+    for key in [
+        CONFIG_KEY_MINIMUM_LOG_LEVEL,
+        CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
+        CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
+        CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING,
+        CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
+        CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
+    ] {
+        ensure_config_value(pool, key, crate::logging::default_logging_level()).await?;
+    }
+
     ensure_default_channel(pool, default_profile_id).await?;
 
     Ok(())
@@ -777,7 +794,16 @@ mod tests {
         .expect("load system playlist group");
         let config_rows = sqlx::query(
             r#"SELECT "Key", "Value" FROM "ConfigElement"
-               WHERE "Key" IN ('ffmpeg.default_profile_id', 'ffmpeg.default_resolution_id')
+               WHERE "Key" IN (
+                   'ffmpeg.default_profile_id',
+                   'ffmpeg.default_resolution_id',
+                   'log.minimum_level',
+                   'log.minimum_level.scanning',
+                   'log.minimum_level.scheduling',
+                   'log.minimum_level.searching',
+                   'log.minimum_level.streaming',
+                   'log.minimum_level.http'
+               )
                ORDER BY "Key""#,
         )
         .fetch_all(&pool)
@@ -788,7 +814,7 @@ mod tests {
         assert_eq!(profile_name, "1920x1080 x264 aac");
         assert_eq!(channel_name, "ErsatzTV");
         assert_eq!(group_name, "Trakt Lists");
-        assert_eq!(config_rows.len(), 2);
+        assert_eq!(config_rows.len(), 8);
         for row in config_rows {
             let value: Option<String> = row.try_get("Value").expect("config value");
             assert!(value.is_some());

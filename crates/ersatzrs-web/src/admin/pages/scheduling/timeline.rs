@@ -25,56 +25,52 @@ struct TimelineBar {
 
 #[component]
 fn TimelineInfo(selected_item: RwSignal<Option<PlayoutTimelineItem>>) -> impl IntoView {
+    // Both the empty hint and the detail rows are always rendered; only one is visible at a time.
     view! {
         <div class=style::info_box>
-            {move || {
-                selected_item.get().map_or_else(
-                    || {
-                        view! {
-                            <p class=style::info_empty>
-                                "Click a playout item to inspect its title, times, and scheduling context."
-                            </p>
-                        }
-                            .into_any()
-                    },
-                    |item| {
-                        let title = if item.title.trim().is_empty() {
-                            "Untitled item".to_string()
-                        } else {
-                            item.title.clone()
-                        };
-                        let start = format_local_datetime(item.start_ms);
-                        let finish = format_local_datetime(item.finish_ms);
-                        let context = item
-                            .scheduling_context
-                            .clone()
-                            .filter(|value| !value.trim().is_empty())
-                            .unwrap_or_else(|| "No scheduling context".to_string());
-
-                        view! {
-                            <>
-                                <div class=style::info_row>
-                                    <span class=style::info_label>"Title"</span>
-                                    <span class=style::info_value>{title}</span>
-                                </div>
-                                <div class=style::info_row>
-                                    <span class=style::info_label>"Start"</span>
-                                    <span class=style::info_value>{start}</span>
-                                </div>
-                                <div class=style::info_row>
-                                    <span class=style::info_label>"Finish"</span>
-                                    <span class=style::info_value>{finish}</span>
-                                </div>
-                                <div class=style::info_row>
-                                    <span class=style::info_label>"Scheduling Context"</span>
-                                    <span class=style::info_context>{context}</span>
-                                </div>
-                            </>
-                        }
-                            .into_any()
-                    },
-                )
-            }}
+            <p
+                class=style::info_empty
+                style:display=move || if selected_item.get().is_none() { "" } else { "none" }
+            >
+                "Click a playout item to inspect its title, times, and scheduling context."
+            </p>
+            <div style:display=move || if selected_item.get().is_some() { "" } else { "none" }>
+                <div class=style::info_row>
+                    <span class=style::info_label>"Title"</span>
+                    <span class=style::info_value>
+                        {move || selected_item.get().map(|item| {
+                            if item.title.trim().is_empty() {
+                                "Untitled item".to_string()
+                            } else {
+                                item.title.clone()
+                            }
+                        }).unwrap_or_default()}
+                    </span>
+                </div>
+                <div class=style::info_row>
+                    <span class=style::info_label>"Start"</span>
+                    <span class=style::info_value>
+                        {move || selected_item.get().map(|item| format_local_datetime(item.start_ms)).unwrap_or_default()}
+                    </span>
+                </div>
+                <div class=style::info_row>
+                    <span class=style::info_label>"Finish"</span>
+                    <span class=style::info_value>
+                        {move || selected_item.get().map(|item| format_local_datetime(item.finish_ms)).unwrap_or_default()}
+                    </span>
+                </div>
+                <div class=style::info_row>
+                    <span class=style::info_label>"Scheduling Context"</span>
+                    <span class=style::info_context>
+                        {move || selected_item.get().map(|item| {
+                            item.scheduling_context
+                                .clone()
+                                .filter(|value| !value.trim().is_empty())
+                                .unwrap_or_else(|| "No scheduling context".to_string())
+                        }).unwrap_or_default()}
+                    </span>
+                </div>
+            </div>
         </div>
     }
 }
@@ -146,47 +142,49 @@ pub fn PlayoutTimelineIsland(playout_id: i64) -> impl IntoView {
                                             class=style::background
                                         />
                                         {hour_ticks(window_start.get())}
-                                        {if bars.is_empty() {
-                                            view! {
-                                                <text x="500" y="34" text-anchor="middle" class=style::empty_label>
-                                                    "No playout items in this 24-hour window"
-                                                </text>
-                                            }
-                                                .into_any()
-                                        } else {
-                                            bars.into_iter().map(|bar| {
-                                                let fill = if bar.item.filler_kind == 0 {
-                                                    "var(--color-primary)"
-                                                } else {
-                                                    "var(--color-muted)"
-                                                };
-                                                let label = if bar.item.title.trim().is_empty() {
-                                                    "Untitled item".to_string()
-                                                } else {
-                                                    bar.item.title.clone()
-                                                };
-                                                let item_for_click = bar.item.clone();
+                                        // Empty-state label — always rendered; hidden when bars exist.
+                                        <text
+                                            x="500"
+                                            y="34"
+                                            text-anchor="middle"
+                                            class=style::empty_label
+                                            style:display=if bars.is_empty() { "" } else { "none" }
+                                        >
+                                            "No playout items in this 24-hour window"
+                                        </text>
+                                        // Bar items — only rendered when non-empty.
+                                        {bars.into_iter().map(|bar| {
+                                            let fill = if bar.item.filler_kind == 0 {
+                                                "var(--color-primary)"
+                                            } else {
+                                                "var(--color-muted)"
+                                            };
+                                            let label = if bar.item.title.trim().is_empty() {
+                                                "Untitled item".to_string()
+                                            } else {
+                                                bar.item.title.clone()
+                                            };
+                                            let item_for_click = bar.item.clone();
 
-                                                view! {
-                                                    <g>
-                                                        <rect
-                                                            x=format!("{:.2}", bar.x)
-                                                            y=format!("{BAR_Y:.2}")
-                                                            width=format!("{:.2}", bar.width)
-                                                            height=format!("{BAR_HEIGHT:.2}")
-                                                            rx="4"
-                                                            ry="4"
-                                                            fill=fill
-                                                            class=style::bar
-                                                            on:click=move |_| {
-                                                                selected_item.set(Some(item_for_click.clone()));
-                                                            }
-                                                        />
-                                                        <title>{label}</title>
-                                                    </g>
-                                                }
-                                            }).collect_view().into_any()
-                                        }}
+                                            view! {
+                                                <g>
+                                                    <rect
+                                                        x=format!("{:.2}", bar.x)
+                                                        y=format!("{BAR_Y:.2}")
+                                                        width=format!("{:.2}", bar.width)
+                                                        height=format!("{BAR_HEIGHT:.2}")
+                                                        rx="4"
+                                                        ry="4"
+                                                        fill=fill
+                                                        class=style::bar
+                                                        on:click=move |_| {
+                                                            selected_item.set(Some(item_for_click.clone()));
+                                                        }
+                                                    />
+                                                    <title>{label}</title>
+                                                </g>
+                                            }
+                                        }).collect_view()}
                                     </svg>
                                 </div>
 
@@ -245,20 +243,15 @@ fn hour_ticks(window_start: i64) -> impl IntoView {
                         y2=format!("{SVG_HEIGHT:.2}")
                         class=style::tick_line
                     />
-                    {if show_label {
-                        view! {
-                            <text
-                                x=format!("{:.2}", (x + 6.0).min(SVG_WIDTH - 30.0))
-                                y="9"
-                                class=style::tick_label
-                            >
-                                {format_hour_label(tick_ms)}
-                            </text>
-                        }
-                            .into_any()
-                    } else {
-                        ().into_any()
-                    }}
+                    // Always render the label element; hide it for non-labelled ticks.
+                    <text
+                        x=format!("{:.2}", (x + 6.0).min(SVG_WIDTH - 30.0))
+                        y="9"
+                        class=style::tick_label
+                        style:display=if show_label { "" } else { "none" }
+                    >
+                        {format_hour_label(tick_ms)}
+                    </text>
                 </g>
             }
         })

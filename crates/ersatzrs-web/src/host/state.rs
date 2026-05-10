@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
@@ -9,6 +9,38 @@ use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+/// In-process tracker for libraries that have an active scan/sync. Mirrors
+/// `IEntityLocker` in `ErsatzTV`: the admin UI polls this via a server fn to
+/// render an indeterminate spinner while a background task is running.
+#[derive(Clone, Default)]
+pub struct EntityLocker {
+    libraries: Arc<Mutex<HashSet<i64>>>,
+}
+
+impl EntityLocker {
+    /// Attempts to acquire the lock for `library_id`. Returns true when the
+    /// lock was acquired (caller is responsible for `unlock_library` when
+    /// done). Returns false when the library is already locked.
+    pub fn lock_library(&self, library_id: i64) -> bool {
+        self.libraries
+            .lock()
+            .is_ok_and(|mut set| set.insert(library_id))
+    }
+
+    pub fn unlock_library(&self, library_id: i64) {
+        if let Ok(mut set) = self.libraries.lock() {
+            set.remove(&library_id);
+        }
+    }
+
+    pub fn locked_libraries(&self) -> Vec<i64> {
+        self.libraries
+            .lock()
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct SystemStartup {
@@ -41,6 +73,7 @@ pub struct AppState {
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
+    pub entity_locker: EntityLocker,
 }
 
 #[derive(Clone)]
@@ -74,6 +107,7 @@ impl AppState {
             hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,
+            entity_locker: EntityLocker::default(),
         }
     }
 

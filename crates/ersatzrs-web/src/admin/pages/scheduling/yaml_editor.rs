@@ -175,11 +175,13 @@ fn YamlEditorIsland(initial_form: SequentialPlayoutForm) -> impl IntoView {
             </div>
 
             // ── Inline validation error banner ────────────────────────
-            {move || {
-                validation_error.get().map(|msg| {
-                    view! { <div class=style::error_banner>{msg}</div> }
-                })
-            }}
+            // Always rendered; hidden when there is no error to keep a stable DOM shape.
+            <div
+                class=style::error_banner
+                style:display=move || if validation_error.get().is_some() { "" } else { "none" }
+            >
+                {move || validation_error.get().unwrap_or_default()}
+            </div>
 
             // ── YAML textarea ──────────────────────────────────────────
             <div class=style::editor_wrap>

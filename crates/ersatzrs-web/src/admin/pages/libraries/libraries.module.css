@@ -78,3 +78,21 @@ tr:last-child td {
     color: var(--color-muted);
     font-size: 0.875rem;
 }
+
+/* Indeterminate spinner shown while a library is being scanned. Mirrors the
+ * MudProgressCircular indicator on the ErsatzTV libraries page. The element
+ * is always rendered (for stable hydration); visibility is toggled via an
+ * inline `style:display` reactive attribute. */
+.spinner {
+    display: none;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

@@ -50,6 +50,9 @@ crates/ersatzrs-web/
   belong beside their page module.
 
 Generated Leptos hydration assets are not stored under `public/js`; they are
-built into the configured `site-root` and served as `/pkg`. Use `public/js`
-only for hand-written JavaScript that cannot reasonably live in a Leptos
-island.
+built into the configured `site-root` and served as `/pkg`. For local
+interactive admin work, install `cargo-leptos` and run
+`(cd crates/ersatzrs-web && cargo leptos build)` before starting
+`cargo run --bin ersatzrs-web`; otherwise the server intentionally emits
+SSR-only HTML and browser-side button actions do not run. Use `public/js` only
+for hand-written JavaScript that cannot reasonably live in a Leptos island.

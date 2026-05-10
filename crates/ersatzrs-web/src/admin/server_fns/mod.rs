@@ -3,6 +3,7 @@ pub mod channels;
 pub mod ffmpeg_profiles;
 pub mod layout;
 pub mod libraries;
+pub mod logs;
 pub mod media_browser;
 pub mod media_sources;
 pub mod playouts;

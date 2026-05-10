@@ -20,7 +20,7 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1")
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
         .await
         .unwrap();
 
@@ -83,7 +83,7 @@ async fn plex_sync_paginates_movie_library() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 3, "3")
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 3, "3", false)
         .await
         .unwrap();
 
@@ -91,6 +91,112 @@ async fn plex_sync_paginates_movie_library() {
     assert_eq!(count(&pool, "PlexMovie").await, 2);
     first_page.assert_async().await;
     second_page.assert_async().await;
+}
+
+#[tokio::test]
+async fn plex_sync_skips_unchanged_movie_etag_writes() {
+    let server = MockServer::start_async().await;
+    let page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/1/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/100", "/library/parts/10", "/media/unchanged.mkv", 100)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
+        .await
+        .unwrap();
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/media/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/kept.mkv");
+
+    let deep_synced = sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", true)
+        .await
+        .unwrap();
+
+    assert_eq!(deep_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/unchanged.mkv");
+    assert_eq!(page.calls_async().await, 3);
+}
+
+#[tokio::test]
+async fn plex_sync_scopes_matching_etags_to_the_current_library() {
+    let server = MockServer::start_async().await;
+    let first_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/1/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/shared", "/library/parts/10", "/media/shared.mkv", 100)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let second_page = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/2/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json("/library/metadata/shared", "/library/parts/20", "/media/shared-2.mkv", 200)
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 1, "1", false)
+        .await
+        .unwrap();
+    let synced = sync_plex_movie_library(&pool, &service, &config, 1, 2, "2", false)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(count(&pool, "PlexMovie").await, 2);
+    assert_eq!(count(&pool, "MediaFile").await, 2);
+    assert_eq!(first_page.calls_async().await, 1);
+    assert_eq!(second_page.calls_async().await, 1);
 }
 
 #[tokio::test]
@@ -104,7 +210,7 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
         token: "plex-token".to_owned(),
     };
 
-    let synced = sync_plex_show_library(&pool, &service, &config, 1, 1, "2")
+    let synced = sync_plex_show_library(&pool, &service, &config, 1, 1, "2", false)
         .await
         .unwrap();
 
@@ -177,7 +283,7 @@ async fn plex_sync_maps_mock_collection_response_to_collection_rows() {
         token: "plex-token".to_owned(),
     };
 
-    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4")
+    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4", false)
         .await
         .unwrap();
 
@@ -269,6 +375,115 @@ async fn mock_plex_show_pages(server: &MockServer) {
         .await;
 }
 
+/// Exercises real-world Plex collection response shapes that the mock test
+/// above does not: paginated `/library/all?type=18` results, unicode in
+/// collection titles, mixed `type` values for collection members, and a
+/// member with a redirect-style `ratingKey`-only key. Asserts that the sync
+/// projects collections deterministically and that pagination is honored
+/// (Plex caps each page at 100, so a totalSize of 150 must trigger a second
+/// fetch).
+#[tokio::test]
+async fn plex_sync_paginates_collection_list_and_handles_mixed_member_types() {
+    let server = MockServer::start_async().await;
+    mock_plex_collection_movie_pages(&server).await;
+
+    let collections_page_one = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("type", "18")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        {
+                            "ratingKey": "910",
+                            "title": "Action — Greatest Hits",
+                            "updatedAt": 1_776_406_500i64,
+                            "librarySectionId": 4
+                        },
+                        {
+                            "ratingKey": "911",
+                            "title": "Holiday Marathon \u{1F389}",
+                            "updatedAt": 1_776_406_600i64,
+                            "librarySectionId": 4
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let action_members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/collections/910/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        { "key": "/library/metadata/400", "type": "movie" },
+                        { "key": "/library/metadata/401", "type": "movie" }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let holiday_members = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/collections/911/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 2,
+                    "Metadata": [
+                        { "key": "/library/metadata/401", "type": "movie" },
+                        { "key": "/library/metadata/9999", "type": "show" }
+                    ]
+                }
+            }));
+        })
+        .await;
+
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 4, "4", false)
+        .await
+        .unwrap();
+
+    let synced = sync_plex_collection_library(&pool, &service, &config, 1, "4")
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 2);
+    assert_eq!(count(&pool, "Collection").await, 2);
+    assert_eq!(count(&pool, "PlexCollection").await, 2);
+    // 2 movies in Action + 1 movie in Holiday (the show key has no matching
+    // PlexShow row, so it is dropped during member resolution rather than
+    // failing the sync).
+    assert_eq!(count(&pool, "CollectionItem").await, 3);
+    insta::assert_json_snapshot!(plex_collection_rows(&pool).await);
+    collections_page_one.assert_async().await;
+    action_members.assert_async().await;
+    holiday_members.assert_async().await;
+}
+
 async fn mock_plex_collection_movie_pages(server: &MockServer) {
     server
         .mock_async(|when, then| {
@@ -358,6 +573,14 @@ async fn provider_library_key(
         .await
         .unwrap()
         .get("Value")
+}
+
+async fn media_file_path(pool: &SqlitePool) -> String {
+    sqlx::query(r#"SELECT "Path" FROM "MediaFile" LIMIT 1"#)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Path")
 }
 
 async fn plex_movie_rows(pool: &SqlitePool) -> serde_json::Value {
