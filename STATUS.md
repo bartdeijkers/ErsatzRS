@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-09 (Support logs file parity)
+Last updated: 2026-05-10 (platform parity across six RIDs)
 
 ## Current Phase
 
@@ -370,6 +370,25 @@ block behavior moved into core/infra (`XmltvBlockBehavior` and
 `xmltv.block_behavior`) so the transport layer only renders projected guide
 programmes. ADR 0010 records the Classic scheduling engine port decision.
 
+**Platform support — at parity with ErsatzTV across all six RIDs.** Every
+PR/push runs a 6-cell `platforms` matrix in `.github/workflows/ci.yml` that
+builds the workspace for `linux-x64`, `linux-arm64`, `linux-arm`, `osx-arm64`,
+`osx-x64`, and `win-x64`, and runs the test suite on the natively-built cells
+(linux-x64 on `ubuntu-latest`, osx-arm64 on `macos-latest`, win-x64 on
+`windows-latest`). The two ARM Linux cells use cross-rs via
+[`Cross.toml`](Cross.toml); osx-x64 cross-compiles from `macos-latest` because
+the Intel `macos-13` runners are scarce and being deprecated. Tag pushes now
+attach `ersatzrs-<tag>-<rid>.tar.gz` (or `.zip` for win-x64) per RID through
+the new `binaries` matrix in [`release.yml`](.github/workflows/release.yml),
+sitting alongside the existing Docker publish path. Windows contributors use
+[`run.cmd`](run.cmd) and [`run.ps1`](run.ps1) which mirror the bash
+`run.sh` subcommands. Audit results: only one source-level fix was needed —
+splitting the unix-only ffmpeg version-check test helpers into a
+`#[cfg(all(test, unix))] mod unix_tests` so the parser tests still compile on
+Windows. The `platform-parity-fixer` agent in
+[`.claude/agents/`](.claude/agents/platform-parity-fixer.md) encodes the audit
+procedure and the false-positive catalogue for future regressions.
+
 ### Admin UI Route Coverage
 
 The NavDrawer in [`crates/ersatzrs-web/src/admin/layout/nav.rs`](crates/ersatzrs-web/src/admin/layout/nav.rs)
@@ -465,6 +484,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-10 | Claude Code (claude-opus-4-7) | Closed the platform-parity slice. Added the `platform-parity-fixer` project agent and Supported Platforms section in AGENTS.md, split unix-only ffmpeg test helpers into `#[cfg(all(test, unix))] mod unix_tests`, added `Cross.toml` for cross-rs ARM/Windows builds, made `ersatzrs-web/build.rs` warn-and-skip when stylance-cli is unavailable so cross builds succeed, expanded the CI matrix with a 6-cell `platforms` job (linux-x64/arm64/arm via cross, osx-arm64 native, osx-x64 cross from Apple Silicon, win-x64 MSVC, all green on real runners), added a `binaries` matrix to release.yml that attaches `ersatzrs-<tag>-<rid>.tar.gz`/`.zip` to GitHub releases per RID, ported `run.sh` to `run.ps1` plus a `run.cmd` shim for Windows contributors, ignored RUSTSEC-2023-0071 with rationale, and updated parity-matrix.md to mark platform support at parity with ErsatzTV. |
 | 2026-05-08 | Codex (GPT-5) | Added the `.claude/agents/support-parity-fixer.md` project agent to drive the Support Playwright parity failures to green while following the repo contracts, ErsatzTV source-first workflow, and Leptos hydration rules. |
 | 2026-05-08 | Codex (GPT-5) | Captured the live ErsatzTV Legacy Support page criteria and added scripted Playwright coverage for `/system/health`, `/system/logs`, and `/system/troubleshooting`, including the visible health-check row set and troubleshooting report tabs. |
 | 2026-05-08 | Codex (GPT-5) | Fixed `/system/health` Support parity to render the ErsatzTV-style health table from persisted or live check results, filter `NotApplicable` rows, and keep the Support nav group expanded by default. |
