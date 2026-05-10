@@ -33,8 +33,39 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
 | `./run.sh log`   | `tail -F ersatzrs.log`.                                     |
 
+On Windows, use [`run.cmd`](run.cmd) (or `pwsh -File run.ps1`) with the same
+subcommands. See [Windows development](#windows-development) below.
+
 For the longer commands (clippy, test, deny, snapshot review), see the
 "Commands" block in [AGENTS.md](AGENTS.md).
+
+## Windows development
+
+Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
+`run.sh` — invoked through the [`run.cmd`](run.cmd) shim so the same `dev` /
+`build` / `serve` / `seed` / `log` subcommands work from any shell.
+
+```powershell
+.\run.cmd            # alias for `dev`
+.\run.cmd dev        # cargo leptos watch
+.\run.cmd build      # cargo leptos build + cargo run
+.\run.cmd serve      # cargo leptos serve
+.\run.cmd seed       # seed the SQLite db from tests/fixtures/seed_admin.sql
+.\run.cmd log        # Get-Content -Wait equivalent of tail -F
+```
+
+`run.cmd` calls `pwsh` (PowerShell 7+); install it with `winget install
+Microsoft.PowerShell` if it's not on PATH.
+
+`run.ps1` looks for FFmpeg 8.1 at `%USERPROFILE%\.local\ffmpeg-8.1\bin` and
+sets `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH` automatically when
+that directory exists. If your FFmpeg lives elsewhere, set those two
+environment variables yourself or put `ffmpeg.exe` on `PATH` and the runtime
+detector will find it on startup.
+
+`run.ps1 seed` shells out to the `sqlite3` CLI; `winget install
+SQLite.SQLite` (or any other source of `sqlite3.exe` on `PATH`) covers the
+prerequisite.
 
 ## Dev loop (`run.sh dev`)
 
