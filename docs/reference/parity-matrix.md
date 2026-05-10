@@ -42,8 +42,9 @@ and mirrored in STATUS.md.
 | Trakt lists | `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`, `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`, `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`, `ErsatzTV/Shared/AddTraktListDialog.razor` | `crates/ersatzrs-core/src/trakt.rs`, `crates/ersatzrs-infra/src/{trakt,trakt_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/trakt,pages/media/trakt_lists}.rs` | Ported: ErsatzTV-compatible locator parsing, Trakt v2 API client headers and list/item projection, `TraktList`/`TraktListItem`/`TraktListItemGuid` persistence, GUID-first matching with title/year/season/episode fallback, generated playlists under the system `Trakt Lists` group, auto-refresh/rematch maintenance, Add/Edit/Search/Match/Delete UI, and `trakt_list:{id}` search integration. `TRAKT__CLIENTID` is required for add/refresh only. | |
 | Schedules / Templates / Decorations / Deco templates | `ErsatzTV/Pages/Schedules*.razor`, etc. | `crates/ersatzrs-web/src/admin/pages/scheduling/` | Not started: nav links advertised in the drawer 404 today. Block scheduling UI is the only scheduling editor currently shipped. | |
 | Settings (FFmpeg / Logging / HDHomeRun / Scanner / Playout / UI / XMLTV) | `ErsatzTV/Pages/Settings*.razor`, `$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs` | `crates/ersatzrs-domain/src/config.rs`, `crates/ersatzrs-infra/src/{db,logging,xmltv}.rs`, `crates/ersatzrs-core/src/playout_builder.rs` | In progress: no admin settings UI yet, but Slice 20 closes the non-web config surface. `ffmpeg.global_watermark_id` and `ffmpeg.global_fallback_filler_id` are honored during playout build post-processing; `log.minimum_level` plus scanning/scheduling/searching/streaming/http subsystem keys are seeded and loaded into binary tracing filters; and `xmltv.block_behavior` is owned by core/infra guide projection. | |
-| Support pages (Health / Logs / Troubleshooting) | `ErsatzTV/Pages/Health*.razor`, etc. | `crates/ersatzrs-web/src/admin/pages/system/` | Not started: nav links advertised in the drawer 404 today. The `HealthBadge` island already counts issues via `count_health_issues`, but no detail page exists yet. | |
+| Support pages (Health / Logs / Troubleshooting) | `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/` | `crates/ersatzrs-web/src/admin/pages/system/`, `tests/e2e/support-pages.spec.ts` | In progress: `/system/health` renders an ErsatzTV-style two-column health table from the persisted scheduler snapshot or the live health service when no snapshot exists, filtering out `NotApplicable` rows like `GetAllHealthCheckResultsHandler.cs`; `/system/logs` reads the newest OS-local app-data log file and exposes the ErsatzTV-visible heading, Search field, Timestamp/Level/Message table, and pager surface; `/system/troubleshooting` exposes the ErsatzTV-visible Tools, General, NVIDIA, and QSV tabs with copyable report panes. Generated troubleshooting data, linked troubleshooting tools, dynamic nav badge counts, and full log search/sort paging remain future parity work. | |
 | Remote streams browser | `ErsatzTV/Pages/RemoteStreams*.razor` | `crates/ersatzrs-web/src/admin/pages/media/` | Not started: nav link advertised in the drawer 404s today. Remote-stream domain entities exist; no UI yet. | |
+| Platform support (linux-x64, linux-arm64, linux-arm, osx-x64, osx-arm64, win-x64) | ErsatzTV `.NET runtime identifier` matrix and `dotnet publish -r <RID>` per release | `.github/workflows/{ci,release}.yml`, `Cross.toml`, `rust-toolchain.toml`, `run.ps1`, `run.cmd`, `crates/ersatzrs-ffmpeg/src/version.rs` (Unix-only test split) | Ported: every PR/push runs a 6-cell `platforms` matrix that builds the workspace for each ErsatzTV-parity RID and runs the test suite on the four natively-built cells (linux-x64 + ubuntu-latest, osx-arm64 + macos-latest, osx-x64 cross-compiled from macos-latest, win-x64 + windows-latest); the two ARM Linux cells build via cross-rs. Tag pushes attach `ersatzrs-<tag>-<rid>.tar.gz` (or `.zip` for win-x64) per RID alongside the existing Docker publish path. Windows contributors use `run.cmd` / `run.ps1` mirroring `run.sh`. Only platform-specific code lives behind documented `cfg` guards (Leptos `wasm32` islands, Unix-only ffmpeg test helpers). | |
 
 Statuses:
 
@@ -86,6 +87,8 @@ mapping from advertised nav link to backing route in
 | `/search` | scheduling search result page, including `trakt_list:{id}` queries |
 | `/blocks` | aliased to `/scheduling/blocks`; list + `:id` editor |
 | `/playouts` | list + embedded timeline + `/playouts/sequential/:id` editor |
+| `/system/logs` | newest OS-local app-data log file in ErsatzTV-style Support log table/search/pager surface |
+| `/system/troubleshooting` | ErsatzTV-style Support troubleshooting tools/report tab surface |
 
 ### Advertised but 404 (placeholders pending Phase 7)
 
@@ -107,9 +110,5 @@ mapping from advertised nav link to backing route in
 | `/settings/playout` | Same as above. |
 | `/settings/ui` | Same as above. |
 | `/settings/xmltv` | Same as above. |
-| `/system/health` | `HealthBadge` island counts issues but has no detail page. |
-| `/system/logs` | No log surface yet. |
-| `/system/troubleshooting` | No troubleshooting surface yet. |
-
 When closing one of these gaps, move the row from the lower table to the
 upper one and add a corresponding row to the main feature matrix above.

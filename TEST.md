@@ -74,9 +74,9 @@ stabilisation. Apply them every time you wire interactive UI:
 
 ## Admin UI E2E
 
-Hydration smoke tests are run manually via the Playwright MCP tool. There is no
-committed `@playwright/test` harness — the MCP browser is the primary tool for
-interactive UI verification.
+Hydration smoke tests can be run manually via the Playwright MCP tool. Scripted
+admin parity checks live under `tests/e2e/` and run with `npm run test:e2e`.
+Point them at a running server with `E2E_BASE_URL=http://127.0.0.1:8409`.
 
 Workflow:
 1. Start the server: `./run.sh dev` (or `cargo run --bin ersatzrs-web`).
@@ -84,6 +84,11 @@ Workflow:
    tools to navigate to the page and exercise interactive islands.
 3. Check browser console for `failed_to_cast_marker_node` or other hydration
    errors; any such error is a product bug in the affected island.
+
+Support page parity criteria are captured from the live ErsatzTV Legacy
+Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can
+seed the persisted health snapshot with `E2E_SEED_SUPPORT=1` when
+`E2E_DB_PATH` or `ERSATZRS_DB_PATH` points at the SQLite test database.
 
 ## Per-page E2E index
 
@@ -111,6 +116,9 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/watermarks/:id`        | ✅     | Stable DOM shape, all conditional sections via `style:display`.         |
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/collections/:id` | ✅     | `MembersSection` autocomplete list via `style:display`.                 |
+| `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
+| `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
+| `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |
 
 ## Fixture strategy
 

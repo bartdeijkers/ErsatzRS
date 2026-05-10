@@ -33,8 +33,39 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
 | `./run.sh log`   | `tail -F ersatzrs.log`.                                     |
 
+On Windows, use [`run.cmd`](run.cmd) (or `pwsh -File run.ps1`) with the same
+subcommands. See [Windows development](#windows-development) below.
+
 For the longer commands (clippy, test, deny, snapshot review), see the
 "Commands" block in [AGENTS.md](AGENTS.md).
+
+## Windows development
+
+Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
+`run.sh` — invoked through the [`run.cmd`](run.cmd) shim so the same `dev` /
+`build` / `serve` / `seed` / `log` subcommands work from any shell.
+
+```powershell
+.\run.cmd            # alias for `dev`
+.\run.cmd dev        # cargo leptos watch
+.\run.cmd build      # cargo leptos build + cargo run
+.\run.cmd serve      # cargo leptos serve
+.\run.cmd seed       # seed the SQLite db from tests/fixtures/seed_admin.sql
+.\run.cmd log        # Get-Content -Wait equivalent of tail -F
+```
+
+`run.cmd` calls `pwsh` (PowerShell 7+); install it with `winget install
+Microsoft.PowerShell` if it's not on PATH.
+
+`run.ps1` looks for FFmpeg 8.1 at `%USERPROFILE%\.local\ffmpeg-8.1\bin` and
+sets `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH` automatically when
+that directory exists. If your FFmpeg lives elsewhere, set those two
+environment variables yourself or put `ffmpeg.exe` on `PATH` and the runtime
+detector will find it on startup.
+
+`run.ps1 seed` shells out to the `sqlite3` CLI; `winget install
+SQLite.SQLite` (or any other source of `sqlite3.exe` on `PATH`) covers the
+prerequisite.
 
 ## Dev loop (`run.sh dev`)
 
@@ -84,6 +115,53 @@ Trade-offs:
 - `target/` will be larger than before — the per-package optimisation level
   generates more codegen artifacts. On WSL2, `cargo clean` periodically (and
   consider `cargo install cargo-sweep && cargo sweep --time 30`).
+
+## Cross-compiling
+
+ErsatzRS targets the same six RIDs as ErsatzTV (`linux-x64`, `linux-arm64`,
+`linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`). Targets are installed on
+demand: CI installs the matching target per matrix cell, and locally you add
+them with `rustup target add`.
+
+For the targets the host can't compile natively, use
+[`cross`](https://github.com/cross-rs/cross). Configuration lives in
+[`Cross.toml`](Cross.toml). `cross` requires a working Docker or Podman, and
+its containers ship the target stdlib already so no `rustup target add` is
+needed when cross-building.
+
+```bash
+cargo install cross --git https://github.com/cross-rs/cross --locked
+
+# Linux ARM64 (linux-arm64)
+cross build --workspace --target aarch64-unknown-linux-gnu
+
+# Linux ARMv7 (linux-arm)
+cross build --workspace --target armv7-unknown-linux-gnueabihf
+
+# Windows x86-64 (win-x64) — uses MinGW for cross-from-Linux verification.
+# Native Windows CI runners use the MSVC target instead.
+cross build --workspace --target x86_64-pc-windows-gnu
+```
+
+macOS targets are **not** supported by `cross`. Build them on a real macOS
+host (or `macos-latest` / `macos-13` GitHub runners):
+
+```bash
+cargo build --workspace --target aarch64-apple-darwin   # osx-arm64
+cargo build --workspace --target x86_64-apple-darwin    # osx-x64
+```
+
+Notes:
+
+- The workspace uses `reqwest` with `rustls-tls` only; no OpenSSL native libs
+  are needed, so the default `cross` images work without `pre-build` apt
+  packages.
+- `SQLX_OFFLINE=true` is exported via [`.cargo/config.toml`](.cargo/config.toml)
+  and passed through `Cross.toml`'s `passthrough` list. The shipped `.sqlx/`
+  cache is required.
+- `cargo-leptos` and the WASM hydration bundle are **only** built on the
+  Linux host that ships the release. The other RIDs ship the SSR binary
+  plus the prebuilt `target/site/` assets from that host build.
 
 ## Compile-cost notes
 

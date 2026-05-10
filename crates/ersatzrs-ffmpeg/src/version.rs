@@ -714,15 +714,11 @@ fn to_owned_vec(values: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        check_ffmpeg_runtime_with_config, collect_runtime_issues, parse_capability_names,
-        parse_configuration_flags, parse_hwaccels, parse_version, FfmpegCapabilityReport,
-        FfmpegCheckError, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
+        collect_runtime_issues, parse_capability_names, parse_configuration_flags, parse_hwaccels,
+        parse_version, FfmpegCapabilityReport, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue,
+        FfmpegVersion,
     };
     use std::collections::BTreeSet;
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn parses_release_version_without_patch() {
@@ -843,6 +839,18 @@ Encoders:
         assert!(issues[0].is_error());
         assert!(!issues[3].is_error());
     }
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use super::{
+        check_ffmpeg_runtime_with_config, FfmpegCheckError, FfmpegRuntimeCheckConfig,
+        FfmpegRuntimeIssue, FfmpegVersion,
+    };
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[tokio::test(flavor = "current_thread")]
     async fn runtime_check_reports_missing_ffmpeg() {
