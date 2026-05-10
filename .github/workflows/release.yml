@@ -20,8 +20,8 @@ jobs:
 
   binaries:
     # Build release binaries for every ErsatzTV-parity RID and attach them
-    # as archives to the GitHub release. Mirrors the `platforms` matrix
-    # in ci.yml. The Linux Docker image publish path remains separate.
+    # as archives to the GitHub release. CI stays on the self-hosted
+    # development checks; hosted platform builds run only for releases.
     name: Release archive (${{ matrix.rid }})
     needs: release
     runs-on: ${{ matrix.runner }}
