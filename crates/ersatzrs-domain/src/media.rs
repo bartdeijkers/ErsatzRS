@@ -281,6 +281,7 @@ pub struct MediaStream {
     pub index: i32,
     pub kind: MediaStreamKind,
     pub codec: Option<String>,
+    pub profile: Option<String>,
     pub language: Option<String>,
     pub title: Option<String>,
     pub default: bool,
@@ -288,6 +289,15 @@ pub struct MediaStream {
     pub channels: Option<i32>,
     pub width: Option<i32>,
     pub height: Option<i32>,
+    pub pixel_format: Option<String>,
+    pub color_range: Option<String>,
+    pub color_space: Option<String>,
+    pub color_transfer: Option<String>,
+    pub color_primaries: Option<String>,
+    pub bits_per_raw_sample: i32,
+    pub attached_pic: bool,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

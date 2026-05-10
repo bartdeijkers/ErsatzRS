@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
 use crate::admin::layout::badges::{HealthBadge, PlayoutWarningBadge};
-use crate::admin::ui::primitives::icon::{Icon, IconName};
+use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 use super::style;
 
@@ -83,7 +83,7 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
                     <PlayoutWarningBadge/>
                 </div>
                 <span class=style::nav_group_chevron>
-                    <Icon name=IconName::ChevronDown size="0.75rem"/>
+                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
                 </span>
             </summary>
             <div class=style::nav_group_children>
@@ -96,14 +96,14 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
 #[component]
 fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
     view! {
-        <details class=style::nav_group>
+        <details class=style::nav_group open>
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
                     <span>"Support"</span>
                     <HealthBadge/>
                 </div>
                 <span class=style::nav_group_chevron>
-                    <Icon name=IconName::ChevronDown size="0.75rem"/>
+                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
                 </span>
             </summary>
             <div class=style::nav_group_children>
@@ -120,7 +120,7 @@ fn NavGroup(label: &'static str, children: ChildrenFn) -> impl IntoView {
             <summary class=style::nav_group_header>
                 <span>{label}</span>
                 <span class=style::nav_group_chevron>
-                    <Icon name=IconName::ChevronDown size="0.75rem"/>
+                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
                 </span>
             </summary>
             <div class=style::nav_group_children>
@@ -145,7 +145,7 @@ fn NavLink(href: &'static str, label: &'static str, icon: IconName) -> impl Into
 
     view! {
         <a href=href class=cls>
-            <Icon name=icon size="1rem"/>
+            <span style=icon_style(icon, "1rem") aria-hidden="true"></span>
             <span class=style::nav_link_text>{label}</span>
         </a>
     }

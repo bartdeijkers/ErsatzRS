@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 346
+expression: "tonemap_filter(&software_state(), PixelFormat::Yuv420P,\nTonemapAlgorithm::Hable,)"
+---
+zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p

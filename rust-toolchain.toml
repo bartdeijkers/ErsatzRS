@@ -2,3 +2,9 @@
 channel = "stable"
 profile = "default"
 components = ["rustfmt", "clippy"]
+# Cross-compile targets are installed on demand by the dtolnay/rust-toolchain
+# step in the CI platforms matrix and via `rustup target add` for local
+# cross-builds. They are not pinned here because doing so forces every
+# rustup-driven toolchain bootstrap (including precompiled cargo-deny-action
+# containers) to install all six target stdlibs, which fails in containers
+# whose host triple does not match.

@@ -7,6 +7,7 @@ stylance::import_crate_style!(style, "src/admin/ui/primitives/form.module.css");
 pub fn TextField(
     label: &'static str,
     value: RwSignal<String>,
+    #[prop(default = None)] name: Option<&'static str>,
     #[prop(default = "text")] input_type: &'static str,
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = false)] disabled: bool,
@@ -14,6 +15,8 @@ pub fn TextField(
     #[prop(default = None)]
     error: Option<Signal<Option<String>>>,
 ) -> impl IntoView {
+    let initial_value = value.get_untracked();
+
     view! {
         <div class=style::field>
             <label class=style::label>{label}</label>
@@ -22,6 +25,8 @@ pub fn TextField(
                 placeholder=placeholder
                 disabled=disabled
                 class=style::input
+                value=initial_value
+                name=name
                 prop:value=move || value.get()
                 on:input=move |e| value.set(event_target_value(&e))
             />
@@ -42,6 +47,8 @@ pub fn NumberField(
     #[prop(default = false)] disabled: bool,
     #[prop(default = None)] error: Option<Signal<Option<String>>>,
 ) -> impl IntoView {
+    let initial_value = value.get_untracked().to_string();
+
     view! {
         <div class=style::field>
             <label class=style::label>{label}</label>
@@ -51,6 +58,7 @@ pub fn NumberField(
                 min=min.map(|v| v.to_string())
                 max=max.map(|v| v.to_string())
                 class=style::input
+                value=initial_value
                 prop:value=move || value.get().to_string()
                 on:input=move |e| {
                     if let Ok(n) = event_target_value(&e).parse::<i64>() {
@@ -78,11 +86,13 @@ pub fn SelectField<T>(
 where
     T: Clone + PartialEq + std::fmt::Display + std::str::FromStr + Send + Sync + 'static,
 {
+    let initial_value = value.get_untracked();
     let items_view: Vec<_> = items
         .into_iter()
         .map(|(v, lbl)| {
+            let selected = v == initial_value;
             let v_str = v.to_string();
-            view! { <option value=v_str>{lbl}</option> }
+            view! { <option value=v_str selected=selected>{lbl}</option> }
         })
         .collect();
 
@@ -117,12 +127,15 @@ pub fn CheckBox(
     value: RwSignal<bool>,
     #[prop(default = false)] disabled: bool,
 ) -> impl IntoView {
+    let initial_checked = value.get_untracked();
+
     view! {
         <label class=style::checkbox_label>
             <input
                 type="checkbox"
                 disabled=disabled
                 class=style::checkbox
+                checked=initial_checked
                 prop:checked=move || value.get()
                 on:change=move |e| {
                     let checked = event_target_checked(&e);
@@ -145,6 +158,8 @@ pub fn TextArea(
     #[prop(default = None)] error: Option<Signal<Option<String>>>,
 ) -> impl IntoView {
     let cls = format!("{} {}", style::input, style::textarea);
+    let initial_value = value.get_untracked();
+
     view! {
         <div class=style::field>
             <label class=style::label>{label}</label>
@@ -155,7 +170,9 @@ pub fn TextArea(
                 class=cls
                 prop:value=move || value.get()
                 on:input=move |e| value.set(event_target_value(&e))
-            />
+            >
+                {initial_value}
+            </textarea>
             {move || error.and_then(|s| s.get()).map(|msg| view! {
                 <span class=style::error>{msg}</span>
             })}

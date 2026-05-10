@@ -400,59 +400,76 @@ fn BlockEditorIsland(initial_block: BlockForm, initial_items: Vec<BlockItemForm>
                 </div>
 
                 // ── Selected item editor ────────────────────────────────
-                {move || {
-                    selected_idx.get().and_then(|idx| {
-                        items.get().into_iter().nth(idx).map(|item| {
-                            view! { <ItemEditor item=item idx=idx items=items/> }
+                // Always rendered with a stable wrapper; content updates reactively.
+                <div style:display=move || if selected_idx.get().is_some() { "" } else { "none" }>
+                    {move || {
+                        selected_idx.get().and_then(|idx| {
+                            items.get().into_iter().nth(idx).map(|item| {
+                                view! { <ItemEditor item=item idx=idx items=items/> }
+                            })
                         })
-                    })
-                }}
+                    }}
+                </div>
             </div>
 
             // ── Preview modal ───────────────────────────────────────────
-            <Show when=move || preview_open.get()>
-                <div
-                    class=style::modal_backdrop
+            // Always rendered with stable DOM shape; visibility via style:display.
+            <div
+                class=style::modal_backdrop
+                style:display=move || if preview_open.get() { "" } else { "none" }
+                on:click=move |_| preview_open.set(false)
+            />
+            <div
+                class=style::modal_panel
+                style:display=move || if preview_open.get() { "" } else { "none" }
+            >
+                <button
+                    class=style::modal_close
                     on:click=move |_| preview_open.set(false)
-                />
-                <div class=style::modal_panel>
-                    <button
-                        class=style::modal_close
-                        on:click=move |_| preview_open.set(false)
-                    >
-                        "✕ Close"
-                    </button>
-                    <h2 class=style::modal_title>"Preview Block Playout"</h2>
-                    <Show when=move || preview_pending.get()>
-                        <p class=style::empty>"Computing preview…"</p>
-                    </Show>
-                    <Show when=move || !preview_pending.get() && preview_rows.get().is_empty()>
-                        <p class=style::empty>"No items to preview."</p>
-                    </Show>
-                    <Show when=move || !preview_pending.get() && !preview_rows.get().is_empty()>
-                        <table class=style::preview_table>
-                            <thead>
-                                <tr>
-                                    <th>"Start"</th>
-                                    <th>"Finish"</th>
-                                    <th>"Media Item"</th>
-                                    <th>"Duration"</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {move || preview_rows.get().into_iter().map(|r| view! {
-                                    <tr>
-                                        <td>{r.start}</td>
-                                        <td>{r.finish}</td>
-                                        <td>{r.title}</td>
-                                        <td>{r.duration}</td>
-                                    </tr>
-                                }).collect_view()}
-                            </tbody>
-                        </table>
-                    </Show>
-                </div>
-            </Show>
+                >
+                    "\u{2715} Close"
+                </button>
+                <h2 class=style::modal_title>"Preview Block Playout"</h2>
+                <p
+                    class=style::empty
+                    style:display=move || if preview_pending.get() { "" } else { "none" }
+                >
+                    "Computing preview\u{2026}"
+                </p>
+                <p
+                    class=style::empty
+                    style:display=move || {
+                        if !preview_pending.get() && preview_rows.get().is_empty() { "" } else { "none" }
+                    }
+                >
+                    "No items to preview."
+                </p>
+                <table
+                    class=style::preview_table
+                    style:display=move || {
+                        if !preview_pending.get() && !preview_rows.get().is_empty() { "" } else { "none" }
+                    }
+                >
+                    <thead>
+                        <tr>
+                            <th>"Start"</th>
+                            <th>"Finish"</th>
+                            <th>"Media Item"</th>
+                            <th>"Duration"</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {move || preview_rows.get().into_iter().map(|r| view! {
+                            <tr>
+                                <td>{r.start}</td>
+                                <td>{r.finish}</td>
+                                <td>{r.title}</td>
+                                <td>{r.duration}</td>
+                            </tr>
+                        }).collect_view()}
+                    </tbody>
+                </table>
+            </div>
         </div>
     }
 }
@@ -638,71 +655,88 @@ fn ItemEditor(
                 </select>
             </div>
 
-            <Show when=needs_autocomplete>
-                <div class=style::field>
-                    <label class=style::label>"Collection"</label>
-                    <div class=style::autocomplete>
-                        <input
-                            class=style::autocomplete_input
-                            type="text"
-                            placeholder="Type to search…"
-                            prop:value=move || col_query.get()
-                            on:input=move |e| col_query.set(event_target_value(&e))
-                            on:blur=move |_| {
-                                // small delay so mousedown on list item fires first
-                                leptos::task::spawn_local(async move {
-                                    gloo_timers::future::TimeoutFuture::new(150).await;
-                                    show_suggest.set(false);
-                                });
+            // Collection autocomplete — always rendered; hidden for SEARCH_QUERY type.
+            <div
+                class=style::field
+                style:display=move || if needs_autocomplete() { "" } else { "none" }
+            >
+                <label class=style::label>"Collection"</label>
+                <div class=style::autocomplete>
+                    <input
+                        class=style::autocomplete_input
+                        type="text"
+                        placeholder="Type to search…"
+                        prop:value=move || col_query.get()
+                        disabled=move || !needs_autocomplete()
+                        on:input=move |e| col_query.set(event_target_value(&e))
+                        on:blur=move |_| {
+                            // small delay so mousedown on list item fires first
+                            leptos::task::spawn_local(async move {
+                                gloo_timers::future::TimeoutFuture::new(150).await;
+                                show_suggest.set(false);
+                            });
+                        }
+                        on:focus=move |_| {
+                            if !col_query.get().trim().is_empty() {
+                                show_suggest.set(true);
                             }
-                            on:focus=move |_| {
-                                if !col_query.get().trim().is_empty() {
-                                    show_suggest.set(true);
-                                }
-                            }
-                        />
-                        <Show when=move || show_suggest.get() && !suggestions.get().is_empty()>
-                            <ul class=style::autocomplete_list>
-                                {move || suggestions.get().into_iter().map(|(id, name)| {
-                                    let name_clone = name.clone();
-                                    view! {
-                                        <li
-                                            class=style::autocomplete_item
-                                            on:mousedown=move |e| {
-                                                e.prevent_default();
-                                                select_suggestion(id, name_clone.clone());
-                                            }
-                                        >
-                                            {name}
-                                        </li>
+                        }
+                    />
+                    <ul
+                        class=style::autocomplete_list
+                        style:display=move || {
+                            if show_suggest.get() && !suggestions.get().is_empty() { "" } else { "none" }
+                        }
+                    >
+                        {move || suggestions.get().into_iter().map(|(id, name)| {
+                            let name_clone = name.clone();
+                            view! {
+                                <li
+                                    class=style::autocomplete_item
+                                    on:mousedown=move |e| {
+                                        e.prevent_default();
+                                        select_suggestion(id, name_clone.clone());
                                     }
-                                }).collect_view()}
-                            </ul>
-                        </Show>
-                    </div>
+                                >
+                                    {name}
+                                </li>
+                            }
+                        }).collect_view()}
+                    </ul>
                 </div>
-            </Show>
+            </div>
 
-            <Show when=move || col_type.get() == collection_type::SEARCH_QUERY>
-                <div class=style::field>
-                    <label class=style::label>"Search Title (display)"</label>
-                    <input
-                        class=style::input
-                        placeholder="Optional display title…"
-                        prop:value=move || search_title.get()
-                        on:input=move |e| search_title.set(event_target_value(&e))
-                    />
-                </div>
-                <div class=style::field>
-                    <label class=style::label>"Search Query"</label>
-                    <input
-                        class=style::input
-                        placeholder="e.g. genre:action"
-                        prop:value=move || search_query_val.get()
-                        on:input=move |e| search_query_val.set(event_target_value(&e))
-                    />
-                </div>
-            </Show>
+            // Search fields — always rendered; hidden for non-SEARCH_QUERY types.
+            <div
+                class=style::field
+                style:display=move || {
+                    if col_type.get() == collection_type::SEARCH_QUERY { "" } else { "none" }
+                }
+            >
+                <label class=style::label>"Search Title (display)"</label>
+                <input
+                    class=style::input
+                    placeholder="Optional display title…"
+                    disabled=move || col_type.get() != collection_type::SEARCH_QUERY
+                    prop:value=move || search_title.get()
+                    on:input=move |e| search_title.set(event_target_value(&e))
+                />
+            </div>
+            <div
+                class=style::field
+                style:display=move || {
+                    if col_type.get() == collection_type::SEARCH_QUERY { "" } else { "none" }
+                }
+            >
+                <label class=style::label>"Search Query"</label>
+                <input
+                    class=style::input
+                    placeholder="e.g. genre:action"
+                    disabled=move || col_type.get() != collection_type::SEARCH_QUERY
+                    prop:value=move || search_query_val.get()
+                    on:input=move |e| search_query_val.set(event_target_value(&e))
+                />
+            </div>
 
             <div class=style::field>
                 <label class=style::label>"Playback Order"</label>

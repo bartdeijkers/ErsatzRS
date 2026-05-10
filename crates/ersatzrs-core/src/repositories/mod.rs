@@ -25,7 +25,8 @@ pub use deco::DecoRepository;
 pub use emby::{
     EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
     EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
-    EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService, EmbyShowItem, EmbyShowPage,
+    EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService, EmbyShowItem,
+    EmbyShowPage,
 };
 pub use error::{RepositoryError, Result};
 pub use ffmpeg_profile::FfmpegProfileRepository;
@@ -34,8 +35,9 @@ pub use graphics::GraphicsRepository;
 pub use jellyfin::{
     JellyfinCollectionItem, JellyfinCollectionMediaItem, JellyfinCollectionMediaKind,
     JellyfinCollectionMediaPage, JellyfinCollectionPage, JellyfinConnectionConfig,
-    JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem, JellyfinPlaybackMetadata,
-    JellyfinSeasonItem, JellyfinSeasonPage, JellyfinService, JellyfinShowItem, JellyfinShowPage,
+    JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem, JellyfinPathInfo,
+    JellyfinPlaybackMetadata, JellyfinSeasonItem, JellyfinSeasonPage, JellyfinService,
+    JellyfinShowItem, JellyfinShowPage,
 };
 pub use library::LibraryRepository;
 pub use media_item::MediaItemRepository;

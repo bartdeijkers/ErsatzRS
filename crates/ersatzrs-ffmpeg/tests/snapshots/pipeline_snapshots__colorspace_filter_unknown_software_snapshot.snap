@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 394
+expression: "colorspace_filter(&software_state(), &params, PixelFormat::Yuv420P, false,\nfalse,)"
+---
+setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709

@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 322
+expression: "deinterlace_vaapi_filter(&hardware_state(PixelFormat::Vaapi))"
+---
+deinterlace_vaapi

@@ -1,4 +1,5 @@
 mod block;
+mod classic;
 mod scripted;
 mod yaml;
 
@@ -7,9 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
-    CollectionType, EntityId, PlaybackOrder, Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory,
-    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    PlayoutScheduleKind,
+    CollectionType, EntityId, FixedStartTimeBehavior, PlaybackOrder, Playout, PlayoutAnchor,
+    PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ pub use block::{
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
+pub use classic::{classic_schedule_item_key, ClassicSchedulingContext, ClassicSchedulingEngine};
 pub use scripted::ScriptedSchedulingEngine;
 pub use yaml::{
     YamlInstruction, YamlPlayoutDefinition, YamlPlayoutEngine, YamlPlayoutSequenceItem,
@@ -185,9 +187,27 @@ pub struct SchedulingReferenceData {
     pub watermark_ids_by_name: BTreeMap<String, EntityId>,
     pub graphics_ids_by_path: BTreeMap<String, EntityId>,
     pub effective_blocks: Vec<EffectiveBlock>,
+    pub classic_schedule_id: Option<EntityId>,
+    pub classic_schedule_name: Option<String>,
+    pub classic_schedule_items: Vec<ProgramScheduleItem>,
+    pub classic_shuffle_schedule_items: bool,
+    pub classic_random_start_point: bool,
+    pub classic_fixed_start_time_behavior: FixedStartTimeBehavior,
+    pub existing_program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    pub existing_fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
     pub max_playout_offset: Duration,
+    pub global_watermark_id: Option<EntityId>,
+    pub global_fallback: Option<SchedulingFallbackPreset>,
+}
+
+/// Configured fallback filler media available to the playout post-processor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulingFallbackPreset {
+    pub id: EntityId,
+    pub allow_watermarks: bool,
+    pub media_items: Vec<SchedulingMediaItem>,
 }
 
 impl SchedulingReferenceData {
@@ -452,6 +472,18 @@ pub trait PlayoutSchedulingEngine {
     /// Returns an error when the engine cannot load or evaluate its schedule
     /// definition.
     fn schedule(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError>;
+}
+
+/// `ErsatzTV`'s external JSON playout builder is a no-op: external playout rows
+/// are owned by the external producer, so a build request succeeds without
+/// mutating generated items or runtime state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExternalJsonSchedulingEngine;
+
+impl PlayoutSchedulingEngine for ExternalJsonSchedulingEngine {
+    fn schedule(&self, _request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        Ok(SchedulingResult::default())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

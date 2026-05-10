@@ -14,6 +14,11 @@ const PAGE_SIZE: u32 = 25;
 
 #[component]
 pub fn FfmpegProfilesListPage() -> impl IntoView {
+    view! { <FfmpegProfilesListIsland/> }
+}
+
+#[island]
+fn FfmpegProfilesListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
     let rows_resource: Resource<Vec<FfmpegProfileListRow>> = Resource::new(
@@ -109,7 +114,7 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
 
             <DeleteDialog
                 open=delete_open
-                entity_name=Signal::derive(move || delete_name.get()).get()
+                entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         if let Some(p) = delete_target.get_untracked() {
