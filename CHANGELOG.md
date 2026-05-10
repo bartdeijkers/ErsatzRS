@@ -10,6 +10,13 @@ for commit messages.
 
 ### Added
 
+- Dependency and CI hardening for `cargo deny`: upgraded the web CSS toolchain
+  to `stylance`/`stylance-cli` 0.8, upgraded test HTTP mocking to
+  `httpmock` 0.8, refreshed the lockfile, allowed the transitive `CC0-1.0`
+  license used by Leptos theming, and aligned duplicate-version policy skips
+  with the current Leptos/Stylance dependency graph so `cargo deny check`
+  passes cleanly again.
+
 - Phase 7 Channels admin visual parity pass: the `/channels` list now uses
   locally served Roboto fonts, closer ErsatzTV PaletteDark tokens, MudTable-like
   row height and pager spacing, a styled Show Disabled switch, logo/language/
@@ -232,6 +239,15 @@ for commit messages.
 
 ### Fixed
 
+- Admin libraries page (`/media/libraries`) `Scan` and `Deep Scan` buttons,
+  and Plex sources page (`/media/sources/plex`) `Sign out of Plex` button
+  are now wired to their click handlers. The pages were plain `#[component]`
+  views, so the click handlers declared at the top level were dropped on
+  hydration (the app uses `hydrate_islands()`); both interactive bodies are
+  now wrapped in a `#[island]` (`LibrariesIsland`, `PlexSourcesIsland`).
+  The libraries row also keeps a stable DOM (always-rendered Deep Scan/Scan
+  buttons + spinner toggled via reactive `style:display` and `disabled`)
+  so hydration cannot fall back to inert SSR markup.
 - Admin shell sidebar parity: the ErsatzRS logo now appears next to the
   hamburger menu, the top app bar spans the full viewport width above the
   sidebar, the sidebar uses the ErsatzTV gray surface, and sidebar groups

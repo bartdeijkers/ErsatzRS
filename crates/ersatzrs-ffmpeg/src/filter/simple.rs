@@ -83,6 +83,7 @@ pub enum FrameDataLocation {
     Hardware,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrameState {
     pub scaled_size: FrameSize,
@@ -93,6 +94,8 @@ pub struct FrameState {
     pub is_anamorphic: bool,
     pub deinterlaced: bool,
     pub frame_rate: Option<FrameRate>,
+    pub is_hdr: bool,
+    pub should_deinterlace: bool,
 }
 
 impl FrameState {
@@ -107,6 +110,8 @@ impl FrameState {
             is_anamorphic: false,
             deinterlaced: false,
             frame_rate: None,
+            is_hdr: false,
+            should_deinterlace: false,
         }
     }
 }
@@ -161,11 +166,6 @@ pub fn crop_filter(current: &FrameState, cropped_size: FrameSize) -> String {
         current,
         &format!("crop=w={}:h={}", cropped_size.width, cropped_size.height),
     )
-}
-
-#[must_use]
-pub fn yadif_filter(current: &FrameState) -> String {
-    with_hwdownload(current, "yadif=1")
 }
 
 #[must_use]

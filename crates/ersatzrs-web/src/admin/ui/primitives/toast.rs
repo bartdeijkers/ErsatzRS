@@ -63,7 +63,7 @@ pub fn provide_toast_store() -> ToastStore {
 
 /// Access the `ToastStore` from any component.
 pub fn use_toast() -> ToastStore {
-    expect_context::<ToastStore>()
+    use_context::<ToastStore>().unwrap_or_else(provide_toast_store)
 }
 
 fn severity_class(s: ToastSeverity) -> &'static str {

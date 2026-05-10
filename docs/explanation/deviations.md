@@ -36,7 +36,13 @@ hardware list uses the startup capability report instead of probing
 `ffmpeg -hwaccels` per request.
 
 GPU acceleration support is advertised from what the runtime image actually
-reports. Host GPU access remains an operator responsibility: NVIDIA requires
+reports, using both FFmpeg hardware accelerators and encoder names. The admin
+FFmpeg profile editor preserves a saved hardware value even when that value is
+not available in the current runtime report, so imported profiles can still be
+inspected and corrected. Vulkan remains a runtime/image capability used by the
+FFmpeg toolchain and filters; it is not exposed as an FFmpeg profile
+`HardwareAccelerationKind` because ErsatzTV does not define a Vulkan profile
+enum value. Host GPU access remains an operator responsibility: NVIDIA requires
 container GPU runtime support, while VAAPI and Vulkan require `/dev/dri`
 device passthrough. The `linux/arm/v7` image is CPU-only for this slice.
 
@@ -55,6 +61,15 @@ ErsatzRS uses explicit SQL through sqlx, with SQLite as the default backend and
 MySQL support behind a Cargo feature flag.
 
 ADR: [0006](../adr/0006-sqlx-over-sea-orm.md)
+
+## SQL-backed search without Elasticsearch
+
+ErsatzRS keeps search in process and SQL-backed for the parity target. The core
+search parser/evaluator preserves the Lucene-style behavior needed by
+scheduling, smart collections, and admin search, but ErsatzRS does not port
+ErsatzTV's experimental Elasticsearch backend.
+
+ADR: [0009](../adr/0009-sql-backed-search-and-no-elasticsearch.md)
 
 ## Leptos instead of Blazor
 

@@ -1,0 +1,31 @@
+# Cross-compilation configuration for ErsatzRS.
+#
+# Used by `cross` (https://github.com/cross-rs/cross) to build the workspace
+# for ErsatzTV-parity targets that the host can't compile natively. The
+# default cross images already ship a Rust toolchain plus the C runtime
+# needed for our deps (rustls-tls only, no OpenSSL/Cairo native-libs).
+#
+# Run e.g.:
+#   cross build --workspace --target aarch64-unknown-linux-gnu
+#   cross build --workspace --target armv7-unknown-linux-gnueabihf
+#   cross build --workspace --target x86_64-pc-windows-gnu
+#
+# macOS targets (x86_64-apple-darwin, aarch64-apple-darwin) are not in
+# `cross`; build them on a real macOS runner. See BUILD.md.
+
+[build]
+# SQLX offline mode is required because cross sandboxes the build away from
+# the host's DATABASE_URL. The `.sqlx/` cache is shipped in the repo.
+pre-build = []
+
+[build.env]
+passthrough = ["SQLX_OFFLINE", "RUST_BACKTRACE", "CARGO_TERM_COLOR"]
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:edge"
+
+[target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:edge"
+
+[target.x86_64-pc-windows-gnu]
+image = "ghcr.io/cross-rs/x86_64-pc-windows-gnu:edge"

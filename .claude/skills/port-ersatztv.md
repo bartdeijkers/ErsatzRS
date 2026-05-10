@@ -9,7 +9,7 @@ Produce a plan only. Do not write code.
 
 ## Inputs
 
-- A C# file, directory, class, or feature under `/home/bart/ErsatzTV/`.
+- A C# file, directory, class, or feature under `$ERSATZTV_SRC/`.
 - Optional target phase or crate hint.
 
 ## Workflow

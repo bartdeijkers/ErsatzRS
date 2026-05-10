@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 307
+expression: "deinterlace_qsv_filter(&software_state(), 64)"
+---
+format=nv12,hwupload=extra_hw_frames=64,deinterlace_qsv

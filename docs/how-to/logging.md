@@ -38,6 +38,13 @@ Include stable identifiers when they apply:
 - Recoverable user/config errors: `warn`.
 - Process crashes and data corruption risks: `error`.
 
+Runtime binaries load persisted ErsatzTV-compatible `ConfigElement` levels at
+startup. `log.minimum_level` controls the default level, and these subsystem
+keys override narrower targets: `log.minimum_level.scanning`,
+`log.minimum_level.scheduling`, `log.minimum_level.searching`,
+`log.minimum_level.streaming`, and `log.minimum_level.http`. `RUST_LOG` remains
+available as the base filter; persisted keys are appended after it.
+
 ## Secrets
 
 Never log API keys, bearer tokens, cookies, database passwords, full connection

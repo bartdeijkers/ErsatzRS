@@ -18,6 +18,106 @@ jobs:
         with:
           generate_release_notes: true
 
+  binaries:
+    # Build release binaries for every ErsatzTV-parity RID and attach them
+    # as archives to the GitHub release. Mirrors the `platforms` matrix
+    # in ci.yml. The Linux Docker image publish path remains separate.
+    name: Release archive (${{ matrix.rid }})
+    needs: release
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            cross: false
+            archive: tar.gz
+          - rid: linux-arm64
+            runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: true
+            archive: tar.gz
+          - rid: linux-arm
+            runner: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            cross: true
+            archive: tar.gz
+          - rid: osx-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            cross: false
+            archive: tar.gz
+          - rid: osx-x64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            cross: false
+            archive: tar.gz
+          - rid: win-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            cross: false
+            archive: zip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.rid }}
+      - name: Install stylance-cli
+        if: ${{ !matrix.cross }}
+        run: cargo install stylance-cli --version 0.8.0 --locked
+      - name: Install cross
+        if: ${{ matrix.cross }}
+        run: cargo install cross --locked
+      - name: Build (cargo)
+        if: ${{ !matrix.cross }}
+        run: cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+      - name: Build (cross)
+        if: ${{ matrix.cross }}
+        run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+      - name: Stage archive
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ github.ref_name }}
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          set -euo pipefail
+          stage="ersatzrs-${VERSION}-${RID}"
+          mkdir -p "$stage"
+          if [ "$RID" = "win-x64" ]; then
+            cp "target/${TARGET}/release/ersatzrs-web.exe" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
+          else
+            cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
+          fi
+          cp -R assets "$stage/assets"
+          cp LICENSE "$stage/"
+          cp README.md "$stage/"
+          if [ "$ARCHIVE" = "zip" ]; then
+            7z a -tzip "${stage}.zip" "$stage" >/dev/null
+            echo "ARCHIVE_PATH=${stage}.zip" >> "$GITHUB_ENV"
+          else
+            tar -czf "${stage}.tar.gz" "$stage"
+            echo "ARCHIVE_PATH=${stage}.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release upload "$VERSION" "$ARCHIVE_PATH" --clobber --repo "$REPO"
+
   docker:
     name: Publish Docker image
     runs-on: ubuntu-latest

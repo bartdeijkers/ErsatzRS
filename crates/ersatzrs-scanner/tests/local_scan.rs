@@ -65,7 +65,7 @@ async fn seed_local_library(pool: &SqlitePool, path: &Path) {
         .unwrap();
     sqlx::query(
         r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
-           VALUES (1, 'Local', 3, 1)"#,
+           VALUES (1, 'Local', 4, 1)"#,
     )
     .execute(pool)
     .await

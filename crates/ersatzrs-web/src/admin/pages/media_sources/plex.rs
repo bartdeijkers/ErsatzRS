@@ -18,6 +18,11 @@ stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.modul
 
 #[component]
 pub fn PlexSourcesPage() -> impl IntoView {
+    view! { <PlexSourcesIsland/> }
+}
+
+#[island]
+fn PlexSourcesIsland() -> impl IntoView {
     let rows: Resource<Vec<PlexSourceRow>> = Resource::new(
         || (),
         |()| async { list_plex_sources().await.unwrap_or_default() },
@@ -47,66 +52,74 @@ pub fn PlexSourcesPage() -> impl IntoView {
 
             <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
                 {move || {
+                    // Evaluate both resources together so the view closure is reactive to both.
                     let sources = rows.get().unwrap_or_default();
                     let authorized = has_token.get().unwrap_or(false);
+                    let show_sign_in = sources.is_empty() || !authorized;
+                    let show_sources = !sources.is_empty();
 
                     view! {
                         <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
-                            {if sources.is_empty() || !authorized {
-                                view! { <PlexSignInIsland/> }.into_any()
-                            } else {
-                                view! {
-                                    <button
-                                        class=style::btn_danger
-                                        on:click=move |_| sign_out_open.set(true)
-                                    >"Sign out of Plex"</button>
-                                }.into_any()
-                            }}
+                            // Sign-in island — always rendered; shown when not yet authorized.
+                            <div style:display=move || if show_sign_in { "" } else { "none" }>
+                                <PlexSignInIsland/>
+                            </div>
+                            // Sign-out button — always rendered; hidden when sign-in is shown.
+                            <button
+                                class=style::btn_danger
+                                style:display=move || if show_sign_in { "none" } else { "" }
+                                disabled=move || show_sign_in
+                                on:click=move |_| sign_out_open.set(true)
+                            >
+                                "Sign out of Plex"
+                            </button>
                         </div>
 
-                        {if sources.is_empty() {
-                            view! {
-                                <p class=style::cell_muted>
-                                    "Sign in to Plex to add a media source."
-                                </p>
-                            }.into_any()
-                        } else {
-                            view! {
-                                <table style="width:100%;border-collapse:collapse">
-                                    <thead>
+                        // Empty state — always rendered; shown when no sources exist.
+                        <p
+                            class=style::cell_muted
+                            style:display=move || if show_sources { "none" } else { "" }
+                        >
+                            "Sign in to Plex to add a media source."
+                        </p>
+
+                        // Sources table — always rendered; hidden when empty.
+                        <table
+                            style:display=move || if show_sources { "" } else { "none" }
+                            style="width:100%;border-collapse:collapse"
+                        >
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Name"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Address"</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sources.into_iter().map(|r| {
+                                    let id = r.id;
+                                    view! {
                                         <tr>
-                                            <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Name"</th>
-                                            <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Address"</th>
-                                            <th/>
+                                            <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
+                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
+                                            <td style="padding:0.5rem;text-align:right">
+                                                <div class=style::row_actions>
+                                                    <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>"Libraries"</a>
+                                                    <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>"Paths"</a>
+                                                </div>
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {sources.into_iter().map(|r| {
-                                            let id = r.id;
-                                            view! {
-                                                <tr>
-                                                    <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
-                                                    <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
-                                                    <td style="padding:0.5rem;text-align:right">
-                                                        <div class=style::row_actions>
-                                                            <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>"Libraries"</a>
-                                                            <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>"Paths"</a>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            }
-                                        }).collect::<Vec<_>>()}
-                                    </tbody>
-                                </table>
-                            }.into_any()
-                        }}
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </tbody>
+                        </table>
                     }
                 }}
             </Suspense>
 
             <DeleteDialog
                 open=sign_out_open
-                entity_name="Plex".into()
+                entity_name=Signal::derive(|| "Plex".to_string())
                 on_confirm=Callback::new(move |confirmed: bool| {
                     if confirmed { sign_out_action.dispatch(()); }
                     else { sign_out_open.set(false); }
@@ -169,45 +182,71 @@ pub fn PlexSignInIsland() -> impl IntoView {
         }
     });
 
+    // All four state variants are always rendered; only the matching one is visible.
+    // This gives a stable DOM shape on SSR and client hydration.
     view! {
-        {move || match state.get() {
-            State::Idle => view! {
-                <button
-                    class=style::btn_primary
-                    on:click=move |_| { let _ = start_action.dispatch(()); }
-                >"Sign in to Plex"</button>
-            }.into_any(),
+        // Idle: sign-in button
+        <button
+            class=style::btn_primary
+            style:display=move || if matches!(state.get(), State::Idle) { "" } else { "none" }
+            disabled=move || !matches!(state.get(), State::Idle)
+            on:click=move |_| { let _ = start_action.dispatch(()); }
+        >
+            "Sign in to Plex"
+        </button>
 
-            State::Waiting { auth_url, .. } => view! {
-                <div class=style::pin_waiting>
-                    <p>
-                        "Waiting for Plex authorization. "
-                        <a href=auth_url target="_blank" class=style::pin_link>
-                            "Click here to authorize on Plex.tv"
-                        </a>
-                        " (opens in new tab)."
-                    </p>
-                    <p class=style::cell_muted>"Checking every 2 seconds…"</p>
-                </div>
-            }.into_any(),
+        // Waiting: authorization link + polling message
+        <div
+            class=style::pin_waiting
+            style:display=move || if matches!(state.get(), State::Waiting { .. }) { "" } else { "none" }
+        >
+            <p>
+                "Waiting for Plex authorization. "
+                <a
+                    href=move || match state.get() {
+                        State::Waiting { auth_url, .. } => auth_url,
+                        _ => String::new(),
+                    }
+                    target="_blank"
+                    class=style::pin_link
+                >
+                    "Click here to authorize on Plex.tv"
+                </a>
+                " (opens in new tab)."
+            </p>
+            <p class=style::cell_muted>"Checking every 2 seconds…"</p>
+        </div>
 
-            State::Done => view! {
-                <p class=style::success_msg>"Authorized — redirecting…"</p>
-            }.into_any(),
+        // Done: success message
+        <p
+            class=style::success_msg
+            style:display=move || if matches!(state.get(), State::Done) { "" } else { "none" }
+        >
+            "Authorized — redirecting…"
+        </p>
 
-            State::Error(msg) => view! {
-                <div>
-                    <p class=style::error_msg>"Error: "{msg}</p>
-                    <button
-                        class=style::btn_secondary
-                        on:click=move |_| {
-                            state.set(State::Idle);
-                            let _ = start_action.dispatch(());
-                        }
-                    >"Retry"</button>
-                </div>
-            }.into_any(),
-        }}
+        // Error: error message + retry button
+        <div
+            style:display=move || if matches!(state.get(), State::Error(_)) { "" } else { "none" }
+        >
+            <p class=style::error_msg>
+                "Error: "
+                {move || match state.get() {
+                    State::Error(msg) => msg,
+                    _ => String::new(),
+                }}
+            </p>
+            <button
+                class=style::btn_secondary
+                disabled=move || !matches!(state.get(), State::Error(_))
+                on:click=move |_| {
+                    state.set(State::Idle);
+                    let _ = start_action.dispatch(());
+                }
+            >
+                "Retry"
+            </button>
+        </div>
     }
 }
 
@@ -304,8 +343,18 @@ pub fn PlexLibrariesPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            <p
+                class=style::form_error
+                style:display=move || if err.get().is_some() { "" } else { "none" }
+            >
+                {move || err.get().unwrap_or_default()}
+            </p>
+            <p
+                class=style::success_msg
+                style:display=move || if saved.get() { "" } else { "none" }
+            >
+                "Saved."
+            </p>
         </div>
     }
 }
@@ -388,8 +437,18 @@ pub fn PlexPathsPage() -> impl IntoView {
                 remote_label="Plex Path"
             />
 
-            {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            <p
+                class=style::form_error
+                style:display=move || if err.get().is_some() { "" } else { "none" }
+            >
+                {move || err.get().unwrap_or_default()}
+            </p>
+            <p
+                class=style::success_msg
+                style:display=move || if saved.get() { "" } else { "none" }
+            >
+                "Saved."
+            </p>
         </div>
     }
 }

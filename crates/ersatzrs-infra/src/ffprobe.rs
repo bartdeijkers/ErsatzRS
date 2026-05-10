@@ -202,11 +202,33 @@ fn stream_to_domain(stream: &FfprobeStream, media_version_id: i64) -> Option<Med
         _ => return None,
     };
 
+    let attached_pic = stream
+        .disposition
+        .as_ref()
+        .is_some_and(|disposition| disposition.attached_pic == Some(1));
+    let bits_per_raw_sample = stream
+        .bits_per_raw_sample
+        .as_deref()
+        .and_then(|value| value.parse::<i32>().ok())
+        .unwrap_or_default();
+    let (file_name, mime_type) = if matches!(kind, MediaStreamKind::Attachment) {
+        (
+            stream.tags.as_ref().and_then(|tags| tags.filename.clone()),
+            stream.tags.as_ref().and_then(|tags| tags.mimetype.clone()),
+        )
+    } else {
+        (None, None)
+    };
+
     Some(MediaStream {
         media_version_id,
         index: stream.index.unwrap_or_default(),
         kind,
         codec: stream.codec_name.clone(),
+        profile: stream
+            .profile
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
         language: stream.tags.as_ref().and_then(|tags| tags.language.clone()),
         title: stream.tags.as_ref().and_then(|tags| tags.title.clone()),
         default: stream
@@ -220,6 +242,30 @@ fn stream_to_domain(stream: &FfprobeStream, media_version_id: i64) -> Option<Med
         channels: stream.channels,
         width: stream.width,
         height: stream.height,
+        pixel_format: stream
+            .pix_fmt
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
+        color_range: stream
+            .color_range
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
+        color_space: stream
+            .color_space
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
+        color_transfer: stream
+            .color_transfer
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
+        color_primaries: stream
+            .color_primaries
+            .as_ref()
+            .map(|value| value.to_ascii_lowercase()),
+        bits_per_raw_sample,
+        attached_pic,
+        file_name,
+        mime_type,
         ..MediaStream::default()
     })
 }
@@ -281,6 +327,8 @@ struct FfprobeDisposition {
     default: Option<i32>,
     #[serde(default)]
     forced: Option<i32>,
+    #[serde(default)]
+    attached_pic: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -288,6 +336,7 @@ struct FfprobeStream {
     index: Option<i32>,
     codec_name: Option<String>,
     codec_type: Option<String>,
+    profile: Option<String>,
     channels: Option<i32>,
     width: Option<i32>,
     height: Option<i32>,
@@ -296,6 +345,12 @@ struct FfprobeStream {
     field_order: Option<String>,
     r_frame_rate: Option<String>,
     bit_rate: Option<String>,
+    pix_fmt: Option<String>,
+    color_range: Option<String>,
+    color_space: Option<String>,
+    color_transfer: Option<String>,
+    color_primaries: Option<String>,
+    bits_per_raw_sample: Option<String>,
     disposition: Option<FfprobeDisposition>,
     tags: Option<FfprobeTags>,
 }
@@ -311,4 +366,6 @@ struct FfprobeChapter {
 struct FfprobeTags {
     language: Option<String>,
     title: Option<String>,
+    filename: Option<String>,
+    mimetype: Option<String>,
 }

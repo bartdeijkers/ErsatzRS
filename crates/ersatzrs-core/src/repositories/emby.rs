@@ -15,6 +15,13 @@ pub struct EmbyLibrarySummary {
     pub item_id: String,
     pub name: String,
     pub media_kind: LibraryMediaKind,
+    pub path_infos: Vec<EmbyPathInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbyPathInfo {
+    pub path: String,
+    pub network_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 499
+expression: "frame_rate_filter(&hardware_state(PixelFormat::Nv12), FrameRate::new(60, 1),)"
+---
+hwdownload,format=nv12,framerate=fps=60/1:flags=-scd
