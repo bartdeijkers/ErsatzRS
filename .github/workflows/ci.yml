@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   fmt:
     name: Format
@@ -51,11 +54,16 @@ jobs:
     name: Commit lint
     runs-on: self-hosted
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: ./commitlint.config.cjs
 
   docs:
     name: Documentation links

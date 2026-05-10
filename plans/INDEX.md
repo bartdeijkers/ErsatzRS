@@ -43,7 +43,7 @@ public open-source project.
 - `clippy.toml`
 - `deny.toml`
 - `rust-toolchain.toml`
-- `commitlint.config.js`
+- `commitlint.config.cjs`
 
 ### Architecture and Porting
 
