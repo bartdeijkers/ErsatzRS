@@ -325,8 +325,47 @@ pub async fn sync_jellyfin_movie_library<S>(
 where
     S: JellyfinServiceTrait,
 {
+    sync_jellyfin_movie_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_jellyfin_movie_library`] that emits
+/// `(synced / total_record_count)` after each item upsert.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client fails or any database write fails.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+pub async fn sync_jellyfin_movie_library_with_progress<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
     let mut synced = 0;
     let mut start_index = 0;
+    let mut reported_initial = false;
 
     loop {
         let page = service
@@ -334,6 +373,12 @@ where
             .await?;
         let total_record_count = page.total_record_count;
         let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        if !reported_initial {
+            if let Some(sink) = progress {
+                sink.report(0.0);
+            }
+            reported_initial = true;
+        }
         for item in &page.items {
             if !deep_scan
                 && item_etag_matches(
@@ -346,20 +391,24 @@ where
                 .await?
             {
                 synced += 1;
-                continue;
+            } else {
+                let playback = service.stream_metadata(config, &item.item_id).await?;
+                upsert_jellyfin_movie(
+                    pool,
+                    media_source_id,
+                    library_id,
+                    library_item_id,
+                    item,
+                    &playback,
+                )
+                .await?;
+                synced += 1;
             }
-
-            let playback = service.stream_metadata(config, &item.item_id).await?;
-            upsert_jellyfin_movie(
-                pool,
-                media_source_id,
-                library_id,
-                library_item_id,
-                item,
-                &playback,
-            )
-            .await?;
-            synced += 1;
+            if let Some(sink) = progress {
+                if total_record_count > 0 {
+                    sink.report(synced as f32 / total_record_count as f32);
+                }
+            }
         }
 
         start_index += JELLYFIN_PAGE_SIZE;
@@ -368,6 +417,9 @@ where
         }
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -388,8 +440,49 @@ pub async fn sync_jellyfin_show_library<S>(
 where
     S: JellyfinServiceTrait,
 {
+    sync_jellyfin_show_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_item_id,
+        deep_scan,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_jellyfin_show_library`] that reports show-level
+/// progress (`shows_completed / show_total_count`). Episode-granular progress
+/// would require a 3-deep upfront-count pass.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client fails or any database write fails.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+pub async fn sync_jellyfin_show_library_with_progress<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
     let mut synced = 0;
+    let mut shows_completed: usize = 0;
     let mut show_start_index = 0;
+    let mut reported_initial = false;
 
     loop {
         let shows = service
@@ -402,6 +495,12 @@ where
             .await?;
         let show_total_count = shows.total_record_count;
         let show_page_len = i32::try_from(shows.items.len()).unwrap_or(i32::MAX);
+        if !reported_initial {
+            if let Some(sink) = progress {
+                sink.report(0.0);
+            }
+            reported_initial = true;
+        }
         for show in &shows.items {
             let show_id =
                 upsert_jellyfin_show(pool, media_source_id, library_id, library_item_id, show)
@@ -483,6 +582,12 @@ where
                     break;
                 }
             }
+            shows_completed += 1;
+            if let Some(sink) = progress {
+                if show_total_count > 0 {
+                    sink.report(shows_completed as f32 / show_total_count as f32);
+                }
+            }
         }
 
         show_start_index += JELLYFIN_PAGE_SIZE;
@@ -491,6 +596,9 @@ where
         }
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -509,8 +617,38 @@ pub async fn sync_jellyfin_collection_library<S>(
 where
     S: JellyfinServiceTrait,
 {
+    sync_jellyfin_collection_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        parent_id,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_jellyfin_collection_library`] that reports
+/// `(synced / total_record_count)` after each collection upsert.
+///
+/// # Errors
+///
+/// Returns an error when the HTTP client fails or any database write fails.
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+pub async fn sync_jellyfin_collection_library_with_progress<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    parent_id: &str,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
     let mut synced = 0;
     let mut collection_start_index = 0;
+    let mut reported_initial = false;
 
     loop {
         let page = service
@@ -523,6 +661,12 @@ where
             .await?;
         let total_record_count = page.total_record_count;
         let page_len = i32::try_from(page.items.len()).unwrap_or(i32::MAX);
+        if !reported_initial {
+            if let Some(sink) = progress {
+                sink.report(0.0);
+            }
+            reported_initial = true;
+        }
         for collection in &page.items {
             let collection_id =
                 upsert_jellyfin_collection(pool, media_source_id, collection).await?;
@@ -550,6 +694,11 @@ where
 
             replace_collection_items(pool, collection_id, &all_items).await?;
             synced += 1;
+            if let Some(sink) = progress {
+                if total_record_count > 0 {
+                    sink.report(synced as f32 / total_record_count as f32);
+                }
+            }
         }
 
         collection_start_index += JELLYFIN_PAGE_SIZE;
@@ -558,6 +707,9 @@ where
         }
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -618,6 +770,22 @@ pub async fn sync_library_by_id_with_options(
     library_id: i64,
     deep_scan: bool,
 ) -> Result<usize> {
+    sync_library_by_id_with_progress(pool, library_id, deep_scan, None).await
+}
+
+/// Variant of [`sync_library_by_id_with_options`] that forwards a progress
+/// sink to the underlying branch fn.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Jellyfin API, or database writes
+/// fail.
+pub async fn sync_library_by_id_with_progress(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l WHERE l."Id" = ? LIMIT 1"#,
@@ -666,7 +834,7 @@ pub async fn sync_library_by_id_with_options(
 
     let service = JellyfinService::new();
     if kind == LibraryMediaKind::Shows {
-        sync_jellyfin_show_library(
+        sync_jellyfin_show_library_with_progress(
             pool,
             &service,
             &config,
@@ -674,10 +842,11 @@ pub async fn sync_library_by_id_with_options(
             library_id,
             &parent_id,
             deep_scan,
+            progress,
         )
         .await
     } else {
-        sync_jellyfin_movie_library(
+        sync_jellyfin_movie_library_with_progress(
             pool,
             &service,
             &config,
@@ -685,6 +854,7 @@ pub async fn sync_library_by_id_with_options(
             library_id,
             &parent_id,
             deep_scan,
+            progress,
         )
         .await
     }

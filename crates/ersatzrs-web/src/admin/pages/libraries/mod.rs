@@ -6,7 +6,9 @@ use crate::admin::server_fns::libraries::{
     ExternalCollectionRow, LibraryRow,
 };
 #[cfg(target_arch = "wasm32")]
-use crate::admin::server_fns::libraries::{list_locked_collections, list_locked_libraries};
+use crate::admin::server_fns::libraries::{
+    list_locked_collections, list_locked_libraries, list_scan_progress,
+};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -68,6 +70,7 @@ fn LibrariesIsland() -> impl IntoView {
     // implemented client-side with `gloo-timers` (no SignalR).
     let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
     let locked_collections: RwSignal<Vec<(String, i64)>> = RwSignal::new(Vec::new());
+    let scan_progress: RwSignal<Vec<(i64, f32)>> = RwSignal::new(Vec::new());
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
@@ -79,12 +82,23 @@ fn LibrariesIsland() -> impl IntoView {
                     if let Ok(pairs) = list_locked_collections().await {
                         locked_collections.set(pairs);
                     }
+                    if let Ok(pairs) = list_scan_progress().await {
+                        scan_progress.set(pairs);
+                    }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
             });
         }
     });
     let is_locked = move |id: i64| locked.with(|ids| ids.contains(&id));
+    let progress_for = move |id: i64| {
+        scan_progress.with(|pairs| {
+            pairs
+                .iter()
+                .find(|(library_id, _)| *library_id == id)
+                .map(|(_, fraction)| *fraction)
+        })
+    };
     let are_collections_locked = move |kind: &str, media_source_id: i64| {
         locked_collections.with(|pairs| {
             pairs
@@ -190,13 +204,9 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         aria-hidden="true"
                                                                     />
                                                                 </a>
-                                                                <span
-                                                                    class=style::spinner
-                                                                    style:display=move || {
-                                                                        if is_locked(id) { "inline-block" } else { "none" }
-                                                                    }
-                                                                    title="Scanning…"
-                                                                    aria-label="Scanning"
+                                                                <ScanIndicator
+                                                                    visible=Signal::derive(move || is_locked(id))
+                                                                    fraction=Signal::derive(move || progress_for(id))
                                                                 />
                                                             </div>
                                                         </td>
@@ -283,17 +293,9 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         aria-hidden="true"
                                                                     />
                                                                 </button>
-                                                                <span
-                                                                    class=style::spinner
-                                                                    style:display=move || {
-                                                                        if are_collections_locked(&kind_lock_c, media_source_id) {
-                                                                            "inline-block"
-                                                                        } else {
-                                                                            "none"
-                                                                        }
-                                                                    }
-                                                                    title="Scanning…"
-                                                                    aria-label="Scanning"
+                                                                <ScanIndicator
+                                                                    visible=Signal::derive(move || are_collections_locked(&kind_lock_c, media_source_id))
+                                                                    fraction=Signal::derive(|| None)
                                                                 />
                                                             </div>
                                                         </td>
@@ -310,5 +312,64 @@ fn LibrariesIsland() -> impl IntoView {
                 }}
             </Suspense>
         </div>
+    }
+}
+
+/// Circular scan indicator: when `fraction` is `Some(f)`, draws a determinate
+/// ring with a percentage label; otherwise spins an indeterminate ring.
+/// Mirrors `MudProgressCircular` on the ErsatzTV libraries page.
+///
+/// Always rendered (so DOM shape stays stable across hydration); `visible`
+/// toggles `display`.
+#[component]
+fn ScanIndicator(visible: Signal<bool>, fraction: Signal<Option<f32>>) -> impl IntoView {
+    // Ring geometry: radius 8 inside a 20x20 viewBox; circumference ~50.27.
+    const CIRCUMFERENCE: f32 = std::f32::consts::TAU * 8.0;
+
+    let display = move || if visible.get() { "inline-flex" } else { "none" };
+    let is_determinate = move || fraction.get().is_some();
+    let arc_class = move || {
+        if is_determinate() {
+            style::ring_arc_determinate
+        } else {
+            style::ring_arc_indeterminate
+        }
+    };
+    let dash_array = move || {
+        if is_determinate() {
+            format!("{CIRCUMFERENCE}")
+        } else {
+            // Indeterminate: render ~25% of the ring as a moving arc.
+            format!("{} {}", CIRCUMFERENCE * 0.25, CIRCUMFERENCE)
+        }
+    };
+    let dash_offset = move || match fraction.get() {
+        Some(f) => (1.0 - f.clamp(0.0, 1.0)) * CIRCUMFERENCE,
+        None => 0.0,
+    };
+    let label = move || match fraction.get() {
+        Some(f) => {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let pct = (f.clamp(0.0, 1.0) * 100.0).round() as u32;
+            format!("{pct} %")
+        }
+        None => String::new(),
+    };
+
+    view! {
+        <span class=style::ring style:display=display title="Scanning…" aria-label="Scanning">
+            <svg viewBox="0 0 20 20" class=style::ring_svg aria-hidden="true">
+                <circle cx="10" cy="10" r="8" class=style::ring_track/>
+                <circle
+                    cx="10"
+                    cy="10"
+                    r="8"
+                    class=arc_class
+                    stroke-dasharray=dash_array
+                    stroke-dashoffset=dash_offset
+                />
+            </svg>
+            <span class=style::ring_label>{label}</span>
+        </span>
     }
 }

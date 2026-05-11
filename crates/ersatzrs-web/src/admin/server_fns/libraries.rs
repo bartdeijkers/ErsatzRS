@@ -99,6 +99,7 @@ pub async fn scan_library(
     let state = expect_context::<AppState>();
     let pool = state.pool.clone();
     let locker = state.entity_locker.clone();
+    let progress_map = state.scan_progress.clone();
 
     tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
 
@@ -110,6 +111,8 @@ pub async fn scan_library(
     tokio::task::spawn(async move {
         let started = std::time::Instant::now();
         tracing::info!(library_id, kind = %kind, "library scan started");
+        let sink = progress_map.sink_for(library_id);
+        let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
         macro_rules! log_err {
             ($res:expr) => {
                 if let Err(e) = $res {
@@ -119,38 +122,50 @@ pub async fn scan_library(
         }
         match kind.as_str() {
             "Plex" => log_err!(
-                ersatzrs_infra::plex::sync_library_by_id_with_options(&pool, library_id, deep_scan)
-                    .await
+                ersatzrs_infra::plex::sync_library_by_id_with_progress(
+                    &pool,
+                    library_id,
+                    deep_scan,
+                    Some(sink_ref),
+                )
+                .await
             ),
             "Jellyfin" => {
                 log_err!(
-                    ersatzrs_infra::jellyfin::sync_library_by_id_with_options(
-                        &pool, library_id, deep_scan
+                    ersatzrs_infra::jellyfin::sync_library_by_id_with_progress(
+                        &pool,
+                        library_id,
+                        deep_scan,
+                        Some(sink_ref),
                     )
                     .await
                 );
             }
             "Emby" => {
                 log_err!(
-                    ersatzrs_infra::emby::sync_library_by_id_with_options(
-                        &pool, library_id, deep_scan
+                    ersatzrs_infra::emby::sync_library_by_id_with_progress(
+                        &pool,
+                        library_id,
+                        deep_scan,
+                        Some(sink_ref),
                     )
                     .await
                 );
             }
             "Local" => {
-                use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
+                use ersatzrs_scanner::{scan_local_library_with_progress, LocalScanConfig};
                 let config = LocalScanConfig {
                     library_id,
                     ffprobe_path: ersatzrs_ffmpeg::ffprobe_path_from_env(),
                 };
-                log_err!(scan_local_library(&pool, &config).await);
+                log_err!(scan_local_library_with_progress(&pool, &config, Some(sink_ref)).await);
             }
             other => {
                 tracing::warn!(kind = other, "unknown library kind in scan_library");
             }
         }
         locker.unlock_library(library_id);
+        progress_map.clear(library_id);
         tracing::info!(
             library_id,
             elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
@@ -170,6 +185,20 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
 
     let state = expect_context::<AppState>();
     Ok(state.entity_locker.locked_libraries())
+}
+
+/// Returns the fractional scan progress per library in `[0.0, 1.0]`. Polled
+/// by the libraries page alongside `list_locked_libraries` to drive the
+/// percentage ring. Libraries that are locked but have not yet emitted any
+/// progress are simply absent from the map; the UI falls back to an
+/// indeterminate spinner in that case.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn list_scan_progress() -> Result<Vec<(i64, f32)>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.scan_progress.snapshot().into_iter().collect())
 }
 
 /// One row of the External Collections table. Mirrors ETV's

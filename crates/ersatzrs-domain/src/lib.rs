@@ -12,6 +12,7 @@ pub mod media;
 pub mod media_source;
 pub mod metadata;
 pub mod playout;
+pub mod scanning;
 pub mod scheduling;
 
 pub use channel::*;
@@ -26,4 +27,5 @@ pub use media::*;
 pub use media_source::*;
 pub use metadata::*;
 pub use playout::*;
+pub use scanning::*;
 pub use scheduling::*;

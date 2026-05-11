@@ -692,12 +692,51 @@ pub async fn sync_plex_movie_library(
     library_key: &str,
     deep_scan: bool,
 ) -> Result<usize> {
+    sync_plex_movie_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_plex_movie_library`] that emits `(synced / total_size)`
+/// to `progress` after each item upsert. Use this from the web admin so the
+/// libraries page can render a percentage ring.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+pub async fn sync_plex_movie_library_with_progress(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
     let mut synced = 0;
     let mut start_index = 0;
     let mut page = service
         .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
         .await?;
     let total_size = page.total_record_count;
+
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
 
     while start_index < total_size {
         for item in &page.items {
@@ -712,11 +751,15 @@ pub async fn sync_plex_movie_library(
                 .await?
             {
                 synced += 1;
-                continue;
+            } else {
+                upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
+                synced += 1;
             }
-
-            upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
-            synced += 1;
+            if let Some(sink) = progress {
+                if total_size > 0 {
+                    sink.report(synced as f32 / total_size as f32);
+                }
+            }
         }
         start_index += PLEX_PAGE_SIZE;
         if start_index >= total_size {
@@ -727,6 +770,9 @@ pub async fn sync_plex_movie_library(
             .await?;
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -744,12 +790,54 @@ pub async fn sync_plex_show_library(
     library_key: &str,
     deep_scan: bool,
 ) -> Result<usize> {
+    sync_plex_show_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_id,
+        library_key,
+        deep_scan,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_plex_show_library`] that emits progress at show
+/// granularity (`shows_completed / show_total_size`). Episode-granular
+/// progress would require a 3-deep nested upfront-count pass which is not
+/// worth the additional network round-trips.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+pub async fn sync_plex_show_library_with_progress(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
     let mut synced = 0;
+    let mut shows_completed: usize = 0;
     let mut show_start_index = 0;
     let mut shows = service
         .fetch_show_page(config, library_key, show_start_index, PLEX_PAGE_SIZE)
         .await?;
     let show_total_size = shows.total_record_count;
+
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
 
     while show_start_index < show_total_size {
         for show in &shows.items {
@@ -832,6 +920,12 @@ pub async fn sync_plex_show_library(
                     .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
                     .await?;
             }
+            shows_completed += 1;
+            if let Some(sink) = progress {
+                if show_total_size > 0 {
+                    sink.report(shows_completed as f32 / show_total_size as f32);
+                }
+            }
         }
         show_start_index += PLEX_PAGE_SIZE;
         if show_start_index >= show_total_size {
@@ -842,6 +936,9 @@ pub async fn sync_plex_show_library(
             .await?;
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -857,16 +954,48 @@ pub async fn sync_plex_collection_library(
     media_source_id: i64,
     library_key: &str,
 ) -> Result<usize> {
+    sync_plex_collection_library_with_progress(
+        pool,
+        service,
+        config,
+        media_source_id,
+        library_key,
+        None,
+    )
+    .await
+}
+
+/// Variant of [`sync_plex_collection_library`] that reports
+/// `(start_index + items_seen_in_page) / total_size` after each page.
+///
+/// # Errors
+///
+/// Returns an error when Plex requests or database writes fail.
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+pub async fn sync_plex_collection_library_with_progress(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_key: &str,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
     let library_section_id = library_key.parse::<i32>().unwrap_or_default();
     let mut synced = 0;
+    let mut seen: usize = 0;
     let mut start_index = 0;
     let mut page = service
         .fetch_collection_page(config, start_index, PLEX_PAGE_SIZE)
         .await?;
     let total_size = page.total_record_count;
 
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+
     while start_index < total_size {
         for collection in &page.items {
+            seen += 1;
             if collection.library_section_id != library_section_id {
                 continue;
             }
@@ -899,6 +1028,11 @@ pub async fn sync_plex_collection_library(
             replace_plex_collection_items(pool, collection_id, &all_items).await?;
             synced += 1;
         }
+        if let Some(sink) = progress {
+            if total_size > 0 {
+                sink.report(seen as f32 / total_size as f32);
+            }
+        }
 
         start_index += PLEX_PAGE_SIZE;
         if start_index >= total_size {
@@ -909,6 +1043,9 @@ pub async fn sync_plex_collection_library(
             .await?;
     }
 
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(synced)
 }
 
@@ -1815,6 +1952,22 @@ pub async fn sync_library_by_id_with_options(
     library_id: i64,
     deep_scan: bool,
 ) -> Result<usize> {
+    sync_library_by_id_with_progress(pool, library_id, deep_scan, None).await
+}
+
+/// Variant of [`sync_library_by_id_with_options`] that forwards a progress
+/// sink to the underlying branch fn (`sync_plex_movie_library_with_progress`,
+/// etc.). Used by the web admin to drive the libraries page ring.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+pub async fn sync_library_by_id_with_progress(
+    pool: &DbPool,
+    library_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
     let row = sqlx::query(
         r#"SELECT l."MediaKind", l."MediaSourceId"
            FROM "Library" l
@@ -1866,7 +2019,7 @@ pub async fn sync_library_by_id_with_options(
     let service = PlexService::new();
     match kind {
         1 => {
-            sync_plex_show_library(
+            sync_plex_show_library_with_progress(
                 pool,
                 &service,
                 &config,
@@ -1874,11 +2027,12 @@ pub async fn sync_library_by_id_with_options(
                 library_id,
                 &library_key,
                 deep_scan,
+                progress,
             )
             .await
         }
         0 => {
-            sync_plex_movie_library(
+            sync_plex_movie_library_with_progress(
                 pool,
                 &service,
                 &config,
@@ -1886,12 +2040,20 @@ pub async fn sync_library_by_id_with_options(
                 library_id,
                 &library_key,
                 deep_scan,
+                progress,
             )
             .await
         }
         _ => {
-            sync_plex_collection_library(pool, &service, &config, media_source_id, &library_key)
-                .await
+            sync_plex_collection_library_with_progress(
+                pool,
+                &service,
+                &config,
+                media_source_id,
+                &library_key,
+                progress,
+            )
+            .await
         }
     }
 }

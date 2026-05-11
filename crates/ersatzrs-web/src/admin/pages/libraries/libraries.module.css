@@ -100,20 +100,55 @@ tr:last-child td {
     font-size: 0.875rem;
 }
 
-/* Indeterminate spinner shown while a library is being scanned. Mirrors the
- * MudProgressCircular indicator on the ErsatzTV libraries page. The element
- * is always rendered (for stable hydration); visibility is toggled via an
- * inline `style:display` reactive attribute. */
-.spinner {
+/* Scan progress ring. Mirrors MudProgressCircular: a circular track plus an
+ * arc that either sweeps to a fraction (determinate, with a percentage
+ * label) or spins indefinitely (indeterminate, when the scanner hasn't
+ * reported progress yet). Always present in the DOM for stable hydration;
+ * visibility is toggled via an inline `style:display` reactive attribute. */
+.ring {
     display: none;
-    width: 1rem;
-    height: 1rem;
-    border: 2px solid var(--color-border);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    white-space: nowrap;
 }
 
-@keyframes spin {
+.ring-svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    transform: rotate(-90deg);
+}
+
+.ring-track {
+    fill: none;
+    stroke: var(--color-border);
+    stroke-width: 2;
+}
+
+.ring-arc-determinate {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 250ms linear;
+}
+
+/* Indeterminate arc: stroke-dasharray is set inline (~25% of circumference)
+ * so the arc length is consistent with the determinate ring's geometry. */
+.ring-arc-indeterminate {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    animation: ring-spin 0.9s linear infinite;
+    transform-origin: 50% 50%;
+}
+
+.ring-label {
+    font-variant-numeric: tabular-nums;
+}
+
+@keyframes ring-spin {
     to { transform: rotate(360deg); }
 }

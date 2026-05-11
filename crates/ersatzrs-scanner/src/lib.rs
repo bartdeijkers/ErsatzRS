@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
-    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
+    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink, VideoScanKind,
 };
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
@@ -38,6 +38,27 @@ pub struct LocalScanReport {
     pub scanned_files: usize,
 }
 
+/// One pre-enumerated unit of work for the local scanner. Materializing the
+/// full work list up front lets the with-progress variant report a true
+/// fraction.
+enum LocalScanWork {
+    MusicVideo {
+        artist_folder: String,
+        file_path: PathBuf,
+    },
+    RemoteStream {
+        path: PathBuf,
+    },
+    Generic {
+        path: PathBuf,
+    },
+}
+
+struct LocalScanBucket {
+    library_path: LocalLibraryPath,
+    items: Vec<LocalScanWork>,
+}
+
 /// Scan a local `ErsatzTV` library path into media database rows.
 ///
 /// # Errors
@@ -48,42 +69,104 @@ pub async fn scan_local_library(
     pool: &DbPool,
     config: &LocalScanConfig,
 ) -> Result<LocalScanReport> {
+    scan_local_library_with_progress(pool, config, None).await
+}
+
+/// Scan a local library while emitting fractional progress to `progress` if
+/// provided. Mirrors `scan_local_library` and is the entry point used by the
+/// web admin so the libraries page can render a percentage ring.
+///
+/// Progress is reported as `(files_processed / total_files)` after each item.
+/// When `progress` is `None` this is a thin wrapper over the original
+/// algorithm.
+///
+/// # Errors
+///
+/// Returns an error when the library has no paths, ffprobe fails, or database
+/// writes fail.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+pub async fn scan_local_library_with_progress(
+    pool: &DbPool,
+    config: &LocalScanConfig,
+    progress: Option<&dyn ScanProgressSink>,
+) -> Result<LocalScanReport> {
     let paths = load_library_paths(pool, config.library_id).await?;
     if paths.is_empty() {
         return Err(ScannerError::MissingLibraryPaths(config.library_id));
     }
 
-    let extractor = FfprobeExtractor::new(config.ffprobe_path.clone());
-    let mut report = LocalScanReport::default();
+    // Pre-enumerate files per path so we can report a true fraction. ETV's
+    // `LocalFolderScanner` does the same up-front discovery before probing.
+    let mut total_items: usize = 0;
+    let mut buckets: Vec<LocalScanBucket> = Vec::new();
     for library_path in paths {
         if matches!(library_path.media_kind, LibraryMediaKind::Shows) {
             return Err(ScannerError::UnsupportedLibraryMediaKind(
                 library_path.media_kind,
             ));
         }
+        let items: Vec<LocalScanWork> = match library_path.media_kind {
+            LibraryMediaKind::MusicVideos => collect_music_video_files(&library_path.path)
+                .into_iter()
+                .map(|(artist_folder, file_path)| LocalScanWork::MusicVideo {
+                    artist_folder,
+                    file_path,
+                })
+                .collect(),
+            LibraryMediaKind::RemoteStreams => collect_remote_stream_files(&library_path.path)
+                .into_iter()
+                .map(|path| LocalScanWork::RemoteStream { path })
+                .collect(),
+            _ => collect_scannable_files(&library_path.path, library_path.media_kind)
+                .into_iter()
+                .map(|path| LocalScanWork::Generic { path })
+                .collect(),
+        };
+        total_items = total_items.saturating_add(items.len());
+        buckets.push(LocalScanBucket {
+            library_path,
+            items,
+        });
+    }
 
-        match library_path.media_kind {
-            LibraryMediaKind::MusicVideos => {
-                for (artist_folder, file_path) in collect_music_video_files(&library_path.path) {
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+
+    let extractor = FfprobeExtractor::new(config.ffprobe_path.clone());
+    let mut report = LocalScanReport::default();
+    let mut processed: usize = 0;
+    for bucket in buckets {
+        let library_path = bucket.library_path;
+        for work in bucket.items {
+            match work {
+                LocalScanWork::MusicVideo {
+                    artist_folder,
+                    file_path,
+                } => {
                     let artist_id =
                         upsert_artist_for_folder(pool, library_path.id, &artist_folder).await?;
                     let probed = extractor.extract(&file_path).await?;
                     upsert_local_music_video(pool, &library_path, artist_id, &file_path, probed)
                         .await?;
-                    report.scanned_files += 1;
                 }
-            }
-            LibraryMediaKind::RemoteStreams => {
-                for path in collect_remote_stream_files(&library_path.path) {
+                LocalScanWork::RemoteStream { path } => {
                     upsert_local_remote_stream(pool, &library_path, &path).await?;
-                    report.scanned_files += 1;
                 }
-            }
-            _ => {
-                for path in collect_scannable_files(&library_path.path, library_path.media_kind) {
+                LocalScanWork::Generic { path } => {
                     let probed = extractor.extract(&path).await?;
                     upsert_local_file(pool, &library_path, &path, probed).await?;
-                    report.scanned_files += 1;
+                }
+            }
+            report.scanned_files += 1;
+            processed += 1;
+            if let Some(sink) = progress {
+                if total_items > 0 {
+                    sink.report(processed as f32 / total_items as f32);
                 }
             }
         }
@@ -92,6 +175,9 @@ pub async fn scan_local_library(
     }
 
     update_library_scan(pool, config.library_id, Utc::now()).await?;
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
     Ok(report)
 }
 
