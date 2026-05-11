@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-10 (platform parity across six RIDs)
+Last updated: 2026-05-11 (embedded scheduler into ersatzrs-web)
 
 ## Current Phase
 
@@ -264,15 +264,18 @@ the same persisted parity summary feeds the health detail surface. This must be
 kept current as porting work changes runtime capabilities or parity-sensitive
 persisted state.
 
-Slice 17 is complete. The new `ersatzrs-scheduler` binary runs
-runtime-independent maintenance work as a sibling to `ersatzrs-web` and
-`ersatzrs-scanner`: periodic playout builds with channel lock markers,
-due-library refresh dispatch using `Scanner.LibraryRefreshInterval`, provider
-connectivity polling for Plex/Jellyfin/Emby connections, transcode/image/log
-cache cleanup, search-index rebuild dispatch markers, and automatic persisted
-health runs after successful FFmpeg runtime probing. Loop timestamps and
-dispatcher state are stored in `ConfigElement` under `maintenance.*`; health
-results continue to use `health.results` and `health.summary`.
+Slice 17 is complete. `ersatzrs_scheduler::runner::run_scheduler` runs
+runtime-independent maintenance work as an in-process tokio task inside
+`ersatzrs-web`, matching ErsatzTV's hosted-service model (`Startup.cs`):
+periodic playout builds with channel lock markers, due-library refresh
+dispatch using `Scanner.LibraryRefreshInterval`, provider connectivity polling
+for Plex/Jellyfin/Emby connections, transcode/image/log cache cleanup,
+search-index rebuild dispatch markers, and automatic persisted health runs
+after successful FFmpeg runtime probing. Loop timestamps and dispatcher state
+are stored in `ConfigElement` under `maintenance.*`; health results continue
+to use `health.results` and `health.summary`. The `ersatzrs-scheduler` crate
+stays a library to keep `runner.rs` testable; only two binaries
+(`ersatzrs-web`, `ersatzrs-scanner`) are produced and shipped.
 
 Slice 19 is complete for the non-web search parity target. The core search
 parser/evaluator now lowercases and accent-folds text, consumes Lucene boost
@@ -365,7 +368,7 @@ playout build post-processing: generated items inherit
 can be filled from `ffmpeg.global_fallback_filler_id`. The mediaserver
 bootstrap seeds `log.minimum_level` plus scanning/scheduling/searching/
 streaming/http subsystem keys, and `ersatzrs-web`, `ersatzrs-scanner`, and
-`ersatzrs-scheduler` load those keys into `tracing` filters on startup. XMLTV
+the in-process scheduler task load those keys into `tracing` filters on startup. XMLTV
 block behavior moved into core/infra (`XmltvBlockBehavior` and
 `xmltv.block_behavior`) so the transport layer only renders projected guide
 programmes. ADR 0010 records the Classic scheduling engine port decision.
@@ -484,6 +487,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-11 | Claude Code (claude-opus-4-7) | Embedded the maintenance scheduler into `ersatzrs-web` (issue #20). Added `ersatzrs-scheduler` as a dependency of `ersatzrs-web`, spawn `run_scheduler` from `host/tasks.rs` alongside HDHR UDP discovery and Trakt maintenance, dropped the `[[bin]]` section and `src/main.rs` from `ersatzrs-scheduler` (crate remains a library), and trimmed the now-unused `clap`/`tracing-subscriber` deps and tokio features. Updated STATUS.md and parity-matrix.md to reflect the two-binary shape that the Docker image and per-RID release archives already produce. |
 | 2026-05-10 | Claude Code (claude-opus-4-7) | Closed the platform-parity slice. Added the `platform-parity-fixer` project agent and Supported Platforms section in AGENTS.md, split unix-only ffmpeg test helpers into `#[cfg(all(test, unix))] mod unix_tests`, added `Cross.toml` for cross-rs ARM/Windows builds, made `ersatzrs-web/build.rs` warn-and-skip when stylance-cli is unavailable so cross builds succeed, expanded the CI matrix with a 6-cell `platforms` job (linux-x64/arm64/arm via cross, osx-arm64 native, osx-x64 cross from Apple Silicon, win-x64 MSVC, all green on real runners), added a `binaries` matrix to release.yml that attaches `ersatzrs-<tag>-<rid>.tar.gz`/`.zip` to GitHub releases per RID, ported `run.sh` to `run.ps1` plus a `run.cmd` shim for Windows contributors, ignored RUSTSEC-2023-0071 with rationale, and updated parity-matrix.md to mark platform support at parity with ErsatzTV. |
 | 2026-05-08 | Codex (GPT-5) | Added the `.claude/agents/support-parity-fixer.md` project agent to drive the Support Playwright parity failures to green while following the repo contracts, ErsatzTV source-first workflow, and Leptos hydration rules. |
 | 2026-05-08 | Codex (GPT-5) | Captured the live ErsatzTV Legacy Support page criteria and added scripted Playwright coverage for `/system/health`, `/system/logs`, and `/system/troubleshooting`, including the visible health-check row set and troubleshooting report tabs. |

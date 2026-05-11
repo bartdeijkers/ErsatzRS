@@ -30,6 +30,7 @@ ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
 ersatzrs-scanner = { path = "../ersatzrs-scanner", version = "0.1.0" }
+ersatzrs-scheduler = { path = "../ersatzrs-scheduler", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "net", "sync", "time"] }
 tokio-util = { version = "0.7", features = ["io"] }
 # Keep axum aligned with leptos_axum and enable Multipart extraction for image upload routes.
@@ -79,11 +80,16 @@ insta = "1"
 default = ["ssr"]
 hydrate = ["leptos/hydrate"]
 ssr = ["leptos/ssr", "leptos_router/ssr", "leptos_meta/ssr"]
-mysql = ["ersatzrs-infra/mysql", "ersatzrs-scanner/mysql"]
+mysql = [
+    "ersatzrs-infra/mysql",
+    "ersatzrs-scanner/mysql",
+    "ersatzrs-scheduler/mysql",
+]
 mysql-integration = [
     "mysql",
     "ersatzrs-infra/mysql-integration",
     "ersatzrs-scanner/mysql-integration",
+    "ersatzrs-scheduler/mysql-integration",
 ]
 
 [lints]

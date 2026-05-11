@@ -1,6 +1,7 @@
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
 use ersatzrs_infra::trakt_sync::TraktSynchronizer;
+use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
 
 pub fn spawn_background_tasks(
     pool: DbPool,
@@ -14,6 +15,18 @@ pub fn spawn_background_tasks(
         listen_port,
     ));
     tokio::spawn(run_trakt_maintenance(pool));
+    tokio::spawn(run_maintenance_scheduler());
+}
+
+async fn run_maintenance_scheduler() {
+    if let Err(error) = run_scheduler(SchedulerOptions {
+        tick: std::time::Duration::from_mins(1),
+        ..SchedulerOptions::default()
+    })
+    .await
+    {
+        tracing::error!(%error, "maintenance scheduler exited");
+    }
 }
 
 async fn run_trakt_maintenance(pool: DbPool) {
