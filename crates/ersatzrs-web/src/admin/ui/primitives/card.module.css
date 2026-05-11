@@ -117,6 +117,7 @@
 }
 .pager-btn:hover:not(:disabled) { background-color: var(--color-surface); }
 .pager-btn:disabled { opacity: 0.4; }
+.pager-btn-disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 .selected-label {
     font-size: 0.75rem;

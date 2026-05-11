@@ -1,6 +1,13 @@
 use leptos::prelude::*;
 
-stylance::import_crate_style!(style, "src/admin/ui/primitives/card.module.css");
+// `pager_btn_disabled` is used by external consumers (e.g. the movies page
+// re-imports this stylesheet), not by `MediaCardPager` itself.
+#[allow(dead_code)]
+mod style_mod {
+    stylance::import_crate_style!(s, "src/admin/ui/primitives/card.module.css");
+    pub use s::*;
+}
+use style_mod as style;
 
 /// A media item card for browser grids (maps to ErsatzTV's `MediaCard` component).
 #[allow(dead_code)]

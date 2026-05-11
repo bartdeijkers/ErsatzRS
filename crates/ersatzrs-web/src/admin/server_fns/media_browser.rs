@@ -29,6 +29,29 @@ pub struct MediaCardRow {
     pub artwork_path: Option<String>,
 }
 
+/// Detailed projection for the movie details page. Mirrors the relevant
+/// subset of `ErsatzTV.Application.Movies.MovieViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MovieDetailRow {
+    pub id: i64,
+    pub title: String,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub content_rating: Option<String>,
+    pub release_date: Option<String>,
+    pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub file_path: Option<String>,
+    /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
+    pub media_item_state: i32,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub directors: Vec<String>,
+    pub writers: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CollectionListRow {
     pub id: i64,
@@ -71,12 +94,18 @@ fn song_subtitle(artists: Option<String>, album: Option<String>) -> Option<Strin
 // ---------------------------------------------------------------------------
 
 /// Paginated movie list. Results ordered by `SortTitle`.
+///
+/// Note: `ArtworkKind = 0` is `Poster` in ErsatzTV's enum (see
+/// `ErsatzTV.Core/Domain/ArtworkKind.cs`); the previous version of this query
+/// used `1` (`Thumbnail`) by mistake and so never returned poster art for
+/// movies stored with kind `Poster`.
 #[server]
 pub async fn list_movies(
     search: String,
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -102,7 +131,7 @@ pub async fn list_movies(
            FROM "Movie" m
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
            LEFT JOIN "Artwork" a
-               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 1
+               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
            WHERE (? = '' OR mm."Title" LIKE ?)
            ORDER BY mm."SortTitle", mm."Title"
            LIMIT ? OFFSET ?"#,
@@ -124,12 +153,133 @@ pub async fn list_movies(
                 .try_get::<Option<i64>, _>("Year")
                 .unwrap_or(None)
                 .map(|y| y.to_string()),
-            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Poster")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
     #[allow(clippy::cast_sign_loss)]
     Ok((cards, total.max(0) as u64))
+}
+
+/// Movie details for the `/media/movies/:id` page. Ports
+/// `ErsatzTV/Pages/Movie.razor` + `Application.Movies/Queries/GetMovieById`.
+#[server]
+pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let Some(row) = sqlx::query(
+        r#"SELECT m."Id" AS "Id",
+                  COALESCE(mm."Title", '') AS "Title",
+                  mm."Year" AS "Year",
+                  mm."Plot" AS "Plot",
+                  mm."Tagline" AS "Tagline",
+                  mm."ContentRating" AS "ContentRating",
+                  mm."ReleaseDate" AS "ReleaseDate",
+                  COALESCE(mi."State", 0) AS "State",
+                  mm."Id" AS "MetadataId"
+           FROM "Movie" m
+           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           LEFT JOIN "MediaItem" mi ON mi."Id" = m."Id"
+           WHERE m."Id" = ?
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+
+    // Poster (kind 0) + FanArt (kind 3).
+    let poster_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "MovieMetadataId" = ? AND "ArtworkKind" = 0 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+    let fanart_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "MovieMetadataId" = ? AND "ArtworkKind" = 3 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+
+    // First media file path. Mirrors ETV's `movie.GetHeadVersion().MediaFiles.Head().Path`.
+    let file_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT mf."Path"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           WHERE mv."MovieId" = ?
+           ORDER BY mv."Id" LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+
+    let genres = load_strings(&state.pool, r#""Genre""#, "MovieMetadataId", metadata_id).await?;
+    let tags = load_strings(&state.pool, r#""Tag""#, "MovieMetadataId", metadata_id).await?;
+    let studios = load_strings(&state.pool, r#""Studio""#, "MovieMetadataId", metadata_id).await?;
+    let directors =
+        load_strings(&state.pool, r#""Director""#, "MovieMetadataId", metadata_id).await?;
+    let writers = load_strings(&state.pool, r#""Writer""#, "MovieMetadataId", metadata_id).await?;
+
+    Ok(Some(MovieDetailRow {
+        id: row.try_get("Id").unwrap_or(0),
+        title: row.try_get("Title").unwrap_or_default(),
+        year: row.try_get::<Option<i64>, _>("Year").unwrap_or(None),
+        plot: row.try_get::<Option<String>, _>("Plot").unwrap_or(None),
+        tagline: row.try_get::<Option<String>, _>("Tagline").unwrap_or(None),
+        content_rating: row
+            .try_get::<Option<String>, _>("ContentRating")
+            .unwrap_or(None),
+        release_date: row
+            .try_get::<Option<String>, _>("ReleaseDate")
+            .unwrap_or(None),
+        poster_url: poster_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+        fanart_url: fanart_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
+        file_path,
+        media_item_state: row.try_get("State").unwrap_or(0),
+        genres,
+        tags,
+        studios,
+        directors,
+        writers,
+    }))
+}
+
+#[cfg(feature = "ssr")]
+async fn load_strings(
+    pool: &ersatzrs_infra::db::DbPool,
+    table: &str,
+    column: &str,
+    metadata_id: i64,
+) -> Result<Vec<String>, ServerFnError> {
+    use sqlx::Row;
+
+    // `table` and `column` are private constants supplied by the call sites
+    // in this module; not user input. Identifiers are inlined because the
+    // sqlx query cache uses the rendered SQL as the key.
+    let sql = format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ? ORDER BY "Name""#);
+    let rows = sqlx::query(&sql).bind(metadata_id).fetch_all(pool).await?;
+    Ok(rows
+        .iter()
+        .filter_map(|r| r.try_get::<Option<String>, _>("Name").ok().flatten())
+        .filter(|name| !name.trim().is_empty())
+        .collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +292,7 @@ pub async fn list_shows(
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -167,7 +318,7 @@ pub async fn list_shows(
            FROM "Show" s
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
            LEFT JOIN "Artwork" a
-               ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 1
+               ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
            WHERE (? = '' OR sm."Title" LIKE ?)
            ORDER BY sm."SortTitle", sm."Title"
            LIMIT ? OFFSET ?"#,
@@ -189,7 +340,10 @@ pub async fn list_shows(
                 .try_get::<Option<i64>, _>("Year")
                 .unwrap_or(None)
                 .map(|y| y.to_string()),
-            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Poster")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
@@ -207,6 +361,7 @@ pub async fn list_images(
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -253,7 +408,10 @@ pub async fn list_images(
             subtitle: r
                 .try_get::<Option<String>, _>("ReleaseDate")
                 .unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
@@ -271,6 +429,7 @@ pub async fn list_artists(
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -315,7 +474,10 @@ pub async fn list_artists(
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
             subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
@@ -333,6 +495,7 @@ pub async fn list_other_videos(
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -379,7 +542,10 @@ pub async fn list_other_videos(
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
             subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Artwork").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Artwork")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
@@ -397,6 +563,7 @@ pub async fn list_songs(
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
 
@@ -445,7 +612,10 @@ pub async fn list_songs(
                 r.try_get::<Option<String>, _>("Artists").unwrap_or(None),
                 r.try_get::<Option<String>, _>("Album").unwrap_or(None),
             ),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect();
 
@@ -518,6 +688,7 @@ pub async fn empty_trash() -> Result<u64, ServerFnError> {
 async fn load_trash_movies(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -530,7 +701,7 @@ async fn load_trash_movies(
            JOIN "MediaItem" mi ON mi."Id" = m."Id" AND mi."State" = 1
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
            LEFT JOIN "Artwork" a
-               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 1
+               ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
            ORDER BY mm."SortTitle", mm."Title""#,
     )
     .fetch_all(pool)
@@ -546,7 +717,10 @@ async fn load_trash_movies(
                 .try_get::<Option<i64>, _>("Year")
                 .unwrap_or(None)
                 .map(|year| year.to_string()),
-            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Poster")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
@@ -555,6 +729,7 @@ async fn load_trash_movies(
 async fn load_trash_shows(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -567,7 +742,7 @@ async fn load_trash_shows(
            JOIN "MediaItem" mi ON mi."Id" = s."Id" AND mi."State" = 1
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
            LEFT JOIN "Artwork" a
-               ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 1
+               ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
            ORDER BY sm."SortTitle", sm."Title""#,
     )
     .fetch_all(pool)
@@ -583,7 +758,10 @@ async fn load_trash_shows(
                 .try_get::<Option<i64>, _>("Year")
                 .unwrap_or(None)
                 .map(|year| year.to_string()),
-            artwork_path: r.try_get::<Option<String>, _>("Poster").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Poster")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
@@ -592,6 +770,7 @@ async fn load_trash_shows(
 async fn load_trash_artists(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -617,7 +796,10 @@ async fn load_trash_artists(
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
             subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
@@ -626,6 +808,7 @@ async fn load_trash_artists(
 async fn load_trash_other_videos(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -653,7 +836,10 @@ async fn load_trash_other_videos(
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
             subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Artwork").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Artwork")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
@@ -662,6 +848,7 @@ async fn load_trash_other_videos(
 async fn load_trash_songs(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -691,7 +878,10 @@ async fn load_trash_songs(
                 r.try_get::<Option<String>, _>("Artists").unwrap_or(None),
                 r.try_get::<Option<String>, _>("Album").unwrap_or(None),
             ),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
@@ -700,6 +890,7 @@ async fn load_trash_songs(
 async fn load_trash_images(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
 
     let rows = sqlx::query(
@@ -726,7 +917,10 @@ async fn load_trash_images(
             subtitle: r
                 .try_get::<Option<String>, _>("ReleaseDate")
                 .unwrap_or(None),
-            artwork_path: r.try_get::<Option<String>, _>("Thumb").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         })
         .collect())
 }
