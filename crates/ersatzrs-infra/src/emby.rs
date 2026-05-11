@@ -701,6 +701,72 @@ pub async fn sync_library_by_id_with_options(
     }
 }
 
+/// Sync Emby collections for every library on `media_source_id` that has
+/// `ShouldSyncItems = 1`. Mirrors ETV's `SynchronizeEmbyCollections` command
+/// dispatched from the External Collections row on the libraries page.
+///
+/// `_deep_scan` matches the UI button contract;
+/// `sync_emby_collection_library` does not currently distinguish deep from
+/// shallow scans, so the flag is reserved for future use.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Emby API, or database writes
+/// fail.
+pub async fn sync_collections_for_media_source(
+    pool: &DbPool,
+    media_source_id: i64,
+    _deep_scan: bool,
+) -> Result<usize> {
+    let library_ids: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT l."Id"
+           FROM "Library" l
+           JOIN "EmbyLibrary" el ON el."Id" = l."Id"
+           WHERE l."MediaSourceId" = ? AND el."ShouldSyncItems" = 1
+           ORDER BY l."Id""#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    if library_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let address: String = sqlx::query_scalar(
+        r#"SELECT "Address" FROM "EmbyConnection"
+           WHERE "EmbyMediaSourceId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v: Option<String>| v)
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "emby connection",
+        value: format!("no connection for source {media_source_id}"),
+    })?;
+
+    let api_key = load_emby_api_key(pool, &address).await?;
+    let config = EmbyConnectionConfig { address, api_key };
+    let service = EmbyService::new();
+
+    let mut total = 0;
+    for library_id in library_ids {
+        let parent_id: Option<String> =
+            sqlx::query_scalar(r#"SELECT "ItemId" FROM "EmbyLibrary" WHERE "Id" = ?"#)
+                .bind(library_id)
+                .fetch_optional(pool)
+                .await?
+                .and_then(|v: Option<String>| v);
+        let Some(parent_id) = parent_id else {
+            continue;
+        };
+        total += sync_emby_collection_library(pool, &service, &config, media_source_id, &parent_id)
+            .await?;
+    }
+    Ok(total)
+}
+
 async fn load_emby_api_key(pool: &DbPool, address: &str) -> Result<String> {
     let keys = [
         format!("emby.api_key.{address}"),

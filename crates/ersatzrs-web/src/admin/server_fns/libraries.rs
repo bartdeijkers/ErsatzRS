@@ -171,3 +171,168 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
     let state = expect_context::<AppState>();
     Ok(state.entity_locker.locked_libraries())
 }
+
+/// One row of the External Collections table. Mirrors ETV's
+/// `GetExternalCollectionsHandler` — one row per remote `MediaSource` whose
+/// libraries are flagged with `ShouldSyncItems = 1`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ExternalCollectionRow {
+    pub media_source_id: i64,
+    /// "Plex", "Jellyfin", or "Emby".
+    pub kind: String,
+    pub server_name: Option<String>,
+}
+
+impl ExternalCollectionRow {
+    /// Key used by the `EntityLocker` to gate a collections sync for one
+    /// media source. Kept in sync with `scan_external_collections`.
+    #[must_use]
+    pub fn lock_key(&self) -> String {
+        external_collections_lock_key(&self.kind, self.media_source_id)
+    }
+}
+
+fn external_collections_lock_key(kind: &str, media_source_id: i64) -> String {
+    format!("collections:{kind}:{media_source_id}")
+}
+
+/// Returns one External Collections row per remote MediaSource whose
+/// libraries are flagged for collection sync. Mirrors ETV's
+/// `GetExternalCollectionsHandler`.
+#[server]
+pub async fn list_external_collections() -> Result<Vec<ExternalCollectionRow>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let rows = sqlx::query(
+        r#"SELECT DISTINCT
+               l."MediaSourceId" AS "MediaSourceId",
+               CASE
+                   WHEN pl."Id" IS NOT NULL THEN 'Plex'
+                   WHEN jl."Id" IS NOT NULL THEN 'Jellyfin'
+                   WHEN el."Id" IS NOT NULL THEN 'Emby'
+                   ELSE NULL
+               END AS "Kind",
+               COALESCE(pms."ServerName", jms."ServerName", ems."ServerName") AS "ServerName"
+           FROM "Library" l
+           LEFT JOIN "PlexLibrary"     pl  ON pl."Id"  = l."Id"
+           LEFT JOIN "JellyfinLibrary" jl  ON jl."Id"  = l."Id"
+           LEFT JOIN "EmbyLibrary"     el  ON el."Id"  = l."Id"
+           LEFT JOIN "PlexMediaSource"     pms ON pms."Id" = l."MediaSourceId"
+           LEFT JOIN "JellyfinMediaSource" jms ON jms."Id" = l."MediaSourceId"
+           LEFT JOIN "EmbyMediaSource"     ems ON ems."Id" = l."MediaSourceId"
+           WHERE (pl."ShouldSyncItems" = 1
+               OR jl."ShouldSyncItems" = 1
+               OR el."ShouldSyncItems" = 1)
+           ORDER BY "Kind", "ServerName", "MediaSourceId""#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .filter_map(|r| {
+            let kind: Option<String> = r.try_get("Kind").ok().flatten();
+            kind.map(|kind| ExternalCollectionRow {
+                media_source_id: r.try_get("MediaSourceId").unwrap_or(0),
+                kind,
+                server_name: r.try_get("ServerName").ok().flatten(),
+            })
+        })
+        .collect())
+}
+
+/// Fires a background sync of external collections for a single remote
+/// MediaSource. Returns immediately; the sync runs in a spawned task and is
+/// gated by the `EntityLocker` under `collections:{kind}:{media_source_id}`.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn scan_external_collections(
+    media_source_id: i64,
+    kind: String,
+    deep_scan: bool,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let pool = state.pool.clone();
+    let locker = state.entity_locker.clone();
+    let key = external_collections_lock_key(&kind, media_source_id);
+
+    tracing::info!(media_source_id, kind = %kind, deep_scan, "scan_external_collections invoked");
+
+    if !locker.lock_key(key.clone()) {
+        tracing::info!(media_source_id, kind = %kind, "scan_external_collections: already locked, no-op");
+        return Ok(());
+    }
+
+    tokio::task::spawn(async move {
+        let started = std::time::Instant::now();
+        tracing::info!(media_source_id, kind = %kind, "external collections sync started");
+        let res = match kind.as_str() {
+            "Plex" => {
+                ersatzrs_infra::plex::sync_collections_for_media_source(
+                    &pool,
+                    media_source_id,
+                    deep_scan,
+                )
+                .await
+            }
+            "Jellyfin" => {
+                ersatzrs_infra::jellyfin::sync_collections_for_media_source(
+                    &pool,
+                    media_source_id,
+                    deep_scan,
+                )
+                .await
+            }
+            "Emby" => {
+                ersatzrs_infra::emby::sync_collections_for_media_source(
+                    &pool,
+                    media_source_id,
+                    deep_scan,
+                )
+                .await
+            }
+            other => {
+                tracing::warn!(kind = other, "unknown kind in scan_external_collections");
+                Ok(0)
+            }
+        };
+        if let Err(e) = res {
+            tracing::warn!(media_source_id, kind = %kind, error = %e, "external collections sync failed");
+        }
+        locker.unlock_key(&key);
+        tracing::info!(
+            media_source_id,
+            kind = %kind,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "external collections sync finished"
+        );
+    });
+
+    Ok(())
+}
+
+/// Returns the `(kind, media_source_id)` pairs whose collections sync is
+/// currently locked. Polled by the libraries page alongside
+/// `list_locked_libraries`.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn list_locked_collections() -> Result<Vec<(String, i64)>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state
+        .entity_locker
+        .locked_keys()
+        .into_iter()
+        .filter_map(|key| {
+            let rest = key.strip_prefix("collections:")?;
+            let (kind, id) = rest.rsplit_once(':')?;
+            id.parse::<i64>().ok().map(|id| (kind.to_owned(), id))
+        })
+        .collect())
+}

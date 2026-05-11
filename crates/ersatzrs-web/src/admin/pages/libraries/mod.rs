@@ -1,9 +1,12 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
+use crate::admin::server_fns::libraries::{
+    list_external_collections, list_libraries, scan_external_collections, scan_library,
+    ExternalCollectionRow, LibraryRow,
+};
 #[cfg(target_arch = "wasm32")]
-use crate::admin::server_fns::libraries::list_locked_libraries;
-use crate::admin::server_fns::libraries::{list_libraries, scan_library, LibraryRow};
+use crate::admin::server_fns::libraries::{list_locked_collections, list_locked_libraries};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -27,6 +30,18 @@ fn LibrariesIsland() -> impl IntoView {
         async move { scan_library(id, kind, deep_scan).await }
     });
 
+    let externals: Resource<Vec<ExternalCollectionRow>> = Resource::new(
+        || (),
+        |()| async move { list_external_collections().await.unwrap_or_default() },
+    );
+    let collections_action =
+        Action::new(|(media_source_id, kind, deep_scan): &(i64, String, bool)| {
+            let media_source_id = *media_source_id;
+            let kind = kind.clone();
+            let deep_scan = *deep_scan;
+            async move { scan_external_collections(media_source_id, kind, deep_scan).await }
+        });
+
     let toast = use_toast();
     Effect::new(move |_| {
         if let Some(res) = scan_action.value().get() {
@@ -36,11 +51,23 @@ fn LibrariesIsland() -> impl IntoView {
             }
         }
     });
+    Effect::new(move |_| {
+        if let Some(res) = collections_action.value().get() {
+            match res {
+                Ok(()) => toast.push("Collections scan queued", ToastSeverity::Success),
+                Err(e) => toast.push(
+                    format!("Collections scan failed: {e}"),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
 
     // Poll the entity locker so each row knows whether its scan task is still
     // running. Mirrors ETV's `IEntityLocker.OnLibraryChanged` poll loop, but
     // implemented client-side with `gloo-timers` (no SignalR).
     let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
+    let locked_collections: RwSignal<Vec<(String, i64)>> = RwSignal::new(Vec::new());
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
         {
@@ -49,13 +76,24 @@ fn LibrariesIsland() -> impl IntoView {
                     if let Ok(ids) = list_locked_libraries().await {
                         locked.set(ids);
                     }
+                    if let Ok(pairs) = list_locked_collections().await {
+                        locked_collections.set(pairs);
+                    }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
             });
         }
     });
     let is_locked = move |id: i64| locked.with(|ids| ids.contains(&id));
+    let are_collections_locked = move |kind: &str, media_source_id: i64| {
+        locked_collections.with(|pairs| {
+            pairs
+                .iter()
+                .any(|(k, id)| k == kind && *id == media_source_id)
+        })
+    };
     let scanning = move || scan_action.pending().get();
+    let scanning_collections = move || collections_action.pending().get();
 
     view! {
         <div class=style::page>
@@ -171,6 +209,103 @@ fn LibrariesIsland() -> impl IntoView {
                             </div>
                         }
                         .into_any()
+                    })
+                }}
+            </Suspense>
+            <Suspense fallback=|| ()>
+                {move || {
+                    externals.get().map(|rows| {
+                        if rows.is_empty() {
+                            return view! { <span/> }.into_any();
+                        }
+                        view! {
+                            <h2 class=style::section_title>"External Collections"</h2>
+                            <div class=style::table_wrap>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>"Library Kind"</th>
+                                            <th>"Server"</th>
+                                            <th/>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rows
+                                            .into_iter()
+                                            .map(|ext| {
+                                                let media_source_id = ext.media_source_id;
+                                                let kind = ext.kind.clone();
+                                                let kind_scan = kind.clone();
+                                                let kind_deep = kind.clone();
+                                                let kind_lock_a = kind.clone();
+                                                let kind_lock_b = kind.clone();
+                                                let kind_lock_c = kind.clone();
+                                                let srv = ext.server_name.clone().unwrap_or_default();
+                                                view! {
+                                                    <tr>
+                                                        <td>{kind.clone()}</td>
+                                                        <td class=style::cell_muted>{srv}</td>
+                                                        <td>
+                                                            <div class=style::actions>
+                                                                <button
+                                                                    class=style::icon_btn
+                                                                    disabled=move || {
+                                                                        scanning_collections()
+                                                                            || are_collections_locked(&kind_lock_a, media_source_id)
+                                                                    }
+                                                                    title="Deep Scan Collections"
+                                                                    aria-label="Deep Scan Collections"
+                                                                    on:click=move |_| {
+                                                                        collections_action
+                                                                            .dispatch((media_source_id, kind_deep.clone(), true));
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        style=icon_style(IconName::FindReplace, "1.125rem")
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </button>
+                                                                <button
+                                                                    class=style::icon_btn
+                                                                    disabled=move || {
+                                                                        scanning_collections()
+                                                                            || are_collections_locked(&kind_lock_b, media_source_id)
+                                                                    }
+                                                                    title="Scan Collections"
+                                                                    aria-label="Scan Collections"
+                                                                    on:click=move |_| {
+                                                                        collections_action
+                                                                            .dispatch((media_source_id, kind_scan.clone(), false));
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        style=icon_style(IconName::Refresh, "1.125rem")
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </button>
+                                                                <span
+                                                                    class=style::spinner
+                                                                    style:display=move || {
+                                                                        if are_collections_locked(&kind_lock_c, media_source_id) {
+                                                                            "inline-block"
+                                                                        } else {
+                                                                            "none"
+                                                                        }
+                                                                    }
+                                                                    title="Scanning…"
+                                                                    aria-label="Scanning"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                            .into_any()
                     })
                 }}
             </Suspense>

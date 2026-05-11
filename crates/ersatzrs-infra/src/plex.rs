@@ -1896,6 +1896,76 @@ pub async fn sync_library_by_id_with_options(
     }
 }
 
+/// Sync Plex collections for every library on `media_source_id` that has
+/// `ShouldSyncItems = 1`. Mirrors ETV's `SynchronizePlexCollections` command
+/// dispatched from the External Collections row on the libraries page.
+///
+/// `_deep_scan` matches the UI button contract;
+/// `sync_plex_collection_library` does not currently distinguish deep from
+/// shallow scans, so the flag is reserved for future use.
+///
+/// # Errors
+///
+/// Returns an error when config loading, the Plex API, or database writes fail.
+pub async fn sync_collections_for_media_source(
+    pool: &DbPool,
+    media_source_id: i64,
+    _deep_scan: bool,
+) -> Result<usize> {
+    let library_ids: Vec<i64> = sqlx::query_scalar(
+        r#"SELECT l."Id"
+           FROM "Library" l
+           JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+           WHERE l."MediaSourceId" = ? AND pl."ShouldSyncItems" = 1
+           ORDER BY l."Id""#,
+    )
+    .bind(media_source_id)
+    .fetch_all(pool)
+    .await?;
+
+    if library_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let conn_row = sqlx::query(
+        r#"SELECT pc."Uri", pms."ClientIdentifier"
+           FROM "PlexConnection" pc
+           JOIN "PlexMediaSource" pms ON pms."Id" = pc."PlexMediaSourceId"
+           WHERE pc."PlexMediaSourceId" = ? AND pc."IsActive" = 1
+           ORDER BY pc."Id"
+           LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "plex connection",
+        value: format!("no active connection for source {media_source_id}"),
+    })?;
+    let uri: String = conn_row.try_get("Uri").unwrap_or_default();
+    let client_identifier: String = conn_row.try_get("ClientIdentifier").unwrap_or_default();
+    let token = load_plex_token(pool, &client_identifier).await?;
+    let config = PlexConnectionConfig { uri, token };
+    let service = PlexService::new();
+
+    let mut total = 0;
+    for library_id in library_ids {
+        let library_key: Option<String> =
+            sqlx::query_scalar(r#"SELECT "Key" FROM "PlexLibrary" WHERE "Id" = ?"#)
+                .bind(library_id)
+                .fetch_optional(pool)
+                .await?
+                .and_then(|v: Option<String>| v);
+        let Some(library_key) = library_key else {
+            continue;
+        };
+        total +=
+            sync_plex_collection_library(pool, &service, &config, media_source_id, &library_key)
+                .await?;
+    }
+    Ok(total)
+}
+
 async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<String> {
     for key in &[
         format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}{client_identifier}"),

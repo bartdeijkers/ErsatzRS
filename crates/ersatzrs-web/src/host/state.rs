@@ -10,34 +10,69 @@ use jsonwebtoken::{DecodingKey, Validation};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-/// In-process tracker for libraries that have an active scan/sync. Mirrors
+/// In-process tracker for entities that have an active scan/sync. Mirrors
 /// `IEntityLocker` in `ErsatzTV`: the admin UI polls this via a server fn to
 /// render an indeterminate spinner while a background task is running.
+///
+/// Keys are arbitrary strings so the same locker can guard libraries
+/// (`library:{id}`), external collection syncs (`collections:{kind}:{id}`),
+/// and any future entity type.
 #[derive(Clone, Default)]
 pub struct EntityLocker {
-    libraries: Arc<Mutex<HashSet<i64>>>,
+    keys: Arc<Mutex<HashSet<String>>>,
+}
+
+fn library_key(library_id: i64) -> String {
+    format!("library:{library_id}")
 }
 
 impl EntityLocker {
-    /// Attempts to acquire the lock for `library_id`. Returns true when the
-    /// lock was acquired (caller is responsible for `unlock_library` when
-    /// done). Returns false when the library is already locked.
-    pub fn lock_library(&self, library_id: i64) -> bool {
-        self.libraries
-            .lock()
-            .is_ok_and(|mut set| set.insert(library_id))
+    /// Attempts to acquire `key`. Returns true when the lock was acquired
+    /// (caller is responsible for `unlock_key` when done). Returns false when
+    /// the key is already locked.
+    pub fn lock_key(&self, key: impl Into<String>) -> bool {
+        self.keys.lock().is_ok_and(|mut set| set.insert(key.into()))
     }
 
-    pub fn unlock_library(&self, library_id: i64) {
-        if let Ok(mut set) = self.libraries.lock() {
-            set.remove(&library_id);
+    pub fn unlock_key(&self, key: &str) {
+        if let Ok(mut set) = self.keys.lock() {
+            set.remove(key);
         }
     }
 
-    pub fn locked_libraries(&self) -> Vec<i64> {
-        self.libraries
+    pub fn is_locked(&self, key: &str) -> bool {
+        self.keys.lock().is_ok_and(|set| set.contains(key))
+    }
+
+    /// Returns every currently locked key.
+    pub fn locked_keys(&self) -> Vec<String> {
+        self.keys
             .lock()
-            .map(|set| set.iter().copied().collect())
+            .map(|set| set.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    pub fn lock_library(&self, library_id: i64) -> bool {
+        self.lock_key(library_key(library_id))
+    }
+
+    pub fn unlock_library(&self, library_id: i64) {
+        self.unlock_key(&library_key(library_id));
+    }
+
+    /// Returns the ids of currently locked libraries (those locked via
+    /// `lock_library`, identified by the `library:` key prefix).
+    pub fn locked_libraries(&self) -> Vec<i64> {
+        self.keys
+            .lock()
+            .map(|set| {
+                set.iter()
+                    .filter_map(|k| {
+                        k.strip_prefix("library:")
+                            .and_then(|n| n.parse::<i64>().ok())
+                    })
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
