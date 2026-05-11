@@ -53,23 +53,44 @@ tr:last-child td {
 
 .actions {
     display: flex;
-    gap: 0.25rem;
+    gap: 0.125rem;
     align-items: center;
+    justify-content: flex-end;
 }
 
-.btn-scan {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: var(--radius);
-    background-color: var(--color-surface);
+/* Mirrors MudIconButton: a 2.25rem circular hit area centered on a 1.125rem icon.
+ * Used for Scan, Deep Scan, and Search Library row actions. */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    background-color: transparent;
     color: var(--color-gray-300);
-    transition: background-color 150ms;
-    white-space: nowrap;
+    transition: background-color 150ms, color 150ms;
 }
-.btn-scan:hover { background-color: var(--color-primary-20); }
-.btn-scan:disabled {
-    opacity: 0.5;
+.icon-btn:hover {
+    background-color: var(--color-primary-20);
+    color: var(--color-primary);
+}
+.icon-btn:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
+}
+.icon-btn:disabled:hover {
+    background-color: transparent;
+    color: var(--color-gray-300);
+}
+
+/* Fixed-width spacer that keeps the icon column aligned when an action is
+ * not applicable (e.g. Deep Scan on a Local library). Matches ETV's empty 48px
+ * placeholder div pattern in Libraries.razor. */
+.icon-slot {
+    display: inline-block;
+    width: 2.25rem;
+    height: 2.25rem;
 }
 
 .empty {

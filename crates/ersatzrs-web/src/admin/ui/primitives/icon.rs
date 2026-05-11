@@ -28,6 +28,7 @@ pub enum IconName {
     Download,
     MoreVert,
     Tune,
+    FindReplace,
 }
 
 /// Returns inline style for a static icon span.
@@ -66,6 +67,9 @@ fn icon_path(name: IconName) -> &'static str {
         IconName::Download => "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
         IconName::MoreVert => "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
         IconName::Tune => "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+        // FindReplace: magnifying-glass with a circular refresh inside, matching MudBlazor's
+        // FindReplace icon used by ErsatzTV for the "Deep Scan" library action.
+        IconName::FindReplace => "M11 6a5 5 0 1 0 3.54 8.54M21 21l-5.5-5.5M14 4l2 2-2 2M16 6h-3a3 3 0 0 0-3 3",
     }
 }
 

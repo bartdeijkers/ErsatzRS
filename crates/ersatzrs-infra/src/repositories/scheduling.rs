@@ -953,6 +953,7 @@ impl SqliteSchedulingContentRepository {
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
             trakt_lists: self.trakt_list_values(item_id).await?,
+            library_id: row.try_get::<Option<EntityId>, _>("library_id")?,
             provider_guids: self.metadata_guids(&metadata_kind, metadata_id).await?,
         })
     }
@@ -1890,7 +1891,9 @@ impl SqliteSchedulingContentRepository {
 }
 
 const SEARCH_DOCUMENT_SQL: &str = r#"
-SELECT *
+SELECT
+    "documents".*,
+    "lp"."LibraryId" AS "library_id"
 FROM (
     SELECT
         "mm"."MovieId" AS "item_id",
@@ -2056,7 +2059,9 @@ FROM (
         NULL AS "season_number",
         NULL AS "episode_number"
     FROM "RemoteStreamMetadata" AS "rsm"
-)
+) AS "documents"
+LEFT JOIN "MediaItem" AS "mi" ON "mi"."Id" = "documents"."item_id"
+LEFT JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
 fn collection_key_from_row(row: &DbRow) -> Result<SchedulingCollectionKey> {

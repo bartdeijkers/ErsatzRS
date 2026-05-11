@@ -52,6 +52,7 @@ pub enum SearchField {
     EpisodeNumber,
     MetadataKind,
     TraktList,
+    LibraryId,
     ProviderGuid(Option<String>),
 }
 
@@ -108,6 +109,7 @@ pub struct SearchDocument {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub trakt_lists: Vec<String>,
+    pub library_id: Option<i64>,
     pub provider_guids: Vec<SearchProviderGuid>,
 }
 
@@ -250,6 +252,11 @@ impl SearchField {
                 .collect(),
             Self::MetadataKind => vec![document.metadata_kind.clone()],
             Self::TraktList => document.trakt_lists.clone(),
+            Self::LibraryId => document
+                .library_id
+                .map(|id| id.to_string())
+                .into_iter()
+                .collect(),
             Self::ProviderGuid(None) => document
                 .provider_guids
                 .iter()
@@ -303,6 +310,7 @@ impl SearchField {
             "episode_number" | "episode" => Self::EpisodeNumber,
             "metadata_kind" => Self::MetadataKind,
             "trakt_list" | "traktlist" => Self::TraktList,
+            "library_id" | "libraryid" => Self::LibraryId,
             "guid" | "provider_guid" => Self::ProviderGuid(None),
             source => Self::ProviderGuid(Some(source.to_owned())),
         }
@@ -319,6 +327,7 @@ impl SearchField {
                 | Self::Seconds
                 | Self::SeasonNumber
                 | Self::EpisodeNumber
+                | Self::LibraryId
         )
     }
 
@@ -1057,6 +1066,17 @@ mod tests {
         assert!(SearchExpression::parse("chapters:3 AND minutes:62").matches(&doc));
         assert!(SearchExpression::parse("seconds:[3600 TO 3700]").matches(&doc));
         assert!(!SearchExpression::parse("width:192").matches(&doc));
+    }
+
+    #[test]
+    fn filters_by_library_id() {
+        let mut doc = document();
+        doc.library_id = Some(7);
+        assert!(SearchExpression::parse("library_id:7").matches(&doc));
+        assert!(!SearchExpression::parse("library_id:8").matches(&doc));
+        // Documents without a library id never match the filter.
+        doc.library_id = None;
+        assert!(!SearchExpression::parse("library_id:7").matches(&doc));
     }
 
     #[test]

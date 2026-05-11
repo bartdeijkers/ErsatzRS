@@ -4,6 +4,7 @@ use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::libraries::list_locked_libraries;
 use crate::admin::server_fns::libraries::{list_libraries, scan_library, LibraryRow};
+use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
@@ -95,6 +96,7 @@ fn LibrariesIsland() -> impl IntoView {
                                                 let kind_scan = kind.clone();
                                                 let kind_deep = kind.clone();
                                                 let srv = lib.source_name.clone().unwrap_or_default();
+                                                let search_href = format!("/search?query=library_id%3a{id}");
                                                 view! {
                                                     <tr>
                                                         <td>{kind}</td>
@@ -103,27 +105,53 @@ fn LibrariesIsland() -> impl IntoView {
                                                         <td class=style::cell_muted>{lib.media_kind_label()}</td>
                                                         <td>
                                                             <div class=style::actions>
-                                                                <button
-                                                                    class=style::btn_scan
-                                                                    style:display=move || {
-                                                                        if is_remote { "" } else { "none" }
+                                                                {if is_remote {
+                                                                    view! {
+                                                                        <button
+                                                                            class=style::icon_btn
+                                                                            disabled=move || scanning() || is_locked(id)
+                                                                            title="Deep Scan Library"
+                                                                            aria-label="Deep Scan Library"
+                                                                            on:click=move |_| {
+                                                                                scan_action.dispatch((id, kind_deep.clone(), true));
+                                                                            }
+                                                                        >
+                                                                            <span
+                                                                                style=icon_style(IconName::FindReplace, "1.125rem")
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                        </button>
                                                                     }
-                                                                    disabled=move || scanning() || is_locked(id)
-                                                                    on:click=move |_| {
-                                                                        scan_action.dispatch((id, kind_deep.clone(), true));
-                                                                    }
-                                                                >
-                                                                    "Deep Scan"
-                                                                </button>
+                                                                        .into_any()
+                                                                } else {
+                                                                    view! { <span class=style::icon_slot aria-hidden="true"/> }
+                                                                        .into_any()
+                                                                }}
                                                                 <button
-                                                                    class=style::btn_scan
+                                                                    class=style::icon_btn
                                                                     disabled=move || scanning() || is_locked(id)
+                                                                    title="Scan Library"
+                                                                    aria-label="Scan Library"
                                                                     on:click=move |_| {
                                                                         scan_action.dispatch((id, kind_scan.clone(), false));
                                                                     }
                                                                 >
-                                                                    "Scan"
+                                                                    <span
+                                                                        style=icon_style(IconName::Refresh, "1.125rem")
+                                                                        aria-hidden="true"
+                                                                    />
                                                                 </button>
+                                                                <a
+                                                                    class=style::icon_btn
+                                                                    href=search_href
+                                                                    title="Search Library"
+                                                                    aria-label="Search Library"
+                                                                >
+                                                                    <span
+                                                                        style=icon_style(IconName::Search, "1.125rem")
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </a>
                                                                 <span
                                                                     class=style::spinner
                                                                     style:display=move || {
