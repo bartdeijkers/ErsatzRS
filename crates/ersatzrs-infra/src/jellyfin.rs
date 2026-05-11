@@ -1076,10 +1076,47 @@ fn project_movie(item: JellyfinLibraryItemResponse) -> Option<JellyfinMediaItem>
         return None;
     }
     let duration = Duration::nanoseconds(item.run_time_ticks * 100);
+    let name = item.name.unwrap_or_default();
+    let release_date = item.premiere_date;
+    let tagline = item
+        .taglines
+        .iter()
+        .find(|tagline| !tagline.trim().is_empty())
+        .cloned();
+    let poster_artwork_path = item
+        .image_tags
+        .primary
+        .filter(|tag| !tag.trim().is_empty())
+        .map(|tag| {
+            format!(
+                "jellyfin://Items/{}/Images/Primary?tag={tag}",
+                item.id.as_deref().unwrap_or_default()
+            )
+        });
+    let fanart_artwork_path = item
+        .backdrop_image_tags
+        .iter()
+        .find(|tag| !tag.trim().is_empty())
+        .map(|tag| {
+            format!(
+                "jellyfin://Items/{}/Images/Backdrop?tag={tag}",
+                item.id.as_deref().unwrap_or_default()
+            )
+        });
+    let provider_guids = guids_from_provider_ids(&item.provider_ids);
     Some(JellyfinMediaItem {
         item_id: item.id?,
         etag: item.etag,
-        name: item.name.unwrap_or_default(),
+        sort_title: sort_title(&name),
+        plot: item.overview,
+        year: item.production_year,
+        tagline,
+        content_rating: item.official_rating,
+        release_date,
+        poster_artwork_path,
+        fanart_artwork_path,
+        provider_guids,
+        name,
         path,
         date_created: item.date_created.unwrap_or_else(Utc::now),
         duration,
@@ -1235,6 +1272,7 @@ async fn upsert_jellyfin_movie(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let item_id = ensure_jellyfin_movie_item(&mut tx, library_path_id, item).await?;
+    upsert_movie_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
@@ -1411,11 +1449,21 @@ async fn item_etag_matches(
     item_id: &str,
     etag: Option<&str>,
 ) -> Result<bool> {
+    let (metadata_select, metadata_join) = if table == "JellyfinMovie" {
+        (
+            r#""MovieMetadata"."Id" AS "MovieMetadataId""#,
+            r#"LEFT JOIN "MovieMetadata" ON "MovieMetadata"."MovieId" = "JellyfinMovie"."Id""#,
+        )
+    } else {
+        (r#"NULL AS "MovieMetadataId""#, "")
+    };
     let sql = format!(
-        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State"
+        r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State",
+                  {metadata_select}
            FROM "{table}"
            INNER JOIN "MediaItem" ON "MediaItem"."Id" = "{table}"."Id"
            INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
+           {metadata_join}
            WHERE "{table}"."ItemId" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
     let Some(row) = sqlx::query(&sql)
@@ -1429,7 +1477,9 @@ async fn item_etag_matches(
 
     let existing_etag: Option<String> = row.try_get("Etag")?;
     let state: i64 = row.try_get("State")?;
-    Ok(state == 0 && existing_etag.as_deref() == etag)
+    let has_movie_metadata =
+        table != "JellyfinMovie" || row.try_get::<Option<i64>, _>("MovieMetadataId")?.is_some();
+    Ok(state == 0 && has_movie_metadata && existing_etag.as_deref() == etag)
 }
 
 /// Synchronizes the set of Jellyfin libraries for a media source.
@@ -1710,6 +1760,129 @@ async fn ensure_jellyfin_movie_item(
         .execute(&mut **tx)
         .await?;
     Ok(id)
+}
+
+async fn upsert_movie_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    movie_id: i64,
+    item: &JellyfinMediaItem,
+) -> Result<()> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
+            .bind(movie_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let now = Utc::now();
+
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "MovieMetadata"
+               SET "ContentRating" = ?, "DateAdded" = ?, "DateUpdated" = ?,
+                   "MetadataKind" = 2, "OriginalTitle" = NULL, "Outline" = NULL,
+                   "Plot" = ?, "ReleaseDate" = ?, "SortTitle" = ?,
+                   "Tagline" = ?, "Title" = ?, "Year" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&item.content_rating)
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                "ContentRating", "DateAdded", "DateUpdated", "MetadataKind",
+                "MovieId", "OriginalTitle", "Outline", "Plot", "ReleaseDate",
+                "SortTitle", "Tagline", "Title", "Year"
+            ) VALUES (?, ?, ?, 2, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&item.content_rating)
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(movie_id)
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .execute(&mut **tx)
+        .await?;
+        crate::db::last_insert_id(result)
+    };
+
+    replace_movie_artwork(tx, metadata_id, item).await?;
+    replace_movie_guids(tx, metadata_id, &item.provider_guids).await?;
+    Ok(())
+}
+
+async fn replace_movie_artwork(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    item: &JellyfinMediaItem,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "Artwork" WHERE "MovieMetadataId" = ? AND "ArtworkKind" IN (0, 3)"#)
+        .bind(metadata_id)
+        .execute(&mut **tx)
+        .await?;
+
+    if let Some(path) = &item.poster_artwork_path {
+        insert_movie_artwork(tx, metadata_id, 0, path, item.date_created).await?;
+    }
+    if let Some(path) = &item.fanart_artwork_path {
+        insert_movie_artwork(tx, metadata_id, 3, path, item.date_created).await?;
+    }
+
+    Ok(())
+}
+
+async fn insert_movie_artwork(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    kind: i32,
+    path: &str,
+    date_added: DateTime<Utc>,
+) -> Result<()> {
+    sqlx::query(
+        r#"INSERT INTO "Artwork" (
+            "ArtworkKind", "MovieMetadataId", "DateAdded", "DateUpdated", "Path"
+        ) VALUES (?, ?, ?, ?, ?)"#,
+    )
+    .bind(kind)
+    .bind(metadata_id)
+    .bind(encode_datetime(date_added))
+    .bind(encode_datetime(Utc::now()))
+    .bind(path)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn replace_movie_guids(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    guids: &[String],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "MetadataGuid" WHERE "MovieMetadataId" = ?"#)
+        .bind(metadata_id)
+        .execute(&mut **tx)
+        .await?;
+    for guid in guids {
+        sqlx::query(r#"INSERT INTO "MetadataGuid" ("Guid", "MovieMetadataId") VALUES (?, ?)"#)
+            .bind(guid)
+            .bind(metadata_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
 }
 
 async fn ensure_jellyfin_show_item(
@@ -2068,6 +2241,47 @@ fn path_hash(path: &str) -> String {
     hash
 }
 
+fn sort_title(title: &str) -> String {
+    let lower = title.to_ascii_lowercase();
+    if lower.starts_with("the ") {
+        title[4..].to_owned()
+    } else if lower.starts_with("a ") {
+        title[2..].to_owned()
+    } else if lower.starts_with("an ") {
+        title[3..].to_owned()
+    } else if title.starts_with('Æ') {
+        title.replace('Æ', "E")
+    } else {
+        title.to_owned()
+    }
+}
+
+fn guids_from_provider_ids(provider_ids: &JellyfinProviderIdsResponse) -> Vec<String> {
+    let mut result = Vec::new();
+    if let Some(value) = provider_ids
+        .imdb
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        result.push(format!("imdb://{value}"));
+    }
+    if let Some(value) = provider_ids
+        .tmdb
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        result.push(format!("tmdb://{value}"));
+    }
+    if let Some(value) = provider_ids
+        .tvdb
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        result.push(format!("tvdb://{value}"));
+    }
+    result
+}
+
 fn encode_datetime(value: DateTime<Utc>) -> String {
     value.naive_utc().format("%Y-%m-%d %H:%M:%S").to_string()
 }
@@ -2137,16 +2351,44 @@ struct JellyfinLibraryItemResponse {
     id: Option<String>,
     etag: Option<String>,
     path: Option<String>,
+    official_rating: Option<String>,
     #[serde(default)]
     date_created: Option<DateTime<Utc>>,
     #[serde(default)]
     run_time_ticks: i64,
+    #[serde(default)]
+    production_year: Option<i32>,
+    #[serde(default)]
+    provider_ids: JellyfinProviderIdsResponse,
+    #[serde(default)]
+    premiere_date: Option<DateTime<Utc>>,
     location_type: Option<String>,
+    overview: Option<String>,
+    #[serde(default)]
+    taglines: Vec<String>,
+    #[serde(default)]
+    image_tags: JellyfinImageTagsResponse,
+    #[serde(default)]
+    backdrop_image_tags: Vec<String>,
     #[serde(rename = "Type")]
     item_type: Option<String>,
     index_number: Option<i32>,
     #[serde(default)]
     chapters: Vec<JellyfinChapterResponse>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct JellyfinProviderIdsResponse {
+    imdb: Option<String>,
+    tmdb: Option<String>,
+    tvdb: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct JellyfinImageTagsResponse {
+    primary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

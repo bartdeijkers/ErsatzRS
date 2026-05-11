@@ -38,6 +38,18 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
                         "Path": "/srv/media/bbb.mp4",
                         "DateCreated": "2026-04-17T10:00:00Z",
                         "RunTimeTicks": 120_000_000,
+                        "Overview": "A large rabbit has a larger problem.",
+                        "ProductionYear": 2008,
+                        "PremiereDate": "2008-04-10T00:00:00Z",
+                        "OfficialRating": "G",
+                        "Taglines": ["A short movie"],
+                        "ProviderIds": {
+                            "Imdb": "tt1254207",
+                            "Tmdb": "10378",
+                            "Tvdb": "98765"
+                        },
+                        "ImageTags": { "Primary": "poster-tag" },
+                        "BackdropImageTags": ["fanart-tag"],
                         "LocationType": "FileSystem",
                         "Chapters": [
                             { "StartPositionTicks": 0, "Name": "Intro" },
@@ -100,6 +112,10 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "MediaItem").await, 1);
     assert_eq!(count(&pool, "Movie").await, 1);
     assert_eq!(count(&pool, "JellyfinMovie").await, 1);
+    assert_eq!(count(&pool, "MovieMetadata").await, 1);
+    assert_eq!(movie_metadata_title(&pool, 1).await, "Big Buck Bunny");
+    assert_eq!(count(&pool, "MetadataGuid").await, 3);
+    assert_eq!(count(&pool, "Artwork").await, 2);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
@@ -541,6 +557,15 @@ async fn count(pool: &SqlitePool, table: &str) -> i64 {
         .await
         .unwrap()
         .get("Count")
+}
+
+async fn movie_metadata_title(pool: &SqlitePool, movie_id: i64) -> String {
+    sqlx::query(r#"SELECT "Title" FROM "MovieMetadata" WHERE "MovieId" = ?"#)
+        .bind(movie_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("Title")
 }
 
 async fn provider_library_item_id(pool: &SqlitePool, table: &str, id: i64) -> Option<String> {

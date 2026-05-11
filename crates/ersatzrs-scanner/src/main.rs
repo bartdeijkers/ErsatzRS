@@ -119,7 +119,7 @@ async fn scan_jellyfin(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         load_provider_library_key(pool, "JellyfinLibrary", "ItemId", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
     let service = JellyfinService::new();
-    let count = if kind == 1 {
+    let count = if kind == 2 {
         sync_jellyfin_show_library(
             pool,
             &service,
@@ -159,7 +159,7 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
     let service = PlexService::new();
     let count = match kind {
         1 => {
-            sync_plex_show_library(
+            sync_plex_movie_library(
                 pool,
                 &service,
                 &config,
@@ -170,8 +170,8 @@ async fn scan_plex(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
             )
             .await?
         }
-        0 => {
-            sync_plex_movie_library(
+        2 => {
+            sync_plex_show_library(
                 pool,
                 &service,
                 &config,
@@ -202,7 +202,7 @@ async fn scan_emby(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         load_provider_library_key(pool, "EmbyLibrary", "ItemId", args.library_id).await?;
     let kind = load_library_media_kind(pool, args.library_id).await?;
     let service = EmbyService::new();
-    let count = if kind == 1 {
+    let count = if kind == 2 {
         sync_emby_show_library(
             pool,
             &service,
@@ -519,7 +519,7 @@ mod tests {
         .expect("seed plex connection");
         pool.execute(
             r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
-               VALUES (5, 'Plex Movies', 0, 10)"#,
+               VALUES (5, 'Plex Movies', 1, 10)"#,
         )
         .await
         .expect("seed library");
