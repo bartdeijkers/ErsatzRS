@@ -1,7 +1,6 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::server_fns::media_sources::{
     delete_jellyfin_source, get_jellyfin_connection, list_jellyfin_libraries, list_jellyfin_paths,
@@ -11,6 +10,16 @@ use crate::admin::server_fns::media_sources::{
 use crate::admin::ui::primitives::dialog::DeleteDialog;
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ─── Sources list ─────────────────────────────────────────────────────────────
 
@@ -118,46 +127,64 @@ pub fn JellyfinSourcesPage() -> impl IntoView {
 
 #[component]
 pub fn JellyfinConnectionPage() -> impl IntoView {
-    let initial: Resource<ConnectionForm> = Resource::new(
+    let initial: Resource<ConnectionForm> = Resource::new_blocking(
         || (),
         |()| async { get_jellyfin_connection().await.unwrap_or_default() },
     );
 
-    let address = RwSignal::new(String::new());
-    let api_key = RwSignal::new(String::new());
+    view! {
+        <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            {move || {
+                initial.get().map(|form| view! {
+                    <JellyfinConnectionEditorIsland initial_form=form/>
+                })
+            }}
+        </Suspense>
+    }
+}
+
+#[island]
+fn JellyfinConnectionEditorIsland(initial_form: ConnectionForm) -> impl IntoView {
+    let source_id = initial_form.source_id;
+    let address = RwSignal::new(initial_form.address);
+    let api_key = RwSignal::new(initial_form.api_key);
     let err: RwSignal<Option<String>> = RwSignal::new(None);
+    let saving = RwSignal::new(false);
 
-    Effect::new(move |_| {
-        if let Some(f) = initial.get() {
-            address.set(f.address);
-            api_key.set(f.api_key);
-        }
-    });
-
-    let navigate = use_navigate();
     let save_action = Action::new(move |form: &ConnectionForm| {
         let form = form.clone();
         async move { save_jellyfin_connection(form).await }
     });
 
     Effect::new(move |_| match save_action.value().get() {
-        Some(Ok(_)) => navigate("/media/sources/jellyfin", NavigateOptions::default()),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Ok(_)) => {
+            saving.set(false);
+            set_browser_location("/media/sources/jellyfin");
+        }
+        Some(Err(e)) => {
+            saving.set(false);
+            err.set(Some(format!("Save failed: {e}")));
+        }
         None => {}
     });
 
     let on_save = move |_| {
-        let a = address.get_untracked();
-        if a.trim().is_empty() {
+        let a = address.get_untracked().trim().to_string();
+        let k = api_key.get_untracked().trim().to_string();
+        if a.is_empty() {
             err.set(Some("Address is required.".into()));
             return;
         }
+        if k.is_empty() {
+            err.set(Some("API key is required.".into()));
+            return;
+        }
         err.set(None);
-        let source_id = initial.get().map_or(0, |f| f.source_id);
+        saving.set(true);
         save_action.dispatch(ConnectionForm {
             source_id,
             address: a,
-            api_key: api_key.get_untracked(),
+            api_key: k,
         });
     };
 
@@ -169,7 +196,13 @@ pub fn JellyfinConnectionPage() -> impl IntoView {
                     <h1 class=style::page_title>"Jellyfin Connection"</h1>
                 </div>
                 <div class=style::toolbar_actions>
-                    <button class=style::btn_primary on:click=on_save>"Save"</button>
+                    <button
+                        class=style::btn_primary
+                        on:click=on_save
+                        disabled=move || saving.get()
+                    >
+                        {move || if saving.get() { "Saving…" } else { "Save" }}
+                    </button>
                 </div>
             </div>
 
@@ -193,7 +226,12 @@ pub fn JellyfinConnectionPage() -> impl IntoView {
                         on:input=move |e| api_key.set(event_target_value(&e))
                     />
                 </div>
-                {move || err.get().map(|e| view! { <span class=style::form_error>{e}</span> })}
+                <span
+                    class=style::form_error
+                    style:display=move || if err.get().is_some() { "" } else { "none" }
+                >
+                    {move || err.get().unwrap_or_default()}
+                </span>
             </div>
         </div>
     }
