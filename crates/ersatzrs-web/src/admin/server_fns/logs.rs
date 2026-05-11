@@ -16,8 +16,8 @@ pub struct AdminLogSnapshot {
 }
 
 #[server]
-#[allow(clippy::unused_async)]
-pub async fn load_recent_log_entries() -> Result<AdminLogSnapshot, ServerFnError> {
+#[allow(clippy::unused_async, clippy::too_many_lines)]
+pub async fn load_recent_log_entries(filter: String) -> Result<AdminLogSnapshot, ServerFnError> {
     use chrono::{DateTime, Local};
     use std::path::PathBuf;
 
@@ -94,10 +94,18 @@ pub async fn load_recent_log_entries() -> Result<AdminLogSnapshot, ServerFnError
         });
     };
 
+    let filter = filter.trim().to_lowercase();
     let mut entries = std::fs::read_to_string(log_file)
         .unwrap_or_default()
         .lines()
         .filter_map(|line| parse_serilog_line(line).or_else(|| parse_tracing_line(line)))
+        .filter(|entry| {
+            if filter.is_empty() {
+                return true;
+            }
+            entry.level.to_lowercase().contains(&filter)
+                || entry.message.to_lowercase().contains(&filter)
+        })
         .collect::<Vec<_>>();
     entries.sort_by_key(|entry| std::cmp::Reverse(entry.timestamp));
 

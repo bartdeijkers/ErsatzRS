@@ -4,9 +4,16 @@ use crate::admin::server_fns::logs::{load_recent_log_entries, AdminLogEntry, Adm
 
 #[component]
 pub fn LogsPage() -> impl IntoView {
+    view! { <LogsIsland/> }
+}
+
+#[island]
+fn LogsIsland() -> impl IntoView {
+    let search = RwSignal::new(String::new());
+
     let logs = Resource::new(
-        || (),
-        |()| async move { load_recent_log_entries().await.unwrap_or_default() },
+        move || search.get(),
+        |filter| async move { load_recent_log_entries(filter).await.unwrap_or_default() },
     );
 
     view! {
@@ -25,6 +32,8 @@ pub fn LogsPage() -> impl IntoView {
                 <input
                     id="support-log-search"
                     type="text"
+                    prop:value=move || search.get()
+                    on:input=move |event| search.set(event_target_value(&event))
                     style="width:100%;border:1px solid var(--color-border);border-radius:var(--radius);background:var(--color-surface);color:var(--color-gray-100);font:inherit;font-size:0.875rem;padding:0.5rem 0.75rem"
                 />
             </div>
