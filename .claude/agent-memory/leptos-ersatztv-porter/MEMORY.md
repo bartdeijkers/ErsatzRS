@@ -1,0 +1,5 @@
+- [FFmpegProfile editor port notes](ffmpeg-profile-editor.md) — parity decisions, hydration patterns, ReactiveSelectField primitive.
+- [Hydration fix patterns (2025)](hydration-fixes-2025.md) — all root causes + fixes for failed_to_cast_marker_node across all admin islands.
+- [ErsatzTV path](ersatztv-source-path.md) — where the C# source tree lives on this machine.
+- [Movies page port](movies-page-port.md) — artwork proxy URL routing, URL-driven pagination, details page pattern.
+- [Verification scope](verification-scope.md) — Phase 4 fast-loop contract: hydration-lint + web-crate compile only, hand off full gates and Playwright to the human at commit.

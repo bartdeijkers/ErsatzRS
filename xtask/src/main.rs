@@ -1,0 +1,33 @@
+use std::process::ExitCode;
+
+mod hydration_lint;
+
+fn main() -> ExitCode {
+    let mut args = std::env::args().skip(1);
+    let Some(sub) = args.next() else {
+        print_help();
+        return ExitCode::FAILURE;
+    };
+    match sub.as_str() {
+        "hydration-lint" => hydration_lint::run(args.collect()),
+        "help" | "--help" | "-h" => {
+            print_help();
+            ExitCode::SUCCESS
+        }
+        other => {
+            eprintln!("xtask: unknown subcommand `{other}`");
+            print_help();
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn print_help() {
+    eprintln!("xtask — workspace task runner");
+    eprintln!();
+    eprintln!("USAGE:");
+    eprintln!("    cargo xtask <SUBCOMMAND>");
+    eprintln!();
+    eprintln!("SUBCOMMANDS:");
+    eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
+}

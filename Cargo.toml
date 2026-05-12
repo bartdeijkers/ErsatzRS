@@ -9,6 +9,7 @@ members = [
     "crates/ersatzrs-web",
     "crates/ersatzrs-scanner",
     "crates/ersatzrs-scheduler",
+    "xtask",
 ]
 
 [workspace.lints.rust]

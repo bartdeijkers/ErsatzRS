@@ -1,0 +1,22 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+
+# xtask is a developer tool, not shipped code. Keep clippy expectations modest
+# so we don't spend cycles polishing pedantic lints that don't ship.
+[lints.clippy]
+all = "warn"
+
+[dependencies]
+anyhow = "1"
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+walkdir = "2"

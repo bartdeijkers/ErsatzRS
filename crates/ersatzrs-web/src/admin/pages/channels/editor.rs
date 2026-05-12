@@ -8,33 +8,46 @@ use crate::admin::server_fns::channels::{
 
 stylance::import_crate_style!(style, "src/admin/pages/channels/editor.module.css");
 
-type ChannelEditorPageData = (ChannelForm, Vec<(i64, String)>, Vec<(i64, String)>);
+type ChannelEditorData = (ChannelForm, Vec<(i64, String)>, Vec<(i64, String)>);
 
+// The page wrapper passes only a plain `i64` to the island. The island owns
+// the blocking resource; the interactive form runs inside the island as a
+// plain `#[component]`. Avoids the prop-bearing-island-across-Suspense
+// pattern that breaks button handlers with `failed_to_cast_marker_node`.
 #[component]
 pub fn ChannelEditorPage() -> impl IntoView {
     let params = use_params_map();
-    let channel_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
+    let channel_id =
+        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
 
-    let data: Resource<ChannelEditorPageData> =
-        Resource::new_blocking(channel_id, |id| async move {
+    view! { <ChannelEditorIsland channel_id=channel_id()/> }
+}
+
+#[island]
+fn ChannelEditorIsland(channel_id: i64) -> impl IntoView {
+    let data: Resource<ChannelEditorData> = Resource::new_blocking(
+        move || channel_id,
+        |id| async move {
             let form = async move {
-                match id {
-                    Some(id) => get_channel_form(id).await.unwrap_or_default(),
-                    None => ChannelForm::new_defaults(),
+                if id == 0 {
+                    ChannelForm::new_defaults()
+                } else {
+                    get_channel_form(id).await.unwrap_or_default()
                 }
             };
             let profiles = async { list_ffmpeg_profiles_for_select().await.unwrap_or_default() };
             let fillers = async { list_filler_presets_for_select().await.unwrap_or_default() };
             let (form, profiles, fillers) = tokio::join!(form, profiles, fillers);
             (form, profiles, fillers)
-        });
+        },
+    );
 
     view! {
         <Suspense fallback=|| view! { <p class=style::loading>"Loading..."</p> }>
             {move || {
                 data.get().map(|(form, profiles, fillers)| {
                     view! {
-                        <ChannelEditorIsland
+                        <ChannelEditorForm
                             initial_form=form
                             initial_profiles=profiles
                             initial_fillers=fillers
@@ -47,8 +60,8 @@ pub fn ChannelEditorPage() -> impl IntoView {
     }
 }
 
-#[island]
-fn ChannelEditorIsland(
+#[component]
+fn ChannelEditorForm(
     initial_form: ChannelForm,
     initial_profiles: Vec<(i64, String)>,
     initial_fillers: Vec<(i64, String)>,

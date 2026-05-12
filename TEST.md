@@ -72,6 +72,52 @@ stabilisation. Apply them every time you wire interactive UI:
    `libraries/mod.rs:39-56`: `gloo_timers::future::TimeoutFuture::new(1500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
 
+### Hydration lint
+
+Static check that runs in seconds. Catches the patterns above without needing
+a browser session:
+
+```bash
+cargo xtask hydration-lint -p ersatzrs-web
+```
+
+Rules enforced (v1):
+
+- **rule-1** — `<Show>` inside `#[island]` (rule 2 above).
+- **rule-2** — Prop-bearing call to a known `#[island]` function inside a
+  `<Suspense>` region (rule 3 above).
+
+Known pre-existing findings are listed in `.hydration-lint-baseline` at the
+repo root. When you fix one, delete its line — new findings in files not
+listed there fail the linter as normal. To run without the baseline (e.g.
+to see the full debt): `cargo xtask hydration-lint -p ersatzrs-web --no-baseline`.
+
+## Verification responsibility split
+
+The porter (`leptos-ersatztv-porter` agent) and the human reviewer share the
+verification load on UI port work. Each side runs only what's cheap on their
+side, so neither blocks the other.
+
+The **porter** produces:
+
+- Source code that compiles clean (`cargo build -p ersatzrs-web`,
+  `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`).
+- Zero new `cargo xtask hydration-lint` findings.
+- A row in the per-page E2E index below, with status `TODO`.
+- A hand-off checklist of the gates the human should run.
+
+The **human** runs, before committing:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo test --workspace --all-features`
+- `cargo leptos build` from `crates/ersatzrs-web` (rebuilds hydration assets).
+- Playwright MCP smoke per the playbook for the touched page.
+- Flips the per-page index row from `TODO` to `✅` on success.
+
+This split keeps the porter's edit loop short — full-workspace gates and
+hydration-asset rebuilds happen once at commit time, not on every iteration.
+
 ## Admin UI E2E
 
 Hydration smoke tests can be run manually via the Playwright MCP tool. Scripted
