@@ -40,14 +40,20 @@ pub fn Modal(
     };
 
     view! {
+        // Backdrop is purely visual; it sits below the overlay
+        // (z-index 40 vs 50) and never receives clicks because the
+        // overlay's `inset: 0` covers it. The click-to-dismiss handler
+        // therefore lives on the overlay (`do_cancel`), with the inner
+        // panel calling `stop_propagation` so clicks inside the dialog
+        // body do not close it.
         <div
             class=style::backdrop
             style:display=move || if open.get() { "" } else { "none" }
-            on:click=move |_| do_cancel()
         />
         <div
             class=style::overlay
             style:display=move || if open.get() { "" } else { "none" }
+            on:click=move |_| do_cancel()
         >
             <div class=style::panel on:click=|e| e.stop_propagation()>
                 <h2 class=style::title>{title}</h2>

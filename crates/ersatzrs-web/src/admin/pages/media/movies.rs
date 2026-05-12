@@ -1,15 +1,22 @@
-//! Movie browser — port of `Pages/MovieList.razor` plus the per-item
-//! `Pages/Movie.razor` details page (`/media/movies/:id`).
+//! Movie browser — port of `Pages/MovieList.razor` (the list grid and
+//! multi-select toolbar) plus the per-item `Pages/Movie.razor` details page
+//! (`/media/movies/:id`).
 //!
 //! Hydration notes:
 //!
-//! * The list page is a plain `#[component]`, not an island. Search and
-//!   pagination are URL-driven (`?query=…&page=N`), mirroring `ErsatzTV`'s
-//!   `NavigationManager.NavigateTo("media/movies/page/N")` pattern. This
-//!   sidesteps hydration entirely for the toolbar/pager: pressing Enter on
-//!   the search box submits a GET form; clicking the pager arrows is a plain
-//!   `<a>` navigation. The grid re-renders from server data on each request,
-//!   so SSR and client always agree.
+//! * The page wrapper is a plain `#[component]`. Search and pagination are
+//!   URL-driven (`?query=…&page=N`), mirroring `ErsatzTV`'s
+//!   `NavigationManager.NavigateTo("media/movies/page/N")` pattern.
+//!   * Pressing Enter on the search box submits a GET form (no hydration).
+//!   * Pager arrows are plain `<a>` anchors (no hydration).
+//!   * `LetterBar` anchors are plain `<a href="#letter-X">` (no hydration).
+//! * The interactive multi-select toolbar (Select All button, selection
+//!   header, hover-checkboxes on cards, Add-to-Collection / Add-to-Playlist
+//!   modals) lives in [`MovieMultiSelectIsland`]. The island owns its own
+//!   `Resource::new_blocking` for the card grid and renders `<Suspense>`
+//!   internally, so it sits **above** the suspense boundary as the rules in
+//!   `TEST.md` require. Selection state is per-page and ephemeral (matches
+//!   `ErsatzTV`'s `MultiSelectBase`).
 //! * The details page is also a plain `#[component]` that owns a blocking
 //!   resource and renders inside a single `<Suspense>` boundary — no
 //!   prop-bearing island.
@@ -20,10 +27,13 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::server_fns::media_browser::{
-    get_movie_details, list_movies, MediaCardRow, MovieDetailRow,
+    add_movies_to_collection, add_movies_to_playlist, create_collection, get_movie_details,
+    list_all_collections, list_all_playlist_groups, list_movies, list_playlists_by_group,
+    CollectionOption, MediaCardRow, MovieDetailRow, PlaylistGroupOption, PlaylistOption,
 };
-use crate::admin::ui::primitives::card::MediaCard;
+use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
 // Re-imported so the pager can be styled from this file rather than via the
@@ -53,13 +63,6 @@ pub fn MoviesPage() -> impl IntoView {
         (q, pg)
     });
 
-    // Blocking so SSR resolves before HTML streams — same DOM on hydration.
-    let query_for_resource = initial_query.clone();
-    let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
-        move || (query_for_resource.clone(), initial_page),
-        |(q, p)| async move { list_movies(q, p, PAGE_SIZE).await.unwrap_or_default() },
-    );
-
     let toolbar_query = initial_query.clone();
 
     view! {
@@ -77,60 +80,532 @@ pub fn MoviesPage() -> impl IntoView {
                 />
             </form>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
-                {move || {
-                    data.get().map(|(rows, total)| {
-                        let present: Signal<Option<HashSet<char>>> = Signal::derive({
-                            let rows = rows.clone();
-                            move || Some(rows.iter().map(|r| letter_bucket(&r.sort_title)).collect())
-                        });
-                        let query_for_links = initial_query.clone();
-                        view! {
-                            <LetterBar present=present/>
-                            <Pager
-                                query=query_for_links
-                                page=initial_page
-                                total=total
-                            />
-                            {if rows.is_empty() {
-                                view! { <p class=style::empty>"No items to display."</p> }
-                                    .into_any()
-                            } else {
-                                view! {
-                                    <div class=style::grid>
-                                        <FragmentLetterAnchor
-                                            cards=rows
-                                            sort_title=|r: &MediaCardRow| r.sort_title.as_str()
-                                            render=move |r: MediaCardRow| {
-                                                let href = format!("/media/movies/{}", r.id);
-                                                view! {
-                                                    <MediaCard
-                                                        title=r.title
-                                                        subtitle=r.subtitle
-                                                        artwork_url=r.artwork_path
-                                                        href=Some(href)
-                                                    />
-                                                }
-                                                .into_any()
-                                            }
-                                        />
-                                    </div>
-                                }
-                                .into_any()
-                            }}
-                        }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
+            <MovieMultiSelectIsland query=initial_query page=initial_page/>
         </div>
     }
 }
 
-/// URL-driven pager. Renders summary + prev/next anchors that target the
-/// same `/media/movies?query=…&page=N` route. Disabled state collapses the
-/// anchor into a styled `<span>` so the DOM shape stays stable while still
-/// being non-interactive.
+// ---------------------------------------------------------------------------
+// Island: data load + multi-select toolbar + grid with hover-checkboxes.
+//
+// Note: the island receives only plain scalar props (`String`, `u32`) and
+// owns the `Resource::new_blocking` internally — this is the
+// "no prop-bearing island across Suspense" pattern documented in `TEST.md`
+// (rule 3) and used by `ChannelEditorIsland`, `FfmpegProfileEditorIsland`,
+// and `YamlEditorIsland`.
+// ---------------------------------------------------------------------------
+
+#[island]
+fn MovieMultiSelectIsland(query: String, page: u32) -> impl IntoView {
+    let q_for_resource = query.clone();
+    let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
+        move || (q_for_resource.clone(), page),
+        |(q, p)| async move { list_movies(q, p, PAGE_SIZE).await.unwrap_or_default() },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            {move || {
+                data.get().map(|(rows, total)| {
+                    let present: Signal<Option<HashSet<char>>> = Signal::derive({
+                        let rows = rows.clone();
+                        move || Some(rows.iter().map(|r| letter_bucket(&r.sort_title)).collect())
+                    });
+                    let query_for_links = query.clone();
+                    view! {
+                        <LetterBar present=present/>
+                        <MovieGridWithSelection
+                            rows=rows
+                            total=total
+                            page=page
+                            query=query_for_links
+                        />
+                    }
+                    .into_any()
+                })
+            }}
+        </Suspense>
+    }
+}
+
+/// Inner body rendered once the resource resolves. Owns the selection state
+/// signals and renders pager, selection header, grid, and the two modals.
+///
+/// All `RwSignal`s are created here so they are tied to the island's
+/// reactive owner; the children are plain components (no nested islands).
+#[component]
+fn MovieGridWithSelection(
+    rows: Vec<MediaCardRow>,
+    total: u64,
+    page: u32,
+    query: String,
+) -> impl IntoView {
+    // ── Selection state ────────────────────────────────────────────────
+    // HashSet<i64> of selected movie ids. ErsatzTV's `MultiSelectBase` uses
+    // a `HashSet<MediaCardViewModel>` keyed on identity, but our card rows
+    // are plain structs so we key on the stable `id` (movie id).
+    let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
+    let selected_count = Signal::derive(move || selected.with(HashSet::len));
+
+    // Page ids for "Select All".
+    let page_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let page_ids_for_select_all = page_ids.clone();
+
+    // ── Modal open signals ─────────────────────────────────────────────
+    let collection_open = RwSignal::new(false);
+    let playlist_open = RwSignal::new(false);
+
+    // Stable closure: are all current-page items selected?
+    let all_selected = {
+        let page_ids = page_ids.clone();
+        Signal::derive(move || {
+            !page_ids.is_empty() && selected.with(|s| page_ids.iter().all(|id| s.contains(id)))
+        })
+    };
+
+    view! {
+        // ── Pager + Select All ─────────────────────────────────────────
+        <Pager
+            query=query.clone()
+            page=page
+            total=total
+        />
+
+        // ── Selection header — always rendered; visibility via `style:display`
+        //    to keep the DOM shape stable (TEST.md rule 2). ──────────────
+        <div
+            class=style::selection_header
+            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+        >
+            <span class=style::selection_count>
+                {move || {
+                    let n = selected_count.get();
+                    if n == 1 { "1 Item Selected".to_string() } else { format!("{n} Items Selected") }
+                }}
+            </span>
+            <button
+                class=style::selection_btn
+                on:click=move |_| collection_open.set(true)
+            >
+                "+ Add To Collection"
+            </button>
+            <button
+                class=style::selection_btn
+                on:click=move |_| playlist_open.set(true)
+            >
+                "+ Add To Playlist"
+            </button>
+            <button
+                class=style::selection_btn_secondary
+                on:click=move |_| selected.update(HashSet::clear)
+            >
+                "✓ Clear Selection"
+            </button>
+        </div>
+
+        // ── "Select All" button (right-aligned). Always present; disabled
+        //    when there are no items, or when all are already selected. ──
+        <div style="display: flex">
+            <button
+                class=style::select_all_btn
+                disabled={
+                    let ids = page_ids_for_select_all.clone();
+                    move || ids.is_empty() || all_selected.get()
+                }
+                on:click={
+                    let page_ids = page_ids_for_select_all.clone();
+                    move |_| {
+                        let ids = page_ids.clone();
+                        selected.update(|s| {
+                            for id in &ids {
+                                s.insert(*id);
+                            }
+                        });
+                    }
+                }
+            >
+                "☑ Select All"
+            </button>
+        </div>
+
+        // ── Grid ───────────────────────────────────────────────────────
+        {if rows.is_empty() {
+            view! { <p class=style::empty>"No items to display."</p> }.into_any()
+        } else {
+            let rows_for_grid = rows;
+            view! {
+                <div class=style::grid>
+                    <FragmentLetterAnchor
+                        cards=rows_for_grid
+                        sort_title=|r: &MediaCardRow| r.sort_title.as_str()
+                        render=move |r: MediaCardRow| {
+                            view! {
+                                <SelectableMovieCard
+                                    row=r
+                                    selected=selected
+                                />
+                            }
+                            .into_any()
+                        }
+                    />
+                </div>
+            }
+            .into_any()
+        }}
+
+        // ── Modals: rendered unconditionally so SSR/hydrate DOM matches.
+        //    Visibility is controlled via `style:display` inside `Modal`. ─
+        <AddToCollectionModal
+            open=collection_open
+            selected=selected
+        />
+        <AddToPlaylistModal
+            open=playlist_open
+            selected=selected
+        />
+    }
+}
+
+/// One movie card with selection overlay. The whole card is wrapped in a
+/// stable `<div>` so the selection border and hover-checkbox have a stable
+/// element to attach to. The poster + caption are still wrapped in a link
+/// to `/media/movies/{id}` (matches the C# `<a href>` overlay).
+#[component]
+fn SelectableMovieCard(row: MediaCardRow, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
+    let movie_id = row.id;
+    let title = row.title.clone();
+    let title_for_link = row.title.clone();
+    let subtitle = row.subtitle.clone();
+    let artwork = row.artwork_path.clone();
+    let href = format!("/media/movies/{movie_id}");
+
+    let is_selected = Signal::derive(move || selected.with(|s| s.contains(&movie_id)));
+
+    let wrap_class = move || {
+        if is_selected.get() {
+            format!("{} {}", style::card_wrap, style::selected)
+        } else {
+            style::card_wrap.to_string()
+        }
+    };
+
+    let toggle = move || {
+        selected.update(|s| {
+            if !s.remove(&movie_id) {
+                s.insert(movie_id);
+            }
+        });
+    };
+
+    view! {
+        <div class=wrap_class>
+            // Checkbox overlay sits ABOVE the link so clicks on it do not
+            // navigate. `pointer-events` aren't needed because the label
+            // stops propagation at the change event level.
+            <label
+                class=style::card_checkbox
+                on:click=move |e| {
+                    // Prevent the wrapping <a> from navigating when the
+                    // user clicks the checkbox area.
+                    e.stop_propagation();
+                    e.prevent_default();
+                    toggle();
+                }
+                aria-label=move || format!(
+                    "Select {}",
+                    if is_selected.get() { "off" } else { "on" }
+                )
+            >
+                <input
+                    type="checkbox"
+                    prop:checked=move || is_selected.get()
+                    on:click=move |e| e.stop_propagation()
+                    on:change=move |_| toggle()
+                />
+            </label>
+
+            <a href=href>
+                <div class=card_style::card>
+                    <div class=card_style::poster>
+                        {match artwork {
+                            Some(url) => view! {
+                                <img src=url loading="lazy" class=card_style::poster_img alt=title_for_link/>
+                            }.into_any(),
+                            None => view! {
+                                <div class=card_style::poster_placeholder>"🎬"</div>
+                            }.into_any(),
+                        }}
+                    </div>
+                    <div class=card_style::caption>
+                        <p class=card_style::caption_title>{title}</p>
+                        {subtitle.map(|s| view! {
+                            <p class=card_style::caption_sub>{s}</p>
+                        })}
+                    </div>
+                </div>
+            </a>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Add To Collection modal — ports `Shared/AddToCollectionDialog.razor`.
+// ---------------------------------------------------------------------------
+
+/// Sentinel id for the "(New Collection)" pseudo-option. `ErsatzTV` uses a
+/// distinct `MediaCollectionViewModel` reference; we use `-1` since
+/// `Collection.Id` is `AUTOINCREMENT` and always positive.
+const NEW_COLLECTION_ID: i64 = -1;
+
+#[component]
+fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
+    // Server resource for the dropdown options. Loads once and refreshes
+    // when the modal closes after creating a new collection.
+    //
+    // `new_blocking` so the SSR HTML and the first client tick agree on the
+    // resolved value — combined with reading `.get().unwrap_or_default()`
+    // directly (no inner `<Suspense>`) this avoids the
+    // `failed_to_cast_marker_node` panic that a Suspense+`prop:value`
+    // combination triggers inside an island (see memory:
+    // `movies-page-port`).
+    let refresh: RwSignal<u32> = RwSignal::new(0);
+    let options: Resource<Vec<CollectionOption>> = Resource::new_blocking(
+        move || refresh.get(),
+        |_| async move { list_all_collections().await.unwrap_or_default() },
+    );
+
+    // Selected collection id. `-1` means "(New Collection)".
+    let collection_id: RwSignal<i64> = RwSignal::new(NEW_COLLECTION_ID);
+    let new_name: RwSignal<String> = RwSignal::new(String::new());
+
+    let toast = use_toast();
+
+    // Submit action — runs the create-then-add or add-only branches.
+    let submit_action = Action::new(move |(): &()| {
+        let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());
+        let chosen_id = collection_id.get_untracked();
+        let new_collection_name = new_name.get_untracked();
+        async move {
+            let target_id = if chosen_id == NEW_COLLECTION_ID {
+                let name = new_collection_name.trim();
+                if name.is_empty() {
+                    return Err(ServerFnError::new("Collection name is required"));
+                }
+                create_collection(name.to_string()).await?.id
+            } else {
+                chosen_id
+            };
+            let added = add_movies_to_collection(target_id, ids.clone()).await?;
+            Ok::<(usize, u64, i64), ServerFnError>((ids.len(), added, target_id))
+        }
+    });
+
+    // Effect: on success, toast, close, clear selection, and refresh dropdown.
+    Effect::new(move |_| {
+        if let Some(res) = submit_action.value().get() {
+            match res {
+                Ok((requested, _added, _id)) => {
+                    toast.push(
+                        format!("Added {requested} items to collection"),
+                        ToastSeverity::Success,
+                    );
+                    selected.update(HashSet::clear);
+                    open.set(false);
+                    refresh.update(|n| *n += 1);
+                    // Reset modal state.
+                    collection_id.set(NEW_COLLECTION_ID);
+                    new_name.set(String::new());
+                }
+                Err(e) => toast.push(
+                    format!("Add to collection failed: {e}"),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+
+    let count_label = Signal::derive(move || selected.with(HashSet::len));
+
+    view! {
+        <Modal
+            open=open
+            title="Add To Collection".to_string()
+            on_close=Callback::new(move |confirmed: bool| {
+                if confirmed {
+                    submit_action.dispatch(());
+                }
+            })
+            confirm_label="Add To Collection"
+            cancel_label="Cancel"
+        >
+            <p>
+                {move || format!(
+                    "Select the collection to add the {} selected items",
+                    count_label.get()
+                )}
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
+                <label>"Collection"</label>
+                // Render the `<select>` directly — no inner `<Suspense>`.
+                // The blocking resource guarantees SSR and the first
+                // client tick see the same value.
+                <select
+                    prop:value=move || collection_id.get().to_string()
+                    on:change=move |e| {
+                        if let Ok(v) = event_target_value(&e).parse::<i64>() {
+                            collection_id.set(v);
+                        }
+                    }
+                >
+                    <option value=NEW_COLLECTION_ID.to_string()>"(New Collection)"</option>
+                    {move || {
+                        options.get().unwrap_or_default().into_iter().map(|c| view! {
+                            <option value=c.id.to_string()>{c.name}</option>
+                        }).collect_view()
+                    }}
+                </select>
+
+                <label>"New Collection Name"</label>
+                <input
+                    type="text"
+                    prop:value=move || new_name.get()
+                    on:input=move |e| new_name.set(event_target_value(&e))
+                    disabled=move || collection_id.get() != NEW_COLLECTION_ID
+                />
+            </div>
+        </Modal>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Add To Playlist modal — ports `Shared/AddToPlaylistDialog.razor`.
+// ---------------------------------------------------------------------------
+
+#[component]
+fn AddToPlaylistModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
+    let group_id: RwSignal<i64> = RwSignal::new(0);
+    let playlist_id: RwSignal<i64> = RwSignal::new(0);
+
+    // `new_blocking` + no inner `<Suspense>` to dodge the
+    // `failed_to_cast_marker_node` hydration panic that the
+    // Suspense+`prop:value` combo triggers inside an island.
+    let groups: Resource<Vec<PlaylistGroupOption>> = Resource::new_blocking(
+        || (),
+        |()| async { list_all_playlist_groups().await.unwrap_or_default() },
+    );
+
+    // Playlists for the currently chosen group. Re-fetches on group change.
+    let playlists: Resource<Vec<PlaylistOption>> = Resource::new_blocking(
+        move || group_id.get(),
+        |gid| async move {
+            if gid == 0 {
+                return Vec::new();
+            }
+            list_playlists_by_group(gid).await.unwrap_or_default()
+        },
+    );
+
+    let toast = use_toast();
+
+    let submit_action = Action::new(move |(): &()| {
+        let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());
+        let pid = playlist_id.get_untracked();
+        async move {
+            if pid == 0 {
+                return Err(ServerFnError::new("Please choose a playlist"));
+            }
+            let added = add_movies_to_playlist(pid, ids.clone()).await?;
+            Ok::<(usize, u64), ServerFnError>((ids.len(), added))
+        }
+    });
+
+    Effect::new(move |_| {
+        if let Some(res) = submit_action.value().get() {
+            match res {
+                Ok((requested, _added)) => {
+                    toast.push(
+                        format!("Added {requested} items to playlist"),
+                        ToastSeverity::Success,
+                    );
+                    selected.update(HashSet::clear);
+                    open.set(false);
+                }
+                Err(e) => toast.push(format!("Add to playlist failed: {e}"), ToastSeverity::Error),
+            }
+        }
+    });
+
+    let count_label = Signal::derive(move || selected.with(HashSet::len));
+
+    view! {
+        <Modal
+            open=open
+            title="Add To Playlist".to_string()
+            on_close=Callback::new(move |confirmed: bool| {
+                if confirmed {
+                    submit_action.dispatch(());
+                }
+            })
+            confirm_label="Add To Playlist"
+            cancel_label="Cancel"
+        >
+            <p>
+                {move || format!(
+                    "Select the playlist to add the {} selected items",
+                    count_label.get()
+                )}
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
+                <label>"Playlist Group"</label>
+                <select
+                    prop:value=move || group_id.get().to_string()
+                    on:change=move |e| {
+                        if let Ok(v) = event_target_value(&e).parse::<i64>() {
+                            group_id.set(v);
+                            // Reset playlist choice on group change.
+                            playlist_id.set(0);
+                        }
+                    }
+                >
+                    <option value="0">"(Select a group)"</option>
+                    {move || {
+                        groups.get().unwrap_or_default().into_iter().map(|g| view! {
+                            <option value=g.id.to_string()>{g.name}</option>
+                        }).collect_view()
+                    }}
+                </select>
+
+                <label>"Playlist"</label>
+                <select
+                    prop:value=move || playlist_id.get().to_string()
+                    on:change=move |e| {
+                        if let Ok(v) = event_target_value(&e).parse::<i64>() {
+                            playlist_id.set(v);
+                        }
+                    }
+                    disabled=move || group_id.get() == 0
+                >
+                    <option value="0">"(Select a playlist)"</option>
+                    {move || {
+                        playlists.get().unwrap_or_default().into_iter().map(|p| view! {
+                            <option value=p.id.to_string()>{p.name}</option>
+                        }).collect_view()
+                    }}
+                </select>
+            </div>
+        </Modal>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// URL-driven pager. Identical to the previous implementation; lifted up so
+// it can be reused inside the island. Renders summary + prev/next anchors
+// targeting `/media/movies?query=…&page=N`. Disabled state collapses the
+// anchor into a styled `<span>` so the DOM shape stays stable.
+// ---------------------------------------------------------------------------
+
 #[component]
 fn Pager(query: String, page: u32, total: u64) -> impl IntoView {
     let max_page = if total == 0 {

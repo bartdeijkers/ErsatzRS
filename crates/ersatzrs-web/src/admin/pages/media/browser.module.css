@@ -43,3 +43,114 @@
     color: var(--color-muted);
     font-size: 0.875rem;
 }
+
+/* ---- Select All button (right side of the toolbar) ------------------- */
+
+.select-all-btn {
+    margin-left: auto;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: var(--radius);
+    background-color: var(--color-primary-20, rgba(76, 175, 80, 0.2));
+    color: var(--color-primary);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+.select-all-btn:hover:not(:disabled) {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary, #000);
+}
+.select-all-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ---- Selection action header (visible when ≥1 selected) ------------- */
+
+.selection-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+
+.selection-count {
+    flex: 1;
+    color: var(--color-primary);
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.selection-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: var(--radius);
+    background-color: var(--color-primary);
+    color: var(--color-on-primary, #000);
+    border: none;
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+.selection-btn:hover { filter: brightness(1.1); }
+
+.selection-btn-secondary {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: var(--radius);
+    background-color: transparent;
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color 150ms;
+}
+.selection-btn-secondary:hover { background-color: var(--color-surface); }
+
+/* ---- Per-card selection (hover-only checkbox, green border) --------- */
+
+.card-wrap {
+    position: relative;
+    border-radius: var(--radius);
+    /* Reserve the green border width so selection doesn't shift layout. */
+    padding: 2px;
+    border: 2px solid transparent;
+    transition: border-color 150ms;
+}
+.card-wrap.selected {
+    border-color: var(--color-primary, #4caf50);
+}
+
+.card-checkbox {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 2;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms;
+}
+/* Reveal on hover of the wrapping card... */
+.card-wrap:hover .card-checkbox,
+/* ...and keep it visible when the card is selected. */
+.card-wrap.selected .card-checkbox {
+    opacity: 1;
+}
+
+.card-checkbox input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--color-primary, #4caf50);
+}

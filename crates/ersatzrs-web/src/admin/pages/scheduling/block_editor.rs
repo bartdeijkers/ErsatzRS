@@ -27,44 +27,45 @@ pub fn BlockEditorPage() -> impl IntoView {
     let block_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
 
-    let block_data: Resource<Option<BlockForm>> =
-        Resource::new(
-            block_id,
-            |id| async move { get_block(id).await.unwrap_or(None) },
-        );
+    view! { <BlockEditorIsland block_id=block_id()/> }
+}
 
-    let items_data: Resource<Vec<BlockItemForm>> = Resource::new(block_id, |id| async move {
-        get_block_items(id).await.unwrap_or_default()
-    });
+// ---------------------------------------------------------------------------
+// Island — owns the blocking resource; inner component is the fully hydrated editor
+// ---------------------------------------------------------------------------
+
+#[island]
+fn BlockEditorIsland(block_id: i64) -> impl IntoView {
+    let data: Resource<(Option<BlockForm>, Vec<BlockItemForm>)> = Resource::new_blocking(
+        move || block_id,
+        |id| async move {
+            let block_fut = async move { get_block(id).await.unwrap_or(None) };
+            let items_fut = async move { get_block_items(id).await.unwrap_or_default() };
+            tokio::join!(block_fut, items_fut)
+        },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
             {move || {
-                let maybe_block = block_data.get();
-                let maybe_items = items_data.get();
-                match (maybe_block, maybe_items) {
-                    (Some(Some(block)), Some(items)) => view! {
-                        <BlockEditorIsland
+                data.get().map(|(maybe_block, items)| match maybe_block {
+                    Some(block) => view! {
+                        <BlockEditorForm
                             initial_block=block
                             initial_items=items
                         />
                     }.into_any(),
-                    (Some(None), _) => view! {
+                    None => view! {
                         <p class=style::empty>"Block not found."</p>
                     }.into_any(),
-                    _ => view! { <p class=style::empty>"Loading…"</p> }.into_any(),
-                }
+                })
             }}
         </Suspense>
     }
 }
 
-// ---------------------------------------------------------------------------
-// Island — the fully hydrated editor
-// ---------------------------------------------------------------------------
-
-#[island]
-fn BlockEditorIsland(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) -> impl IntoView {
+#[component]
+fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) -> impl IntoView {
     use crate::admin::server_fns::blocks::{collection_type, playback_order, stop_scheduling};
 
     // ── Block metadata state ────────────────────────────────────────────

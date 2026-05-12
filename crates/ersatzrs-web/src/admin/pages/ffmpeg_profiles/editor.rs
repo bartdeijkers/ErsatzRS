@@ -45,27 +45,42 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     let params = use_params_map();
     let profile_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
+    // Pass `0` for the "add" route, otherwise the actual id. The island owns
+    // the blocking resource and the inner #[component] renders the editor body.
+    view! { <FfmpegProfileEditorIsland profile_id=profile_id().unwrap_or(0)/> }
+}
+
+// ---------------------------------------------------------------------------
+// Island — owns blocking resource; inner component is the fully hydrated editor
+// ---------------------------------------------------------------------------
+
+#[island]
+fn FfmpegProfileEditorIsland(profile_id: i64) -> impl IntoView {
     #[allow(clippy::type_complexity)]
     let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
-        Resource::new(profile_id, |maybe_id| async move {
-            let (resolutions, form) = tokio::join!(list_resolutions_for_select(), async {
-                match maybe_id {
-                    None => Some(FfmpegProfileForm::new_defaults()),
-                    Some(id) => get_ffmpeg_profile_form(id).await.unwrap_or(None),
-                }
-            });
-            let resolutions = resolutions.unwrap_or_default();
-            let hw_accels = list_supported_hw_accelerations().await;
-            let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
-            form.map(|f| (f, resolutions, hw_accels))
-        });
+        Resource::new_blocking(
+            move || profile_id,
+            |id| async move {
+                let (resolutions, form) = tokio::join!(list_resolutions_for_select(), async move {
+                    if id == 0 {
+                        Some(FfmpegProfileForm::new_defaults())
+                    } else {
+                        get_ffmpeg_profile_form(id).await.unwrap_or(None)
+                    }
+                });
+                let resolutions = resolutions.unwrap_or_default();
+                let hw_accels = list_supported_hw_accelerations().await;
+                let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, "None".to_string())]);
+                form.map(|f| (f, resolutions, hw_accels))
+            },
+        );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
             {move || {
                 data.get().map(|maybe| match maybe {
                     Some((form, resolutions, hw_accels)) => view! {
-                        <FfmpegProfileEditorIsland
+                        <FfmpegProfileEditorForm
                             initial_form=form
                             initial_resolutions=resolutions
                             initial_hw_accels=hw_accels
@@ -82,18 +97,14 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Island — fully hydrated editor
-// ---------------------------------------------------------------------------
-
-/// Fully hydrated `FFmpegProfile` editor.
+/// Fully hydrated `FFmpegProfile` editor body.
 ///
 /// Hardware accordion visibility is driven by `normalize_video`, not by the
 /// selected video format.  Within the accordion, VAAPI-specific fields
 /// (device, display, driver, pad mode) appear when `HardwareAcceleration == 3`
 /// and QSV extra-hardware-frames appear when `HardwareAcceleration == 1`.
-#[island]
-fn FfmpegProfileEditorIsland(
+#[component]
+fn FfmpegProfileEditorForm(
     initial_form: FfmpegProfileForm,
     initial_resolutions: Vec<(i64, String)>,
     initial_hw_accels: Vec<(i32, String)>,

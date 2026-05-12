@@ -38,16 +38,25 @@ pub fn YamlEditorPage() -> impl IntoView {
     let playout_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
 
-    let playout_data: Resource<Option<SequentialPlayoutForm>> =
-        Resource::new(playout_id, |id| async move {
-            get_sequential_playout(id).await.unwrap_or(None)
-        });
+    view! { <YamlEditorIsland playout_id=playout_id()/> }
+}
+
+// ---------------------------------------------------------------------------
+// Island — owns the blocking resource; inner component renders the form
+// ---------------------------------------------------------------------------
+
+#[island]
+fn YamlEditorIsland(playout_id: i64) -> impl IntoView {
+    let playout_data: Resource<Option<SequentialPlayoutForm>> = Resource::new_blocking(
+        move || playout_id,
+        |id| async move { get_sequential_playout(id).await.unwrap_or(None) },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
             {move || {
                 playout_data.get().map(|maybe| match maybe {
-                    Some(form) => view! { <YamlEditorIsland initial_form=form/> }.into_any(),
+                    Some(form) => view! { <YamlEditorForm initial_form=form/> }.into_any(),
                     None => view! {
                         <p class=style::empty>"Playout not found."</p>
                     }
@@ -58,16 +67,9 @@ pub fn YamlEditorPage() -> impl IntoView {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Island — fully hydrated YAML editor
-// ---------------------------------------------------------------------------
-
-/// Fully hydrated YAML editor for a Sequential playout.
-///
-/// Props are serialized to the HTML shell by Leptos and rehydrated in the
-/// browser, so [`SequentialPlayoutForm`] must implement `Serialize`/`Deserialize`.
-#[island]
-fn YamlEditorIsland(initial_form: SequentialPlayoutForm) -> impl IntoView {
+/// Fully hydrated YAML editor body for a Sequential playout.
+#[component]
+fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
     // ── Signals ─────────────────────────────────────────────────────────
     let playout_id = initial_form.id;
     let channel_label = initial_form.channel_label.clone();

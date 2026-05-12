@@ -30,20 +30,34 @@ pub fn WatermarkEditorPage() -> impl IntoView {
     let params = use_params_map();
     let watermark_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
 
-    let data: Resource<Option<WatermarkForm>> =
-        Resource::new(watermark_id, |maybe_id| async move {
-            match maybe_id {
-                None => Some(WatermarkForm::default()),
-                Some(id) => get_watermark_form(id).await.ok(),
+    // Island owns the blocking resource. We pass `0` for "new" and the actual
+    // id otherwise, mirroring the channel editor pattern.
+    view! { <WatermarkEditorIsland watermark_id=watermark_id().unwrap_or(0)/> }
+}
+
+// ---------------------------------------------------------------------------
+// Island — owns blocking resource; inner component renders the editor body
+// ---------------------------------------------------------------------------
+
+#[island]
+fn WatermarkEditorIsland(watermark_id: i64) -> impl IntoView {
+    let data: Resource<Option<WatermarkForm>> = Resource::new_blocking(
+        move || watermark_id,
+        |id| async move {
+            if id == 0 {
+                Some(WatermarkForm::default())
+            } else {
+                get_watermark_form(id).await.ok()
             }
-        });
+        },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
             {move || {
                 data.get().map(|maybe| match maybe {
                     Some(form) => view! {
-                        <WatermarkEditorIsland initial_form=form/>
+                        <WatermarkEditorForm initial_form=form/>
                     }
                     .into_any(),
                     None => view! {
@@ -56,12 +70,8 @@ pub fn WatermarkEditorPage() -> impl IntoView {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Island — fully hydrated editor
-// ---------------------------------------------------------------------------
-
-#[island]
-fn WatermarkEditorIsland(initial_form: WatermarkForm) -> impl IntoView {
+#[component]
+fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
     let watermark_id = initial_form.id;
 
     // ── Signals ──────────────────────────────────────────────────────────

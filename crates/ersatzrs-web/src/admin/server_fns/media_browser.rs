@@ -1261,6 +1261,242 @@ pub struct CollectionMember {
     pub kind: String,
 }
 
+// ---------------------------------------------------------------------------
+// Multi-select: add selected media items to a collection or playlist.
+//
+// Ports `ErsatzTV.Application.MediaCollections.AddItemsToCollectionHandler`
+// (collection branch) and `AddItemsToPlaylistHandler` (playlist branch).
+// The MovieList page only ever passes movie ids, but the underlying tables
+// are media-item agnostic; we accept a typed kind so future ports of
+// `ShowList`, `OtherVideoList`, etc. can reuse these endpoints unchanged.
+// ---------------------------------------------------------------------------
+
+/// Row for the "(New Collection)" / existing-collection dropdown in
+/// `AddToCollectionDialog`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CollectionOption {
+    pub id: i64,
+    pub name: String,
+}
+
+/// Row for the "Playlist Group" dropdown in `AddToPlaylistDialog`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlaylistGroupOption {
+    pub id: i64,
+    pub name: String,
+}
+
+/// Row for the "Playlist" dropdown in `AddToPlaylistDialog`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PlaylistOption {
+    pub id: i64,
+    pub name: String,
+    pub playlist_group_id: i64,
+}
+
+/// All collections, ordered by name. Mirrors `GetAllCollectionsHandler`,
+/// which loads every row from `Collection`.
+#[server]
+pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "Collection"
+           ORDER BY "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| CollectionOption {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Creates a new collection with the given name and returns it. Mirrors
+/// `CreateCollectionHandler`.
+#[server]
+pub async fn create_collection(name: String) -> Result<CollectionOption, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(ServerFnError::new("Collection name is required"));
+    }
+
+    let result =
+        sqlx::query(r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#)
+            .bind(trimmed)
+            .execute(&state.pool)
+            .await?;
+    let id = ersatzrs_infra::db::last_insert_id(result);
+    Ok(CollectionOption {
+        id,
+        name: trimmed.to_string(),
+    })
+}
+
+/// All playlist groups, ordered system-first then by name. Mirrors
+/// `GetAllPlaylistGroupsHandler` (`OrderByDescending(pg => pg.IsSystem)`,
+/// `ThenBy(pg => pg.Name)`).
+#[server]
+pub async fn list_all_playlist_groups() -> Result<Vec<PlaylistGroupOption>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "PlaylistGroup"
+           ORDER BY COALESCE("IsSystem", 0) DESC, "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| PlaylistGroupOption {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Playlists in a given group, ordered by name. Mirrors
+/// `GetPlaylistsByPlaylistGroupIdHandler`.
+#[server]
+pub async fn list_playlists_by_group(
+    playlist_group_id: i64,
+) -> Result<Vec<PlaylistOption>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name", "PlaylistGroupId"
+           FROM "Playlist"
+           WHERE "PlaylistGroupId" = ?
+           ORDER BY "Name" COLLATE NOCASE"#,
+    )
+    .bind(playlist_group_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| PlaylistOption {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+            playlist_group_id: r.try_get("PlaylistGroupId").unwrap_or(0),
+        })
+        .collect())
+}
+
+/// Adds movies to a collection. Ports the movie branch of
+/// `AddItemsToCollectionHandler`. The C# handler appends to
+/// `Collection.MediaItems`; the joined table is `CollectionItem` and
+/// duplicates are skipped via `INSERT OR IGNORE` (PK is composite).
+/// Returns the number of rows actually inserted (i.e. ignoring duplicates).
+#[server]
+pub async fn add_movies_to_collection(
+    collection_id: i64,
+    movie_ids: Vec<i64>,
+) -> Result<u64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    if movie_ids.is_empty() {
+        return Ok(0);
+    }
+
+    // Validate that the collection exists — mirrors `CollectionMustExist`.
+    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
+        .bind(collection_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if exists == 0 {
+        return Err(ServerFnError::new("Collection does not exist."));
+    }
+
+    let mut added: u64 = 0;
+    for id in movie_ids {
+        let result = sqlx::query(
+            r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
+        )
+        .bind(collection_id)
+        .bind(id)
+        .execute(&state.pool)
+        .await?;
+        added += result.rows_affected();
+    }
+    Ok(added)
+}
+
+/// Adds movies to a playlist as individual `PlaylistItem` rows of
+/// `CollectionType = 10` (Movie). Ports the movie branch of
+/// `AddItemsToPlaylistHandler`: each item gets `Index = max(Index) + 1`,
+/// `PlaybackOrder = Shuffle (1)`, `IncludeInProgramGuide = 1`.
+#[server]
+pub async fn add_movies_to_playlist(
+    playlist_id: i64,
+    movie_ids: Vec<i64>,
+) -> Result<u64, ServerFnError> {
+    // CollectionType.Movie = 10 (see `ErsatzTV.Core/Domain/CollectionType.cs`).
+    const COLLECTION_TYPE_MOVIE: i32 = 10;
+    // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
+    const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
+
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    if movie_ids.is_empty() {
+        return Ok(0);
+    }
+
+    // Validate that the playlist exists — mirrors `PlaylistMustExist`.
+    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
+        .bind(playlist_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if exists == 0 {
+        return Err(ServerFnError::new("Playlist does not exist."));
+    }
+
+    // Next index = max(Index) + 1 over the existing items, or 0 if empty.
+    let max_index: Option<i64> =
+        sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+            .bind(playlist_id)
+            .fetch_one(&state.pool)
+            .await?;
+    let start_index = max_index.map_or(0, |i| i + 1);
+
+    let mut added: u64 = 0;
+    for (next_index, id) in (start_index..).zip(movie_ids) {
+        let result = sqlx::query(
+            r#"INSERT INTO "PlaylistItem"
+                   ("Index", "PlaylistId", "CollectionType", "MediaItemId",
+                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll")
+               VALUES (?, ?, ?, ?, 1, ?, 0)"#,
+        )
+        .bind(next_index)
+        .bind(playlist_id)
+        .bind(COLLECTION_TYPE_MOVIE)
+        .bind(id)
+        .bind(PLAYBACK_ORDER_SHUFFLE)
+        .execute(&state.pool)
+        .await?;
+        added += result.rows_affected();
+    }
+    Ok(added)
+}
+
 #[server]
 pub async fn list_collection_members(
     collection_id: i64,

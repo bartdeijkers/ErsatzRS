@@ -52,9 +52,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok((n, suppressed)) => {
-            eprintln!(
-                "hydration-lint: {n} new finding(s) ({suppressed} suppressed by baseline)"
-            );
+            eprintln!("hydration-lint: {n} new finding(s) ({suppressed} suppressed by baseline)");
             ExitCode::FAILURE
         }
         Err(e) => {
@@ -143,8 +141,8 @@ fn parse_args(args: Vec<String>) -> Result<Opts, String> {
 fn load_baseline(path: Option<&Path>) -> Result<HashSet<(PathBuf, String)>> {
     let mut out = HashSet::new();
     let Some(p) = path else { return Ok(out) };
-    let src = std::fs::read_to_string(p)
-        .with_context(|| format!("read baseline {}", p.display()))?;
+    let src =
+        std::fs::read_to_string(p).with_context(|| format!("read baseline {}", p.display()))?;
     for raw in src.lines() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
@@ -158,10 +156,7 @@ fn load_baseline(path: Option<&Path>) -> Result<HashSet<(PathBuf, String)>> {
     Ok(out)
 }
 
-fn lint(
-    roots: &[PathBuf],
-    baseline: &HashSet<(PathBuf, String)>,
-) -> Result<(usize, usize)> {
+fn lint(roots: &[PathBuf], baseline: &HashSet<(PathBuf, String)>) -> Result<(usize, usize)> {
     let mut files: Vec<PathBuf> = Vec::new();
     for root in roots {
         if !root.exists() {
@@ -355,10 +350,7 @@ fn scan_view_body(ctx: &mut Ctx<'_>, body: TokenStream, suspense_depth: &mut i32
                                 ),
                             );
                         }
-                        if ctx.islands.contains(&name)
-                            && *suspense_depth > 0
-                            && attr_count > 0
-                        {
+                        if ctx.islands.contains(&name) && *suspense_depth > 0 && attr_count > 0 {
                             report(
                                 ctx,
                                 span,
