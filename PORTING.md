@@ -10,12 +10,12 @@ refers to it through the **`$ERSATZTV_SRC`** environment variable so that no
 maintainer's local filesystem layout leaks into committed files.
 
 - Set `ERSATZTV_SRC` to a checkout of
-  [ErsatzTV/ErsatzTV](https://github.com/ErsatzTV/ErsatzTV). A common layout is
+  [ErsatzTV/ErsatzTV](https://github.com/ErsatzTV/legacy). A common layout is
   a sibling clone next to ErsatzRS (`../ErsatzTV/`); any path works.
 - All references in this repo write paths as `$ERSATZTV_SRC/<relative path>`
   (for example `$ERSATZTV_SRC/ErsatzTV.FFmpeg/Pipeline/`). Resolve them with
   your shell, IDE, or by reading the same path under
-  `https://github.com/ErsatzTV/ErsatzTV/tree/main/<relative path>`.
+  `https://github.com/ErsatzTV/legacy/tree/main/<relative path>`.
 - Never commit absolute paths from a maintainer's machine. See
   [CONTRIBUTING.md](CONTRIBUTING.md) ground rules.
 
