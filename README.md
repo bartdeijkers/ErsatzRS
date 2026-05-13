@@ -1,38 +1,52 @@
 # ErsatzRS
 
 ErsatzRS is a from-scratch Rust reimplementation of
-[ErsatzTV](https://github.com/ErsatzTV/ErsatzTV): a media server that turns
+[ErsatzTV Legacy](https://github.com/ErsatzTV/ErsatzTV): a media server that turns
 personal media libraries into linear TV channels served through IPTV, HLS, and
 HDHomeRun-compatible endpoints.
 
-The project is currently **pre-alpha**. It is in phase 0 bootstrap: contracts,
-workspace layout, tooling, and architecture are being established before the
-first Rust crates are added.
+The project is currently **pre-alpha**
 
 ## Goals
 
-- Reach long-term feature parity with ErsatzTV.
-- Ship as a simpler deployment: one Rust server binary plus a scanner binary.
+- Reach feature parity with ErsatzTV Legacy first and then fork into a 'next' version with opinionated changes.
 - Use FFmpeg 8.1 as a hard runtime requirement.
-- Replace the external graphics-renderer process with FFmpeg 8.1 `drawvg`
+- Utilize the external graphics-renderer process with FFmpeg 8.1 `drawvg`
   filters and SVG templates.
 - Keep the project public-open-source ready, even while development starts as a
   solo-maintainer effort.
 
 ## Current Status
 
-There is no `Cargo.toml` yet and no runnable application. Until the workspace is
-created, the repository is intentionally focused on project contracts:
+**Phase 7: Hardening and Parity Completion.** Phases 0–6 are complete. The workspace,
+FFmpeg pipeline, playout scheduling, media source scanning, IPTV/HDHomeRun endpoints, and
+admin UI slices through Trakt list integration are all in place. See [STATUS.md](STATUS.md)
+for the current phase checklist, parity matrix, and session log.
 
-- [Contributing](CONTRIBUTING.md)
-- [Code style](STYLE.md)
-- [Architecture](ARCHITECTURE.md)
-- [Porting contract](PORTING.md)
-- [Testing contract](docs/how-to/testing.md)
-- [Documentation contract](docs/CONTRIBUTING.md)
-- [ADRs](docs/adr/)
-- [Project contracts and status](plans/INDEX.md)
-- [Current phase status](STATUS.md)
+## Quick Start
+
+Build and run (requires FFmpeg 8.1+ on PATH):
+
+```bash
+cargo build --workspace
+cargo run --bin ersatzrs-web
+```
+
+The admin UI is at http://127.0.0.1:8409. See [BUILD.md](BUILD.md) for full development
+instructions, including database setup, Leptos hot-reload, and per-platform build targets.
+
+## Key Resources
+
+Project contracts and decisions:
+
+- [STATUS.md](STATUS.md) — current phase, checklist, gaps, session log.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — crate layout, dependency rules.
+- [PORTING.md](PORTING.md) — ErsatzTV porting workflow and critical files.
+- [plans/INDEX.md](plans/INDEX.md) — locked decisions and deferred work.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution workflow.
+- [STYLE.md](STYLE.md) — Rust/SQL naming, errors, parity code rules.
+- [TEST.md](TEST.md) — Leptos hydration rules and test playbook format.
+- [docs/adr/](docs/adr/) — architectural decision records.
 
 ## Documentation
 
@@ -45,14 +59,13 @@ Documentation follows the Diataxis structure under [docs/](docs/README.md):
 
 ## Development Requirements
 
-The full developer setup will be introduced with the Cargo workspace. The
-long-term baseline is:
-
 - Rust stable, pinned through [rust-toolchain.toml](rust-toolchain.toml).
-- FFmpeg 8.1 or newer available on `PATH`.
-- SQLite as the default database backend.
-- MySQL 8/MariaDB-compatible backend support behind the `mysql` Cargo feature;
-  use a `mysql://...` or `mariadb://...` `DATABASE_URL` when building with it.
+- FFmpeg 8.1 or newer available on `PATH` — a hard runtime requirement.
+- SQLite as the default database backend (created at `~/.ersatzrs/ErsatzRS.db`).
+- MySQL 8/MariaDB support behind the `mysql` Cargo feature; set
+  `DATABASE_URL='mysql://user:pass@host/ersatzrs'` to use it.
+- For interactive UI development: `cargo install cargo-leptos --locked` and run
+  `cargo leptos build` in `crates/ersatzrs-web/` to generate WASM hydration assets.
 
 ## Credits
 
