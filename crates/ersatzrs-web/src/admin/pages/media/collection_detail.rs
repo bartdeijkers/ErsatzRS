@@ -187,11 +187,10 @@ fn CollectionDetailView(
         }
     });
 
-    let toggle_action =
-        Action::new(move |on: &bool| {
-            let on = *on;
-            async move { set_collection_use_custom_order(id, on).await }
-        });
+    let toggle_action = Action::new(move |on: &bool| {
+        let on = *on;
+        async move { set_collection_use_custom_order(id, on).await }
+    });
 
     Effect::new(move |_| {
         if let Some(res) = toggle_action.value().get() {
@@ -308,11 +307,7 @@ fn CollectionDetailView(
     });
 
     let item_count = detail.items.len();
-    let movie_count = detail
-        .items
-        .iter()
-        .filter(|i| i.kind == "movie")
-        .count();
+    let movie_count = detail.items.iter().filter(|i| i.kind == "movie").count();
 
     view! {
         // ── Header (rename + summary + custom-order toggle) ────────────

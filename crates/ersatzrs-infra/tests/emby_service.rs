@@ -13,89 +13,9 @@ use sqlx::{Row, SqlitePool};
 #[tokio::test]
 async fn emby_sync_maps_mock_movie_response_to_media_rows() {
     let server = MockServer::start_async().await;
-    let libraries = server
-        .mock_async(|when, then| {
-            when.method(GET).path("/Library/VirtualFolders");
-            then.status(200).json_body(json!([
-                { "Name": "Movies", "CollectionType": "movies", "ItemId": "library-1" }
-            ]));
-        })
-        .await;
-    let items = server
-        .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Items")
-                .query_param("parentId", "library-1")
-                .query_param(
-                    "fields",
-                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,Chapters",
-                )
-                .query_param("includeItemTypes", "Movie");
-            then.status(200).json_body(json!({
-                "TotalRecordCount": 1,
-                "Items": [
-                    {
-                        "Name": "Big Buck Bunny",
-                        "Id": "movie-1",
-                        "Etag": "etag-1",
-                        "Path": "/srv/media/bbb.mp4",
-                        "DateCreated": "2026-04-17T10:00:00Z",
-                        "RunTimeTicks": 120_000_000,
-                        "Overview": "A large rabbit has a larger problem.",
-                        "ProductionYear": 2008,
-                        "PremiereDate": "2008-04-10T00:00:00Z",
-                        "OfficialRating": "G",
-                        "Taglines": ["A short movie"],
-                        "ProviderIds": {
-                            "Imdb": "tt1254207",
-                            "Tmdb": "10378",
-                            "Tvdb": "98765"
-                        },
-                        "ImageTags": { "Primary": "poster-tag" },
-                        "BackdropImageTags": ["fanart-tag"],
-                        "LocationType": "FileSystem",
-                        "Chapters": [
-                            { "StartPositionTicks": 0, "Name": "Intro" },
-                            { "StartPositionTicks": 50_000_000, "Name": "Main" }
-                        ]
-                    }
-                ]
-            }));
-        })
-        .await;
-    let playback = server
-        .mock_async(|when, then| {
-            when.method(GET).path("/Items/movie-1/PlaybackInfo");
-            then.status(200).json_body(json!({
-                "MediaSources": [
-                    {
-                        "RunTimeTicks": 120_000_000,
-                        "MediaStreams": [
-                            {
-                                "Type": "Video",
-                                "Codec": "h264",
-                                "Width": 1920,
-                                "Height": 1080,
-                                "Index": 0,
-                                "IsDefault": true,
-                                "AspectRatio": "16:9",
-                                "RealFrameRate": 23.976
-                            },
-                            {
-                                "Type": "Audio",
-                                "Codec": "aac",
-                                "Language": "eng",
-                                "Channels": 2,
-                                "Index": 1,
-                                "IsDefault": true,
-                                "Title": "Stereo"
-                            }
-                        ]
-                    }
-                ]
-            }));
-        })
-        .await;
+    let libraries = mock_emby_libraries(&server).await;
+    let items = mock_detailed_movie_items(&server).await;
+    let playback = mock_detailed_movie_playback(&server).await;
 
     let pool = common::test_db().await;
     let service = EmbyService::new();
@@ -510,6 +430,98 @@ async fn mock_movie(server: &MockServer) {
             }));
         })
         .await;
+}
+
+async fn mock_emby_libraries(server: &MockServer) -> Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method(GET).path("/Library/VirtualFolders");
+            then.status(200).json_body(json!([
+                { "Name": "Movies", "CollectionType": "movies", "ItemId": "library-1" }
+            ]));
+        })
+        .await
+}
+
+async fn mock_detailed_movie_items(server: &MockServer) -> Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-1")
+                .query_param(
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,Chapters",
+                )
+                .query_param("includeItemTypes", "Movie");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Big Buck Bunny",
+                        "Id": "movie-1",
+                        "Etag": "etag-1",
+                        "Path": "/srv/media/bbb.mp4",
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 120_000_000,
+                        "Overview": "A large rabbit has a larger problem.",
+                        "ProductionYear": 2008,
+                        "PremiereDate": "2008-04-10T00:00:00Z",
+                        "OfficialRating": "G",
+                        "Taglines": ["A short movie"],
+                        "ProviderIds": {
+                            "Imdb": "tt1254207",
+                            "Tmdb": "10378",
+                            "Tvdb": "98765"
+                        },
+                        "ImageTags": { "Primary": "poster-tag" },
+                        "BackdropImageTags": ["fanart-tag"],
+                        "LocationType": "FileSystem",
+                        "Chapters": [
+                            { "StartPositionTicks": 0, "Name": "Intro" },
+                            { "StartPositionTicks": 50_000_000, "Name": "Main" }
+                        ]
+                    }
+                ]
+            }));
+        })
+        .await
+}
+
+async fn mock_detailed_movie_playback(server: &MockServer) -> Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method(GET).path("/Items/movie-1/PlaybackInfo");
+            then.status(200).json_body(json!({
+                "MediaSources": [
+                    {
+                        "RunTimeTicks": 120_000_000,
+                        "MediaStreams": [
+                            {
+                                "Type": "Video",
+                                "Codec": "h264",
+                                "Width": 1920,
+                                "Height": 1080,
+                                "Index": 0,
+                                "IsDefault": true,
+                                "AspectRatio": "16:9",
+                                "RealFrameRate": 23.976
+                            },
+                            {
+                                "Type": "Audio",
+                                "Codec": "aac",
+                                "Language": "eng",
+                                "Channels": 2,
+                                "Index": 1,
+                                "IsDefault": true,
+                                "Title": "Stereo"
+                            }
+                        ]
+                    }
+                ]
+            }));
+        })
+        .await
 }
 
 async fn mock_emby_playback<'a>(server: &'a MockServer, item_id: &str) -> Mock<'a> {
