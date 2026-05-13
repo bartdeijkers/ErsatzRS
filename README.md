@@ -54,6 +54,16 @@ long-term baseline is:
 - MySQL 8/MariaDB-compatible backend support behind the `mysql` Cargo feature;
   use a `mysql://...` or `mariadb://...` `DATABASE_URL` when building with it.
 
+## Credits
+
+ErsatzRS is a Rust port of [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) by
+Jason Dove. ErsatzTV is the original work this project ports from, and ErsatzRS
+would not exist without it. If you find either project useful, please consider
+supporting Jason's continued work on the upstream:
+[paypal.me/jasongdove](https://www.paypal.me/jasongdove).
+
 ## License
 
-ErsatzRS is licensed under the zlib license. See [LICENSE](LICENSE).
+ErsatzRS is licensed under the zlib license, the same license as the upstream
+ErsatzTV project. See [LICENSE](LICENSE) for the full text and the preserved
+upstream copyright notice.
