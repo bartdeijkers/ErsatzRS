@@ -161,7 +161,8 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/watermarks`            | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/watermarks/:id`        | ✅     | Stable DOM shape, all conditional sections via `style:display`.         |
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
-| `/media/collections/:id` | ✅     | `MembersSection` autocomplete list via `style:display`.                 |
+| `/media/collections/:id` | TODO   | Detail page port: poster grid, hover-checkbox multi-select, per-card trashcan, inline rename pencil, "Use Custom Playback Order" toggle with Move Up/Down (drag-and-drop deferred). Island owns blocking resource; sections rendered conditionally over stable signal state. |
+| `/media/collections/:id/edit` | ✅ | Rename-only form (port of `CollectionEditor.razor`).                  |
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
 | `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |

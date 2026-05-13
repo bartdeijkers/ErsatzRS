@@ -1497,6 +1497,384 @@ pub async fn add_movies_to_playlist(
     Ok(added)
 }
 
+// ---------------------------------------------------------------------------
+// Collection detail page (`/media/collections/:id`).
+//
+// Ports `ErsatzTV/Pages/CollectionItems.razor` +
+// `ErsatzTV.Application.MediaCards.GetCollectionCardsHandler`. The C# handler
+// projects to a `CollectionCardResultsViewModel` with one list per kind. We
+// flatten the projection into a single `Vec<CollectionItemCard>` carrying a
+// `kind` discriminant — the UI groups by kind for rendering but operates on a
+// uniform `(media_item_id, custom_index)` everywhere else.
+// ---------------------------------------------------------------------------
+
+/// One card in the collection detail grid. `kind` is the discriminant used by
+/// the UI to group cards into sections and to build `href`s.
+///
+/// `kind` values match those used by `suggest_media_items` and
+/// `list_collection_members`: `"movie" | "show" | "season" | "episode" |
+/// "artist" | "music_video" | "other_video" | "song" | "image" |
+/// "remote_stream"`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CollectionItemCard {
+    pub media_item_id: i64,
+    pub kind: String,
+    pub title: String,
+    pub sort_title: String,
+    pub subtitle: Option<String>,
+    pub artwork_path: Option<String>,
+    pub href: Option<String>,
+    pub custom_index: i64,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CollectionDetail {
+    pub id: i64,
+    pub name: String,
+    pub use_custom_playback_order: bool,
+    pub items: Vec<CollectionItemCard>,
+}
+
+/// Loads the full collection detail (header + all card rows). Mirrors the
+/// projection performed by `GetCollectionCardsHandler` over the joined
+/// `Collection` + `CollectionItem` + per-kind metadata graph.
+///
+/// Artwork URLs are resolved server-side via `artwork_url(...)` so the
+/// returned `artwork_path` is ready to drop into `<img src=...>`.
+#[allow(clippy::too_many_lines)]
+#[server]
+pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let Some(collection_row) = sqlx::query(
+        r#"SELECT "Id",
+                  COALESCE("Name", '') AS "Name",
+                  COALESCE("UseCustomPlaybackOrder", 0) AS "UseCustomPlaybackOrder"
+           FROM "Collection" WHERE "Id" = ? LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let name: String = collection_row.try_get("Name").unwrap_or_default();
+    let use_custom: i64 = collection_row
+        .try_get("UseCustomPlaybackOrder")
+        .unwrap_or(0);
+
+    // Pull every CollectionItem joined with each possible per-kind metadata.
+    // We do this as a single UNION ALL to keep the round-trip count to two.
+    // `ArtworkKind = 0` is Poster; `1` is Thumbnail (used for artists, music
+    // videos, songs, other videos, images, remote streams in ErsatzTV's
+    // `MediaCard` defaults).
+    let rows = sqlx::query(
+        r#"
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'movie' AS "Kind",
+               COALESCE(mm."Title", '') AS "Title",
+               COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
+               CAST(mm."Year" AS TEXT) AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0 LIMIT 1) AS "Artwork",
+               0 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Movie" m ON m."Id" = ci."MediaItemId"
+          JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'show' AS "Kind",
+               COALESCE(sm."Title", '') AS "Title",
+               COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
+               CAST(sm."Year" AS TEXT) AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0 LIMIT 1) AS "Artwork",
+               0 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Show" s ON s."Id" = ci."MediaItemId"
+          JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'season' AS "Kind",
+               COALESCE(sh_meta."Title", '') AS "Title",
+               COALESCE(sh_meta."SortTitle", sh_meta."Title", '') AS "SortTitle",
+               COALESCE(sea_meta."Title", 'Season ' || CAST(se."SeasonNumber" AS TEXT)) AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."SeasonMetadataId" = sea_meta."Id" AND a."ArtworkKind" = 0 LIMIT 1) AS "Artwork",
+               0 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Season" se ON se."Id" = ci."MediaItemId"
+          LEFT JOIN "SeasonMetadata" sea_meta ON sea_meta."SeasonId" = se."Id"
+          JOIN "Show" sh ON sh."Id" = se."ShowId"
+          JOIN "ShowMetadata" sh_meta ON sh_meta."ShowId" = sh."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'episode' AS "Kind",
+               COALESCE(em."Title", '') AS "Title",
+               COALESCE(em."SortTitle", em."Title", '') AS "SortTitle",
+               sh_meta."Title" || ' - S' || CAST(COALESCE(se."SeasonNumber", 0) AS TEXT)
+                                || ' E' || CAST(COALESCE(em."EpisodeNumber", 0) AS TEXT) AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."EpisodeMetadataId" = em."Id" AND a."ArtworkKind" = 0 LIMIT 1) AS "Artwork",
+               0 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Episode" ep ON ep."Id" = ci."MediaItemId"
+          JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
+          JOIN "Season" se ON se."Id" = ep."SeasonId"
+          JOIN "Show" sh ON sh."Id" = se."ShowId"
+          JOIN "ShowMetadata" sh_meta ON sh_meta."ShowId" = sh."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'artist' AS "Kind",
+               COALESCE(am."Title", '') AS "Title",
+               COALESCE(am."SortTitle", am."Title", '') AS "SortTitle",
+               am."Disambiguation" AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."ArtistMetadataId" = am."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Artist" ar ON ar."Id" = ci."MediaItemId"
+          JOIN "ArtistMetadata" am ON am."ArtistId" = ar."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'music_video' AS "Kind",
+               COALESCE(mvm."Title", '') AS "Title",
+               COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
+               mvm."Album" AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."MusicVideoMetadataId" = mvm."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "MusicVideo" mv ON mv."Id" = ci."MediaItemId"
+          JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'other_video' AS "Kind",
+               COALESCE(ovm."Title", '') AS "Title",
+               COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
+               NULL AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."OtherVideoMetadataId" = ovm."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "OtherVideo" ov ON ov."Id" = ci."MediaItemId"
+          JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'song' AS "Kind",
+               COALESCE(sgm."Title", '') AS "Title",
+               COALESCE(sgm."SortTitle", sgm."Title", '') AS "SortTitle",
+               sgm."Album" AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."SongMetadataId" = sgm."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Song" sg ON sg."Id" = ci."MediaItemId"
+          JOIN "SongMetadata" sgm ON sgm."SongId" = sg."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'image' AS "Kind",
+               COALESCE(im."Title", '') AS "Title",
+               COALESCE(im."SortTitle", im."Title", '') AS "SortTitle",
+               NULL AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."ImageMetadataId" = im."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "Image" img ON img."Id" = ci."MediaItemId"
+          JOIN "ImageMetadata" im ON im."ImageId" = img."Id"
+         WHERE ci."CollectionId" = ?
+
+        UNION ALL
+
+        SELECT ci."MediaItemId" AS "Id",
+               ci."CustomIndex" AS "CustomIndex",
+               'remote_stream' AS "Kind",
+               COALESCE(rsm."Title", '') AS "Title",
+               COALESCE(rsm."SortTitle", rsm."Title", '') AS "SortTitle",
+               NULL AS "Subtitle",
+               (SELECT a."Path" FROM "Artwork" a
+                WHERE a."RemoteStreamMetadataId" = rsm."Id" AND a."ArtworkKind" = 1 LIMIT 1) AS "Artwork",
+               1 AS "ArtworkKindHint"
+          FROM "CollectionItem" ci
+          JOIN "RemoteStream" rs ON rs."Id" = ci."MediaItemId"
+          JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
+         WHERE ci."CollectionId" = ?
+
+        ORDER BY "Kind", "SortTitle", "Title"
+        "#,
+    )
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let items: Vec<CollectionItemCard> = rows
+        .iter()
+        .map(|r| {
+            let kind: String = r.try_get("Kind").unwrap_or_default();
+            let item_id: i64 = r.try_get("Id").unwrap_or(0);
+            // ErsatzTV's `MediaCard` defaults to poster artwork; for artists,
+            // music videos, etc. the card explicitly opts into thumbnail
+            // artwork. We don't yet have a `Thumbnail` variant in
+            // `ArtworkUrlKind` (it maps to the same posters cache anyway),
+            // so reuse `Poster` for both — the underlying `ArtworkController`
+            // routes by stored hash, not by the requested kind.
+            let _ = r.try_get::<i64, _>("ArtworkKindHint").unwrap_or(0);
+            let artwork_path = r
+                .try_get::<Option<String>, _>("Artwork")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster));
+
+            let href = match kind.as_str() {
+                "movie" => Some(format!("/media/movies/{item_id}")),
+                "show" => Some(format!("/media/tv/shows/{item_id}")),
+                _ => None,
+            };
+
+            CollectionItemCard {
+                media_item_id: item_id,
+                kind,
+                title: r.try_get("Title").unwrap_or_default(),
+                sort_title: r.try_get("SortTitle").unwrap_or_default(),
+                subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+                artwork_path,
+                href,
+                custom_index: r.try_get("CustomIndex").unwrap_or(0),
+            }
+        })
+        .collect();
+
+    Ok(Some(CollectionDetail {
+        id,
+        name,
+        use_custom_playback_order: use_custom != 0,
+        items,
+    }))
+}
+
+/// Toggles `Collection.UseCustomPlaybackOrder`. Mirrors the
+/// `UseCustomPlaybackOrder` branch of `UpdateCollectionHandler`.
+#[server]
+pub async fn set_collection_use_custom_order(id: i64, on: bool) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    sqlx::query(r#"UPDATE "Collection" SET "UseCustomPlaybackOrder" = ? WHERE "Id" = ?"#)
+        .bind(i64::from(on))
+        .bind(id)
+        .execute(&state.pool)
+        .await?;
+    Ok(())
+}
+
+/// Removes one or many media items from a collection. Mirrors
+/// `RemoveItemsFromCollectionHandler` — note that ErsatzTV also re-queues
+/// playout rebuilds for every playout that uses this collection; the playout
+/// scheduler in ErsatzRS does not yet have an equivalent enqueue point, so
+/// we just persist the removal for now (TODO: wire playout refresh once the
+/// scheduling channel exists).
+#[server]
+pub async fn remove_items_from_collection(
+    collection_id: i64,
+    media_item_ids: Vec<i64>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    if media_item_ids.is_empty() {
+        return Ok(());
+    }
+    let mut tx = state.pool.begin().await?;
+    for mid in &media_item_ids {
+        sqlx::query(
+            r#"DELETE FROM "CollectionItem"
+               WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
+        )
+        .bind(collection_id)
+        .bind(mid)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Persists the manual playback order. Mirrors
+/// `UpdateCollectionCustomOrderHandler` — writes `CustomIndex` per
+/// `(CollectionId, MediaItemId)` based on position in `ordered_item_ids`
+/// (0-based, matching the C# handler's input).
+#[server]
+pub async fn update_collection_custom_order(
+    collection_id: i64,
+    ordered_item_ids: Vec<i64>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    if ordered_item_ids.is_empty() {
+        return Ok(());
+    }
+    let mut tx = state.pool.begin().await?;
+    for (idx, mid) in ordered_item_ids.iter().enumerate() {
+        sqlx::query(
+            r#"UPDATE "CollectionItem"
+                  SET "CustomIndex" = ?
+                WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
+        )
+        .bind(i64::try_from(idx).unwrap_or(0))
+        .bind(collection_id)
+        .bind(mid)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 #[server]
 pub async fn list_collection_members(
     collection_id: i64,

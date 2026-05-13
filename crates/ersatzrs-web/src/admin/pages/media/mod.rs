@@ -1,5 +1,6 @@
 pub mod artists;
 pub mod browser;
+pub mod collection_detail;
 pub mod collections;
 pub mod images;
 pub mod movies;

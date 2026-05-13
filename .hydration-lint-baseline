@@ -6,15 +6,3 @@
 # When you fix one of these, delete the matching line. New findings — in
 # files not listed here, or in files listed here but for a different rule —
 # fail the linter as normal.
-#
-# rule-2 (prop-bearing island inside <Suspense>) — these pages reproduce the
-# `failed_to_cast_marker_node` panic that breaks interactive button handlers.
-# See `.claude/agent-memory/leptos-ersatztv-porter/movies-page-port.md`.
-# Fixes follow the movies-page pattern: have the island own its own
-# `Resource::new_blocking` and accept a plain id from the page wrapper.
-crates/ersatzrs-web/src/admin/pages/scheduling/block_editor.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/scheduling/yaml_editor.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/media_sources/jellyfin.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/media_sources/emby.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/watermarks/editor.rs:rule-2
-crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.rs:rule-2
