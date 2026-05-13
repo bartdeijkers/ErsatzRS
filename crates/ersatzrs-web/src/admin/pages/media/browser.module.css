@@ -154,3 +154,124 @@
     cursor: pointer;
     accent-color: var(--color-primary, #4caf50);
 }
+
+/* ---- Per-card overflow menu ----------------------------------------- */
+
+.item-menu {
+    position: absolute;
+    left: 0.625rem;
+    bottom: 3.25rem;
+    z-index: 4;
+}
+
+.item-menu-trigger {
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-gray-100);
+    background: rgba(0, 0, 0, 0.62);
+    cursor: pointer;
+}
+.item-menu-trigger:hover,
+.item-menu-trigger:focus-visible {
+    background: var(--color-surface);
+    outline: 1px solid var(--color-border);
+}
+
+.item-menu-popover {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 0.25rem);
+    min-width: 15rem;
+    padding: 0.25rem 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-appbar);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.35);
+}
+
+.item-menu-entry {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 0;
+    color: var(--color-gray-100);
+    background: transparent;
+    text-align: left;
+    text-decoration: none;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+.item-menu-entry:hover,
+.item-menu-entry:focus-visible {
+    background: var(--color-surface);
+    outline: none;
+}
+
+/* ---- Media info dialog ---------------------------------------------- */
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.media-info-panel {
+    width: min(44rem, 100%);
+    max-height: min(38rem, 92vh);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.media-info-title {
+    margin: 0;
+    padding: 1rem 1.25rem 0.75rem;
+    color: var(--color-gray-100);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.media-info-dialog {
+    overflow: auto;
+    max-height: 29rem;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.media-info-pre {
+    margin: 0;
+    padding: 1rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--color-gray-200);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+
+.media-info-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.75rem 1rem;
+}

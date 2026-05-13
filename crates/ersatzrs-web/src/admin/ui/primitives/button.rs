@@ -42,6 +42,7 @@ pub fn Button(
     let cls = btn_class(variant);
     view! {
         <button
+            type="button"
             class=cls
             disabled=disabled
             on:click=move |_| { if let Some(cb) = on_click { cb.run(()); } }
@@ -78,6 +79,7 @@ pub fn IconButton(
     let cls = icon_btn_class(variant);
     view! {
         <button
+            type="button"
             class=cls
             disabled=disabled
             title=title

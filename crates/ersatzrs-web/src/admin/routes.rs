@@ -40,7 +40,9 @@ use crate::admin::pages::scheduling::playouts::PlayoutsPage;
 use crate::admin::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::admin::pages::search::SearchPage;
 use crate::admin::pages::system::{
-    health::HealthPage, logs::LogsPage, troubleshooting::TroubleshootingPage,
+    health::HealthPage,
+    logs::LogsPage,
+    troubleshooting::{PlaybackTroubleshootingPage, TroubleshootingPage},
 };
 use crate::admin::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
 
@@ -119,6 +121,14 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("system"), StaticSegment("troubleshooting"))
                 view=TroubleshootingPage
+            />
+            <Route
+                path=(
+                    StaticSegment("system"),
+                    StaticSegment("troubleshooting"),
+                    StaticSegment("playback"),
+                )
+                view=PlaybackTroubleshootingPage
             />
             <Route path=(StaticSegment("blocks"), ParamSegment("id")) view=BlockEditorPage/>
             <Route path=(StaticSegment("scheduling"), StaticSegment("blocks")) view=BlocksPage/>

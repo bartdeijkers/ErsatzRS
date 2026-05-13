@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-11 (embedded scheduler into ersatzrs-web)
+Last updated: 2026-05-13 (movie item submenu parity)
 
 ## Current Phase
 
@@ -441,6 +441,7 @@ yet.
 | `YamlEditorPage`              | ✅     |                                                                |
 | `TimelinePage` (`/playouts`)  | ✅     | Read-only SVG island; selection is the gap (Slice F).          |
 | `CollectionsPage`             | ✅     | Autocomplete island.                                           |
+| `MoviesPage`                  | TODO   | Item overflow menu wired; Playwright smoke pending.             |
 | `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
@@ -487,6 +488,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-13 | Codex (GPT-5) | Added ErsatzTV-style `/media/movies` item overflow menu with Add To Collection, Show Media Info, and Troubleshoot Playback actions; ported movie media-info JSON projection and added the playback troubleshooting entry route. |
 | 2026-05-11 | Claude Code (claude-opus-4-7) | Embedded the maintenance scheduler into `ersatzrs-web` (issue #20). Added `ersatzrs-scheduler` as a dependency of `ersatzrs-web`, spawn `run_scheduler` from `host/tasks.rs` alongside HDHR UDP discovery and Trakt maintenance, dropped the `[[bin]]` section and `src/main.rs` from `ersatzrs-scheduler` (crate remains a library), and trimmed the now-unused `clap`/`tracing-subscriber` deps and tokio features. Updated STATUS.md and parity-matrix.md to reflect the two-binary shape that the Docker image and per-RID release archives already produce. |
 | 2026-05-10 | Claude Code (claude-opus-4-7) | Closed the platform-parity slice. Added the `platform-parity-fixer` project agent and Supported Platforms section in AGENTS.md, split unix-only ffmpeg test helpers into `#[cfg(all(test, unix))] mod unix_tests`, added `Cross.toml` for cross-rs ARM/Windows builds, made `ersatzrs-web/build.rs` warn-and-skip when stylance-cli is unavailable so cross builds succeed, expanded the CI matrix with a 6-cell `platforms` job (linux-x64/arm64/arm via cross, osx-arm64 native, osx-x64 cross from Apple Silicon, win-x64 MSVC, all green on real runners), added a `binaries` matrix to release.yml that attaches `ersatzrs-<tag>-<rid>.tar.gz`/`.zip` to GitHub releases per RID, ported `run.sh` to `run.ps1` plus a `run.cmd` shim for Windows contributors, ignored RUSTSEC-2023-0071 with rationale, and updated parity-matrix.md to mark platform support at parity with ErsatzTV. |
 | 2026-05-08 | Codex (GPT-5) | Added the `.claude/agents/support-parity-fixer.md` project agent to drive the Support Playwright parity failures to green while following the repo contracts, ErsatzTV source-first workflow, and Leptos hydration rules. |

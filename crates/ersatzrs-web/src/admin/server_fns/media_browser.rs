@@ -52,6 +52,99 @@ pub struct MovieDetailRow {
     pub writers: Vec<String>,
 }
 
+#[cfg(feature = "ssr")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct MediaItemInfoJson {
+    id: i64,
+    title: String,
+    kind: String,
+    library_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_name: Option<String>,
+    library_name: String,
+    state: String,
+    duration: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sample_aspect_ratio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_aspect_ratio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r_frame_rate: Option<String>,
+    video_scan_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    interlaced_ratio: Option<f64>,
+    width: i64,
+    height: i64,
+    streams: Vec<MediaItemInfoStreamJson>,
+    chapters: Vec<MediaItemInfoChapterJson>,
+}
+
+#[cfg(feature = "ssr")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct MediaItemInfoStreamJson {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    index: Option<i64>,
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channels: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    forced: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attached_pic: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pixel_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color_space: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color_transfer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color_primaries: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bits_per_raw_sample: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_extracted: Option<bool>,
+}
+
+#[cfg(feature = "ssr")]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct MediaItemInfoChapterJson {
+    title: String,
+    start_time: String,
+    end_time: String,
+}
+
+#[cfg(feature = "ssr")]
+struct SubtitleInfoRow {
+    stream_index: i64,
+    subtitle_kind: i64,
+    title: Option<String>,
+    codec: Option<String>,
+    language: Option<String>,
+    default: bool,
+    forced: bool,
+    path: Option<String>,
+    is_extracted: bool,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CollectionListRow {
     pub id: i64,
@@ -261,6 +354,120 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
     }))
 }
 
+/// Media-info JSON for `MediaItemInfoDialog`. Ports the movie branch of
+/// `ErsatzTV.Application.MediaItems.Queries.GetMediaItemInfoHandler` and the
+/// serialization options used by `Shared/MediaItemInfoDialog.razor`
+/// (`JsonStringEnumConverter`, null fields omitted, indented JSON).
+#[server]
+#[allow(clippy::too_many_lines)]
+pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let Some(row) = sqlx::query(
+        r#"SELECT m."Id" AS "Id",
+                  COALESCE(mm."Title", '') AS "Title",
+                  mm."Id" AS "MetadataId",
+                  COALESCE(mi."State", 0) AS "State",
+                  COALESCE(l."Name", '') AS "LibraryName",
+                  CASE
+                      WHEN ll."Id" IS NOT NULL THEN 'LocalLibrary'
+                      WHEN pl."Id" IS NOT NULL THEN 'PlexLibrary'
+                      WHEN jl."Id" IS NOT NULL THEN 'JellyfinLibrary'
+                      WHEN el."Id" IS NOT NULL THEN 'EmbyLibrary'
+                      ELSE 'Library'
+                  END AS "LibraryKind",
+                  COALESCE(pms."ServerName", jms."ServerName", ems."ServerName") AS "ServerName",
+                  mv."Id" AS "MediaVersionId",
+                  mv."Duration" AS "Duration",
+                  mv."SampleAspectRatio" AS "SampleAspectRatio",
+                  mv."DisplayAspectRatio" AS "DisplayAspectRatio",
+                  mv."RFrameRate" AS "RFrameRate",
+                  COALESCE(mv."VideoScanKind", 0) AS "VideoScanKind",
+                  mv."InterlacedRatio" AS "InterlacedRatio",
+                  COALESCE(mv."Width", 0) AS "Width",
+                  COALESCE(mv."Height", 0) AS "Height"
+           FROM "Movie" m
+           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           LEFT JOIN "MediaItem" mi ON mi."Id" = m."Id"
+           LEFT JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           LEFT JOIN "Library" l ON l."Id" = lp."LibraryId"
+           LEFT JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
+           LEFT JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+           LEFT JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
+           LEFT JOIN "EmbyLibrary" el ON el."Id" = l."Id"
+           LEFT JOIN "MediaSource" ms ON ms."Id" = l."MediaSourceId"
+           LEFT JOIN "PlexMediaSource" pms ON pms."Id" = ms."Id"
+           LEFT JOIN "JellyfinMediaSource" jms ON jms."Id" = ms."Id"
+           LEFT JOIN "EmbyMediaSource" ems ON ems."Id" = ms."Id"
+           LEFT JOIN "MediaVersion" mv ON mv."MovieId" = m."Id"
+           WHERE mi."Id" = ?
+           ORDER BY mv."Id"
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Err(ServerFnError::new("Unable to locate media item"));
+    };
+
+    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+    let version_id: Option<i64> = row.try_get("MediaVersionId").unwrap_or(None);
+    let is_local_library =
+        row.try_get::<String, _>("LibraryKind").unwrap_or_default() == "LocalLibrary";
+
+    let subtitles = load_movie_subtitle_info(&state.pool, metadata_id).await?;
+    let streams = if let Some(version_id) = version_id {
+        load_media_info_streams(&state.pool, version_id, &subtitles, is_local_library).await?
+    } else {
+        Vec::new()
+    };
+    let chapters = if let Some(version_id) = version_id {
+        load_media_info_chapters(&state.pool, version_id).await?
+    } else {
+        Vec::new()
+    };
+
+    let info = MediaItemInfoJson {
+        id: row.try_get("Id").unwrap_or(0),
+        title: row.try_get("Title").unwrap_or_default(),
+        kind: "Movie".to_string(),
+        library_kind: row.try_get("LibraryKind").unwrap_or_default(),
+        server_name: row
+            .try_get::<Option<String>, _>("ServerName")
+            .unwrap_or(None),
+        library_name: row.try_get("LibraryName").unwrap_or_default(),
+        state: media_item_state_name(row.try_get("State").unwrap_or(0)).to_string(),
+        duration: row
+            .try_get::<Option<String>, _>("Duration")
+            .unwrap_or(None)
+            .unwrap_or_else(|| "00:00:00".to_string()),
+        sample_aspect_ratio: row
+            .try_get::<Option<String>, _>("SampleAspectRatio")
+            .unwrap_or(None),
+        display_aspect_ratio: row
+            .try_get::<Option<String>, _>("DisplayAspectRatio")
+            .unwrap_or(None),
+        r_frame_rate: row
+            .try_get::<Option<String>, _>("RFrameRate")
+            .unwrap_or(None),
+        video_scan_kind: video_scan_kind_name(row.try_get("VideoScanKind").unwrap_or(0))
+            .to_string(),
+        interlaced_ratio: row
+            .try_get::<Option<f64>, _>("InterlacedRatio")
+            .unwrap_or(None),
+        width: row.try_get("Width").unwrap_or(0),
+        height: row.try_get("Height").unwrap_or(0),
+        streams,
+        chapters,
+    };
+
+    serde_json::to_string_pretty(&info).map_err(ServerFnError::new)
+}
+
 #[cfg(feature = "ssr")]
 async fn load_strings(
     pool: &ersatzrs_infra::db::DbPool,
@@ -280,6 +487,246 @@ async fn load_strings(
         .filter_map(|r| r.try_get::<Option<String>, _>("Name").ok().flatten())
         .filter(|name| !name.trim().is_empty())
         .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_movie_subtitle_info(
+    pool: &ersatzrs_infra::db::DbPool,
+    metadata_id: i64,
+) -> Result<Vec<SubtitleInfoRow>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT "StreamIndex",
+                  "SubtitleKind",
+                  "Title",
+                  "Codec",
+                  "Language",
+                  "Default",
+                  "Forced",
+                  "Path",
+                  "IsExtracted"
+           FROM "Subtitle"
+           WHERE "MovieMetadataId" = ?
+           ORDER BY "StreamIndex", "Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| SubtitleInfoRow {
+            stream_index: r.try_get("StreamIndex").unwrap_or(0),
+            subtitle_kind: r.try_get("SubtitleKind").unwrap_or(0),
+            title: r.try_get::<Option<String>, _>("Title").unwrap_or(None),
+            codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+            default: r.try_get::<i64, _>("Default").unwrap_or(0) != 0,
+            forced: r.try_get::<i64, _>("Forced").unwrap_or(0) != 0,
+            path: r.try_get::<Option<String>, _>("Path").unwrap_or(None),
+            is_extracted: r.try_get::<i64, _>("IsExtracted").unwrap_or(0) != 0,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+async fn load_media_info_streams(
+    pool: &ersatzrs_infra::db::DbPool,
+    media_version_id: i64,
+    subtitles: &[SubtitleInfoRow],
+    is_local_library: bool,
+) -> Result<Vec<MediaItemInfoStreamJson>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT "Index",
+                  "MediaStreamKind",
+                  "Title",
+                  "Codec",
+                  "Profile",
+                  "Language",
+                  "Channels",
+                  "Default",
+                  "Forced",
+                  "AttachedPic",
+                  "PixelFormat",
+                  "ColorRange",
+                  "ColorSpace",
+                  "ColorTransfer",
+                  "ColorPrimaries",
+                  "BitsPerRawSample",
+                  "MimeType",
+                  "FileName"
+           FROM "MediaStream"
+           WHERE "MediaVersionId" = ?
+           ORDER BY "Index", "Id""#,
+    )
+    .bind(media_version_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut streams = rows
+        .iter()
+        .map(|r| {
+            let index = r.try_get::<i64, _>("Index").unwrap_or(0);
+            let kind_value = r.try_get::<i64, _>("MediaStreamKind").unwrap_or(0);
+            let mut stream = MediaItemInfoStreamJson {
+                index: Some(index),
+                kind: media_stream_kind_name(kind_value).to_string(),
+                title: r.try_get::<Option<String>, _>("Title").unwrap_or(None),
+                codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+                profile: r.try_get::<Option<String>, _>("Profile").unwrap_or(None),
+                language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+                channels: positive_i64(r.try_get("Channels").unwrap_or(0)),
+                default: true_or_none(r.try_get("Default").unwrap_or(0)),
+                forced: true_or_none(r.try_get("Forced").unwrap_or(0)),
+                attached_pic: true_or_none(r.try_get("AttachedPic").unwrap_or(0)),
+                pixel_format: r
+                    .try_get::<Option<String>, _>("PixelFormat")
+                    .unwrap_or(None),
+                color_range: r.try_get::<Option<String>, _>("ColorRange").unwrap_or(None),
+                color_space: r.try_get::<Option<String>, _>("ColorSpace").unwrap_or(None),
+                color_transfer: r
+                    .try_get::<Option<String>, _>("ColorTransfer")
+                    .unwrap_or(None),
+                color_primaries: r
+                    .try_get::<Option<String>, _>("ColorPrimaries")
+                    .unwrap_or(None),
+                bits_per_raw_sample: positive_i64(r.try_get("BitsPerRawSample").unwrap_or(0)),
+                mime_type: r.try_get::<Option<String>, _>("MimeType").unwrap_or(None),
+                file_name: r.try_get::<Option<String>, _>("FileName").unwrap_or(None),
+                is_extracted: None,
+            };
+
+            if stream.kind == "Subtitle" {
+                if let Some(subtitle) = subtitles.iter().find(|s| s.stream_index == index) {
+                    if !is_image_subtitle(subtitle.codec.as_deref()) {
+                        stream.is_extracted = Some(subtitle.is_extracted);
+                    }
+                    stream.file_name = clean_string(subtitle.path.clone());
+                }
+            }
+
+            stream
+        })
+        .collect::<Vec<_>>();
+
+    if is_local_library {
+        streams.extend(subtitles.iter().filter(|s| s.subtitle_kind == 1).map(|s| {
+            MediaItemInfoStreamJson {
+                index: None,
+                kind: "ExternalSubtitle".to_string(),
+                title: clean_string(s.title.clone()),
+                codec: clean_string(s.codec.clone()),
+                profile: None,
+                language: clean_string(s.language.clone()),
+                channels: None,
+                default: s.default.then_some(true),
+                forced: s.forced.then_some(true),
+                attached_pic: None,
+                pixel_format: None,
+                color_range: None,
+                color_space: None,
+                color_transfer: None,
+                color_primaries: None,
+                bits_per_raw_sample: None,
+                mime_type: None,
+                file_name: s.path.as_ref().and_then(|p| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                }),
+                is_extracted: None,
+            }
+        }));
+    }
+
+    Ok(streams)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_media_info_chapters(
+    pool: &ersatzrs_infra::db::DbPool,
+    media_version_id: i64,
+) -> Result<Vec<MediaItemInfoChapterJson>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT COALESCE("Title", '') AS "Title", "StartTime", "EndTime"
+           FROM "MediaChapter"
+           WHERE "MediaVersionId" = ?
+           ORDER BY "StartTime", "ChapterId""#,
+    )
+    .bind(media_version_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaItemInfoChapterJson {
+            title: r.try_get("Title").unwrap_or_default(),
+            start_time: r.try_get("StartTime").unwrap_or_default(),
+            end_time: r.try_get("EndTime").unwrap_or_default(),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+fn clean_string(value: Option<String>) -> Option<String> {
+    value.filter(|s| !s.trim().is_empty())
+}
+
+#[cfg(feature = "ssr")]
+fn true_or_none(value: i64) -> Option<bool> {
+    (value != 0).then_some(true)
+}
+
+#[cfg(feature = "ssr")]
+fn positive_i64(value: i64) -> Option<i64> {
+    (value > 0).then_some(value)
+}
+
+#[cfg(feature = "ssr")]
+fn media_item_state_name(value: i64) -> &'static str {
+    match value {
+        1 => "FileNotFound",
+        2 => "Unavailable",
+        3 => "RemoteOnly",
+        _ => "Normal",
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn media_stream_kind_name(value: i64) -> &'static str {
+    match value {
+        2 => "Audio",
+        3 => "Subtitle",
+        4 => "Attachment",
+        5 => "ExternalSubtitle",
+        // Some current ErsatzRS scanner/provider paths still write zero-based
+        // stream kinds. Accept `0` as video when displaying media info, while
+        // preserving the ErsatzTV one-based names for canonical data.
+        _ => "Video",
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn video_scan_kind_name(value: i64) -> &'static str {
+    match value {
+        1 => "Progressive",
+        2 => "Interlaced",
+        _ => "Unknown",
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn is_image_subtitle(codec: Option<&str>) -> bool {
+    matches!(
+        codec,
+        Some("hdmv_pgs_subtitle" | "dvd_subtitle" | "dvdsub" | "vobsub" | "pgssub" | "pgs")
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1330,6 +1777,20 @@ pub async fn create_collection(name: String) -> Result<CollectionOption, ServerF
     if trimmed.is_empty() {
         return Err(ServerFnError::new("Collection name is required"));
     }
+    if trimmed.chars().count() > 50 {
+        return Err(ServerFnError::new(
+            "Collection name must be 50 characters or less",
+        ));
+    }
+
+    let duplicate: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Name" = ? COLLATE NOCASE"#)
+            .bind(trimmed)
+            .fetch_one(&state.pool)
+            .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("Collection name must be unique"));
+    }
 
     let result =
         sqlx::query(r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#)
@@ -1427,6 +1888,15 @@ pub async fn add_movies_to_collection(
 
     let mut added: u64 = 0;
     for id in movie_ids {
+        let movie_exists: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Movie" WHERE "Id" = ?"#)
+                .bind(id)
+                .fetch_one(&state.pool)
+                .await?;
+        if movie_exists == 0 {
+            return Err(ServerFnError::new(format!("Movie {id} does not exist.")));
+        }
+
         let result = sqlx::query(
             r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
         )

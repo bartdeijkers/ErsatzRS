@@ -27,15 +27,16 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::server_fns::media_browser::{
-    add_movies_to_collection, add_movies_to_playlist, create_collection, get_movie_details,
-    list_movies, CollectionOption, MediaCardRow, MovieDetailRow, PlaylistGroupOption,
-    PlaylistOption,
+    add_movies_to_collection, add_movies_to_playlist, create_collection, get_media_item_info_json,
+    get_movie_details, list_movies, CollectionOption, MediaCardRow, MovieDetailRow,
+    PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
     list_all_collections, list_all_playlist_groups, list_playlists_by_group,
 };
 use crate::admin::ui::primitives::dialog::Modal;
+use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -53,6 +54,18 @@ stylance::import_crate_style!(
 );
 
 const PAGE_SIZE: u32 = 50;
+
+#[derive(Clone, Debug, Default)]
+struct MovieMenuTarget {
+    id: i64,
+    title: String,
+}
+
+#[derive(Clone, Debug)]
+enum MovieMenuCommand {
+    AddToCollection(MovieMenuTarget),
+    ShowMediaInfo(MovieMenuTarget),
+}
 
 #[component]
 pub fn MoviesPage() -> impl IntoView {
@@ -158,6 +171,56 @@ fn MovieGridWithSelection(
     // ── Modal open signals ─────────────────────────────────────────────
     let collection_open = RwSignal::new(false);
     let playlist_open = RwSignal::new(false);
+    let media_info_open = RwSignal::new(false);
+    let media_info_title = RwSignal::new(String::new());
+    let media_info_body = RwSignal::new(String::new());
+    let item_menu_command: RwSignal<Option<MovieMenuCommand>> = RwSignal::new(None);
+
+    let toast = use_toast();
+    let media_info_action = Action::new(move |target: &MovieMenuTarget| {
+        let target = target.clone();
+        async move {
+            get_media_item_info_json(target.id)
+                .await
+                .map(|json| (target.title, json))
+        }
+    });
+
+    Effect::new(move |_| {
+        if let Some(result) = media_info_action.value().get() {
+            match result {
+                Ok((title, json)) => {
+                    media_info_title.set(title);
+                    media_info_body.set(json);
+                }
+                Err(error) => {
+                    media_info_body.set(format!("Unable to load media info: {error}"));
+                    toast.push("Show media info failed".to_string(), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+
+    Effect::new(move |_| {
+        if let Some(command) = item_menu_command.get() {
+            item_menu_command.set(None);
+            match command {
+                MovieMenuCommand::AddToCollection(target) => {
+                    selected.update(|items| {
+                        items.clear();
+                        items.insert(target.id);
+                    });
+                    collection_open.set(true);
+                }
+                MovieMenuCommand::ShowMediaInfo(target) => {
+                    media_info_title.set(target.title.clone());
+                    media_info_body.set("Loading media info…".to_string());
+                    media_info_open.set(true);
+                    media_info_action.dispatch(target);
+                }
+            }
+        }
+    });
 
     // Stable closure: are all current-page items selected?
     let all_selected = {
@@ -247,6 +310,7 @@ fn MovieGridWithSelection(
                                 <SelectableMovieCard
                                     row=r
                                     selected=selected
+                                    item_menu_command=item_menu_command
                                 />
                             }
                             .into_any()
@@ -267,6 +331,11 @@ fn MovieGridWithSelection(
             open=playlist_open
             selected=selected
         />
+        <MediaInfoModal
+            open=media_info_open
+            title=media_info_title
+            body=media_info_body
+        />
     }
 }
 
@@ -275,10 +344,16 @@ fn MovieGridWithSelection(
 /// element to attach to. The poster + caption are still wrapped in a link
 /// to `/media/movies/{id}` (matches the C# `<a href>` overlay).
 #[component]
-fn SelectableMovieCard(row: MediaCardRow, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
+fn SelectableMovieCard(
+    row: MediaCardRow,
+    selected: RwSignal<HashSet<i64>>,
+    item_menu_command: RwSignal<Option<MovieMenuCommand>>,
+) -> impl IntoView {
     let movie_id = row.id;
     let title = row.title.clone();
     let title_for_link = row.title.clone();
+    let title_for_collection = row.title.clone();
+    let title_for_info = row.title.clone();
     let subtitle = row.subtitle.clone();
     let artwork = row.artwork_path.clone();
     let href = format!("/media/movies/{movie_id}");
@@ -348,6 +423,102 @@ fn SelectableMovieCard(row: MediaCardRow, selected: RwSignal<HashSet<i64>>) -> i
                     </div>
                 </div>
             </a>
+            <MovieItemMenu
+                movie_id=movie_id
+                title_for_collection=title_for_collection
+                title_for_info=title_for_info
+                item_menu_command=item_menu_command
+            />
+        </div>
+    }
+}
+
+#[component]
+fn MovieItemMenu(
+    movie_id: i64,
+    title_for_collection: String,
+    title_for_info: String,
+    item_menu_command: RwSignal<Option<MovieMenuCommand>>,
+) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let target_for_collection = MovieMenuTarget {
+        id: movie_id,
+        title: title_for_collection,
+    };
+    let target_for_info = MovieMenuTarget {
+        id: movie_id,
+        title: title_for_info,
+    };
+    let troubleshoot_href = format!("/system/troubleshooting/playback?mediaItem={movie_id}");
+
+    view! {
+        <div class=style::item_menu on:click=|e| e.stop_propagation()>
+            <button
+                type="button"
+                class=style::item_menu_trigger
+                title="Movie actions"
+                aria-label="Movie actions"
+                aria-expanded=move || open.get().to_string()
+                on:click=move |e| {
+                    e.prevent_default();
+                    e.stop_propagation();
+                    open.update(|value| *value = !*value);
+                }
+            >
+                <span style=icon_style(IconName::MoreVert, "1.25rem") aria-hidden="true"></span>
+            </button>
+            <div
+                class=style::item_menu_popover
+                role="menu"
+                style:display=move || if open.get() { "" } else { "none" }
+            >
+                <button
+                    type="button"
+                    class=style::item_menu_entry
+                    role="menuitem"
+                    on:click={
+                        let target = target_for_collection.clone();
+                        move |e| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            open.set(false);
+                            item_menu_command.set(Some(MovieMenuCommand::AddToCollection(target.clone())));
+                        }
+                    }
+                >
+                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                    <span>"Add To Collection"</span>
+                </button>
+                <button
+                    type="button"
+                    class=style::item_menu_entry
+                    role="menuitem"
+                    on:click={
+                        let target = target_for_info.clone();
+                        move |e| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            open.set(false);
+                            item_menu_command.set(Some(MovieMenuCommand::ShowMediaInfo(target.clone())));
+                        }
+                    }
+                >
+                    <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
+                    <span>"Show Media Info"</span>
+                </button>
+                <a
+                    class=style::item_menu_entry
+                    role="menuitem"
+                    href=troubleshoot_href
+                    on:click=move |e| {
+                        e.stop_propagation();
+                        open.set(false);
+                    }
+                >
+                    <span style=icon_style(IconName::FindReplace, "1.125rem") aria-hidden="true"></span>
+                    <span>"Troubleshoot Playback"</span>
+                </a>
+            </div>
         </div>
     }
 }
@@ -484,6 +655,37 @@ fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) 
                 />
             </div>
         </Modal>
+    }
+}
+
+#[component]
+fn MediaInfoModal(
+    open: RwSignal<bool>,
+    title: RwSignal<String>,
+    body: RwSignal<String>,
+) -> impl IntoView {
+    view! {
+        <div
+            class=style::modal_backdrop
+            style:display=move || if open.get() { "" } else { "none" }
+        />
+        <div
+            class=style::modal_overlay
+            style:display=move || if open.get() { "" } else { "none" }
+            on:click=move |_| open.set(false)
+        >
+            <div class=style::media_info_panel on:click=|e| e.stop_propagation()>
+                <h2 class=style::media_info_title>{move || title.get()}</h2>
+                <div class=style::media_info_dialog>
+                    <pre class=style::media_info_pre><code>{move || body.get()}</code></pre>
+                </div>
+                <div class=style::media_info_footer>
+                    <button type="button" class=style::selection_btn on:click=move |_| open.set(false)>
+                        "Close"
+                    </button>
+                </div>
+            </div>
+        </div>
     }
 }
 

@@ -166,8 +166,9 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
 | `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |
-| `/media/movies`          | ✅     | URL-driven pager (`?query=…&page=N`) + Jellyfin/Emby artwork proxy.       |
+| `/media/movies`          | TODO   | URL-driven pager (`?query=…&page=N`) + Jellyfin/Emby artwork proxy; item overflow menu opens Add To Collection, Show Media Info, and Troubleshoot Playback. |
 | `/media/movies/:id`      | ✅     | Blocking resource details page with fanart, poster, plot, metadata.       |
+| `/system/troubleshooting/playback` | TODO | Media-item entry route accepts `?mediaItem=ID` and loads backend media-info context. |
 
 ## Fixture strategy
 

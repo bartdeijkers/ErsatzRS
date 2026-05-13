@@ -1,4 +1,7 @@
 use leptos::prelude::*;
+use leptos_router::hooks::use_query_map;
+
+use crate::admin::server_fns::media_browser::get_media_item_info_json;
 
 const GENERAL_REPORT: &str = r#"{
   "Version": "ErsatzRS",
@@ -74,6 +77,62 @@ pub fn TroubleshootingPage() -> impl IntoView {
                 style=panel_style()
             >
                 {report_block("QSV capabilities have not been collected yet.", false)}
+            </section>
+        </div>
+    }
+}
+
+#[component]
+pub fn PlaybackTroubleshootingPage() -> impl IntoView {
+    let query = use_query_map();
+    let media_item_id = query.with_untracked(|params| {
+        params
+            .get("mediaItem")
+            .and_then(|value| value.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
+
+    let info: Resource<Result<String, ServerFnError>> = Resource::new_blocking(
+        move || media_item_id,
+        |id| async move {
+            if id <= 0 {
+                Err(ServerFnError::new("Missing mediaItem query parameter"))
+            } else {
+                get_media_item_info_json(id).await
+            }
+        },
+    );
+
+    view! {
+        <div style="max-width:72rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
+            <header style="display:flex;flex-direction:column;gap:0.75rem">
+                <h1 style="font-size:1.5rem;font-weight:700;color:var(--color-gray-100);margin:0">
+                    "Playback Troubleshooting"
+                </h1>
+                <div style="height:1px;background:var(--color-border)"></div>
+            </header>
+
+            <section style=panel_style()>
+                <Suspense fallback=move || view! { <p>"Loading media info…"</p> }>
+                    {move || match info.get() {
+                        Some(Ok(json)) => view! {
+                            <div style="display:flex;flex-direction:column;gap:1rem">
+                                <p style="margin:0;color:var(--color-gray-300)">
+                                    "Media item " {media_item_id.to_string()}
+                                </p>
+                                <pre style="max-height:31.25rem;overflow:auto;white-space:pre-wrap;margin:0;color:var(--color-gray-200);font-size:0.8125rem;line-height:1.5">
+                                    <code>{json}</code>
+                                </pre>
+                            </div>
+                        }.into_any(),
+                        Some(Err(error)) => view! {
+                            <p style="margin:0;color:var(--color-error,#f87171)">
+                                {format!("Unable to load playback troubleshooting context: {error}")}
+                            </p>
+                        }.into_any(),
+                        None => view! { <p>"Loading media info…"</p> }.into_any(),
+                    }}
+                </Suspense>
             </section>
         </div>
     }
