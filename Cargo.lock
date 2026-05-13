@@ -941,7 +941,7 @@ dependencies = [
  "ersatzrs-scanner",
  "ersatzrs-scheduler",
  "futures-util",
- "gloo-net",
+ "gloo-net 0.7.0",
  "gloo-timers",
  "insta",
  "js-sys",
@@ -1229,13 +1229,34 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-sink",
- "gloo-utils",
+ "gloo-utils 0.2.0",
  "http",
  "js-sys",
  "pin-project",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "gloo-net"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6420f887c48417e9e86c6cf61274eb231830cccc100e49613f7952e269a1fe1"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils 0.3.0",
+ "http",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -1258,6 +1279,19 @@ name = "gloo-utils"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b5555354113b18c547c1d3a98fbf7fb32a9ff4f6fa112ce823a21641a0ba3aa"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "gloo-utils"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4202275d95a142fa209a1e35e91c250a710c5600731372cd3464a39ed01573d6"
 dependencies = [
  "js-sys",
  "serde",
@@ -1744,16 +1778,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
-name = "iri-string"
-version = "0.7.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25e659a4bb38e810ebc252e53b5814ff908a8c58c2a9ce2fae1bbec24cbf4e20"
-dependencies = [
- "memchr",
- "serde",
-]
-
-[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1788,9 +1812,9 @@ dependencies = [
 
 [[package]]
 name = "jsonwebtoken"
-version = "10.3.0"
+version = "10.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0529410abe238729a60b108898784df8984c87f6054c9c4fcacc47e4803c1ce1"
+checksum = "eba32bfb4ffdeaca3e34431072faf01745c9b26d25504aa7a6cf5684334fc4fc"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -1807,6 +1831,7 @@ dependencies = [
  "sha2",
  "signature",
  "simple_asn1",
+ "zeroize",
 ]
 
 [[package]]
@@ -1998,7 +2023,7 @@ dependencies = [
  "any_spawner",
  "either_of",
  "futures",
- "gloo-net",
+ "gloo-net 0.6.0",
  "js-sys",
  "leptos",
  "leptos_router_macro",
@@ -3298,7 +3323,7 @@ dependencies = [
  "const-str",
  "const_format",
  "futures",
- "gloo-net",
+ "gloo-net 0.6.0",
  "http",
  "http-body-util",
  "hyper",
@@ -3712,18 +3737,18 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "stylance"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b107398dd7e772ced243ab3ec19192ddc7184b7974407b1dd8badbe882e64a68"
+checksum = "39b72e2dd834346e3148750851d1af96084ccc40c3d10fae59fca2165375b0b7"
 dependencies = [
  "stylance-macros",
 ]
 
 [[package]]
 name = "stylance-core"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a86f3820639939a15a60a546c614115917e04cde3c307158d8af50281a1d3b"
+checksum = "5ea3f7bfe13422266fd8d8212fc46df000471b4767e530f67eb469a7aea48455"
 dependencies = [
  "anyhow",
  "serde",
@@ -3734,9 +3759,9 @@ dependencies = [
 
 [[package]]
 name = "stylance-macros"
-version = "0.8.0"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18f8370bfcfab14dad62d9f138e136af1aa2cd8466f84d2f8bf790a44aa8fd96"
+checksum = "c3549aff67c0b62a2c0522461ee98ff4af771769e52db863c6900fe9f8b8c15e"
 dependencies = [
  "anyhow",
  "proc-macro2",
@@ -3964,9 +3989,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.0"
+version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a91135f59b1cbf38c91e73cf3386fca9bb77915c45ce2771460c9d92f0f3d776"
+checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
 dependencies = [
  "bytes",
  "libc",
@@ -4125,9 +4150,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.6.8"
+version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
+checksum = "68d6fdd9f81c2819c9a8b0e0cd91660e7746a8e6ea2ba7c6b2b057985f6bcb51"
 dependencies = [
  "bitflags",
  "bytes",
@@ -4138,7 +4163,6 @@ dependencies = [
  "http-body-util",
  "http-range-header",
  "httpdate",
- "iri-string",
  "mime",
  "mime_guess",
  "percent-encoding",
@@ -4149,6 +4173,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "url",
 ]
 
 [[package]]
@@ -5145,6 +5170,20 @@ name = "zeroize"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "zerotrie"
