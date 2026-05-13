@@ -28,8 +28,12 @@ use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::server_fns::media_browser::{
     add_movies_to_collection, add_movies_to_playlist, create_collection, get_movie_details,
-    list_all_collections, list_all_playlist_groups, list_movies, list_playlists_by_group,
-    CollectionOption, MediaCardRow, MovieDetailRow, PlaylistGroupOption, PlaylistOption,
+    list_movies, CollectionOption, MediaCardRow, MovieDetailRow, PlaylistGroupOption,
+    PlaylistOption,
+};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::media_browser::{
+    list_all_collections, list_all_playlist_groups, list_playlists_by_group,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
@@ -359,26 +363,34 @@ const NEW_COLLECTION_ID: i64 = -1;
 
 #[component]
 fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
-    // Server resource for the dropdown options. Loads once and refreshes
-    // when the modal closes after creating a new collection.
-    //
-    // `new_blocking` so the SSR HTML and the first client tick agree on the
-    // resolved value — combined with reading `.get().unwrap_or_default()`
-    // directly (no inner `<Suspense>`) this avoids the
-    // `failed_to_cast_marker_node` panic that a Suspense+`prop:value`
-    // combination triggers inside an island (see memory:
-    // `movies-page-port`).
     let refresh: RwSignal<u32> = RwSignal::new(0);
-    let options: Resource<Vec<CollectionOption>> = Resource::new_blocking(
-        move || refresh.get(),
-        |_| async move { list_all_collections().await.unwrap_or_default() },
-    );
+    let options: RwSignal<Vec<CollectionOption>> = RwSignal::new(Vec::new());
 
     // Selected collection id. `-1` means "(New Collection)".
     let collection_id: RwSignal<i64> = RwSignal::new(NEW_COLLECTION_ID);
     let new_name: RwSignal<String> = RwSignal::new(String::new());
 
     let toast = use_toast();
+
+    // Load option rows only after hydration. Rendering server-resolved
+    // `<option>` nodes inside an island `<select>` can abort hydration before
+    // the modal buttons receive handlers.
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        let _ = refresh.get();
+        leptos::task::spawn_local(async move {
+            let loaded = list_all_collections().await.unwrap_or_default();
+            let first_id = loaded.first().map(|c| c.id);
+            options.set(loaded);
+            if let Some(id) = first_id {
+                if collection_id.get_untracked() == NEW_COLLECTION_ID
+                    && new_name.with_untracked(String::is_empty)
+                {
+                    collection_id.set(id);
+                }
+            }
+        });
+    });
 
     // Submit action — runs the create-then-add or add-only branches.
     let submit_action = Action::new(move |(): &()| {
@@ -447,9 +459,6 @@ fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) 
 
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
                 <label>"Collection"</label>
-                // Render the `<select>` directly — no inner `<Suspense>`.
-                // The blocking resource guarantees SSR and the first
-                // client tick see the same value.
                 <select
                     prop:value=move || collection_id.get().to_string()
                     on:change=move |e| {
@@ -460,7 +469,7 @@ fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) 
                 >
                     <option value=NEW_COLLECTION_ID.to_string()>"(New Collection)"</option>
                     {move || {
-                        options.get().unwrap_or_default().into_iter().map(|c| view! {
+                        options.get().into_iter().map(|c| view! {
                             <option value=c.id.to_string()>{c.name}</option>
                         }).collect_view()
                     }}
@@ -486,25 +495,35 @@ fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) 
 fn AddToPlaylistModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
     let group_id: RwSignal<i64> = RwSignal::new(0);
     let playlist_id: RwSignal<i64> = RwSignal::new(0);
+    let groups: RwSignal<Vec<PlaylistGroupOption>> = RwSignal::new(Vec::new());
+    let playlists: RwSignal<Vec<PlaylistOption>> = RwSignal::new(Vec::new());
 
-    // `new_blocking` + no inner `<Suspense>` to dodge the
-    // `failed_to_cast_marker_node` hydration panic that the
-    // Suspense+`prop:value` combo triggers inside an island.
-    let groups: Resource<Vec<PlaylistGroupOption>> = Resource::new_blocking(
-        || (),
-        |()| async { list_all_playlist_groups().await.unwrap_or_default() },
-    );
+    // Load select options only after hydration, for the same reason as the
+    // collection modal above.
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            groups.set(list_all_playlist_groups().await.unwrap_or_default());
+        });
+    });
 
-    // Playlists for the currently chosen group. Re-fetches on group change.
-    let playlists: Resource<Vec<PlaylistOption>> = Resource::new_blocking(
-        move || group_id.get(),
-        |gid| async move {
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        let gid = group_id.get();
+        playlists.set(Vec::new());
+        if gid == 0 {
+            return;
+        }
+        leptos::task::spawn_local(async move {
+            let loaded = list_playlists_by_group(gid).await.unwrap_or_default();
             if gid == 0 {
-                return Vec::new();
+                return;
             }
-            list_playlists_by_group(gid).await.unwrap_or_default()
-        },
-    );
+            if group_id.get_untracked() == gid {
+                playlists.set(loaded);
+            }
+        });
+    });
 
     let toast = use_toast();
 
@@ -571,7 +590,7 @@ fn AddToPlaylistModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) ->
                 >
                     <option value="0">"(Select a group)"</option>
                     {move || {
-                        groups.get().unwrap_or_default().into_iter().map(|g| view! {
+                        groups.get().into_iter().map(|g| view! {
                             <option value=g.id.to_string()>{g.name}</option>
                         }).collect_view()
                     }}
@@ -589,7 +608,7 @@ fn AddToPlaylistModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) ->
                 >
                     <option value="0">"(Select a playlist)"</option>
                     {move || {
-                        playlists.get().unwrap_or_default().into_iter().map(|p| view! {
+                        playlists.get().into_iter().map(|p| view! {
                             <option value=p.id.to_string()>{p.name}</option>
                         }).collect_view()
                     }}
