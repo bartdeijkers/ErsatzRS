@@ -582,13 +582,17 @@ async fn upsert_local_file(
     .await?;
 
     let (item_id, version_id) = if let Some(row) = maybe_existing {
-        (
-            row.get::<Option<i64>, _>("MediaItemId").unwrap_or_default(),
-            row.get::<i64, _>("MediaVersionId"),
-        )
+        let item_id = row.get::<Option<i64>, _>("MediaItemId").unwrap_or_default();
+        // Backfill fallback metadata for items created before this insert
+        // existed in the scanner. `insert_fallback_metadata` is idempotent.
+        if item_id != 0 {
+            insert_fallback_metadata(&mut tx, item_id, library_path, path).await?;
+        }
+        (item_id, row.get::<i64, _>("MediaVersionId"))
     } else {
         let item_id = insert_media_item(&mut tx, library_path.id).await?;
         insert_media_subtype(&mut tx, item_id, library_path.media_kind).await?;
+        insert_fallback_metadata(&mut tx, item_id, library_path, path).await?;
         let version_id =
             insert_media_version(&mut tx, item_id, &probed, library_path.media_kind).await?;
         sqlx::query(
@@ -676,6 +680,139 @@ async fn insert_media_subtype(
     };
     let sql = format!(r#"INSERT INTO "{table}" ("Id") VALUES (?)"#);
     sqlx::query(&sql).bind(item_id).execute(&mut **tx).await?;
+    Ok(())
+}
+
+/// Inserts a fallback metadata row for the newly created media item so the
+/// admin browser queries (which `INNER JOIN` on the subtype's metadata table)
+/// have something to return.
+///
+/// Idempotent: if a metadata row already exists for this item (any
+/// `MetadataKind`), this is a no-op. That lets us call it from both the
+/// "newly inserted" and the "existing row" branches of `upsert_local_file`
+/// so libraries scanned before fallback metadata was introduced get
+/// backfilled on the next scan.
+///
+/// Mirrors `ErsatzTV`'s `FallbackMetadataProvider.GetFallbackMetadata*` — the
+/// title defaults to the file stem and `OriginalTitle` is the path relative to
+/// the library root. Tags / artwork / actors are intentionally deferred; the
+/// folder scanner can enrich the row later without disturbing this insert.
+async fn fallback_metadata_exists(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    media_kind: LibraryMediaKind,
+) -> Result<bool> {
+    let (table, column) = match media_kind {
+        LibraryMediaKind::Movies => ("MovieMetadata", "MovieId"),
+        LibraryMediaKind::OtherVideos => ("OtherVideoMetadata", "OtherVideoId"),
+        LibraryMediaKind::Songs => ("SongMetadata", "SongId"),
+        LibraryMediaKind::Images => ("ImageMetadata", "ImageId"),
+        LibraryMediaKind::MusicVideos
+        | LibraryMediaKind::RemoteStreams
+        | LibraryMediaKind::Shows => return Ok(true),
+    };
+    let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "{column}" = ?)"#);
+    let exists: i64 = sqlx::query_scalar(&sql)
+        .bind(item_id)
+        .fetch_one(&mut **tx)
+        .await?;
+    Ok(exists != 0)
+}
+
+async fn insert_fallback_metadata(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+) -> Result<()> {
+    if fallback_metadata_exists(tx, item_id, library_path.media_kind).await? {
+        return Ok(());
+    }
+
+    let title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let original_title = std::path::Path::new(path)
+        .strip_prefix(&library_path.path)
+        .ok()
+        .and_then(|p| p.to_str())
+        .map(str::to_owned);
+    let now = encode_datetime(Utc::now());
+
+    match library_path.media_kind {
+        LibraryMediaKind::Movies => {
+            sqlx::query(
+                r#"INSERT INTO "MovieMetadata" (
+                    "MovieId", "DateAdded", "DateUpdated", "MetadataKind",
+                    "Title", "SortTitle", "OriginalTitle"
+                ) VALUES (?, ?, ?, 1, ?, ?, ?)"#,
+            )
+            .bind(item_id)
+            .bind(&now)
+            .bind(&now)
+            .bind(&title)
+            .bind(&title)
+            .bind(&original_title)
+            .execute(&mut **tx)
+            .await?;
+        }
+        LibraryMediaKind::OtherVideos => {
+            sqlx::query(
+                r#"INSERT INTO "OtherVideoMetadata" (
+                    "OtherVideoId", "DateAdded", "DateUpdated", "MetadataKind",
+                    "Title", "SortTitle", "OriginalTitle"
+                ) VALUES (?, ?, ?, 1, ?, ?, ?)"#,
+            )
+            .bind(item_id)
+            .bind(&now)
+            .bind(&now)
+            .bind(&title)
+            .bind(&title)
+            .bind(&original_title)
+            .execute(&mut **tx)
+            .await?;
+        }
+        LibraryMediaKind::Songs => {
+            sqlx::query(
+                r#"INSERT INTO "SongMetadata" (
+                    "SongId", "DateAdded", "DateUpdated", "MetadataKind",
+                    "Title", "SortTitle", "OriginalTitle"
+                ) VALUES (?, ?, ?, 1, ?, ?, ?)"#,
+            )
+            .bind(item_id)
+            .bind(&now)
+            .bind(&now)
+            .bind(&title)
+            .bind(&title)
+            .bind(&original_title)
+            .execute(&mut **tx)
+            .await?;
+        }
+        LibraryMediaKind::Images => {
+            sqlx::query(
+                r#"INSERT INTO "ImageMetadata" (
+                    "ImageId", "DateAdded", "DateUpdated", "MetadataKind",
+                    "Title", "SortTitle", "OriginalTitle"
+                ) VALUES (?, ?, ?, 1, ?, ?, ?)"#,
+            )
+            .bind(item_id)
+            .bind(&now)
+            .bind(&now)
+            .bind(&title)
+            .bind(&title)
+            .bind(&original_title)
+            .execute(&mut **tx)
+            .await?;
+        }
+        LibraryMediaKind::MusicVideos
+        | LibraryMediaKind::RemoteStreams
+        | LibraryMediaKind::Shows => {
+            // MusicVideo / RemoteStream metadata is written by their dedicated
+            // upsert paths; Shows are not supported by the local scanner.
+        }
+    }
     Ok(())
 }
 

@@ -3,4 +3,5 @@
 - [ErsatzTV path](ersatztv-source-path.md) — where the C# source tree lives on this machine.
 - [Movies page port](movies-page-port.md) — artwork proxy URL routing, URL-driven pagination, details page pattern.
 - [Collection detail port](collection-detail-port.md) — multi-kind UNION-ALL card query, scalar-prop island reuse, drag-and-drop deferral pattern.
+- [Local scanner fallback metadata](local-scanner-fallback-metadata.md) — scanner must insert Movie/OtherVideo/Song/Image metadata or browser INNER JOINs hide everything.
 - [Verification scope](verification-scope.md) — Phase 4 fast-loop contract: hydration-lint + web-crate compile only, hand off full gates and Playwright to the human at commit.
