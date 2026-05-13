@@ -1,7 +1,7 @@
 # ErsatzRS
 
 ErsatzRS is a from-scratch Rust reimplementation of
-[ErsatzTV Legacy](https://github.com/ErsatzTV/ErsatzTV): a media server that turns
+[ErsatzTV Legacy](https://github.com/ErsatzTV/legacy): a media server that turns
 personal media libraries into linear TV channels served through IPTV, HLS, and
 HDHomeRun-compatible endpoints.
 
@@ -69,7 +69,7 @@ Documentation follows the Diataxis structure under [docs/](docs/README.md):
 
 ## Credits
 
-ErsatzRS is a Rust port of [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) by
+ErsatzRS is a Rust port of [ErsatzTV Legacy](https://github.com/ErsatzTV/legacy) by
 Jason Dove. ErsatzTV is the original work this project ports from, and ErsatzRS
 would not exist without it. If you find either project useful, please consider
 supporting Jason's continued work on the upstream:

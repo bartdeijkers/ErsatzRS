@@ -22,7 +22,7 @@ freely, subject to the following restrictions:
 ---
 
 ErsatzRS is a Rust port of ErsatzTV by Jason Dove
-(https://github.com/ErsatzTV/ErsatzTV). The original ErsatzTV project is
+(https://github.com/ErsatzTV/legacy). The original ErsatzTV project is
 distributed under the zlib license; that notice is preserved above as
 required by restriction 3.
 
