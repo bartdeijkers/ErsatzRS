@@ -69,6 +69,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.rid }}
+          # Self-hosted runner shares $CARGO_HOME/bin with the developer
+          # shell, so don't let rust-cache prune cargo-leptos /
+          # stylance-cli / wasm-bindgen / cross between runs.
+          cache-bin: "false"
       - name: Install stylance-cli
         if: ${{ !matrix.cross }}
         run: cargo install stylance-cli --version 0.8.0 --locked

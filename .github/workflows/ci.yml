@@ -24,6 +24,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Self-hosted runner shares $CARGO_HOME/bin with the developer
+          # shell, so don't let rust-cache prune cargo-leptos /
+          # stylance-cli / wasm-bindgen between runs.
+          cache-bin: "false"
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.0 --locked
       - name: Clippy (default / SQLite)
@@ -38,6 +43,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Self-hosted runner shares $CARGO_HOME/bin with the developer
+          # shell, so don't let rust-cache prune cargo-leptos /
+          # stylance-cli / wasm-bindgen between runs.
+          cache-bin: "false"
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.0 --locked
       - name: Test (all features)
