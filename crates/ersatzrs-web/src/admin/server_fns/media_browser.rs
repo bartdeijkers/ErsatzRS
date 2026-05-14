@@ -281,93 +281,6 @@ pub async fn list_movies(
     Ok((cards, total.max(0) as u64))
 }
 
-/// Page map for the movies list. Ports the
-/// `LuceneSearchIndex.GetSearchPageMap` algorithm:
-///
-/// Walk the filtered, sort-title-ordered movie list in `page_size` chunks.
-/// For every page, look at the bucket of the last item on the page; every
-/// bucket up to and including that letter that has not yet been assigned
-/// maps to this page (1-based). Unmatched trailing buckets get the final
-/// page number so the rightmost letters still scroll to the last page.
-#[server]
-pub async fn movies_page_map(
-    search: String,
-    page_size: u32,
-) -> Result<LetterPageMap, ServerFnError> {
-    use crate::host::state::AppState;
-    use sqlx::Row;
-
-    if page_size == 0 {
-        return Ok(LetterPageMap {
-            pages: vec![0; 27],
-        });
-    }
-
-    let state = expect_context::<AppState>();
-    let like = format!("%{}%", search.trim());
-
-    // Just the SortTitle of each row, in the same order as `list_movies`.
-    let rows = sqlx::query(
-        r#"SELECT COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle"
-           FROM "Movie" m
-           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
-           WHERE (? = '' OR mm."Title" LIKE ?)
-           ORDER BY mm."SortTitle", mm."Title""#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let buckets: Vec<usize> = rows
-        .iter()
-        .map(|r| {
-            let sort_title: String = r.try_get("SortTitle").unwrap_or_default();
-            let letter = sort_title
-                .trim()
-                .chars()
-                .next()
-                .map(|c| c.to_ascii_lowercase())
-                .filter(char::is_ascii_alphabetic)
-                .unwrap_or('#');
-            bucket_index(letter)
-        })
-        .collect();
-
-    let mut map = vec![0_u32; 27];
-    let total = buckets.len();
-    if total == 0 {
-        return Ok(LetterPageMap { pages: map });
-    }
-
-    let mut current = 0_usize;
-    let mut page: u32 = 0;
-    let page_size_usize = page_size as usize;
-    while current < total {
-        page += 1;
-        current += page_size_usize;
-        if current > total {
-            current = total;
-        }
-        let jump = buckets[current - 1];
-        for (i, slot) in map.iter_mut().enumerate().take(jump + 1) {
-            if *slot == 0 {
-                *slot = page;
-            }
-            let _ = i;
-        }
-    }
-
-    let max = map.iter().copied().max().unwrap_or(0);
-    for slot in &mut map {
-        if *slot == 0 {
-            *slot = max;
-        }
-    }
-
-    Ok(LetterPageMap { pages: map })
-}
-
 /// Movie details for the `/media/movies/:id` page. Ports
 /// `ErsatzTV/Pages/Movie.razor` + `Application.Movies/Queries/GetMovieById`.
 #[server]
@@ -1971,24 +1884,157 @@ pub async fn list_playlists_by_group(
         .collect())
 }
 
-/// Adds movies to a collection. Ports the movie branch of
-/// `AddItemsToCollectionHandler`. The C# handler appends to
-/// `Collection.MediaItems`; the joined table is `CollectionItem` and
-/// duplicates are skipped via `INSERT OR IGNORE` (PK is composite).
-/// Returns the number of rows actually inserted (i.e. ignoring duplicates).
+// ---------------------------------------------------------------------------
+// Page-map + add-to-collection/playlist used by `/media/movies`,
+// `/media/tv/shows`, `/media/music/artists`, and `/media/other/videos`.
+//
+// These functions accept a `kind` discriminant so the same browser shell can
+// drive every multi-select media kind with identical SQL shapes (one table
+// per kind, joined to its metadata).
+// ---------------------------------------------------------------------------
+
+/// Discriminant for the media-browser server functions below. Values match the
+/// kind discriminants used by `CollectionItemCard.kind`.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MediaBrowserKind {
+    Movie,
+    Show,
+    Artist,
+    OtherVideo,
+}
+
+#[cfg(feature = "ssr")]
+impl MediaBrowserKind {
+    /// SQL table + metadata table + foreign-key column for the page-map query.
+    /// Returns `(item_table, metadata_table, fk_column)`.
+    const fn tables(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Movie => ("Movie", "MovieMetadata", "MovieId"),
+            Self::Show => ("Show", "ShowMetadata", "ShowId"),
+            Self::Artist => ("Artist", "ArtistMetadata", "ArtistId"),
+            Self::OtherVideo => ("OtherVideo", "OtherVideoMetadata", "OtherVideoId"),
+        }
+    }
+
+    /// `CollectionType` value used when inserting `PlaylistItem` rows.
+    /// Matches `ErsatzTV.Core/Domain/CollectionType.cs`.
+    const fn collection_type(self) -> i32 {
+        match self {
+            Self::Movie => 10,
+            Self::Show => 1,
+            Self::Artist => 3,
+            Self::OtherVideo => 40,
+        }
+    }
+}
+
+/// Page map for any browser kind. Ports the
+/// `LuceneSearchIndex.GetSearchPageMap` algorithm:
+///
+/// Walk the filtered, sort-title-ordered item list in `page_size` chunks. For
+/// every page, look at the bucket of the last item on the page; every bucket
+/// up to and including that letter that has not yet been assigned maps to
+/// this page (1-based). Unmatched trailing buckets get the final page number
+/// so the rightmost letters still scroll to the last page.
 #[server]
-pub async fn add_movies_to_collection(
+pub async fn media_page_map(
+    kind: MediaBrowserKind,
+    search: String,
+    page_size: u32,
+) -> Result<LetterPageMap, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    if page_size == 0 {
+        return Ok(LetterPageMap { pages: vec![0; 27] });
+    }
+
+    let state = expect_context::<AppState>();
+    let like = format!("%{}%", search.trim());
+
+    let (item_table, metadata_table, fk_column) = kind.tables();
+    // `item_table`, `metadata_table`, and `fk_column` are private constants
+    // returned by `MediaBrowserKind::tables` — not user input.
+    let sql = format!(
+        r#"SELECT COALESCE(m."SortTitle", m."Title", '') AS "SortTitle"
+           FROM "{item_table}" i
+           JOIN "{metadata_table}" m ON m."{fk_column}" = i."Id"
+           WHERE (? = '' OR m."Title" LIKE ?)
+           ORDER BY m."SortTitle", m."Title""#
+    );
+
+    let rows = sqlx::query(&sql)
+        .bind(search.trim())
+        .bind(&like)
+        .fetch_all(&state.pool)
+        .await?;
+
+    let buckets: Vec<usize> = rows
+        .iter()
+        .map(|r| {
+            let sort_title: String = r.try_get("SortTitle").unwrap_or_default();
+            let letter = sort_title
+                .trim()
+                .chars()
+                .next()
+                .map(|c| c.to_ascii_lowercase())
+                .filter(char::is_ascii_alphabetic)
+                .unwrap_or('#');
+            bucket_index(letter)
+        })
+        .collect();
+
+    let mut map = vec![0_u32; 27];
+    let total = buckets.len();
+    if total == 0 {
+        return Ok(LetterPageMap { pages: map });
+    }
+
+    let mut current = 0_usize;
+    let mut page: u32 = 0;
+    let page_size_usize = page_size as usize;
+    while current < total {
+        page += 1;
+        current += page_size_usize;
+        if current > total {
+            current = total;
+        }
+        let jump = buckets[current - 1];
+        for (i, slot) in map.iter_mut().enumerate().take(jump + 1) {
+            if *slot == 0 {
+                *slot = page;
+            }
+            let _ = i;
+        }
+    }
+
+    let max = map.iter().copied().max().unwrap_or(0);
+    for slot in &mut map {
+        if *slot == 0 {
+            *slot = max;
+        }
+    }
+
+    Ok(LetterPageMap { pages: map })
+}
+
+/// Add any media items to a collection. Ports the
+/// `AddItemsToCollectionHandler` branches: `CollectionItem` only references a
+/// `MediaItemId`, so this works uniformly for every kind. Duplicates are
+/// skipped via `INSERT OR IGNORE` (PK is composite). Returns the number of
+/// rows actually inserted.
+#[server]
+pub async fn add_media_items_to_collection(
     collection_id: i64,
-    movie_ids: Vec<i64>,
+    media_item_ids: Vec<i64>,
 ) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    if movie_ids.is_empty() {
+    if media_item_ids.is_empty() {
         return Ok(0);
     }
 
-    // Validate that the collection exists — mirrors `CollectionMustExist`.
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
         .bind(collection_id)
         .fetch_one(&state.pool)
@@ -1998,14 +2044,16 @@ pub async fn add_movies_to_collection(
     }
 
     let mut added: u64 = 0;
-    for id in movie_ids {
-        let movie_exists: i64 =
-            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Movie" WHERE "Id" = ?"#)
+    for id in media_item_ids {
+        let item_exists: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
                 .bind(id)
                 .fetch_one(&state.pool)
                 .await?;
-        if movie_exists == 0 {
-            return Err(ServerFnError::new(format!("Movie {id} does not exist.")));
+        if item_exists == 0 {
+            return Err(ServerFnError::new(format!(
+                "Media item {id} does not exist."
+            )));
         }
 
         let result = sqlx::query(
@@ -2020,28 +2068,28 @@ pub async fn add_movies_to_collection(
     Ok(added)
 }
 
-/// Adds movies to a playlist as individual `PlaylistItem` rows of
-/// `CollectionType = 10` (Movie). Ports the movie branch of
-/// `AddItemsToPlaylistHandler`: each item gets `Index = max(Index) + 1`,
-/// `PlaybackOrder = Shuffle (1)`, `IncludeInProgramGuide = 1`.
+/// Add media items to a playlist as individual `PlaylistItem` rows. The
+/// `CollectionType` is taken from `kind` (see
+/// `ErsatzTV.Core/Domain/CollectionType.cs`). Per item:
+/// `Index = max(Index) + 1`, `PlaybackOrder = Shuffle (1)`,
+/// `IncludeInProgramGuide = 1`, `PlayAll = 0`. Mirrors the per-kind branches
+/// of `AddItemsToPlaylistHandler`.
 #[server]
-pub async fn add_movies_to_playlist(
+pub async fn add_media_items_to_playlist(
+    kind: MediaBrowserKind,
     playlist_id: i64,
-    movie_ids: Vec<i64>,
+    media_item_ids: Vec<i64>,
 ) -> Result<u64, ServerFnError> {
-    // CollectionType.Movie = 10 (see `ErsatzTV.Core/Domain/CollectionType.cs`).
-    const COLLECTION_TYPE_MOVIE: i32 = 10;
     // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
     const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
 
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    if movie_ids.is_empty() {
+    if media_item_ids.is_empty() {
         return Ok(0);
     }
 
-    // Validate that the playlist exists — mirrors `PlaylistMustExist`.
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
         .bind(playlist_id)
         .fetch_one(&state.pool)
@@ -2050,7 +2098,6 @@ pub async fn add_movies_to_playlist(
         return Err(ServerFnError::new("Playlist does not exist."));
     }
 
-    // Next index = max(Index) + 1 over the existing items, or 0 if empty.
     let max_index: Option<i64> =
         sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
             .bind(playlist_id)
@@ -2058,8 +2105,9 @@ pub async fn add_movies_to_playlist(
             .await?;
     let start_index = max_index.map_or(0, |i| i + 1);
 
+    let collection_type = kind.collection_type();
     let mut added: u64 = 0;
-    for (next_index, id) in (start_index..).zip(movie_ids) {
+    for (next_index, id) in (start_index..).zip(media_item_ids) {
         let result = sqlx::query(
             r#"INSERT INTO "PlaylistItem"
                    ("Index", "PlaylistId", "CollectionType", "MediaItemId",
@@ -2068,7 +2116,7 @@ pub async fn add_movies_to_playlist(
         )
         .bind(next_index)
         .bind(playlist_id)
-        .bind(COLLECTION_TYPE_MOVIE)
+        .bind(collection_type)
         .bind(id)
         .bind(PLAYBACK_ORDER_SHUFFLE)
         .execute(&state.pool)

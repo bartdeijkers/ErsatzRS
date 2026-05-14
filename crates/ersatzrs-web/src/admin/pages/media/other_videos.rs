@@ -1,15 +1,13 @@
 //! Other video browser — port of `Pages/OtherVideoList.razor`.
+//!
+//! Delegates to the shared [`MultiSelectBrowserPage`].
+//! `OtherVideoCardViewModel.HasMediaInfo = true`, so the per-card "Show Media
+//! Info" entry is enabled.
 use leptos::prelude::*;
 
-use crate::admin::pages::media::browser::MediaBrowserPage;
-use crate::admin::server_fns::media_browser::list_other_videos;
+use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
 
 #[component]
 pub fn OtherVideosPage() -> impl IntoView {
-    view! {
-        <MediaBrowserPage
-            title="Other Videos"
-            loader=move |q, p, ps| list_other_videos(q, p, ps)
-        />
-    }
+    view! { <MultiSelectBrowserPage config=BrowserKindConfig::OTHER_VIDEOS/> }
 }
