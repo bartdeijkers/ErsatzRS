@@ -9,7 +9,10 @@
 //!   `NavigationManager.NavigateTo("media/movies/page/N")` pattern.
 //!   * Pressing Enter on the search box submits a GET form (no hydration).
 //!   * Pager arrows are plain `<a>` anchors (no hydration).
-//!   * `LetterBar` anchors are plain `<a href="#letter-X">` (no hydration).
+//!   * `LetterBar` renders as a fixed right-edge column of plain `<a>` links
+//!     pointing at `/media/movies?query=…&page=N#letter-X`, where `N` comes
+//!     from [`movies_page_map`] — the port of `ErsatzTV`'s `SearchPageMap`
+//!     algorithm in `LuceneSearchIndex.GetSearchPageMap`.
 //! * The interactive multi-select toolbar (Select All button, selection
 //!   header, hover-checkboxes on cards, Add-to-Collection / Add-to-Playlist
 //!   modals) lives in [`MovieMultiSelectIsland`]. The island owns its own
@@ -28,8 +31,8 @@ use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::server_fns::media_browser::{
     add_movies_to_collection, add_movies_to_playlist, create_collection, get_media_item_info_json,
-    get_movie_details, list_movies, CollectionOption, MediaCardRow, MovieDetailRow,
-    PlaylistGroupOption, PlaylistOption,
+    get_movie_details, list_movies, movies_page_map, CollectionOption, LetterPageMap,
+    MediaCardRow, MovieDetailRow, PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -37,7 +40,9 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
-use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
+use crate::admin::ui::primitives::letter_bar::{
+    letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
+};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/browser.module.css");
@@ -120,17 +125,38 @@ fn MovieMultiSelectIsland(query: String, page: u32) -> impl IntoView {
         |(q, p)| async move { list_movies(q, p, PAGE_SIZE).await.unwrap_or_default() },
     );
 
+    // Letter→page map is search-scoped (page-independent), so its resource
+    // only depends on the query. Ports the `SearchPageMap` lookup that
+    // backs `LetterBar.razor`'s `GetLinkForLetter`.
+    let q_for_map = query.clone();
+    let page_map: Resource<LetterPageMap> = Resource::new_blocking(
+        move || q_for_map.clone(),
+        |q| async move { movies_page_map(q, PAGE_SIZE).await.unwrap_or_default() },
+    );
+
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
             {move || {
+                let query_for_links = query.clone();
+                let query_for_jump = query.clone();
                 data.get().map(|(rows, total)| {
                     let present: Signal<Option<HashSet<char>>> = Signal::derive({
                         let rows = rows.clone();
                         move || Some(rows.iter().map(|r| letter_bucket(&r.sort_title)).collect())
                     });
-                    let query_for_links = query.clone();
+                    let letter_bar_view = match page_map.get() {
+                        Some(pm) => {
+                            let jump = LetterJump {
+                                base_uri: "/media/movies".to_string(),
+                                query: query_for_jump,
+                                page_map: pm,
+                            };
+                            view! { <LetterBar present=present jump=jump/> }.into_any()
+                        }
+                        None => view! { <LetterBar present=present/> }.into_any(),
+                    };
                     view! {
-                        <LetterBar present=present/>
+                        {letter_bar_view}
                         <MovieGridWithSelection
                             rows=rows
                             total=total
@@ -230,13 +256,42 @@ fn MovieGridWithSelection(
         })
     };
 
+    let select_all_disabled = {
+        let ids = page_ids_for_select_all.clone();
+        Signal::derive(move || ids.is_empty() || all_selected.get())
+    };
+    let select_all_click = {
+        let page_ids = page_ids_for_select_all.clone();
+        move |_| {
+            let ids = page_ids.clone();
+            selected.update(|s| {
+                for id in &ids {
+                    s.insert(*id);
+                }
+            });
+        }
+    };
+
     view! {
-        // ── Pager + Select All ─────────────────────────────────────────
-        <Pager
-            query=query.clone()
-            page=page
-            total=total
-        />
+        // ── Pager (centered summary + chevrons) and Select All on the
+        //    right — mirrors ErsatzTV's `MediaCardPager.razor` row layout.
+        <div class=card_style::pager>
+            <div class=card_style::pager_left/>
+            <PagerCenter
+                query=query.clone()
+                page=page
+                total=total
+            />
+            <div style="flex: 1; display: flex; justify-content: flex-end;">
+                <button
+                    class=style::select_all_btn
+                    disabled=move || select_all_disabled.get()
+                    on:click=select_all_click
+                >
+                    "☑ Select All"
+                </button>
+            </div>
+        </div>
 
         // ── Selection header — always rendered; visibility via `style:display`
         //    to keep the DOM shape stable (TEST.md rule 2). ──────────────
@@ -267,31 +322,6 @@ fn MovieGridWithSelection(
                 on:click=move |_| selected.update(HashSet::clear)
             >
                 "✓ Clear Selection"
-            </button>
-        </div>
-
-        // ── "Select All" button (right-aligned). Always present; disabled
-        //    when there are no items, or when all are already selected. ──
-        <div style="display: flex">
-            <button
-                class=style::select_all_btn
-                disabled={
-                    let ids = page_ids_for_select_all.clone();
-                    move || ids.is_empty() || all_selected.get()
-                }
-                on:click={
-                    let page_ids = page_ids_for_select_all.clone();
-                    move |_| {
-                        let ids = page_ids.clone();
-                        selected.update(|s| {
-                            for id in &ids {
-                                s.insert(*id);
-                            }
-                        });
-                    }
-                }
-            >
-                "☑ Select All"
             </button>
         </div>
 
@@ -828,7 +858,7 @@ fn AddToPlaylistModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) ->
 // ---------------------------------------------------------------------------
 
 #[component]
-fn Pager(query: String, page: u32, total: u64) -> impl IntoView {
+fn PagerCenter(query: String, page: u32, total: u64) -> impl IntoView {
     let max_page = if total == 0 {
         0
     } else {
@@ -867,27 +897,24 @@ fn Pager(query: String, page: u32, total: u64) -> impl IntoView {
     let next_href = build_link(&query, page + 1);
 
     view! {
-        <div class=card_style::pager>
-            <div class=card_style::pager_left/>
-            <div class=card_style::pager_right>
-                <span>{summary}</span>
-                {if prev_disabled {
-                    view! {
-                        <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"‹"</span>
-                    }
-                    .into_any()
-                } else {
-                    view! { <a class=card_style::pager_btn href=prev_href>"‹"</a> }.into_any()
-                }}
-                {if next_disabled {
-                    view! {
-                        <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"›"</span>
-                    }
-                    .into_any()
-                } else {
-                    view! { <a class=card_style::pager_btn href=next_href>"›"</a> }.into_any()
-                }}
-            </div>
+        <div class=card_style::pager_right>
+            {if prev_disabled {
+                view! {
+                    <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"‹"</span>
+                }
+                .into_any()
+            } else {
+                view! { <a class=card_style::pager_btn href=prev_href>"‹"</a> }.into_any()
+            }}
+            <span>{summary}</span>
+            {if next_disabled {
+                view! {
+                    <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"›"</span>
+                }
+                .into_any()
+            } else {
+                view! { <a class=card_style::pager_btn href=next_href>"›"</a> }.into_any()
+            }}
         </div>
     }
 }

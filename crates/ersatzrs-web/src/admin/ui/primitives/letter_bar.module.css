@@ -11,6 +11,30 @@
     margin-bottom: 1rem;
 }
 
+/* Right-edge vertical variant — ports the ErsatzTV `LetterBar` look,
+   which sits flush against the page's right gutter as a column of links
+   spanning the full visible height of the viewport. Letters are
+   distributed evenly with `justify-content: space-around` (mirrors
+   `wwwroot/css/site.css` `.letter-bar`), so the column scales
+   dynamically when the window resizes. The top offset matches the admin
+   `.topbar` height (3.5rem). */
+.bar-side {
+    position: fixed;
+    top: 3.5rem;
+    bottom: 0;
+    right: 0.5rem;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: space-around;
+    gap: 0;
+    padding: 0.5rem 0.375rem;
+    background-color: transparent;
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
 .letter {
     display: inline-flex;
     align-items: center;
@@ -26,6 +50,20 @@
     transition: background-color 150ms, color 150ms;
 }
 .letter:hover { background-color: var(--color-primary-20); color: var(--color-primary); }
+
+/* In the vertical bar each link is the green accent colour — same as
+   ErsatzTV's `MudLink` default in this slot. */
+.bar-side .letter {
+    color: var(--color-primary);
+    min-width: 1rem;
+    height: auto;
+    padding: 0 0.25rem;
+    font-size: 0.8125rem;
+}
+.bar-side .letter:hover {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary, #000);
+}
 
 .letter-disabled {
     opacity: 0.4;

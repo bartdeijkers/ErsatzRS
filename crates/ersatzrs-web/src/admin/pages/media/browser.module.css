@@ -2,6 +2,10 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    /* Reserve room on the right edge for the fixed `LetterBar`
+       (`bar-side` in `letter_bar.module.css`). Mirrors the `right: 1em`
+       gutter ErsatzTV's `.letter-bar-container` sits in. */
+    padding-right: 2.5rem;
 }
 
 .toolbar {

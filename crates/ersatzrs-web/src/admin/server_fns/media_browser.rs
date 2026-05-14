@@ -29,6 +29,30 @@ pub struct MediaCardRow {
     pub artwork_path: Option<String>,
 }
 
+/// Page-map for the alphabetic jump-bar. Mirrors `ErsatzTV`'s
+/// `SearchPageMap.PageMap`: for each bucket ('#' or 'a'..='z'), the 1-based
+/// page number that contains the first item starting with that letter.
+///
+/// Stored as a 27-element vector indexed by [`bucket_index`] (0 = '#',
+/// 1 = 'a', …, 26 = 'z') so the type is `Serialize`/`Deserialize`-friendly
+/// for `server_fn`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct LetterPageMap {
+    pub pages: Vec<u32>,
+}
+
+/// Returns the bucket index for a letter: `'#' => 0`, `'a'..='z' => 1..=26`.
+/// Out-of-range characters bucket to '#'.
+#[must_use]
+pub fn bucket_index(letter: char) -> usize {
+    let lc = letter.to_ascii_lowercase();
+    if lc.is_ascii_lowercase() {
+        (lc as usize - 'a' as usize) + 1
+    } else {
+        0
+    }
+}
+
 /// Detailed projection for the movie details page. Mirrors the relevant
 /// subset of `ErsatzTV.Application.Movies.MovieViewModel`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -255,6 +279,93 @@ pub async fn list_movies(
 
     #[allow(clippy::cast_sign_loss)]
     Ok((cards, total.max(0) as u64))
+}
+
+/// Page map for the movies list. Ports the
+/// `LuceneSearchIndex.GetSearchPageMap` algorithm:
+///
+/// Walk the filtered, sort-title-ordered movie list in `page_size` chunks.
+/// For every page, look at the bucket of the last item on the page; every
+/// bucket up to and including that letter that has not yet been assigned
+/// maps to this page (1-based). Unmatched trailing buckets get the final
+/// page number so the rightmost letters still scroll to the last page.
+#[server]
+pub async fn movies_page_map(
+    search: String,
+    page_size: u32,
+) -> Result<LetterPageMap, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    if page_size == 0 {
+        return Ok(LetterPageMap {
+            pages: vec![0; 27],
+        });
+    }
+
+    let state = expect_context::<AppState>();
+    let like = format!("%{}%", search.trim());
+
+    // Just the SortTitle of each row, in the same order as `list_movies`.
+    let rows = sqlx::query(
+        r#"SELECT COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle"
+           FROM "Movie" m
+           JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           WHERE (? = '' OR mm."Title" LIKE ?)
+           ORDER BY mm."SortTitle", mm."Title""#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let buckets: Vec<usize> = rows
+        .iter()
+        .map(|r| {
+            let sort_title: String = r.try_get("SortTitle").unwrap_or_default();
+            let letter = sort_title
+                .trim()
+                .chars()
+                .next()
+                .map(|c| c.to_ascii_lowercase())
+                .filter(char::is_ascii_alphabetic)
+                .unwrap_or('#');
+            bucket_index(letter)
+        })
+        .collect();
+
+    let mut map = vec![0_u32; 27];
+    let total = buckets.len();
+    if total == 0 {
+        return Ok(LetterPageMap { pages: map });
+    }
+
+    let mut current = 0_usize;
+    let mut page: u32 = 0;
+    let page_size_usize = page_size as usize;
+    while current < total {
+        page += 1;
+        current += page_size_usize;
+        if current > total {
+            current = total;
+        }
+        let jump = buckets[current - 1];
+        for (i, slot) in map.iter_mut().enumerate().take(jump + 1) {
+            if *slot == 0 {
+                *slot = page;
+            }
+            let _ = i;
+        }
+    }
+
+    let max = map.iter().copied().max().unwrap_or(0);
+    for slot in &mut map {
+        if *slot == 0 {
+            *slot = max;
+        }
+    }
+
+    Ok(LetterPageMap { pages: map })
 }
 
 /// Movie details for the `/media/movies/:id` page. Ports
