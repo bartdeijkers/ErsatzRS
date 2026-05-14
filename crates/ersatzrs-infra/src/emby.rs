@@ -3,10 +3,11 @@ use crate::repositories::common::decode_enum_column;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
-    EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
-    EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
-    EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage,
-    EmbyService as EmbyServiceTrait, EmbyShowItem, EmbyShowPage, RepositoryError, Result,
+    EmbyActor, EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind,
+    EmbyCollectionMediaPage, EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage,
+    EmbyLibrarySummary, EmbyMediaItem, EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem,
+    EmbySeasonPage, EmbyService as EmbyServiceTrait, EmbyShowItem, EmbyShowPage, RepositoryError,
+    Result,
 };
 use ersatzrs_domain::{
     LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, VideoScanKind,
@@ -121,7 +122,7 @@ impl EmbyServiceTrait for EmbyService {
             .fetch_items(
                 config,
                 parent_id,
-                "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,OfficialRating,ProviderIds",
+                "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,ImageTags",
                 "Series",
                 start_index,
                 limit,
@@ -157,7 +158,10 @@ impl EmbyServiceTrait for EmbyService {
             .query(&[
                 ("sortOrder", "Ascending"),
                 ("sortBy", "SortName"),
-                ("fields", "Path,DateCreated,Etag,Taglines,ProviderIds"),
+                (
+                    "fields",
+                    "Path,DateCreated,Etag,ProviderIds,PremiereDate,ImageTags",
+                ),
                 ("startIndex", start_index.as_str()),
                 ("limit", limit.as_str()),
             ])
@@ -201,7 +205,7 @@ impl EmbyServiceTrait for EmbyService {
                 ("seasonId", season_id),
                 (
                     "fields",
-                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,Chapters",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,ImageTags,Chapters",
                 ),
                 ("sortOrder", "Ascending"),
                 ("sortBy", "SortName"),
@@ -221,7 +225,7 @@ impl EmbyServiceTrait for EmbyService {
             items: response
                 .items
                 .into_iter()
-                .filter_map(project_movie)
+                .filter_map(project_episode)
                 .collect(),
         })
     }
@@ -960,18 +964,134 @@ async fn load_emby_api_key(pool: &DbPool, address: &str) -> Result<String> {
 }
 
 fn project_show(item: EmbyLibraryItemResponse) -> Option<EmbyShowItem> {
+    let name = item.name.unwrap_or_default();
+    let release_date = item.premiere_date;
+    let tagline = item
+        .taglines
+        .iter()
+        .find(|tagline| !tagline.trim().is_empty())
+        .cloned();
+    let item_id = item.id.as_deref().unwrap_or_default();
+    let poster_artwork_path = item
+        .image_tags
+        .primary
+        .as_deref()
+        .filter(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Primary?tag={tag}"));
+    let thumb_artwork_path = item
+        .image_tags
+        .thumb
+        .as_deref()
+        .filter(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Thumb?tag={tag}"));
+    let fanart_artwork_path = item
+        .backdrop_image_tags
+        .iter()
+        .find(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Backdrop?tag={tag}"));
+    let provider_guids = guids_from_provider_ids(&item.provider_ids);
+    let genres = nonempty_strings(item.genres);
+    let tags = project_tag_names(item.tag_items);
+    let studios = item
+        .studios
+        .into_iter()
+        .filter_map(|s| s.name)
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+    let actors = project_actors(&item.people);
     Some(EmbyShowItem {
         item_id: item.id?,
         etag: item.etag,
-        name: item.name.unwrap_or_default(),
+        sort_title: sort_title(&name),
+        plot: item.overview,
+        year: item.production_year,
+        tagline,
+        content_rating: item.official_rating,
+        release_date,
+        poster_artwork_path,
+        thumb_artwork_path,
+        fanart_artwork_path,
+        provider_guids,
+        genres,
+        tags,
+        studios,
+        actors,
+        name,
+        date_created: item.date_created.unwrap_or_else(Utc::now),
     })
 }
 
+fn nonempty_strings(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect()
+}
+
+fn project_tag_names(values: Vec<EmbyNameRefResponse>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter_map(|tag| tag.name)
+        .filter(|name| !name.trim().is_empty())
+        .collect()
+}
+
+fn project_actors(people: &[EmbyPersonResponse]) -> Vec<EmbyActor> {
+    people
+        .iter()
+        .filter(|person| {
+            person
+                .person_type
+                .as_deref()
+                .is_some_and(|person_type| person_type.eq_ignore_ascii_case("actor"))
+        })
+        .enumerate()
+        .filter_map(|(idx, person)| {
+            let name = person
+                .name
+                .as_ref()
+                .filter(|name| !name.trim().is_empty())?
+                .clone();
+            let role = person
+                .role
+                .as_ref()
+                .filter(|role| !role.trim().is_empty())
+                .cloned();
+            Some(EmbyActor {
+                name,
+                role,
+                order: Some(i32::try_from(idx).unwrap_or(i32::MAX)),
+            })
+        })
+        .collect()
+}
+
 fn project_season(item: EmbyLibraryItemResponse) -> Option<EmbySeasonItem> {
+    let name = item.name.unwrap_or_default();
+    let item_id = item.id.as_deref().unwrap_or_default();
+    let poster_artwork_path = item
+        .image_tags
+        .primary
+        .as_deref()
+        .filter(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Primary?tag={tag}"));
+    let fanart_artwork_path = item
+        .backdrop_image_tags
+        .iter()
+        .find(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Backdrop?tag={tag}"));
+    let provider_guids = guids_from_provider_ids(&item.provider_ids);
     Some(EmbySeasonItem {
         item_id: item.id?,
         etag: item.etag,
-        name: item.name.unwrap_or_default(),
+        sort_title: sort_title(&name),
+        year: item.production_year,
+        release_date: item.premiere_date,
+        poster_artwork_path,
+        fanart_artwork_path,
+        provider_guids,
+        date_created: item.date_created.unwrap_or_else(Utc::now),
+        name,
         season_number: item.index_number.unwrap_or_default(),
     })
 }
@@ -1046,15 +1166,87 @@ fn project_movie(item: EmbyLibraryItemResponse) -> Option<EmbyMediaItem> {
         tagline,
         content_rating: item.official_rating,
         release_date: item.premiere_date,
+        episode_number: None,
         poster_artwork_path,
+        thumb_artwork_path: None,
         fanart_artwork_path,
         provider_guids,
+        genres: Vec::new(),
+        tags: Vec::new(),
+        actors: Vec::new(),
+        directors: Vec::new(),
+        writers: Vec::new(),
         name,
         path,
         date_created: item.date_created.unwrap_or_else(Utc::now),
         duration,
         chapters: project_chapters(item.chapters, duration),
     })
+}
+
+fn project_episode(item: EmbyLibraryItemResponse) -> Option<EmbyMediaItem> {
+    if item.location_type.as_deref() == Some("Virtual") {
+        return None;
+    }
+    let path = item.path?;
+    if path.to_ascii_lowercase().ends_with(".strm") {
+        return None;
+    }
+    let duration = Duration::nanoseconds(item.run_time_ticks * 100);
+    let name = item.name.unwrap_or_default();
+    let item_id = item.id.as_deref().unwrap_or_default();
+    let thumb_artwork_path = item
+        .image_tags
+        .primary
+        .as_deref()
+        .filter(|tag| !tag.trim().is_empty())
+        .map(|tag| format!("emby://Items/{item_id}/Images/Primary?tag={tag}"));
+    let provider_guids = guids_from_provider_ids(&item.provider_ids);
+    let genres = nonempty_strings(item.genres);
+    let tags = project_tag_names(item.tag_items);
+    let actors = project_actors(&item.people);
+    let directors = project_person_names(&item.people, "Director");
+    let writers = project_person_names(&item.people, "Writer");
+    Some(EmbyMediaItem {
+        item_id: item.id?,
+        etag: item.etag,
+        sort_title: sort_title(&name),
+        plot: item.overview,
+        year: item.production_year,
+        tagline: None,
+        content_rating: None,
+        release_date: item.premiere_date,
+        episode_number: item.index_number,
+        poster_artwork_path: None,
+        thumb_artwork_path,
+        fanart_artwork_path: None,
+        provider_guids,
+        genres,
+        tags,
+        actors,
+        directors,
+        writers,
+        name,
+        path,
+        date_created: item.date_created.unwrap_or_else(Utc::now),
+        duration,
+        chapters: project_chapters(item.chapters, duration),
+    })
+}
+
+fn project_person_names(people: &[EmbyPersonResponse], person_type: &str) -> Vec<String> {
+    people
+        .iter()
+        .filter(|person| {
+            person
+                .person_type
+                .as_deref()
+                .is_some_and(|value| value.eq_ignore_ascii_case(person_type))
+        })
+        .filter_map(|person| person.name.as_ref())
+        .filter(|name| !name.trim().is_empty())
+        .cloned()
+        .collect()
 }
 
 fn project_chapters(chapters: Vec<EmbyChapterResponse>, duration: Duration) -> Vec<MediaChapter> {
@@ -1224,6 +1416,7 @@ async fn upsert_emby_show(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let id = ensure_emby_show_item(&mut tx, library_path_id, item).await?;
+    upsert_show_metadata(&mut tx, id, item).await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -1241,6 +1434,7 @@ async fn upsert_emby_season(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let id = ensure_emby_season_item(&mut tx, library_path_id, show_id, item).await?;
+    upsert_season_metadata(&mut tx, id, item).await?;
     tx.commit().await?;
     Ok(id)
 }
@@ -1259,6 +1453,7 @@ async fn upsert_emby_episode(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let item_id = ensure_emby_episode_item(&mut tx, library_path_id, season_id, item).await?;
+    upsert_episode_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
@@ -1759,41 +1954,32 @@ async fn replace_movie_artwork(
     metadata_id: i64,
     item: &EmbyMediaItem,
 ) -> Result<()> {
-    sqlx::query(r#"DELETE FROM "Artwork" WHERE "MovieMetadataId" = ? AND "ArtworkKind" IN (0, 3)"#)
-        .bind(metadata_id)
-        .execute(&mut **tx)
-        .await?;
-
+    let mut items = Vec::with_capacity(2);
     if let Some(path) = &item.poster_artwork_path {
-        insert_movie_artwork(tx, metadata_id, 0, path, item.date_created).await?;
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::POSTER,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
     }
     if let Some(path) = &item.fanart_artwork_path {
-        insert_movie_artwork(tx, metadata_id, 3, path, item.date_created).await?;
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::FAN_ART,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
     }
-
-    Ok(())
-}
-
-async fn insert_movie_artwork(
-    tx: &mut Transaction<'_, crate::db::Db>,
-    metadata_id: i64,
-    kind: i32,
-    path: &str,
-    date_added: DateTime<Utc>,
-) -> Result<()> {
-    sqlx::query(
-        r#"INSERT INTO "Artwork" (
-            "ArtworkKind", "MovieMetadataId", "DateAdded", "DateUpdated", "Path"
-        ) VALUES (?, ?, ?, ?, ?)"#,
+    crate::metadata::replace_artwork(
+        tx,
+        "MovieMetadataId",
+        metadata_id,
+        &[
+            crate::metadata::artwork_kind::POSTER,
+            crate::metadata::artwork_kind::FAN_ART,
+        ],
+        &items,
     )
-    .bind(kind)
-    .bind(metadata_id)
-    .bind(encode_datetime(date_added))
-    .bind(encode_datetime(Utc::now()))
-    .bind(path)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 async fn replace_movie_guids(
@@ -1801,18 +1987,343 @@ async fn replace_movie_guids(
     metadata_id: i64,
     guids: &[String],
 ) -> Result<()> {
-    sqlx::query(r#"DELETE FROM "MetadataGuid" WHERE "MovieMetadataId" = ?"#)
-        .bind(metadata_id)
+    crate::metadata::replace_guids(tx, "MovieMetadataId", metadata_id, guids).await
+}
+
+async fn upsert_show_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    show_id: i64,
+    item: &EmbyShowItem,
+) -> Result<()> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ? LIMIT 1"#)
+            .bind(show_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let now = Utc::now();
+
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "ShowMetadata"
+               SET "ContentRating" = ?, "DateAdded" = ?, "DateUpdated" = ?,
+                   "MetadataKind" = 2, "OriginalTitle" = NULL, "Outline" = NULL,
+                   "Plot" = ?, "ReleaseDate" = ?, "SortTitle" = ?,
+                   "Tagline" = ?, "Title" = ?, "Year" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&item.content_rating)
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .bind(id)
         .execute(&mut **tx)
         .await?;
-    for guid in guids {
-        sqlx::query(r#"INSERT INTO "MetadataGuid" ("Guid", "MovieMetadataId") VALUES (?, ?)"#)
-            .bind(guid)
-            .bind(metadata_id)
-            .execute(&mut **tx)
-            .await?;
-    }
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "ShowMetadata" (
+                "ContentRating", "DateAdded", "DateUpdated", "MetadataKind",
+                "ShowId", "OriginalTitle", "Outline", "Plot", "ReleaseDate",
+                "SortTitle", "Tagline", "Title", "Year"
+            ) VALUES (?, ?, ?, 2, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&item.content_rating)
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(show_id)
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .execute(&mut **tx)
+        .await?;
+        crate::db::last_insert_id(result)
+    };
+
+    replace_show_artwork(tx, metadata_id, item).await?;
+    crate::metadata::replace_guids(tx, "ShowMetadataId", metadata_id, &item.provider_guids).await?;
+    crate::metadata::replace_strings(tx, "Genre", "ShowMetadataId", metadata_id, &item.genres)
+        .await?;
+    crate::metadata::replace_strings(tx, "Tag", "ShowMetadataId", metadata_id, &item.tags).await?;
+    crate::metadata::replace_strings(tx, "Studio", "ShowMetadataId", metadata_id, &item.studios)
+        .await?;
+    replace_show_actors(tx, metadata_id, &item.actors).await?;
     Ok(())
+}
+
+async fn replace_show_artwork(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    item: &EmbyShowItem,
+) -> Result<()> {
+    let mut items = Vec::with_capacity(3);
+    if let Some(path) = &item.poster_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::POSTER,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    if let Some(path) = &item.thumb_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::THUMBNAIL,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    if let Some(path) = &item.fanart_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::FAN_ART,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    crate::metadata::replace_artwork(
+        tx,
+        "ShowMetadataId",
+        metadata_id,
+        &[
+            crate::metadata::artwork_kind::POSTER,
+            crate::metadata::artwork_kind::THUMBNAIL,
+            crate::metadata::artwork_kind::FAN_ART,
+        ],
+        &items,
+    )
+    .await
+}
+
+async fn replace_show_actors(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    actors: &[EmbyActor],
+) -> Result<()> {
+    let people: Vec<crate::metadata::PersonRef> = actors
+        .iter()
+        .map(|actor| crate::metadata::PersonRef {
+            name: actor.name.clone(),
+            role: actor.role.clone(),
+            order: actor.order,
+        })
+        .collect();
+    crate::metadata::replace_people(tx, "Actor", "ShowMetadataId", metadata_id, &people).await
+}
+
+async fn upsert_season_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    season_id: i64,
+    item: &EmbySeasonItem,
+) -> Result<()> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "SeasonMetadata" WHERE "SeasonId" = ? LIMIT 1"#)
+            .bind(season_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let now = Utc::now();
+
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "SeasonMetadata"
+               SET "DateAdded" = ?, "DateUpdated" = ?, "MetadataKind" = 2,
+                   "OriginalTitle" = NULL, "Outline" = NULL, "ReleaseDate" = ?,
+                   "SortTitle" = ?, "Title" = ?, "Year" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.name)
+        .bind(item.year)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "SeasonMetadata" (
+                "DateAdded", "DateUpdated", "MetadataKind", "SeasonId",
+                "OriginalTitle", "Outline", "ReleaseDate", "SortTitle", "Title", "Year"
+            ) VALUES (?, ?, 2, ?, NULL, NULL, ?, ?, ?, ?)"#,
+        )
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(season_id)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.name)
+        .bind(item.year)
+        .execute(&mut **tx)
+        .await?;
+        crate::db::last_insert_id(result)
+    };
+
+    replace_season_artwork(tx, metadata_id, item).await?;
+    crate::metadata::replace_guids(tx, "SeasonMetadataId", metadata_id, &item.provider_guids)
+        .await?;
+    Ok(())
+}
+
+async fn replace_season_artwork(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    item: &EmbySeasonItem,
+) -> Result<()> {
+    let mut items = Vec::with_capacity(2);
+    if let Some(path) = &item.poster_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::POSTER,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    if let Some(path) = &item.fanart_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::FAN_ART,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    crate::metadata::replace_artwork(
+        tx,
+        "SeasonMetadataId",
+        metadata_id,
+        &[
+            crate::metadata::artwork_kind::POSTER,
+            crate::metadata::artwork_kind::FAN_ART,
+        ],
+        &items,
+    )
+    .await
+}
+
+async fn upsert_episode_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    episode_id: i64,
+    item: &EmbyMediaItem,
+) -> Result<()> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
+            .bind(episode_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let now = Utc::now();
+    let episode_number = item.episode_number.unwrap_or_default();
+
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "EpisodeMetadata"
+               SET "DateAdded" = ?, "DateUpdated" = ?, "EpisodeNumber" = ?,
+                   "MetadataKind" = 2, "OriginalTitle" = NULL, "Outline" = NULL,
+                   "Plot" = ?, "ReleaseDate" = ?, "SortTitle" = ?,
+                   "Tagline" = ?, "Title" = ?, "Year" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(episode_number)
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "EpisodeMetadata" (
+                "DateAdded", "DateUpdated", "EpisodeNumber", "EpisodeId",
+                "MetadataKind", "OriginalTitle", "Outline", "Plot", "ReleaseDate",
+                "SortTitle", "Tagline", "Title", "Year"
+            ) VALUES (?, ?, ?, ?, 2, NULL, NULL, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(encode_datetime(item.date_created))
+        .bind(encode_datetime(now))
+        .bind(episode_number)
+        .bind(episode_id)
+        .bind(&item.plot)
+        .bind(item.release_date.map(encode_datetime))
+        .bind(&item.sort_title)
+        .bind(&item.tagline)
+        .bind(&item.name)
+        .bind(item.year)
+        .execute(&mut **tx)
+        .await?;
+        crate::db::last_insert_id(result)
+    };
+
+    replace_episode_artwork(tx, metadata_id, item).await?;
+    crate::metadata::replace_guids(tx, "EpisodeMetadataId", metadata_id, &item.provider_guids)
+        .await?;
+    crate::metadata::replace_strings(tx, "Genre", "EpisodeMetadataId", metadata_id, &item.genres)
+        .await?;
+    crate::metadata::replace_strings(tx, "Tag", "EpisodeMetadataId", metadata_id, &item.tags)
+        .await?;
+    replace_episode_actors(tx, metadata_id, &item.actors).await?;
+    replace_episode_people(tx, "Director", metadata_id, &item.directors).await?;
+    replace_episode_people(tx, "Writer", metadata_id, &item.writers).await?;
+    Ok(())
+}
+
+async fn replace_episode_artwork(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    item: &EmbyMediaItem,
+) -> Result<()> {
+    let mut items = Vec::with_capacity(1);
+    if let Some(path) = &item.thumb_artwork_path {
+        items.push(crate::metadata::ArtworkRef {
+            kind: crate::metadata::artwork_kind::THUMBNAIL,
+            path: path.clone(),
+            date_added: item.date_created,
+        });
+    }
+    crate::metadata::replace_artwork(
+        tx,
+        "EpisodeMetadataId",
+        metadata_id,
+        &[crate::metadata::artwork_kind::THUMBNAIL],
+        &items,
+    )
+    .await
+}
+
+async fn replace_episode_actors(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    metadata_id: i64,
+    actors: &[EmbyActor],
+) -> Result<()> {
+    let people: Vec<crate::metadata::PersonRef> = actors
+        .iter()
+        .map(|actor| crate::metadata::PersonRef {
+            name: actor.name.clone(),
+            role: actor.role.clone(),
+            order: actor.order,
+        })
+        .collect();
+    crate::metadata::replace_people(tx, "Actor", "EpisodeMetadataId", metadata_id, &people).await
+}
+
+async fn replace_episode_people(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    table: &'static str,
+    metadata_id: i64,
+    names: &[String],
+) -> Result<()> {
+    let people: Vec<crate::metadata::PersonRef> = names
+        .iter()
+        .map(|name| crate::metadata::PersonRef::new(name.clone()))
+        .collect();
+    crate::metadata::replace_people(tx, table, "EpisodeMetadataId", metadata_id, &people).await
 }
 
 async fn ensure_emby_show_item(
@@ -2305,6 +2816,14 @@ struct EmbyLibraryItemResponse {
     index_number: Option<i32>,
     #[serde(default)]
     chapters: Vec<EmbyChapterResponse>,
+    #[serde(default)]
+    genres: Vec<String>,
+    #[serde(default)]
+    tag_items: Vec<EmbyNameRefResponse>,
+    #[serde(default)]
+    studios: Vec<EmbyNameRefResponse>,
+    #[serde(default)]
+    people: Vec<EmbyPersonResponse>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -2319,6 +2838,22 @@ struct EmbyProviderIdsResponse {
 #[serde(rename_all = "PascalCase")]
 struct EmbyImageTagsResponse {
     primary: Option<String>,
+    thumb: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyNameRefResponse {
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct EmbyPersonResponse {
+    name: Option<String>,
+    role: Option<String>,
+    #[serde(rename = "Type")]
+    person_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

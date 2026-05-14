@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-13 (movie item submenu parity)
+Last updated: 2026-05-15 (TV metadata parity midpoint)
 
 ## Current Phase
 
@@ -488,6 +488,9 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-15 | Codex (GPT-5) | Reached the metadata parity midpoint: generic metadata helpers are in place, Jellyfin/Emby Show + Season + Episode scans now write rich metadata child rows, and the scanner has the new serde/quick-xml NFO parser plus SortTitle helper for upcoming Local TV, Artist, and Music Video slices. |
+| 2026-05-14 | Codex (GPT-5) | Implemented Emby Show + Season + Episode metadata parity slice: show scans now write `ShowMetadata` with child rows and artwork; season scans write `SeasonMetadata`, poster/fanart artwork, and provider GUIDs; episode scans write `EpisodeMetadata`, thumbnail artwork, GUIDs, genres/tags, actors, directors, and writers with focused Emby provider test coverage. |
+| 2026-05-14 | Codex (GPT-5) | Implemented Jellyfin Season + Episode metadata parity slice: season scans now write `SeasonMetadata`, poster/fanart artwork, and provider GUIDs; episode scans now write `EpisodeMetadata`, thumbnail artwork, provider GUIDs, genres/tags, actors, directors, and writers with focused Jellyfin provider test coverage. |
 | 2026-05-13 | Codex (GPT-5) | Added ErsatzTV-style `/media/movies` item overflow menu with Add To Collection, Show Media Info, and Troubleshoot Playback actions; ported movie media-info JSON projection and added the playback troubleshooting entry route. |
 | 2026-05-11 | Claude Code (claude-opus-4-7) | Embedded the maintenance scheduler into `ersatzrs-web` (issue #20). Added `ersatzrs-scheduler` as a dependency of `ersatzrs-web`, spawn `run_scheduler` from `host/tasks.rs` alongside HDHR UDP discovery and Trakt maintenance, dropped the `[[bin]]` section and `src/main.rs` from `ersatzrs-scheduler` (crate remains a library), and trimmed the now-unused `clap`/`tracing-subscriber` deps and tokio features. Updated STATUS.md and parity-matrix.md to reflect the two-binary shape that the Docker image and per-RID release archives already produce. |
 | 2026-05-10 | Claude Code (claude-opus-4-7) | Closed the platform-parity slice. Added the `platform-parity-fixer` project agent and Supported Platforms section in AGENTS.md, split unix-only ffmpeg test helpers into `#[cfg(all(test, unix))] mod unix_tests`, added `Cross.toml` for cross-rs ARM/Windows builds, made `ersatzrs-web/build.rs` warn-and-skip when stylance-cli is unavailable so cross builds succeed, expanded the CI matrix with a 6-cell `platforms` job (linux-x64/arm64/arm via cross, osx-arm64 native, osx-x64 cross from Apple Silicon, win-x64 MSVC, all green on real runners), added a `binaries` matrix to release.yml that attaches `ersatzrs-<tag>-<rid>.tar.gz`/`.zip` to GitHub releases per RID, ported `run.sh` to `run.ps1` plus a `run.cmd` shim for Windows contributors, ignored RUSTSEC-2023-0071 with rationale, and updated parity-matrix.md to mark platform support at parity with ErsatzTV. |

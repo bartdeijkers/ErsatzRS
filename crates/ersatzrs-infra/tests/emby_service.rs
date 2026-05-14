@@ -269,7 +269,24 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
                         "Name": "Example Show",
                         "Id": "show-1",
                         "Etag": "show-etag",
-                        "DateCreated": "2026-04-17T10:00:00Z"
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "Overview": "An example series.",
+                        "ProductionYear": 2026,
+                        "PremiereDate": "2026-04-01T00:00:00Z",
+                        "OfficialRating": "TV-PG",
+                        "Genres": ["Drama", "Mystery"],
+                        "TagItems": [{ "Name": "serialized" }],
+                        "Studios": [{ "Name": "Example Studio" }],
+                        "People": [
+                            { "Name": "Show Actor", "Type": "Actor", "Role": "Lead" }
+                        ],
+                        "ProviderIds": {
+                            "Imdb": "ttshow",
+                            "Tmdb": "101",
+                            "Tvdb": "202"
+                        },
+                        "ImageTags": { "Primary": "show-poster", "Thumb": "show-thumb" },
+                        "BackdropImageTags": ["show-fanart"]
                     }
                 ]
             }));
@@ -277,9 +294,10 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
         .await;
     let seasons = server
         .mock_async(|when, then| {
-            when.method(GET)
-                .path("/Shows/show-1/Seasons")
-                .query_param("fields", "Path,DateCreated,Etag,Taglines,ProviderIds");
+            when.method(GET).path("/Shows/show-1/Seasons").query_param(
+                "fields",
+                "Path,DateCreated,Etag,ProviderIds,PremiereDate,ImageTags",
+            );
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
                 "Items": [
@@ -288,7 +306,14 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
                         "Id": "season-1",
                         "Etag": "season-etag",
                         "IndexNumber": 1,
-                        "DateCreated": "2026-04-17T10:00:00Z"
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "ProductionYear": 2026,
+                        "PremiereDate": "2026-04-01T00:00:00Z",
+                        "ProviderIds": {
+                            "Tvdb": "303"
+                        },
+                        "ImageTags": { "Primary": "season-poster" },
+                        "BackdropImageTags": ["season-fanart"]
                     }
                 ]
             }));
@@ -301,7 +326,7 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
                 .query_param("seasonId", "season-1")
                 .query_param(
                     "fields",
-                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,Chapters",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,ProductionYear,PremiereDate,MediaSources,LocationType,ProviderIds,People,ImageTags,Chapters",
                 );
             then.status(200).json_body(json!({
                 "TotalRecordCount": 1,
@@ -314,6 +339,23 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
                         "DateCreated": "2026-04-17T10:00:00Z",
                         "RunTimeTicks": 1_800_000_000,
                         "LocationType": "FileSystem",
+                        "Overview": "The story starts.",
+                        "ProductionYear": 2026,
+                        "PremiereDate": "2026-04-02T00:00:00Z",
+                        "IndexNumber": 1,
+                        "Genres": ["Drama", "Sci-Fi"],
+                        "TagItems": [{ "Name": "pilot" }],
+                        "People": [
+                            { "Name": "Episode Actor", "Type": "Actor", "Role": "Guest" },
+                            { "Name": "Episode Director", "Type": "Director" },
+                            { "Name": "Episode Writer", "Type": "Writer" }
+                        ],
+                        "ProviderIds": {
+                            "Imdb": "ttepisode",
+                            "Tmdb": "404",
+                            "Tvdb": "505"
+                        },
+                        "ImageTags": { "Primary": "episode-thumb" },
                         "Chapters": [
                             { "StartPositionTicks": 0, "Name": "Cold Open" }
                         ]
@@ -368,8 +410,19 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
 
     assert_eq!(synced, 1);
     assert_eq!(count(&pool, "EmbyShow").await, 1);
+    assert_eq!(count(&pool, "ShowMetadata").await, 1);
     assert_eq!(count(&pool, "EmbySeason").await, 1);
+    assert_eq!(count(&pool, "SeasonMetadata").await, 1);
     assert_eq!(count(&pool, "EmbyEpisode").await, 1);
+    assert_eq!(count(&pool, "EpisodeMetadata").await, 1);
+    assert_eq!(count(&pool, "MetadataGuid").await, 7);
+    assert_eq!(count(&pool, "Artwork").await, 6);
+    assert_eq!(count(&pool, "Genre").await, 4);
+    assert_eq!(count(&pool, "Tag").await, 2);
+    assert_eq!(count(&pool, "Studio").await, 1);
+    assert_eq!(count(&pool, "Actor").await, 2);
+    assert_eq!(count(&pool, "Director").await, 1);
+    assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
     assert_eq!(count(&pool, "MediaStream").await, 2);
@@ -616,7 +669,10 @@ async fn emby_projected_rows(pool: &SqlitePool) -> serde_json::Value {
         r#"SELECT "jfs"."ItemId" AS "ShowItemId",
                   "jfse"."ItemId" AS "SeasonItemId",
                   "s"."SeasonNumber" AS "SeasonNumber",
+                  "sm"."Title" AS "SeasonTitle",
                   "jfe"."ItemId" AS "EpisodeItemId",
+                  "em"."Title" AS "EpisodeTitle",
+                  "em"."EpisodeNumber" AS "EpisodeNumber",
                   "mf"."Path" AS "Path",
                   "mv"."Duration" AS "Duration",
                   "mv"."Width" AS "Width",
@@ -626,14 +682,17 @@ async fn emby_projected_rows(pool: &SqlitePool) -> serde_json::Value {
            FROM "EmbyShow" AS "jfs"
            JOIN "Season" AS "s" ON "s"."ShowId" = "jfs"."Id"
            JOIN "EmbySeason" AS "jfse" ON "jfse"."Id" = "s"."Id"
+           JOIN "SeasonMetadata" AS "sm" ON "sm"."SeasonId" = "s"."Id"
            JOIN "Episode" AS "e" ON "e"."SeasonId" = "s"."Id"
            JOIN "EmbyEpisode" AS "jfe" ON "jfe"."Id" = "e"."Id"
+           JOIN "EpisodeMetadata" AS "em" ON "em"."EpisodeId" = "e"."Id"
            JOIN "MediaVersion" AS "mv" ON "mv"."EpisodeId" = "e"."Id"
            JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id"
            LEFT JOIN "MediaStream" AS "ms" ON "ms"."MediaVersionId" = "mv"."Id"
            LEFT JOIN "MediaChapter" AS "mc" ON "mc"."MediaVersionId" = "mv"."Id"
            GROUP BY "jfs"."ItemId", "jfse"."ItemId", "s"."SeasonNumber",
-                    "jfe"."ItemId", "mf"."Path", "mv"."Duration", "mv"."Width", "mv"."Height""#,
+                    "sm"."Title", "jfe"."ItemId", "em"."Title", "em"."EpisodeNumber",
+                    "mf"."Path", "mv"."Duration", "mv"."Width", "mv"."Height""#,
     )
     .fetch_all(pool)
     .await
@@ -646,7 +705,10 @@ async fn emby_projected_rows(pool: &SqlitePool) -> serde_json::Value {
                     "show_item_id": row.get::<String, _>("ShowItemId"),
                     "season_item_id": row.get::<String, _>("SeasonItemId"),
                     "season_number": row.get::<i64, _>("SeasonNumber"),
+                    "season_title": row.get::<String, _>("SeasonTitle"),
                     "episode_item_id": row.get::<String, _>("EpisodeItemId"),
+                    "episode_title": row.get::<String, _>("EpisodeTitle"),
+                    "episode_number": row.get::<i64, _>("EpisodeNumber"),
                     "path": row.get::<String, _>("Path"),
                     "duration": row.get::<String, _>("Duration"),
                     "width": row.get::<i64, _>("Width"),

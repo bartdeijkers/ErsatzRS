@@ -10,6 +10,7 @@ pub mod hls_worker;
 pub mod jellyfin;
 pub mod logging;
 pub mod maintenance;
+pub mod metadata;
 pub mod plex;
 pub mod repositories;
 pub mod trakt;

@@ -23,21 +23,21 @@ pub use collection::CollectionRepository;
 pub use config::ConfigRepository;
 pub use deco::DecoRepository;
 pub use emby::{
-    EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind, EmbyCollectionMediaPage,
-    EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage, EmbyLibrarySummary, EmbyMediaItem,
-    EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem, EmbySeasonPage, EmbyService, EmbyShowItem,
-    EmbyShowPage,
+    EmbyActor, EmbyCollectionItem, EmbyCollectionMediaItem, EmbyCollectionMediaKind,
+    EmbyCollectionMediaPage, EmbyCollectionPage, EmbyConnectionConfig, EmbyItemPage,
+    EmbyLibrarySummary, EmbyMediaItem, EmbyPathInfo, EmbyPlaybackMetadata, EmbySeasonItem,
+    EmbySeasonPage, EmbyService, EmbyShowItem, EmbyShowPage,
 };
 pub use error::{RepositoryError, Result};
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
 pub use graphics::GraphicsRepository;
 pub use jellyfin::{
-    JellyfinCollectionItem, JellyfinCollectionMediaItem, JellyfinCollectionMediaKind,
-    JellyfinCollectionMediaPage, JellyfinCollectionPage, JellyfinConnectionConfig,
-    JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem, JellyfinPathInfo,
-    JellyfinPlaybackMetadata, JellyfinSeasonItem, JellyfinSeasonPage, JellyfinService,
-    JellyfinShowItem, JellyfinShowPage,
+    JellyfinActor, JellyfinCollectionItem, JellyfinCollectionMediaItem,
+    JellyfinCollectionMediaKind, JellyfinCollectionMediaPage, JellyfinCollectionPage,
+    JellyfinConnectionConfig, JellyfinItemPage, JellyfinLibrarySummary, JellyfinMediaItem,
+    JellyfinPathInfo, JellyfinPlaybackMetadata, JellyfinSeasonItem, JellyfinSeasonPage,
+    JellyfinService, JellyfinShowItem, JellyfinShowPage,
 };
 pub use library::LibraryRepository;
 pub use media_item::MediaItemRepository;

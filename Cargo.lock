@@ -903,6 +903,8 @@ dependencies = [
  "ersatzrs-domain",
  "ersatzrs-infra",
  "httpmock",
+ "quick-xml",
+ "serde",
  "serde_json",
  "sha2",
  "sqlx",
@@ -2703,6 +2705,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "721da970c312655cde9b4ffe0547f20a8494866a4af5ff51f18b7c633d0c870b"
 dependencies = [
  "memchr",
+ "serde",
 ]
 
 [[package]]

@@ -35,9 +35,16 @@ pub struct EmbyMediaItem {
     pub tagline: Option<String>,
     pub content_rating: Option<String>,
     pub release_date: Option<DateTime<Utc>>,
+    pub episode_number: Option<i32>,
     pub poster_artwork_path: Option<String>,
+    pub thumb_artwork_path: Option<String>,
     pub fanart_artwork_path: Option<String>,
     pub provider_guids: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub actors: Vec<EmbyActor>,
+    pub directors: Vec<String>,
+    pub writers: Vec<String>,
     pub path: String,
     pub date_created: DateTime<Utc>,
     pub duration: Duration,
@@ -45,10 +52,32 @@ pub struct EmbyMediaItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbyActor {
+    pub name: String,
+    pub role: Option<String>,
+    pub order: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbyShowItem {
     pub item_id: String,
     pub etag: Option<String>,
     pub name: String,
+    pub sort_title: String,
+    pub plot: Option<String>,
+    pub year: Option<i32>,
+    pub tagline: Option<String>,
+    pub content_rating: Option<String>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub poster_artwork_path: Option<String>,
+    pub thumb_artwork_path: Option<String>,
+    pub fanart_artwork_path: Option<String>,
+    pub provider_guids: Vec<String>,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub actors: Vec<EmbyActor>,
+    pub date_created: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +85,13 @@ pub struct EmbySeasonItem {
     pub item_id: String,
     pub etag: Option<String>,
     pub name: String,
+    pub sort_title: String,
+    pub year: Option<i32>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub poster_artwork_path: Option<String>,
+    pub fanart_artwork_path: Option<String>,
+    pub provider_guids: Vec<String>,
+    pub date_created: DateTime<Utc>,
     pub season_number: i32,
 }
 

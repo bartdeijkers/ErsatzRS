@@ -13,6 +13,8 @@ use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
 
+pub mod nfo;
+
 #[derive(Debug, Error)]
 pub enum ScannerError {
     #[error("database error: {0}")]
