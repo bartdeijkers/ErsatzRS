@@ -16,6 +16,7 @@ use sqlx::{Executor, Row, SqlitePool};
 
 #[tokio::test]
 #[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+#[allow(clippy::too_many_lines)]
 async fn local_music_video_scan_writes_full_metadata_and_child_rows() {
     let Some(ffprobe) = ffprobe_binary() else {
         eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
