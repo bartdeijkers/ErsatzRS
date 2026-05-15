@@ -1574,13 +1574,20 @@ async fn item_etag_matches(
     item_id: &str,
     etag: Option<&str>,
 ) -> Result<bool> {
-    let (metadata_select, metadata_join) = if table == "EmbyMovie" {
-        (
-            r#""MovieMetadata"."Id" AS "MovieMetadataId""#,
+    // Pair each provider subtype table with the metadata table it owns.
+    // The etag short-circuit must fail when the matching metadata row is
+    // missing so a rescan after a parity slice that newly writes that row
+    // actually populates it instead of skipping the item as "unchanged".
+    let (metadata_select, metadata_join) = match table {
+        "EmbyMovie" => (
+            r#""MovieMetadata"."Id" AS "MetadataId""#,
             r#"LEFT JOIN "MovieMetadata" ON "MovieMetadata"."MovieId" = "EmbyMovie"."Id""#,
-        )
-    } else {
-        (r#"NULL AS "MovieMetadataId""#, "")
+        ),
+        "EmbyEpisode" => (
+            r#""EpisodeMetadata"."Id" AS "MetadataId""#,
+            r#"LEFT JOIN "EpisodeMetadata" ON "EpisodeMetadata"."EpisodeId" = "EmbyEpisode"."Id""#,
+        ),
+        _ => (r#"NULL AS "MetadataId""#, ""),
     };
     let sql = format!(
         r#"SELECT "{table}"."Etag" AS "Etag", "MediaItem"."State" AS "State",
@@ -1602,9 +1609,9 @@ async fn item_etag_matches(
 
     let existing_etag: Option<String> = row.try_get("Etag")?;
     let state: i64 = row.try_get("State")?;
-    let has_movie_metadata =
-        table != "EmbyMovie" || row.try_get::<Option<i64>, _>("MovieMetadataId")?.is_some();
-    Ok(state == 0 && has_movie_metadata && existing_etag.as_deref() == etag)
+    let has_metadata = !matches!(table, "EmbyMovie" | "EmbyEpisode")
+        || row.try_get::<Option<i64>, _>("MetadataId")?.is_some();
+    Ok(state == 0 && has_metadata && existing_etag.as_deref() == etag)
 }
 
 /// Synchronizes the set of Emby libraries for a media source.
