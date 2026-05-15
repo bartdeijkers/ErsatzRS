@@ -445,6 +445,11 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
     assert_eq!(block.items[0].content, "block-item:711");
     assert_eq!(block.items[0].watermark_ids, vec![501]);
     assert_eq!(block.items[0].graphics_element_ids, vec![601]);
+    // BlockItem 711 points at Collection 1, whose CollectionItems are Show 10
+    // and Movie 20. ErsatzTV's MediaCollectionRepository.GetShowItems expands a
+    // show in a collection into its episodes, so the resolved set is the show's
+    // episodes (12, 13) plus the movie (20) — matching the identical Collection
+    // 1 resolution asserted for "deco-default-filler:750" below.
     assert_eq!(
         reference_data
             .media_by_key
@@ -453,7 +458,7 @@ async fn scheduling_repository_loads_block_reference_data_from_sql() {
             .iter()
             .map(|item| item.id)
             .collect::<Vec<_>>(),
-        vec![20]
+        vec![12, 13, 20]
     );
 
     let deco = block.deco.as_ref().unwrap();
