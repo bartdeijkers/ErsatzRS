@@ -1790,6 +1790,31 @@ pub async fn list_all_collections() -> Result<Vec<CollectionOption>, ServerFnErr
         .collect())
 }
 
+/// All smart collections, ordered by name. Used by the search page's
+/// Save-As-Smart-Collection dialog.
+#[server]
+pub async fn list_smart_collections_for_select() -> Result<Vec<CollectionOption>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "SmartCollection"
+           ORDER BY "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| CollectionOption {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
 /// Creates a new collection with the given name and returns it. Mirrors
 /// `CreateCollectionHandler`.
 #[server]
