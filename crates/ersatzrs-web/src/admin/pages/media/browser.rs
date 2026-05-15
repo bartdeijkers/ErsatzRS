@@ -109,12 +109,14 @@ where
                                             } else {
                                                 Some(format!("{hp}/{}", r.id))
                                             };
+                                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&r.sort_title);
                                             view! {
                                                 <MediaCard
                                                     title=r.title
                                                     subtitle=r.subtitle
                                                     artwork_url=r.artwork_path
                                                     href=href
+                                                    placeholder=placeholder
                                                 />
                                             }
                                             .into_any()

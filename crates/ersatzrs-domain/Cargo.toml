@@ -8,7 +8,7 @@ license.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 serde = { version = "1", features = ["derive"] }
 urlencoding = "2"
-uuid = { version = "1", features = ["serde", "v4"] }
+uuid = { version = "1", features = ["js", "serde", "v4"] }
 
 [lints]
 workspace = true

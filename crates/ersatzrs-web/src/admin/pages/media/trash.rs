@@ -161,12 +161,14 @@ pub fn TrashPage() -> impl IntoView {
                                                 let item_title = row.title.clone();
                                                 let subtitle = row.subtitle.clone();
                                                 let artwork_path = row.artwork_path.clone();
+                                                let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&row.sort_title);
                                                 view! {
                                                     <div class=style::card_shell>
                                                         <MediaCard
                                                             title=item_title.clone()
                                                             subtitle=subtitle
                                                             artwork_url=artwork_path
+                                                            placeholder=placeholder
                                                         />
                                                         <div class=style::card_actions>
                                                             <label class=style::checkbox_label>

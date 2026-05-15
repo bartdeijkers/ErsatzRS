@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
-use crate::admin::server_fns::search::{search_media, SearchResultRow};
+use crate::admin::server_fns::search::{search_results, SearchCard, SearchCardKind, SearchResults};
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
 
@@ -29,11 +29,11 @@ pub fn SearchPage() -> impl IntoView {
 fn SearchIsland(initial_query: String) -> impl IntoView {
     let input = RwSignal::new(initial_query.clone());
 
-    let data: Resource<(String, Vec<SearchResultRow>)> = Resource::new(
+    let data: Resource<(String, SearchResults)> = Resource::new(
         move || initial_query.clone(),
         move |query| async move {
-            let rows = search_media(query.clone()).await.unwrap_or_default();
-            (query, rows)
+            let results = search_results(query.clone()).await.unwrap_or_default();
+            (query, results)
         },
     );
 
@@ -69,7 +69,7 @@ fn SearchIsland(initial_query: String) -> impl IntoView {
 
             <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
                 {move || {
-                    data.get().map(|(query, rows)| {
+                    data.get().map(|(query, results)| {
                         if query.trim().is_empty() {
                             return view! {
                                 <p class=style::empty>"Enter a search query."</p>
@@ -77,6 +77,7 @@ fn SearchIsland(initial_query: String) -> impl IntoView {
                             .into_any();
                         }
 
+                        let rows = flatten_search_cards(results);
                         if rows.is_empty() {
                             return view! {
                                 <p class=style::empty>"No media matched."</p>
@@ -91,8 +92,7 @@ fn SearchIsland(initial_query: String) -> impl IntoView {
                                         <tr>
                                             <th>"Title"</th>
                                             <th>"Kind"</th>
-                                            <th>"Year"</th>
-                                            <th>"Duration"</th>
+                                            <th>"Subtitle"</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -100,9 +100,8 @@ fn SearchIsland(initial_query: String) -> impl IntoView {
                                             view! {
                                                 <tr>
                                                     <td>{row.title}</td>
-                                                    <td>{row.media_kind}</td>
-                                                    <td>{row.year.map(|year| year.to_string()).unwrap_or_default()}</td>
-                                                    <td>{format_duration(row.duration_seconds)}</td>
+                                                    <td>{card_kind_label(row.kind)}</td>
+                                                    <td>{row.subtitle.unwrap_or_default()}</td>
                                                 </tr>
                                             }
                                         }).collect_view()}
@@ -118,15 +117,32 @@ fn SearchIsland(initial_query: String) -> impl IntoView {
     }
 }
 
-fn format_duration(seconds: i64) -> String {
-    let total = seconds.max(0);
-    let hours = total / 3600;
-    let minutes = (total % 3600) / 60;
-    let seconds = total % 60;
+fn flatten_search_cards(results: SearchResults) -> Vec<SearchCard> {
+    let mut rows = Vec::new();
+    rows.extend(results.movies.cards);
+    rows.extend(results.shows.cards);
+    rows.extend(results.seasons.cards);
+    rows.extend(results.episodes.cards);
+    rows.extend(results.artists.cards);
+    rows.extend(results.music_videos.cards);
+    rows.extend(results.other_videos.cards);
+    rows.extend(results.songs.cards);
+    rows.extend(results.images.cards);
+    rows.extend(results.remote_streams.cards);
+    rows
+}
 
-    if hours > 0 {
-        format!("{hours}:{minutes:02}:{seconds:02}")
-    } else {
-        format!("{minutes}:{seconds:02}")
+fn card_kind_label(kind: SearchCardKind) -> &'static str {
+    match kind {
+        SearchCardKind::Movie => "Movie",
+        SearchCardKind::Show => "Show",
+        SearchCardKind::Season => "Season",
+        SearchCardKind::Episode => "Episode",
+        SearchCardKind::Artist => "Artist",
+        SearchCardKind::MusicVideo => "Music Video",
+        SearchCardKind::OtherVideo => "Other Video",
+        SearchCardKind::Song => "Song",
+        SearchCardKind::Image => "Image",
+        SearchCardKind::RemoteStream => "Remote Stream",
     }
 }

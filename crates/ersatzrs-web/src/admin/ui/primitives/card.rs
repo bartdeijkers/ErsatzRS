@@ -1,4 +1,25 @@
+use leptos::ev::MouseEvent;
 use leptos::prelude::*;
+
+use crate::admin::ui::primitives::icon::{icon_style, IconName};
+
+pub use ersatzrs_domain::MediaItemState;
+
+/// Returns the placeholder string used by `MediaCard` when no artwork is
+/// available. Mirrors `MediaCard.razor`'s `GetPlaceholder`: uppercase first
+/// letter of `sort_title` for ASCII letters; `#` for digits / other characters
+/// / empty.
+#[must_use]
+pub fn first_letter_placeholder(sort_title: &str) -> String {
+    let Some(first) = sort_title.chars().next() else {
+        return "#".to_string();
+    };
+    if first.is_ascii_alphabetic() {
+        first.to_ascii_uppercase().to_string()
+    } else {
+        "#".to_string()
+    }
+}
 
 // `pager_btn_disabled` is used by external consumers (e.g. the movies page
 // re-imports this stylesheet), not by `MediaCardPager` itself.
@@ -10,47 +31,221 @@ mod style_mod {
 use style_mod as style;
 
 /// A media item card for browser grids (maps to ErsatzTV's `MediaCard` component).
-#[allow(dead_code)]
+///
+/// `placeholder` is the string shown when no artwork is available (first letter
+/// of `sort_title`, `#`, or season number — see `MediaCard.razor`'s
+/// `GetPlaceholder`). `state` adds a corner warning icon for
+/// `FileNotFound` (red) and `Unavailable` (amber).
+///
+/// When `select_mode` is true, the whole card surface acts as a select toggle
+/// (the `on_select` callback receives the click event so callers can read
+/// `event.shift_key()` for range select). When false and `href` is set, the
+/// card navigates. The `MoreVert` per-card menu renders only when at least one
+/// of the `on_add_to_collection` / `on_add_to_playlist` / `on_show_media_info`
+/// callbacks is set and `select_mode` is false.
+#[allow(
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value
+)]
 #[component]
 pub fn MediaCard(
     title: String,
     #[prop(default = None)] subtitle: Option<String>,
     #[prop(default = None)] artwork_url: Option<String>,
     #[prop(default = None)] href: Option<String>,
+    #[prop(into, default = String::new())] placeholder: String,
+    #[prop(default = MediaItemState::Normal)] state: MediaItemState,
+    #[prop(default = Signal::derive(|| false))] select_mode: Signal<bool>,
     #[prop(default = None)] selected: Option<RwSignal<bool>>,
+    #[prop(default = None)] on_select: Option<Callback<MouseEvent>>,
+    #[prop(default = None)] on_add_to_collection: Option<Callback<()>>,
+    #[prop(default = None)] on_add_to_playlist: Option<Callback<()>>,
+    #[prop(default = None)] on_show_media_info: Option<Callback<()>>,
 ) -> impl IntoView {
+    let has_menu = on_add_to_collection.is_some()
+        || on_add_to_playlist.is_some()
+        || on_show_media_info.is_some();
+    let menu_open = RwSignal::new(false);
+
+    // Match `GetPlaceholder` in MediaCard.razor — letter count drives typography.
+    let placeholder_size_class = match placeholder.chars().count() {
+        n if n > 12 => style::placeholder_h3,
+        n if n > 2 => style::placeholder_h2,
+        _ => style::placeholder_h1,
+    };
+
+    let poster_view = {
+        let placeholder = placeholder.clone();
+        let title_alt = title.clone();
+        move || match artwork_url.clone() {
+            Some(url) => view! {
+                <img src=url loading="lazy" class=style::poster_img alt=title_alt.clone()/>
+            }
+            .into_any(),
+            None => view! {
+                <div class=format!("{} {}", style::poster_placeholder, placeholder_size_class)>
+                    {placeholder.clone()}
+                </div>
+            }
+            .into_any(),
+        }
+    };
+
+    let state_overlay = match state {
+        MediaItemState::FileNotFound => Some(
+            view! {
+                <div class=format!("{} {}", style::state_overlay, style::state_overlay_error)
+                     aria-label="File not found">
+                    <span style=icon_style(IconName::Warning, "1.25rem") aria-hidden="true"></span>
+                </div>
+            }
+            .into_any(),
+        ),
+        MediaItemState::Unavailable => Some(
+            view! {
+                <div class=format!("{} {}", style::state_overlay, style::state_overlay_warning)
+                     aria-label="Unavailable">
+                    <span style=icon_style(IconName::Warning, "1.25rem") aria-hidden="true"></span>
+                </div>
+            }
+            .into_any(),
+        ),
+        MediaItemState::Normal | MediaItemState::RemoteOnly => None,
+    };
+
+    let selection_check = selected.map(|sel| {
+        view! {
+            <div class=style::selection on:click=|e: MouseEvent| e.stop_propagation()>
+                <input
+                    type="checkbox"
+                    prop:checked=move || sel.get()
+                    on:change=move |e| sel.set(event_target_checked(&e))
+                />
+            </div>
+        }
+    });
+
+    // Card surface click: select-mode → on_select; otherwise navigate via href
+    // (handled by the outer <a>). When in select-mode but the caller provided
+    // no on_select, the click is a no-op.
+    let on_card_click = move |e: MouseEvent| {
+        if select_mode.get() {
+            e.prevent_default();
+            e.stop_propagation();
+            if let Some(cb) = on_select {
+                cb.run(e);
+            }
+        }
+    };
+
     let inner = view! {
-        <div class=style::card>
+        <div class=style::card on:click=on_card_click>
             <div class=style::poster>
-                {match artwork_url {
-                    Some(url) => view! {
-                        <img src=url loading="lazy" class=style::poster_img/>
-                    }.into_any(),
-                    None => view! {
-                        <div class=style::poster_placeholder>"🎬"</div>
-                    }.into_any(),
-                }}
+                {poster_view()}
+                {state_overlay}
             </div>
             <div class=style::caption>
                 <p class=style::caption_title>{title}</p>
-                {subtitle.map(|s| view! {
-                    <p class=style::caption_sub>{s}</p>
-                })}
+                {subtitle.map(|s| view! { <p class=style::caption_sub>{s}</p> })}
             </div>
-            {selected.map(|sel| view! {
-                <div class=style::selection on:click=|e| e.stop_propagation()>
-                    <input
-                        type="checkbox"
-                        prop:checked=move || sel.get()
-                        on:change=move |e| sel.set(event_target_checked(&e))
-                    />
+            {selection_check}
+            {has_menu.then(|| view! {
+                <div
+                    class=style::item_menu
+                    on:click=|e: MouseEvent| e.stop_propagation()
+                    style:display=move || if select_mode.get() { "none" } else { "" }
+                >
+                    <button
+                        type="button"
+                        class=style::item_menu_trigger
+                        title="Item actions"
+                        aria-label="Item actions"
+                        aria-expanded=move || menu_open.get().to_string()
+                        on:click=move |e: MouseEvent| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            menu_open.update(|v| *v = !*v);
+                        }
+                    >
+                        <span style=icon_style(IconName::MoreVert, "1.25rem") aria-hidden="true"></span>
+                    </button>
+                    <div
+                        class=style::item_menu_popover
+                        role="menu"
+                        style:display=move || if menu_open.get() { "" } else { "none" }
+                    >
+                        {on_add_to_collection.map(|cb| view! {
+                            <button
+                                type="button"
+                                class=style::item_menu_entry
+                                role="menuitem"
+                                on:click=move |e: MouseEvent| {
+                                    e.prevent_default();
+                                    e.stop_propagation();
+                                    menu_open.set(false);
+                                    cb.run(());
+                                }
+                            >
+                                <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                                <span>"Add To Collection"</span>
+                            </button>
+                        })}
+                        {on_add_to_playlist.map(|cb| view! {
+                            <button
+                                type="button"
+                                class=style::item_menu_entry
+                                role="menuitem"
+                                on:click=move |e: MouseEvent| {
+                                    e.prevent_default();
+                                    e.stop_propagation();
+                                    menu_open.set(false);
+                                    cb.run(());
+                                }
+                            >
+                                <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                                <span>"Add To Playlist"</span>
+                            </button>
+                        })}
+                        {on_show_media_info.map(|cb| view! {
+                            <button
+                                type="button"
+                                class=style::item_menu_entry
+                                role="menuitem"
+                                on:click=move |e: MouseEvent| {
+                                    e.prevent_default();
+                                    e.stop_propagation();
+                                    menu_open.set(false);
+                                    cb.run(());
+                                }
+                            >
+                                <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
+                                <span>"Show Media Info"</span>
+                            </button>
+                        })}
+                    </div>
                 </div>
             })}
         </div>
     };
 
+    // In select-mode the wrapper anchor should not navigate; render the card
+    // bare so the surface click handler owns the gesture.
     match href {
-        Some(url) => view! { <a href=url>{inner}</a> }.into_any(),
+        Some(url) => view! {
+            <a
+                href=url
+                on:click=move |e: MouseEvent| {
+                    if select_mode.get() {
+                        e.prevent_default();
+                    }
+                }
+            >
+                {inner}
+            </a>
+        }
+        .into_any(),
         None => inner.into_any(),
     }
 }

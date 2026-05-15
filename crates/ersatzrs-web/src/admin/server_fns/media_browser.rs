@@ -2126,6 +2126,132 @@ pub async fn add_media_items_to_playlist(
     Ok(added)
 }
 
+/// One row to be inserted into `PlaylistItem` by
+/// `add_media_items_to_playlist_mixed`. Computed by
+/// [`plan_mixed_playlist_inserts`] so we can unit-test the per-kind branching
+/// and `Index` assignment without touching a database.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MixedPlaylistInsert {
+    pub index: i64,
+    pub collection_type: i32,
+    pub media_item_id: i64,
+}
+
+/// Expand a `SearchAllIds` payload into the per-row `PlaylistItem` plan,
+/// stamping the matching `CollectionType` per kind. Order matches the C#
+/// `AddItemsToPlaylistHandler.ApplyAddItemsRequest` iteration:
+/// `Movie` → `TelevisionShow` → `TelevisionSeason` → `Episode` → `Artist` →
+/// `MusicVideo` → `OtherVideo` → `Song` → `Image` → `RemoteStream`. `Index`
+/// is contiguous starting at `start_index` and crosses kind boundaries
+/// (matches the C# `index++`).
+///
+/// `CollectionType` values come from
+/// `$ERSATZTV_SRC/ErsatzTV.Core/Domain/CollectionType.cs`.
+#[must_use]
+pub fn plan_mixed_playlist_inserts(
+    start_index: i64,
+    ids: &crate::admin::server_fns::search::SearchAllIds,
+) -> Vec<MixedPlaylistInsert> {
+    // CollectionType values per ErsatzTV.Core/Domain/CollectionType.cs.
+    const MOVIE: i32 = 10;
+    const TELEVISION_SHOW: i32 = 1;
+    const TELEVISION_SEASON: i32 = 2;
+    const EPISODE: i32 = 20;
+    const ARTIST: i32 = 3;
+    const MUSIC_VIDEO: i32 = 30;
+    const OTHER_VIDEO: i32 = 40;
+    const SONG: i32 = 50;
+    const IMAGE: i32 = 60;
+    const REMOTE_STREAM: i32 = 70;
+
+    let groups: [(i32, &[i64]); 10] = [
+        (MOVIE, &ids.movie_ids),
+        (TELEVISION_SHOW, &ids.show_ids),
+        (TELEVISION_SEASON, &ids.season_ids),
+        (EPISODE, &ids.episode_ids),
+        (ARTIST, &ids.artist_ids),
+        (MUSIC_VIDEO, &ids.music_video_ids),
+        (OTHER_VIDEO, &ids.other_video_ids),
+        (SONG, &ids.song_ids),
+        (IMAGE, &ids.image_ids),
+        (REMOTE_STREAM, &ids.remote_stream_ids),
+    ];
+
+    let mut next_index = start_index;
+    let mut out = Vec::new();
+    for (collection_type, group) in groups {
+        for &media_item_id in group {
+            out.push(MixedPlaylistInsert {
+                index: next_index,
+                collection_type,
+                media_item_id,
+            });
+            next_index += 1;
+        }
+    }
+    out
+}
+
+/// Add a mixed-kind id payload (typically the output of `search_all_ids`) to a
+/// playlist. Ports `AddItemsToPlaylistHandler` directly: one `PlaylistItem`
+/// row per id, `CollectionType` stamped per kind, `Index` continuous across
+/// the whole insertion starting at `MAX(Index) + 1`. Per row:
+/// `PlaybackOrder = Shuffle (1)`, `IncludeInProgramGuide = 1`, `PlayAll = 0`.
+///
+/// Sibling to the single-kind [`add_media_items_to_playlist`], which the
+/// browser pages still use for their per-kind grids.
+#[server]
+pub async fn add_media_items_to_playlist_mixed(
+    playlist_id: i64,
+    ids: crate::admin::server_fns::search::SearchAllIds,
+) -> Result<u64, ServerFnError> {
+    // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
+    const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
+
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+
+    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
+        .bind(playlist_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if exists == 0 {
+        return Err(ServerFnError::new("Playlist does not exist."));
+    }
+
+    let max_index: Option<i64> =
+        sqlx::query_scalar(r#"SELECT MAX("Index") FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+            .bind(playlist_id)
+            .fetch_one(&state.pool)
+            .await?;
+    let start_index = max_index.map_or(0, |i| i + 1);
+
+    let plan = plan_mixed_playlist_inserts(start_index, &ids);
+    if plan.is_empty() {
+        return Ok(0);
+    }
+
+    let mut added: u64 = 0;
+    for row in plan {
+        let result = sqlx::query(
+            r#"INSERT INTO "PlaylistItem"
+                   ("Index", "PlaylistId", "CollectionType", "MediaItemId",
+                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll")
+               VALUES (?, ?, ?, ?, 1, ?, 0)"#,
+        )
+        .bind(row.index)
+        .bind(playlist_id)
+        .bind(row.collection_type)
+        .bind(row.media_item_id)
+        .bind(PLAYBACK_ORDER_SHUFFLE)
+        .execute(&state.pool)
+        .await?;
+        added += result.rows_affected();
+    }
+    Ok(added)
+}
+
 // ---------------------------------------------------------------------------
 // Collection detail page (`/media/collections/:id`).
 //
@@ -2536,4 +2662,93 @@ pub async fn list_collection_members(
             kind: r.try_get("Kind").unwrap_or_default(),
         })
         .collect())
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::admin::server_fns::search::SearchAllIds;
+
+    #[test]
+    fn plan_mixed_playlist_inserts_is_empty_for_empty_payload() {
+        let ids = SearchAllIds::default();
+        assert!(plan_mixed_playlist_inserts(0, &ids).is_empty());
+    }
+
+    #[test]
+    fn plan_mixed_playlist_inserts_stamps_collection_type_per_kind() {
+        let ids = SearchAllIds {
+            movie_ids: vec![101],
+            show_ids: vec![201],
+            season_ids: vec![301],
+            episode_ids: vec![401],
+            artist_ids: vec![501],
+            music_video_ids: vec![601],
+            other_video_ids: vec![701],
+            song_ids: vec![801],
+            image_ids: vec![901],
+            remote_stream_ids: vec![1001],
+        };
+
+        let plan = plan_mixed_playlist_inserts(0, &ids);
+
+        // (collection_type, media_item_id) in ErsatzTV iteration order.
+        let observed: Vec<(i32, i64)> = plan
+            .iter()
+            .map(|row| (row.collection_type, row.media_item_id))
+            .collect();
+        assert_eq!(
+            observed,
+            vec![
+                (10, 101),  // Movie
+                (1, 201),   // TelevisionShow
+                (2, 301),   // TelevisionSeason
+                (20, 401),  // Episode
+                (3, 501),   // Artist
+                (30, 601),  // MusicVideo
+                (40, 701),  // OtherVideo
+                (50, 801),  // Song
+                (60, 901),  // Image
+                (70, 1001), // RemoteStream
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_mixed_playlist_inserts_indexes_are_contiguous_across_kinds() {
+        let ids = SearchAllIds {
+            movie_ids: vec![1, 2],
+            show_ids: vec![3],
+            episode_ids: vec![4, 5, 6],
+            song_ids: vec![7],
+            ..SearchAllIds::default()
+        };
+
+        let plan = plan_mixed_playlist_inserts(42, &ids);
+
+        let indexes: Vec<i64> = plan.iter().map(|row| row.index).collect();
+        assert_eq!(indexes, vec![42, 43, 44, 45, 46, 47, 48]);
+        assert_eq!(plan.len(), 7);
+        // Empty kinds (seasons/artists/etc.) must not consume an index slot.
+        let kinds: Vec<i32> = plan.iter().map(|row| row.collection_type).collect();
+        assert_eq!(kinds, vec![10, 10, 1, 20, 20, 20, 50]);
+    }
+
+    #[test]
+    fn plan_mixed_playlist_inserts_respects_start_index() {
+        let ids = SearchAllIds {
+            movie_ids: vec![99],
+            ..SearchAllIds::default()
+        };
+
+        let plan = plan_mixed_playlist_inserts(1000, &ids);
+        assert_eq!(
+            plan,
+            vec![MixedPlaylistInsert {
+                index: 1000,
+                collection_type: 10,
+                media_item_id: 99,
+            }]
+        );
+    }
 }
