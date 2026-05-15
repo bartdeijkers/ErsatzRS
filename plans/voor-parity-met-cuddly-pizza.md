@@ -224,13 +224,13 @@ De bestaande `/media/tv/shows` (`list_shows` in [crates/ersatzrs-web/src/admin/s
 5. [x] Implementeer Jellyfin × Season + Episode volledig.
 6. [x] Implementeer Emby × Show + Season + Episode volledig.
 7. [x] Maak [`nfo.rs`](/home/bart/ErsatzRS/crates/ersatzrs-scanner/src/nfo.rs) met serde-based parsers + SortTitle.
-8. [ ] Maak [`local_television.rs`](/home/bart/ErsatzRS/crates/ersatzrs-scanner/src/local_television.rs) (TV-folder-scanner).
-9. [ ] Wire Local × Show in [`lib.rs`](/home/bart/ErsatzRS/crates/ersatzrs-scanner/src/lib.rs) (verwijder de `UnsupportedLibraryMediaKind` returns).
-10. [ ] Verrijk `upsert_artist_for_folder` met NFO + artwork + Genres/Styles/Moods.
-11. [ ] Verrijk `upsert_local_music_video` met NFO + artwork + child-relaties.
-12. [ ] Tests (zowel uitgebreid bestaand als nieuw).
-13. [ ] STATUS + parity-matrix docs.
-14. [ ] `cargo fmt`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo insta review` waar nodig.
+8. [x] Maak [`local_television.rs`](/home/bart/ErsatzRS/crates/ersatzrs-scanner/src/local_television.rs) (TV-folder-scanner).
+9. [x] Wire Local × Show in [`lib.rs`](/home/bart/ErsatzRS/crates/ersatzrs-scanner/src/lib.rs) (verwijder de `UnsupportedLibraryMediaKind` returns).
+10. [x] Verrijk `upsert_artist_for_folder` met NFO + artwork + Genres/Styles/Moods.
+11. [x] Verrijk `upsert_local_music_video` met NFO + artwork + child-relaties.
+12. [x] Tests (zowel uitgebreid bestaand als nieuw).
+13. [x] STATUS + parity-matrix docs.
+14. [x] `cargo fmt`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --all-features`, `cargo insta review` waar nodig.
 
 Verwachte commit-grootte: zeer fors (vermoedelijk 4.000–6.000 regels gewijzigd over ~15 bestanden). De gebruiker heeft expliciet voor één commit gekozen; geen splitsing.
 

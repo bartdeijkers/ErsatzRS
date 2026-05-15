@@ -4,15 +4,21 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, Utc};
+use ersatzrs_core::repositories::RepositoryError;
 use ersatzrs_domain::{
     LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink, VideoScanKind,
 };
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
+use ersatzrs_infra::metadata::{
+    artwork_kind, replace_artwork, replace_people, replace_strings, ArtworkRef, PersonRef,
+};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
+use tracing::warn;
 
+pub mod local_television;
 pub mod nfo;
 
 #[derive(Debug, Error)]
@@ -25,6 +31,8 @@ pub enum ScannerError {
     MissingLibraryPaths(i64),
     #[error("local scan for {0:?} libraries is not implemented yet")]
     UnsupportedLibraryMediaKind(LibraryMediaKind),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
 }
 
 pub type Result<T> = std::result::Result<T, ScannerError>;
@@ -56,9 +64,14 @@ enum LocalScanWork {
     },
 }
 
+enum LocalScanBucketKind {
+    Items(Vec<LocalScanWork>),
+    Shows { expected_episodes: usize },
+}
+
 struct LocalScanBucket {
     library_path: LocalLibraryPath,
-    items: Vec<LocalScanWork>,
+    kind: LocalScanBucketKind,
 }
 
 /// Scan a local `ErsatzTV` library path into media database rows.
@@ -106,33 +119,42 @@ pub async fn scan_local_library_with_progress(
     let mut total_items: usize = 0;
     let mut buckets: Vec<LocalScanBucket> = Vec::new();
     for library_path in paths {
-        if matches!(library_path.media_kind, LibraryMediaKind::Shows) {
-            return Err(ScannerError::UnsupportedLibraryMediaKind(
-                library_path.media_kind,
-            ));
-        }
-        let items: Vec<LocalScanWork> = match library_path.media_kind {
-            LibraryMediaKind::MusicVideos => collect_music_video_files(&library_path.path)
-                .into_iter()
-                .map(|(artist_folder, file_path)| LocalScanWork::MusicVideo {
-                    artist_folder,
-                    file_path,
-                })
-                .collect(),
-            LibraryMediaKind::RemoteStreams => collect_remote_stream_files(&library_path.path)
-                .into_iter()
-                .map(|path| LocalScanWork::RemoteStream { path })
-                .collect(),
-            _ => collect_scannable_files(&library_path.path, library_path.media_kind)
-                .into_iter()
-                .map(|path| LocalScanWork::Generic { path })
-                .collect(),
+        let kind = match library_path.media_kind {
+            LibraryMediaKind::Shows => {
+                let expected_episodes = local_television::count_episode_files(&library_path.path);
+                total_items = total_items.saturating_add(expected_episodes);
+                LocalScanBucketKind::Shows { expected_episodes }
+            }
+            LibraryMediaKind::MusicVideos => {
+                let items: Vec<LocalScanWork> = collect_music_video_files(&library_path.path)
+                    .into_iter()
+                    .map(|(artist_folder, file_path)| LocalScanWork::MusicVideo {
+                        artist_folder,
+                        file_path,
+                    })
+                    .collect();
+                total_items = total_items.saturating_add(items.len());
+                LocalScanBucketKind::Items(items)
+            }
+            LibraryMediaKind::RemoteStreams => {
+                let items: Vec<LocalScanWork> = collect_remote_stream_files(&library_path.path)
+                    .into_iter()
+                    .map(|path| LocalScanWork::RemoteStream { path })
+                    .collect();
+                total_items = total_items.saturating_add(items.len());
+                LocalScanBucketKind::Items(items)
+            }
+            _ => {
+                let items: Vec<LocalScanWork> =
+                    collect_scannable_files(&library_path.path, library_path.media_kind)
+                        .into_iter()
+                        .map(|path| LocalScanWork::Generic { path })
+                        .collect();
+                total_items = total_items.saturating_add(items.len());
+                LocalScanBucketKind::Items(items)
+            }
         };
-        total_items = total_items.saturating_add(items.len());
-        buckets.push(LocalScanBucket {
-            library_path,
-            items,
-        });
+        buckets.push(LocalScanBucket { library_path, kind });
     }
 
     if let Some(sink) = progress {
@@ -144,32 +166,65 @@ pub async fn scan_local_library_with_progress(
     let mut processed: usize = 0;
     for bucket in buckets {
         let library_path = bucket.library_path;
-        for work in bucket.items {
-            match work {
-                LocalScanWork::MusicVideo {
-                    artist_folder,
-                    file_path,
-                } => {
-                    let artist_id =
-                        upsert_artist_for_folder(pool, library_path.id, &artist_folder).await?;
-                    let probed = extractor.extract(&file_path).await?;
-                    upsert_local_music_video(pool, &library_path, artist_id, &file_path, probed)
-                        .await?;
-                }
-                LocalScanWork::RemoteStream { path } => {
-                    upsert_local_remote_stream(pool, &library_path, &path).await?;
-                }
-                LocalScanWork::Generic { path } => {
-                    let probed = extractor.extract(&path).await?;
-                    upsert_local_file(pool, &library_path, &path, probed).await?;
+        match bucket.kind {
+            LocalScanBucketKind::Items(items) => {
+                for work in items {
+                    match work {
+                        LocalScanWork::MusicVideo {
+                            artist_folder,
+                            file_path,
+                        } => {
+                            let artist_id =
+                                upsert_artist_for_folder(pool, &library_path, &artist_folder)
+                                    .await?;
+                            let artist_dir = Path::new(&library_path.path).join(&artist_folder);
+                            let probed = extractor.extract(&file_path).await?;
+                            upsert_local_music_video(
+                                pool,
+                                &library_path,
+                                artist_id,
+                                &artist_dir,
+                                &file_path,
+                                probed,
+                            )
+                            .await?;
+                        }
+                        LocalScanWork::RemoteStream { path } => {
+                            upsert_local_remote_stream(pool, &library_path, &path).await?;
+                        }
+                        LocalScanWork::Generic { path } => {
+                            let probed = extractor.extract(&path).await?;
+                            upsert_local_file(pool, &library_path, &path, probed).await?;
+                        }
+                    }
+                    report.scanned_files += 1;
+                    processed += 1;
+                    if let Some(sink) = progress {
+                        if total_items > 0 {
+                            sink.report(processed as f32 / total_items as f32);
+                        }
+                    }
                 }
             }
-            report.scanned_files += 1;
-            processed += 1;
-            if let Some(sink) = progress {
-                if total_items > 0 {
-                    sink.report(processed as f32 / total_items as f32);
-                }
+            LocalScanBucketKind::Shows { expected_episodes } => {
+                let mut local_processed = 0usize;
+                let scanned = local_television::sync_local_show_library(
+                    pool,
+                    &library_path,
+                    &extractor,
+                    || {
+                        local_processed += 1;
+                        if let Some(sink) = progress {
+                            if total_items > 0 {
+                                let done = processed.saturating_add(local_processed);
+                                sink.report(done as f32 / total_items as f32);
+                            }
+                        }
+                    },
+                )
+                .await?;
+                report.scanned_files = report.scanned_files.saturating_add(scanned);
+                processed = processed.saturating_add(expected_episodes.max(scanned));
             }
         }
         let now = Utc::now();
@@ -335,69 +390,280 @@ async fn load_library_paths(pool: &DbPool, library_id: i64) -> Result<Vec<LocalL
         .collect())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn upsert_artist_for_folder(
     pool: &DbPool,
-    library_path_id: i64,
+    library_path: &LocalLibraryPath,
     artist_name: &str,
 ) -> Result<i64> {
+    let artist_folder = Path::new(&library_path.path).join(artist_name);
+
+    let nfo_path = locate_artist_nfo(&artist_folder);
+    let parsed_nfo = nfo_path.as_ref().and_then(|path| match nfo::parse_artist_nfo(path) {
+        Ok(parsed) => Some(parsed),
+        Err(err) => {
+            warn!(path = %path.display(), error = %err, "failed to parse artist.nfo; falling back");
+            None
+        }
+    });
+
+    let title = parsed_nfo
+        .as_ref()
+        .and_then(|n| n.name.clone())
+        .unwrap_or_else(|| artist_name.to_owned());
+    let sort_title = parsed_nfo
+        .as_ref()
+        .and_then(|n| n.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let disambiguation = parsed_nfo.as_ref().and_then(|n| n.disambiguation.clone());
+    let biography = parsed_nfo.as_ref().and_then(|n| n.biography.clone());
+    let year = parsed_nfo.as_ref().and_then(|n| n.year);
+    let formed = parsed_nfo
+        .as_ref()
+        .and_then(|n| n.formed)
+        .map(|dt| dt.naive_utc().format("%Y-%m-%d").to_string());
+    let metadata_kind = i32::from(parsed_nfo.is_some());
+
     let mut tx = pool.begin().await?;
-    let existing: Option<i64> = sqlx::query_scalar(
-        r#"SELECT "a"."Id"
+
+    let existing: Option<(i64, Option<i64>)> = sqlx::query(
+        r#"SELECT "a"."Id" AS "ArtistId", "am"."Id" AS "ArtistMetadataId"
            FROM "Artist" AS "a"
            JOIN "MediaItem" AS "mi" ON "mi"."Id" = "a"."Id"
-           JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "a"."Id"
-           WHERE "mi"."LibraryPathId" = ? AND "am"."Title" = ?
+           LEFT JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "a"."Id"
+           WHERE "mi"."LibraryPathId" = ? AND COALESCE("am"."Title", '') = ?
            LIMIT 1"#,
     )
-    .bind(library_path_id)
+    .bind(library_path.id)
     .bind(artist_name)
     .fetch_optional(&mut *tx)
-    .await?;
+    .await?
+    .map(|row| (row.get("ArtistId"), row.get("ArtistMetadataId")));
 
-    if let Some(id) = existing {
+    let now = encode_datetime(Utc::now());
+
+    let (artist_id, metadata_id) = if let Some((artist_id, metadata_id)) = existing {
         sqlx::query(r#"UPDATE "MediaItem" SET "State" = 0 WHERE "Id" = ?"#)
+            .bind(artist_id)
+            .execute(&mut *tx)
+            .await?;
+        let metadata_id = if let Some(id) = metadata_id {
+            sqlx::query(
+                r#"UPDATE "ArtistMetadata"
+                   SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+                       "SortTitle" = ?, "Disambiguation" = ?, "Biography" = ?,
+                       "Year" = ?, "Formed" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(&now)
+            .bind(metadata_kind)
+            .bind(&title)
+            .bind(&sort_title)
+            .bind(&disambiguation)
+            .bind(&biography)
+            .bind(year)
+            .bind(&formed)
             .bind(id)
             .execute(&mut *tx)
             .await?;
-        tx.commit().await?;
-        return Ok(id);
-    }
+            id
+        } else {
+            insert_artist_metadata(
+                &mut tx,
+                artist_id,
+                &title,
+                &sort_title,
+                disambiguation.as_deref(),
+                biography.as_deref(),
+                year,
+                formed.as_deref(),
+                metadata_kind,
+                &now,
+            )
+            .await?
+        };
+        (artist_id, metadata_id)
+    } else {
+        let result =
+            sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
+                .bind(library_path.id)
+                .execute(&mut *tx)
+                .await?;
+        let artist_id = ersatzrs_infra::db::last_insert_id(result);
+        sqlx::query(r#"INSERT INTO "Artist" ("Id") VALUES (?)"#)
+            .bind(artist_id)
+            .execute(&mut *tx)
+            .await?;
+        let metadata_id = insert_artist_metadata(
+            &mut tx,
+            artist_id,
+            &title,
+            &sort_title,
+            disambiguation.as_deref(),
+            biography.as_deref(),
+            year,
+            formed.as_deref(),
+            metadata_kind,
+            &now,
+        )
+        .await?;
+        (artist_id, metadata_id)
+    };
 
-    let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
-        .bind(library_path_id)
-        .execute(&mut *tx)
-        .await?;
-    let id = ersatzrs_infra::db::last_insert_id(result);
-    sqlx::query(r#"INSERT INTO "Artist" ("Id") VALUES (?)"#)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
-    let now = encode_datetime(Utc::now());
-    sqlx::query(
-        r#"INSERT INTO "ArtistMetadata" (
-            "ArtistId", "DateAdded", "DateUpdated", "MetadataKind", "Title"
-        ) VALUES (?, ?, ?, 1, ?)"#,
+    let genres = parsed_nfo
+        .as_ref()
+        .map(|n| n.genres.clone())
+        .unwrap_or_default();
+    let styles = parsed_nfo
+        .as_ref()
+        .map(|n| n.styles.clone())
+        .unwrap_or_default();
+    let moods = parsed_nfo
+        .as_ref()
+        .map(|n| n.moods.clone())
+        .unwrap_or_default();
+    replace_strings(&mut tx, "Genre", "ArtistMetadataId", metadata_id, &genres).await?;
+    replace_strings(&mut tx, "Style", "ArtistMetadataId", metadata_id, &styles).await?;
+    replace_strings(&mut tx, "Mood", "ArtistMetadataId", metadata_id, &moods).await?;
+
+    let mut artwork = Vec::new();
+    if let Some(path) = locate_artist_artwork(&artist_folder, &["thumb", "profile"]) {
+        artwork.push(artwork_ref(&path, artwork_kind::THUMBNAIL));
+    }
+    if let Some(path) = locate_artist_artwork(&artist_folder, &["fanart", "backdrop"]) {
+        artwork.push(artwork_ref(&path, artwork_kind::FAN_ART));
+    }
+    if let Some(path) = locate_artist_artwork(&artist_folder, &["logo"]) {
+        artwork.push(artwork_ref(&path, artwork_kind::LOGO));
+    }
+    replace_artwork(
+        &mut tx,
+        "ArtistMetadataId",
+        metadata_id,
+        &[
+            artwork_kind::THUMBNAIL,
+            artwork_kind::FAN_ART,
+            artwork_kind::LOGO,
+        ],
+        &artwork,
     )
-    .bind(id)
-    .bind(&now)
-    .bind(&now)
-    .bind(artist_name)
-    .execute(&mut *tx)
     .await?;
+
     tx.commit().await?;
-    Ok(id)
+    Ok(artist_id)
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn insert_artist_metadata(
+    tx: &mut Transaction<'_, Db>,
+    artist_id: i64,
+    title: &str,
+    sort_title: &str,
+    disambiguation: Option<&str>,
+    biography: Option<&str>,
+    year: Option<i32>,
+    formed: Option<&str>,
+    metadata_kind: i32,
+    now: &str,
+) -> Result<i64> {
+    let result = sqlx::query(
+        r#"INSERT INTO "ArtistMetadata" (
+            "ArtistId", "DateAdded", "DateUpdated", "MetadataKind",
+            "Title", "SortTitle", "Disambiguation", "Biography",
+            "Year", "Formed"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(artist_id)
+    .bind(now)
+    .bind(now)
+    .bind(metadata_kind)
+    .bind(title)
+    .bind(sort_title)
+    .bind(disambiguation)
+    .bind(biography)
+    .bind(year)
+    .bind(formed)
+    .execute(&mut **tx)
+    .await?;
+    Ok(ersatzrs_infra::db::last_insert_id(result))
+}
+
+fn locate_artist_nfo(artist_folder: &Path) -> Option<PathBuf> {
+    let candidate = artist_folder.join("artist.nfo");
+    candidate.is_file().then_some(candidate)
+}
+
+fn locate_artist_artwork(artist_folder: &Path, names: &[&str]) -> Option<PathBuf> {
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+    for name in names {
+        for ext in EXTENSIONS {
+            let candidate = artist_folder.join(format!("{name}.{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+fn artwork_ref(path: &Path, kind: i32) -> ArtworkRef {
+    ArtworkRef {
+        kind,
+        path: path.display().to_string(),
+        date_added: Utc::now(),
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 async fn upsert_local_music_video(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     artist_id: i64,
+    artist_folder: &Path,
     path: &Path,
     probed: FfprobeMediaVersion,
 ) -> Result<()> {
+    let nfo_path = locate_music_video_nfo(path);
+    let parsed_nfo = nfo_path
+        .as_ref()
+        .and_then(|p| match nfo::parse_music_video_nfo(p) {
+            Ok(parsed) => Some(parsed),
+            Err(err) => {
+                warn!(path = %p.display(), error = %err, "failed to parse music video nfo; falling back");
+                None
+            }
+        });
+
+    let fallback_title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = parsed_nfo
+        .as_ref()
+        .and_then(|n| n.title.clone())
+        .unwrap_or_else(|| fallback_title.clone());
+    let sort_title = nfo::sort_title(&title);
+    let album = parsed_nfo.as_ref().and_then(|n| n.album.clone());
+    let plot = parsed_nfo.as_ref().and_then(|n| n.plot.clone());
+    let track = parsed_nfo.as_ref().and_then(|n| n.track);
+    let release_date = parsed_nfo
+        .as_ref()
+        .and_then(|n| n.aired.or(n.premiered))
+        .map(|dt| dt.naive_utc().format("%Y-%m-%d").to_string());
+    let year = parsed_nfo.as_ref().and_then(|n| {
+        n.year.or_else(|| {
+            n.aired
+                .or(n.premiered)
+                .and_then(|dt| dt.naive_utc().date().format("%Y").to_string().parse().ok())
+        })
+    });
+    let metadata_kind = i32::from(parsed_nfo.is_some());
+
     let mut tx = pool.begin().await?;
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
+    let now = encode_datetime(Utc::now());
 
     let maybe_existing = sqlx::query(
         r#"SELECT "mf"."MediaVersionId",
@@ -422,22 +688,6 @@ async fn upsert_local_music_video(
             .bind(artist_id)
             .execute(&mut *tx)
             .await?;
-        let now = encode_datetime(Utc::now());
-        let title = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or_default();
-        sqlx::query(
-            r#"INSERT INTO "MusicVideoMetadata" (
-                "MusicVideoId", "DateAdded", "DateUpdated", "MetadataKind", "Title"
-            ) VALUES (?, ?, ?, 1, ?)"#,
-        )
-        .bind(item_id)
-        .bind(&now)
-        .bind(&now)
-        .bind(title)
-        .execute(&mut *tx)
-        .await?;
         let version_id =
             insert_media_version(&mut tx, item_id, &probed, LibraryMediaKind::MusicVideos).await?;
         sqlx::query(
@@ -466,8 +716,236 @@ async fn upsert_local_music_video(
     replace_streams(&mut tx, version_id, &probed.streams).await?;
     replace_chapters(&mut tx, version_id, &probed.chapters).await?;
 
+    let metadata_id = upsert_music_video_metadata(
+        &mut tx,
+        item_id,
+        &title,
+        &sort_title,
+        album.as_deref(),
+        plot.as_deref(),
+        year,
+        release_date.as_deref(),
+        track,
+        metadata_kind,
+        &now,
+    )
+    .await?;
+
+    let genres = parsed_nfo
+        .as_ref()
+        .map(|n| n.genres.clone())
+        .unwrap_or_default();
+    let tags = parsed_nfo
+        .as_ref()
+        .map(|n| n.tags.clone())
+        .unwrap_or_default();
+    let studios = parsed_nfo
+        .as_ref()
+        .map(|n| n.studios.clone())
+        .unwrap_or_default();
+    let directors = parsed_nfo
+        .as_ref()
+        .map(|n| {
+            n.directors
+                .iter()
+                .cloned()
+                .map(PersonRef::new)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let artists = parsed_nfo
+        .as_ref()
+        .map(|n| n.artists.clone())
+        .unwrap_or_default();
+    replace_strings(
+        &mut tx,
+        "Genre",
+        "MusicVideoMetadataId",
+        metadata_id,
+        &genres,
+    )
+    .await?;
+    replace_strings(&mut tx, "Tag", "MusicVideoMetadataId", metadata_id, &tags).await?;
+    replace_strings(
+        &mut tx,
+        "Studio",
+        "MusicVideoMetadataId",
+        metadata_id,
+        &studios,
+    )
+    .await?;
+    replace_people(
+        &mut tx,
+        "Director",
+        "MusicVideoMetadataId",
+        metadata_id,
+        &directors,
+    )
+    .await?;
+    replace_strings(
+        &mut tx,
+        "MusicVideoArtist",
+        "MusicVideoMetadataId",
+        metadata_id,
+        &artists,
+    )
+    .await?;
+
+    let mut artwork = Vec::new();
+    if let Some(poster) =
+        locate_music_video_artwork(path, artist_folder, &["poster"], &["-poster"], &[])
+    {
+        artwork.push(artwork_ref(&poster, artwork_kind::POSTER));
+    }
+    if let Some(thumb) =
+        locate_music_video_artwork(path, artist_folder, &["thumb"], &["-thumb"], &[".tbn"])
+    {
+        artwork.push(artwork_ref(&thumb, artwork_kind::THUMBNAIL));
+    }
+    if let Some(fanart) = locate_music_video_artwork(
+        path,
+        artist_folder,
+        &["fanart", "backdrop"],
+        &["-fanart"],
+        &[],
+    ) {
+        artwork.push(artwork_ref(&fanart, artwork_kind::FAN_ART));
+    }
+    replace_artwork(
+        &mut tx,
+        "MusicVideoMetadataId",
+        metadata_id,
+        &[
+            artwork_kind::POSTER,
+            artwork_kind::THUMBNAIL,
+            artwork_kind::FAN_ART,
+        ],
+        &artwork,
+    )
+    .await?;
+
     tx.commit().await?;
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn upsert_music_video_metadata(
+    tx: &mut Transaction<'_, Db>,
+    music_video_id: i64,
+    title: &str,
+    sort_title: &str,
+    album: Option<&str>,
+    plot: Option<&str>,
+    year: Option<i32>,
+    release_date: Option<&str>,
+    track: Option<i32>,
+    metadata_kind: i32,
+    now: &str,
+) -> Result<i64> {
+    let existing: Option<i64> = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "MusicVideoMetadata" WHERE "MusicVideoId" = ? LIMIT 1"#,
+    )
+    .bind(music_video_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some(id) = existing {
+        sqlx::query(
+            r#"UPDATE "MusicVideoMetadata"
+               SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+                   "SortTitle" = ?, "Album" = ?, "Plot" = ?, "Year" = ?,
+                   "ReleaseDate" = ?, "Track" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(now)
+        .bind(metadata_kind)
+        .bind(title)
+        .bind(sort_title)
+        .bind(album)
+        .bind(plot)
+        .bind(year)
+        .bind(release_date)
+        .bind(track)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(id)
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "MusicVideoMetadata" (
+                "MusicVideoId", "DateAdded", "DateUpdated", "MetadataKind",
+                "Title", "SortTitle", "Album", "Plot", "Year", "ReleaseDate", "Track"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(music_video_id)
+        .bind(now)
+        .bind(now)
+        .bind(metadata_kind)
+        .bind(title)
+        .bind(sort_title)
+        .bind(album)
+        .bind(plot)
+        .bind(year)
+        .bind(release_date)
+        .bind(track)
+        .execute(&mut **tx)
+        .await?;
+        Ok(ersatzrs_infra::db::last_insert_id(result))
+    }
+}
+
+fn locate_music_video_nfo(video_path: &Path) -> Option<PathBuf> {
+    let candidate = video_path.with_extension("nfo");
+    candidate.is_file().then_some(candidate)
+}
+
+/// Locate music-video artwork following `ErsatzTV`'s discovery order:
+/// 1. `{video_basename}{per_video_suffix}.{ext}` next to the video
+///    (e.g. `Song-poster.jpg`, `Song-thumb.png`).
+/// 2. Bare `{video_basename}{exact_ext}` (used for `.tbn`).
+/// 3. Generic `{folder_name}.{ext}` next to the video (e.g. `poster.jpg`).
+/// 4. Same generic name in the parent artist folder as a final fallback.
+fn locate_music_video_artwork(
+    video_path: &Path,
+    artist_folder: &Path,
+    folder_names: &[&str],
+    per_video_suffixes: &[&str],
+    exact_extensions: &[&str],
+) -> Option<PathBuf> {
+    const EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+    let video_dir = video_path.parent().unwrap_or(artist_folder);
+    let basename = video_path.file_stem().and_then(|s| s.to_str())?;
+
+    for suffix in per_video_suffixes {
+        for ext in EXTENSIONS {
+            let candidate = video_dir.join(format!("{basename}{suffix}.{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    for ext in exact_extensions {
+        let candidate = video_dir.join(format!("{basename}{ext}"));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    for name in folder_names {
+        for ext in EXTENSIONS {
+            let candidate = video_dir.join(format!("{name}.{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    for name in folder_names {
+        for ext in EXTENSIONS {
+            let candidate = artist_folder.join(format!("{name}.{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 async fn upsert_local_remote_stream(
@@ -622,7 +1100,10 @@ async fn upsert_local_file(
     Ok(())
 }
 
-async fn insert_media_item(tx: &mut Transaction<'_, Db>, library_path_id: i64) -> Result<i64> {
+pub(crate) async fn insert_media_item(
+    tx: &mut Transaction<'_, Db>,
+    library_path_id: i64,
+) -> Result<i64> {
     let result = sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (?, 0)"#)
         .bind(library_path_id)
         .execute(&mut **tx)
@@ -636,9 +1117,18 @@ async fn insert_media_version(
     probed: &FfprobeMediaVersion,
     media_kind: LibraryMediaKind,
 ) -> Result<i64> {
+    let owner_column = media_version_owner_column(media_kind)?;
+    insert_media_version_with_owner(tx, item_id, probed, owner_column).await
+}
+
+pub(crate) async fn insert_media_version_with_owner(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    probed: &FfprobeMediaVersion,
+    owner_column: &'static str,
+) -> Result<i64> {
     let version = &probed.version;
     let now = Utc::now();
-    let owner_column = media_version_owner_column(media_kind)?;
     let sql = format!(
         r#"INSERT INTO "MediaVersion" (
             "DateAdded", "DateUpdated", "DisplayAspectRatio", "Duration", "Height",
@@ -812,7 +1302,7 @@ async fn insert_fallback_metadata(
         | LibraryMediaKind::RemoteStreams
         | LibraryMediaKind::Shows => {
             // MusicVideo / RemoteStream metadata is written by their dedicated
-            // upsert paths; Shows are not supported by the local scanner.
+            // upsert paths; Shows are handled by the TV folder scanner.
         }
     }
     Ok(())
@@ -830,7 +1320,7 @@ fn media_version_owner_column(media_kind: LibraryMediaKind) -> Result<&'static s
     }
 }
 
-async fn update_media_version(
+pub(crate) async fn update_media_version(
     tx: &mut Transaction<'_, Db>,
     version_id: i64,
     probed: &FfprobeMediaVersion,
@@ -860,7 +1350,7 @@ async fn update_media_version(
     Ok(())
 }
 
-async fn replace_streams(
+pub(crate) async fn replace_streams(
     tx: &mut Transaction<'_, Db>,
     version_id: i64,
     streams: &[MediaStream],
@@ -905,7 +1395,7 @@ async fn replace_streams(
     Ok(())
 }
 
-async fn replace_chapters(
+pub(crate) async fn replace_chapters(
     tx: &mut Transaction<'_, Db>,
     version_id: i64,
     chapters: &[MediaChapter],
@@ -955,7 +1445,7 @@ async fn update_library_scan(pool: &DbPool, library_id: i64, when: DateTime<Utc>
     Ok(())
 }
 
-fn path_hash(path: &str) -> String {
+pub(crate) fn path_hash(path: &str) -> String {
     let digest = Sha256::digest(path.as_bytes());
     let mut hash = String::with_capacity(digest.len() * 2);
 
@@ -968,7 +1458,7 @@ fn path_hash(path: &str) -> String {
     hash
 }
 
-fn encode_datetime(value: DateTime<Utc>) -> String {
+pub(crate) fn encode_datetime(value: DateTime<Utc>) -> String {
     value.naive_utc().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
@@ -999,10 +1489,10 @@ fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
 }
 
 #[derive(Debug, Clone)]
-struct LocalLibraryPath {
-    id: i64,
-    path: String,
-    media_kind: LibraryMediaKind,
+pub(crate) struct LocalLibraryPath {
+    pub(crate) id: i64,
+    pub(crate) path: String,
+    pub(crate) media_kind: LibraryMediaKind,
 }
 
 fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {

@@ -11,10 +11,6 @@
 //! Both are `&'static str`, never user input, so this is not an injection
 //! surface. All variable values use bound parameters.
 
-// Helpers land in slice 1 ahead of their callers (slices 2-8). The
-// dead-code allow is removed once every helper is consumed.
-#![allow(dead_code)]
-
 use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::Result;
 use sqlx::Transaction;
@@ -70,7 +66,11 @@ pub struct ArtworkRef {
 /// DELETE-then-INSERT rows in a "shared string" table (`Genre`, `Tag`,
 /// `Studio`, `Style`, `Mood`, `MusicVideoArtist`). Each row has a single
 /// `Name` payload column plus the `{Kind}MetadataId` FK.
-pub(crate) async fn replace_strings(
+///
+/// # Errors
+///
+/// Returns an error when the underlying DELETE or INSERT statements fail.
+pub async fn replace_strings(
     tx: &mut Transaction<'_, Db>,
     table: &'static str,
     fk_column: &'static str,
@@ -101,7 +101,11 @@ pub(crate) async fn replace_strings(
 /// DELETE-then-INSERT rows in a "person" table (`Actor`, `Director`,
 /// `Writer`). `Actor` has additional `Role` and `Order` columns; for
 /// `Director`/`Writer` the helper writes NULL into both.
-pub(crate) async fn replace_people(
+///
+/// # Errors
+///
+/// Returns an error when the underlying DELETE or INSERT statements fail.
+pub async fn replace_people(
     tx: &mut Transaction<'_, Db>,
     table: &'static str,
     fk_column: &'static str,
@@ -152,7 +156,11 @@ pub(crate) async fn replace_people(
 /// are deleted unconditionally so the source-of-truth can shrink (a media item
 /// that loses its poster between scans must not keep stale rows). Kinds
 /// outside `scope` are left untouched.
-pub(crate) async fn replace_artwork(
+///
+/// # Errors
+///
+/// Returns an error when the underlying DELETE or INSERT statements fail.
+pub async fn replace_artwork(
     tx: &mut Transaction<'_, Db>,
     fk_column: &'static str,
     metadata_id: i64,
@@ -198,7 +206,11 @@ pub(crate) async fn replace_artwork(
 
 /// DELETE-then-INSERT provider GUIDs in `MetadataGuid` for the given
 /// metadata FK.
-pub(crate) async fn replace_guids(
+///
+/// # Errors
+///
+/// Returns an error when the underlying DELETE or INSERT statements fail.
+pub async fn replace_guids(
     tx: &mut Transaction<'_, Db>,
     fk_column: &'static str,
     metadata_id: i64,

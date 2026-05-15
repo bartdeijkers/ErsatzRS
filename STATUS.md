@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-15 (TV metadata parity midpoint)
+Last updated: 2026-05-15 (Local TV scanner + Local Artist/MusicVideo metadata parity)
 
 ## Current Phase
 
@@ -488,6 +488,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-15 | Claude Code (claude-opus-4-7) | Closed the Local-side of the metadata parity sweep: `upsert_artist_for_folder` now parses `artist.nfo` and writes full `ArtistMetadata` (Title/SortTitle/Disambiguation/Biography/Year/Formed/MetadataKind) with Genres/Styles/Moods + thumb/profile/fanart/logo artwork; `upsert_local_music_video` parses `{video}.nfo` and writes full `MusicVideoMetadata` (Title/SortTitle/Album/Plot/Year/ReleaseDate/Track) with Genres/Tags/Studios/Directors via `replace_strings`/`replace_people`, MusicVideoArtist rows, and ETV-order artwork discovery (per-video suffix → `.tbn` exact-ext → generic in video dir → parent artist folder). Added two `#[ignore]`-gated integration tests (`local_television.rs`, `local_music_video.rs`) that build a tempdir tree with NFOs and assert metadata + child rows + artwork land via `scan_local_library`. |
 | 2026-05-15 | Codex (GPT-5) | Reached the metadata parity midpoint: generic metadata helpers are in place, Jellyfin/Emby Show + Season + Episode scans now write rich metadata child rows, and the scanner has the new serde/quick-xml NFO parser plus SortTitle helper for upcoming Local TV, Artist, and Music Video slices. |
 | 2026-05-14 | Codex (GPT-5) | Implemented Emby Show + Season + Episode metadata parity slice: show scans now write `ShowMetadata` with child rows and artwork; season scans write `SeasonMetadata`, poster/fanart artwork, and provider GUIDs; episode scans write `EpisodeMetadata`, thumbnail artwork, GUIDs, genres/tags, actors, directors, and writers with focused Emby provider test coverage. |
 | 2026-05-14 | Codex (GPT-5) | Implemented Jellyfin Season + Episode metadata parity slice: season scans now write `SeasonMetadata`, poster/fanart artwork, and provider GUIDs; episode scans now write `EpisodeMetadata`, thumbnail artwork, provider GUIDs, genres/tags, actors, directors, and writers with focused Jellyfin provider test coverage. |
