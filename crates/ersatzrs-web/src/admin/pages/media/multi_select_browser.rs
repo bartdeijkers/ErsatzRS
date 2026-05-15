@@ -27,9 +27,10 @@ use leptos::prelude::*;
 
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
-    get_media_item_info_json, list_artists, list_movies, list_other_videos, list_shows,
-    media_page_map, CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow,
-    PlaylistGroupOption, PlaylistOption,
+    get_media_item_info_json, list_artists, list_episodes, list_movies, list_music_videos,
+    list_other_videos, list_remote_streams, list_seasons, list_shows, media_page_map,
+    CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow, PlaylistGroupOption,
+    PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -99,6 +100,34 @@ impl BrowserKindConfig {
         has_media_info: true,
         placeholder_icon: "🎞️",
     };
+    pub const SEASONS: Self = Self {
+        kind: MediaBrowserKind::Season,
+        title: "Seasons",
+        base_path: "/media/tv/seasons",
+        has_media_info: false,
+        placeholder_icon: "📺",
+    };
+    pub const EPISODES: Self = Self {
+        kind: MediaBrowserKind::Episode,
+        title: "Episodes",
+        base_path: "/media/tv/episodes",
+        has_media_info: true,
+        placeholder_icon: "📺",
+    };
+    pub const MUSIC_VIDEOS: Self = Self {
+        kind: MediaBrowserKind::MusicVideo,
+        title: "Music Videos",
+        base_path: "/media/music/videos",
+        has_media_info: true,
+        placeholder_icon: "🎵",
+    };
+    pub const REMOTE_STREAMS: Self = Self {
+        kind: MediaBrowserKind::RemoteStream,
+        title: "Remote Streams",
+        base_path: "/media/remote/streams",
+        has_media_info: false,
+        placeholder_icon: "📡",
+    };
 
     fn kind_code(self) -> i32 {
         match self.kind {
@@ -106,6 +135,10 @@ impl BrowserKindConfig {
             MediaBrowserKind::Show => 1,
             MediaBrowserKind::Artist => 2,
             MediaBrowserKind::OtherVideo => 3,
+            MediaBrowserKind::Season => 4,
+            MediaBrowserKind::Episode => 5,
+            MediaBrowserKind::MusicVideo => 6,
+            MediaBrowserKind::RemoteStream => 7,
         }
     }
 
@@ -114,6 +147,10 @@ impl BrowserKindConfig {
             1 => Self::SHOWS,
             2 => Self::ARTISTS,
             3 => Self::OTHER_VIDEOS,
+            4 => Self::SEASONS,
+            5 => Self::EPISODES,
+            6 => Self::MUSIC_VIDEOS,
+            7 => Self::REMOTE_STREAMS,
             _ => Self::MOVIES,
         }
     }
@@ -188,6 +225,10 @@ fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView 
                 MediaBrowserKind::Show => list_shows(q, p, PAGE_SIZE).await,
                 MediaBrowserKind::Artist => list_artists(q, p, PAGE_SIZE).await,
                 MediaBrowserKind::OtherVideo => list_other_videos(q, p, PAGE_SIZE).await,
+                MediaBrowserKind::Season => list_seasons(q, p, PAGE_SIZE).await,
+                MediaBrowserKind::Episode => list_episodes(q, p, PAGE_SIZE).await,
+                MediaBrowserKind::MusicVideo => list_music_videos(q, p, PAGE_SIZE).await,
+                MediaBrowserKind::RemoteStream => list_remote_streams(q, p, PAGE_SIZE).await,
             }
             .unwrap_or_default()
         },

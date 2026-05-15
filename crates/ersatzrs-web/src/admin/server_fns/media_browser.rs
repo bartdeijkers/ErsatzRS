@@ -1025,6 +1025,325 @@ pub async fn list_other_videos(
 }
 
 // ---------------------------------------------------------------------------
+// Seasons — "See All" target for the search page's Seasons section.
+//
+// Mirrors the season projection in `search.rs`: the card title is
+// "Specials" for season 0 else "Season {n}"; subtitle is the show title;
+// artwork falls back from the season poster to the show poster.
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_seasons(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    // Seasons are searched by their show's title (seasons have no title of
+    // their own); ordering matches `media_page_map`'s SortTitle ordering.
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "Season" s
+           JOIN "Show" sh ON sh."Id" = s."ShowId"
+           JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           WHERE (? = '' OR shm."Title" LIKE ?)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  s."SeasonNumber" AS "SeasonNumber",
+                  COALESCE(shm."Title", '') AS "ShowTitle",
+                  COALESCE(shm."SortTitle", shm."Title", '') AS "ShowSortTitle",
+                  COALESCE(sa."Path", sha."Path") AS "Poster"
+           FROM "Season" s
+           JOIN "Show" sh ON sh."Id" = s."ShowId"
+           JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
+           LEFT JOIN "Artwork" sa
+               ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sha
+               ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
+           WHERE (? = '' OR shm."Title" LIKE ?)
+           ORDER BY shm."SortTitle", shm."Title", s."SeasonNumber"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| {
+            let number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
+            let show_title: String = r.try_get("ShowTitle").unwrap_or_default();
+            let show_sort: String = r.try_get("ShowSortTitle").unwrap_or_default();
+            let title = if number == 0 {
+                "Specials".to_string()
+            } else {
+                format!("Season {number}")
+            };
+            MediaCardRow {
+                id: r.try_get("Id").unwrap_or(0),
+                title,
+                // Sort within a show by season number, scoped under the
+                // show's sort title so the letter-bar groups by show.
+                sort_title: format!("{show_sort} {number:04}"),
+                subtitle: (!show_title.is_empty()).then_some(show_title),
+                artwork_path: r
+                    .try_get::<Option<String>, _>("Poster")
+                    .unwrap_or(None)
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            }
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Episodes — "See All" target for the search page's Episodes section.
+//
+// Subtitle mirrors `search.rs`: "{ShowTitle} - S{season} E{episode}".
+// Artwork falls back episode → season → show poster.
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_episodes(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "EpisodeMetadata" em
+           WHERE (? = '' OR em."Title" LIKE ?)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT e."Id" AS "Id",
+                  COALESCE(em."Title", '') AS "Title",
+                  COALESCE(em."SortTitle", em."Title", '') AS "SortTitle",
+                  em."EpisodeNumber" AS "EpisodeNumber",
+                  s."SeasonNumber" AS "SeasonNumber",
+                  COALESCE(shm."Title", '') AS "ShowTitle",
+                  COALESCE(ea."Path", sa."Path", sha."Path") AS "Poster"
+           FROM "Episode" e
+           JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
+           JOIN "Season" s ON s."Id" = e."SeasonId"
+           JOIN "Show" sh ON sh."Id" = s."ShowId"
+           JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
+           LEFT JOIN "Artwork" ea
+               ON ea."EpisodeMetadataId" = em."Id" AND ea."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sa
+               ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sha
+               ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
+           WHERE (? = '' OR em."Title" LIKE ?)
+           ORDER BY em."SortTitle", em."Title"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| {
+            let show_title: String = r.try_get("ShowTitle").unwrap_or_default();
+            let season_number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
+            let episode_number: i64 = r.try_get("EpisodeNumber").unwrap_or(0);
+            let subtitle = (!show_title.is_empty())
+                .then(|| format!("{show_title} - S{season_number} E{episode_number}"));
+            MediaCardRow {
+                id: r.try_get("Id").unwrap_or(0),
+                title: r.try_get("Title").unwrap_or_default(),
+                sort_title: r.try_get("SortTitle").unwrap_or_default(),
+                subtitle,
+                artwork_path: r
+                    .try_get::<Option<String>, _>("Poster")
+                    .unwrap_or(None)
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            }
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Music videos — "See All" target for the search page's Music Videos section.
+//
+// Subtitle is the owning artist's name; artwork is the thumbnail (kind 1).
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_music_videos(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "MusicVideoMetadata" mvm
+           WHERE (? = '' OR mvm."Title" LIKE ?)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT mv."Id" AS "Id",
+                  COALESCE(mvm."Title", '') AS "Title",
+                  COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
+                  am."Title" AS "ArtistName",
+                  art."Path" AS "Thumb"
+           FROM "MusicVideo" mv
+           JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+           LEFT JOIN "Artist" a ON a."Id" = mv."ArtistId"
+           LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           LEFT JOIN "Artwork" art
+               ON art."MusicVideoMetadataId" = mvm."Id" AND art."ArtworkKind" = 1
+           WHERE (? = '' OR mvm."Title" LIKE ?)
+           ORDER BY mvm."SortTitle", mvm."Title"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<String>, _>("ArtistName")
+                .unwrap_or(None)
+                .filter(|s| !s.trim().is_empty()),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
+// Remote streams — "See All" target for the search page's Remote Streams
+// section. Subtitle is the original title; artwork is the thumbnail.
+// ---------------------------------------------------------------------------
+
+#[server]
+pub async fn list_remote_streams(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let offset = i64::from(page) * i64::from(page_size);
+    let like = format!("%{}%", search.trim());
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "RemoteStreamMetadata" rsm
+           WHERE (? = '' OR rsm."Title" LIKE ?)"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT rs."Id" AS "Id",
+                  COALESCE(rsm."Title", '') AS "Title",
+                  COALESCE(rsm."SortTitle", rsm."Title", '') AS "SortTitle",
+                  rsm."OriginalTitle" AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "RemoteStream" rs
+           JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
+           LEFT JOIN "Artwork" art
+               ON art."RemoteStreamMetadataId" = rsm."Id" AND art."ArtworkKind" = 1
+           WHERE (? = '' OR rsm."Title" LIKE ?)
+           ORDER BY rsm."SortTitle", rsm."Title"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(search.trim())
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let cards = rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<String>, _>("Subtitle")
+                .unwrap_or(None)
+                .filter(|s| !s.trim().is_empty()),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((cards, total.max(0) as u64))
+}
+
+// ---------------------------------------------------------------------------
 // Songs
 // ---------------------------------------------------------------------------
 
@@ -1926,6 +2245,10 @@ pub enum MediaBrowserKind {
     Show,
     Artist,
     OtherVideo,
+    Season,
+    Episode,
+    MusicVideo,
+    RemoteStream,
 }
 
 #[cfg(feature = "ssr")]
@@ -1938,6 +2261,10 @@ impl MediaBrowserKind {
             Self::Show => ("Show", "ShowMetadata", "ShowId"),
             Self::Artist => ("Artist", "ArtistMetadata", "ArtistId"),
             Self::OtherVideo => ("OtherVideo", "OtherVideoMetadata", "OtherVideoId"),
+            Self::Season => ("Season", "SeasonMetadata", "SeasonId"),
+            Self::Episode => ("Episode", "EpisodeMetadata", "EpisodeId"),
+            Self::MusicVideo => ("MusicVideo", "MusicVideoMetadata", "MusicVideoId"),
+            Self::RemoteStream => ("RemoteStream", "RemoteStreamMetadata", "RemoteStreamId"),
         }
     }
 
@@ -1949,6 +2276,10 @@ impl MediaBrowserKind {
             Self::Show => 1,
             Self::Artist => 3,
             Self::OtherVideo => 40,
+            Self::Season => 2,
+            Self::Episode => 20,
+            Self::MusicVideo => 30,
+            Self::RemoteStream => 70,
         }
     }
 }

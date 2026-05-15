@@ -6,6 +6,7 @@ pub mod images;
 pub mod movies;
 pub mod multi_select_browser;
 pub mod other_videos;
+pub mod see_all_lists;
 pub mod shows;
 pub mod smart_collections;
 pub mod songs;
