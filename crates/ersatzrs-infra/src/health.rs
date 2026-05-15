@@ -959,6 +959,10 @@ async fn missing_metadata_result(
         return Ok(HealthCheckResult::pass(title));
     }
 
+    // Mirrors `EpisodeMetadataHealthCheck.cs` / `MovieMetadataHealthCheck.cs`
+    // in ErsatzTV: take parent folders of missing items, deduplicate, then
+    // keep the first five. The SQL `LIMIT` is generous so we have enough
+    // raw rows to surface five distinct folders after deduplication.
     let paths_sql = format!(
         r#"SELECT mf."Path"
            FROM "{item_table}" item
@@ -969,16 +973,19 @@ async fn missing_metadata_result(
                WHERE metadata."{item_table}Id" = item."Id"
            )
            ORDER BY mf."Path", mf."Id"
-           LIMIT 5"#
+           LIMIT 500"#
     );
     let rows = sqlx::query(&paths_sql)
         .fetch_all(pool)
         .await
         .map_err(sqlx_error)?;
+    let mut seen = std::collections::HashSet::new();
     let folders = rows
         .iter()
         .filter_map(|row| row.try_get::<Option<String>, _>("Path").ok().flatten())
         .filter_map(|path| parent_folder(&path))
+        .filter(|folder| !folder.is_empty() && seen.insert(folder.clone()))
+        .take(5)
         .collect::<Vec<_>>();
 
     Ok(HealthCheckResult::new(
@@ -1068,10 +1075,28 @@ fn acceleration_name(kind: i32) -> &'static str {
     }
 }
 
+/// Return the directory component of `path` for the health-check warning
+/// message. Mirrors `.NET`'s `Path.GetDirectoryName`, which understands both
+/// `/` and `\` separators on every host. `ErsatzTV` stores raw provider
+/// paths from Plex/Jellyfin/Emby/local hosts, so a Linux deployment of
+/// `ErsatzRS` routinely sees Windows-shaped paths (e.g. `D:\Media\...`) and
+/// cannot rely on `std::path::Path::parent()`, which only splits on `/`
+/// on Unix.
 fn parent_folder(path: &str) -> Option<String> {
-    Path::new(path)
-        .parent()
-        .map(|parent| parent.to_string_lossy().into_owned())
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    let split_at = trimmed.rfind(['/', '\\']).map(|idx| idx + 1)?;
+    let parent = &trimmed[..split_at];
+    // Strip the trailing separator unless we're left with a bare root
+    // (`/`, `C:\`, `\\server\share\`). Drive-letter and UNC roots are
+    // preserved so the message remains parseable to a human reader.
+    let stripped = parent.trim_end_matches(['/', '\\']);
+    if stripped.is_empty() {
+        return Some(parent.to_owned());
+    }
+    if stripped.ends_with(':') {
+        return Some(parent.to_owned());
+    }
+    Some(stripped.to_owned())
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -1278,6 +1303,39 @@ mod tests {
             result.brief_message,
             "Configured VAAPI device does not exist"
         );
+    }
+
+    #[test]
+    fn parent_folder_handles_unix_and_windows_paths() {
+        // Unix host paths.
+        assert_eq!(
+            parent_folder("/media/tv/Show/Season 1/episode.mkv").as_deref(),
+            Some("/media/tv/Show/Season 1")
+        );
+        // Windows host paths arriving from Jellyfin/Emby/Plex on Windows.
+        // Without separator-agnostic parsing these collapse to "" because
+        // `std::path::Path::parent` only splits on `/` on Unix, which is
+        // what produced the empty folders in the /system/health message.
+        assert_eq!(
+            parent_folder(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1\ep.mkv").as_deref(),
+            Some(r"D:\Downloads\TV\3 Body Problem (2024)\Season 1")
+        );
+        // Trailing separators must not produce an empty parent.
+        assert_eq!(
+            parent_folder(r"D:\Media\Show\episode.mkv\").as_deref(),
+            Some(r"D:\Media\Show")
+        );
+        // Mixed separators (Jellyfin sometimes normalizes one side).
+        assert_eq!(
+            parent_folder(r"D:\Media/Show\episode.mkv").as_deref(),
+            Some(r"D:\Media/Show")
+        );
+        // A bare file name has no parent.
+        assert_eq!(parent_folder("episode.mkv"), None);
+        // Roots are preserved with their separator so the message stays
+        // human-readable.
+        assert_eq!(parent_folder("/episode.mkv").as_deref(), Some("/"));
+        assert_eq!(parent_folder(r"C:\episode.mkv").as_deref(), Some(r"C:\"));
     }
 
     fn assert_result(
