@@ -53,6 +53,41 @@ pub enum SearchCardKind {
     RemoteStream,
 }
 
+impl SearchAllIds {
+    /// All ids across every kind, flattened in section order, for the
+    /// kind-agnostic `add_media_items_to_collection` path.
+    #[must_use]
+    pub fn flatten(&self) -> Vec<i64> {
+        let mut out = Vec::new();
+        out.extend(&self.movie_ids);
+        out.extend(&self.show_ids);
+        out.extend(&self.season_ids);
+        out.extend(&self.episode_ids);
+        out.extend(&self.artist_ids);
+        out.extend(&self.music_video_ids);
+        out.extend(&self.other_video_ids);
+        out.extend(&self.song_ids);
+        out.extend(&self.image_ids);
+        out.extend(&self.remote_stream_ids);
+        out
+    }
+
+    /// True when no kind has any ids.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.movie_ids.is_empty()
+            && self.show_ids.is_empty()
+            && self.season_ids.is_empty()
+            && self.episode_ids.is_empty()
+            && self.artist_ids.is_empty()
+            && self.music_video_ids.is_empty()
+            && self.other_video_ids.is_empty()
+            && self.song_ids.is_empty()
+            && self.image_ids.is_empty()
+            && self.remote_stream_ids.is_empty()
+    }
+}
+
 impl SearchCardKind {
     /// String value the SQL-backed search index emits for this kind.
     /// Matches `SEARCH_DOCUMENT_SQL` in `scheduling.rs`.

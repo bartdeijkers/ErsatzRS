@@ -40,6 +40,25 @@ fn TopBar() -> impl IntoView {
 
             <div class=style::flex_1/>
 
+            // Server-rendered GET form: pressing Enter navigates to
+            // /search?query=... with no hydration cost. Mirrors ErsatzTV's
+            // MainLayout search-bar (Search.razor reads ?query= on load).
+            <form method="get" action="/search" class=style::search_form role="search">
+                <span
+                    class=style::search_icon
+                    style=icon_style(IconName::Search, "1rem")
+                    aria-hidden="true"
+                ></span>
+                <input
+                    type="search"
+                    name="query"
+                    class=style::search_input
+                    placeholder="Search"
+                    aria-label="Search media"
+                    autocomplete="off"
+                />
+            </form>
+
             <nav class=style::topbar_nav>
                 <a href="/iptv/channels.m3u" class=style::topbar_link target="_blank">"M3U"</a>
                 <a href="/iptv/xmltv.xml" class=style::topbar_link target="_blank">"XMLTV"</a>

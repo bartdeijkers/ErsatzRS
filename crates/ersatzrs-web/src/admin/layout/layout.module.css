@@ -101,6 +101,40 @@
     color: var(--color-gray-200);
 }
 
+.search-form {
+    display: none;
+    align-items: center;
+    position: relative;
+}
+@media (min-width: 768px) {
+    .search-form { display: flex; }
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.5rem;
+    color: var(--color-muted);
+    pointer-events: none;
+}
+
+.search-input {
+    width: 16rem;
+    height: 2rem;
+    padding: 0 0.5rem 0 1.875rem;
+    font-size: 0.875rem;
+    color: var(--color-gray-200);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    transition: border-color 150ms, background-color 150ms;
+}
+.search-input::placeholder { color: var(--color-muted); }
+.search-input:focus { outline: none; }
+.search-input:focus-visible {
+    border-color: var(--color-primary);
+    background-color: var(--color-bg);
+}
+
 .drawer {
     width: 14rem;
     flex-shrink: 0;

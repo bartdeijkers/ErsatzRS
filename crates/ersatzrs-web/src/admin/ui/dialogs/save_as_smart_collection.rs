@@ -14,6 +14,7 @@ stylance::import_crate_style!(
 const NEW_SMART_COLLECTION_ID: i64 = 0;
 
 #[component]
+#[allow(clippy::too_many_lines)]
 pub fn SaveAsSmartCollectionDialog(
     open: RwSignal<bool>,
     query: Signal<String>,
