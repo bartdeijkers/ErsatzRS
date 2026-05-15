@@ -963,6 +963,48 @@ mod tests {
     }
 }
 
+#[cfg(all(test, feature = "ssr"))]
+mod bulk_id_tests {
+    use super::*;
+    use ersatzrs_core::search::SearchDocument;
+
+    fn hit(media_item_id: i64, media_kind: &str) -> SearchDocument {
+        SearchDocument {
+            media_item_id,
+            media_kind: media_kind.to_string(),
+            ..SearchDocument::default()
+        }
+    }
+
+    #[test]
+    fn bucket_search_all_ids_groups_every_supported_kind() {
+        let ids = bucket_search_all_ids(vec![
+            hit(1, "movie"),
+            hit(2, "show"),
+            hit(3, "season"),
+            hit(4, "episode"),
+            hit(5, "artist"),
+            hit(6, "music_video"),
+            hit(7, "other_video"),
+            hit(8, "song"),
+            hit(9, "image"),
+            hit(10, "remote_stream"),
+            hit(99, "unknown"),
+        ]);
+
+        assert_eq!(ids.movie_ids, vec![1]);
+        assert_eq!(ids.show_ids, vec![2]);
+        assert_eq!(ids.season_ids, vec![3]);
+        assert_eq!(ids.episode_ids, vec![4]);
+        assert_eq!(ids.artist_ids, vec![5]);
+        assert_eq!(ids.music_video_ids, vec![6]);
+        assert_eq!(ids.other_video_ids, vec![7]);
+        assert_eq!(ids.song_ids, vec![8]);
+        assert_eq!(ids.image_ids, vec![9]);
+        assert_eq!(ids.remote_stream_ids, vec![10]);
+    }
+}
+
 #[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
 mod section_tests {
     //! DB-backed projection tests. Seed a tiny fixture (one show + two
