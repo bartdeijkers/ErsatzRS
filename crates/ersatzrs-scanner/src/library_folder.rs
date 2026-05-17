@@ -5,11 +5,11 @@
 //! (`GetParentFolderId`, `GetOrAddFolder`, `SetEtag`, `UpdateLibraryFolderId`,
 //! `CleanEtagsForLibraryPath`) into scanner-local SQL.
 //!
-//! These are kept here, not in an infra repository, until another scanner
-//! slice needs them (`plans/optimalisation-one.md`, step 2). The SQL uses
-//! quoted EF-style identifiers and `?` placeholders so it stays neutral
-//! across the SQLite/MySQL backends the workspace already abstracts; it adds
-//! no `ON CONFLICT` or other SQLite-only syntax.
+//! These are kept scanner-local, not in an infra repository, until another
+//! scanner slice needs them. The SQL uses quoted EF-style identifiers and
+//! `?` placeholders so it stays neutral across the SQLite/MySQL backends the
+//! workspace already abstracts; it adds no `ON CONFLICT` or other
+//! SQLite-only syntax.
 //!
 //! Parity notes versus the C# repository:
 //!
