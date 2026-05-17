@@ -101,6 +101,36 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     assert!(count(&pool, "MediaVersion").await >= 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
 
+    // Step 3 parity: one show LibraryFolder + one season LibraryFolder, with
+    // the season folder's ParentId pointing at the show folder. The library
+    // root itself gets no row (ErsatzTV's ScanFolder only adds show/season
+    // folders), so the show folder's ParentId stays NULL. Etag stays NULL
+    // and episode MediaFile.LibraryFolderId is unset until later steps.
+    assert_eq!(count(&pool, "LibraryFolder").await, 2);
+    let show_path = show_dir.to_string_lossy().into_owned();
+    let season_path = season_dir.to_string_lossy().into_owned();
+    let show_folder =
+        sqlx::query(r#"SELECT "Id", "ParentId", "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(&show_path)
+            .fetch_one(&pool)
+            .await
+            .expect("show LibraryFolder row");
+    let show_folder_id: i64 = show_folder.get("Id");
+    assert_eq!(show_folder.get::<Option<i64>, _>("ParentId"), None);
+    assert_eq!(show_folder.get::<Option<String>, _>("Etag"), None);
+
+    let season_folder =
+        sqlx::query(r#"SELECT "ParentId", "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(&season_path)
+            .fetch_one(&pool)
+            .await
+            .expect("season LibraryFolder row");
+    assert_eq!(
+        season_folder.get::<Option<i64>, _>("ParentId"),
+        Some(show_folder_id)
+    );
+    assert_eq!(season_folder.get::<Option<String>, _>("Etag"), None);
+
     // Show-scoped child rows.
     assert!(count_where(&pool, "Genre", r#""ShowMetadataId""#).await >= 2);
     assert!(count_where(&pool, "Tag", r#""ShowMetadataId""#).await >= 1);

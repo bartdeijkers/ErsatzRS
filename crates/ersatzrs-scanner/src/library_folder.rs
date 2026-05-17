@@ -470,20 +470,15 @@ mod tests {
         // Stale parent whose child is still on disk: the child survives (its
         // path exists) and its presence keeps the stale parent via the
         // `NOT EXISTS child` guard.
-        let kept_parent =
-            get_or_add_library_folder(&pool, lp, None, Path::new("/lib/KeptParent"))
-                .await
-                .expect("insert kept parent");
+        let kept_parent = get_or_add_library_folder(&pool, lp, None, Path::new("/lib/KeptParent"))
+            .await
+            .expect("insert kept parent");
         let live_child_path = tmp.path().join("live-child");
         std::fs::create_dir(&live_child_path).unwrap();
-        let live_child = get_or_add_library_folder(
-            &pool,
-            lp,
-            Some(kept_parent.id),
-            &live_child_path,
-        )
-        .await
-        .expect("insert live child");
+        let live_child =
+            get_or_add_library_folder(&pool, lp, Some(kept_parent.id), &live_child_path)
+                .await
+                .expect("insert live child");
 
         // Stale folder referenced by a MediaFile -> kept by the file guard.
         let referenced = get_or_add_library_folder(&pool, lp, None, Path::new("/lib/Referenced"))

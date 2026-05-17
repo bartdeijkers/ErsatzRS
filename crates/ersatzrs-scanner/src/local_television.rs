@@ -7,9 +7,11 @@
 //! (`poster.*`, `fanart.*`, `thumb.*`, `season01-poster.*`,
 //! `{episode}-thumb.*`).
 //!
-//! Compared to `ErsatzTV` we currently skip the folder-etag fast path and the
-//! `LibraryFolder` row inserts: a re-scan walks the full tree. Metadata
-//! upserts are idempotent so this remains correct.
+//! Show and season `LibraryFolder` rows are now persisted (parented as in
+//! `ErsatzTV`), but the folder-etag fast path and episode
+//! `MediaFile.LibraryFolderId` linking are still pending later steps of
+//! `plans/optimalisation-one.md`, so a re-scan still walks the full tree.
+//! Metadata upserts are idempotent so this remains correct.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -24,6 +26,7 @@ use ersatzrs_infra::metadata::{
 use sqlx::{Row, Transaction};
 use tracing::warn;
 
+use crate::library_folder;
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
 use crate::{
     encode_datetime, insert_media_item, insert_media_version_with_owner, path_hash,
@@ -340,6 +343,45 @@ fn directors_from(values: &[String]) -> Vec<PersonRef> {
     values.iter().cloned().map(PersonRef::new).collect()
 }
 
+/// Resolve a folder's parent and create/load its `LibraryFolder` row,
+/// mirroring ErsatzTV's `GetParentFolderId` + `GetOrAddFolder` pairing used
+/// before both the show and season upserts. Returns the persisted row, or
+/// `None` after logging when the folder cannot be resolved or created — the
+/// caller treats `None` as "skip this folder", matching the existing
+/// per-item warn-and-continue style. `kind` is only used for log context.
+async fn ensure_library_folder(
+    pool: &DbPool,
+    library_path_id: i64,
+    folder: &Path,
+    kind: &str,
+) -> Option<library_folder::LibraryFolderRow> {
+    let parent_id = match library_folder::get_parent_folder_id(pool, library_path_id, folder).await
+    {
+        Ok(parent_id) => parent_id,
+        Err(err) => {
+            warn!(
+                folder = %folder.display(),
+                error = %err,
+                "failed to resolve {kind} parent folder; skipping"
+            );
+            return None;
+        }
+    };
+
+    match library_folder::get_or_add_library_folder(pool, library_path_id, parent_id, folder).await
+    {
+        Ok(row) => Some(row),
+        Err(err) => {
+            warn!(
+                folder = %folder.display(),
+                error = %err,
+                "failed to create {kind} library folder; skipping"
+            );
+            None
+        }
+    }
+}
+
 /// Sync one library path of `LibraryMediaKind::Shows`. Returns the number of
 /// episode files processed so the caller can roll the total scan report.
 pub(crate) async fn sync_local_show_library(
@@ -352,6 +394,16 @@ pub(crate) async fn sync_local_show_library(
     let mut episode_count = 0usize;
 
     for show in shows {
+        // Create the show LibraryFolder before the show upsert, mirroring
+        // ErsatzTV's `ScanFolder`. The show item does not use this row
+        // itself; it exists so season folders can point at it via ParentId.
+        if ensure_library_folder(pool, library_path.id, &show.folder, "show")
+            .await
+            .is_none()
+        {
+            continue;
+        }
+
         let show_id = match upsert_show(pool, library_path, &show).await {
             Ok(id) => id,
             Err(err) => {
@@ -365,6 +417,16 @@ pub(crate) async fn sync_local_show_library(
         };
 
         for season in &show.seasons {
+            // Create the season LibraryFolder before the season upsert,
+            // mirroring ErsatzTV's `ScanSeasons`. Etag computation and the
+            // episode fast path are wired in later steps.
+            if ensure_library_folder(pool, library_path.id, &season.folder, "season")
+                .await
+                .is_none()
+            {
+                continue;
+            }
+
             let season_id =
                 match upsert_season(pool, library_path, show_id, &show.folder, season).await {
                     Ok(id) => id,

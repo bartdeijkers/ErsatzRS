@@ -18,10 +18,14 @@ use sqlx::{Row, Transaction};
 use thiserror::Error;
 use tracing::warn;
 
-// Wired into the scanner flow in a later step of plans/optimalisation-one.md;
-// until then the helpers have no production caller.
+// folder_etag has no production caller until the etag fast path lands
+// (steps 5-7 of plans/optimalisation-one.md).
 #[allow(dead_code)]
 mod folder_etag;
+// library_folder's parent/get-or-add helpers are wired into
+// sync_local_show_library (step 3); set_etag, media-file linking, and
+// cleanup are consumed by steps 4-7, so the module stays dead-code-allowed
+// until then.
 #[allow(dead_code)]
 mod library_folder;
 pub mod local_television;
