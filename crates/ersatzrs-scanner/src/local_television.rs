@@ -7,11 +7,12 @@
 //! (`poster.*`, `fanart.*`, `thumb.*`, `season01-poster.*`,
 //! `{episode}-thumb.*`).
 //!
-//! Show and season `LibraryFolder` rows are now persisted (parented as in
-//! `ErsatzTV`), and each episode `MediaFile` is linked to its season
-//! `LibraryFolder`. The folder-etag fast path is still pending a later step
-//! of `plans/optimalisation-one.md`, so a re-scan still walks the full tree.
-//! Metadata upserts are idempotent so this remains correct.
+//! Show and season `LibraryFolder` rows are persisted (parented as in
+//! `ErsatzTV`), each episode `MediaFile` is linked to its season
+//! `LibraryFolder`, and the season folder-etag fast path skips episode
+//! probing for unchanged folders while still refreshing season
+//! metadata/poster. The restore/non-normal guard that disables the fast path
+//! is still pending (`plans/optimalisation-one.md` step 6).
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -384,11 +385,16 @@ async fn ensure_library_folder(
 
 /// Sync one library path of `LibraryMediaKind::Shows`. Returns the number of
 /// episode files processed so the caller can roll the total scan report.
+/// `on_episode(count)` advances scan progress by `count` episode files. It is
+/// called once per scanned episode (`count == 1`) and once per season skipped
+/// by the etag fast path (`count == skipped episodes`), so the progress sink
+/// still reaches 100% even though skipped episodes are not probed. Skipped
+/// episodes do not contribute to the returned count.
 pub(crate) async fn sync_local_show_library(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
     extractor: &FfprobeExtractor,
-    mut on_episode: impl FnMut(),
+    mut on_episode: impl FnMut(usize),
 ) -> Result<usize> {
     let shows = collect_show_work(&library_path.path);
     let mut episode_count = 0usize;
@@ -419,13 +425,22 @@ pub(crate) async fn sync_local_show_library(
         for season in &show.seasons {
             // Create the season LibraryFolder before the season upsert,
             // mirroring ErsatzTV's `ScanSeasons`. Episodes link their
-            // `MediaFile` to this row; the etag fast path is a later step.
+            // `MediaFile` to this row.
             let Some(season_folder) =
                 ensure_library_folder(pool, library_path.id, &season.folder, "season").await
             else {
                 continue;
             };
 
+            // Compute the season-folder etag with subfolders and cache the
+            // match against the stored value, exactly like ErsatzTV's
+            // `ScanSeasons`. The restore/non-normal guard that disables a
+            // match is step 6; `etag_match` stays honest here.
+            let current_etag = crate::folder_etag::folder_etag_with_subfolders(&season.folder);
+            let etag_match = season_folder.etag.as_deref() == Some(current_etag.as_str());
+
+            // Always run the season upsert so season metadata and poster
+            // refresh still happen on unchanged folders.
             let season_id =
                 match upsert_season(pool, library_path, show_id, &show.folder, season).await {
                     Ok(id) => id,
@@ -438,6 +453,14 @@ pub(crate) async fn sync_local_show_library(
                         continue;
                     }
                 };
+
+            // Etag fast path: skip all episode probing/upsert work for an
+            // unchanged season, but still advance progress for the skipped
+            // episodes so the sink reaches 100%.
+            if etag_match {
+                on_episode(season.episode_files.len());
+                continue;
+            }
 
             for episode_path in &season.episode_files {
                 match sync_local_episode(
@@ -453,7 +476,7 @@ pub(crate) async fn sync_local_show_library(
                 {
                     Ok(()) => {
                         episode_count += 1;
-                        on_episode();
+                        on_episode(1);
                     }
                     Err(err) => {
                         warn!(
@@ -463,6 +486,18 @@ pub(crate) async fn sync_local_show_library(
                         );
                     }
                 }
+            }
+
+            // Persist the new etag after the non-skipped episode scan, like
+            // ErsatzTV's `SetEtag` call following `ScanEpisodes`.
+            if let Err(err) =
+                library_folder::set_library_folder_etag(pool, season_folder.id, &current_etag).await
+            {
+                warn!(
+                    folder = %season.folder.display(),
+                    error = %err,
+                    "failed to persist season folder etag"
+                );
             }
         }
     }

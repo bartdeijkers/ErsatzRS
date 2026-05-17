@@ -18,14 +18,10 @@ use sqlx::{Row, Transaction};
 use thiserror::Error;
 use tracing::warn;
 
-// folder_etag has no production caller until the etag fast path lands
-// (steps 5-7 of plans/optimalisation-one.md).
-#[allow(dead_code)]
 mod folder_etag;
-// library_folder's parent/get-or-add helpers are wired into
-// sync_local_show_library (step 3); set_etag, media-file linking, and
-// cleanup are consumed by steps 4-7, so the module stays dead-code-allowed
-// until then.
+// library_folder's parent/get-or-add/set-etag/media-file-link helpers are
+// wired into sync_local_show_library (steps 3-5); clean_library_folders_for_path
+// is consumed by step 7, so the module stays dead-code-allowed until then.
 #[allow(dead_code)]
 mod library_folder;
 pub mod local_television;
@@ -222,8 +218,8 @@ pub async fn scan_local_library_with_progress(
                     pool,
                     &library_path,
                     &extractor,
-                    || {
-                        local_processed += 1;
+                    |count| {
+                        local_processed += count;
                         if let Some(sink) = progress {
                             if total_items > 0 {
                                 let done = processed.saturating_add(local_processed);

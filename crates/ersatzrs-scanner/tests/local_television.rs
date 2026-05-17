@@ -101,12 +101,13 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     assert!(count(&pool, "MediaVersion").await >= 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
 
-    // Steps 3-4 parity: one show LibraryFolder + one season LibraryFolder,
+    // Steps 3-5 parity: one show LibraryFolder + one season LibraryFolder,
     // with the season folder's ParentId pointing at the show folder. The
     // library root itself gets no row (ErsatzTV's ScanFolder only adds
-    // show/season folders), so the show folder's ParentId stays NULL. Etag
-    // stays NULL until the etag fast-path step; the episode's MediaFile now
-    // links to the season LibraryFolder.
+    // show/season folders), so the show folder's ParentId stays NULL. The
+    // show folder's Etag stays NULL (ErsatzTV only etags season folders,
+    // after ScanEpisodes); the season folder's Etag is persisted after the
+    // episode scan; the episode's MediaFile links to the season folder.
     assert_eq!(count(&pool, "LibraryFolder").await, 2);
     let show_path = show_dir.to_string_lossy().into_owned();
     let season_path = season_dir.to_string_lossy().into_owned();
@@ -131,7 +132,10 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
         season_folder.get::<Option<i64>, _>("ParentId"),
         Some(show_folder_id)
     );
-    assert_eq!(season_folder.get::<Option<String>, _>("Etag"), None);
+    assert!(
+        season_folder.get::<Option<String>, _>("Etag").is_some(),
+        "season folder etag is persisted after the episode scan"
+    );
 
     // Step 4 parity: the episode MediaFile links to the season LibraryFolder.
     let media_file_folder: Option<i64> =
@@ -171,6 +175,85 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
         .unwrap()
         .get("MetadataKind");
     assert_eq!(episode_kind, 1);
+}
+
+/// Step 5 parity: a second scan of an unchanged season folder hits the etag
+/// fast path (no episode probing, `scanned_files == 0`), while touching a
+/// file under the season folder changes the etag and forces a rescan.
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+async fn second_scan_skips_unchanged_season_via_etag() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-television-etag");
+    let season_dir = temp
+        .path()
+        .join("library")
+        .join("The Expanse")
+        .join("Season 01");
+    std::fs::create_dir_all(&season_dir).unwrap();
+    let episode_path = season_dir.join("The Expanse - S01E01 - Dulcinea.mkv");
+    std::fs::copy(&fixture, &episode_path).unwrap();
+
+    let pool = test_db().await;
+    seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
+
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+
+    // First scan probes the episode and persists the season folder etag.
+    let first = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(first.scanned_files, 1);
+    let etag_after_first: Option<String> =
+        sqlx::query(r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(season_dir.to_string_lossy().into_owned())
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("Etag");
+    assert!(etag_after_first.is_some(), "season etag must be persisted");
+
+    // Second scan with an unchanged folder skips episode work entirely.
+    let second = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(
+        second.scanned_files, 0,
+        "unchanged season must not be re-probed"
+    );
+    assert_eq!(count(&pool, "Episode").await, 1);
+
+    // Touching the episode file changes the folder etag and forces a rescan.
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+    std::fs::File::options()
+        .write(true)
+        .open(&episode_path)
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
+    let third = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(
+        third.scanned_files, 1,
+        "changed season etag must trigger a rescan"
+    );
+    let etag_after_third: Option<String> =
+        sqlx::query(r#"SELECT "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(season_dir.to_string_lossy().into_owned())
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("Etag");
+    assert_ne!(
+        etag_after_third, etag_after_first,
+        "etag must change after the file mtime changed"
+    );
 }
 
 async fn test_db() -> SqlitePool {

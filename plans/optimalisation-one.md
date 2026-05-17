@@ -165,7 +165,7 @@ Progress/reporting:
 4. [x] **Link episode `MediaFile` rows.**
    Pass the season folder id into `sync_local_episode` and write
    `MediaFile.LibraryFolderId` for both insert and existing-file update paths.
-5. [ ] **Enable etag skip.**
+5. [x] **Enable etag skip.**
    Compare the stored etag to the current etag after season folder creation.
    Skip only episode scanning, not season metadata/poster refresh. Update the
    etag only after the non-skipped episode scan succeeds.
