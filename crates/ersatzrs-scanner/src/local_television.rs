@@ -11,8 +11,9 @@
 //! `ErsatzTV`), each episode `MediaFile` is linked to its season
 //! `LibraryFolder`, and the season folder-etag fast path skips episode
 //! probing for unchanged folders while still refreshing season
-//! metadata/poster. The restore/non-normal guard that disables the fast path
-//! is still pending (`plans/optimalisation-one.md` step 6).
+//! metadata/poster. A restore guard disables the fast path for any season
+//! holding a previously trashed (`State IN (1,2)`) episode so the file can
+//! return to `Normal`, mirroring ErsatzTV's `GetAllTrashedItems` check.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -383,6 +384,58 @@ async fn ensure_library_folder(
     }
 }
 
+/// Port of `MediaItemRepository.GetAllTrashedItems`, scoped to episodes:
+/// every episode `MediaFile.Path` in this library path whose owning
+/// `MediaItem.State` is `FileNotFound (1)` or `Unavailable (2)`. ErsatzTV uses
+/// `State IN (1,2)` here, so `RemoteOnly (3)` is intentionally excluded — a
+/// remote-only item is not "trashed" and must not disable the etag fast path.
+async fn trashed_episode_paths(pool: &DbPool, library_path_id: i64) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        r#"SELECT "mf"."Path"
+           FROM "MediaItem" AS "mi"
+           JOIN "MediaVersion" AS "mv" ON "mi"."Id" = "mv"."EpisodeId"
+           JOIN "MediaFile" AS "mf" ON "mv"."Id" = "mf"."MediaVersionId"
+           WHERE "mi"."State" IN (1, 2) AND "mi"."LibraryPathId" = ?"#,
+    )
+    .bind(library_path_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.get::<Option<String>, _>("Path"))
+        .collect())
+}
+
+/// Decide whether a season's episode scan can be skipped, mirroring the
+/// `etagMatch` logic in ErsatzTV's `ScanSeasons`: the stored etag must equal
+/// the current etag, and the restore guard must not fire. The guard disables
+/// the fast path when a previously trashed episode is now present under the
+/// season folder, so the restored file can return to `Normal` — ErsatzTV's
+/// `allTrashedItems.Any(f => f.StartsWith(seasonFolder, OrdinalIgnoreCase))`.
+/// `trashed_paths` must already be lowercased for the case-insensitive match.
+fn season_etag_match(
+    stored_etag: Option<&str>,
+    current_etag: &str,
+    season_folder: &Path,
+    trashed_paths: &[String],
+) -> bool {
+    if stored_etag != Some(current_etag) {
+        return false;
+    }
+    let season_prefix = season_folder.to_string_lossy().to_lowercase();
+    if trashed_paths
+        .iter()
+        .any(|path| path.starts_with(&season_prefix))
+    {
+        warn!(
+            folder = %season_folder.display(),
+            "previously trashed items are present; rescanning season"
+        );
+        return false;
+    }
+    true
+}
+
 /// Sync one library path of `LibraryMediaKind::Shows`. Returns the number of
 /// episode files processed so the caller can roll the total scan report.
 /// `on_episode(count)` advances scan progress by `count` episode files. It is
@@ -398,6 +451,16 @@ pub(crate) async fn sync_local_show_library(
 ) -> Result<usize> {
     let shows = collect_show_work(&library_path.path);
     let mut episode_count = 0usize;
+
+    // Load trashed episode paths once per library path, like ErsatzTV's
+    // `GetAllTrashedItems` call at the top of `ScanFolder`. Lowercased so the
+    // per-season prefix check can be case-insensitive, matching ErsatzTV's
+    // `StartsWith(..., StringComparison.OrdinalIgnoreCase)`.
+    let trashed_paths: Vec<String> = trashed_episode_paths(pool, library_path.id)
+        .await?
+        .into_iter()
+        .map(|path| path.to_lowercase())
+        .collect();
 
     for show in shows {
         // Create the show LibraryFolder before the show upsert, mirroring
@@ -432,12 +495,13 @@ pub(crate) async fn sync_local_show_library(
                 continue;
             };
 
-            // Compute the season-folder etag with subfolders and cache the
-            // match against the stored value, exactly like ErsatzTV's
-            // `ScanSeasons`. The restore/non-normal guard that disables a
-            // match is step 6; `etag_match` stays honest here.
             let current_etag = crate::folder_etag::folder_etag_with_subfolders(&season.folder);
-            let etag_match = season_folder.etag.as_deref() == Some(current_etag.as_str());
+            let etag_match = season_etag_match(
+                season_folder.etag.as_deref(),
+                &current_etag,
+                &season.folder,
+                &trashed_paths,
+            );
 
             // Always run the season upsert so season metadata and poster
             // refresh still happen on unchanged folders.

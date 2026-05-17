@@ -256,6 +256,75 @@ async fn second_scan_skips_unchanged_season_via_etag() {
     );
 }
 
+/// Step 6 parity: a previously trashed (`State IN (1,2)`) episode under an
+/// otherwise unchanged season disables the etag fast path so the episode is
+/// re-probed and restored to `Normal` (State 0).
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+async fn trashed_episode_disables_etag_skip_and_restores_normal() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-television-trash");
+    let season_dir = temp
+        .path()
+        .join("library")
+        .join("The Expanse")
+        .join("Season 01");
+    std::fs::create_dir_all(&season_dir).unwrap();
+    let episode_path = season_dir.join("The Expanse - S01E01 - Dulcinea.mkv");
+    std::fs::copy(&fixture, &episode_path).unwrap();
+
+    let pool = test_db().await;
+    seed_local_library(&pool, temp.path().join("library").as_path(), 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+
+    // First scan probes the episode and persists the season folder etag.
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+
+    // Mark the episode MediaItem as trashed (FileNotFound = 1).
+    sqlx::query(
+        r#"UPDATE "MediaItem" SET "State" = 1
+           WHERE "Id" IN (SELECT "Id" FROM "Episode")"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // The season folder etag is unchanged, but the restore guard must
+    // disable the fast path: the episode is re-probed.
+    let rescan = scan_local_library(&pool, &config).await.unwrap();
+    assert_eq!(
+        rescan.scanned_files, 1,
+        "trashed episode must disable the etag skip"
+    );
+
+    // And the episode is restored to Normal (State 0).
+    let state: i32 = sqlx::query(
+        r#"SELECT "State" FROM "MediaItem" WHERE "Id" IN (SELECT "Id" FROM "Episode")"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .get("State");
+    assert_eq!(state, 0, "restored episode must return to Normal");
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

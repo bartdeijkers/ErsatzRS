@@ -169,10 +169,13 @@ Progress/reporting:
    Compare the stored etag to the current etag after season folder creation.
    Skip only episode scanning, not season metadata/poster refresh. Update the
    etag only after the non-skipped episode scan succeeds.
-6. [ ] **Restore/non-normal guard.**
-   Add the query that disables the fast path when non-normal episode rows exist
-   under the season folder. If a future trash table is added, replace this with
-   exact `GetAllTrashedItems` parity.
+6. [x] **Restore/non-normal guard.**
+   Implemented with exact `GetAllTrashedItems` parity rather than the looser
+   `State != Normal` fallback: a per-library-path query loads episode
+   `MediaFile.Path` values whose `MediaItem.State IN (1,2)`
+   (FileNotFound/Unavailable), and any path under a season folder disables
+   that season's etag fast path. `RemoteOnly (3)` is intentionally excluded,
+   matching ErsatzTV's `State IN (1,2)`. No trash table was required.
 7. [ ] **Clean stale folders.**
    Call the clean-up helper after a library path scan, deepest-first, matching
    ErsatzTV's `CleanEtagsForLibraryPath`.
