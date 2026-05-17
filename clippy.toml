@@ -2,6 +2,11 @@
 # The policy is defined in STYLE.md: current stable minus one.
 avoid-breaking-exported-api = true
 
+# Project/domain identifiers that legitimately appear CamelCase in prose
+# (project name and ErsatzTV's documented .NET API surface we port against).
+# Appended to clippy's built-in doc-valid-idents default list.
+doc-valid-idents = ["ErsatzTV", "ErsatzRS", "..", "MD5", "SHA-256"]
+
 disallowed-methods = [
   { path = "std::env::var", reason = "Use the configuration layer so defaults, files, env, and CLI stay consistent." },
   { path = "std::env::var_os", reason = "Use the configuration layer so defaults, files, env, and CLI stay consistent." },

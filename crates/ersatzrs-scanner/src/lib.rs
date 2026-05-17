@@ -18,6 +18,12 @@ use sqlx::{Row, Transaction};
 use thiserror::Error;
 use tracing::warn;
 
+// Wired into the scanner flow in a later step of plans/optimalisation-one.md;
+// until then the helpers have no production caller.
+#[allow(dead_code)]
+mod folder_etag;
+#[allow(dead_code)]
+mod library_folder;
 pub mod local_television;
 pub mod nfo;
 
