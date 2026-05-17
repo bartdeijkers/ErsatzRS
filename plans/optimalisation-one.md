@@ -176,9 +176,13 @@ Progress/reporting:
    (FileNotFound/Unavailable), and any path under a season folder disables
    that season's etag fast path. `RemoteOnly (3)` is intentionally excluded,
    matching ErsatzTV's `State IN (1,2)`. No trash table was required.
-7. [ ] **Clean stale folders.**
-   Call the clean-up helper after a library path scan, deepest-first, matching
-   ErsatzTV's `CleanEtagsForLibraryPath`.
+7. [x] **Clean stale folders.**
+   `clean_library_folders_for_path` (from step 2) is now called at the end of
+   `sync_local_show_library`, after all shows for the library path are
+   processed and before returning, mirroring ErsatzTV's
+   `CleanEtagsForLibraryPath` placement in `ScanFolder`. Deepest-first with
+   the `MediaFile`/child guards is already implemented in the helper. A
+   failure is logged and non-fatal since scan results are already persisted.
 8. [ ] **Document and verify.**
    Update the scanner row in
    [`docs/reference/parity-matrix.md`](../docs/reference/parity-matrix.md) and

@@ -14,6 +14,8 @@
 //! metadata/poster. A restore guard disables the fast path for any season
 //! holding a previously trashed (`State IN (1,2)`) episode so the file can
 //! return to `Normal`, mirroring ErsatzTV's `GetAllTrashedItems` check.
+//! After all shows are processed, stale `LibraryFolder` rows are cleaned,
+//! mirroring ErsatzTV's `CleanEtagsForLibraryPath`.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -564,6 +566,18 @@ pub(crate) async fn sync_local_show_library(
                 );
             }
         }
+    }
+
+    // After all shows are processed for this library path, drop stale
+    // `LibraryFolder` rows whose path no longer exists, mirroring ErsatzTV's
+    // `CleanEtagsForLibraryPath` call at the end of `ScanFolder`. A failure
+    // here is non-fatal: the scan results are already persisted.
+    if let Err(err) = library_folder::clean_library_folders_for_path(pool, library_path.id).await {
+        warn!(
+            library_path_id = library_path.id,
+            error = %err,
+            "failed to clean stale library folders"
+        );
     }
 
     Ok(episode_count)

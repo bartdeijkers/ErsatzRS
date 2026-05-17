@@ -325,6 +325,87 @@ async fn trashed_episode_disables_etag_skip_and_restores_normal() {
     assert_eq!(state, 0, "restored episode must return to Normal");
 }
 
+/// Step 7 parity: `clean_library_folders_for_path` runs after a library-path
+/// scan. A stale season folder still referenced by an episode `MediaFile`
+/// survives, and that surviving child keeps its (also stale) show parent via
+/// the `NOT EXISTS child` guard — exactly ErsatzTV's `CleanEtagsForLibraryPath`
+/// behavior. The unit test `clean_keeps_referenced_and_removes_stale` covers
+/// the fully-unreferenced deletion path.
+#[tokio::test]
+#[ignore = "requires ffprobe and the Big Buck Bunny fixture; run cargo test -- --ignored to execute it"]
+async fn stale_library_folders_cleaned_after_scan() {
+    let Some(ffprobe) = ffprobe_binary() else {
+        eprintln!("skipping: ffprobe not found and ERSATZRS_FFPROBE is unset");
+        return;
+    };
+    let Some(fixture) = big_buck_bunny_fixture() else {
+        eprintln!("skipping: Big Buck Bunny testdata fixture not found");
+        return;
+    };
+
+    let temp = TempDir::new("ersatzrs-local-television-clean");
+    let library_dir = temp.path().join("library");
+    let show_dir = library_dir.join("The Expanse");
+    let season_dir = show_dir.join("Season 01");
+    std::fs::create_dir_all(&season_dir).unwrap();
+    std::fs::copy(
+        &fixture,
+        season_dir.join("The Expanse - S01E01 - Dulcinea.mkv"),
+    )
+    .unwrap();
+
+    let pool = test_db().await;
+    seed_local_library(&pool, library_dir.as_path(), 2).await;
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: ffprobe,
+    };
+
+    assert_eq!(
+        scan_local_library(&pool, &config)
+            .await
+            .unwrap()
+            .scanned_files,
+        1
+    );
+    // First scan created the show + season LibraryFolder rows.
+    assert_eq!(count(&pool, "LibraryFolder").await, 2);
+    let show_path = show_dir.to_string_lossy().into_owned();
+    let season_path = season_dir.to_string_lossy().into_owned();
+
+    // Remove the entire show subtree from disk, then rescan.
+    std::fs::remove_dir_all(&show_dir).unwrap();
+    scan_local_library(&pool, &config).await.unwrap();
+
+    // The season folder row survives because the episode MediaFile still
+    // references it; the surviving season row then keeps its stale show
+    // parent through the `NOT EXISTS child` guard — both rows remain, exactly
+    // like ErsatzTV's clean-up guards.
+    let season_rows: i64 =
+        sqlx::query(r#"SELECT COUNT(*) AS "C" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(&season_path)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("C");
+    assert_eq!(
+        season_rows, 1,
+        "season folder referenced by a MediaFile must survive"
+    );
+
+    let show_rows: i64 =
+        sqlx::query(r#"SELECT COUNT(*) AS "C" FROM "LibraryFolder" WHERE "Path" = ?"#)
+            .bind(&show_path)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("C");
+    assert_eq!(
+        show_rows, 1,
+        "stale show parent is kept while its referenced child survives"
+    );
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

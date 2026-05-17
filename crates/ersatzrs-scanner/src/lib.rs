@@ -19,10 +19,6 @@ use thiserror::Error;
 use tracing::warn;
 
 mod folder_etag;
-// library_folder's parent/get-or-add/set-etag/media-file-link helpers are
-// wired into sync_local_show_library (steps 3-5); clean_library_folders_for_path
-// is consumed by step 7, so the module stays dead-code-allowed until then.
-#[allow(dead_code)]
 mod library_folder;
 pub mod local_television;
 pub mod nfo;
