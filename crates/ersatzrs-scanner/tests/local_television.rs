@@ -101,11 +101,12 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     assert!(count(&pool, "MediaVersion").await >= 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
 
-    // Step 3 parity: one show LibraryFolder + one season LibraryFolder, with
-    // the season folder's ParentId pointing at the show folder. The library
-    // root itself gets no row (ErsatzTV's ScanFolder only adds show/season
-    // folders), so the show folder's ParentId stays NULL. Etag stays NULL
-    // and episode MediaFile.LibraryFolderId is unset until later steps.
+    // Steps 3-4 parity: one show LibraryFolder + one season LibraryFolder,
+    // with the season folder's ParentId pointing at the show folder. The
+    // library root itself gets no row (ErsatzTV's ScanFolder only adds
+    // show/season folders), so the show folder's ParentId stays NULL. Etag
+    // stays NULL until the etag fast-path step; the episode's MediaFile now
+    // links to the season LibraryFolder.
     assert_eq!(count(&pool, "LibraryFolder").await, 2);
     let show_path = show_dir.to_string_lossy().into_owned();
     let season_path = season_dir.to_string_lossy().into_owned();
@@ -120,16 +121,26 @@ async fn local_show_scan_writes_full_metadata_and_child_rows() {
     assert_eq!(show_folder.get::<Option<String>, _>("Etag"), None);
 
     let season_folder =
-        sqlx::query(r#"SELECT "ParentId", "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
+        sqlx::query(r#"SELECT "Id", "ParentId", "Etag" FROM "LibraryFolder" WHERE "Path" = ?"#)
             .bind(&season_path)
             .fetch_one(&pool)
             .await
             .expect("season LibraryFolder row");
+    let season_folder_id: i64 = season_folder.get("Id");
     assert_eq!(
         season_folder.get::<Option<i64>, _>("ParentId"),
         Some(show_folder_id)
     );
     assert_eq!(season_folder.get::<Option<String>, _>("Etag"), None);
+
+    // Step 4 parity: the episode MediaFile links to the season LibraryFolder.
+    let media_file_folder: Option<i64> =
+        sqlx::query(r#"SELECT "LibraryFolderId" FROM "MediaFile" LIMIT 1"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .get("LibraryFolderId");
+    assert_eq!(media_file_folder, Some(season_folder_id));
 
     // Show-scoped child rows.
     assert!(count_where(&pool, "Genre", r#""ShowMetadataId""#).await >= 2);

@@ -150,19 +150,19 @@ Progress/reporting:
 
 ## Implementation Order steps
 
-1. [ ] **Add etag helper and tests.**
+1. [x] **Add etag helper and tests.**
    Port `FolderEtag.Calculate` and `CalculateWithSubfolders` into scanner-local
    Rust. Add fixture tests with sorted files, ignored `._*` files, direct
    subfolders, and modified mtimes. Include one test vector generated from
    ErsatzTV if possible.
-2. [ ] **Add `LibraryFolder` SQL helpers.**
+2. [x] **Add `LibraryFolder` SQL helpers.**
    Add a private `LibraryFolderRow { id, path, parent_id, etag }` and helper
    functions in `local_television.rs` or a sibling module. Cover insert,
    lookup, parent repair, etag update, and clean-up behavior with SQLite tests.
-3. [ ] **Wire show/season folder rows.**
+3. [x] **Wire show/season folder rows.**
    Create the show folder before `upsert_show`; create the season folder before
    `upsert_season`. Preserve the current show/season metadata behavior.
-4. [ ] **Link episode `MediaFile` rows.**
+4. [x] **Link episode `MediaFile` rows.**
    Pass the season folder id into `sync_local_episode` and write
    `MediaFile.LibraryFolderId` for both insert and existing-file update paths.
 5. [ ] **Enable etag skip.**

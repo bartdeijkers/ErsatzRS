@@ -8,9 +8,9 @@
 //! `{episode}-thumb.*`).
 //!
 //! Show and season `LibraryFolder` rows are now persisted (parented as in
-//! `ErsatzTV`), but the folder-etag fast path and episode
-//! `MediaFile.LibraryFolderId` linking are still pending later steps of
-//! `plans/optimalisation-one.md`, so a re-scan still walks the full tree.
+//! `ErsatzTV`), and each episode `MediaFile` is linked to its season
+//! `LibraryFolder`. The folder-etag fast path is still pending a later step
+//! of `plans/optimalisation-one.md`, so a re-scan still walks the full tree.
 //! Metadata upserts are idempotent so this remains correct.
 
 use std::collections::VecDeque;
@@ -418,14 +418,13 @@ pub(crate) async fn sync_local_show_library(
 
         for season in &show.seasons {
             // Create the season LibraryFolder before the season upsert,
-            // mirroring ErsatzTV's `ScanSeasons`. Etag computation and the
-            // episode fast path are wired in later steps.
-            if ensure_library_folder(pool, library_path.id, &season.folder, "season")
-                .await
-                .is_none()
-            {
+            // mirroring ErsatzTV's `ScanSeasons`. Episodes link their
+            // `MediaFile` to this row; the etag fast path is a later step.
+            let Some(season_folder) =
+                ensure_library_folder(pool, library_path.id, &season.folder, "season").await
+            else {
                 continue;
-            }
+            };
 
             let season_id =
                 match upsert_season(pool, library_path, show_id, &show.folder, season).await {
@@ -446,6 +445,7 @@ pub(crate) async fn sync_local_show_library(
                     library_path,
                     season_id,
                     season.season_number,
+                    season_folder.id,
                     episode_path,
                     extractor,
                 )
@@ -865,6 +865,7 @@ async fn sync_local_episode(
     library_path: &LocalLibraryPath,
     season_id: i64,
     season_number: i32,
+    library_folder_id: i64,
     video_path: &Path,
     extractor: &FfprobeExtractor,
 ) -> Result<()> {
@@ -949,6 +950,10 @@ async fn sync_local_episode(
             .bind(episode_id)
             .execute(&mut *tx)
             .await?;
+        // ErsatzTV's `UpdateLibraryFolderId`: repair the head MediaFile's
+        // season-folder link for restored/moved episodes.
+        library_folder::update_media_file_library_folder_id(&mut tx, version_id, library_folder_id)
+            .await?;
         (episode_id, version_id)
     } else {
         let media_item_id = insert_media_item(&mut tx, library_path.id).await?;
@@ -960,9 +965,10 @@ async fn sync_local_episode(
         let version_id =
             insert_media_version_with_owner(&mut tx, media_item_id, &probed, "EpisodeId").await?;
         sqlx::query(
-            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
-               VALUES (?, ?, ?)"#,
+            r#"INSERT INTO "MediaFile" ("LibraryFolderId", "MediaVersionId", "Path", "PathHash")
+               VALUES (?, ?, ?, ?)"#,
         )
+        .bind(library_folder_id)
         .bind(version_id)
         .bind(&path_text)
         .bind(&hash)
