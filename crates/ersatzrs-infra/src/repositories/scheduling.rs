@@ -12,7 +12,8 @@ use ersatzrs_core::scheduling::{
     SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{
-    search_page_map, SearchDocument, SearchExpression, SearchPageMap, SearchProviderGuid,
+    search_page_map, SearchDocument, SearchExpression, SearchField, SearchPageMap,
+    SearchProviderGuid,
 };
 use ersatzrs_domain::{
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
@@ -29,6 +30,114 @@ use super::common::{
 
 #[derive(Clone)]
 pub struct SqliteSchedulingContentRepository(pub Pool<crate::db::Db>);
+
+const SEARCH_NEED_GENRES: u64 = 1 << 0;
+const SEARCH_NEED_TAGS: u64 = 1 << 1;
+const SEARCH_NEED_STUDIOS: u64 = 1 << 2;
+const SEARCH_NEED_ACTORS: u64 = 1 << 3;
+const SEARCH_NEED_DIRECTORS: u64 = 1 << 4;
+const SEARCH_NEED_WRITERS: u64 = 1 << 5;
+const SEARCH_NEED_LANGUAGES: u64 = 1 << 6;
+const SEARCH_NEED_LANGUAGE_TAGS: u64 = 1 << 7;
+const SEARCH_NEED_SUBTITLE_LANGUAGES: u64 = 1 << 8;
+const SEARCH_NEED_SUBTITLE_LANGUAGE_TAGS: u64 = 1 << 9;
+const SEARCH_NEED_VIDEO_CODECS: u64 = 1 << 10;
+const SEARCH_NEED_AUDIO_CODECS: u64 = 1 << 11;
+const SEARCH_NEED_SUBTITLE_CODECS: u64 = 1 << 12;
+const SEARCH_NEED_WIDTH: u64 = 1 << 13;
+const SEARCH_NEED_HEIGHT: u64 = 1 << 14;
+const SEARCH_NEED_CHAPTERS: u64 = 1 << 15;
+const SEARCH_NEED_DURATIONS: u64 = 1 << 16;
+const SEARCH_NEED_SHOW_GENRES: u64 = 1 << 17;
+const SEARCH_NEED_SHOW_TAGS: u64 = 1 << 18;
+const SEARCH_NEED_SHOW_STUDIOS: u64 = 1 << 19;
+const SEARCH_NEED_TRAKT_LISTS: u64 = 1 << 20;
+const SEARCH_NEED_PROVIDER_GUIDS: u64 = 1 << 21;
+
+const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
+    | SEARCH_NEED_LANGUAGE_TAGS
+    | SEARCH_NEED_SUBTITLE_LANGUAGES
+    | SEARCH_NEED_SUBTITLE_LANGUAGE_TAGS
+    | SEARCH_NEED_VIDEO_CODECS
+    | SEARCH_NEED_AUDIO_CODECS
+    | SEARCH_NEED_SUBTITLE_CODECS
+    | SEARCH_NEED_WIDTH
+    | SEARCH_NEED_HEIGHT
+    | SEARCH_NEED_CHAPTERS
+    | SEARCH_NEED_DURATIONS;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SearchHydrationNeeds {
+    flags: u64,
+}
+
+impl SearchHydrationNeeds {
+    fn for_expression(expression: &SearchExpression) -> Self {
+        let mut needs = Self::default();
+        needs.visit_expression(expression);
+        needs
+    }
+
+    fn insert(&mut self, flag: u64) {
+        self.flags |= flag;
+    }
+
+    fn contains(self, flag: u64) -> bool {
+        self.flags & flag != 0
+    }
+
+    fn visit_expression(&mut self, expression: &SearchExpression) {
+        match expression {
+            SearchExpression::MatchAll => {}
+            SearchExpression::Term(term) => self.visit_field(&term.field),
+            SearchExpression::And(expressions) | SearchExpression::Or(expressions) => {
+                for expression in expressions {
+                    self.visit_expression(expression);
+                }
+            }
+            SearchExpression::Not(expression) => self.visit_expression(expression),
+        }
+    }
+
+    fn visit_field(&mut self, field: &SearchField) {
+        match field {
+            SearchField::Default
+            | SearchField::Title
+            | SearchField::SortTitle
+            | SearchField::OriginalTitle
+            | SearchField::Year
+            | SearchField::ReleaseDate
+            | SearchField::MediaKind
+            | SearchField::ShowTitle
+            | SearchField::SeasonNumber
+            | SearchField::EpisodeNumber
+            | SearchField::MetadataKind
+            | SearchField::LibraryId => {}
+            SearchField::Genre => self.insert(SEARCH_NEED_GENRES),
+            SearchField::Tag => self.insert(SEARCH_NEED_TAGS),
+            SearchField::Studio => self.insert(SEARCH_NEED_STUDIOS),
+            SearchField::Actor => self.insert(SEARCH_NEED_ACTORS),
+            SearchField::Director => self.insert(SEARCH_NEED_DIRECTORS),
+            SearchField::Writer => self.insert(SEARCH_NEED_WRITERS),
+            SearchField::Language => self.insert(SEARCH_NEED_LANGUAGES),
+            SearchField::LanguageTag => self.insert(SEARCH_NEED_LANGUAGE_TAGS),
+            SearchField::SubtitleLanguage => self.insert(SEARCH_NEED_SUBTITLE_LANGUAGES),
+            SearchField::SubtitleLanguageTag => self.insert(SEARCH_NEED_SUBTITLE_LANGUAGE_TAGS),
+            SearchField::VideoCodec => self.insert(SEARCH_NEED_VIDEO_CODECS),
+            SearchField::AudioCodec => self.insert(SEARCH_NEED_AUDIO_CODECS),
+            SearchField::SubtitleCodec => self.insert(SEARCH_NEED_SUBTITLE_CODECS),
+            SearchField::Width => self.insert(SEARCH_NEED_WIDTH),
+            SearchField::Height => self.insert(SEARCH_NEED_HEIGHT),
+            SearchField::Chapters => self.insert(SEARCH_NEED_CHAPTERS),
+            SearchField::Minutes | SearchField::Seconds => self.insert(SEARCH_NEED_DURATIONS),
+            SearchField::ShowGenre => self.insert(SEARCH_NEED_SHOW_GENRES),
+            SearchField::ShowTag => self.insert(SEARCH_NEED_SHOW_TAGS),
+            SearchField::ShowStudio => self.insert(SEARCH_NEED_SHOW_STUDIOS),
+            SearchField::TraktList => self.insert(SEARCH_NEED_TRAKT_LISTS),
+            SearchField::ProviderGuid(_) => self.insert(SEARCH_NEED_PROVIDER_GUIDS),
+        }
+    }
+}
 
 #[async_trait]
 impl SchedulingContentRepository for SqliteSchedulingContentRepository {
@@ -835,7 +944,8 @@ impl SqliteSchedulingContentRepository {
         limit: usize,
     ) -> Result<(Vec<SearchDocument>, usize, Option<SearchPageMap>)> {
         let expression = SearchExpression::parse(query);
-        let documents = self.search_documents().await?;
+        let hydration = SearchHydrationNeeds::for_expression(&expression);
+        let documents = self.search_documents(&hydration).await?;
         let mut hits = documents
             .into_iter()
             .filter(|document| expression.matches(document))
@@ -858,18 +968,26 @@ impl SqliteSchedulingContentRepository {
         Ok((selected, total_count, page_map))
     }
 
-    async fn search_documents(&self) -> Result<Vec<SearchDocument>> {
+    async fn search_documents(
+        &self,
+        hydration: &SearchHydrationNeeds,
+    ) -> Result<Vec<SearchDocument>> {
         let rows = sqlx::query(SEARCH_DOCUMENT_SQL).fetch_all(&self.0).await?;
 
         let mut documents = Vec::with_capacity(rows.len());
         for row in rows {
-            documents.push(self.search_document_from_row(&row).await?);
+            documents.push(self.search_document_from_row(&row, hydration).await?);
         }
 
         Ok(documents)
     }
 
-    async fn search_document_from_row(&self, row: &DbRow) -> Result<SearchDocument> {
+    #[allow(clippy::too_many_lines)]
+    async fn search_document_from_row(
+        &self,
+        row: &DbRow,
+        hydration: &SearchHydrationNeeds,
+    ) -> Result<SearchDocument> {
         let metadata_kind = row.try_get::<String, _>("metadata_kind")?;
         let metadata_id = row.try_get::<EntityId, _>("metadata_id")?;
         let show_id = row.try_get::<Option<EntityId>, _>("show_id")?;
@@ -879,9 +997,12 @@ impl SqliteSchedulingContentRepository {
             .map(|value| parse_datetime("search release_date", &value))
             .transpose()?;
         let item_id = row.try_get::<EntityId, _>("item_id")?;
-        let stream_languages = self
-            .stream_search_fields(&metadata_kind, metadata_id, item_id)
-            .await?;
+        let stream_fields = if hydration.contains(SEARCH_NEED_STREAM_FIELDS) {
+            self.stream_search_fields(&metadata_kind, metadata_id, item_id)
+                .await?
+        } else {
+            StreamSearchFields::default()
+        };
 
         Ok(SearchDocument {
             media_item_id: item_id,
@@ -892,8 +1013,8 @@ impl SqliteSchedulingContentRepository {
             original_title: row.try_get("original_title")?,
             year: row.try_get("year")?,
             release_date,
-            genres: self
-                .metadata_lookup_values_fk(
+            genres: if hydration.contains(SEARCH_NEED_GENRES) {
+                self.metadata_lookup_values_fk(
                     "Genre",
                     "MovieMetadataId",
                     "EpisodeMetadataId",
@@ -901,9 +1022,12 @@ impl SqliteSchedulingContentRepository {
                     &metadata_kind,
                     metadata_id,
                 )
-                .await?,
-            tags: self
-                .metadata_lookup_values_fk(
+                .await?
+            } else {
+                Vec::new()
+            },
+            tags: if hydration.contains(SEARCH_NEED_TAGS) {
+                self.metadata_lookup_values_fk(
                     "Tag",
                     "MovieMetadataId",
                     "EpisodeMetadataId",
@@ -911,9 +1035,12 @@ impl SqliteSchedulingContentRepository {
                     &metadata_kind,
                     metadata_id,
                 )
-                .await?,
-            studios: self
-                .metadata_lookup_values_fk(
+                .await?
+            } else {
+                Vec::new()
+            },
+            studios: if hydration.contains(SEARCH_NEED_STUDIOS) {
+                self.metadata_lookup_values_fk(
                     "Studio",
                     "MovieMetadataId",
                     "EpisodeMetadataId",
@@ -921,40 +1048,112 @@ impl SqliteSchedulingContentRepository {
                     &metadata_kind,
                     metadata_id,
                 )
-                .await?,
-            actors: self
-                .metadata_actor_values(&metadata_kind, metadata_id)
-                .await?,
-            directors: self
-                .metadata_credit_values("Director", &metadata_kind, metadata_id)
-                .await?,
-            writers: self
-                .metadata_credit_values("Writer", &metadata_kind, metadata_id)
-                .await?,
-            languages: self
-                .language_names_for_codes(&stream_languages.audio_languages)
-                .await?,
-            language_tags: stream_languages.audio_languages,
-            subtitle_languages: self
-                .language_names_for_codes(&stream_languages.subtitle_languages)
-                .await?,
-            subtitle_language_tags: stream_languages.subtitle_languages,
-            video_codecs: stream_languages.video_codecs,
-            audio_codecs: stream_languages.audio_codecs,
-            subtitle_codecs: stream_languages.subtitle_codecs,
-            width: stream_languages.width,
-            height: stream_languages.height,
-            chapter_counts: stream_languages.chapter_counts,
-            durations_seconds: stream_languages.durations_seconds,
+                .await?
+            } else {
+                Vec::new()
+            },
+            actors: if hydration.contains(SEARCH_NEED_ACTORS) {
+                self.metadata_actor_values(&metadata_kind, metadata_id)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            directors: if hydration.contains(SEARCH_NEED_DIRECTORS) {
+                self.metadata_credit_values("Director", &metadata_kind, metadata_id)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            writers: if hydration.contains(SEARCH_NEED_WRITERS) {
+                self.metadata_credit_values("Writer", &metadata_kind, metadata_id)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            languages: if hydration.contains(SEARCH_NEED_LANGUAGES) {
+                self.language_names_for_codes(&stream_fields.audio_languages)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            language_tags: if hydration.contains(SEARCH_NEED_LANGUAGE_TAGS) {
+                stream_fields.audio_languages.clone()
+            } else {
+                Vec::new()
+            },
+            subtitle_languages: if hydration.contains(SEARCH_NEED_SUBTITLE_LANGUAGES) {
+                self.language_names_for_codes(&stream_fields.subtitle_languages)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            subtitle_language_tags: if hydration.contains(SEARCH_NEED_SUBTITLE_LANGUAGE_TAGS) {
+                stream_fields.subtitle_languages.clone()
+            } else {
+                Vec::new()
+            },
+            video_codecs: if hydration.contains(SEARCH_NEED_VIDEO_CODECS) {
+                stream_fields.video_codecs.clone()
+            } else {
+                Vec::new()
+            },
+            audio_codecs: if hydration.contains(SEARCH_NEED_AUDIO_CODECS) {
+                stream_fields.audio_codecs.clone()
+            } else {
+                Vec::new()
+            },
+            subtitle_codecs: if hydration.contains(SEARCH_NEED_SUBTITLE_CODECS) {
+                stream_fields.subtitle_codecs.clone()
+            } else {
+                Vec::new()
+            },
+            width: hydration
+                .contains(SEARCH_NEED_WIDTH)
+                .then_some(stream_fields.width)
+                .flatten(),
+            height: hydration
+                .contains(SEARCH_NEED_HEIGHT)
+                .then_some(stream_fields.height)
+                .flatten(),
+            chapter_counts: if hydration.contains(SEARCH_NEED_CHAPTERS) {
+                stream_fields.chapter_counts.clone()
+            } else {
+                Vec::new()
+            },
+            durations_seconds: if hydration.contains(SEARCH_NEED_DURATIONS) {
+                stream_fields.durations_seconds.clone()
+            } else {
+                Vec::new()
+            },
             show_title: row.try_get("show_title")?,
-            show_genres: self.show_lookup_values("Genre", show_id).await?,
-            show_tags: self.show_lookup_values("Tag", show_id).await?,
-            show_studios: self.show_lookup_values("Studio", show_id).await?,
+            show_genres: if hydration.contains(SEARCH_NEED_SHOW_GENRES) {
+                self.show_lookup_values("Genre", show_id).await?
+            } else {
+                Vec::new()
+            },
+            show_tags: if hydration.contains(SEARCH_NEED_SHOW_TAGS) {
+                self.show_lookup_values("Tag", show_id).await?
+            } else {
+                Vec::new()
+            },
+            show_studios: if hydration.contains(SEARCH_NEED_SHOW_STUDIOS) {
+                self.show_lookup_values("Studio", show_id).await?
+            } else {
+                Vec::new()
+            },
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
-            trakt_lists: self.trakt_list_values(item_id).await?,
+            trakt_lists: if hydration.contains(SEARCH_NEED_TRAKT_LISTS) {
+                self.trakt_list_values(item_id).await?
+            } else {
+                Vec::new()
+            },
             library_id: row.try_get::<Option<EntityId>, _>("library_id")?,
-            provider_guids: self.metadata_guids(&metadata_kind, metadata_id).await?,
+            provider_guids: if hydration.contains(SEARCH_NEED_PROVIDER_GUIDS) {
+                self.metadata_guids(&metadata_kind, metadata_id).await?
+            } else {
+                Vec::new()
+            },
         })
     }
 

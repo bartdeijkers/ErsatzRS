@@ -171,24 +171,31 @@ fn see_all_href(list_path: &str, query: &str) -> String {
 
 #[component]
 pub fn SearchPage() -> impl IntoView {
-    let query_map = use_query_map();
-    let initial_query = query_map.with_untracked(|params| params.get("query").unwrap_or_default());
-
-    view! { <SearchIsland initial_query/> }
+    view! { <SearchIsland/> }
 }
 
 #[island]
-fn SearchIsland(initial_query: String) -> impl IntoView {
-    let input = RwSignal::new(initial_query.clone());
+fn SearchIsland() -> impl IntoView {
+    // Read `?query=` reactively. The `/search` route is matched by a single
+    // `StaticSegment`, so a top-bar submit that only changes the query string
+    // does **not** remount this component — Leptos client routing keeps the
+    // same route match. Driving the resource off the reactive query map (not a
+    // `with_untracked` snapshot) is what makes a same-route navigation
+    // actually re-run the search. Mirrors `Search.razor`, which re-reads
+    // `?query=` on every navigation.
+    let query_map = use_query_map();
+    let current_query = move || query_map.with(|params| params.get("query").unwrap_or_default());
 
-    let q_for_resource = initial_query.clone();
-    let data: Resource<(String, SearchResults)> = Resource::new_blocking(
-        move || q_for_resource.clone(),
-        move |query| async move {
+    let input = RwSignal::new(current_query());
+    // Keep the in-page search box in sync when the URL query changes (e.g. a
+    // top-bar submit while already on `/search`).
+    Effect::new(move |_| input.set(current_query()));
+
+    let data: Resource<(String, SearchResults)> =
+        Resource::new_blocking(current_query, move |query| async move {
             let results = search_results(query.clone()).await.unwrap_or_default();
             (query, results)
-        },
-    );
+        });
 
     let do_search = move || {
         let query = input.get_untracked();

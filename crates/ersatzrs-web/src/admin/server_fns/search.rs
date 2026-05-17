@@ -308,14 +308,23 @@ pub async fn search_results(query: String) -> Result<SearchResults, ServerFnErro
 
     let state = expect_context::<AppState>();
 
+    let (hits, _, _) = state
+        .repositories
+        .scheduling
+        .search_documents_page(&query, 0, 0)
+        .await?;
+
     let sections = futures_util::future::try_join_all(SEARCH_CARD_KINDS.into_iter().map(|kind| {
-        let scheduling = &state.repositories.scheduling;
         let pool = &state.pool;
-        let query = query.clone();
+        let section_hits = hits
+            .iter()
+            .filter(|hit| hit.media_kind == kind.media_kind())
+            .cloned()
+            .collect::<Vec<_>>();
         async move {
-            let scoped = format!("type:{} AND ({query})", kind.media_kind());
-            let (hits, total, _) = scheduling.search_documents_page(&scoped, 0, 50).await?;
-            let cards = project_section(pool, kind, hits).await?;
+            let total = section_hits.len();
+            let cards =
+                project_section(pool, kind, section_hits.into_iter().take(50).collect()).await?;
             #[allow(clippy::cast_possible_truncation)]
             let section = SearchSection {
                 cards,
