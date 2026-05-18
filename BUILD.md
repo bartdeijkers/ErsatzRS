@@ -202,5 +202,12 @@ Common things that look like a "rebuild bug" but aren't:
 Record measurements here when you change profile flags or `run.sh`. Format:
 `<date> — <command> — <cold s> / <warm s>`.
 
-- _(no baseline recorded yet — run `time ./run.sh build` cold and warm after
-  the next clean to populate this section)_
+### Linker investigation (negative result, 2026-05-17)
+
+The reported "10+ minute" builds are the **cold-rebuild path forced by an
+oversized `target/`** (observed at 102–136 GB), not a linker problem — on a
+healthy `target/` the cold cost is ~2.5 min and warm rebuilds are seconds.
+Keep `target/` pruned: run `cargo sweep --time 30` routinely (prunes only
+artifacts older than 30 days, preserves the warm cache) and reserve the heavy
+`cargo clean` for reclaiming all space. See the disk-space note in
+[CLAUDE.md](CLAUDE.md).

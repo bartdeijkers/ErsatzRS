@@ -100,11 +100,15 @@ cargo deny check
 # Snapshot review (after test changes)
 cargo insta review
 
-# Free disk space: remove all build artifacts (~170 GB typical).
-# Run periodically or before compacting the WSL ext4.vhdx.
-# cargo-sweep is an alternative that prunes only old/unused artifacts:
+# Keep target/ pruned to avoid slow cold rebuilds. ROUTINE maintenance is
+# cargo-sweep, which prunes only stale artifacts and preserves the warm cache:
 #   cargo install cargo-sweep && cargo sweep --time 30
-cargo clean
+# An oversized target/ (100+ GB) is what makes cold builds feel like "10+ min";
+# a healthy target/ rebuilds cold in ~2.5 min. Swapping the linker does NOT
+# help (mold trialed, no gain — see BUILD.md). Reserve `cargo clean` (wipes
+# everything, forces a full cold rebuild) for reclaiming all space or before
+# compacting the WSL ext4.vhdx — do not run it as routine cleanup.
+cargo sweep --time 30   # routine; `cargo clean` only for a full reset
 ```
 
 Non-Rust checks available now:
