@@ -392,6 +392,19 @@ Windows. The `platform-parity-fixer` agent in
 [`.claude/agents/`](.claude/agents/platform-parity-fixer.md) encodes the audit
 procedure and the false-positive catalogue for future regressions.
 
+**Next up — close the three TV-show-page parity gaps.** The
+`/media/tv/shows/:id` port (2026-05-18) shipped with three documented
+deferrals. The remediation is planned in
+[`plans/scan-languages-fact-row-sync.md`](plans/scan-languages-fact-row-sync.md)
+as ordered slices: Slice 0 (plan scaffolding — done) → Slice 1 (Languages
+fact row: vendor ErsatzTV's ISO-639-2 table + `ersatzrs-core::language_codes`
+port + `GetLanguagesForShow` query) → Slice 2 (playout-refresh: in-process
+`mpsc` consumed inside the scheduler loop, enqueue `BuildPlayout(Refresh)`
+from the schedule/collection add paths) → Slices 3–5 (per-show targeted sync
+for Plex/Jellyfin/Emby via extracted `sync_one_<p>_show` + provider
+single-show fetch + a `scan_show` server fn). Execute slices in order; each
+slice carries its own tests + gate run + STATUS session-log row.
+
 ### Admin UI Route Coverage
 
 The NavDrawer in [`crates/ersatzrs-web/src/admin/layout/nav.rs`](crates/ersatzrs-web/src/admin/layout/nav.rs)

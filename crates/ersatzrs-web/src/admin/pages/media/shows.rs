@@ -37,11 +37,11 @@ use leptos_router::hooks::use_params_map;
 
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
 use crate::admin::server_fns::libraries::scan_library;
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::media_browser::list_program_schedules;
 use crate::admin::server_fns::media_browser::{
     add_show_to_schedule, get_show_details, MediaBrowserKind, ScheduleOption, ShowDetailRow,
 };
-#[cfg(target_arch = "wasm32")]
-use crate::admin::server_fns::media_browser::list_program_schedules;
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
@@ -58,7 +58,9 @@ stylance::import_crate_style!(style, "src/admin/pages/media/show_detail.module.c
 
 #[component]
 pub fn ShowsPage() -> impl IntoView {
-    use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
+    use crate::admin::pages::media::multi_select_browser::{
+        BrowserKindConfig, MultiSelectBrowserPage,
+    };
     view! { <MultiSelectBrowserPage config=BrowserKindConfig::SHOWS/> }
 }
 

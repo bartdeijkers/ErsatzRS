@@ -30,7 +30,7 @@ jobs:
           # stylance-cli / wasm-bindgen between runs.
           cache-bin: "false"
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.0 --locked
+        run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Clippy (default / SQLite)
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Clippy (MySQL feature)
@@ -49,7 +49,7 @@ jobs:
           # stylance-cli / wasm-bindgen between runs.
           cache-bin: "false"
       - name: Install Stylance CLI
-        run: cargo install stylance-cli --version 0.8.0 --locked
+        run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test (all features)
         run: cargo test --workspace --all-features
 

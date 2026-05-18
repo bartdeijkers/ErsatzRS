@@ -97,6 +97,14 @@ public open-source project.
 - `.claude/skills/update-parity.md`
 - `.claude/skills/verify-phase.md`
 
+## Plan Documents
+
+Feature-level porting plans live alongside this index:
+
+- `plans/scan-languages-fact-row-sync.md` — closes the three TV-show-page
+  parity gaps (per-show sync, playout-refresh channel, languages fact row)
+  as ordered slices.
+
 ## Deferred Contract Work
 
 These are intentionally deferred until code exists:
