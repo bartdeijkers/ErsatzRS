@@ -2,10 +2,7 @@
 //!
 //! - [`WatermarkEditorPage`] — SSR wrapper; loads form data server-side.
 //! - [`WatermarkEditorIsland`] — fully hydrated editor. Conditional sections:
-//!   - Image upload/preview shown when `image_source == 0` (Custom).
-//!   - Frequency/duration fields shown when `mode == 2` (Intermittent).
-//!   - Opacity expression field shown when `mode == 3` (`OpacityExpression`).
-//!   - Width/margin/size/location/opacity/placement fields hidden when mode == 0 (None).
+//!   - Mode-dependent fields stay visible and are disabled to match ErsatzTV.
 //!   - drawvg preview refreshes (debounced 400 ms) whenever placement params change.
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
@@ -16,7 +13,6 @@ use crate::admin::server_fns::watermarks::{
     get_watermark_form, preview_watermark_placement, save_watermark, WatermarkForm,
     WatermarkPreviewParams,
 };
-use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/watermarks/editor.module.css");
@@ -93,11 +89,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
     let opacity_expression = RwSignal::new(initial_form.opacity_expression.clone());
     let z_index = RwSignal::new(i64::from(initial_form.z_index));
 
-    // ── Derived visibility ────────────────────────────────────────────────
-    let show_placement_fields = Signal::derive(move || mode.get() != 0);
-    let show_intermittent = Signal::derive(move || mode.get() == 2);
-    let show_opacity_expr = Signal::derive(move || mode.get() == 3);
-    let show_custom_image = Signal::derive(move || image_source.get() == 0);
+    let is_uploading = RwSignal::new(false);
 
     // ── drawvg preview — debounced 400 ms ────────────────────────────────
     let preview_key: RwSignal<Option<WatermarkPreviewParams>> = RwSignal::new(None);
@@ -164,7 +156,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         }
     });
 
-    let on_save = move |_| {
+    let build_form = move || {
         let width = width_percent.get_untracked().parse::<f64>().unwrap_or(15.0);
         let h_margin = horizontal_margin_percent
             .get_untracked()
@@ -174,7 +166,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             .get_untracked()
             .parse::<f64>()
             .unwrap_or(5.0);
-        let form = WatermarkForm {
+        WatermarkForm {
             id: watermark_id,
             name: name.get_untracked(),
             mode: mode.get_untracked(),
@@ -192,11 +184,15 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             place_within_source_content: place_within_source_content.get_untracked(),
             opacity_expression: opacity_expression.get_untracked(),
             z_index: i32::try_from(z_index.get_untracked()).unwrap_or(0),
-        };
-        save_action.dispatch(form);
+        }
+    };
+
+    let on_save = move || {
+        save_action.dispatch(build_form());
     };
 
     let is_saving = save_action.pending();
+    let is_busy = Signal::derive(move || is_saving.get() || is_uploading.get());
     let is_edit = watermark_id != 0;
     let title = if is_edit {
         "Edit Watermark"
@@ -217,33 +213,45 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
     ];
     let image_source_items: Vec<(i32, String)> =
         vec![(0, "Custom".to_string()), (1, "Channel Logo".to_string())];
-    // Wrap in StoredValue so these Vecs are Copy and can be captured by Fn closures inside Show.
-    let location_items = StoredValue::new(vec![
+    let mut location_items = vec![
         (0i32, "Bottom Right".to_string()),
+        (6i32, "Bottom Middle".to_string()),
         (1i32, "Bottom Left".to_string()),
-        (2i32, "Top Right".to_string()),
+        (7i32, "Left Middle".to_string()),
         (3i32, "Top Left".to_string()),
         (4i32, "Top Middle".to_string()),
+        (2i32, "Top Right".to_string()),
         (5i32, "Right Middle".to_string()),
-        (6i32, "Bottom Middle".to_string()),
-        (7i32, "Left Middle".to_string()),
-        (8i32, "Middle Center".to_string()),
-    ]);
-    let size_items = StoredValue::new(vec![
+    ];
+    if initial_form.location == 8 {
+        location_items.push((8i32, "Middle Center".to_string()));
+    }
+    let size_items = vec![
         (0i32, "Scaled".to_string()),
         (1i32, "Actual Size".to_string()),
-    ]);
-    let freq_items = StoredValue::new(vec![
+    ];
+    let freq_items = vec![
         (5i32, "5 minutes".to_string()),
         (10i32, "10 minutes".to_string()),
         (15i32, "15 minutes".to_string()),
         (20i32, "20 minutes".to_string()),
         (30i32, "30 minutes".to_string()),
         (60i32, "60 minutes".to_string()),
-    ]);
+    ];
+    let select_class = format!("{} {}", style::input, style::select);
 
     view! {
-        <div class=style::page>
+        <form
+            method="post"
+            action="/api/watermarks/save"
+            enctype="multipart/form-data"
+            class=style::page
+            on:submit=move |ev| {
+                ev.prevent_default();
+                on_save();
+            }
+        >
+            <input type="hidden" name="id" value=watermark_id.to_string()/>
             <div class=style::breadcrumb>
                 <a href="/watermarks" class=style::back_link>"← Watermarks"</a>
                 <h1 class=style::page_title>{title}</h1>
@@ -251,9 +259,9 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
 
             <div class=style::action_bar>
                 <button
+                    type="submit"
                     class=style::btn_primary
-                    disabled=move || is_saving.get()
-                    on:click=on_save
+                    disabled=move || is_busy.get()
                 >
                     {btn_label}
                 </button>
@@ -262,153 +270,417 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             <div class=style::section>
                 <h2 class=style::section_title>"Identity"</h2>
                 <div class=style::fields>
-                    <TextField label="Name" value=name/>
-                    <SelectField<i32> label="Mode" value=mode items=mode_items/>
+                    <div class=style::field>
+                        <label class=style::label>"Name"</label>
+                        <input
+                            type="text"
+                            name="name"
+                            class=style::input
+                            value=name.get_untracked()
+                            prop:value=move || name.get()
+                            on:input=move |e| name.set(event_target_value(&e))
+                        />
+                    </div>
+                    <div class=style::field>
+                        <label class=style::label>"Mode"</label>
+                        <select
+                            name="mode"
+                            class=select_class.clone()
+                            prop:value=move || mode.get().to_string()
+                            on:change=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                    mode.set(parsed);
+                                }
+                            }
+                        >
+                            {mode_items
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    let selected = value == mode.get_untracked();
+                                    view! {
+                                        <option value=value.to_string() selected=selected>{label}</option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    </div>
                 </div>
             </div>
 
             <div class=style::section>
                 <h2 class=style::section_title>"Image"</h2>
                 <div class=style::fields>
-                    <SelectField<i32>
-                        label="Image Source"
-                        value=image_source
-                        items=image_source_items
+                    <input
+                        type="hidden"
+                        name="image"
+                        value=move || image_path.get().unwrap_or_default()
                     />
-
-                    // Custom image fields — always rendered; hidden when not using custom source.
-                    <div style:display=move || if show_custom_image.get() { "" } else { "none" }>
-                        // Image preview (when an image is already uploaded)
-                        <div
-                            class=style::img_preview_row
-                            style:display=move || if image_path.get().is_some() { "" } else { "none" }
-                        >
-                            <span class=style::field_label>"Current image"</span>
-                            <img
-                                src=move || {
-                                    image_path.get()
-                                        .map(|p| format!("/artwork/watermarks/{p}"))
-                                        .unwrap_or_default()
+                    <input
+                        type="hidden"
+                        name="original_content_type"
+                        value=move || image_content_type.get().unwrap_or_default()
+                    />
+                    <input
+                        type="hidden"
+                        name="image_source"
+                        value=move || image_source.get().to_string()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Image Source"</label>
+                        <select
+                            name="image_source"
+                            class=select_class.clone()
+                            disabled=move || mode.get() == 0
+                            prop:value=move || image_source.get().to_string()
+                            on:change=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                    image_source.set(parsed);
                                 }
-                                class=style::img_preview
-                                alt="watermark preview"
-                            />
-                        </div>
+                            }
+                        >
+                            {image_source_items
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    let selected = value == image_source.get_untracked();
+                                    view! {
+                                        <option value=value.to_string() selected=selected>{label}</option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    </div>
 
-                        // File upload input
-                        <div class=style::upload_row>
-                            <span class=style::field_label>"Upload image"</span>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                class=style::file_input
-                                disabled=move || !show_custom_image.get()
-                                on:change=move |ev| {
-                                    #[cfg(target_arch = "wasm32")]
-                                    {
-                                        use leptos::task::spawn_local;
-                                        use wasm_bindgen::JsCast;
-                                        let target = ev.target().unwrap();
-                                        let input = target
-                                            .dyn_into::<web_sys::HtmlInputElement>()
-                                            .unwrap();
-                                        spawn_local(async move {
-                                            if let Some((path, ct)) = upload_file(input).await {
+                    <div
+                        class=style::img_preview_row
+                        style:display=move || if image_path.get().is_some() { "" } else { "none" }
+                    >
+                        <span class=style::field_label>"Current image"</span>
+                        <img
+                            src=move || {
+                                image_path.get()
+                                    .map(|p| format!("/artwork/watermarks/{p}"))
+                                    .unwrap_or_default()
+                            }
+                            class=style::img_preview
+                            alt="watermark preview"
+                        />
+                    </div>
+
+                    <div class=style::upload_row>
+                        <span class=style::field_label>"Upload image"</span>
+                        <input
+                            type="file"
+                            name="image_file"
+                            accept="image/*"
+                            class=style::file_input
+                            disabled=move || image_source.get() != 0
+                            on:change=move |ev| {
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    use leptos::task::spawn_local;
+                                    use wasm_bindgen::JsCast;
+                                    let target = ev.target().unwrap();
+                                    let input = target
+                                        .dyn_into::<web_sys::HtmlInputElement>()
+                                        .unwrap();
+                                    is_uploading.set(true);
+                                    spawn_local(async move {
+                                        match upload_file(input).await {
+                                            Some((path, ct)) => {
                                                 image_path.set(Some(path));
                                                 image_content_type.set(Some(ct));
                                             }
-                                        });
-                                    }
-                                    let _ = ev;
+                                            None => {
+                                                toast.push(
+                                                    "Upload failed.".to_string(),
+                                                    ToastSeverity::Error,
+                                                );
+                                            }
+                                        }
+                                        is_uploading.set(false);
+                                    });
                                 }
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            // Placement section — always rendered; hidden when mode == 0 (None).
-            <div style:display=move || if show_placement_fields.get() { "" } else { "none" }>
-                <div class=style::section>
-                    <h2 class=style::section_title>"Placement"</h2>
-                    <div class=style::fields>
-                        <SelectField<i32>
-                            label="Location"
-                            value=location
-                            items=location_items.get_value()
-                        />
-                        <SelectField<i32>
-                            label="Size"
-                            value=size
-                            items=size_items.get_value()
-                        />
-                        <TextField label="Width (%)" value=width_percent/>
-                        <TextField label="Horizontal Margin (%)" value=horizontal_margin_percent/>
-                        <TextField label="Vertical Margin (%)" value=vertical_margin_percent/>
-                        <NumberField label="Opacity (1–100)" value=opacity min=Some(1) max=Some(100)/>
-                        <CheckBox label="Place Within Source Content" value=place_within_source_content/>
-                        <NumberField label="Z-Index" value=z_index min=Some(0)/>
-                    </div>
-                </div>
-
-                // drawvg placement preview
-                <div class=style::section>
-                    <h2 class=style::section_title>"Placement Preview"</h2>
-                    <Suspense fallback=move || {
-                        view! { <p class=style::preview_loading>"Generating preview\u{2026}"</p> }
-                    }>
-                        // Always-rendered image; src is empty when no preview available.
-                        <img
-                            src=move || {
-                                preview_resource
-                                    .get()
-                                    .flatten()
-                                    .filter(|url| !url.is_empty())
-                                    .unwrap_or_default()
+                                let _ = ev;
                             }
-                            class=style::preview_img
-                            style:display=move || {
-                                let has_preview = preview_resource
-                                    .get()
-                                    .flatten()
-                                    .is_some_and(|url| !url.is_empty());
-                                if has_preview { "" } else { "none" }
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div class=style::section>
+                <h2 class=style::section_title>"Placement"</h2>
+                <div class=style::fields>
+                    <input
+                        type="hidden"
+                        name="location"
+                        value=move || location.get().to_string()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Location"</label>
+                        <select
+                            name="location"
+                            class=select_class.clone()
+                            disabled=move || mode.get() == 0
+                            prop:value=move || location.get().to_string()
+                            on:change=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                    location.set(parsed);
+                                }
                             }
-                            alt="watermark placement preview"
+                        >
+                            {location_items
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    let selected = value == location.get_untracked();
+                                    view! {
+                                        <option value=value.to_string() selected=selected>{label}</option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    </div>
+                    <input type="hidden" name="size" value=move || size.get().to_string()/>
+                    <div class=style::field>
+                        <label class=style::label>"Size"</label>
+                        <select
+                            name="size"
+                            class=select_class.clone()
+                            disabled=move || mode.get() == 0
+                            prop:value=move || size.get().to_string()
+                            on:change=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                    size.set(parsed);
+                                }
+                            }
+                        >
+                            {size_items
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    let selected = value == size.get_untracked();
+                                    view! {
+                                        <option value=value.to_string() selected=selected>{label}</option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    </div>
+                    <input
+                        type="hidden"
+                        name="width_percent"
+                        value=move || width_percent.get()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Width (%)"</label>
+                        <input
+                            type="text"
+                            name="width_percent"
+                            class=style::input
+                            disabled=move || mode.get() == 0 || size.get() == 1
+                            value=width_percent.get_untracked()
+                            prop:value=move || width_percent.get()
+                            on:input=move |e| width_percent.set(event_target_value(&e))
                         />
-                    </Suspense>
+                    </div>
+                    <input
+                        type="hidden"
+                        name="horizontal_margin_percent"
+                        value=move || horizontal_margin_percent.get()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Horizontal Margin (%)"</label>
+                        <input
+                            type="text"
+                            name="horizontal_margin_percent"
+                            class=style::input
+                            disabled=move || mode.get() == 0
+                            value=horizontal_margin_percent.get_untracked()
+                            prop:value=move || horizontal_margin_percent.get()
+                            on:input=move |e| {
+                                horizontal_margin_percent.set(event_target_value(&e));
+                            }
+                        />
+                    </div>
+                    <input
+                        type="hidden"
+                        name="vertical_margin_percent"
+                        value=move || vertical_margin_percent.get()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Vertical Margin (%)"</label>
+                        <input
+                            type="text"
+                            name="vertical_margin_percent"
+                            class=style::input
+                            disabled=move || mode.get() == 0
+                            value=vertical_margin_percent.get_untracked()
+                            prop:value=move || vertical_margin_percent.get()
+                            on:input=move |e| vertical_margin_percent.set(event_target_value(&e))
+                        />
+                    </div>
+                    <input
+                        type="hidden"
+                        name="place_within_source_content"
+                        value=move || place_within_source_content.get().to_string()
+                    />
+                    <label class=style::checkbox_label>
+                        <input
+                            type="checkbox"
+                            name="place_within_source_content"
+                            value="true"
+                            class=style::checkbox
+                            disabled=move || mode.get() == 0
+                            checked=place_within_source_content.get_untracked()
+                            prop:checked=move || place_within_source_content.get()
+                            on:change=move |e| {
+                                place_within_source_content.set(event_target_checked(&e));
+                            }
+                        />
+                        <span class=style::checkbox_text>"Place Within Source Content"</span>
+                    </label>
                 </div>
             </div>
 
-            // Intermittent timing section — always rendered; hidden when mode != 2.
-            <div style:display=move || if show_intermittent.get() { "" } else { "none" }>
-                <div class=style::section>
-                    <h2 class=style::section_title>"Intermittent Timing"</h2>
-                    <div class=style::fields>
-                        <SelectField<i32>
-                            label="Frequency"
-                            value=frequency_minutes
-                            items=freq_items.get_value()
-                        />
-                        <NumberField
-                            label="Duration (seconds)"
-                            value=duration_seconds
-                            min=Some(1)
+            <div class=style::section>
+                <h2 class=style::section_title>"Intermittent Timing"</h2>
+                <div class=style::fields>
+                    <input
+                        type="hidden"
+                        name="frequency_minutes"
+                        value=move || frequency_minutes.get().to_string()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Frequency"</label>
+                        <select
+                            name="frequency_minutes"
+                            class=select_class.clone()
+                            disabled=move || mode.get() != 2
+                            prop:value=move || frequency_minutes.get().to_string()
+                            on:change=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i32>() {
+                                    frequency_minutes.set(parsed);
+                                }
+                            }
+                        >
+                            {freq_items
+                                .into_iter()
+                                .map(|(value, label)| {
+                                    let selected = value == frequency_minutes.get_untracked();
+                                    view! {
+                                        <option value=value.to_string() selected=selected>{label}</option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    </div>
+                    <input
+                        type="hidden"
+                        name="duration_seconds"
+                        value=move || duration_seconds.get().to_string()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Duration (seconds)"</label>
+                        <input
+                            type="number"
+                            name="duration_seconds"
+                            min="1"
+                            class=style::input
+                            disabled=move || mode.get() != 2
+                            value=duration_seconds.get_untracked().to_string()
+                            prop:value=move || duration_seconds.get().to_string()
+                            on:input=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i64>() {
+                                    duration_seconds.set(parsed);
+                                }
+                            }
                         />
                     </div>
                 </div>
             </div>
 
-            // Opacity expression section — always rendered; hidden when mode != 3.
-            <div style:display=move || if show_opacity_expr.get() { "" } else { "none" }>
-                <div class=style::section>
-                    <h2 class=style::section_title>"Opacity Expression"</h2>
-                    <div class=style::fields>
-                        <TextField label="Expression" value=opacity_expression/>
+            <div class=style::section>
+                <h2 class=style::section_title>"Opacity"</h2>
+                <div class=style::fields>
+                    <input type="hidden" name="opacity" value=move || opacity.get().to_string()/>
+                    <div class=style::field>
+                        <label class=style::label>"Opacity (1-100)"</label>
+                        <input
+                            type="number"
+                            name="opacity"
+                            min="1"
+                            max="100"
+                            class=style::input
+                            disabled=move || mode.get() == 0 || mode.get() == 3
+                            value=opacity.get_untracked().to_string()
+                            prop:value=move || opacity.get().to_string()
+                            on:input=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i64>() {
+                                    opacity.set(parsed);
+                                }
+                            }
+                        />
+                    </div>
+                    <input
+                        type="hidden"
+                        name="opacity_expression"
+                        value=move || opacity_expression.get()
+                    />
+                    <div class=style::field>
+                        <label class=style::label>"Opacity Expression"</label>
+                        <input
+                            type="text"
+                            name="opacity_expression"
+                            class=style::input
+                            disabled=move || mode.get() != 3
+                            value=opacity_expression.get_untracked()
+                            prop:value=move || opacity_expression.get()
+                            on:input=move |e| opacity_expression.set(event_target_value(&e))
+                        />
+                    </div>
+                    <div class=style::field>
+                        <label class=style::label>"Z-Index"</label>
+                        <input
+                            type="number"
+                            name="z_index"
+                            min="0"
+                            class=style::input
+                            value=z_index.get_untracked().to_string()
+                            prop:value=move || z_index.get().to_string()
+                            on:input=move |e| {
+                                if let Ok(parsed) = event_target_value(&e).parse::<i64>() {
+                                    z_index.set(parsed);
+                                }
+                            }
+                        />
                     </div>
                 </div>
             </div>
-        </div>
+
+            <div class=style::section>
+                <h2 class=style::section_title>"Placement Preview"</h2>
+                <Suspense fallback=move || {
+                    view! { <p class=style::preview_loading>"Generating preview\u{2026}"</p> }
+                }>
+                    <img
+                        src=move || {
+                            preview_resource
+                                .get()
+                                .flatten()
+                                .filter(|url| !url.is_empty())
+                                .unwrap_or_default()
+                        }
+                        class=style::preview_img
+                        style:display=move || {
+                            let has_preview = preview_resource
+                                .get()
+                                .flatten()
+                                .is_some_and(|url| !url.is_empty());
+                            if has_preview { "" } else { "none" }
+                        }
+                        alt="watermark placement preview"
+                    />
+                </Suspense>
+            </div>
+        </form>
     }
 }
 

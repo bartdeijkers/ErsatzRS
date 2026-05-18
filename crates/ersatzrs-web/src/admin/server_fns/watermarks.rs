@@ -196,51 +196,77 @@ pub async fn get_watermark_form(id: i64) -> Result<WatermarkForm, ServerFnError>
     }
 }
 
-#[allow(clippy::too_many_lines)]
 #[server]
 pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_watermark_with_pool(&state.pool, form)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+}
 
+#[cfg(feature = "ssr")]
+#[derive(Debug, thiserror::Error)]
+pub enum WatermarkSaveError {
+    #[error("{0}")]
+    Validation(&'static str),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+pub async fn save_watermark_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: WatermarkForm,
+) -> Result<i64, WatermarkSaveError> {
     let name = form.name.trim().to_string();
     if name.is_empty() {
-        return Err(ServerFnError::new("Name is required"));
+        return Err(WatermarkSaveError::Validation("Name is required"));
     }
     if name.len() > 50 {
-        return Err(ServerFnError::new("Name must be 50 characters or fewer"));
+        return Err(WatermarkSaveError::Validation(
+            "Name must be 50 characters or fewer",
+        ));
     }
 
     // Validate custom image is present when ImageSource == Custom
     if form.image_source == 0 && form.image.as_deref().unwrap_or("").trim().is_empty() {
-        return Err(ServerFnError::new("Watermark image is required"));
+        return Err(WatermarkSaveError::Validation(
+            "Watermark image is required",
+        ));
     }
 
     if form.mode != 0 {
         // Width: required to be in (0, 100] when mode != None and size == Scaled
         if form.size == 0 && (form.width_percent <= 0.0 || form.width_percent > 100.0) {
-            return Err(ServerFnError::new("Width must be between 0 and 100%"));
+            return Err(WatermarkSaveError::Validation(
+                "Width must be between 0 and 100%",
+            ));
         }
         // Margins: [0, 50]
         if form.horizontal_margin_percent < 0.0 || form.horizontal_margin_percent > 50.0 {
-            return Err(ServerFnError::new(
+            return Err(WatermarkSaveError::Validation(
                 "Horizontal margin must be between 0 and 50%",
             ));
         }
         if form.vertical_margin_percent < 0.0 || form.vertical_margin_percent > 50.0 {
-            return Err(ServerFnError::new(
+            return Err(WatermarkSaveError::Validation(
                 "Vertical margin must be between 0 and 50%",
             ));
         }
         // Duration must be positive and less than frequency window
         if form.duration_seconds <= 0 || form.duration_seconds >= form.frequency_minutes * 60 {
-            return Err(ServerFnError::new(
+            return Err(WatermarkSaveError::Validation(
                 "Duration must be positive and less than frequency window",
             ));
         }
         // Opacity: (0, 100]
         if form.opacity <= 0 || form.opacity > 100 {
-            return Err(ServerFnError::new("Opacity must be between 1 and 100"));
+            return Err(WatermarkSaveError::Validation(
+                "Opacity must be between 1 and 100",
+            ));
         }
     }
 
@@ -262,11 +288,13 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
         let exists: i64 =
             sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Name" = ?"#)
                 .bind(&name)
-                .fetch_one(&state.pool)
+                .fetch_one(pool)
                 .await
                 .unwrap_or(0);
         if exists > 0 {
-            return Err(ServerFnError::new("Watermark name must be unique"));
+            return Err(WatermarkSaveError::Validation(
+                "Watermark name must be unique",
+            ));
         }
 
         let result = sqlx::query(
@@ -293,7 +321,7 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
         .bind(place_within)
         .bind(&opacity_expr)
         .bind(i64::from(form.z_index))
-        .execute(&state.pool)
+        .execute(pool)
         .await?;
         let id = ersatzrs_infra::db::last_insert_id(result);
 
@@ -304,11 +332,13 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
         )
         .bind(&name)
         .bind(form.id)
-        .fetch_one(&state.pool)
+        .fetch_one(pool)
         .await
         .unwrap_or(0);
         if exists > 0 {
-            return Err(ServerFnError::new("Watermark name must be unique"));
+            return Err(WatermarkSaveError::Validation(
+                "Watermark name must be unique",
+            ));
         }
 
         let rows = sqlx::query(
@@ -336,12 +366,12 @@ pub async fn save_watermark(form: WatermarkForm) -> Result<i64, ServerFnError> {
         .bind(&opacity_expr)
         .bind(i64::from(form.z_index))
         .bind(form.id)
-        .execute(&state.pool)
+        .execute(pool)
         .await?
         .rows_affected();
 
         if rows == 0 {
-            return Err(ServerFnError::new("Watermark not found"));
+            return Err(WatermarkSaveError::Validation("Watermark not found"));
         }
         Ok(form.id)
     }
@@ -535,4 +565,195 @@ pub async fn preview_watermark_placement(
 
     let encoded = base64::engine::general_purpose::STANDARD.encode(&out.stdout);
     Ok(format!("data:image/png;base64,{encoded}"))
+}
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+mod tests {
+    use super::*;
+    use sqlx::Row;
+
+    async fn fresh_pool() -> ersatzrs_infra::db::DbPool {
+        let dir = tempfile::tempdir().expect("temp db dir");
+        let database_url = format!("sqlite://{}", dir.path().join("watermarks.db").display());
+        std::mem::forget(dir);
+        ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database")
+    }
+
+    fn custom_form(name: &str) -> WatermarkForm {
+        WatermarkForm {
+            name: name.to_owned(),
+            image: Some("bug.png".to_owned()),
+            original_content_type: Some("image/png".to_owned()),
+            ..WatermarkForm::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn save_watermark_with_pool_creates_custom_image_watermark() {
+        let pool = fresh_pool().await;
+
+        let id = save_watermark_with_pool(&pool, custom_form("bug"))
+            .await
+            .expect("save watermark");
+
+        let row = sqlx::query(
+            r#"SELECT "Name", "ImageSource", "Image", "OriginalContentType"
+               FROM "ChannelWatermark" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch watermark");
+
+        assert_eq!(row.try_get::<String, _>("Name").unwrap(), "bug");
+        assert_eq!(row.try_get::<i64, _>("ImageSource").unwrap(), 0);
+        assert_eq!(
+            row.try_get::<Option<String>, _>("Image")
+                .unwrap()
+                .as_deref(),
+            Some("bug.png")
+        );
+        assert_eq!(
+            row.try_get::<Option<String>, _>("OriginalContentType")
+                .unwrap()
+                .as_deref(),
+            Some("image/png")
+        );
+    }
+
+    #[tokio::test]
+    async fn save_watermark_with_pool_allows_channel_logo_without_image() {
+        let pool = fresh_pool().await;
+        let form = WatermarkForm {
+            name: "logo".to_owned(),
+            image_source: 1,
+            image: Some("ignored.png".to_owned()),
+            original_content_type: Some("image/png".to_owned()),
+            ..WatermarkForm::default()
+        };
+
+        let id = save_watermark_with_pool(&pool, form)
+            .await
+            .expect("save watermark");
+
+        let row = sqlx::query(
+            r#"SELECT "ImageSource", "Image", "OriginalContentType"
+               FROM "ChannelWatermark" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch watermark");
+
+        assert_eq!(row.try_get::<i64, _>("ImageSource").unwrap(), 1);
+        assert!(row.try_get::<Option<String>, _>("Image").unwrap().is_none());
+        assert!(row
+            .try_get::<Option<String>, _>("OriginalContentType")
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn save_watermark_with_pool_rejects_duplicate_name() {
+        let pool = fresh_pool().await;
+        save_watermark_with_pool(&pool, custom_form("dupe"))
+            .await
+            .expect("save first watermark");
+
+        let error = save_watermark_with_pool(&pool, custom_form("dupe"))
+            .await
+            .expect_err("reject duplicate");
+
+        assert_eq!(error.to_string(), "Watermark name must be unique");
+    }
+
+    #[tokio::test]
+    async fn save_watermark_with_pool_clears_opacity_expression_outside_expression_mode() {
+        let pool = fresh_pool().await;
+        let create = WatermarkForm {
+            mode: 3,
+            opacity_expression: "if(lt(t,1),0,100)".to_owned(),
+            ..custom_form("fade")
+        };
+        let id = save_watermark_with_pool(&pool, create)
+            .await
+            .expect("save expression watermark");
+
+        let update = WatermarkForm {
+            id,
+            mode: 1,
+            opacity_expression: "if(lt(t,1),0,100)".to_owned(),
+            ..custom_form("fade")
+        };
+        save_watermark_with_pool(&pool, update)
+            .await
+            .expect("update watermark");
+
+        let opacity_expression: Option<String> = sqlx::query_scalar(
+            r#"SELECT "OpacityExpression" FROM "ChannelWatermark" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch opacity expression");
+
+        assert!(opacity_expression.is_none());
+    }
+
+    #[tokio::test]
+    async fn save_watermark_with_pool_rejects_validation_failures() {
+        let cases = [
+            (
+                "missing image",
+                WatermarkForm {
+                    name: "missing image".to_owned(),
+                    image: None,
+                    ..WatermarkForm::default()
+                },
+                "Watermark image is required",
+            ),
+            (
+                "bad width",
+                WatermarkForm {
+                    width_percent: 0.0,
+                    ..custom_form("bad width")
+                },
+                "Width must be between 0 and 100%",
+            ),
+            (
+                "bad margin",
+                WatermarkForm {
+                    horizontal_margin_percent: 51.0,
+                    ..custom_form("bad margin")
+                },
+                "Horizontal margin must be between 0 and 50%",
+            ),
+            (
+                "bad duration",
+                WatermarkForm {
+                    duration_seconds: 900,
+                    ..custom_form("bad duration")
+                },
+                "Duration must be positive and less than frequency window",
+            ),
+            (
+                "bad opacity",
+                WatermarkForm {
+                    opacity: 0,
+                    ..custom_form("bad opacity")
+                },
+                "Opacity must be between 1 and 100",
+            ),
+        ];
+
+        for (label, form, expected) in cases {
+            let pool = fresh_pool().await;
+            let Err(error) = save_watermark_with_pool(&pool, form).await else {
+                panic!("expected validation error for {label}");
+            };
+            assert_eq!(error.to_string(), expected, "{label}");
+        }
+    }
 }

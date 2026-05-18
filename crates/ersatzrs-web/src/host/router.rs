@@ -76,6 +76,11 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::media_sources::save_local_library_form),
         )
         .route(
+            "/api/watermarks/save",
+            post(api::watermarks::save_watermark_form)
+                .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
+        )
+        .route(
             "/api/watermarks/image",
             post(api::watermarks::upload_watermark_image)
                 .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
