@@ -76,6 +76,52 @@ pub struct MovieDetailRow {
     pub writers: Vec<String>,
 }
 
+/// One season card on the show details page. Mirrors
+/// `ErsatzTV.Application.MediaCards.TelevisionSeasonCardViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SeasonCardRow {
+    pub id: i64,
+    pub season_number: i64,
+    /// `"Specials"` when `season_number == 0`, else `"Season {n}"`.
+    pub title: String,
+    pub poster_url: Option<String>,
+}
+
+/// One cast member on the show details page. Mirrors
+/// `ErsatzTV.Application.MediaCards.ActorCardViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ActorCardRow {
+    pub id: i64,
+    pub name: String,
+    pub role: Option<String>,
+    pub thumb_url: Option<String>,
+}
+
+/// Detailed projection for the TV show details page. Mirrors the relevant
+/// subset of `ErsatzTV.Application.Television.TelevisionShowViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ShowDetailRow {
+    pub id: i64,
+    pub library_id: i64,
+    /// `Local` | `Plex` | `Jellyfin` | `Emby` — drives the Scan menu and
+    /// matches `Television/Mapper.cs`'s `MediaSourceKind` resolution.
+    pub media_source_kind: String,
+    pub title: String,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
+    pub media_item_state: i32,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub studios: Vec<String>,
+    pub networks: Vec<String>,
+    pub actors: Vec<ActorCardRow>,
+    pub seasons: Vec<SeasonCardRow>,
+}
+
 #[cfg(feature = "ssr")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -375,6 +421,196 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
         studios,
         directors,
         writers,
+    }))
+}
+
+/// TV show details for the `/media/tv/shows/:id` page. Ports
+/// `ErsatzTV/Pages/TelevisionSeasonList.razor` +
+/// `Application.Television/Queries/GetTelevisionShowById` +
+/// `Application.MediaCards/Queries/GetTelevisionSeasonCards`.
+#[server]
+#[allow(clippy::too_many_lines)]
+pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    // `Tag.PlexNetworkTypeId` — see `ErsatzTV.Core/Domain/Metadata/Tag.cs`.
+    const PLEX_NETWORK_TYPE_ID: &str = "319";
+
+    let state = expect_context::<AppState>();
+
+    let Some(row) = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  COALESCE(lp."LibraryId", 0) AS "LibraryId",
+                  CASE
+                      WHEN pl."Id" IS NOT NULL THEN 'Plex'
+                      WHEN jl."Id" IS NOT NULL THEN 'Jellyfin'
+                      WHEN el."Id" IS NOT NULL THEN 'Emby'
+                      ELSE 'Local'
+                  END AS "MediaSourceKind",
+                  COALESCE(sm."Title", '') AS "Title",
+                  sm."Year" AS "Year",
+                  sm."Plot" AS "Plot",
+                  sm."ContentRating" AS "ContentRating",
+                  COALESCE(mi."State", 0) AS "State",
+                  sm."Id" AS "MetadataId"
+           FROM "Show" s
+           JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+           LEFT JOIN "MediaItem" mi ON mi."Id" = s."Id"
+           LEFT JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           LEFT JOIN "PlexLibrary" pl ON pl."Id" = lp."LibraryId"
+           LEFT JOIN "JellyfinLibrary" jl ON jl."Id" = lp."LibraryId"
+           LEFT JOIN "EmbyLibrary" el ON el."Id" = lp."LibraryId"
+           WHERE s."Id" = ?
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+
+    let poster_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "ShowMetadataId" = ? AND "ArtworkKind" = 0 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+    let fanart_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "ShowMetadataId" = ? AND "ArtworkKind" = 3 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+
+    let genres = load_strings(&state.pool, r#""Genre""#, "ShowMetadataId", metadata_id).await?;
+    let studios = load_strings(&state.pool, r#""Studio""#, "ShowMetadataId", metadata_id).await?;
+
+    // Tags split into plain tags vs Plex "network" tags, mirroring
+    // `Television/Mapper.cs` (`ExternalTypeId` is null/blank for tags,
+    // `Tag.PlexNetworkTypeId` for networks).
+    let tag_rows = sqlx::query(
+        r#"SELECT COALESCE("Name", '') AS "Name",
+                  COALESCE("ExternalTypeId", '') AS "ExternalTypeId"
+           FROM "Tag" WHERE "ShowMetadataId" = ? ORDER BY "Name""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let mut tags: Vec<String> = Vec::new();
+    let mut networks: Vec<String> = Vec::new();
+    for r in &tag_rows {
+        let name: String = r.try_get("Name").unwrap_or_default();
+        if name.trim().is_empty() {
+            continue;
+        }
+        let external: String = r.try_get("ExternalTypeId").unwrap_or_default();
+        if external.trim().is_empty() {
+            tags.push(name);
+        } else if external == PLEX_NETWORK_TYPE_ID {
+            networks.push(name);
+        }
+    }
+
+    // Content rating is a single "/"-separated field in ErsatzTV.
+    let content_ratings: Vec<String> = row
+        .try_get::<Option<String>, _>("ContentRating")
+        .unwrap_or(None)
+        .map(|cr| {
+            cr.split('/')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Actors ordered by `Order` then `Id` (see `Television/Mapper.cs`).
+    let actor_rows = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  COALESCE(a."Name", '') AS "Name",
+                  a."Role" AS "Role",
+                  art."Path" AS "Thumb"
+           FROM "Actor" a
+           LEFT JOIN "Artwork" art ON art."Id" = a."ArtworkId"
+           WHERE a."ShowMetadataId" = ?
+           ORDER BY a."Order", a."Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let actors = actor_rows
+        .iter()
+        .map(|r| ActorCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+            role: r.try_get::<Option<String>, _>("Role").unwrap_or(None),
+            thumb_url: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+        })
+        .collect();
+
+    // Seasons ordered by season number (see `MediaCards/Mapper.cs`).
+    let season_rows = sqlx::query(
+        r#"SELECT se."Id" AS "Id",
+                  se."SeasonNumber" AS "SeasonNumber",
+                  a."Path" AS "Poster"
+           FROM "Season" se
+           JOIN "SeasonMetadata" sem ON sem."SeasonId" = se."Id"
+           LEFT JOIN "Artwork" a
+               ON a."SeasonMetadataId" = sem."Id" AND a."ArtworkKind" = 0
+           WHERE se."ShowId" = ?
+           ORDER BY se."SeasonNumber""#,
+    )
+    .bind(id)
+    .fetch_all(&state.pool)
+    .await?;
+    let seasons = season_rows
+        .iter()
+        .map(|r| {
+            let season_number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
+            SeasonCardRow {
+                id: r.try_get("Id").unwrap_or(0),
+                season_number,
+                title: if season_number == 0 {
+                    "Specials".to_string()
+                } else {
+                    format!("Season {season_number}")
+                },
+                poster_url: r
+                    .try_get::<Option<String>, _>("Poster")
+                    .unwrap_or(None)
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            }
+        })
+        .collect();
+
+    Ok(Some(ShowDetailRow {
+        id: row.try_get("Id").unwrap_or(0),
+        library_id: row.try_get("LibraryId").unwrap_or(0),
+        media_source_kind: row.try_get("MediaSourceKind").unwrap_or_default(),
+        title: row.try_get("Title").unwrap_or_default(),
+        year: row.try_get::<Option<i64>, _>("Year").unwrap_or(None),
+        plot: row.try_get::<Option<String>, _>("Plot").unwrap_or(None),
+        content_ratings,
+        poster_url: poster_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+        fanart_url: fanart_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
+        media_item_state: row.try_get("State").unwrap_or(0),
+        genres,
+        tags,
+        studios,
+        networks,
+        actors,
+        seasons,
     }))
 }
 
@@ -2060,6 +2296,119 @@ pub struct CollectionMember {
 // are media-item agnostic; we accept a typed kind so future ports of
 // `ShowList`, `OtherVideoList`, etc. can reuse these endpoints unchanged.
 // ---------------------------------------------------------------------------
+
+/// Row for the schedule dropdown in the show "Add To Schedule" dialog.
+/// Mirrors the id + name subset of
+/// `ErsatzTV.Application.ProgramSchedules.ProgramScheduleViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ScheduleOption {
+    pub id: i64,
+    pub name: String,
+}
+
+/// All program schedules, ordered by name. Mirrors
+/// `GetAllProgramSchedulesHandler` (every row from `ProgramSchedule`).
+#[server]
+pub async fn list_program_schedules() -> Result<Vec<ScheduleOption>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let rows = sqlx::query(
+        r#"SELECT "Id" AS "Id", COALESCE("Name", '') AS "Name"
+           FROM "ProgramSchedule" ORDER BY "Name""#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(rows
+        .iter()
+        .map(|r| ScheduleOption {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// Adds a show to a program schedule as a single `PlayoutMode.One` item.
+/// Ports `AddProgramScheduleItem.ForMediaItem(scheduleId,
+/// CollectionType.TelevisionShow, showId)` +
+/// `AddProgramScheduleItemHandler` / `ProgramScheduleItemCommandBase`.
+///
+/// Parity note: ErsatzTV also refreshes any playouts that use the schedule
+/// (a `BuildPlayout` background request). That refresh is not wired here;
+/// the next scheduled playout build picks the new item up.
+#[server]
+pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), ServerFnError> {
+    // Enum values from `ErsatzTV.Core.Domain`:
+    // CollectionType.TelevisionShow = 1, PlaybackOrder.Shuffle = 3,
+    // FillWithGroupMode.None = 0, GuideMode.Normal = 0,
+    // MarathonGroupBy.None = 0.
+    const COLLECTION_TYPE_TELEVISION_SHOW: i64 = 1;
+    const PLAYBACK_ORDER_SHUFFLE: i64 = 3;
+    const FILL_WITH_GROUP_MODE_NONE: i64 = 0;
+    const GUIDE_MODE_NORMAL: i64 = 0;
+    const MARATHON_GROUP_BY_NONE: i64 = 0;
+
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+
+    let schedule_exists: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ProgramSchedule" WHERE "Id" = ?"#)
+            .bind(schedule_id)
+            .fetch_one(&state.pool)
+            .await?;
+    if schedule_exists == 0 {
+        return Err(ServerFnError::new("[ProgramScheduleId] does not exist."));
+    }
+    let show_exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Show" WHERE "Id" = ?"#)
+        .bind(show_id)
+        .fetch_one(&state.pool)
+        .await?;
+    if show_exists == 0 {
+        return Err(ServerFnError::new("[MediaItem] does not exist."));
+    }
+
+    let mut tx = state.pool.begin().await?;
+
+    // nextIndex = max(Index) + 1 over the schedule's existing items.
+    let next_index: i64 = sqlx::query_scalar(
+        r#"SELECT COALESCE(MAX("Index"), -1) + 1
+           FROM "ProgramScheduleItem" WHERE "ProgramScheduleId" = ?"#,
+    )
+    .bind(schedule_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let result = sqlx::query(
+        r#"INSERT INTO "ProgramScheduleItem" (
+               "ProgramScheduleId", "CollectionType", "MediaItemId",
+               "PlaybackOrder", "FillWithGroupMode", "GuideMode",
+               "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
+               "Index"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)"#,
+    )
+    .bind(schedule_id)
+    .bind(COLLECTION_TYPE_TELEVISION_SHOW)
+    .bind(show_id)
+    .bind(PLAYBACK_ORDER_SHUFFLE)
+    .bind(FILL_WITH_GROUP_MODE_NONE)
+    .bind(GUIDE_MODE_NORMAL)
+    .bind(MARATHON_GROUP_BY_NONE)
+    .bind(next_index)
+    .execute(&mut *tx)
+    .await?;
+
+    // PlayoutMode.One → a `ProgramScheduleOneItem` subtype row (TPT).
+    let item_id = ersatzrs_infra::db::last_insert_id(result);
+    sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
+        .bind(item_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
 
 /// Row for the "(New Collection)" / existing-collection dropdown in
 /// `AddToCollectionDialog`.

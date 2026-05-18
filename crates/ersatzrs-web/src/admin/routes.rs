@@ -22,7 +22,7 @@ use crate::admin::pages::media::other_videos::OtherVideosPage;
 use crate::admin::pages::media::see_all_lists::{
     EpisodesListPage, MusicVideosListPage, RemoteStreamsListPage, SeasonsListPage,
 };
-use crate::admin::pages::media::shows::ShowsPage;
+use crate::admin::pages::media::shows::{ShowPage, ShowsPage};
 use crate::admin::pages::media::smart_collections::{
     SmartCollectionEditorPage, SmartCollectionsPage,
 };
@@ -152,6 +152,19 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=ShowsPage
             />
             <Route path=(StaticSegment("media"), StaticSegment("shows")) view=ShowsPage/>
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("tv"),
+                    StaticSegment("shows"),
+                    ParamSegment("id"),
+                )
+                view=ShowPage
+            />
+            <Route
+                path=(StaticSegment("media"), StaticSegment("shows"), ParamSegment("id"))
+                view=ShowPage
+            />
             <Route path=(StaticSegment("media"), StaticSegment("images")) view=ImagesPage/>
             <Route
                 path=(StaticSegment("media"), StaticSegment("browser"), StaticSegment("images"))

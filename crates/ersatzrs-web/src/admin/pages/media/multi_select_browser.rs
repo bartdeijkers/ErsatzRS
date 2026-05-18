@@ -649,7 +649,10 @@ fn ItemMenu(
 const NEW_COLLECTION_ID: i64 = -1;
 
 #[component]
-fn AddToCollectionModal(open: RwSignal<bool>, selected: RwSignal<HashSet<i64>>) -> impl IntoView {
+pub(crate) fn AddToCollectionModal(
+    open: RwSignal<bool>,
+    selected: RwSignal<HashSet<i64>>,
+) -> impl IntoView {
     let refresh: RwSignal<u32> = RwSignal::new(0);
     let options: RwSignal<Vec<CollectionOption>> = RwSignal::new(Vec::new());
 
@@ -803,7 +806,7 @@ fn MediaInfoModal(
 // ---------------------------------------------------------------------------
 
 #[component]
-fn AddToPlaylistModal(
+pub(crate) fn AddToPlaylistModal(
     open: RwSignal<bool>,
     selected: RwSignal<HashSet<i64>>,
     kind: MediaBrowserKind,

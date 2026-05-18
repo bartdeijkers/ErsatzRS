@@ -32,6 +32,7 @@ use crate::host::state::AppState;
 
 const LOCAL_POSTER_DIR: &str = "data/artwork/posters";
 const LOCAL_FANART_DIR: &str = "data/artwork/fanart";
+const LOCAL_THUMBNAIL_DIR: &str = "data/artwork/thumbnails";
 
 /// Convert a DB-stored artwork path (`jellyfin://Items/.../Primary?tag=X`, a
 /// raw SHA-1 hash filename, or `http(s)://…`) into a URL suitable for an
@@ -90,6 +91,7 @@ pub fn artwork_url(path: &str, kind: ArtworkUrlKind) -> Option<String> {
 pub enum ArtworkUrlKind {
     Poster,
     FanArt,
+    Thumbnail,
 }
 
 impl ArtworkUrlKind {
@@ -97,14 +99,16 @@ impl ArtworkUrlKind {
         match self {
             ArtworkUrlKind::Poster => "posters",
             ArtworkUrlKind::FanArt => "fanart",
+            ArtworkUrlKind::Thumbnail => "thumbnails",
         }
     }
 
     fn max_height(self) -> i32 {
         match self {
             // `ErsatzTV`'s MediaCards `GetPoster` uses 440. Fan art is full-size
-            // (no resize parameter on ETV either).
-            ArtworkUrlKind::Poster => 440,
+            // (no resize parameter on ETV either). Actor thumbnails reuse the
+            // poster resize budget.
+            ArtworkUrlKind::Poster | ArtworkUrlKind::Thumbnail => 440,
             ArtworkUrlKind::FanArt => 1080,
         }
     }
@@ -155,6 +159,16 @@ pub async fn serve_fanart(
     serve_artwork(state, "fanart", &full_path, &params).await
 }
 
+/// `/artwork/thumbnails/{*path}` — same as [`serve_poster`] for actor /
+/// thumbnail artwork (`ErsatzTV` `ArtworkKind.Thumbnail`).
+pub async fn serve_thumbnail(
+    State(state): State<AppState>,
+    Path(full_path): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    serve_artwork(state, "thumbnails", &full_path, &params).await
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct CommonResizeParams {
@@ -183,6 +197,7 @@ async fn serve_local_artwork(kind: &str, file_name: &str) -> Response {
     let base = match kind {
         "posters" => LOCAL_POSTER_DIR,
         "fanart" => LOCAL_FANART_DIR,
+        "thumbnails" => LOCAL_THUMBNAIL_DIR,
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     // Hash filenames are sharded by the first two hex chars in `ErsatzTV`

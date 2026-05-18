@@ -91,6 +91,10 @@ pub fn build_app(app_state: AppState) -> Router {
         )
         .route("/artwork/posters/{*path}", get(api::artwork::serve_poster))
         .route("/artwork/fanart/{*path}", get(api::artwork::serve_fanart))
+        .route(
+            "/artwork/thumbnails/{*path}",
+            get(api::artwork::serve_thumbnail),
+        )
         .merge(build_iptv_router(&app_state))
         .route("/discover.json", get(hdhr::get_discover_json))
         .route("/device.xml", get(hdhr::get_device_xml))

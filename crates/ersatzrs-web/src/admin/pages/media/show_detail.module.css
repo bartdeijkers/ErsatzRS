@@ -1,0 +1,44 @@
+/* Show details page — section + action styles layered on top of the shared
+   movie_detail.module.css hero/fanart/facts styles. */
+
+.action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+
+.action-btn {
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--radius);
+    background: var(--color-primary);
+    color: var(--color-bg);
+    border: 1px solid var(--color-primary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.action-btn:hover {
+    filter: brightness(1.1);
+}
+
+.section-title {
+    margin: 2rem 0 0.25rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-gray-100);
+}
+
+.divider {
+    height: 1px;
+    background-color: var(--color-border);
+    margin: 0.25rem 0 1rem 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: 0.75rem;
+}
