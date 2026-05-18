@@ -392,13 +392,14 @@ Windows. The `platform-parity-fixer` agent in
 [`.claude/agents/`](.claude/agents/platform-parity-fixer.md) encodes the audit
 procedure and the false-positive catalogue for future regressions.
 
-**Next up — close the three TV-show-page parity gaps.** The
+**Next up — close the remaining TV-show-page parity gaps.** The
 `/media/tv/shows/:id` port (2026-05-18) shipped with three documented
 deferrals. The remediation is planned in
 [`plans/scan-languages-fact-row-sync.md`](plans/scan-languages-fact-row-sync.md)
 as ordered slices: Slice 0 (plan scaffolding — done) → Slice 1 (Languages
-fact row: vendor ErsatzTV's ISO-639-2 table + `ersatzrs-core::language_codes`
-port + `GetLanguagesForShow` query) → Slice 2 (playout-refresh: in-process
+fact row — done: vendored ErsatzTV's ISO-639-2 table, ported
+`ersatzrs-core::language_codes`, and wired the `GetLanguagesForShow` query
+into the show facts) → Slice 2 (playout-refresh: in-process
 `mpsc` consumed inside the scheduler loop, enqueue `BuildPlayout(Refresh)`
 from the schedule/collection add paths) → Slices 3–5 (per-show targeted sync
 for Plex/Jellyfin/Emby via extracted `sync_one_<p>_show` + provider
@@ -501,6 +502,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-18 | Codex (GPT-5) | Implemented Slice 1 of `scan-languages-fact-row-sync`: vendored ErsatzTV's `ISO-639-2_utf-8.txt`, added `ersatzrs-core::language_codes` with code-group expansion and English-name lookup, wired `get_show_details` to resolve distinct episode audio stream languages through the ErsatzTV `GetLanguagesForShow` join, rendered the `Languages` fact row on `/media/tv/shows/:id`, and added focused core + DB-backed web tests. |
 | 2026-05-18 | Claude Code (claude-opus-4-7) | Ported the TV show details page (`Pages/TelevisionSeasonList.razor`) to `/media/tv/shows/:id`. Added `get_show_details` (Show+ShowMetadata+MediaItem, poster/fanart, genres/studios, Plex-network tag split via `Tag.ExternalTypeId == "319"`, "/"-split content ratings, ordered actors, season cards), `list_program_schedules`, and `add_show_to_schedule` (ports `AddProgramScheduleItem.ForMediaItem` → `ProgramScheduleItem` + `ProgramScheduleOneItem` TPT row; playout-refresh side-effect noted as deferred). Added a `Thumbnail` `ArtworkUrlKind` + `/artwork/thumbnails/{*path}` route for actor art. New `ShowPage`/`ShowDetailIsland` (page-wrapper→island hydration shape) with seasons + cast grids reusing the `MediaCard` primitive and the now-`pub(crate)` `AddToCollectionModal`/`AddToPlaylistModal`, plus a new `AddToScheduleModal`; Scan (Quick/Deep) actions gated to remote sources reuse `scan_library` (targeted single-show scan deferred — ErsatzRS scanning is library-level; languages fact row deferred like the movies page). Routes `/media/tv/shows/:id` + `/media/shows/:id` registered. fmt + clippy (default + `--features mysql`) + `cargo leptos build` green; SSR-verified live: show 340 renders title, Seasons 1–9, Cast, Content Ratings/Genres facts, fanart, and the Add-to/Scan actions. |
 | 2026-05-15 | Claude Code (claude-opus-4-7) | Closed the Local-side of the metadata parity sweep: `upsert_artist_for_folder` now parses `artist.nfo` and writes full `ArtistMetadata` (Title/SortTitle/Disambiguation/Biography/Year/Formed/MetadataKind) with Genres/Styles/Moods + thumb/profile/fanart/logo artwork; `upsert_local_music_video` parses `{video}.nfo` and writes full `MusicVideoMetadata` (Title/SortTitle/Album/Plot/Year/ReleaseDate/Track) with Genres/Tags/Studios/Directors via `replace_strings`/`replace_people`, MusicVideoArtist rows, and ETV-order artwork discovery (per-video suffix → `.tbn` exact-ext → generic in video dir → parent artist folder). Added two `#[ignore]`-gated integration tests (`local_television.rs`, `local_music_video.rs`) that build a tempdir tree with NFOs and assert metadata + child rows + artwork land via `scan_local_library`. |
 | 2026-05-15 | Codex (GPT-5) | Reached the metadata parity midpoint: generic metadata helpers are in place, Jellyfin/Emby Show + Season + Episode scans now write rich metadata child rows, and the scanner has the new serde/quick-xml NFO parser plus SortTitle helper for upcoming Local TV, Artist, and Music Video slices. |

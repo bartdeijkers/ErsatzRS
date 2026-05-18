@@ -116,6 +116,7 @@ pub struct ShowDetailRow {
     pub media_item_state: i32,
     pub genres: Vec<String>,
     pub tags: Vec<String>,
+    pub languages: Vec<String>,
     pub studios: Vec<String>,
     pub networks: Vec<String>,
     pub actors: Vec<ActorCardRow>,
@@ -493,6 +494,7 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
 
     let genres = load_strings(&state.pool, r#""Genre""#, "ShowMetadataId", metadata_id).await?;
     let studios = load_strings(&state.pool, r#""Studio""#, "ShowMetadataId", metadata_id).await?;
+    let languages = load_show_languages(&state.pool, id).await?;
 
     // Tags split into plain tags vs Plex "network" tags, mirroring
     // `Television/Mapper.cs` (`ExternalTypeId` is null/blank for tags,
@@ -607,6 +609,7 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
         media_item_state: row.try_get("State").unwrap_or(0),
         genres,
         tags,
+        languages,
         studios,
         networks,
         actors,
@@ -726,6 +729,41 @@ pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> 
     };
 
     serde_json::to_string_pretty(&info).map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_show_languages(
+    pool: &ersatzrs_infra::db::DbPool,
+    show_id: i64,
+) -> Result<Vec<String>, ServerFnError> {
+    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/SearchRepository.cs`
+    // `GetLanguagesForShow`; `MediaStreamKind = 2` is the ErsatzTV persisted
+    // enum value for audio streams.
+    let codes: Vec<Option<String>> = sqlx::query_scalar(
+        r#"SELECT DISTINCT ms."Language"
+           FROM "MediaStream" ms
+           JOIN "MediaVersion" mv ON mv."Id" = ms."MediaVersionId"
+           JOIN "Episode" e ON e."Id" = mv."EpisodeId"
+           JOIN "Season" s ON s."Id" = e."SeasonId"
+           WHERE ms."MediaStreamKind" = 2 AND s."ShowId" = ?"#,
+    )
+    .bind(show_id)
+    .fetch_all(pool)
+    .await?;
+
+    let media_codes = codes
+        .into_iter()
+        .flatten()
+        .filter(|code| !code.trim().is_empty());
+
+    let mut languages: Vec<String> = ersatzrs_core::language_codes::all_language_codes(media_codes)
+        .into_iter()
+        .filter_map(|code| ersatzrs_core::language_codes::english_name(&code))
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+    languages.sort();
+    languages.dedup();
+    Ok(languages)
 }
 
 #[cfg(feature = "ssr")]
@@ -3374,6 +3412,26 @@ mod tests {
     use super::*;
     use crate::admin::server_fns::search::SearchAllIds;
 
+    #[tokio::test]
+    async fn load_show_languages_resolves_episode_audio_stream_codes() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("show-languages.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_show_language_fixture(&pool).await;
+
+        let languages = load_show_languages(&pool, 10)
+            .await
+            .expect("load show languages");
+
+        assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
     #[test]
     fn plan_mixed_playlist_inserts_is_empty_for_empty_payload() {
         let ids = SearchAllIds::default();
@@ -3455,5 +3513,74 @@ mod tests {
                 media_item_id: 99,
             }]
         );
+    }
+
+    async fn seed_show_language_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Shows', 2, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/tv', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+
+        for id in [10_i64, 11, 12] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("seed media item");
+        }
+
+        sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (10)"#)
+            .execute(pool)
+            .await
+            .expect("seed show");
+        sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (11, 10, 1)"#)
+            .execute(pool)
+            .await
+            .expect("seed season");
+        sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (12, 11)"#)
+            .execute(pool)
+            .await
+            .expect("seed episode");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "EpisodeId",
+                   "Height", "VideoScanKind", "Width"
+               ) VALUES (
+                   20, '2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z',
+                   '00:22:00', 12, 1080, 0, 1920
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
+                   "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (30, 0, 'aac', 2, 'eng', 2, 1, 0, 20),
+                   (31, 1, 'aac', 2, 'en', 2, 0, 0, 20),
+                   (32, 2, 'aac', 2, 'nld', 2, 0, 0, 20),
+                   (33, 3, 'ass', 3, 'eng', 0, 0, 0, 20),
+                   (34, 4, 'aac', 2, NULL, 2, 0, 0, 20)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media streams");
     }
 }

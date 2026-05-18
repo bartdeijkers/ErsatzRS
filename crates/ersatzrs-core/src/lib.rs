@@ -2,6 +2,7 @@
 
 pub mod health;
 pub mod hls;
+pub mod language_codes;
 pub mod locking;
 pub mod maintenance;
 pub mod path_replacement;

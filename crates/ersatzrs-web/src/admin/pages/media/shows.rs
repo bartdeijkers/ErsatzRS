@@ -16,10 +16,6 @@
 //!
 //! Parity notes / deferred from the C# behaviour:
 //!
-//! * **Languages fact row** — `ErsatzTV` resolves show languages from the
-//!   episodes' media streams (`SearchRepository.GetLanguagesForShow` +
-//!   `ILanguageCodeService`) and renders a "Languages" row. Like the movies
-//!   detail page, that resolution is not ported yet; the row is omitted.
 //! * **Targeted single-show scan** — `ErsatzTV`'s `QueueShowScanByLibraryId`
 //!   syncs just the one show on Plex/Jellyfin/Emby. `ErsatzRS` scanning is
 //!   library-level, so the Scan actions enqueue the owning library scan
@@ -123,6 +119,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
         media_item_state,
         genres,
         tags,
+        languages,
         studios,
         networks,
         actors,
@@ -235,6 +232,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                     {fact_row("Content Ratings", &content_ratings)}
                     {fact_row("Studios", &studios)}
                     {fact_row("Networks", &networks)}
+                    {fact_row("Languages", &languages)}
                     {fact_row("Genres", &genres)}
                     {fact_row("Tags", &tags)}
                 </dl>

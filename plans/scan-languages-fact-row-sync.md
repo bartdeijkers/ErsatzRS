@@ -1,6 +1,6 @@
 **TV-show-page parity gaps: per-show sync, playout-refresh, languages**
 
-Status: Slice 0 done (this file). Slices 1–5 pending. Created 2026-05-18.
+Status: Slices 0–1 done. Slices 2–5 pending. Created 2026-05-18.
 
 **Authoritative C# sources**
 
@@ -58,7 +58,7 @@ actions, the collection add/remove refresh, and the metadata facts list.
 
 ---
 
-## Slice 0 — Plan scaffolding (done)
+## [x] Slice 0 — Plan scaffolding (done)
 
 - Create `plans/scan-languages-fact-row-sync.md` = this file.
 - Index it in `plans/INDEX.md`.
@@ -67,7 +67,7 @@ actions, the collection add/remove refresh, and the metadata facts list.
 
 ---
 
-## Slice 1 — Languages fact row (smallest, isolated; finishes the show page)
+## [x] Slice 1 — Languages fact row (done)
 
 **Implementation:**
 - Vendor `/home/bart/ErsatzTV/ErsatzTV/Resources/ISO-639-2_utf-8.txt` into
@@ -100,7 +100,7 @@ asserting the resolved list. Update TEST.md `/media/tv/shows/:id` row note.
 
 ---
 
-## Slice 2 — Playout-refresh channel
+## [ ] Slice 2 — Playout-refresh channel
 
 **Parity caveat:** ErsatzTV's `AddItemsToPlaylistHandler` does **not** enqueue
 — so ErsatzRS must **not** add playlist refresh (match the source).
@@ -154,7 +154,7 @@ periodic-build tests must stay green (no behaviour change to `build_playout`).
 
 ---
 
-## Slices 3–5 — Per-show targeted sync (one slice per provider)
+## [ ] Slices 3–5 — Per-show targeted sync (one slice per provider)
 
 **Shared design (done in Slice 3, reused by 4–5):**
 - `ersatzrs-infra` {plex,jellyfin,emby}.rs: **pure refactor** — extract the
