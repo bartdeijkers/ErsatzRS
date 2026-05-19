@@ -5,10 +5,12 @@ use std::path::PathBuf;
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::locking::EntityLocker;
+use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db::DatabaseSchemaStatus;
 use ersatzrs_infra::maintenance::{
-    load_library_refresh_interval, run_maintenance_once, LibraryDispatchConfig,
+    load_library_refresh_interval, run_maintenance_once, run_requested_playout_build,
+    LibraryDispatchConfig,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
@@ -225,6 +227,60 @@ async fn maintenance_skips_playouts_with_held_in_memory_lock() {
     assert_eq!(report.playouts_failed, 0);
     // Lock is still held — the maintenance pass must not silently release it.
     assert!(locker.is_playout_locked(77));
+}
+
+#[tokio::test]
+async fn requested_playout_build_uses_locker_and_writes_status() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (78, 1, 20, 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let locker = EntityLocker::new();
+    assert!(locker.lock_playout(78));
+    let skipped = run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 78,
+            mode: PlayoutBuildMode::Refresh,
+        },
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    assert!(!skipped);
+    assert!(locker.unlock_playout(78));
+
+    let built = run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 78,
+            mode: PlayoutBuildMode::Refresh,
+        },
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    assert!(built);
+
+    let status = sqlx::query(
+        r#"SELECT "Success", "Message"
+           FROM "PlayoutBuildStatus"
+           WHERE "PlayoutId" = 78"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status.get::<i64, _>("Success"), 1);
+    assert_eq!(status.get::<Option<String>, _>("Message"), None);
+    assert!(!locker.is_playout_locked(78));
 }
 
 #[tokio::test]

@@ -35,6 +35,18 @@ pub enum PlayoutBuildMode {
     Continue,
 }
 
+/// Request for the scheduler-owned playout builder.
+///
+/// This is the in-process equivalent of ErsatzTV's
+/// `Application/Playouts/Commands/BuildPlayout.cs` background-service request:
+/// callers identify one playout and the build mode, while the scheduler keeps
+/// ownership of locking, reference-data loading, and persistence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayoutBuildRequest {
+    pub playout_id: EntityId,
+    pub mode: PlayoutBuildMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchedulingMediaItem {
     pub id: EntityId,

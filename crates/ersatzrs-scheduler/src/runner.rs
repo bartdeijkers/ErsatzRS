@@ -3,16 +3,18 @@ use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
 use ersatzrs_core::locking::EntityLocker;
+use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db;
 use ersatzrs_infra::maintenance::{
-    run_maintenance_once, LibraryDispatchConfig, MaintenancePassReport,
+    run_maintenance_once, run_requested_playout_build, LibraryDispatchConfig, MaintenancePassReport,
 };
+use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
 use tracing::{info, warn};
 
 /// Scheduler CLI options after argument parsing.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct SchedulerOptions {
     /// Run a single pass and exit.
     pub run_once: bool,
@@ -27,6 +29,8 @@ pub struct SchedulerOptions {
     pub scanner_command: Option<PathBuf>,
     /// Extra arguments appended to every scanner invocation.
     pub scanner_extra_args: Vec<OsString>,
+    /// Requests from the web host for immediate playout rebuilds.
+    pub build_requests: Option<mpsc::Receiver<PlayoutBuildRequest>>,
 }
 
 /// Run the background scheduler.
@@ -37,18 +41,27 @@ pub struct SchedulerOptions {
 /// fails. In loop mode, individual pass failures are logged and retried on the
 /// next tick.
 pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
+    let SchedulerOptions {
+        run_once,
+        tick,
+        transcode_dir,
+        channel_guide_dir,
+        scanner_command,
+        scanner_extra_args,
+        mut build_requests,
+    } = options;
+
     let startup = db::bootstrap_media_server_database().await?;
-    let cache_config =
-        CacheCleanupConfig::from_paths(options.transcode_dir, options.channel_guide_dir);
+    let cache_config = CacheCleanupConfig::from_paths(transcode_dir, channel_guide_dir);
     let library_dispatch = LibraryDispatchConfig {
-        scanner_command: options.scanner_command,
-        extra_args: options.scanner_extra_args,
+        scanner_command,
+        extra_args: scanner_extra_args,
     };
     // Single in-process `EntityLocker` shared across maintenance passes,
     // matching ErsatzTV's `IEntityLocker` singleton.
     let locker = EntityLocker::new();
 
-    if options.run_once {
+    if run_once {
         let report = run_maintenance_once(
             startup.pool,
             &cache_config,
@@ -62,7 +75,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     }
 
     info!("scheduler service started");
-    let mut ticker = interval(options.tick);
+    let mut ticker = interval(tick);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
     loop {
@@ -85,7 +98,29 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     Err(error) => warn!(%error, "scheduler pass failed"),
                 }
             }
+            request = recv_build_request(&mut build_requests) => {
+                let Some(request) = request else {
+                    build_requests = None;
+                    continue;
+                };
+                let playout_id = request.playout_id;
+                let mode = request.mode;
+                match run_requested_playout_build(&startup.pool, &locker, request, chrono::Utc::now()).await {
+                    Ok(true) => info!(playout_id, ?mode, "requested playout build complete"),
+                    Ok(false) => info!(playout_id, ?mode, "requested playout build skipped because playout is locked"),
+                    Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),
+                }
+            }
         }
+    }
+}
+
+async fn recv_build_request(
+    receiver: &mut Option<mpsc::Receiver<PlayoutBuildRequest>>,
+) -> Option<PlayoutBuildRequest> {
+    match receiver {
+        Some(receiver) => receiver.recv().await,
+        None => std::future::pending::<Option<PlayoutBuildRequest>>().await,
     }
 }
 

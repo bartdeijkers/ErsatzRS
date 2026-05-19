@@ -18,6 +18,7 @@ const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
 const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
+const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
 
 pub async fn run() {
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
@@ -33,6 +34,8 @@ pub async fn run() {
     );
 
     let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
+    let (playout_build_tx, playout_build_rx) =
+        tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
 
     if let Some(version) = startup.schema_status.dirty_version {
         tracing::error!(
@@ -58,6 +61,7 @@ pub async fn run() {
         startup.database_backend,
         startup.schema_status,
         ffmpeg_runtime,
+        playout_build_tx,
     )
     .await
     .expect("failed to build application state");
@@ -67,6 +71,7 @@ pub async fn run() {
         app_state.device_uuid,
         app_state.tuner_count,
         LISTEN_PORT,
+        playout_build_rx,
     );
 
     let app = super::router::build_app(app_state);
@@ -185,6 +190,7 @@ async fn build_app_state(
     database_backend: DatabaseBackend,
     schema_status: ersatzrs_infra::db::DatabaseSchemaStatus,
     ffmpeg_runtime: ersatzrs_ffmpeg::FfmpegRuntimeReport,
+    playout_build_tx: tokio::sync::mpsc::Sender<ersatzrs_core::scheduling::PlayoutBuildRequest>,
 ) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
@@ -229,6 +235,7 @@ async fn build_app_state(
         device_uuid,
         tuner_count,
         iptv_access_token_verifier,
+        playout_build_tx,
     ))
 }
 

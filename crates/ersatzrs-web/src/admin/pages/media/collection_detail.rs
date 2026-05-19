@@ -27,12 +27,6 @@
 //!   per item kind; the only manual-collection-specific entry is the
 //!   trashcan (already covered) and an "Add To Schedule" item that the
 //!   `ErsatzRS` UI does not yet provide. Tracked as TODO.
-//! * **Playout refresh on removal/toggle** — `ErsatzTV`'s
-//!   `RemoveItemsFromCollectionHandler` / `UpdateCollectionHandler` enqueue
-//!   a `BuildPlayout(Refresh)` for every playout that references the
-//!   collection; `ErsatzRS` does not yet have an equivalent background
-//!   channel. The persistence path is identical; only the side-effect is
-//!   missing. Tracked as TODO.
 #![allow(clippy::too_many_lines)]
 
 use std::collections::HashSet;

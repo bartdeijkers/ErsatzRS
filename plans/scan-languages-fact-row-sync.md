@@ -1,6 +1,6 @@
 **TV-show-page parity gaps: per-show sync, playout-refresh, languages**
 
-Status: Slices 0–1 done. Slices 2–5 pending. Created 2026-05-18.
+Status: Slices 0–2 done. Slices 3–5 pending. Created 2026-05-18.
 
 **Authoritative C# sources**
 
@@ -100,7 +100,7 @@ asserting the resolved list. Update TEST.md `/media/tv/shows/:id` row note.
 
 ---
 
-## [ ] Slice 2 — Playout-refresh channel
+## [x] Slice 2 — Playout-refresh channel (done)
 
 **Parity caveat:** ErsatzTV's `AddItemsToPlaylistHandler` does **not** enqueue
 — so ErsatzRS must **not** add playlist refresh (match the source).

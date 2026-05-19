@@ -4,8 +4,8 @@
 //!   to the shared [`MultiSelectBrowserPage`].
 //! * `/media/tv/shows/:id` — port of `Pages/TelevisionSeasonList.razor`
 //!   (the per-show "series" page): fanart/poster header, plot, metadata
-//!   facts (content ratings, studios, networks, genres, tags), the seasons
-//!   grid, the cast grid, and the "Add To" (Collection / Playlist /
+//!   facts (content ratings, studios, networks, languages, genres, tags), the
+//!   seasons grid, the cast grid, and the "Add To" (Collection / Playlist /
 //!   Schedule) + "Scan" (Quick / Deep) actions.
 //!
 //! Hydration shape mirrors the proven movies/collection-detail pattern

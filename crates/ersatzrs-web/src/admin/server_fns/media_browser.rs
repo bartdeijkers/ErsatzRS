@@ -767,6 +767,77 @@ async fn load_show_languages(
 }
 
 #[cfg(feature = "ssr")]
+async fn enqueue_schedule_playout_refresh(
+    state: &crate::host::state::AppState,
+    schedule_id: i64,
+) -> Result<(), ServerFnError> {
+    let playout_ids = playout_ids_using_schedule(&state.pool, schedule_id).await?;
+    enqueue_playout_refreshes(state, playout_ids);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn enqueue_collection_playout_refresh(
+    state: &crate::host::state::AppState,
+    collection_id: i64,
+) -> Result<(), ServerFnError> {
+    let playout_ids = playout_ids_using_collection(&state.pool, collection_id).await?;
+    enqueue_playout_refreshes(state, playout_ids);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn playout_ids_using_schedule(
+    pool: &ersatzrs_infra::db::DbPool,
+    schedule_id: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT "Id"
+           FROM "Playout"
+           WHERE "ProgramScheduleId" = ?
+           ORDER BY "Id""#,
+    )
+    .bind(schedule_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn playout_ids_using_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    collection_id: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
+    // MediaCollectionRepository.cs` `PlayoutIdsUsingCollection`.
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "CollectionId" = ?
+           ORDER BY "PlayoutId""#,
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[cfg(feature = "ssr")]
+fn enqueue_playout_refreshes(state: &crate::host::state::AppState, playout_ids: Vec<i64>) {
+    for playout_id in playout_ids {
+        let request = ersatzrs_core::scheduling::PlayoutBuildRequest {
+            playout_id,
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Refresh,
+        };
+        if let Err(error) = state.playout_build_tx.try_send(request) {
+            tracing::warn!(
+                playout_id,
+                %error,
+                "dropping requested playout refresh; periodic scheduler will retry later"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
 async fn load_strings(
     pool: &ersatzrs_infra::db::DbPool,
     table: &str,
@@ -2300,6 +2371,7 @@ pub async fn add_item_to_collection(
     .bind(media_item_id)
     .execute(&state.pool)
     .await?;
+    enqueue_collection_playout_refresh(&state, collection_id).await?;
     Ok(())
 }
 
@@ -2315,6 +2387,7 @@ pub async fn remove_item_from_collection(
         .bind(media_item_id)
         .execute(&state.pool)
         .await?;
+    enqueue_collection_playout_refresh(&state, collection_id).await?;
     Ok(())
 }
 
@@ -2372,9 +2445,6 @@ pub async fn list_program_schedules() -> Result<Vec<ScheduleOption>, ServerFnErr
 /// CollectionType.TelevisionShow, showId)` +
 /// `AddProgramScheduleItemHandler` / `ProgramScheduleItemCommandBase`.
 ///
-/// Parity note: ErsatzTV also refreshes any playouts that use the schedule
-/// (a `BuildPlayout` background request). That refresh is not wired here;
-/// the next scheduled playout build picks the new item up.
 #[server]
 pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), ServerFnError> {
     // Enum values from `ErsatzTV.Core.Domain`:
@@ -2445,6 +2515,7 @@ pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), 
         .await?;
 
     tx.commit().await?;
+    enqueue_schedule_playout_refresh(&state, schedule_id).await?;
     Ok(())
 }
 
@@ -2807,6 +2878,9 @@ pub async fn add_media_items_to_collection(
         .execute(&state.pool)
         .await?;
         added += result.rows_affected();
+    }
+    if added > 0 {
+        enqueue_collection_playout_refresh(&state, collection_id).await?;
     }
     Ok(added)
 }
@@ -3303,20 +3377,20 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 pub async fn set_collection_use_custom_order(id: i64, on: bool) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
     let state = expect_context::<AppState>();
-    sqlx::query(r#"UPDATE "Collection" SET "UseCustomPlaybackOrder" = ? WHERE "Id" = ?"#)
-        .bind(i64::from(on))
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
+    let result =
+        sqlx::query(r#"UPDATE "Collection" SET "UseCustomPlaybackOrder" = ? WHERE "Id" = ?"#)
+            .bind(i64::from(on))
+            .bind(id)
+            .execute(&state.pool)
+            .await?;
+    if result.rows_affected() > 0 {
+        enqueue_collection_playout_refresh(&state, id).await?;
+    }
     Ok(())
 }
 
 /// Removes one or many media items from a collection. Mirrors
-/// `RemoveItemsFromCollectionHandler` — note that ErsatzTV also re-queues
-/// playout rebuilds for every playout that uses this collection; the playout
-/// scheduler in ErsatzRS does not yet have an equivalent enqueue point, so
-/// we just persist the removal for now (TODO: wire playout refresh once the
-/// scheduling channel exists).
+/// `RemoveItemsFromCollectionHandler`.
 #[server]
 pub async fn remove_items_from_collection(
     collection_id: i64,
@@ -3328,8 +3402,9 @@ pub async fn remove_items_from_collection(
         return Ok(());
     }
     let mut tx = state.pool.begin().await?;
+    let mut removed = 0_u64;
     for mid in &media_item_ids {
-        sqlx::query(
+        let result = sqlx::query(
             r#"DELETE FROM "CollectionItem"
                WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
         )
@@ -3337,8 +3412,12 @@ pub async fn remove_items_from_collection(
         .bind(mid)
         .execute(&mut *tx)
         .await?;
+        removed += result.rows_affected();
     }
     tx.commit().await?;
+    if removed > 0 {
+        enqueue_collection_playout_refresh(&state, collection_id).await?;
+    }
     Ok(())
 }
 
@@ -3357,8 +3436,9 @@ pub async fn update_collection_custom_order(
         return Ok(());
     }
     let mut tx = state.pool.begin().await?;
+    let mut updated = 0_u64;
     for (idx, mid) in ordered_item_ids.iter().enumerate() {
-        sqlx::query(
+        let result = sqlx::query(
             r#"UPDATE "CollectionItem"
                   SET "CustomIndex" = ?
                 WHERE "CollectionId" = ? AND "MediaItemId" = ?"#,
@@ -3368,8 +3448,12 @@ pub async fn update_collection_custom_order(
         .bind(mid)
         .execute(&mut *tx)
         .await?;
+        updated += result.rows_affected();
     }
     tx.commit().await?;
+    if updated > 0 {
+        enqueue_collection_playout_refresh(&state, collection_id).await?;
+    }
     Ok(())
 }
 
@@ -3430,6 +3514,32 @@ mod tests {
             .expect("load show languages");
 
         assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn playout_refresh_lookups_match_schedule_and_collection_contracts() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir
+                .path()
+                .join("playout-refresh-lookups.db")
+                .display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_playout_refresh_fixture(&pool).await;
+
+        assert_eq!(
+            playout_ids_using_schedule(&pool, 10).await.unwrap(),
+            vec![100, 101]
+        );
+        assert_eq!(
+            playout_ids_using_collection(&pool, 20).await.unwrap(),
+            vec![101, 102]
+        );
     }
 
     #[test]
@@ -3582,5 +3692,81 @@ mod tests {
         .execute(pool)
         .await
         .expect("seed media streams");
+    }
+
+    async fn seed_playout_refresh_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
+
+        sqlx::query(
+            r#"INSERT OR IGNORE INTO "Resolution" ("Id", "Name", "Width", "Height")
+               VALUES (1, '1920x1080', 1920, 1080)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed resolution");
+
+        let repos = ersatzrs_infra::repositories::make_repositories(pool.clone());
+        repos
+            .ffmpeg_profile
+            .upsert(&ersatzrs_domain::FFmpegProfile {
+                id: 1,
+                name: "default".to_string(),
+                resolution_id: 1,
+                ..ersatzrs_domain::FFmpegProfile::default()
+            })
+            .await
+            .expect("seed ffmpeg profile");
+        repos
+            .channel
+            .upsert(&ersatzrs_domain::Channel {
+                id: 1,
+                unique_id: uuid::Uuid::from_u128(1),
+                number: "1".to_string(),
+                sort_number: 1.0,
+                name: "Channel 1".to_string(),
+                ffmpeg_profile_id: 1,
+                is_enabled: true,
+                ..ersatzrs_domain::Channel::default()
+            })
+            .await
+            .expect("seed channel");
+
+        sqlx::query(
+            r#"INSERT INTO "ProgramSchedule" (
+                   "Id", "FixedStartTimeBehavior", "KeepMultiPartEpisodesTogether",
+                   "Name", "RandomStartPoint", "ShuffleScheduleItems",
+                   "TreatCollectionsAsShows"
+               ) VALUES
+                   (10, 0, 0, 'Schedule 10', 0, 0, 0),
+                   (11, 0, 0, 'Schedule 11', 0, 0, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed schedules");
+        sqlx::query(r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder") VALUES (20, 'Collection 20', 0)"#)
+            .execute(pool)
+            .await
+            .expect("seed collection");
+        sqlx::query(
+            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+               VALUES
+                   (100, 1, 10, 1, 0),
+                   (101, 1, 10, 1, 0),
+                   (102, 1, 11, 1, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed playouts");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+                   "Id", "CollectionId", "CollectionType", "PlayoutId"
+               ) VALUES
+                   (200, 20, 10, 101),
+                   (201, 20, 10, 102),
+                   (202, 20, 10, 102)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed playout anchors");
     }
 }

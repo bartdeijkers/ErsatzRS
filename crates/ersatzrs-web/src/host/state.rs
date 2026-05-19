@@ -2,12 +2,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use ersatzrs_core::hls::HlsSessionRegistry;
+use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
 use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus, DbPool};
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use jsonwebtoken::{DecodingKey, Validation};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 /// In-process tracker for entities that have an active scan/sync. Mirrors
@@ -164,6 +165,7 @@ pub struct AppState {
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
     pub entity_locker: EntityLocker,
     pub scan_progress: ScanProgressMap,
+    pub playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
 }
 
 #[derive(Clone)]
@@ -173,6 +175,7 @@ pub struct IptvAccessTokenVerifier {
 }
 
 impl AppState {
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new(
         pool: DbPool,
@@ -182,6 +185,7 @@ impl AppState {
         device_uuid: Uuid,
         tuner_count: i32,
         iptv_access_token_verifier: IptvAccessTokenVerifier,
+        playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
@@ -199,6 +203,7 @@ impl AppState {
             iptv_access_token_verifier,
             entity_locker: EntityLocker::default(),
             scan_progress: ScanProgressMap::default(),
+            playout_build_tx,
         }
     }
 
@@ -207,6 +212,7 @@ impl AppState {
     pub fn for_tests(iptv_access_token_verifier: IptvAccessTokenVerifier) -> Self {
         let pool =
             ersatzrs_infra::db::lazy_sqlite_pool("sqlite::memory:").expect("lazy sqlite pool");
+        let (playout_build_tx, _playout_build_rx) = mpsc::channel(1);
 
         Self::new(
             pool,
@@ -219,6 +225,7 @@ impl AppState {
             Uuid::nil(),
             2,
             iptv_access_token_verifier,
+            playout_build_tx,
         )
     }
 

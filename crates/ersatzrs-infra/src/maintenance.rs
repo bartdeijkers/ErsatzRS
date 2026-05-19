@@ -10,7 +10,9 @@ use ersatzrs_core::maintenance::{
 };
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
-use ersatzrs_core::scheduling::{PlayoutBuildMode, SchedulingError, SchedulingRequest};
+use ersatzrs_core::scheduling::{
+    PlayoutBuildMode, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
+};
 use ersatzrs_domain::{EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -297,6 +299,49 @@ pub async fn run_health_once(
     schema_status: DatabaseSchemaStatus,
 ) -> Result<PersistedHealthCheckRun> {
     Ok(run_and_persist_health_checks(pool, runtime, schema_status).await?)
+}
+
+/// Run one externally requested playout build through the scheduler-owned
+/// build path.
+///
+/// This maps ErsatzTV's `WorkerService.cs` handling of `BuildPlayout` onto the
+/// ErsatzRS scheduler loop: callers send a request over an in-process channel,
+/// but the scheduler remains the only playout builder and reuses the same
+/// `EntityLocker` as the periodic maintenance pass.
+///
+/// Returns `Ok(true)` when the build ran, `Ok(false)` when the playout lock was
+/// already held, and `Err` when loading, building, or persistence failed.
+///
+/// # Errors
+///
+/// Returns an error when playout loading, scheduling reference-data loading,
+/// build generation, result persistence, or failure-status persistence fails.
+pub async fn run_requested_playout_build(
+    pool: &Pool<Db>,
+    locker: &EntityLocker,
+    request: PlayoutBuildRequest,
+    now: DateTime<Utc>,
+) -> Result<bool> {
+    let Some(_guard) = PlayoutLockGuard::try_acquire(locker, request.playout_id) else {
+        return Ok(false);
+    };
+
+    match build_playout(pool, request.playout_id, request.mode, now).await {
+        Ok(()) => Ok(true),
+        Err(error) => {
+            let message = error.to_string();
+            let repository = SqlitePlayoutRepository(pool.clone());
+            repository
+                .upsert_build_status(&PlayoutBuildStatus {
+                    playout_id: request.playout_id,
+                    last_build: now,
+                    success: false,
+                    message: Some(message),
+                })
+                .await?;
+            Err(error)
+        }
+    }
 }
 
 async fn loop_due(
