@@ -2,8 +2,8 @@
 mod common;
 
 use ersatzrs_infra::plex::{
-    sync_plex_collection_library, sync_plex_movie_library, sync_plex_show_library,
-    PlexConnectionConfig, PlexService,
+    sync_plex_collection_library, sync_plex_movie_library, sync_plex_show_by_id,
+    sync_plex_show_library, PlexConnectionConfig, PlexService,
 };
 use httpmock::prelude::*;
 use serde_json::json;
@@ -226,6 +226,111 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
         Some("2".to_owned())
     );
     insta::assert_json_snapshot!(plex_show_rows(&pool).await);
+}
+
+#[tokio::test]
+async fn plex_single_show_sync_targets_one_show_and_honors_episode_etags() {
+    let server = MockServer::start_async().await;
+    let single_show = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/metadata/200")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "Metadata": [
+                        {
+                            "key": "/library/metadata/200/children",
+                            "title": "Target Show",
+                            "updatedAt": 10
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let seasons = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/metadata/200/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        {
+                            "key": "/library/metadata/201",
+                            "title": "Season 1",
+                            "index": 1,
+                            "updatedAt": 20
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    let episodes = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/metadata/201/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token")
+                .query_param("X-Plex-Container-Start", "0")
+                .query_param("X-Plex-Container-Size", "100");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json(
+                            "/library/metadata/202",
+                            "/library/parts/20",
+                            "/media/show/target.mkv",
+                            202
+                        )
+                    ]
+                }
+            }));
+        })
+        .await;
+
+    let pool = common::test_db().await;
+    seed_plex_show_scan_config(&pool, &server.base_url()).await;
+
+    let synced = sync_plex_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    assert_eq!(count(&pool, "PlexShow").await, 2);
+    assert_eq!(count(&pool, "PlexSeason").await, 1);
+    assert_eq!(count(&pool, "PlexEpisode").await, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/show/target.mkv");
+
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/media/show/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let shallow_synced = sync_plex_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+
+    assert_eq!(shallow_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/show/kept.mkv");
+
+    let deep_synced = sync_plex_show_by_id(&pool, 1, 10, true, None)
+        .await
+        .unwrap();
+
+    assert_eq!(deep_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/media/show/target.mkv");
+    assert_eq!(single_show.calls_async().await, 3);
+    assert_eq!(seasons.calls_async().await, 3);
+    assert_eq!(episodes.calls_async().await, 3);
 }
 
 #[tokio::test]
@@ -549,6 +654,88 @@ fn media_json(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Val
             }
         ]
     })
+}
+
+async fn seed_plex_show_scan_config(pool: &SqlitePool, base_url: &str) {
+    sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "PlexMediaSource" ("Id", "ClientIdentifier", "ServerName")
+           VALUES (1, 'client-1', 'Plex Test')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "PlexConnection" ("Id", "IsActive", "Uri", "PlexMediaSourceId")
+           VALUES (1, 1, ?, 1)"#,
+    )
+    .bind(base_url)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value")
+           VALUES ('plex.server_auth_token.client-1', 'plex-token')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+           VALUES (1, 'Shows', 2, 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "PlexLibrary" ("Id", "Key", "ShouldSyncItems")
+           VALUES (1, '2', 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+           VALUES (1, 1, 'plex://1')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    for (id, key, title) in [
+        (10, "/library/metadata/200/children", "Target Show"),
+        (11, "/library/metadata/999", "Other Show"),
+    ] {
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "PlexShow" ("Id", "Key", "Etag") VALUES (?, ?, 'seed')"#)
+            .bind(id)
+            .bind(key)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ShowMetadata"
+               ("ShowId", "Title", "DateAdded", "DateUpdated", "MetadataKind")
+               VALUES (?, ?, '2026-05-20T00:00:00Z', '2026-05-20T00:00:00Z', 1)"#,
+        )
+        .bind(id)
+        .bind(title)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {

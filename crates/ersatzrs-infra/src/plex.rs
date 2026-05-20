@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::repositories::common::decode_enum_column;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
@@ -205,6 +206,35 @@ impl PlexService {
         })
     }
 
+    /// Fetch a single Plex show by rating key.
+    ///
+    /// Mirrors ErsatzTV's `PlexServerApiClient.GetSingleShow`, which resolves
+    /// `/library/metadata/{ratingKey}` before scanning that show's children.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_single_show(
+        &self,
+        config: &PlexConnectionConfig,
+        show_key: &str,
+    ) -> Result<Option<PlexShowItem>> {
+        let rating_key = plex_rating_key(show_key).ok_or_else(|| RepositoryError::Decode {
+            kind: "plex show key",
+            value: format!("unable to parse rating key from {show_key}"),
+        })?;
+        let url = format!(
+            "{}/library/metadata/{rating_key}",
+            config.uri.trim_end_matches('/')
+        );
+        let response: PlexMetadataResponse = self.get(config, url).await?;
+        Ok(response
+            .media_container
+            .metadata
+            .into_iter()
+            .find_map(project_show))
+    }
+
     /// Fetch one page of Plex seasons for a show rating key.
     ///
     /// # Errors
@@ -352,7 +382,10 @@ impl PlexService {
         start_index: i32,
         limit: i32,
     ) -> Result<PlexMetadataResponse> {
-        let key = key.trim_matches('/').rsplit('/').next().unwrap_or(key);
+        let key = plex_rating_key(key).ok_or_else(|| RepositoryError::Decode {
+            kind: "plex metadata key",
+            value: format!("unable to parse rating key from {key}"),
+        })?;
         let url = format!(
             "{}/library/metadata/{key}/children",
             config.uri.trim_end_matches('/')
@@ -841,85 +874,17 @@ pub async fn sync_plex_show_library_with_progress(
 
     while show_start_index < show_total_size {
         for show in &shows.items {
-            let show_id =
-                upsert_plex_show(pool, media_source_id, library_id, library_key, show).await?;
-            let mut season_start_index = 0;
-            let mut seasons = service
-                .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
-                .await?;
-            let season_total_size = seasons.total_record_count;
-
-            while season_start_index < season_total_size {
-                for season in &seasons.items {
-                    let season_id = upsert_plex_season(
-                        pool,
-                        media_source_id,
-                        library_id,
-                        library_key,
-                        show_id,
-                        season,
-                    )
-                    .await?;
-                    let mut episode_start_index = 0;
-                    let mut episodes = service
-                        .fetch_episode_page(
-                            config,
-                            &season.key,
-                            episode_start_index,
-                            PLEX_PAGE_SIZE,
-                        )
-                        .await?;
-                    let episode_total_size = episodes.total_record_count;
-
-                    while episode_start_index < episode_total_size {
-                        for episode in &episodes.items {
-                            if !deep_scan
-                                && item_etag_matches(
-                                    pool,
-                                    "PlexEpisode",
-                                    library_id,
-                                    &episode.key,
-                                    episode.etag.as_deref(),
-                                )
-                                .await?
-                            {
-                                synced += 1;
-                                continue;
-                            }
-
-                            upsert_plex_episode(
-                                pool,
-                                media_source_id,
-                                library_id,
-                                library_key,
-                                season_id,
-                                episode,
-                            )
-                            .await?;
-                            synced += 1;
-                        }
-                        episode_start_index += PLEX_PAGE_SIZE;
-                        if episode_start_index >= episode_total_size {
-                            break;
-                        }
-                        episodes = service
-                            .fetch_episode_page(
-                                config,
-                                &season.key,
-                                episode_start_index,
-                                PLEX_PAGE_SIZE,
-                            )
-                            .await?;
-                    }
-                }
-                season_start_index += PLEX_PAGE_SIZE;
-                if season_start_index >= season_total_size {
-                    break;
-                }
-                seasons = service
-                    .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
-                    .await?;
-            }
+            synced += sync_one_plex_show(
+                pool,
+                service,
+                config,
+                media_source_id,
+                library_id,
+                library_key,
+                show,
+                deep_scan,
+            )
+            .await?;
             shows_completed += 1;
             if let Some(sink) = progress {
                 if show_total_size > 0 {
@@ -939,6 +904,92 @@ pub async fn sync_plex_show_library_with_progress(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    Ok(synced)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn sync_one_plex_show(
+    pool: &DbPool,
+    service: &PlexService,
+    config: &PlexConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_key: &str,
+    show: &PlexShowItem,
+    deep_scan: bool,
+) -> Result<usize> {
+    // Ports the body of
+    // `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs::ScanSingleShowInternal`.
+    let mut synced = 0;
+    let show_id = upsert_plex_show(pool, media_source_id, library_id, library_key, show).await?;
+    let mut season_start_index = 0;
+    let mut seasons = service
+        .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
+        .await?;
+    let season_total_size = seasons.total_record_count;
+
+    while season_start_index < season_total_size {
+        for season in &seasons.items {
+            let season_id = upsert_plex_season(
+                pool,
+                media_source_id,
+                library_id,
+                library_key,
+                show_id,
+                season,
+            )
+            .await?;
+            let mut episode_start_index = 0;
+            let mut episodes = service
+                .fetch_episode_page(config, &season.key, episode_start_index, PLEX_PAGE_SIZE)
+                .await?;
+            let episode_total_size = episodes.total_record_count;
+
+            while episode_start_index < episode_total_size {
+                for episode in &episodes.items {
+                    if !deep_scan
+                        && item_etag_matches(
+                            pool,
+                            "PlexEpisode",
+                            library_id,
+                            &episode.key,
+                            episode.etag.as_deref(),
+                        )
+                        .await?
+                    {
+                        synced += 1;
+                        continue;
+                    }
+
+                    upsert_plex_episode(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_key,
+                        season_id,
+                        episode,
+                    )
+                    .await?;
+                    synced += 1;
+                }
+                episode_start_index += PLEX_PAGE_SIZE;
+                if episode_start_index >= episode_total_size {
+                    break;
+                }
+                episodes = service
+                    .fetch_episode_page(config, &season.key, episode_start_index, PLEX_PAGE_SIZE)
+                    .await?;
+            }
+        }
+        season_start_index += PLEX_PAGE_SIZE;
+        if season_start_index >= season_total_size {
+            break;
+        }
+        seasons = service
+            .fetch_season_page(config, &show.key, season_start_index, PLEX_PAGE_SIZE)
+            .await?;
+    }
+
     Ok(synced)
 }
 
@@ -1140,6 +1191,13 @@ fn project_show(item: PlexMetadataItemResponse) -> Option<PlexShowItem> {
         etag: item.updated_at.map(|value| value.to_string()),
         title: item.title.unwrap_or_default(),
     })
+}
+
+fn plex_rating_key(key: &str) -> Option<&str> {
+    key.trim_matches('/')
+        .split('/')
+        .map(str::trim)
+        .rfind(|segment| !segment.is_empty() && *segment != "children")
 }
 
 fn project_season(item: PlexMetadataItemResponse) -> Option<PlexSeasonItem> {
@@ -2056,6 +2114,181 @@ pub async fn sync_library_by_id_with_progress(
             .await
         }
     }
+}
+
+/// Synchronize one Plex show by the local `Show.Id`.
+///
+/// Mirrors ErsatzTV's `SynchronizePlexShowByIdHandler`: resolve the active
+/// Plex connection/token, map the local show id to the provider key/title via
+/// the Plex show row, fetch `/library/metadata/{ratingKey}`, then scan that
+/// show's seasons and episodes without library cleanup.
+/// C# source:
+/// `$ERSATZTV_SRC/ErsatzTV.Scanner/Application/Plex/Commands/SynchronizePlexShowByIdHandler.cs`
+/// and
+/// `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/Repositories/PlexTelevisionRepository.cs`.
+///
+/// # Errors
+///
+/// Returns an error when config loading, show lookup, Plex requests, or
+/// database writes fail.
+pub async fn sync_plex_show_by_id(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    let target = load_target_plex_show_scan(pool, library_id, show_id).await?;
+    if !target.should_sync_items {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_title = %target.show_title,
+            "Plex show scan skipped because library item sync is disabled"
+        );
+        return Ok(0);
+    }
+
+    let config = load_active_plex_connection_config(pool, target.media_source_id).await?;
+    let service = PlexService::new();
+
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+
+    let Some(show) = service.fetch_single_show(&config, &target.show_key).await? else {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_key = %target.show_key,
+            show_title = %target.show_title,
+            "No Plex show found during targeted scan"
+        );
+        if let Some(sink) = progress {
+            sink.report(1.0);
+        }
+        return Ok(0);
+    };
+
+    tracing::info!(
+        library_id,
+        show_id,
+        show_key = %show.key,
+        show_title = %target.show_title,
+        deep_scan,
+        "Starting targeted Plex show scan"
+    );
+
+    let synced = sync_one_plex_show(
+        pool,
+        &service,
+        &config,
+        target.media_source_id,
+        library_id,
+        &target.library_key,
+        &show,
+        deep_scan,
+    )
+    .await?;
+
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
+    Ok(synced)
+}
+
+struct TargetPlexShowScan {
+    media_source_id: i64,
+    library_key: String,
+    should_sync_items: bool,
+    show_key: String,
+    show_title: String,
+}
+
+async fn load_target_plex_show_scan(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+) -> Result<TargetPlexShowScan> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind",
+                  l."MediaSourceId",
+                  pl."Key" AS "LibraryKey",
+                  pl."ShouldSyncItems",
+                  psh."Key" AS "ShowKey",
+                  COALESCE(
+                      (SELECT sm."Title"
+                       FROM "ShowMetadata" sm
+                       WHERE sm."ShowId" = psh."Id"
+                       ORDER BY sm."Id"
+                       LIMIT 1),
+                      'Unknown Show'
+                  ) AS "ShowTitle"
+           FROM "Library" l
+           JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+           JOIN "PlexShow" psh ON psh."Id" = ?
+           JOIN "MediaItem" mi ON mi."Id" = psh."Id"
+           JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           WHERE l."Id" = ? AND lp."LibraryId" = l."Id"
+           LIMIT 1"#,
+    )
+    .bind(show_id)
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "plex show",
+        value: format!("show {show_id} does not exist in library {library_id}"),
+    })?;
+
+    let kind: LibraryMediaKind = decode_enum_column("plex library media kind", &row, "MediaKind")?;
+    if kind != LibraryMediaKind::Shows {
+        return Err(RepositoryError::Decode {
+            kind: "plex library",
+            value: format!("library {library_id} is not a TV show library"),
+        });
+    }
+
+    let should_sync_items: i64 = row.try_get("ShouldSyncItems").unwrap_or(1);
+    let show_title: String = row
+        .try_get("ShowTitle")
+        .unwrap_or_else(|_| "Unknown Show".to_owned());
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+    let library_key: String = row.try_get("LibraryKey").unwrap_or_default();
+    let show_key: String = row.try_get("ShowKey").unwrap_or_default();
+
+    Ok(TargetPlexShowScan {
+        media_source_id,
+        library_key,
+        should_sync_items: should_sync_items != 0,
+        show_key,
+        show_title,
+    })
+}
+
+async fn load_active_plex_connection_config(
+    pool: &DbPool,
+    media_source_id: i64,
+) -> Result<PlexConnectionConfig> {
+    let conn_row = sqlx::query(
+        r#"SELECT pc."Uri", pms."ClientIdentifier"
+           FROM "PlexConnection" pc
+           JOIN "PlexMediaSource" pms ON pms."Id" = pc."PlexMediaSourceId"
+           WHERE pc."PlexMediaSourceId" = ? AND pc."IsActive" = 1
+           ORDER BY pc."Id"
+           LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "plex connection",
+        value: format!("no active connection for source {media_source_id}"),
+    })?;
+    let uri: String = conn_row.try_get("Uri").unwrap_or_default();
+    let client_identifier: String = conn_row.try_get("ClientIdentifier").unwrap_or_default();
+    let token = load_plex_token(pool, &client_identifier).await?;
+    Ok(PlexConnectionConfig { uri, token })
 }
 
 /// Sync Plex collections for every library on `media_source_id` that has

@@ -401,10 +401,13 @@ fact row — done: vendored ErsatzTV's ISO-639-2 table, ported
 `ersatzrs-core::language_codes`, and wired the `GetLanguagesForShow` query
 into the show facts) → Slice 2 (playout-refresh — done: in-process `mpsc`
 consumed inside the scheduler loop, with `BuildPlayout(Refresh)` enqueued from
-the schedule/collection mutation paths). Next up: Slices 3–5 (per-show
-targeted sync for Plex/Jellyfin/Emby via extracted `sync_one_<p>_show` +
-provider single-show fetch + a `scan_show` server fn). Execute those slices in
-order; each slice carries its own tests + gate run + STATUS session-log row.
+the schedule/collection mutation paths) → Slice 3 (Plex targeted show sync —
+done: extracted `sync_one_plex_show`, added Plex `/library/metadata/{ratingKey}`
+single-show fetch, `sync_plex_show_by_id`, and `scan_show` wiring from the show
+page). Next up: Slices 4–5 (Jellyfin/Emby targeted show sync via provider
+single-show fetch + `sync_one_<p>_show`; `scan_show` still falls back to full
+library scans for those providers until then). Each slice carries its own
+tests + gate run + STATUS session-log row.
 
 ### Admin UI Route Coverage
 
@@ -502,6 +505,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-20 | Codex (GPT-5) | Implemented Slice 3 of `scan-languages-fact-row-sync`: extracted Plex per-show sync into `sync_one_plex_show`, added Plex single-show fetch plus `sync_plex_show_by_id`, wired the show page Scan buttons through the new `scan_show` server function with Jellyfin/Emby/Local fallback, and added httpmock coverage for targeted Plex sync, etag skip, and deep refresh. |
 | 2026-05-18 | Codex (GPT-5) | Implemented Slice 2 of `scan-languages-fact-row-sync`: added `PlayoutBuildRequest`, threaded a bounded in-process build channel from `ersatzrs-web` into `run_scheduler`, made the scheduler consume requested builds through the existing playout builder and `EntityLocker`, and enqueue `Refresh` builds after Add-to-Schedule plus collection add/remove/custom-order mutations. Added focused requested-build and playout-lookup tests. |
 | 2026-05-18 | Codex (GPT-5) | Implemented Slice 1 of `scan-languages-fact-row-sync`: vendored ErsatzTV's `ISO-639-2_utf-8.txt`, added `ersatzrs-core::language_codes` with code-group expansion and English-name lookup, wired `get_show_details` to resolve distinct episode audio stream languages through the ErsatzTV `GetLanguagesForShow` join, rendered the `Languages` fact row on `/media/tv/shows/:id`, and added focused core + DB-backed web tests. |
 | 2026-05-18 | Claude Code (claude-opus-4-7) | Ported the TV show details page (`Pages/TelevisionSeasonList.razor`) to `/media/tv/shows/:id`. Added `get_show_details` (Show+ShowMetadata+MediaItem, poster/fanart, genres/studios, Plex-network tag split via `Tag.ExternalTypeId == "319"`, "/"-split content ratings, ordered actors, season cards), `list_program_schedules`, and `add_show_to_schedule` (ports `AddProgramScheduleItem.ForMediaItem` → `ProgramScheduleItem` + `ProgramScheduleOneItem` TPT row; playout-refresh side-effect noted as deferred). Added a `Thumbnail` `ArtworkUrlKind` + `/artwork/thumbnails/{*path}` route for actor art. New `ShowPage`/`ShowDetailIsland` (page-wrapper→island hydration shape) with seasons + cast grids reusing the `MediaCard` primitive and the now-`pub(crate)` `AddToCollectionModal`/`AddToPlaylistModal`, plus a new `AddToScheduleModal`; Scan (Quick/Deep) actions gated to remote sources reuse `scan_library` (targeted single-show scan deferred — ErsatzRS scanning is library-level; languages fact row deferred like the movies page). Routes `/media/tv/shows/:id` + `/media/shows/:id` registered. fmt + clippy (default + `--features mysql`) + `cargo leptos build` green; SSR-verified live: show 340 renders title, Seasons 1–9, Cast, Content Ratings/Genres facts, fanart, and the Add-to/Scan actions. |

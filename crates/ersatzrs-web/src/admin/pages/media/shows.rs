@@ -16,11 +16,13 @@
 //!
 //! Parity notes / deferred from the C# behaviour:
 //!
-//! * **Targeted single-show scan** — `ErsatzTV`'s `QueueShowScanByLibraryId`
-//!   syncs just the one show on Plex/Jellyfin/Emby. `ErsatzRS` scanning is
-//!   library-level, so the Scan actions enqueue the owning library scan
-//!   (quick/deep) via [`scan_library`]; the menu is still gated to remote
-//!   sources to match the Razor condition.
+//! * **Provider single-show scan** — Plex now uses the targeted
+//!   `scan_show` path matching `QueueShowScanByLibraryId`; Jellyfin/Emby
+//!   still fall back to the owning library scan until their provider slices
+//!   land. Local single-show scan remains unsupported upstream.
+//! * **Deep-scan subtitles** — `ErsatzTV` queues
+//!   `ExtractEmbeddedShowSubtitles` after a successful deep show scan.
+//!   Embedded subtitle extraction is still unported in `ErsatzRS`.
 //! * **Post-add navigation** — `ErsatzTV` navigates to the
 //!   collection/playlist/schedule after adding. `ErsatzRS` keeps the
 //!   established multi-select-browser behaviour (toast + stay on page).
@@ -32,7 +34,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
-use crate::admin::server_fns::libraries::scan_library;
+use crate::admin::server_fns::libraries::scan_show;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::list_program_schedules;
 use crate::admin::server_fns::media_browser::{
@@ -143,7 +145,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
     let scan_action = Action::new(move |deep: &bool| {
         let deep = *deep;
         let kind = media_source_kind.clone();
-        async move { scan_library(library_id, kind, deep).await }
+        async move { scan_show(library_id, id, kind, deep).await }
     });
     Effect::new(move |_| {
         if let Some(res) = scan_action.value().get() {

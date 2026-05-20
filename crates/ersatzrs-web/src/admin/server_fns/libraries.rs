@@ -176,6 +176,90 @@ pub async fn scan_library(
     Ok(())
 }
 
+/// Fires a background scan for a single show.
+///
+/// Plex now uses the targeted ErsatzTV-equivalent path. Jellyfin, Emby, and
+/// Local intentionally fall back to full library scans until their provider
+/// slices port `ScanSingleShow`. Mirrors
+/// `$ERSATZTV_SRC/ErsatzTV.Application/Libraries/Commands/QueueShowScanByLibraryIdHandler.cs`.
+#[server]
+#[allow(clippy::unused_async)]
+pub async fn scan_show(
+    library_id: i64,
+    show_id: i64,
+    kind: String,
+    deep_scan: bool,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    if kind != "Plex" {
+        return scan_library(library_id, kind, deep_scan).await;
+    }
+
+    let state = expect_context::<AppState>();
+    let pool = state.pool.clone();
+    let locker = state.entity_locker.clone();
+    let progress_map = state.scan_progress.clone();
+
+    tracing::info!(
+        library_id,
+        show_id,
+        kind = %kind,
+        deep_scan,
+        "scan_show invoked"
+    );
+
+    if !locker.lock_library(library_id) {
+        tracing::info!(library_id, show_id, "scan_show: already locked, no-op");
+        return Ok(());
+    }
+
+    tokio::task::spawn(async move {
+        let started = std::time::Instant::now();
+        tracing::info!(library_id, show_id, kind = %kind, "show scan started");
+        let sink = progress_map.sink_for(library_id);
+        let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
+        let result = ersatzrs_infra::plex::sync_plex_show_by_id(
+            &pool,
+            library_id,
+            show_id,
+            deep_scan,
+            Some(sink_ref),
+        )
+        .await;
+
+        match result {
+            Ok(_) => {
+                if deep_scan {
+                    // ErsatzTV queues `ExtractEmbeddedShowSubtitles` after a
+                    // successful deep single-show scan; embedded subtitle
+                    // extraction is not ported yet, so keep the deferral
+                    // visible at the call site.
+                    tracing::debug!(
+                        library_id,
+                        show_id,
+                        "embedded subtitle extraction after deep show scan is deferred"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(library_id, show_id, kind, error = %e, "show scan failed");
+            }
+        }
+
+        locker.unlock_library(library_id);
+        progress_map.clear(library_id);
+        tracing::info!(
+            library_id,
+            show_id,
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            "show scan finished"
+        );
+    });
+
+    Ok(())
+}
+
 /// Returns the ids of libraries currently being scanned. Polled by the
 /// libraries page to drive the per-row "scanning" spinner.
 #[server]

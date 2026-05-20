@@ -1,6 +1,6 @@
 **TV-show-page parity gaps: per-show sync, playout-refresh, languages**
 
-Status: Slices 0–2 done. Slices 3–5 pending. Created 2026-05-18.
+Status: Slices 0–3 done. Slices 4–5 pending. Created 2026-05-18.
 
 **Authoritative C# sources**
 
@@ -154,7 +154,7 @@ periodic-build tests must stay green (no behaviour change to `build_playout`).
 
 ---
 
-## [ ] Slices 3–5 — Per-show targeted sync (one slice per provider)
+## [ ] Slices 3–5 — Per-show targeted sync (Slice 3 done; 4–5 pending)
 
 **Shared design (done in Slice 3, reused by 4–5):**
 - `ersatzrs-infra` {plex,jellyfin,emby}.rs: **pure refactor** — extract the
@@ -182,7 +182,7 @@ periodic-build tests must stay green (no behaviour change to `build_playout`).
   dropped**): `ExtractEmbeddedShowSubtitles` on deep scan (subtitle
   extraction unported); Local single-show stays library-scan (matches ETV).
 
-**Slice 3 = refactor + `scan_show` + UI rewire + Plex end-to-end.**
+**Slice 3 = refactor + `scan_show` + UI rewire + Plex end-to-end (done 2026-05-20).**
 **Slice 4 = Jellyfin single-show.** **Slice 5 = Emby single-show.**
 
 **Tests per provider:** `httpmock` integration test in
