@@ -1,0 +1,31 @@
+{
+  "name": "ersatzrs",
+  "version": "1.0.0",
+  "description": "ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV Legacy](https://github.com/ErsatzTV/legacy): a media server that turns personal media libraries into linear TV channels served through IPTV, HLS, and HDHomeRun-compatible endpoints.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1",
+    "playwright-core": "^1.59.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bartdeijkers/ErsatzRS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bartdeijkers/ErsatzRS/issues"
+  },
+  "homepage": "https://github.com/bartdeijkers/ErsatzRS#readme"
+}

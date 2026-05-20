@@ -1473,12 +1473,17 @@ fn encode_duration(value: Duration) -> String {
 }
 
 fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
+    // Matches ErsatzTV.Core/Domain/MediaItem/MediaStreamKind.cs: the persisted
+    // enum is 1-based (Video=1, Audio=2, Subtitle=3, Attachment=4,
+    // ExternalSubtitle=5). Readers (scheduling.rs::media_stream_kind_from_row,
+    // repositories/common.rs db_enum, the show-languages query) all expect
+    // these values.
     match kind {
-        MediaStreamKind::Video => 0,
-        MediaStreamKind::Audio => 1,
-        MediaStreamKind::Subtitle => 2,
-        MediaStreamKind::Attachment => 3,
-        MediaStreamKind::ExternalSubtitle => 4,
+        MediaStreamKind::Video => 1,
+        MediaStreamKind::Audio => 2,
+        MediaStreamKind::Subtitle => 3,
+        MediaStreamKind::Attachment => 4,
+        MediaStreamKind::ExternalSubtitle => 5,
     }
 }
 

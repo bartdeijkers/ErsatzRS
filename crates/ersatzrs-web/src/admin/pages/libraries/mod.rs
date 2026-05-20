@@ -157,6 +157,15 @@ fn LibrariesIsland() -> impl IntoView {
                                                         <td class=style::cell_muted>{lib.media_kind_label()}</td>
                                                         <td>
                                                             <div class=style::actions>
+                                                                // Scan indicator goes first (left) so it occupies the
+                                                                // free space at the start of the right-justified action
+                                                                // row instead of pushing the icon column wider on the
+                                                                // right. Mirrors ETV's Libraries.razor, where the
+                                                                // percent + spinner appear before the trailing controls.
+                                                                <ScanIndicator
+                                                                    visible=Signal::derive(move || is_locked(id))
+                                                                    fraction=Signal::derive(move || progress_for(id))
+                                                                />
                                                                 {if is_remote {
                                                                     view! {
                                                                         <button
@@ -204,10 +213,6 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         aria-hidden="true"
                                                                     />
                                                                 </a>
-                                                                <ScanIndicator
-                                                                    visible=Signal::derive(move || is_locked(id))
-                                                                    fraction=Signal::derive(move || progress_for(id))
-                                                                />
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -257,6 +262,10 @@ fn LibrariesIsland() -> impl IntoView {
                                                         <td class=style::cell_muted>{srv}</td>
                                                         <td>
                                                             <div class=style::actions>
+                                                                <ScanIndicator
+                                                                    visible=Signal::derive(move || are_collections_locked(&kind_lock_c, media_source_id))
+                                                                    fraction=Signal::derive(|| None)
+                                                                />
                                                                 <button
                                                                     class=style::icon_btn
                                                                     disabled=move || {
@@ -293,10 +302,6 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         aria-hidden="true"
                                                                     />
                                                                 </button>
-                                                                <ScanIndicator
-                                                                    visible=Signal::derive(move || are_collections_locked(&kind_lock_c, media_source_id))
-                                                                    fraction=Signal::derive(|| None)
-                                                                />
                                                             </div>
                                                         </td>
                                                     </tr>

@@ -2190,12 +2190,13 @@ fn encode_duration(value: Duration) -> String {
 }
 
 fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
+    // Matches ErsatzTV.Core/Domain/MediaItem/MediaStreamKind.cs: 1-based enum.
     match kind {
-        MediaStreamKind::Video => 0,
-        MediaStreamKind::Audio => 1,
-        MediaStreamKind::Subtitle => 2,
-        MediaStreamKind::Attachment => 3,
-        MediaStreamKind::ExternalSubtitle => 4,
+        MediaStreamKind::Video => 1,
+        MediaStreamKind::Audio => 2,
+        MediaStreamKind::Subtitle => 3,
+        MediaStreamKind::Attachment => 4,
+        MediaStreamKind::ExternalSubtitle => 5,
     }
 }
 

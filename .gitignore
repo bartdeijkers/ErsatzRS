@@ -80,3 +80,9 @@ Thumbs.db
 .vscode/
 .idea/
 .playwright-mcp/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
