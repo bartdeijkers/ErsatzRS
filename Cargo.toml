@@ -33,7 +33,7 @@ repository = "https://github.com/bart/ErsatzRS"
 # `sqlx = { workspace = true }`. The `mysql`/`any` features stay opt-in via
 # ersatzrs-infra's `mysql` feature flag.
 [workspace.dependencies]
-quick-xml = { version = "0.39", features = ["serialize"] }
+quick-xml = { version = "0.40", features = ["serialize"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono", "uuid", "macros"] }
 
 [profile.release]
