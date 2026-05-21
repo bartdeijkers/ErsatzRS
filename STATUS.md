@@ -392,22 +392,28 @@ Windows. The `platform-parity-fixer` agent in
 [`.claude/agents/`](.claude/agents/platform-parity-fixer.md) encodes the audit
 procedure and the false-positive catalogue for future regressions.
 
-**Next up — close the remaining TV-show-page parity gaps.** The
-`/media/tv/shows/:id` port (2026-05-18) shipped with three documented
-deferrals. The remediation is planned in
+**TV-show-page parity gaps closed.** The remediation plan in
 [`plans/scan-languages-fact-row-sync.md`](plans/scan-languages-fact-row-sync.md)
-as ordered slices: Slice 0 (plan scaffolding — done) → Slice 1 (Languages
-fact row — done: vendored ErsatzTV's ISO-639-2 table, ported
+is now fully landed: Slice 0 (plan scaffolding) → Slice 1 (Languages
+fact row: vendored ErsatzTV's ISO-639-2 table, ported
 `ersatzrs-core::language_codes`, and wired the `GetLanguagesForShow` query
-into the show facts) → Slice 2 (playout-refresh — done: in-process `mpsc`
+into the show facts) → Slice 2 (playout-refresh: in-process `mpsc`
 consumed inside the scheduler loop, with `BuildPlayout(Refresh)` enqueued from
-the schedule/collection mutation paths) → Slice 3 (Plex targeted show sync —
-done: extracted `sync_one_plex_show`, added Plex `/library/metadata/{ratingKey}`
-single-show fetch, `sync_plex_show_by_id`, and `scan_show` wiring from the show
-page). Next up: Slices 4–5 (Jellyfin/Emby targeted show sync via provider
-single-show fetch + `sync_one_<p>_show`; `scan_show` still falls back to full
-library scans for those providers until then). Each slice carries its own
-tests + gate run + STATUS session-log row.
+the schedule/collection mutation paths) → Slices 3–5 (Plex/Jellyfin/Emby
+targeted show sync: provider single-show fetch + `sync_one_<p>_show` refactor
++ `sync_<p>_show_by_id` infra entries + `scan_show` dispatch from the show
+page; Local intentionally falls back to a full library scan, mirroring
+ErsatzTV). `ExtractEmbeddedShowSubtitles` on deep show scan is now ported:
+Jellyfin/Emby episode scans populate `Subtitle` rows
+(`metadata::update_episode_subtitles`), and a successful deep `scan_show`
+calls `subtitles::extract_embedded_show_subtitles` (text-subtitle + font
+extraction via ffmpeg), gated by `ffmpeg.extract_embedded_subtitles`
+(default off) and `ffmpeg.use_embedded_subtitles` (default on). Remaining
+documented deferrals: Plex `Subtitle`-row population (blocked on porting Plex
+`EpisodeMetadata`; Plex extraction is a no-op until then), the playout-window
+`ExtractEmbeddedSubtitles`, transcode-pipeline consumption of extracted
+subtitles, `Subtitle`-row population for movies/music-videos/other-videos, and
+a global FFmpeg settings UI — all tracked in parity-matrix.
 
 ### Admin UI Route Coverage
 
@@ -505,6 +511,9 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-22 | Claude Code (claude-opus-4-7) | Ported `ExtractEmbeddedShowSubtitles` (close last `scan-languages-fact-row-sync` deferral). Slice 1: `metadata::update_episode_subtitles` ports `Subtitle.FromMediaStream` + `MetadataRepository.UpdateSubtitles` (add/remove/update keyed on `(EpisodeMetadataId, StreamIndex)`, `IsExtracted` reset on kind/codec/language/flag/path change), wired after `replace_streams` in jellyfin.rs + emby.rs (episode metadata fns now return the id); Plex deferred (no episode metadata yet) with a call-site comment. Slice 2: `ffmpeg_config` (`ffmpeg.use_embedded_subtitles`=true, `ffmpeg.extract_embedded_subtitles`=false defaults, "True"/"False"/"1"/"0" parse) + `file_system_layout` (`cache/streams/{subtitles,fonts}` under `data_local_dir()/ErsatzRS`). Slice 3: `subtitles::extract_embedded_show_subtitles` ports the engine (MD5 upper-hex output paths, codec→ext map, image-codec filter, `-map 0:idx -c:s copy|text`, `-dump_attachment` fonts; input via `MediaFile.Path`+path-replacements, ffmpeg via `ffmpeg_path_from_env` — both divergences commented); added `md-5` dep. Slice 4: wired into deep `scan_show`, removed deferral notes. Tests: subtitle diff logic, jellyfin/emby Subtitle-row assertions, config defaults, argv/MD5/extension unit tests, gate no-op integration tests. |
+| 2026-05-20 | Claude Code (claude-opus-4-7) | Implemented Slice 5 of `scan-languages-fact-row-sync`: extracted Emby per-show sync into `sync_one_emby_show`, added a `fetch_single_show` inherent method on `EmbyService` (mirrors ETV `EmbyApiClient.GetSingleShow`'s `/Items?parentId=…&ids=…&includeItemTypes=Series&recursive=false&limit=1`), added `sync_emby_show_by_id` (resolves connection/api-key, maps local `Show.Id` → provider item id + title via `EmbyShow.ItemId` + `ShowMetadata.Title`, then calls the per-show helper), and wired the Emby branch of `scan_show` in `libraries.rs`. Added an httpmock integration test asserting targeted Emby sync, episode-etag skip on non-deep re-run (no extra playback hit), and deep re-sync. Closes Slices 3–5 of `plans/scan-languages-fact-row-sync.md`; updated parity-matrix.md Library management row with the per-show targeted scan description for all three providers. |
+| 2026-05-20 | Claude Code (claude-opus-4-7) | Implemented Slice 4 of `scan-languages-fact-row-sync`: extracted Jellyfin per-show sync into `sync_one_jellyfin_show`, added a `fetch_single_show` inherent method on `JellyfinService` (mirrors ETV `JellyfinApiClient.GetSingleShow`'s `/Items?ids=…&parentId=…&recursive=false&limit=1`), added `sync_jellyfin_show_by_id` (resolves connection/api-key, maps local `Show.Id` → provider item id + title, then calls the per-show helper), and wired the Jellyfin branch of `scan_show` in `libraries.rs`. Added an httpmock integration test asserting targeted Jellyfin sync, episode-etag skip on non-deep re-run, and deep re-sync. |
 | 2026-05-20 | Codex (GPT-5) | Implemented Slice 3 of `scan-languages-fact-row-sync`: extracted Plex per-show sync into `sync_one_plex_show`, added Plex single-show fetch plus `sync_plex_show_by_id`, wired the show page Scan buttons through the new `scan_show` server function with Jellyfin/Emby/Local fallback, and added httpmock coverage for targeted Plex sync, etag skip, and deep refresh. |
 | 2026-05-18 | Codex (GPT-5) | Implemented Slice 2 of `scan-languages-fact-row-sync`: added `PlayoutBuildRequest`, threaded a bounded in-process build channel from `ersatzrs-web` into `run_scheduler`, made the scheduler consume requested builds through the existing playout builder and `EntityLocker`, and enqueue `Refresh` builds after Add-to-Schedule plus collection add/remove/custom-order mutations. Added focused requested-build and playout-lookup tests. |
 | 2026-05-18 | Codex (GPT-5) | Implemented Slice 1 of `scan-languages-fact-row-sync`: vendored ErsatzTV's `ISO-639-2_utf-8.txt`, added `ersatzrs-core::language_codes` with code-group expansion and English-name lookup, wired `get_show_details` to resolve distinct episode audio stream languages through the ErsatzTV `GetLanguagesForShow` join, rendered the `Languages` fact row on `/media/tv/shows/:id`, and added focused core + DB-backed web tests. |

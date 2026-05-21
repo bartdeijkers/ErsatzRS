@@ -13,9 +13,19 @@
 
 use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::Result;
-use sqlx::Transaction;
+use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use sqlx::{Row, Transaction};
 
 use crate::db::Db;
+
+/// `ErsatzTV` `SubtitleKind` enum values
+/// (see `ErsatzTV.Core/Domain/Metadata/SubtitleKind.cs`).
+pub mod subtitle_kind {
+    pub const EMBEDDED: i32 = 0;
+    pub const SIDECAR: i32 = 1;
+    #[allow(dead_code)]
+    pub const GENERATED: i32 = 99;
+}
 
 /// `ErsatzTV` `ArtworkKind` enum values
 /// (see `ErsatzTV.Core/Domain/Metadata/ArtworkKind.cs`).
@@ -234,6 +244,242 @@ pub async fn replace_guids(
             .execute(&mut **tx)
             .await?;
     }
+    Ok(())
+}
+
+/// One incoming subtitle row derived from a `MediaStream`.
+///
+/// Mirrors `ErsatzTV.Core/Domain/Metadata/Subtitle.cs` `FromMediaStream`:
+/// `SDH` is intentionally left at its default (`false`) because the C# factory
+/// does not set it; `Path` carries the external `FileName` (sidecar) or NULL.
+///
+/// The three `bool` fields mirror `Subtitle` table columns one-to-one, so the
+/// `struct_excessive_bools` lint (which suggests a state machine) does not apply.
+#[allow(clippy::struct_excessive_bools)]
+struct IncomingSubtitle {
+    stream_index: i32,
+    codec: Option<String>,
+    title: Option<String>,
+    default: bool,
+    forced: bool,
+    sdh: bool,
+    language: Option<String>,
+    path: Option<String>,
+    subtitle_kind: i32,
+}
+
+impl IncomingSubtitle {
+    /// Port of `Subtitle.FromMediaStream` (`Subtitle.cs`):
+    /// `ExternalSubtitle -> Sidecar (1)`, otherwise `Embedded (0)`.
+    fn from_media_stream(stream: &MediaStream) -> Self {
+        let subtitle_kind = if stream.kind == MediaStreamKind::ExternalSubtitle {
+            subtitle_kind::SIDECAR
+        } else {
+            subtitle_kind::EMBEDDED
+        };
+        let path = stream
+            .file_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .map(ToOwned::to_owned);
+        Self {
+            stream_index: stream.index,
+            codec: stream.codec.clone(),
+            title: stream.title.clone(),
+            default: stream.default,
+            forced: stream.forced,
+            sdh: false,
+            language: stream.language.clone(),
+            path,
+            subtitle_kind,
+        }
+    }
+}
+
+/// The four `bool` fields mirror `Subtitle` table columns one-to-one, so the
+/// `struct_excessive_bools` lint does not apply.
+#[allow(clippy::struct_excessive_bools)]
+struct ExistingSubtitle {
+    id: i64,
+    stream_index: i32,
+    codec: Option<String>,
+    default: bool,
+    forced: bool,
+    sdh: bool,
+    language: Option<String>,
+    is_extracted: bool,
+    path: Option<String>,
+    subtitle_kind: i32,
+}
+
+async fn load_existing_subtitles(
+    tx: &mut Transaction<'_, Db>,
+    episode_metadata_id: i64,
+) -> Result<Vec<ExistingSubtitle>> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "StreamIndex", "Codec", "Default", "Forced", "SDH",
+                  "Language", "IsExtracted", "Path", "SubtitleKind"
+           FROM "Subtitle"
+           WHERE "EpisodeMetadataId" = ?"#,
+    )
+    .bind(episode_metadata_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(ExistingSubtitle {
+                id: row.try_get("Id")?,
+                stream_index: row.try_get("StreamIndex")?,
+                codec: row.try_get("Codec")?,
+                default: row.try_get::<i64, _>("Default")? != 0,
+                forced: row.try_get::<i64, _>("Forced")? != 0,
+                sdh: row.try_get::<i64, _>("SDH")? != 0,
+                language: row.try_get("Language")?,
+                is_extracted: row.try_get::<i64, _>("IsExtracted")? != 0,
+                path: row.try_get("Path")?,
+                subtitle_kind: row.try_get("SubtitleKind")?,
+            })
+        })
+        .collect()
+}
+
+async fn insert_subtitle(
+    tx: &mut Transaction<'_, Db>,
+    episode_metadata_id: i64,
+    inc: &IncomingSubtitle,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        r#"INSERT INTO "Subtitle" (
+            "EpisodeMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec",
+            "Default", "Forced", "SDH", "Language", "IsExtracted", "Path",
+            "DateAdded", "DateUpdated"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"#,
+    )
+    .bind(episode_metadata_id)
+    .bind(inc.subtitle_kind)
+    .bind(&inc.title)
+    .bind(inc.stream_index)
+    .bind(&inc.codec)
+    .bind(inc.default)
+    .bind(inc.forced)
+    .bind(inc.sdh)
+    .bind(&inc.language)
+    .bind(&inc.path)
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn update_subtitle(
+    tx: &mut Transaction<'_, Db>,
+    existing: &ExistingSubtitle,
+    inc: &IncomingSubtitle,
+    now: &str,
+) -> Result<()> {
+    // recompute IsExtracted/Path the same way ETV's UpdateSubtitles does
+    let mut is_extracted = existing.is_extracted;
+    let mut path = existing.path.clone();
+
+    if existing.is_extracted {
+        let different_kind = existing.subtitle_kind != inc.subtitle_kind;
+        let different_codec = existing.codec != inc.codec;
+        let different_language = existing.language != inc.language;
+        let different_flags = existing.default != inc.default
+            || existing.forced != inc.forced
+            || existing.sdh != inc.sdh;
+
+        if different_kind || different_codec || different_language || different_flags {
+            is_extracted = false;
+            path = inc.path.clone();
+        } else {
+            // only re-extract if path changed
+            let different_path = existing.path != inc.path;
+            if inc.path.as_deref().is_some_and(|p| !p.is_empty()) && different_path {
+                is_extracted = false;
+                path = inc.path.clone();
+            }
+        }
+    }
+
+    sqlx::query(
+        r#"UPDATE "Subtitle"
+           SET "Default" = ?, "Forced" = ?, "SDH" = ?, "Language" = ?,
+               "SubtitleKind" = ?, "Codec" = ?, "Title" = ?,
+               "IsExtracted" = ?, "Path" = ?, "DateUpdated" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(inc.default)
+    .bind(inc.forced)
+    .bind(inc.sdh)
+    .bind(&inc.language)
+    .bind(inc.subtitle_kind)
+    .bind(&inc.codec)
+    .bind(&inc.title)
+    .bind(is_extracted)
+    .bind(&path)
+    .bind(now)
+    .bind(existing.id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Port of `MetadataRepository.UpdateSubtitles` (`MetadataRepository.cs`
+/// lines 626/666-717) scoped to `EpisodeMetadata`.
+///
+/// Diffs the just-written subtitle/external-subtitle `MediaStream`s for the
+/// episode's media version against existing `Subtitle` rows keyed on
+/// `(EpisodeMetadataId, StreamIndex)`: adds new rows, removes stale ones, and
+/// updates the rest. When the kind, codec, language, or flags
+/// (`Default`/`Forced`/`SDH`) change on a previously extracted row — or the
+/// path changes — `IsExtracted` is reset to 0 so the extractor re-runs.
+///
+/// # Errors
+///
+/// Returns an error when the underlying SELECT/INSERT/UPDATE/DELETE fail.
+pub async fn update_episode_subtitles(
+    tx: &mut Transaction<'_, Db>,
+    episode_metadata_id: i64,
+    streams: &[MediaStream],
+) -> Result<()> {
+    let incoming: Vec<IncomingSubtitle> = streams
+        .iter()
+        .filter(|s| {
+            matches!(
+                s.kind,
+                MediaStreamKind::Subtitle | MediaStreamKind::ExternalSubtitle
+            )
+        })
+        .map(IncomingSubtitle::from_media_stream)
+        .collect();
+
+    let existing = load_existing_subtitles(tx, episode_metadata_id).await?;
+    let now = encode_datetime(Utc::now());
+
+    // remove: existing rows whose StreamIndex is not in the incoming set
+    for existing_row in &existing {
+        if !incoming
+            .iter()
+            .any(|inc| inc.stream_index == existing_row.stream_index)
+        {
+            sqlx::query(r#"DELETE FROM "Subtitle" WHERE "Id" = ?"#)
+                .bind(existing_row.id)
+                .execute(&mut **tx)
+                .await?;
+        }
+    }
+
+    for inc in &incoming {
+        match existing.iter().find(|e| e.stream_index == inc.stream_index) {
+            None => insert_subtitle(tx, episode_metadata_id, inc, &now).await?,
+            Some(existing_row) => update_subtitle(tx, existing_row, inc, &now).await?,
+        }
+    }
+
     Ok(())
 }
 

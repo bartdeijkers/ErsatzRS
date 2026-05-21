@@ -178,9 +178,9 @@ pub async fn scan_library(
 
 /// Fires a background scan for a single show.
 ///
-/// Plex now uses the targeted ErsatzTV-equivalent path. Jellyfin, Emby, and
-/// Local intentionally fall back to full library scans until their provider
-/// slices port `ScanSingleShow`. Mirrors
+/// Plex, Jellyfin, and Emby use the targeted ErsatzTV-equivalent path. Local
+/// intentionally falls back to a full library scan (matches ErsatzTV's
+/// behaviour). Mirrors
 /// `$ERSATZTV_SRC/ErsatzTV.Application/Libraries/Commands/QueueShowScanByLibraryIdHandler.cs`.
 #[server]
 #[allow(clippy::unused_async)]
@@ -192,7 +192,7 @@ pub async fn scan_show(
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
-    if kind != "Plex" {
+    if kind != "Plex" && kind != "Jellyfin" && kind != "Emby" {
         return scan_library(library_id, kind, deep_scan).await;
     }
 
@@ -219,27 +219,60 @@ pub async fn scan_show(
         tracing::info!(library_id, show_id, kind = %kind, "show scan started");
         let sink = progress_map.sink_for(library_id);
         let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
-        let result = ersatzrs_infra::plex::sync_plex_show_by_id(
-            &pool,
-            library_id,
-            show_id,
-            deep_scan,
-            Some(sink_ref),
-        )
-        .await;
+        let result = match kind.as_str() {
+            "Plex" => {
+                ersatzrs_infra::plex::sync_plex_show_by_id(
+                    &pool,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    Some(sink_ref),
+                )
+                .await
+            }
+            "Jellyfin" => {
+                ersatzrs_infra::jellyfin::sync_jellyfin_show_by_id(
+                    &pool,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    Some(sink_ref),
+                )
+                .await
+            }
+            "Emby" => {
+                ersatzrs_infra::emby::sync_emby_show_by_id(
+                    &pool,
+                    library_id,
+                    show_id,
+                    deep_scan,
+                    Some(sink_ref),
+                )
+                .await
+            }
+            // Other kinds were filtered out above; defensively no-op.
+            _ => Ok(0),
+        };
 
         match result {
             Ok(_) => {
                 if deep_scan {
-                    // ErsatzTV queues `ExtractEmbeddedShowSubtitles` after a
-                    // successful deep single-show scan; embedded subtitle
-                    // extraction is not ported yet, so keep the deferral
-                    // visible at the call site.
-                    tracing::debug!(
-                        library_id,
-                        show_id,
-                        "embedded subtitle extraction after deep show scan is deferred"
-                    );
+                    // Mirror `QueueShowScanByLibraryIdHandler` (success && deepScan):
+                    // extract embedded text subtitles + font attachments. The
+                    // function self-gates on the `ffmpeg.use_embedded_subtitles` /
+                    // `ffmpeg.extract_embedded_subtitles` config keys, so it is a
+                    // no-op under the default (extract = false) configuration.
+                    if let Err(e) =
+                        ersatzrs_infra::subtitles::extract_embedded_show_subtitles(&pool, show_id)
+                            .await
+                    {
+                        tracing::warn!(
+                            library_id,
+                            show_id,
+                            error = %e,
+                            "embedded subtitle extraction failed"
+                        );
+                    }
                 }
             }
             Err(e) => {

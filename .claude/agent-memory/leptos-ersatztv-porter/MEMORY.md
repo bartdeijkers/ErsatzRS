@@ -5,3 +5,5 @@
 - [Collection detail port](collection-detail-port.md) — multi-kind UNION-ALL card query, scalar-prop island reuse, drag-and-drop deferral pattern.
 - [Local scanner fallback metadata](local-scanner-fallback-metadata.md) — scanner must insert Movie/OtherVideo/Song/Image metadata or browser INNER JOINs hide everything.
 - [Verification scope](verification-scope.md) — Phase 4 fast-loop contract: hydration-lint + web-crate compile only, hand off full gates and Playwright to the human at commit.
+- [Per-show targeted sync](per-show-targeted-sync.md) — 3-piece pattern (refactor + single-item fetch + by-id entry) for porting `Synchronize<P>ShowById`; reusable for any future single-item provider port.
+- [Embedded subtitle extraction](embedded-subtitle-extraction.md) — ExtractEmbeddedShowSubtitles port: Subtitle-row population, ffmpeg engine, config gate, Plex blocker.

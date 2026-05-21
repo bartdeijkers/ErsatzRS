@@ -272,6 +272,53 @@ impl JellyfinServiceTrait for JellyfinService {
 }
 
 impl JellyfinService {
+    /// Fetch a single Jellyfin show by item id, scoped to its parent library.
+    ///
+    /// Mirrors ErsatzTV's `JellyfinApiClient.GetSingleShow`, which calls
+    /// `/Items?parentId=<library>&ids=<show>&recursive=false&limit=1` and
+    /// projects the first hit. Returns `None` when Jellyfin returns an empty
+    /// list (deleted show, wrong library, etc.).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_single_show(
+        &self,
+        config: &JellyfinConnectionConfig,
+        library_item_id: &str,
+        show_item_id: &str,
+    ) -> Result<Option<JellyfinShowItem>> {
+        let url = format!("{}/Items", config.address.trim_end_matches('/'));
+        let response: JellyfinLibraryItemsResponse = self
+            .client
+            .get(url)
+            .header("Authorization", &config.authorization_header)
+            .query(&[
+                ("sortOrder", "Ascending"),
+                ("sortBy", "SortName"),
+                ("parentId", library_item_id),
+                (
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,OfficialRating,ProviderIds,PremiereDate,ImageTags",
+                ),
+                ("includeItemTypes", "Series"),
+                ("recursive", "false"),
+                ("startIndex", "0"),
+                ("limit", "1"),
+                ("ids", show_item_id),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+
+        Ok(response.items.into_iter().find_map(project_show))
+    }
+
     async fn fetch_items(
         &self,
         config: &JellyfinConnectionConfig,
@@ -502,86 +549,17 @@ where
             reported_initial = true;
         }
         for show in &shows.items {
-            let show_id =
-                upsert_jellyfin_show(pool, media_source_id, library_id, library_item_id, show)
-                    .await?;
-            let mut season_start_index = 0;
-            loop {
-                let seasons = service
-                    .fetch_season_page(
-                        config,
-                        &show.item_id,
-                        season_start_index,
-                        JELLYFIN_PAGE_SIZE,
-                    )
-                    .await?;
-                let season_total_count = seasons.total_record_count;
-                let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
-                for season in &seasons.items {
-                    let season_id = upsert_jellyfin_season(
-                        pool,
-                        media_source_id,
-                        library_id,
-                        library_item_id,
-                        show_id,
-                        season,
-                    )
-                    .await?;
-                    let mut episode_start_index = 0;
-                    loop {
-                        let episodes = service
-                            .fetch_episode_page(
-                                config,
-                                &season.item_id,
-                                episode_start_index,
-                                JELLYFIN_PAGE_SIZE,
-                            )
-                            .await?;
-                        let episode_total_count = episodes.total_record_count;
-                        let episode_page_len =
-                            i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
-                        for episode in &episodes.items {
-                            if !deep_scan
-                                && item_etag_matches(
-                                    pool,
-                                    "JellyfinEpisode",
-                                    library_id,
-                                    &episode.item_id,
-                                    episode.etag.as_deref(),
-                                )
-                                .await?
-                            {
-                                synced += 1;
-                                continue;
-                            }
-
-                            let playback =
-                                service.stream_metadata(config, &episode.item_id).await?;
-                            upsert_jellyfin_episode(
-                                pool,
-                                media_source_id,
-                                library_id,
-                                library_item_id,
-                                season_id,
-                                episode,
-                                &playback,
-                            )
-                            .await?;
-                            synced += 1;
-                        }
-
-                        episode_start_index += JELLYFIN_PAGE_SIZE;
-                        if episode_start_index >= episode_total_count || episode_page_len == 0 {
-                            break;
-                        }
-                    }
-                }
-
-                season_start_index += JELLYFIN_PAGE_SIZE;
-                if season_start_index >= season_total_count || season_page_len == 0 {
-                    break;
-                }
-            }
+            synced += sync_one_jellyfin_show(
+                pool,
+                service,
+                config,
+                media_source_id,
+                library_id,
+                library_item_id,
+                show,
+                deep_scan,
+            )
+            .await?;
             shows_completed += 1;
             if let Some(sink) = progress {
                 if show_total_count > 0 {
@@ -600,6 +578,284 @@ where
         sink.report(1.0);
     }
     Ok(synced)
+}
+
+/// Port of the per-show body of
+/// `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinTelevisionLibraryScanner.cs::ScanSingleShowInternal`:
+/// upsert the show row, page through its seasons and episodes, honour
+/// `deep_scan`/etag skip on each episode. Called both from the library-level
+/// sync and from [`sync_jellyfin_show_by_id`].
+#[allow(clippy::too_many_arguments)]
+async fn sync_one_jellyfin_show<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &JellyfinConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    show: &JellyfinShowItem,
+    deep_scan: bool,
+) -> Result<usize>
+where
+    S: JellyfinServiceTrait,
+{
+    let mut synced = 0;
+    let show_id =
+        upsert_jellyfin_show(pool, media_source_id, library_id, library_item_id, show).await?;
+    let mut season_start_index = 0;
+    loop {
+        let seasons = service
+            .fetch_season_page(
+                config,
+                &show.item_id,
+                season_start_index,
+                JELLYFIN_PAGE_SIZE,
+            )
+            .await?;
+        let season_total_count = seasons.total_record_count;
+        let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
+        for season in &seasons.items {
+            let season_id = upsert_jellyfin_season(
+                pool,
+                media_source_id,
+                library_id,
+                library_item_id,
+                show_id,
+                season,
+            )
+            .await?;
+            let mut episode_start_index = 0;
+            loop {
+                let episodes = service
+                    .fetch_episode_page(
+                        config,
+                        &season.item_id,
+                        episode_start_index,
+                        JELLYFIN_PAGE_SIZE,
+                    )
+                    .await?;
+                let episode_total_count = episodes.total_record_count;
+                let episode_page_len = i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
+                for episode in &episodes.items {
+                    if !deep_scan
+                        && item_etag_matches(
+                            pool,
+                            "JellyfinEpisode",
+                            library_id,
+                            &episode.item_id,
+                            episode.etag.as_deref(),
+                        )
+                        .await?
+                    {
+                        synced += 1;
+                        continue;
+                    }
+
+                    let playback = service.stream_metadata(config, &episode.item_id).await?;
+                    upsert_jellyfin_episode(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_item_id,
+                        season_id,
+                        episode,
+                        &playback,
+                    )
+                    .await?;
+                    synced += 1;
+                }
+
+                episode_start_index += JELLYFIN_PAGE_SIZE;
+                if episode_start_index >= episode_total_count || episode_page_len == 0 {
+                    break;
+                }
+            }
+        }
+
+        season_start_index += JELLYFIN_PAGE_SIZE;
+        if season_start_index >= season_total_count || season_page_len == 0 {
+            break;
+        }
+    }
+    Ok(synced)
+}
+
+/// Synchronize one Jellyfin show by the local `Show.Id`.
+///
+/// Mirrors ErsatzTV's
+/// `$ERSATZTV_SRC/ErsatzTV.Scanner/Application/Jellyfin/Commands/SynchronizeJellyfinShowByIdHandler.cs`:
+/// resolve the active connection/api-key, map the local show id to the
+/// provider item id + title via `JellyfinShow` + `ShowMetadata` (mirrors
+/// `IJellyfinTelevisionRepository.GetShowTitleItemId`), fetch the one show
+/// from `/Items?ids=<itemId>` (mirrors `IJellyfinApiClient.GetSingleShow`),
+/// then scan that show's seasons and episodes without library cleanup.
+///
+/// # Errors
+///
+/// Returns an error when config loading, show lookup, Jellyfin requests, or
+/// database writes fail.
+pub async fn sync_jellyfin_show_by_id(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    let target = load_target_jellyfin_show_scan(pool, library_id, show_id).await?;
+    if !target.should_sync_items {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_title = %target.show_title,
+            "Jellyfin show scan skipped because library item sync is disabled"
+        );
+        return Ok(0);
+    }
+
+    let config = load_active_jellyfin_connection_config(pool, target.media_source_id).await?;
+    let service = JellyfinService::new();
+
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+
+    let Some(show) = service
+        .fetch_single_show(&config, &target.library_item_id, &target.show_item_id)
+        .await?
+    else {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_item_id = %target.show_item_id,
+            show_title = %target.show_title,
+            "No Jellyfin show found during targeted scan"
+        );
+        if let Some(sink) = progress {
+            sink.report(1.0);
+        }
+        return Ok(0);
+    };
+
+    tracing::info!(
+        library_id,
+        show_id,
+        show_item_id = %show.item_id,
+        show_title = %target.show_title,
+        deep_scan,
+        "Starting targeted Jellyfin show scan"
+    );
+
+    let synced = sync_one_jellyfin_show(
+        pool,
+        &service,
+        &config,
+        target.media_source_id,
+        library_id,
+        &target.library_item_id,
+        &show,
+        deep_scan,
+    )
+    .await?;
+
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
+    Ok(synced)
+}
+
+struct TargetJellyfinShowScan {
+    media_source_id: i64,
+    library_item_id: String,
+    should_sync_items: bool,
+    show_item_id: String,
+    show_title: String,
+}
+
+async fn load_target_jellyfin_show_scan(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+) -> Result<TargetJellyfinShowScan> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind",
+                  l."MediaSourceId",
+                  jl."ItemId" AS "LibraryItemId",
+                  jl."ShouldSyncItems",
+                  jsh."ItemId" AS "ShowItemId",
+                  COALESCE(
+                      (SELECT sm."Title"
+                       FROM "ShowMetadata" sm
+                       WHERE sm."ShowId" = jsh."Id"
+                       ORDER BY sm."Id"
+                       LIMIT 1),
+                      'Unknown Show'
+                  ) AS "ShowTitle"
+           FROM "Library" l
+           JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
+           JOIN "JellyfinShow" jsh ON jsh."Id" = ?
+           JOIN "MediaItem" mi ON mi."Id" = jsh."Id"
+           JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           WHERE l."Id" = ? AND lp."LibraryId" = l."Id"
+           LIMIT 1"#,
+    )
+    .bind(show_id)
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "jellyfin show",
+        value: format!("show {show_id} does not exist in library {library_id}"),
+    })?;
+
+    let kind: LibraryMediaKind =
+        decode_enum_column("jellyfin library media kind", &row, "MediaKind")?;
+    if kind != LibraryMediaKind::Shows {
+        return Err(RepositoryError::Decode {
+            kind: "jellyfin library",
+            value: format!("library {library_id} is not a TV show library"),
+        });
+    }
+
+    let should_sync_items: i64 = row.try_get("ShouldSyncItems").unwrap_or(1);
+    let show_title: String = row
+        .try_get("ShowTitle")
+        .unwrap_or_else(|_| "Unknown Show".to_owned());
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+    let library_item_id: String = row.try_get("LibraryItemId").unwrap_or_default();
+    let show_item_id: String = row.try_get("ShowItemId").unwrap_or_default();
+
+    Ok(TargetJellyfinShowScan {
+        media_source_id,
+        library_item_id,
+        should_sync_items: should_sync_items != 0,
+        show_item_id,
+        show_title,
+    })
+}
+
+async fn load_active_jellyfin_connection_config(
+    pool: &DbPool,
+    media_source_id: i64,
+) -> Result<JellyfinConnectionConfig> {
+    let address: String = sqlx::query_scalar(
+        r#"SELECT "Address" FROM "JellyfinConnection"
+           WHERE "JellyfinMediaSourceId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v: Option<String>| v)
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "jellyfin connection",
+        value: format!("no connection for source {media_source_id}"),
+    })?;
+
+    let api_key = load_jellyfin_api_key(pool, &address).await?;
+    let authorization_header = format_jellyfin_auth_header(api_key);
+    Ok(JellyfinConnectionConfig {
+        address,
+        authorization_header,
+    })
 }
 
 /// Fetch Jellyfin collections and write collection membership rows.
@@ -1511,11 +1767,16 @@ async fn upsert_jellyfin_episode(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let item_id = ensure_jellyfin_episode_item(&mut tx, library_path_id, season_id, item).await?;
-    upsert_episode_metadata(&mut tx, item_id, item).await?;
+    let episode_metadata_id = upsert_episode_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
+    // Port of MediaServerTelevisionLibraryScanner.UpdateSubtitles
+    // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):
+    // populate Subtitle rows so a later deep-scan extraction can query them.
+    crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &playback.streams)
+        .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
     tx.commit().await?;
     Ok(())
@@ -2308,7 +2569,7 @@ async fn upsert_episode_metadata(
     tx: &mut Transaction<'_, crate::db::Db>,
     episode_id: i64,
     item: &JellyfinMediaItem,
-) -> Result<()> {
+) -> Result<i64> {
     let existing_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
             .bind(episode_id)
@@ -2372,7 +2633,7 @@ async fn upsert_episode_metadata(
     replace_episode_actors(tx, metadata_id, &item.actors).await?;
     replace_episode_people(tx, "Director", metadata_id, &item.directors).await?;
     replace_episode_people(tx, "Writer", metadata_id, &item.writers).await?;
-    Ok(())
+    Ok(metadata_id)
 }
 
 async fn replace_episode_artwork(

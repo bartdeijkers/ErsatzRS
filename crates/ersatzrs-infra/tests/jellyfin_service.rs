@@ -2,10 +2,12 @@
 mod common;
 
 use ersatzrs_core::repositories::{JellyfinConnectionConfig, JellyfinService as _};
+use ersatzrs_domain::{MediaStream, MediaStreamKind};
 use ersatzrs_infra::jellyfin::{
-    sync_jellyfin_collection_library, sync_jellyfin_movie_library, sync_jellyfin_show_library,
-    JellyfinService,
+    sync_jellyfin_collection_library, sync_jellyfin_movie_library, sync_jellyfin_show_by_id,
+    sync_jellyfin_show_library, JellyfinService,
 };
+use ersatzrs_infra::metadata::update_episode_subtitles;
 use httpmock::prelude::*;
 use httpmock::Mock;
 use serde_json::json;
@@ -387,6 +389,19 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
                                 "Channels": 2,
                                 "Index": 1,
                                 "IsDefault": true
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "subrip",
+                                "Language": "eng",
+                                "Index": 2,
+                                "IsForced": false
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "pgssub",
+                                "Language": "eng",
+                                "Index": 3
                             }
                         ]
                     }
@@ -426,8 +441,20 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
-    assert_eq!(count(&pool, "MediaStream").await, 2);
+    assert_eq!(count(&pool, "MediaStream").await, 4);
     assert_eq!(count(&pool, "MediaChapter").await, 1);
+    // Both subtitle streams (text + image) are persisted as Subtitle rows with
+    // IsExtracted=0. The image-codec filter only excludes pgssub at *extraction*
+    // time, not at row-population time (matches ErsatzTV).
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    let subtitles = subtitle_rows(&pool).await;
+    assert_eq!(
+        subtitles,
+        vec![
+            (2, Some("subrip".to_owned()), 0, 0),
+            (3, Some("pgssub".to_owned()), 0, 0),
+        ]
+    );
     assert_eq!(
         provider_library_item_id(&pool, "JellyfinLibrary", 1).await,
         Some("library-shows".to_owned())
@@ -437,6 +464,319 @@ async fn jellyfin_sync_maps_mock_show_response_to_media_rows() {
     seasons.assert_async().await;
     episodes.assert_async().await;
     playback.assert_async().await;
+}
+
+fn subtitle_stream(index: i32, codec: &str, kind: MediaStreamKind) -> MediaStream {
+    MediaStream {
+        index,
+        kind,
+        codec: Some(codec.to_owned()),
+        language: Some("eng".to_owned()),
+        ..MediaStream::default()
+    }
+}
+
+async fn seed_episode_metadata(pool: &SqlitePool) -> i64 {
+    common::seed_media_path(pool, 1, 1, 1).await;
+    for id in [10_i64, 11, 12] {
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (10)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (11, 10, 1)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (12, 11)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    let result = sqlx::query(
+        r#"INSERT INTO "EpisodeMetadata"
+           ("EpisodeId", "MetadataKind", "DateAdded", "DateUpdated")
+           VALUES (12, 2, '2026-01-01 00:00:00', '2026-01-01 00:00:00')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    result.last_insert_rowid()
+}
+
+/// Exercises the add / reset-on-change / remove branches of
+/// `update_episode_subtitles` (port of `MetadataRepository.UpdateSubtitles`).
+#[tokio::test]
+async fn update_episode_subtitles_adds_resets_and_removes_rows() {
+    let pool = common::test_db().await;
+    let metadata_id = seed_episode_metadata(&pool).await;
+
+    // Initial: one embedded text subtitle + one external (sidecar) subtitle.
+    let mut tx = pool.begin().await.unwrap();
+    update_episode_subtitles(
+        &mut tx,
+        metadata_id,
+        &[
+            subtitle_stream(2, "subrip", MediaStreamKind::Subtitle),
+            subtitle_stream(3, "ass", MediaStreamKind::ExternalSubtitle),
+        ],
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        vec![
+            (2, Some("subrip".to_owned()), 0, 0), // Embedded
+            (3, Some("ass".to_owned()), 1, 0),    // Sidecar
+        ]
+    );
+
+    // Mark stream 2 as extracted, then re-run with a changed codec on stream 2
+    // and the external (3) removed. Expect: row 2 reset to IsExtracted=0, row 3
+    // deleted.
+    sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted" = 1 WHERE "StreamIndex" = 2"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut tx = pool.begin().await.unwrap();
+    update_episode_subtitles(
+        &mut tx,
+        metadata_id,
+        &[subtitle_stream(2, "webvtt", MediaStreamKind::Subtitle)],
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    assert_eq!(count(&pool, "Subtitle").await, 1);
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        vec![(2, Some("webvtt".to_owned()), 0, 0)]
+    );
+
+    // Re-run with no change after marking extracted: IsExtracted stays 1.
+    sqlx::query(r#"UPDATE "Subtitle" SET "IsExtracted" = 1 WHERE "StreamIndex" = 2"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    update_episode_subtitles(
+        &mut tx,
+        metadata_id,
+        &[subtitle_stream(2, "webvtt", MediaStreamKind::Subtitle)],
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        vec![(2, Some("webvtt".to_owned()), 0, 1)]
+    );
+}
+
+#[tokio::test]
+async fn jellyfin_single_show_sync_targets_one_show_and_honors_episode_etags() {
+    let server = MockServer::start_async().await;
+    let single_show = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-shows")
+                .query_param("includeItemTypes", "Series")
+                .query_param("ids", "show-target")
+                .query_param("recursive", "false")
+                .query_param("limit", "1");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Target Show",
+                        "Id": "show-target",
+                        "Etag": "show-target-etag",
+                        "DateCreated": "2026-05-20T10:00:00Z",
+                        "ProductionYear": 2026
+                    }
+                ]
+            }));
+        })
+        .await;
+    let seasons = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "show-target")
+                .query_param("includeItemTypes", "Season");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Season 1",
+                        "Id": "season-target",
+                        "Etag": "season-target-etag",
+                        "IndexNumber": 1,
+                        "DateCreated": "2026-05-20T10:00:00Z"
+                    }
+                ]
+            }));
+        })
+        .await;
+    let episodes = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "season-target")
+                .query_param("includeItemTypes", "Episode");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Pilot",
+                        "Id": "episode-target",
+                        "Etag": "episode-target-etag",
+                        "Path": "/srv/media/show/target.mkv",
+                        "DateCreated": "2026-05-20T10:00:00Z",
+                        "RunTimeTicks": 1_800_000_000,
+                        "LocationType": "FileSystem",
+                        "IndexNumber": 1
+                    }
+                ]
+            }));
+        })
+        .await;
+    let playback = mock_jellyfin_playback(&server, "episode-target").await;
+
+    let pool = common::test_db().await;
+    seed_jellyfin_show_scan_config(&pool, &server.base_url()).await;
+
+    let synced = sync_jellyfin_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    // Only the target show's rows are touched; the seeded "other" show row
+    // stays put.
+    assert_eq!(count(&pool, "JellyfinShow").await, 2);
+    assert_eq!(count(&pool, "JellyfinSeason").await, 1);
+    assert_eq!(count(&pool, "JellyfinEpisode").await, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/target.mkv");
+
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/srv/media/show/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let shallow_synced = sync_jellyfin_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+
+    // Non-deep re-run: episode etag matches so MediaFile is left alone and
+    // PlaybackInfo is NOT called again.
+    assert_eq!(shallow_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/kept.mkv");
+
+    let deep_synced = sync_jellyfin_show_by_id(&pool, 1, 10, true, None)
+        .await
+        .unwrap();
+
+    // Deep re-run: episode is re-synced even with matching etag.
+    assert_eq!(deep_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/target.mkv");
+    assert_eq!(single_show.calls_async().await, 3);
+    assert_eq!(seasons.calls_async().await, 3);
+    assert_eq!(episodes.calls_async().await, 3);
+    // PlaybackInfo: 2 calls (initial sync + deep), skipped on the shallow
+    // re-run thanks to the etag match.
+    assert_eq!(playback.calls_async().await, 2);
+}
+
+async fn seed_jellyfin_show_scan_config(pool: &SqlitePool, base_url: &str) {
+    sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "JellyfinMediaSource" ("Id", "ServerName")
+           VALUES (1, 'Jellyfin Test')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "JellyfinConnection" ("Id", "Address", "JellyfinMediaSourceId")
+           VALUES (1, ?, 1)"#,
+    )
+    .bind(base_url)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value")
+           VALUES ('jellyfin.current_server_api_key', 'jellyfin-token')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+           VALUES (1, 'Shows', 2, 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "JellyfinLibrary" ("Id", "ItemId", "ShouldSyncItems")
+           VALUES (1, 'library-shows', 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+           VALUES (1, 1, 'jellyfin://1')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    for (id, item_id, title) in [
+        (10, "show-target", "Target Show"),
+        (11, "show-other", "Other Show"),
+    ] {
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "JellyfinShow" ("Id", "ItemId", "Etag") VALUES (?, ?, 'seed')"#)
+            .bind(id)
+            .bind(item_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ShowMetadata"
+               ("ShowId", "Title", "DateAdded", "DateUpdated", "MetadataKind")
+               VALUES (?, ?, '2026-05-20T00:00:00Z', '2026-05-20T00:00:00Z', 1)"#,
+        )
+        .bind(id)
+        .bind(title)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
 
 async fn mock_movie(server: &MockServer) {
@@ -659,6 +999,28 @@ async fn media_item_state(pool: &SqlitePool) -> i64 {
         .await
         .unwrap()
         .get("State")
+}
+
+/// Returns `(StreamIndex, Codec, SubtitleKind, IsExtracted)` for every Subtitle
+/// row, ordered by stream index.
+async fn subtitle_rows(pool: &SqlitePool) -> Vec<(i64, Option<String>, i64, i64)> {
+    sqlx::query(
+        r#"SELECT "StreamIndex", "Codec", "SubtitleKind", "IsExtracted"
+           FROM "Subtitle" ORDER BY "StreamIndex""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| {
+        (
+            row.get::<i64, _>("StreamIndex"),
+            row.get::<Option<String>, _>("Codec"),
+            row.get::<i64, _>("SubtitleKind"),
+            row.get::<i64, _>("IsExtracted"),
+        )
+    })
+    .collect()
 }
 
 async fn jellyfin_projected_rows(pool: &SqlitePool) -> serde_json::Value {

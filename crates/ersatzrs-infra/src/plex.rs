@@ -1168,6 +1168,12 @@ async fn upsert_plex_episode(
     let version_id = ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
     replace_streams(&mut tx, version_id, &item.streams).await?;
+    // DEFERRED: no Subtitle-row population here. ErsatzTV's
+    // MediaServerTelevisionLibraryScanner.UpdateSubtitles runs after streams are
+    // written, but the Plex scanner does not yet populate EpisodeMetadata (unlike
+    // Jellyfin/Emby), and Subtitle FKs to EpisodeMetadata. Plex embedded-subtitle
+    // extraction is therefore blocked on porting Plex EpisodeMetadata population.
+    // See docs/reference/parity-matrix.md.
     tx.commit().await?;
     Ok(())
 }

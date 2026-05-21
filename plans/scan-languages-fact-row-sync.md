@@ -1,6 +1,6 @@
 **TV-show-page parity gaps: per-show sync, playout-refresh, languages**
 
-Status: Slices 0–3 done. Slices 4–5 pending. Created 2026-05-18.
+Status: Slices 0–5 done. Created 2026-05-18.
 
 **Authoritative C# sources**
 
@@ -154,7 +154,7 @@ periodic-build tests must stay green (no behaviour change to `build_playout`).
 
 ---
 
-## [ ] Slices 3–5 — Per-show targeted sync (Slice 3 done; 4–5 pending)
+## [x] Slices 3–5 — Per-show targeted sync (Slices 3–5 done)
 
 **Shared design (done in Slice 3, reused by 4–5):**
 - `ersatzrs-infra` {plex,jellyfin,emby}.rs: **pure refactor** — extract the
@@ -183,7 +183,8 @@ periodic-build tests must stay green (no behaviour change to `build_playout`).
   extraction unported); Local single-show stays library-scan (matches ETV).
 
 **Slice 3 = refactor + `scan_show` + UI rewire + Plex end-to-end (done 2026-05-20).**
-**Slice 4 = Jellyfin single-show.** **Slice 5 = Emby single-show.**
+**Slice 4 = Jellyfin single-show (done 2026-05-20).**
+**Slice 5 = Emby single-show (done 2026-05-20).**
 
 **Tests per provider:** `httpmock` integration test in
 `crates/ersatzrs-infra/tests/<p>_service.rs` mirroring existing patterns: mock
@@ -213,7 +214,14 @@ that non-deep re-run is etag-skipped while deep re-syncs. Update
 
 ## Parity status after completion
 
-All three gaps closed with faithful behaviour. Only remaining documented
-deferral: `ExtractEmbeddedShowSubtitles` on deep show scan (subtitle
-extraction subsystem unported) — tracked in code + parity-matrix, not silently
-dropped.
+All three gaps closed with faithful behaviour. The follow-on deferral —
+`ExtractEmbeddedShowSubtitles` on deep show scan — has since been ported in
+[`plans/scan-languages-fact-row-sync-mutable-sparkle.md`](scan-languages-fact-row-sync-mutable-sparkle.md):
+Jellyfin/Emby episode scans populate `Subtitle` rows and a successful deep
+`scan_show` runs `subtitles::extract_embedded_show_subtitles`, gated by
+`ffmpeg.extract_embedded_subtitles` (default off). Remaining documented
+deferrals (tracked in parity-matrix, not silently dropped): Plex `Subtitle`-row
+population (blocked on Plex `EpisodeMetadata`), the playout-window
+`ExtractEmbeddedSubtitles`, transcode-pipeline consumption, `Subtitle`-row
+population for movies/music-videos/other-videos, and a global FFmpeg settings
+UI.

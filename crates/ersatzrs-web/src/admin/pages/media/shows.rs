@@ -20,9 +20,6 @@
 //!   `scan_show` path matching `QueueShowScanByLibraryId`; Jellyfin/Emby
 //!   still fall back to the owning library scan until their provider slices
 //!   land. Local single-show scan remains unsupported upstream.
-//! * **Deep-scan subtitles** — `ErsatzTV` queues
-//!   `ExtractEmbeddedShowSubtitles` after a successful deep show scan.
-//!   Embedded subtitle extraction is still unported in `ErsatzRS`.
 //! * **Post-add navigation** — `ErsatzTV` navigates to the
 //!   collection/playlist/schedule after adding. `ErsatzRS` keeps the
 //!   established multi-select-browser behaviour (toast + stay on page).

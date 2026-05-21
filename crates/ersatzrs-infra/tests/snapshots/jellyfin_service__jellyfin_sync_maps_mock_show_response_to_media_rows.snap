@@ -16,7 +16,7 @@ expression: jellyfin_projected_rows(&pool).await
     "season_number": 1,
     "season_title": "Season 1",
     "show_item_id": "show-1",
-    "stream_count": 2,
+    "stream_count": 4,
     "width": 1280
   }
 ]

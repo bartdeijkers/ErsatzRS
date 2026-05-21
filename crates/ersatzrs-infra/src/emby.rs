@@ -342,6 +342,52 @@ impl EmbyService {
             .await
             .map_err(provider_error)
     }
+
+    /// Fetch a single Emby show by its provider item id, scoped to a parent
+    /// library.
+    ///
+    /// Mirrors ErsatzTV's `EmbyApiClient.GetSingleShow`, which queries
+    /// `/Items?parentId=<library>&includeItemTypes=Series&ids=<showId>&recursive=false&limit=1`
+    /// and projects the first item.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the HTTP request or response decoding fails.
+    pub async fn fetch_single_show(
+        &self,
+        config: &EmbyConnectionConfig,
+        library_item_id: &str,
+        show_item_id: &str,
+    ) -> Result<Option<EmbyShowItem>> {
+        let url = format!("{}/Items", config.address.trim_end_matches('/'));
+        let response: EmbyLibraryItemsResponse = self
+            .client
+            .get(url)
+            .header("X-Emby-Token", &config.api_key)
+            .query(&[
+                ("sortOrder", "Ascending"),
+                ("sortBy", "SortName"),
+                ("parentId", library_item_id),
+                (
+                    "fields",
+                    "Path,Genres,Tags,DateCreated,Etag,Overview,Taglines,Studios,People,ProductionYear,PremiereDate,MediaSources,OfficialRating,ProviderIds,ImageTags",
+                ),
+                ("includeItemTypes", "Series"),
+                ("recursive", "false"),
+                ("startIndex", "0"),
+                ("limit", "1"),
+                ("ids", show_item_id),
+            ])
+            .send()
+            .await
+            .map_err(provider_error)?
+            .error_for_status()
+            .map_err(provider_error)?
+            .json()
+            .await
+            .map_err(provider_error)?;
+        Ok(response.items.into_iter().find_map(project_show))
+    }
 }
 
 /// Fetch Emby movie pages and write mapped movie rows.
@@ -532,81 +578,17 @@ where
             reported_initial = true;
         }
         for show in &shows.items {
-            let show_id =
-                upsert_emby_show(pool, media_source_id, library_id, library_item_id, show).await?;
-            let mut season_start_index = 0;
-            loop {
-                let seasons = service
-                    .fetch_season_page(config, &show.item_id, season_start_index, EMBY_PAGE_SIZE)
-                    .await?;
-                let season_total_count = seasons.total_record_count;
-                let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
-                for season in &seasons.items {
-                    let season_id = upsert_emby_season(
-                        pool,
-                        media_source_id,
-                        library_id,
-                        library_item_id,
-                        show_id,
-                        season,
-                    )
-                    .await?;
-                    let mut episode_start_index = 0;
-                    loop {
-                        let episodes = service
-                            .fetch_episode_page(
-                                config,
-                                &show.item_id,
-                                &season.item_id,
-                                episode_start_index,
-                                EMBY_PAGE_SIZE,
-                            )
-                            .await?;
-                        let episode_total_count = episodes.total_record_count;
-                        let episode_page_len =
-                            i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
-                        for episode in &episodes.items {
-                            if !deep_scan
-                                && item_etag_matches(
-                                    pool,
-                                    "EmbyEpisode",
-                                    library_id,
-                                    &episode.item_id,
-                                    episode.etag.as_deref(),
-                                )
-                                .await?
-                            {
-                                synced += 1;
-                                continue;
-                            }
-
-                            let playback =
-                                service.stream_metadata(config, &episode.item_id).await?;
-                            upsert_emby_episode(
-                                pool,
-                                media_source_id,
-                                library_id,
-                                library_item_id,
-                                season_id,
-                                episode,
-                                &playback,
-                            )
-                            .await?;
-                            synced += 1;
-                        }
-
-                        episode_start_index += EMBY_PAGE_SIZE;
-                        if episode_start_index >= episode_total_count || episode_page_len == 0 {
-                            break;
-                        }
-                    }
-                }
-
-                season_start_index += EMBY_PAGE_SIZE;
-                if season_start_index >= season_total_count || season_page_len == 0 {
-                    break;
-                }
-            }
+            synced += sync_one_emby_show(
+                pool,
+                service,
+                config,
+                media_source_id,
+                library_id,
+                library_item_id,
+                show,
+                deep_scan,
+            )
+            .await?;
             shows_completed += 1;
             if let Some(sink) = progress {
                 if show_total_count > 0 {
@@ -624,6 +606,100 @@ where
     if let Some(sink) = progress {
         sink.report(1.0);
     }
+    Ok(synced)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn sync_one_emby_show<S>(
+    pool: &DbPool,
+    service: &S,
+    config: &EmbyConnectionConfig,
+    media_source_id: i64,
+    library_id: i64,
+    library_item_id: &str,
+    show: &EmbyShowItem,
+    deep_scan: bool,
+) -> Result<usize>
+where
+    S: EmbyServiceTrait,
+{
+    // Ports the body of
+    // `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyTelevisionLibraryScanner.cs::ScanSingleShowInternal`.
+    let mut synced = 0;
+    let show_id =
+        upsert_emby_show(pool, media_source_id, library_id, library_item_id, show).await?;
+    let mut season_start_index = 0;
+    loop {
+        let seasons = service
+            .fetch_season_page(config, &show.item_id, season_start_index, EMBY_PAGE_SIZE)
+            .await?;
+        let season_total_count = seasons.total_record_count;
+        let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
+        for season in &seasons.items {
+            let season_id = upsert_emby_season(
+                pool,
+                media_source_id,
+                library_id,
+                library_item_id,
+                show_id,
+                season,
+            )
+            .await?;
+            let mut episode_start_index = 0;
+            loop {
+                let episodes = service
+                    .fetch_episode_page(
+                        config,
+                        &show.item_id,
+                        &season.item_id,
+                        episode_start_index,
+                        EMBY_PAGE_SIZE,
+                    )
+                    .await?;
+                let episode_total_count = episodes.total_record_count;
+                let episode_page_len = i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
+                for episode in &episodes.items {
+                    if !deep_scan
+                        && item_etag_matches(
+                            pool,
+                            "EmbyEpisode",
+                            library_id,
+                            &episode.item_id,
+                            episode.etag.as_deref(),
+                        )
+                        .await?
+                    {
+                        synced += 1;
+                        continue;
+                    }
+
+                    let playback = service.stream_metadata(config, &episode.item_id).await?;
+                    upsert_emby_episode(
+                        pool,
+                        media_source_id,
+                        library_id,
+                        library_item_id,
+                        season_id,
+                        episode,
+                        &playback,
+                    )
+                    .await?;
+                    synced += 1;
+                }
+
+                episode_start_index += EMBY_PAGE_SIZE;
+                if episode_start_index >= episode_total_count || episode_page_len == 0 {
+                    break;
+                }
+            }
+        }
+
+        season_start_index += EMBY_PAGE_SIZE;
+        if season_start_index >= season_total_count || season_page_len == 0 {
+            break;
+        }
+    }
+
     Ok(synced)
 }
 
@@ -872,6 +948,181 @@ pub async fn sync_library_by_id_with_progress(
         )
         .await
     }
+}
+
+/// Synchronize one Emby show by the local `Show.Id`.
+///
+/// Mirrors ErsatzTV's `SynchronizeEmbyShowByIdHandler`: resolve the active
+/// Emby connection/api key, map the local show id to the provider item id +
+/// title via the Emby show row, fetch the single show via the `/Items`
+/// endpoint, then scan that show's seasons and episodes without library
+/// cleanup.
+/// C# source:
+/// `$ERSATZTV_SRC/ErsatzTV.Scanner/Application/Emby/Commands/SynchronizeEmbyShowByIdHandler.cs`
+/// and
+/// `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/Repositories/EmbyTelevisionRepository.cs::GetShowTitleItemId`.
+///
+/// # Errors
+///
+/// Returns an error when config loading, show lookup, Emby requests, or
+/// database writes fail.
+pub async fn sync_emby_show_by_id(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+    deep_scan: bool,
+    progress: Option<&dyn ersatzrs_domain::ScanProgressSink>,
+) -> Result<usize> {
+    let target = load_target_emby_show_scan(pool, library_id, show_id).await?;
+    if !target.should_sync_items {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_title = %target.show_title,
+            "Emby show scan skipped because library item sync is disabled"
+        );
+        return Ok(0);
+    }
+
+    let config = load_active_emby_connection_config(pool, target.media_source_id).await?;
+    let service = EmbyService::new();
+
+    if let Some(sink) = progress {
+        sink.report(0.0);
+    }
+
+    let Some(show) = service
+        .fetch_single_show(&config, &target.library_item_id, &target.show_item_id)
+        .await?
+    else {
+        tracing::warn!(
+            library_id,
+            show_id,
+            show_item_id = %target.show_item_id,
+            show_title = %target.show_title,
+            "No Emby show found during targeted scan"
+        );
+        if let Some(sink) = progress {
+            sink.report(1.0);
+        }
+        return Ok(0);
+    };
+
+    tracing::info!(
+        library_id,
+        show_id,
+        show_item_id = %show.item_id,
+        show_title = %target.show_title,
+        deep_scan,
+        "Starting targeted Emby show scan"
+    );
+
+    let synced = sync_one_emby_show(
+        pool,
+        &service,
+        &config,
+        target.media_source_id,
+        library_id,
+        &target.library_item_id,
+        &show,
+        deep_scan,
+    )
+    .await?;
+
+    if let Some(sink) = progress {
+        sink.report(1.0);
+    }
+    Ok(synced)
+}
+
+struct TargetEmbyShowScan {
+    media_source_id: i64,
+    library_item_id: String,
+    should_sync_items: bool,
+    show_item_id: String,
+    show_title: String,
+}
+
+async fn load_target_emby_show_scan(
+    pool: &DbPool,
+    library_id: i64,
+    show_id: i64,
+) -> Result<TargetEmbyShowScan> {
+    let row = sqlx::query(
+        r#"SELECT l."MediaKind",
+                  l."MediaSourceId",
+                  el."ItemId" AS "LibraryItemId",
+                  el."ShouldSyncItems",
+                  esh."ItemId" AS "ShowItemId",
+                  COALESCE(
+                      (SELECT sm."Title"
+                       FROM "ShowMetadata" sm
+                       WHERE sm."ShowId" = esh."Id"
+                       ORDER BY sm."Id"
+                       LIMIT 1),
+                      'Unknown Show'
+                  ) AS "ShowTitle"
+           FROM "Library" l
+           JOIN "EmbyLibrary" el ON el."Id" = l."Id"
+           JOIN "EmbyShow" esh ON esh."Id" = ?
+           JOIN "MediaItem" mi ON mi."Id" = esh."Id"
+           JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           WHERE l."Id" = ? AND lp."LibraryId" = l."Id"
+           LIMIT 1"#,
+    )
+    .bind(show_id)
+    .bind(library_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "emby show",
+        value: format!("show {show_id} does not exist in library {library_id}"),
+    })?;
+
+    let kind: LibraryMediaKind = decode_enum_column("emby library media kind", &row, "MediaKind")?;
+    if kind != LibraryMediaKind::Shows {
+        return Err(RepositoryError::Decode {
+            kind: "emby library",
+            value: format!("library {library_id} is not a TV show library"),
+        });
+    }
+
+    let should_sync_items: i64 = row.try_get("ShouldSyncItems").unwrap_or(1);
+    let show_title: String = row
+        .try_get("ShowTitle")
+        .unwrap_or_else(|_| "Unknown Show".to_owned());
+    let media_source_id: i64 = row.try_get("MediaSourceId").unwrap_or(0);
+    let library_item_id: String = row.try_get("LibraryItemId").unwrap_or_default();
+    let show_item_id: String = row.try_get("ShowItemId").unwrap_or_default();
+
+    Ok(TargetEmbyShowScan {
+        media_source_id,
+        library_item_id,
+        should_sync_items: should_sync_items != 0,
+        show_item_id,
+        show_title,
+    })
+}
+
+async fn load_active_emby_connection_config(
+    pool: &DbPool,
+    media_source_id: i64,
+) -> Result<EmbyConnectionConfig> {
+    let address: String = sqlx::query_scalar(
+        r#"SELECT "Address" FROM "EmbyConnection"
+           WHERE "EmbyMediaSourceId" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(media_source_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|v: Option<String>| v)
+    .ok_or_else(|| RepositoryError::Decode {
+        kind: "emby connection",
+        value: format!("no connection for source {media_source_id}"),
+    })?;
+
+    let api_key = load_emby_api_key(pool, &address).await?;
+    Ok(EmbyConnectionConfig { address, api_key })
 }
 
 /// Sync Emby collections for every library on `media_source_id` that has
@@ -1453,11 +1704,16 @@ async fn upsert_emby_episode(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("emby://{library_id}")).await?;
     let item_id = ensure_emby_episode_item(&mut tx, library_path_id, season_id, item).await?;
-    upsert_episode_metadata(&mut tx, item_id, item).await?;
+    let episode_metadata_id = upsert_episode_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
+    // Port of MediaServerTelevisionLibraryScanner.UpdateSubtitles
+    // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):
+    // populate Subtitle rows so a later deep-scan extraction can query them.
+    crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &playback.streams)
+        .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
     tx.commit().await?;
     Ok(())
@@ -2214,7 +2470,7 @@ async fn upsert_episode_metadata(
     tx: &mut Transaction<'_, crate::db::Db>,
     episode_id: i64,
     item: &EmbyMediaItem,
-) -> Result<()> {
+) -> Result<i64> {
     let existing_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
             .bind(episode_id)
@@ -2278,7 +2534,7 @@ async fn upsert_episode_metadata(
     replace_episode_actors(tx, metadata_id, &item.actors).await?;
     replace_episode_people(tx, "Director", metadata_id, &item.directors).await?;
     replace_episode_people(tx, "Writer", metadata_id, &item.writers).await?;
-    Ok(())
+    Ok(metadata_id)
 }
 
 async fn replace_episode_artwork(

@@ -104,6 +104,11 @@ Feature-level porting plans live alongside this index:
 - `plans/scan-languages-fact-row-sync.md` — closes the three TV-show-page
   parity gaps (per-show sync, playout-refresh channel, languages fact row)
   as ordered slices.
+- `plans/scan-languages-fact-row-sync-mutable-sparkle.md` — follow-on plan
+  that ports `ExtractEmbeddedShowSubtitles` on deep show scan (Subtitle-row
+  population for Jellyfin/Emby episodes, config keys + cache layout, the
+  ffmpeg subtitle/font extraction engine, and the deep-scan wiring), closing
+  the last documented deferral of the plan above.
 
 ## Deferred Contract Work
 

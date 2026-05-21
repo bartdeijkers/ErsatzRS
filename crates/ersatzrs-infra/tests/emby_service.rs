@@ -3,7 +3,8 @@ mod common;
 
 use ersatzrs_core::repositories::{EmbyConnectionConfig, EmbyService as _};
 use ersatzrs_infra::emby::{
-    sync_emby_collection_library, sync_emby_movie_library, sync_emby_show_library, EmbyService,
+    sync_emby_collection_library, sync_emby_movie_library, sync_emby_show_by_id,
+    sync_emby_show_library, EmbyService,
 };
 use httpmock::prelude::*;
 use httpmock::Mock;
@@ -389,6 +390,18 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
                                 "Channels": 2,
                                 "Index": 1,
                                 "IsDefault": true
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "subrip",
+                                "Language": "eng",
+                                "Index": 2
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "pgssub",
+                                "Language": "eng",
+                                "Index": 3
                             }
                         ]
                     }
@@ -425,8 +438,18 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
     assert_eq!(count(&pool, "Writer").await, 1);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
-    assert_eq!(count(&pool, "MediaStream").await, 2);
+    assert_eq!(count(&pool, "MediaStream").await, 4);
     assert_eq!(count(&pool, "MediaChapter").await, 1);
+    // Both subtitle streams (text + image) are persisted as Subtitle rows with
+    // IsExtracted=0. The image-codec filter only applies at *extraction* time.
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        vec![
+            (2, Some("subrip".to_owned()), 0, 0),
+            (3, Some("pgssub".to_owned()), 0, 0),
+        ]
+    );
     assert_eq!(
         provider_library_item_id(&pool, "EmbyLibrary", 1).await,
         Some("library-shows".to_owned())
@@ -436,6 +459,198 @@ async fn emby_sync_maps_mock_show_response_to_media_rows() {
     seasons.assert_async().await;
     episodes.assert_async().await;
     playback.assert_async().await;
+}
+
+#[tokio::test]
+async fn emby_single_show_sync_targets_one_show_and_honors_episode_etags() {
+    let server = MockServer::start_async().await;
+    // Single-show fetch: /Items?parentId=library-shows&ids=show-target&includeItemTypes=Series&recursive=false&limit=1
+    let single_show = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-shows")
+                .query_param("ids", "show-target")
+                .query_param("includeItemTypes", "Series")
+                .query_param("recursive", "false")
+                .query_param("limit", "1");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Target Show",
+                        "Id": "show-target",
+                        "Etag": "show-target-etag",
+                        "DateCreated": "2026-04-17T10:00:00Z"
+                    }
+                ]
+            }));
+        })
+        .await;
+    let seasons = server
+        .mock_async(|when, then| {
+            when.method(GET).path("/Shows/show-target/Seasons");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Season 1",
+                        "Id": "season-target",
+                        "Etag": "season-target-etag",
+                        "IndexNumber": 1,
+                        "DateCreated": "2026-04-17T10:00:00Z"
+                    }
+                ]
+            }));
+        })
+        .await;
+    let episodes = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Shows/show-target/Episodes")
+                .query_param("seasonId", "season-target");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 1,
+                "Items": [
+                    {
+                        "Name": "Pilot",
+                        "Id": "episode-target",
+                        "Etag": "episode-target-etag",
+                        "Path": "/srv/media/show/target.mkv",
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 1_800_000_000,
+                        "LocationType": "FileSystem",
+                        "IndexNumber": 1
+                    }
+                ]
+            }));
+        })
+        .await;
+    let playback = mock_emby_playback(&server, "episode-target").await;
+
+    let pool = common::test_db().await;
+    seed_emby_show_scan_config(&pool, &server.base_url()).await;
+
+    let synced = sync_emby_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+
+    assert_eq!(synced, 1);
+    // Only the target show was synced; the other seeded show row is untouched.
+    assert_eq!(count(&pool, "EmbyShow").await, 2);
+    assert_eq!(count(&pool, "EmbySeason").await, 1);
+    assert_eq!(count(&pool, "EmbyEpisode").await, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/target.mkv");
+
+    // Non-deep re-run should etag-skip and not re-upsert the file path.
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = '/srv/media/show/kept.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let shallow_synced = sync_emby_show_by_id(&pool, 1, 10, false, None)
+        .await
+        .unwrap();
+    assert_eq!(shallow_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/kept.mkv");
+    // Shallow re-run should NOT hit the per-episode playback endpoint.
+    assert_eq!(playback.calls_async().await, 1);
+
+    // Deep re-run should bypass the etag skip and re-upsert the file path.
+    let deep_synced = sync_emby_show_by_id(&pool, 1, 10, true, None)
+        .await
+        .unwrap();
+    assert_eq!(deep_synced, 1);
+    assert_eq!(media_file_path(&pool).await, "/srv/media/show/target.mkv");
+
+    assert_eq!(single_show.calls_async().await, 3);
+    assert_eq!(seasons.calls_async().await, 3);
+    assert_eq!(episodes.calls_async().await, 3);
+    // Playback was hit on the first sync and the deep re-run, not the shallow.
+    assert_eq!(playback.calls_async().await, 2);
+}
+
+async fn seed_emby_show_scan_config(pool: &SqlitePool, base_url: &str) {
+    sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "EmbyMediaSource" ("Id", "ServerName")
+           VALUES (1, 'Emby Test')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "EmbyConnection" ("Id", "Address", "EmbyMediaSourceId")
+           VALUES (1, ?, 1)"#,
+    )
+    .bind(base_url)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "ConfigElement" ("Key", "Value")
+           VALUES (?, 'emby-api-key')"#,
+    )
+    .bind(format!("emby.api_key.{base_url}"))
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+           VALUES (1, 'Shows', 2, 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "EmbyLibrary" ("Id", "ItemId", "ShouldSyncItems")
+           VALUES (1, 'library-shows', 1)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+           VALUES (1, 1, 'emby://1')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    for (id, item_id, title) in [
+        (10, "show-target", "Target Show"),
+        (11, "show-other", "Other Show"),
+    ] {
+        sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "Show" ("Id") VALUES (?)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "EmbyShow" ("Id", "ItemId", "Etag") VALUES (?, ?, 'seed')"#)
+            .bind(id)
+            .bind(item_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ShowMetadata"
+               ("ShowId", "Title", "DateAdded", "DateUpdated", "MetadataKind")
+               VALUES (?, ?, '2026-05-20T00:00:00Z', '2026-05-20T00:00:00Z', 1)"#,
+        )
+        .bind(id)
+        .bind(title)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
 
 async fn mock_movie(server: &MockServer) {
@@ -662,6 +877,28 @@ async fn media_item_state(pool: &SqlitePool) -> i64 {
         .await
         .unwrap()
         .get("State")
+}
+
+/// Returns `(StreamIndex, Codec, SubtitleKind, IsExtracted)` for every Subtitle
+/// row, ordered by stream index.
+async fn subtitle_rows(pool: &SqlitePool) -> Vec<(i64, Option<String>, i64, i64)> {
+    sqlx::query(
+        r#"SELECT "StreamIndex", "Codec", "SubtitleKind", "IsExtracted"
+           FROM "Subtitle" ORDER BY "StreamIndex""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| {
+        (
+            row.get::<i64, _>("StreamIndex"),
+            row.get::<Option<String>, _>("Codec"),
+            row.get::<i64, _>("SubtitleKind"),
+            row.get::<i64, _>("IsExtracted"),
+        )
+    })
+    .collect()
 }
 
 async fn emby_projected_rows(pool: &SqlitePool) -> serde_json::Value {
