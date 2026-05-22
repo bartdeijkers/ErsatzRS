@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-22 (media card action-menu positioning fix)
+Last updated: 2026-05-22 (movie detail parity and hydration containment)
 
 ## Current Phase
 
@@ -475,6 +475,7 @@ yet.
 | `TimelinePage` (`/playouts`)  | ✅     | Read-only SVG island; selection is the gap (Slice F).          |
 | `CollectionsPage`             | ✅     | Autocomplete island.                                           |
 | `MoviesPage`                  | TODO   | Item overflow menu wired; Playwright smoke pending.             |
+| `MoviePage` (`/media/movies/:id`) | ✅ | SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean. |
 | `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
@@ -521,6 +522,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-22 | Codex (GPT-5) | Completed `/media/movies/:id` movie detail parity for 2001: stable SSR detail rendering, JSON-backed Add To Collection/Add To Playlist/Media Info actions, collection playout-refresh side effects, playlist success without redirecting to a missing route, and a hydration/UI bug-containment playbook in `TEST.md`. Gates: `cargo clean`, `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web --bin ersatzrs-web --no-default-features --features ssr`, `cargo test -p ersatzrs-web admin::server_fns::media_browser::tests::load_movie_languages_resolves_head_version_audio_stream_codes --features ssr`, `cargo clippy -p ersatzrs-web --bin ersatzrs-web --no-default-features --features ssr -- -D warnings`, `(cd crates/ersatzrs-web && cargo leptos build)`, and Playwright `/media/movies/7` with zero current console errors. |
 | 2026-05-22 | Codex (GPT-5) | Fixed the shared media-card action menu positioning so TV show season cards render the MoreVert/Add To Collection menu inside the poster instead of overlapping the season title caption. Gates: `cargo fmt --all`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`. |
 | 2026-05-22 | Codex (GPT-5) | Finished the SSR channel editor follow-up and source-level audit: `/channels/add` and `/channels/:id` now post as multipart forms with local logo upload, external logo replacement, stored-logo removal, visible mode-specific fields that do not depend on hydration, form-level validation error redirects, ErsatzTV-order logo fields, absolute stored-logo preview URLs, `http://localhost/...` external-logo validation parity, and explicit missing-edit-channel validation. Updated the channel parity plan/index, parity matrix, hydration notes, and status handoff. Gates: `cargo fmt --all -- --check`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-web api::channels::tests -- --nocapture`, `cargo test -p ersatzrs-infra --test channel_repository -- --nocapture`, `cargo test -p ersatzrs-infra --test extract_show_subtitles -- --nocapture`, `cargo test -p ersatzrs-web build_m3u -- --nocapture`, `cargo test -p ersatzrs-infra --all-features channel`, `cargo test -p ersatzrs-web --all-features channel`, `cargo clippy -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings`, `(cd crates/ersatzrs-web && cargo leptos build)`, and Playwright `/channels/add` + `/channels/3` with zero console warnings/errors. |
 | 2026-05-22 | Codex (GPT-5) | Removed the `/channels/add` runtime hydration blocker by rendering the channel editor as a server-rendered form while the broader Leptos island marker issue remains. Verified Playwright `/channels/add` with zero console errors, confirmed `/system/logs` still reproduces the app-wide island `failed_to_cast_marker_node`, and smoke-tested add/edit POSTs against SQLite for expanded channel fields and logo artwork persistence. Gates: `cargo fmt --all`, `cargo check -p ersatzrs-web`, `(cd crates/ersatzrs-web && cargo leptos build)`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-infra --test channel_repository -- --nocapture`, `cargo test -p ersatzrs-infra --test extract_show_subtitles -- --nocapture`, `cargo test -p ersatzrs-web build_m3u -- --nocapture`, `cargo clippy -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings`. |
