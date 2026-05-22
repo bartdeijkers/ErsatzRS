@@ -75,6 +75,39 @@ stabilisation. Apply them every time you wire interactive UI:
    `libraries/mod.rs:39-56`: `gloo_timers::future::TimeoutFuture::new(1500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
 
+## Hydration and UI bug containment
+
+Use this playbook before changing Leptos hydration, islands, shared UI
+primitives, router setup, or Cargo dependencies for an admin UI bug. Hydration
+failures often surface far away from the first mismatch, so treat them as a
+boundary diagnosis problem before refactoring.
+
+1. **Classify the failure first.** Decide whether the bug is SSR HTML shape,
+   island hydration/runtime, server function/API, CSS/layout, or data/query
+   behavior. Record the current evidence in the handoff or final response.
+2. **Create one browser probe before editing.** Use Playwright MCP to navigate
+   to the route, capture current console errors, and exercise exactly one
+   failing interaction. That probe becomes the regression target.
+3. **Patch the narrowest stable boundary.** If a server-rendered detail page
+   only needs one broken action, keep the page SSR and prefer a small explicit
+   JSON endpoint for that action. Do not move the whole page into an island just
+   to attach one handler.
+4. **Do not change shared UI without proof.** Avoid edits to `letter_bar`,
+   pagers, shared modals, `HydrationScripts`, `hydrate_islands`, route setup, or
+   Cargo dependencies unless the browser probe proves that boundary is the
+   source. If many pages can be affected, split the work into a dedicated
+   hydration-hardening task.
+5. **Verify one behavior at a time.** After each change, run the cheapest
+   relevant build/check, repeat the browser probe, and inspect the console. Stop
+   expanding the patch once the failing behavior is fixed.
+6. **Keep parity side effects.** When replacing a Leptos server function with an
+   explicit endpoint, preserve the same persistence rules and runtime side
+   effects, such as playout refresh enqueueing after collection changes.
+
+For Leptos API questions, use Context7 against the repo's current Leptos 0.8.x
+versions. Do not apply generic Leptos examples without checking that they match
+the 0.8 API and this repo's SSR/islands setup.
+
 ### Hydration lint
 
 Static check that runs in seconds. Catches the patterns above without needing

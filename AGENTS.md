@@ -149,11 +149,14 @@ Read the relevant contract before changing that area:
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags, or
   `run.sh` — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
   cargo-leptos hot-reload, and compile-cost troubleshooting.
-- [TEST.md](TEST.md) before adding admin-UI tests or hydration playbooks —
-  covers the Leptos hydration rules (page wrapper vs `#[island]`, stable DOM
-  shape, no prop-bearing islands across `Suspense`), the Playwright MCP
-  playbook format, and the per-page playbook index. Defers deep-dive testing
-  conventions to `docs/how-to/testing.md` and `docs/how-to/snapshot-tests.md`.
+- [TEST.md](TEST.md) before adding admin-UI tests or hydration playbooks, or
+  before changing Leptos hydration, islands, shared UI primitives, router
+  setup, or Cargo dependencies for an admin UI bug — covers the Leptos
+  hydration rules (page wrapper vs `#[island]`, stable DOM shape, no
+  prop-bearing islands across `Suspense`), the hydration/UI bug containment
+  playbook, the Playwright MCP playbook format, and the per-page playbook
+  index. Defers deep-dive testing conventions to `docs/how-to/testing.md` and
+  `docs/how-to/snapshot-tests.md`.
 - [STYLE.md](STYLE.md) before writing Rust, SQL, or ErsatzTV-parity code —
   covers Rust (naming, errors, async, logging, public API), Rust ↔ C# parity
   (serialized contracts, option mapping), and SQL (identifier casing,
