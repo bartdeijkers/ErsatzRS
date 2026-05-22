@@ -123,6 +123,46 @@ pub struct ShowDetailRow {
     pub seasons: Vec<SeasonCardRow>,
 }
 
+/// One episode row on the TV season details page. Mirrors
+/// `ErsatzTV.Application.MediaCards.TelevisionEpisodeCardViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EpisodeCardRow {
+    pub episode_id: i64,
+    pub aired: String,
+    pub show_title: String,
+    pub show_id: i64,
+    pub season_id: i64,
+    pub season_number: i64,
+    pub episode_number: i64,
+    pub title: String,
+    pub sort_title: String,
+    pub plot: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub directors: Vec<String>,
+    pub writers: Vec<String>,
+    /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
+    pub media_item_state: i32,
+    pub file_path: Option<String>,
+    pub local_path: Option<String>,
+}
+
+/// Detailed projection for the TV season details page. Mirrors the relevant
+/// subset of `ErsatzTV.Application.Television.TelevisionSeasonViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SeasonDetailRow {
+    pub id: i64,
+    pub show_id: i64,
+    pub show_title: String,
+    pub show_year: Option<i64>,
+    /// `"Specials"` when `season_number == 0`, else `"Season {n}"`.
+    pub name: String,
+    pub season_number: i64,
+    pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub episode_count: i64,
+    pub episodes: Vec<EpisodeCardRow>,
+}
+
 #[cfg(feature = "ssr")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -251,6 +291,32 @@ fn song_subtitle(artists: Option<String>, album: Option<String>) -> Option<Strin
         (artists, "") => Some(artists.to_string()),
         (artists, album) => Some(format!("{artists} - {album}")),
     }
+}
+
+fn season_name(season_number: i64) -> String {
+    if season_number == 0 {
+        "Specials".to_string()
+    } else {
+        format!("Season {season_number}")
+    }
+}
+
+fn short_date(value: Option<&str>) -> String {
+    use chrono::{DateTime, Datelike, NaiveDate, Utc};
+
+    let Some(value) = value.filter(|v| !v.trim().is_empty()) else {
+        return "1-1-0001".to_string();
+    };
+
+    if let Ok(dt) = DateTime::parse_from_rfc3339(value) {
+        let date = dt.with_timezone(&Utc).date_naive();
+        return format!("{}-{}-{}", date.day(), date.month(), date.year());
+    }
+    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        return format!("{}-{}-{}", date.day(), date.month(), date.year());
+    }
+
+    value.to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +683,70 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
     }))
 }
 
+/// TV season details for the `/media/tv/seasons/:id` page. Ports
+/// `ErsatzTV/Pages/TelevisionEpisodeList.razor` +
+/// `Application.Television/Queries/GetTelevisionSeasonById` +
+/// `Application.MediaCards/Queries/GetTelevisionEpisodeCards`.
+#[server]
+pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use ersatzrs_core::repositories::TelevisionRepository;
+    use ersatzrs_infra::repositories::SqliteTelevisionRepository;
+
+    const PAGE_NUMBER: i64 = 1;
+    const PAGE_SIZE: i64 = 100;
+
+    let state = expect_context::<AppState>();
+    let repo = SqliteTelevisionRepository(state.pool.clone());
+
+    let Some(season) = repo.get_season(id).await? else {
+        return Ok(None);
+    };
+    let episode_count = repo.get_episode_count(id).await?;
+    let episodes = repo.get_paged_episodes(id, PAGE_NUMBER, PAGE_SIZE).await?;
+
+    let season_number = i64::from(season.season_number);
+    Ok(Some(SeasonDetailRow {
+        id: season.id,
+        show_id: season.show_id,
+        show_title: season.show_title,
+        show_year: season.show_year,
+        name: season_name(season_number),
+        season_number,
+        poster_url: season
+            .season_poster_path
+            .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+        fanart_url: season
+            .show_fanart_path
+            .and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
+        episode_count,
+        episodes: episodes
+            .into_iter()
+            .map(|episode| EpisodeCardRow {
+                episode_id: episode.episode_id,
+                aired: short_date(episode.release_date.as_deref()),
+                show_title: episode.show_title,
+                show_id: episode.show_id,
+                season_id: episode.season_id,
+                season_number: i64::from(episode.season_number),
+                episode_number: i64::from(episode.episode_number),
+                title: episode.title,
+                sort_title: episode.sort_title,
+                plot: episode.plot,
+                thumbnail_url: episode
+                    .thumbnail_path
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+                directors: episode.directors,
+                writers: episode.writers,
+                media_item_state: episode.state,
+                file_path: episode.file_path,
+                local_path: episode.local_path,
+            })
+            .collect(),
+    }))
+}
+
 /// Media-info JSON for `MediaItemInfoDialog`. Ports the movie branch of
 /// `ErsatzTV.Application.MediaItems.Queries.GetMediaItemInfoHandler` and the
 /// serialization options used by `Shared/MediaItemInfoDialog.razor`
@@ -625,11 +755,13 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
 #[allow(clippy::too_many_lines)]
 pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
+    use ersatzrs_core::repositories::TelevisionRepository;
+    use ersatzrs_infra::repositories::SqliteTelevisionRepository;
     use sqlx::Row;
 
     let state = expect_context::<AppState>();
 
-    let Some(row) = sqlx::query(
+    let movie_row = sqlx::query(
         r#"SELECT m."Id" AS "Id",
                   COALESCE(mm."Title", '') AS "Title",
                   mm."Id" AS "MetadataId",
@@ -672,63 +804,110 @@ pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> 
     )
     .bind(id)
     .fetch_optional(&state.pool)
-    .await?
-    else {
-        return Err(ServerFnError::new("Unable to locate media item"));
-    };
+    .await?;
 
-    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
-    let version_id: Option<i64> = row.try_get("MediaVersionId").unwrap_or(None);
-    let is_local_library =
-        row.try_get::<String, _>("LibraryKind").unwrap_or_default() == "LocalLibrary";
+    if let Some(row) = movie_row {
+        let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+        let version_id: Option<i64> = row.try_get("MediaVersionId").unwrap_or(None);
+        let is_local_library =
+            row.try_get::<String, _>("LibraryKind").unwrap_or_default() == "LocalLibrary";
 
-    let subtitles = load_movie_subtitle_info(&state.pool, metadata_id).await?;
-    let streams = if let Some(version_id) = version_id {
-        load_media_info_streams(&state.pool, version_id, &subtitles, is_local_library).await?
-    } else {
-        Vec::new()
-    };
-    let chapters = if let Some(version_id) = version_id {
-        load_media_info_chapters(&state.pool, version_id).await?
-    } else {
-        Vec::new()
-    };
+        let subtitles = load_movie_subtitle_info(&state.pool, metadata_id).await?;
+        let streams = if let Some(version_id) = version_id {
+            load_media_info_streams(&state.pool, version_id, &subtitles, is_local_library).await?
+        } else {
+            Vec::new()
+        };
+        let chapters = if let Some(version_id) = version_id {
+            load_media_info_chapters(&state.pool, version_id).await?
+        } else {
+            Vec::new()
+        };
 
-    let info = MediaItemInfoJson {
-        id: row.try_get("Id").unwrap_or(0),
-        title: row.try_get("Title").unwrap_or_default(),
-        kind: "Movie".to_string(),
-        library_kind: row.try_get("LibraryKind").unwrap_or_default(),
-        server_name: row
-            .try_get::<Option<String>, _>("ServerName")
-            .unwrap_or(None),
-        library_name: row.try_get("LibraryName").unwrap_or_default(),
-        state: media_item_state_name(row.try_get("State").unwrap_or(0)).to_string(),
-        duration: row
-            .try_get::<Option<String>, _>("Duration")
-            .unwrap_or(None)
-            .unwrap_or_else(|| "00:00:00".to_string()),
-        sample_aspect_ratio: row
-            .try_get::<Option<String>, _>("SampleAspectRatio")
-            .unwrap_or(None),
-        display_aspect_ratio: row
-            .try_get::<Option<String>, _>("DisplayAspectRatio")
-            .unwrap_or(None),
-        r_frame_rate: row
-            .try_get::<Option<String>, _>("RFrameRate")
-            .unwrap_or(None),
-        video_scan_kind: video_scan_kind_name(row.try_get("VideoScanKind").unwrap_or(0))
-            .to_string(),
-        interlaced_ratio: row
-            .try_get::<Option<f64>, _>("InterlacedRatio")
-            .unwrap_or(None),
-        width: row.try_get("Width").unwrap_or(0),
-        height: row.try_get("Height").unwrap_or(0),
-        streams,
-        chapters,
-    };
+        let info = MediaItemInfoJson {
+            id: row.try_get("Id").unwrap_or(0),
+            title: row.try_get("Title").unwrap_or_default(),
+            kind: "Movie".to_string(),
+            library_kind: row.try_get("LibraryKind").unwrap_or_default(),
+            server_name: row
+                .try_get::<Option<String>, _>("ServerName")
+                .unwrap_or(None),
+            library_name: row.try_get("LibraryName").unwrap_or_default(),
+            state: media_item_state_name(row.try_get("State").unwrap_or(0)).to_string(),
+            duration: row
+                .try_get::<Option<String>, _>("Duration")
+                .unwrap_or(None)
+                .unwrap_or_else(|| "00:00:00".to_string()),
+            sample_aspect_ratio: row
+                .try_get::<Option<String>, _>("SampleAspectRatio")
+                .unwrap_or(None),
+            display_aspect_ratio: row
+                .try_get::<Option<String>, _>("DisplayAspectRatio")
+                .unwrap_or(None),
+            r_frame_rate: row
+                .try_get::<Option<String>, _>("RFrameRate")
+                .unwrap_or(None),
+            video_scan_kind: video_scan_kind_name(row.try_get("VideoScanKind").unwrap_or(0))
+                .to_string(),
+            interlaced_ratio: row
+                .try_get::<Option<f64>, _>("InterlacedRatio")
+                .unwrap_or(None),
+            width: row.try_get("Width").unwrap_or(0),
+            height: row.try_get("Height").unwrap_or(0),
+            streams,
+            chapters,
+        };
 
-    serde_json::to_string_pretty(&info).map_err(ServerFnError::new)
+        return serde_json::to_string_pretty(&info).map_err(ServerFnError::new);
+    }
+
+    let repo = SqliteTelevisionRepository(state.pool.clone());
+    if let Some(episode) = repo.get_episode_media_item_info(id).await? {
+        let subtitles = load_episode_subtitle_info(&state.pool, episode.metadata_id).await?;
+        let streams = if let Some(version_id) = episode.media_version_id {
+            load_media_info_streams(
+                &state.pool,
+                version_id,
+                &subtitles,
+                episode.is_local_library,
+            )
+            .await?
+        } else {
+            Vec::new()
+        };
+        let chapters = if let Some(version_id) = episode.media_version_id {
+            load_media_info_chapters(&state.pool, version_id).await?
+        } else {
+            Vec::new()
+        };
+        let title = format!(
+            "{} - s{:02}e{:02} - {}",
+            episode.show_title, episode.season_number, episode.episode_number, episode.title
+        );
+        let info = MediaItemInfoJson {
+            id: episode.id,
+            title,
+            kind: "Episode".to_string(),
+            library_kind: episode.library_kind,
+            server_name: episode.server_name,
+            library_name: episode.library_name,
+            state: media_item_state_name(i64::from(episode.state)).to_string(),
+            duration: episode.duration.unwrap_or_else(|| "00:00:00".to_string()),
+            sample_aspect_ratio: episode.sample_aspect_ratio,
+            display_aspect_ratio: episode.display_aspect_ratio,
+            r_frame_rate: episode.r_frame_rate,
+            video_scan_kind: video_scan_kind_name(i64::from(episode.video_scan_kind)).to_string(),
+            interlaced_ratio: episode.interlaced_ratio,
+            width: episode.width,
+            height: episode.height,
+            streams,
+            chapters,
+        };
+
+        return serde_json::to_string_pretty(&info).map_err(ServerFnError::new);
+    }
+
+    Err(ServerFnError::new("Unable to locate media item"))
 }
 
 #[cfg(feature = "ssr")]
@@ -877,6 +1056,47 @@ async fn load_movie_subtitle_info(
                   "IsExtracted"
            FROM "Subtitle"
            WHERE "MovieMetadataId" = ?
+           ORDER BY "StreamIndex", "Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| SubtitleInfoRow {
+            stream_index: r.try_get("StreamIndex").unwrap_or(0),
+            subtitle_kind: r.try_get("SubtitleKind").unwrap_or(0),
+            title: r.try_get::<Option<String>, _>("Title").unwrap_or(None),
+            codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+            default: r.try_get::<i64, _>("Default").unwrap_or(0) != 0,
+            forced: r.try_get::<i64, _>("Forced").unwrap_or(0) != 0,
+            path: r.try_get::<Option<String>, _>("Path").unwrap_or(None),
+            is_extracted: r.try_get::<i64, _>("IsExtracted").unwrap_or(0) != 0,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_episode_subtitle_info(
+    pool: &ersatzrs_infra::db::DbPool,
+    metadata_id: i64,
+) -> Result<Vec<SubtitleInfoRow>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT "StreamIndex",
+                  "SubtitleKind",
+                  "Title",
+                  "Codec",
+                  "Language",
+                  "Default",
+                  "Forced",
+                  "Path",
+                  "IsExtracted"
+           FROM "Subtitle"
+           WHERE "EpisodeMetadataId" = ?
            ORDER BY "StreamIndex", "Id""#,
     )
     .bind(metadata_id)
@@ -2447,11 +2667,31 @@ pub async fn list_program_schedules() -> Result<Vec<ScheduleOption>, ServerFnErr
 ///
 #[server]
 pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), ServerFnError> {
-    // Enum values from `ErsatzTV.Core.Domain`:
-    // CollectionType.TelevisionShow = 1, PlaybackOrder.Shuffle = 3,
-    // FillWithGroupMode.None = 0, GuideMode.Normal = 0,
-    // MarathonGroupBy.None = 0.
     const COLLECTION_TYPE_TELEVISION_SHOW: i64 = 1;
+
+    add_media_item_to_schedule_impl(schedule_id, COLLECTION_TYPE_TELEVISION_SHOW, show_id).await
+}
+
+/// Adds any media item to a program schedule as a single `PlayoutMode.One`
+/// item. Ports `AddProgramScheduleItem.ForMediaItem`.
+#[server]
+pub async fn add_media_item_to_schedule(
+    schedule_id: i64,
+    collection_type: i64,
+    media_item_id: i64,
+) -> Result<(), ServerFnError> {
+    add_media_item_to_schedule_impl(schedule_id, collection_type, media_item_id).await
+}
+
+#[cfg(feature = "ssr")]
+async fn add_media_item_to_schedule_impl(
+    schedule_id: i64,
+    collection_type: i64,
+    media_item_id: i64,
+) -> Result<(), ServerFnError> {
+    // Enum values from `ErsatzTV.Core.Domain`:
+    // PlaybackOrder.Shuffle = 3, FillWithGroupMode.None = 0,
+    // GuideMode.Normal = 0, MarathonGroupBy.None = 0.
     const PLAYBACK_ORDER_SHUFFLE: i64 = 3;
     const FILL_WITH_GROUP_MODE_NONE: i64 = 0;
     const GUIDE_MODE_NORMAL: i64 = 0;
@@ -2469,11 +2709,11 @@ pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), 
     if schedule_exists == 0 {
         return Err(ServerFnError::new("[ProgramScheduleId] does not exist."));
     }
-    let show_exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Show" WHERE "Id" = ?"#)
-        .bind(show_id)
+    let item_exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ?"#)
+        .bind(media_item_id)
         .fetch_one(&state.pool)
         .await?;
-    if show_exists == 0 {
+    if item_exists == 0 {
         return Err(ServerFnError::new("[MediaItem] does not exist."));
     }
 
@@ -2497,8 +2737,8 @@ pub async fn add_show_to_schedule(schedule_id: i64, show_id: i64) -> Result<(), 
            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)"#,
     )
     .bind(schedule_id)
-    .bind(COLLECTION_TYPE_TELEVISION_SHOW)
-    .bind(show_id)
+    .bind(collection_type)
+    .bind(media_item_id)
     .bind(PLAYBACK_ORDER_SHUFFLE)
     .bind(FILL_WITH_GROUP_MODE_NONE)
     .bind(GUIDE_MODE_NORMAL)
@@ -3078,6 +3318,268 @@ pub async fn add_media_items_to_playlist_mixed(
 // flatten the projection into a single `Vec<CollectionItemCard>` carrying a
 // `kind` discriminant — the UI groups by kind for rendering but operates on a
 // uniform `(media_item_id, custom_index)` everywhere else.
+
+#[cfg(test)]
+mod season_detail_tests {
+    use super::{get_media_item_info_json, get_season_details};
+    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
+    use leptos::prelude::{provide_context, Owner};
+    use serde_json::Value;
+    use sqlx::Executor;
+    use tempfile::NamedTempFile;
+    use tokio::sync::mpsc;
+    use uuid::Uuid;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn season_details_and_episode_media_info_use_television_repository_projection() {
+        let (_db_file, pool) = test_pool().await;
+        seed_season_detail_fixture(&pool).await;
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+        );
+
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let season = get_season_details(20).await.unwrap().unwrap();
+        assert_eq!(season.id, 20);
+        assert_eq!(season.show_id, 10);
+        assert_eq!(season.show_title, "Example Show");
+        assert_eq!(season.name, "Season 1");
+        assert_eq!(
+            season.poster_url.as_deref(),
+            Some("/artwork/posters/season-poster.jpg")
+        );
+        assert_eq!(
+            season.fanart_url.as_deref(),
+            Some("/artwork/fanart/show-fanart.jpg")
+        );
+        assert_eq!(season.episode_count, 2);
+        assert_eq!(season.episodes.len(), 2);
+        assert_eq!(season.episodes[0].episode_id, 30);
+        assert_eq!(season.episodes[0].episode_number, 1);
+        assert_eq!(season.episodes[0].title, "Pilot");
+        assert_eq!(
+            season.episodes[0].thumbnail_url.as_deref(),
+            Some("/artwork/thumbnails/pilot-thumb.jpg")
+        );
+        assert_eq!(season.episodes[0].aired, "1-5-2026");
+        assert_eq!(season.episodes[0].media_item_state, 1);
+        assert_eq!(
+            season.episodes[0].file_path.as_deref(),
+            Some("/media/show/s01e01.mkv")
+        );
+        assert_eq!(
+            season.episodes[0].directors,
+            vec!["Director A", "Director B"]
+        );
+        assert_eq!(season.episodes[0].writers, vec!["Writer A"]);
+        assert_eq!(season.episodes[1].aired, "1-1-0001");
+
+        let json = get_media_item_info_json(30).await.unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["Kind"], "Episode");
+        assert_eq!(value["Title"], "Example Show - s01e01 - Pilot");
+        assert_eq!(value["LibraryKind"], "LocalLibrary");
+        assert_eq!(value["State"], "FileNotFound");
+        assert_eq!(value["Duration"], "00:22:00");
+        assert_eq!(value["Width"], 1920);
+        assert_eq!(value["Height"], 1080);
+        assert_eq!(value["Streams"][0]["Kind"], "Video");
+        assert_eq!(value["Streams"][1]["Kind"], "Subtitle");
+        assert_eq!(value["Streams"][1]["IsExtracted"], true);
+        assert_eq!(value["Chapters"][0]["Title"], "Opening");
+
+        owner.cleanup();
+    }
+
+    async fn test_pool() -> (NamedTempFile, ersatzrs_infra::db::DbPool) {
+        let file = NamedTempFile::new().unwrap();
+        let database_url = format!("sqlite:{}", file.path().display());
+        let pool = db::init(&database_url).await.unwrap();
+        (file, pool)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn seed_season_detail_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        let now = "2026-05-22T00:00:00Z";
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (10)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (10)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (10, 'TV', 1, 10)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (10)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (10, '/media', 10)"#,
+        )
+        .await
+        .unwrap();
+
+        for (id, state) in [(10, 0), (20, 0), (30, 1), (31, 0)] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+                   VALUES (?, 10, ?)"#,
+            )
+            .bind(id)
+            .bind(state)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+
+        pool.execute(r#"INSERT INTO "Show" ("Id") VALUES (10)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "Season" ("Id", "ShowId", "SeasonNumber") VALUES (20, 10, 1)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (30, 20), (31, 20)"#)
+            .await
+            .unwrap();
+
+        sqlx::query(
+            r#"INSERT INTO "ShowMetadata" (
+                   "Id", "ShowId", "MetadataKind", "Title", "SortTitle", "Year",
+                   "DateAdded", "DateUpdated"
+               ) VALUES (100, 10, 0, 'Example Show', 'example show', 2026, ?, ?)"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "SeasonMetadata" (
+                   "Id", "SeasonId", "MetadataKind", "Title", "SortTitle",
+                   "DateAdded", "DateUpdated"
+               ) VALUES (200, 20, 0, 'Season 1', 'season 1', ?, ?)"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "EpisodeMetadata" (
+                   "Id", "EpisodeId", "MetadataKind", "Title", "SortTitle",
+                   "ReleaseDate", "DateAdded", "DateUpdated", "EpisodeNumber", "Plot"
+               ) VALUES
+                   (300, 30, 0, 'Pilot', 'pilot', '2026-05-01T00:00:00Z', ?, ?, 1, 'The beginning.'),
+                   (301, 31, 0, 'Finale', 'finale', NULL, ?, ?, 2, 'The ending.')"#,
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"INSERT INTO "Artwork" (
+                   "Id", "ArtworkKind", "Path", "SeasonMetadataId", "ShowMetadataId",
+                   "EpisodeMetadataId", "DateAdded", "DateUpdated"
+               ) VALUES
+                   (1, 0, 'season-poster.jpg', 200, NULL, NULL, ?, ?),
+                   (2, 3, 'show-fanart.jpg', NULL, 100, NULL, ?, ?),
+                   (3, 1, 'pilot-thumb.jpg', NULL, NULL, 300, ?, ?)"#,
+        )
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        pool.execute(
+            r#"INSERT INTO "Director" ("EpisodeMetadataId", "Name")
+               VALUES (300, 'Director A'), (300, 'Director B')"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Writer" ("EpisodeMetadataId", "Name")
+               VALUES (300, 'Writer A')"#,
+        )
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "EpisodeId",
+                   "Height", "Width", "VideoScanKind", "SampleAspectRatio",
+                   "DisplayAspectRatio", "RFrameRate"
+               ) VALUES (3000, ?, ?, '00:22:00', 30, 1080, 1920, 1, '1:1', '16:9', '24000/1001')"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "MediaFile" ("Id", "MediaVersionId", "Path", "PathHash")
+               VALUES (4000, 3000, '/media/show/s01e01.mkv', 'hash')"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "Profile", "MediaStreamKind", "Language",
+                   "Channels", "Title", "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (5000, 0, 'h264', 'High', 1, NULL, 0, NULL, 1, 0, 3000),
+                   (5001, 1, 'srt', NULL, 3, 'eng', 0, 'English', 1, 0, 3000)"#,
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "Subtitle" (
+                   "Id", "EpisodeMetadataId", "StreamIndex", "SubtitleKind", "Title",
+                   "Codec", "Language", "Default", "Forced", "Path", "IsExtracted",
+                   "DateAdded", "DateUpdated"
+               ) VALUES (6000, 300, 1, 0, 'English', 'srt', 'eng', 1, 0, '/cache/sub.srt', 1, ?, ?)"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "MediaChapter" (
+                   "Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title"
+               ) VALUES (7000, 3000, 1, '00:00:00', '00:01:00', 'Opening')"#,
+        )
+        .await
+        .unwrap();
+    }
+}
 // ---------------------------------------------------------------------------
 
 /// One card in the collection detail grid. `kind` is the discriminant used by

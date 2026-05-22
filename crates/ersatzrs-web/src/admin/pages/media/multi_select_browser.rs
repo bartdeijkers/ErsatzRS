@@ -771,7 +771,7 @@ pub(crate) fn AddToCollectionModal(
 }
 
 #[component]
-fn MediaInfoModal(
+pub(crate) fn MediaInfoModal(
     open: RwSignal<bool>,
     title: RwSignal<String>,
     body: RwSignal<String>,

@@ -15,6 +15,7 @@ mod media_source;
 mod metadata;
 mod playout;
 mod program_schedule;
+mod television;
 mod template;
 
 pub use block::BlockRepository;
@@ -45,4 +46,5 @@ pub use media_source::MediaSourceRepository;
 pub use metadata::MetadataRepository;
 pub use playout::PlayoutRepository;
 pub use program_schedule::ProgramScheduleRepository;
+pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};
 pub use template::TemplateRepository;

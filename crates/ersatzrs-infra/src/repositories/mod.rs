@@ -14,6 +14,7 @@ mod metadata;
 mod playout;
 mod program_schedule;
 mod scheduling;
+mod television;
 mod template;
 
 pub use block::SqliteBlockRepository;
@@ -32,6 +33,7 @@ pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
 pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::Pool;
+pub use television::SqliteTelevisionRepository;
 pub use template::SqliteTemplateRepository;
 
 #[derive(Clone)]
@@ -52,6 +54,7 @@ pub struct Repositories {
     pub metadata: SqliteMetadataRepository,
     pub config: SqliteConfigRepository,
     pub scheduling: SqliteSchedulingContentRepository,
+    pub television: SqliteTelevisionRepository,
 }
 
 #[must_use]
@@ -72,6 +75,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         graphics: SqliteGraphicsRepository(pool.clone()),
         metadata: SqliteMetadataRepository(pool.clone()),
         config: SqliteConfigRepository(pool.clone()),
-        scheduling: SqliteSchedulingContentRepository(pool),
+        scheduling: SqliteSchedulingContentRepository(pool.clone()),
+        television: SqliteTelevisionRepository(pool),
     }
 }

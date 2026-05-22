@@ -1,3 +1,4 @@
+pub mod add_to_schedule_modal;
 pub mod artists;
 pub mod browser;
 pub mod collection_detail;
@@ -6,6 +7,7 @@ pub mod images;
 pub mod movies;
 pub mod multi_select_browser;
 pub mod other_videos;
+pub mod season_detail;
 pub mod see_all_lists;
 pub mod shows;
 pub mod smart_collections;
