@@ -63,11 +63,11 @@ pub fn MediaCard(
     #[prop(default = None)] on_add_to_collection: Option<Callback<()>>,
     #[prop(default = None)] on_add_to_playlist: Option<Callback<()>>,
     #[prop(default = None)] on_show_media_info: Option<Callback<()>>,
+    #[prop(default = None)] menu_media_item_id: Option<i64>,
 ) -> impl IntoView {
     let has_menu = on_add_to_collection.is_some()
         || on_add_to_playlist.is_some()
         || on_show_media_info.is_some();
-    let menu_open = RwSignal::new(false);
 
     // Match `GetPlaceholder` in MediaCard.razor — letter count drives typography.
     let placeholder_size_class = match placeholder.chars().count() {
@@ -127,9 +127,9 @@ pub fn MediaCard(
         }
     });
 
-    // Card surface click: select-mode → on_select; otherwise navigate via href
-    // (handled by the outer <a>). When in select-mode but the caller provided
-    // no on_select, the click is a no-op.
+    // Card surface click: select-mode → on_select; otherwise the transparent
+    // navigation overlay owns href clicks. When in select-mode but the caller
+    // provided no on_select, the click is a no-op.
     let on_card_click = move |e: MouseEvent| {
         if select_mode.get() {
             e.prevent_default();
@@ -140,44 +140,60 @@ pub fn MediaCard(
         }
     };
 
-    let inner = view! {
+    let nav_overlay = href.map(|url| {
+        let title = title.clone();
+        view! {
+            <a
+                class=style::card_link_overlay
+                href=url
+                aria-label=title
+                on:click=move |e: MouseEvent| {
+                    if select_mode.get() {
+                        e.prevent_default();
+                    }
+                }
+            />
+        }
+    });
+    let menu_media_item_id = menu_media_item_id
+        .map(|id| id.to_string())
+        .unwrap_or_default();
+
+    view! {
         <div class=style::card on:click=on_card_click>
+            {nav_overlay}
             <div class=style::poster>
                 {poster_view()}
                 {has_menu.then(|| view! {
-                    <div
+                    <details
                         class=style::item_menu
                         on:click=|e: MouseEvent| e.stop_propagation()
                         style:display=move || if select_mode.get() { "none" } else { "" }
                     >
-                        <button
-                            type="button"
+                        <summary
                             class=style::item_menu_trigger
                             title="Item actions"
                             aria-label="Item actions"
-                            aria-expanded=move || menu_open.get().to_string()
                             on:click=move |e: MouseEvent| {
-                                e.prevent_default();
                                 e.stop_propagation();
-                                menu_open.update(|v| *v = !*v);
                             }
                         >
                             <span style=icon_style(IconName::MoreVert, "1.25rem") aria-hidden="true"></span>
-                        </button>
+                        </summary>
                         <div
                             class=style::item_menu_popover
                             role="menu"
-                            style:display=move || if menu_open.get() { "" } else { "none" }
                         >
                             {on_add_to_collection.map(|cb| view! {
                                 <button
                                     type="button"
                                     class=style::item_menu_entry
                                     role="menuitem"
+                                    data-search-card-action="collection"
+                                    data-media-item-id=menu_media_item_id.clone()
                                     on:click=move |e: MouseEvent| {
                                         e.prevent_default();
                                         e.stop_propagation();
-                                        menu_open.set(false);
                                         cb.run(());
                                     }
                                 >
@@ -190,10 +206,11 @@ pub fn MediaCard(
                                     type="button"
                                     class=style::item_menu_entry
                                     role="menuitem"
+                                    data-search-card-action="playlist"
+                                    data-media-item-id=menu_media_item_id.clone()
                                     on:click=move |e: MouseEvent| {
                                         e.prevent_default();
                                         e.stop_propagation();
-                                        menu_open.set(false);
                                         cb.run(());
                                     }
                                 >
@@ -209,7 +226,6 @@ pub fn MediaCard(
                                     on:click=move |e: MouseEvent| {
                                         e.prevent_default();
                                         e.stop_propagation();
-                                        menu_open.set(false);
                                         cb.run(());
                                     }
                                 >
@@ -218,7 +234,7 @@ pub fn MediaCard(
                                 </button>
                             })}
                         </div>
-                    </div>
+                    </details>
                 })}
                 {state_overlay}
             </div>
@@ -228,25 +244,6 @@ pub fn MediaCard(
             </div>
             {selection_check}
         </div>
-    };
-
-    // In select-mode the wrapper anchor should not navigate; render the card
-    // bare so the surface click handler owns the gesture.
-    match href {
-        Some(url) => view! {
-            <a
-                href=url
-                on:click=move |e: MouseEvent| {
-                    if select_mode.get() {
-                        e.prevent_default();
-                    }
-                }
-            >
-                {inner}
-            </a>
-        }
-        .into_any(),
-        None => inner.into_any(),
     }
 }
 

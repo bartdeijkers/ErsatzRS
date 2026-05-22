@@ -116,3 +116,70 @@
 .card-wrap.selected {
     border-color: var(--color-primary, #4caf50);
 }
+
+.action-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: rgb(0 0 0 / 55%);
+}
+
+.action-modal-panel {
+    width: min(32rem, 100%);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background-color: var(--color-appbar);
+    color: var(--color-gray-100);
+    box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 45%);
+    padding: 1rem;
+}
+
+.action-modal-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.action-modal-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.action-modal-fields label {
+    font-size: 0.8125rem;
+    color: var(--color-gray-300);
+}
+
+.action-modal-fields select,
+.action-modal-fields input {
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background-color: var(--color-surface);
+    color: var(--color-gray-100);
+    padding: 0.5rem 0.625rem;
+    font-size: 0.875rem;
+}
+
+.action-modal-fields input:disabled {
+    opacity: 0.55;
+}
+
+.action-modal-message {
+    min-height: 1.25rem;
+    margin: 0.75rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+}
+
+.action-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}

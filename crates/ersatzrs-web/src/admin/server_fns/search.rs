@@ -245,23 +245,31 @@ pub fn song_subtitle(artists: Option<&str>, album: Option<&str>) -> Option<Strin
 }
 
 /// Per-kind navigation href. Mirrors the `Href`/`OnClick` rules in
-/// `Search.razor`'s per-section card-grid bindings.
+/// `Search.razor`'s per-section card-grid bindings, extended for the detail
+/// routes ErsatzRS now has for other videos and artist-hosted music videos.
 #[must_use]
-pub fn search_href(kind: SearchCardKind, media_item_id: i64, season_id: Option<i64>) -> String {
+pub fn search_href(kind: SearchCardKind, media_item_id: i64, related_id: Option<i64>) -> String {
     match kind {
         SearchCardKind::Movie => format!("/media/movies/{media_item_id}"),
         SearchCardKind::Show => format!("/media/tv/shows/{media_item_id}"),
         SearchCardKind::Season => format!("/media/tv/seasons/{media_item_id}"),
-        SearchCardKind::Episode => match season_id {
+        SearchCardKind::Episode => match related_id {
             Some(sid) => format!("/media/tv/seasons/{sid}#episode-{media_item_id}"),
             None => String::new(),
         },
         SearchCardKind::Artist => format!("/media/music/artists/{media_item_id}"),
-        SearchCardKind::MusicVideo
-        | SearchCardKind::OtherVideo
-        | SearchCardKind::Song
-        | SearchCardKind::Image
-        | SearchCardKind::RemoteStream => String::new(),
+        SearchCardKind::MusicVideo => match related_id {
+            Some(artist_id) => {
+                format!("/media/music/artists/{artist_id}#music-video-{media_item_id}")
+            }
+            None => String::new(),
+        },
+        SearchCardKind::OtherVideo => format!("/media/other/videos/{media_item_id}"),
+        // These kinds currently have list pages only. Wire them here as soon
+        // as item detail pages land so search result cards navigate too.
+        SearchCardKind::Song | SearchCardKind::Image | SearchCardKind::RemoteStream => {
+            String::new()
+        }
     }
 }
 
@@ -432,6 +440,8 @@ struct SectionEnrichment {
     episode_season_id: std::collections::HashMap<i64, i64>,
     /// For music videos: the artist title keyed by music-video `media_item_id`.
     music_video_artist: std::collections::HashMap<i64, String>,
+    /// For music videos: the artist id keyed by music-video `media_item_id`.
+    music_video_artist_id: std::collections::HashMap<i64, i64>,
     /// For songs: `(artists, album)` keyed by song `media_item_id`.
     song_meta: std::collections::HashMap<i64, (Option<String>, Option<String>)>,
     /// For artists: `ArtistMetadata.Disambiguation` keyed by artist `media_item_id`.
@@ -493,6 +503,10 @@ fn build_card(
         match kind {
             SearchCardKind::Episode => enrichment
                 .episode_season_id
+                .get(&hit.media_item_id)
+                .copied(),
+            SearchCardKind::MusicVideo => enrichment
+                .music_video_artist_id
                 .get(&hit.media_item_id)
                 .copied(),
             _ => None,
@@ -743,6 +757,7 @@ async fn load_enrichment(
         SearchCardKind::MusicVideo => {
             let sql = format!(
                 r#"SELECT mv."Id" AS "ItemId",
+                          mv."ArtistId" AS "ArtistId",
                           a."Path" AS "Path",
                           am."Title" AS "ArtistTitle"
                    FROM "MusicVideo" mv
@@ -755,6 +770,9 @@ async fn load_enrichment(
             let rows = fetch_with_ids(pool, &sql, ids).await?;
             for row in rows {
                 let id: i64 = row.try_get("ItemId")?;
+                if let Ok(Some(artist_id)) = row.try_get::<Option<i64>, _>("ArtistId") {
+                    enrichment.music_video_artist_id.insert(id, artist_id);
+                }
                 if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Path") {
                     enrichment.thumbnail.insert(id, path);
                 }
@@ -956,9 +974,16 @@ mod tests {
             search_href(SearchCardKind::Artist, 5, None),
             "/media/music/artists/5"
         );
+        assert_eq!(
+            search_href(SearchCardKind::MusicVideo, 15, Some(5)),
+            "/media/music/artists/5#music-video-15"
+        );
+        assert_eq!(search_href(SearchCardKind::MusicVideo, 15, None), "");
+        assert_eq!(
+            search_href(SearchCardKind::OtherVideo, 17, None),
+            "/media/other/videos/17"
+        );
         for kind in [
-            SearchCardKind::MusicVideo,
-            SearchCardKind::OtherVideo,
             SearchCardKind::Song,
             SearchCardKind::Image,
             SearchCardKind::RemoteStream,

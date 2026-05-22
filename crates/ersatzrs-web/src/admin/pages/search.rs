@@ -10,10 +10,9 @@
 //!
 //! * The page wrapper is a plain `#[component]` that reads `?query=` from the
 //!   URL and renders a single [`SearchIsland`] (scalar `String` prop only).
-//! * The island owns its own `Resource::new_blocking` and renders
-//!   `<Suspense>` internally, so it sits **above** the suspense boundary as
-//!   the rules require. Selection state is per-page and ephemeral, mirroring
-//!   `MultiSelectBase`.
+//! * The search form is plain SSR. The results grid is a scalar-prop island
+//!   that owns its blocking resource, so per-card menu actions and modals
+//!   hydrate together with the cards.
 //! * Shift-range selection rebuilds the cross-section sorted card list and
 //!   applies `MultiSelectBase.SelectClicked`'s range logic.
 
@@ -49,16 +48,6 @@ mod shell {
     stylance::import_crate_style!(s, "src/admin/pages/media/collections.module.css");
     pub use s::*;
 }
-
-#[cfg(target_arch = "wasm32")]
-fn set_browser_location(path: &str) {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().set_href(path);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn set_browser_location(_path: &str) {}
 
 /// One section's static metadata: anchor id, heading, See-All list route.
 #[derive(Clone, Copy)]
@@ -171,87 +160,64 @@ fn see_all_href(list_path: &str, query: &str) -> String {
 
 #[component]
 pub fn SearchPage() -> impl IntoView {
-    view! { <SearchIsland/> }
-}
-
-#[island]
-fn SearchIsland() -> impl IntoView {
-    // Read `?query=` reactively. The `/search` route is matched by a single
-    // `StaticSegment`, so a top-bar submit that only changes the query string
-    // does **not** remount this component — Leptos client routing keeps the
-    // same route match. Driving the resource off the reactive query map (not a
-    // `with_untracked` snapshot) is what makes a same-route navigation
-    // actually re-run the search. Mirrors `Search.razor`, which re-reads
-    // `?query=` on every navigation.
     let query_map = use_query_map();
-    let current_query = move || query_map.with(|params| params.get("query").unwrap_or_default());
-
-    let input = RwSignal::new(current_query());
-    // Keep the in-page search box in sync when the URL query changes (e.g. a
-    // top-bar submit while already on `/search`).
-    Effect::new(move |_| input.set(current_query()));
-
-    let data: Resource<(String, SearchResults)> =
-        Resource::new_blocking(current_query, move |query| async move {
-            let results = search_results(query.clone()).await.unwrap_or_default();
-            (query, results)
-        });
-
-    let do_search = move || {
-        let query = input.get_untracked();
-        let encoded = urlencoding::encode(query.trim()).into_owned();
-        set_browser_location(&format!("/search?query={encoded}"));
-    };
+    let initial_query = query_map.with(|params| params.get("query").unwrap_or_default());
+    let input_value = initial_query.clone();
 
     view! {
         <div class=shell::page>
-            <form
-                class=shell::toolbar
-                on:submit=move |e| {
-                    e.prevent_default();
-                    do_search();
-                }
-            >
+            <form method="get" action="/search" class=shell::toolbar>
                 <h1 class=shell::page_title>"Search"</h1>
                 <input
                     class=shell::search
                     type="search"
+                    name="query"
                     placeholder="Search…"
-                    prop:value=move || input.get()
-                    on:input=move |event| input.set(event_target_value(&event))
+                    value=input_value
                 />
-                <button
-                    type="submit"
-                    class=shell::btn_add
-                    disabled=move || input.with(|value| value.trim().is_empty())
-                >
-                    "Search"
-                </button>
+                <button type="submit" class=shell::btn_add>"Search"</button>
             </form>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
-                {move || {
-                    data.get().map(|(query, results)| {
-                        if query.trim().is_empty() {
-                            return view! {
-                                <p class=style::empty>"Enter a search query."</p>
-                            }
-                            .into_any();
-                        }
-                        let any = SECTIONS
-                            .iter()
-                            .any(|m| !section_for(&results, m.kind).cards.is_empty());
-                        if !any {
-                            return view! {
-                                <p class=style::empty>"No media matched."</p>
-                            }
-                            .into_any();
-                        }
-                        view! { <SearchResultsView query=query results=results/> }.into_any()
-                    })
-                }}
-            </Suspense>
+            <SearchIsland query=initial_query/>
+            <SearchCardActionFallback/>
         </div>
+    }
+}
+
+#[island]
+fn SearchIsland(query: String) -> impl IntoView {
+    let query_for_resource = query.clone();
+    let data: Resource<(String, SearchResults)> = Resource::new_blocking(
+        move || query_for_resource.clone(),
+        move |query| async move {
+            let results = search_results(query.clone()).await.unwrap_or_default();
+            (query, results)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            {move || {
+                data.get().map(|(query, results)| {
+                    if query.trim().is_empty() {
+                        return view! {
+                            <p class=style::empty>"Enter a search query."</p>
+                        }
+                        .into_any();
+                    }
+                    let any = SECTIONS
+                        .iter()
+                        .any(|m| !section_for(&results, m.kind).cards.is_empty());
+                    if !any {
+                        return view! {
+                            <p class=style::empty>"No media matched."</p>
+                        }
+                        .into_any();
+                    }
+                    view! { <SearchResultsView query=query results=results/> }.into_any()
+                })
+            }}
+        </Suspense>
     }
 }
 
@@ -366,18 +332,19 @@ fn SearchResultsView(query: String, results: SearchResults) -> impl IntoView {
                     });
                     let q_for_link = query.clone();
                     view! {
-                        <section class=style::section>
-                            <div class=style::section_head>
-                                <h2 id=meta.anchor class=style::section_title>
-                                    {meta.label}
-                                </h2>
-                                {(total > 50).then(|| {
-                                    let href = see_all_href(meta.list_path, &q_for_link);
-                                    view! {
-                                        <a class=style::see_all href=href>"See All >>"</a>
-                                    }
-                                })}
-                            </div>
+                            <section class=style::section>
+                                <div class=style::section_head>
+                                    <h2 id=meta.anchor class=style::section_title>
+                                        {meta.label}
+                                    </h2>
+                                    <a
+                                        class=style::see_all
+                                        href=see_all_href(meta.list_path, &q_for_link)
+                                        style:display=move || { if total > 50 { "" } else { "none" } }
+                                    >
+                                        "See All >>"
+                                    </a>
+                                </div>
                             <div class=style::grid>
                                 {cards
                                     .into_iter()
@@ -456,52 +423,46 @@ fn SearchToolbar(
 
     view! {
         <div class=shell::toolbar>
-            <Show
-                when=move || select_mode.get()
-                fallback=move || {
-                    let counts = counts.clone();
-                    let query = query.clone();
-                    view! {
-                        <div class=style::count_links>
-                            <span class=style::query_echo>{query}</span>
-                            {counts
-                                .into_iter()
-                                .map(|(meta, total)| view! {
-                                    <a
-                                        class=style::count_link
-                                        href=format!("#{}", meta.anchor)
-                                    >
-                                        {format!("{total} {}", meta.label)}
-                                    </a>
-                                })
-                                .collect_view()}
-                        </div>
-                        <div class=style::actions>
-                            <button
-                                class=style::action_btn
-                                title="Add All To Collection"
-                                on:click=move |_| on_add_all_collection.run(())
+            <div style:display=move || if select_mode.get() { "none" } else { "" }>
+                <div class=style::count_links>
+                    <span class=style::query_echo>{query}</span>
+                    {counts
+                        .into_iter()
+                        .map(|(meta, total)| view! {
+                            <a
+                                class=style::count_link
+                                href=format!("#{}", meta.anchor)
                             >
-                                "Add All"
-                            </button>
-                            <button
-                                class=style::action_btn
-                                title="Add All To Playlist"
-                                on:click=move |_| on_add_all_playlist.run(())
-                            >
-                                "Add All"
-                            </button>
-                            <button
-                                class=style::action_btn_secondary
-                                title="Save As Smart Collection"
-                                on:click=move |_| on_save_as.run(())
-                            >
-                                "Save As"
-                            </button>
-                        </div>
-                    }
-                }
-            >
+                                {format!("{total} {}", meta.label)}
+                            </a>
+                        })
+                        .collect_view()}
+                </div>
+                <div class=style::actions>
+                    <button
+                        class=style::action_btn
+                        title="Add All To Collection"
+                        on:click=move |_| on_add_all_collection.run(())
+                    >
+                        "Add All"
+                    </button>
+                    <button
+                        class=style::action_btn
+                        title="Add All To Playlist"
+                        on:click=move |_| on_add_all_playlist.run(())
+                    >
+                        "Add All"
+                    </button>
+                    <button
+                        class=style::action_btn_secondary
+                        title="Save As Smart Collection"
+                        on:click=move |_| on_save_as.run(())
+                    >
+                        "Save As"
+                    </button>
+                </div>
+            </div>
+            <div style:display=move || if select_mode.get() { "" } else { "none" }>
                 <div class=style::count_links>
                     <span class=style::query_echo>
                         {move || {
@@ -534,7 +495,7 @@ fn SearchToolbar(
                         "Clear Selection"
                     </button>
                 </div>
-            </Show>
+            </div>
         </div>
     }
 }
@@ -587,10 +548,226 @@ fn SearchResultCard(
                 on_add_to_playlist=Some(Callback::new(move |()| {
                     on_add_to_playlist.run((kind, id));
                 }))
+                menu_media_item_id=Some(id)
             />
         </div>
     }
 }
+
+#[component]
+fn SearchCardActionFallback() -> impl IntoView {
+    view! {
+        <div
+            id="search-card-action-modal"
+            class=style::action_modal_backdrop
+            style="display:none"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="search-card-action-title"
+        >
+            <div class=style::action_modal_panel>
+                <h2 id="search-card-action-title" class=style::action_modal_title>
+                    "Add To Collection"
+                </h2>
+                <div
+                    id="search-card-collection-fields"
+                    class=style::action_modal_fields
+                >
+                    <label for="search-card-collection-select">"Collection"</label>
+                    <select id="search-card-collection-select"></select>
+                    <label for="search-card-collection-name">"New Collection Name"</label>
+                    <input
+                        id="search-card-collection-name"
+                        type="text"
+                        autocomplete="off"
+                    />
+                </div>
+                <div
+                    id="search-card-playlist-fields"
+                    class=style::action_modal_fields
+                    style="display:none"
+                >
+                    <label for="search-card-playlist-group">"Playlist Group"</label>
+                    <select id="search-card-playlist-group"></select>
+                    <label for="search-card-playlist-select">"Playlist"</label>
+                    <select id="search-card-playlist-select"></select>
+                </div>
+                <p id="search-card-action-message" class=style::action_modal_message></p>
+                <div class=style::action_modal_buttons>
+                    <button
+                        id="search-card-action-cancel"
+                        type="button"
+                        class=style::action_btn_secondary
+                    >
+                        "Cancel"
+                    </button>
+                    <button
+                        id="search-card-action-submit"
+                        type="button"
+                        class=style::action_btn
+                    >
+                        "Add To Collection"
+                    </button>
+                </div>
+            </div>
+        </div>
+        <script inner_html=SEARCH_CARD_ACTION_SCRIPT></script>
+    }
+}
+
+const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
+(() => {
+  if (window.__ersatzrsSearchCardActions) return;
+  window.__ersatzrsSearchCardActions = true;
+
+  const state = { mode: "", mediaItemId: 0 };
+  const byId = (id) => document.getElementById(id);
+  const modal = () => byId("search-card-action-modal");
+  const message = (value) => {
+    const el = byId("search-card-action-message");
+    if (el) el.textContent = value;
+  };
+  const show = (id, visible) => {
+    const el = byId(id);
+    if (el) el.style.display = visible ? "" : "none";
+  };
+  const json = async (url, options) => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let detail = "Request failed";
+      try {
+        const body = await response.json();
+        detail = body.error || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    return response.json();
+  };
+  const fillSelect = (id, rows, first) => {
+    const select = byId(id);
+    if (!select) return;
+    select.innerHTML = "";
+    const all = first ? [first, ...rows] : rows;
+    for (const row of all) {
+      const option = document.createElement("option");
+      option.value = String(row.id);
+      option.textContent = row.name;
+      select.appendChild(option);
+    }
+  };
+  const close = () => {
+    const el = modal();
+    if (el) el.style.display = "none";
+  };
+  const openModal = (mode, mediaItemId) => {
+    state.mode = mode;
+    state.mediaItemId = mediaItemId;
+    show("search-card-collection-fields", mode === "collection");
+    show("search-card-playlist-fields", mode === "playlist");
+    const title = byId("search-card-action-title");
+    const submit = byId("search-card-action-submit");
+    if (title) title.textContent = mode === "collection" ? "Add To Collection" : "Add To Playlist";
+    if (submit) submit.textContent = mode === "collection" ? "Add To Collection" : "Add To Playlist";
+    const el = modal();
+    if (el) el.style.display = "";
+  };
+
+  byId("search-card-collection-select")?.addEventListener("change", () => {
+    const selected = Number(byId("search-card-collection-select")?.value || -1);
+    const name = byId("search-card-collection-name");
+    if (name) name.disabled = selected > 0;
+  });
+
+  byId("search-card-playlist-group")?.addEventListener("change", async () => {
+    const groupId = Number(byId("search-card-playlist-group")?.value || 0);
+    message("Loading playlists...");
+    try {
+      const playlists = groupId > 0
+        ? await json(`/api/media/actions/playlists?group_id=${groupId}`)
+        : [];
+      fillSelect("search-card-playlist-select", playlists);
+      message(playlists.length ? "" : "No playlists in this group.");
+    } catch (error) {
+      message(error.message);
+    }
+  });
+
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-search-card-action]");
+    if (!button) return;
+    const mediaItemId = Number(button.dataset.mediaItemId || 0);
+    if (!mediaItemId) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    button.closest("details")?.removeAttribute("open");
+
+    const mode = button.dataset.searchCardAction;
+    openModal(mode, mediaItemId);
+    message(mode === "collection" ? "Loading collections..." : "Loading playlist groups...");
+
+    try {
+      if (mode === "collection") {
+        const name = byId("search-card-collection-name");
+        if (name) {
+          name.value = "";
+          name.disabled = false;
+        }
+        const collections = await json("/api/media/actions/collections");
+        fillSelect("search-card-collection-select", collections, { id: -1, name: "(New Collection)" });
+        message("");
+      } else if (mode === "playlist") {
+        const groups = await json("/api/media/actions/playlist-groups");
+        fillSelect("search-card-playlist-group", groups);
+        message("");
+        byId("search-card-playlist-group")?.dispatchEvent(new Event("change"));
+      }
+    } catch (error) {
+      message(error.message);
+    }
+  });
+
+  byId("search-card-action-cancel")?.addEventListener("click", close);
+  modal()?.addEventListener("click", (event) => {
+    if (event.target === modal()) close();
+  });
+  byId("search-card-action-submit")?.addEventListener("click", async () => {
+    if (!state.mediaItemId) return;
+    message(state.mode === "collection" ? "Adding item..." : "Adding item to playlist...");
+    try {
+      if (state.mode === "collection") {
+        const selected = Number(byId("search-card-collection-select")?.value || -1);
+        const name = byId("search-card-collection-name")?.value || "";
+        const result = await json("/api/media/actions/collections/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            media_item_id: state.mediaItemId,
+            collection_id: selected > 0 ? selected : null,
+            new_name: selected > 0 ? null : name
+          })
+        });
+        window.location.href = `/media/collections/${result.id}`;
+      } else if (state.mode === "playlist") {
+        const playlistId = Number(byId("search-card-playlist-select")?.value || 0);
+        if (!playlistId) {
+          message("Please choose a playlist.");
+          return;
+        }
+        await json("/api/media/actions/playlists/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ media_item_id: state.mediaItemId, playlist_id: playlistId })
+        });
+        message("Added item to playlist.");
+        setTimeout(close, 600);
+      }
+    } catch (error) {
+      message(error.message);
+    }
+  });
+})();
+"#;
 
 // ---------------------------------------------------------------------------
 // Bulk-action dialogs. Both resolve ids from either the current selection
