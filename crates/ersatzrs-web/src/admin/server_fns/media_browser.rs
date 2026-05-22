@@ -62,18 +62,21 @@ pub struct MovieDetailRow {
     pub year: Option<i64>,
     pub plot: Option<String>,
     pub tagline: Option<String>,
-    pub content_rating: Option<String>,
+    pub content_ratings: Vec<String>,
     pub release_date: Option<String>,
     pub poster_url: Option<String>,
     pub fanart_url: Option<String>,
     pub file_path: Option<String>,
+    pub local_path: Option<String>,
     /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
     pub media_item_state: i32,
     pub genres: Vec<String>,
     pub tags: Vec<String>,
+    pub languages: Vec<String>,
     pub studios: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
+    pub actors: Vec<ActorCardRow>,
 }
 
 /// One season card on the show details page. Mirrors
@@ -397,6 +400,7 @@ pub async fn list_movies(
 /// Movie details for the `/media/movies/:id` page. Ports
 /// `ErsatzTV/Pages/Movie.razor` + `Application.Movies/Queries/GetMovieById`.
 #[server]
+#[allow(clippy::too_many_lines)]
 pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -413,6 +417,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
                   mm."ContentRating" AS "ContentRating",
                   mm."ReleaseDate" AS "ReleaseDate",
                   COALESCE(mi."State", 0) AS "State",
+                  mi."LibraryPathId" AS "LibraryPathId",
                   mm."Id" AS "MetadataId"
            FROM "Movie" m
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
@@ -459,6 +464,27 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
     .fetch_optional(&state.pool)
     .await?
     .and_then(|v: Option<String>| v);
+    let library_path_id: Option<i64> = row.try_get("LibraryPathId").unwrap_or(None);
+    let local_path = match (file_path.as_deref(), library_path_id) {
+        (Some(path), Some(library_path_id)) => {
+            let replacements =
+                load_path_replacements_for_library_path(&state.pool, library_path_id).await?;
+            Some(resolve_local_path(path, &replacements))
+        }
+        (Some(path), None) => Some(path.to_owned()),
+        (None, _) => None,
+    };
+
+    let content_ratings: Vec<String> = row
+        .try_get::<Option<String>, _>("ContentRating")
+        .unwrap_or(None)
+        .map(|cr| {
+            cr.split('/')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
 
     let genres = load_strings(&state.pool, r#""Genre""#, "MovieMetadataId", metadata_id).await?;
     let tags = load_strings(&state.pool, r#""Tag""#, "MovieMetadataId", metadata_id).await?;
@@ -466,6 +492,34 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
     let directors =
         load_strings(&state.pool, r#""Director""#, "MovieMetadataId", metadata_id).await?;
     let writers = load_strings(&state.pool, r#""Writer""#, "MovieMetadataId", metadata_id).await?;
+    let languages = load_movie_languages(&state.pool, id).await?;
+
+    // Actors ordered by `Order` then `Id` (see `Movies/Mapper.cs`).
+    let actor_rows = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  COALESCE(a."Name", '') AS "Name",
+                  a."Role" AS "Role",
+                  art."Path" AS "Thumb"
+           FROM "Actor" a
+           LEFT JOIN "Artwork" art ON art."Id" = a."ArtworkId"
+           WHERE a."MovieMetadataId" = ?
+           ORDER BY a."Order", a."Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let actors = actor_rows
+        .iter()
+        .map(|r| ActorCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+            role: r.try_get::<Option<String>, _>("Role").unwrap_or(None),
+            thumb_url: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+        })
+        .collect();
 
     Ok(Some(MovieDetailRow {
         id: row.try_get("Id").unwrap_or(0),
@@ -473,21 +527,22 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
         year: row.try_get::<Option<i64>, _>("Year").unwrap_or(None),
         plot: row.try_get::<Option<String>, _>("Plot").unwrap_or(None),
         tagline: row.try_get::<Option<String>, _>("Tagline").unwrap_or(None),
-        content_rating: row
-            .try_get::<Option<String>, _>("ContentRating")
-            .unwrap_or(None),
+        content_ratings,
         release_date: row
             .try_get::<Option<String>, _>("ReleaseDate")
             .unwrap_or(None),
         poster_url: poster_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
         fanart_url: fanart_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
         file_path,
+        local_path,
         media_item_state: row.try_get("State").unwrap_or(0),
         genres,
         tags,
+        languages,
         studios,
         directors,
         writers,
+        actors,
     }))
 }
 
@@ -755,11 +810,19 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
 #[allow(clippy::too_many_lines)]
 pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> {
     use crate::host::state::AppState;
+    let state = expect_context::<AppState>();
+    get_media_item_info_json_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)]
+pub async fn get_media_item_info_json_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+) -> Result<String, ServerFnError> {
     use ersatzrs_core::repositories::TelevisionRepository;
     use ersatzrs_infra::repositories::SqliteTelevisionRepository;
     use sqlx::Row;
-
-    let state = expect_context::<AppState>();
 
     let movie_row = sqlx::query(
         r#"SELECT m."Id" AS "Id",
@@ -803,7 +866,7 @@ pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> 
            LIMIT 1"#,
     )
     .bind(id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(pool)
     .await?;
 
     if let Some(row) = movie_row {
@@ -812,14 +875,14 @@ pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> 
         let is_local_library =
             row.try_get::<String, _>("LibraryKind").unwrap_or_default() == "LocalLibrary";
 
-        let subtitles = load_movie_subtitle_info(&state.pool, metadata_id).await?;
+        let subtitles = load_movie_subtitle_info(pool, metadata_id).await?;
         let streams = if let Some(version_id) = version_id {
-            load_media_info_streams(&state.pool, version_id, &subtitles, is_local_library).await?
+            load_media_info_streams(pool, version_id, &subtitles, is_local_library).await?
         } else {
             Vec::new()
         };
         let chapters = if let Some(version_id) = version_id {
-            load_media_info_chapters(&state.pool, version_id).await?
+            load_media_info_chapters(pool, version_id).await?
         } else {
             Vec::new()
         };
@@ -861,22 +924,16 @@ pub async fn get_media_item_info_json(id: i64) -> Result<String, ServerFnError> 
         return serde_json::to_string_pretty(&info).map_err(ServerFnError::new);
     }
 
-    let repo = SqliteTelevisionRepository(state.pool.clone());
+    let repo = SqliteTelevisionRepository(pool.clone());
     if let Some(episode) = repo.get_episode_media_item_info(id).await? {
-        let subtitles = load_episode_subtitle_info(&state.pool, episode.metadata_id).await?;
+        let subtitles = load_episode_subtitle_info(pool, episode.metadata_id).await?;
         let streams = if let Some(version_id) = episode.media_version_id {
-            load_media_info_streams(
-                &state.pool,
-                version_id,
-                &subtitles,
-                episode.is_local_library,
-            )
-            .await?
+            load_media_info_streams(pool, version_id, &subtitles, episode.is_local_library).await?
         } else {
             Vec::new()
         };
         let chapters = if let Some(version_id) = episode.media_version_id {
-            load_media_info_chapters(&state.pool, version_id).await?
+            load_media_info_chapters(pool, version_id).await?
         } else {
             Vec::new()
         };
@@ -943,6 +1000,154 @@ async fn load_show_languages(
     languages.sort();
     languages.dedup();
     Ok(languages)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_movie_languages(
+    pool: &ersatzrs_infra::db::DbPool,
+    movie_id: i64,
+) -> Result<Vec<String>, ServerFnError> {
+    // Mirrors `GetMovieByIdHandler.cs`: inspect the movie head version's
+    // audio streams, then expand any ISO-639 aliases to English names.
+    let codes: Vec<Option<String>> = sqlx::query_scalar(
+        r#"SELECT ms."Language"
+           FROM "MediaStream" ms
+           JOIN "MediaVersion" mv ON mv."Id" = ms."MediaVersionId"
+           WHERE ms."MediaStreamKind" = 2
+             AND mv."MovieId" = ?
+             AND mv."Id" = (
+                 SELECT "Id"
+                 FROM "MediaVersion"
+                 WHERE "MovieId" = ?
+                 ORDER BY "Id"
+                 LIMIT 1
+             )
+           ORDER BY ms."Index", ms."Id""#,
+    )
+    .bind(movie_id)
+    .bind(movie_id)
+    .fetch_all(pool)
+    .await?;
+
+    let media_codes = codes
+        .into_iter()
+        .flatten()
+        .filter(|code| !code.trim().is_empty());
+
+    let mut languages: Vec<String> = ersatzrs_core::language_codes::all_language_codes(media_codes)
+        .into_iter()
+        .filter_map(|code| ersatzrs_core::language_codes::english_name(&code))
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+    languages.sort();
+    languages.dedup();
+    Ok(languages)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_path_replacements_for_library_path(
+    pool: &ersatzrs_infra::db::DbPool,
+    library_path_id: i64,
+) -> Result<Vec<ersatzrs_core::path_replacement::PathReplacement>, ServerFnError> {
+    use ersatzrs_core::path_replacement::PathReplacement;
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT ppr."PlexPath" AS "Source",
+                  ppr."LocalPath" AS "Local",
+                  pms."Platform" AS "Platform",
+                  ppr."Id" AS "SortId"
+           FROM "LibraryPath" lp
+           JOIN "Library" l ON l."Id" = lp."LibraryId"
+           JOIN "PlexMediaSource" pms ON pms."Id" = l."MediaSourceId"
+           JOIN "PlexPathReplacement" ppr ON ppr."PlexMediaSourceId" = pms."Id"
+           WHERE lp."Id" = ?
+           UNION ALL
+           SELECT jpr."JellyfinPath" AS "Source",
+                  jpr."LocalPath" AS "Local",
+                  jms."OperatingSystem" AS "Platform",
+                  jpr."Id" AS "SortId"
+           FROM "LibraryPath" lp
+           JOIN "Library" l ON l."Id" = lp."LibraryId"
+           JOIN "JellyfinMediaSource" jms ON jms."Id" = l."MediaSourceId"
+           JOIN "JellyfinPathReplacement" jpr ON jpr."JellyfinMediaSourceId" = jms."Id"
+           WHERE lp."Id" = ?
+           UNION ALL
+           SELECT epr."EmbyPath" AS "Source",
+                  epr."LocalPath" AS "Local",
+                  ems."OperatingSystem" AS "Platform",
+                  epr."Id" AS "SortId"
+           FROM "LibraryPath" lp
+           JOIN "Library" l ON l."Id" = lp."LibraryId"
+           JOIN "EmbyMediaSource" ems ON ems."Id" = l."MediaSourceId"
+           JOIN "EmbyPathReplacement" epr ON epr."EmbyMediaSourceId" = ems."Id"
+           WHERE lp."Id" = ?
+           ORDER BY "SortId""#,
+    )
+    .bind(library_path_id)
+    .bind(library_path_id)
+    .bind(library_path_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut replacements = Vec::new();
+    for row in rows {
+        let source_path: Option<String> = row.try_get("Source")?;
+        let replacement_path: Option<String> = row.try_get("Local")?;
+        let platform: Option<String> = row.try_get("Platform")?;
+        if let (Some(source_path), Some(replacement_path)) = (source_path, replacement_path) {
+            replacements.push(PathReplacement {
+                source_platform: source_platform(&source_path, platform.as_deref()),
+                source_path,
+                replacement_path,
+            });
+        }
+    }
+
+    Ok(replacements)
+}
+
+#[cfg(feature = "ssr")]
+fn resolve_local_path(
+    path: &str,
+    replacements: &[ersatzrs_core::path_replacement::PathReplacement],
+) -> String {
+    if replacements.is_empty() {
+        path.to_owned()
+    } else {
+        ersatzrs_core::path_replacement::replace_path(replacements, path, target_platform())
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn source_platform(
+    source_path: &str,
+    platform: Option<&str>,
+) -> ersatzrs_core::path_replacement::PathPlatform {
+    use ersatzrs_core::path_replacement::PathPlatform;
+
+    let source_looks_windows = source_path.contains('\\') || source_path.contains(':');
+    let source_platform_is_windows = platform.is_some_and(|platform| {
+        platform
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("windows")
+    });
+    if source_looks_windows || source_platform_is_windows {
+        PathPlatform::Windows
+    } else {
+        PathPlatform::Unix
+    }
+}
+
+#[cfg(all(feature = "ssr", target_os = "windows"))]
+fn target_platform() -> ersatzrs_core::path_replacement::PathPlatform {
+    ersatzrs_core::path_replacement::PathPlatform::Windows
+}
+
+#[cfg(all(feature = "ssr", not(target_os = "windows")))]
+fn target_platform() -> ersatzrs_core::path_replacement::PathPlatform {
+    ersatzrs_core::path_replacement::PathPlatform::Unix
 }
 
 #[cfg(feature = "ssr")]
@@ -4019,6 +4224,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn load_movie_languages_resolves_head_version_audio_stream_codes() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("movie-languages.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_movie_language_fixture(&pool).await;
+
+        let languages = load_movie_languages(&pool, 10)
+            .await
+            .expect("load movie languages");
+
+        assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
+    #[tokio::test]
     async fn playout_refresh_lookups_match_schedule_and_collection_contracts() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
@@ -4190,6 +4415,63 @@ mod tests {
                    (32, 2, 'aac', 2, 'nld', 2, 0, 0, 20),
                    (33, 3, 'ass', 3, 'eng', 0, 0, 0, 20),
                    (34, 4, 'aac', 2, NULL, 2, 0, 0, 20)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media streams");
+    }
+
+    async fn seed_movie_language_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Movies', 1, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/movies', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (10, 1, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media item");
+        sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (10)"#)
+            .execute(pool)
+            .await
+            .expect("seed movie");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "MovieId",
+                   "Height", "VideoScanKind", "Width"
+               ) VALUES
+                   (20, '2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z',
+                    '02:20:00', 10, 1080, 0, 1920),
+                   (21, '2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z',
+                    '02:20:00', 10, 1080, 0, 1920)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media versions");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
+                   "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (30, 0, 'aac', 2, 'eng', 2, 1, 0, 20),
+                   (31, 1, 'aac', 2, 'en', 2, 0, 0, 20),
+                   (32, 2, 'aac', 2, 'nld', 2, 0, 0, 20),
+                   (33, 3, 'ass', 3, 'eng', 0, 0, 0, 20),
+                   (34, 0, 'aac', 2, 'fra', 2, 1, 0, 21)"#,
         )
         .execute(pool)
         .await

@@ -21,6 +21,7 @@ use leptos_axum::{generate_route_list, LeptosRoutes};
 
 const WEB_PUBLIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/public");
 
+#[allow(clippy::too_many_lines)]
 pub fn build_app(app_state: AppState) -> Router {
     let conf = super::config::leptos_configuration();
     let leptos_options = conf.leptos_options;
@@ -84,6 +85,30 @@ pub fn build_app(app_state: AppState) -> Router {
         .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
+        )
+        .route(
+            "/api/media/actions/collections",
+            get(api::media_actions::list_collections),
+        )
+        .route(
+            "/api/media/actions/collections/add",
+            post(api::media_actions::add_to_collection),
+        )
+        .route(
+            "/api/media/actions/playlist-groups",
+            get(api::media_actions::list_playlist_groups),
+        )
+        .route(
+            "/api/media/actions/playlists",
+            get(api::media_actions::list_playlists),
+        )
+        .route(
+            "/api/media/actions/playlists/add",
+            post(api::media_actions::add_to_playlist),
+        )
+        .route(
+            "/api/media/actions/media-info/{id}",
+            get(api::media_actions::media_info),
         )
         .route(
             "/api/watermarks/save",

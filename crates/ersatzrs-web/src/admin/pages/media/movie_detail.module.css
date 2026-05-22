@@ -1,6 +1,11 @@
+.page-mount {
+    position: relative;
+}
+
 .page {
     position: relative;
     color: var(--color-gray-100);
+    min-height: calc(100vh - 4rem);
 }
 
 .loading,
@@ -13,7 +18,7 @@
 .fanart-container {
     position: absolute;
     inset: 0 0 auto 0;
-    height: 28rem;
+    height: 31rem;
     overflow: hidden;
     z-index: 0;
 }
@@ -23,15 +28,15 @@
     height: 100%;
     object-fit: cover;
     object-position: center 20%;
-    filter: brightness(0.45) saturate(0.85);
+    filter: brightness(0.72) saturate(0.88);
 }
 
 .fanart-tint {
     position: absolute;
     inset: 0;
     background: linear-gradient(180deg,
-        rgba(15, 15, 18, 0.4) 0%,
-        rgba(15, 15, 18, 0.7) 60%,
+        rgba(15, 15, 18, 0.16) 0%,
+        rgba(15, 15, 18, 0.58) 58%,
         var(--color-bg) 100%);
     z-index: 1;
 }
@@ -39,29 +44,35 @@
 .content {
     position: relative;
     z-index: 2;
-    padding: 4rem 1.5rem 2rem;
-    max-width: 72rem;
+    padding: 4.4rem 1.5rem 2.5rem;
+    max-width: 68rem;
     margin: 0 auto;
 }
 
 .hero {
     display: flex;
     flex-wrap: wrap;
-    gap: 2rem;
-    margin-bottom: 2rem;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+    align-items: flex-start;
 }
 
 .poster-wrap {
-    flex: 0 0 14rem;
+    position: relative;
+    flex: 0 0 12rem;
     border-radius: var(--radius);
     overflow: hidden;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    min-height: 18rem;
+    background: rgba(12, 12, 14, 0.55);
 }
 
 .poster {
     display: block;
     width: 100%;
     height: auto;
+    max-height: 20.4rem;
+    object-fit: cover;
 }
 
 .header {
@@ -70,46 +81,98 @@
 }
 
 .title {
-    font-size: 2.25rem;
-    font-weight: 700;
-    margin: 0 0 0.25rem;
-    color: var(--color-primary);
+    font-size: 2.8rem;
+    line-height: 1.08;
+    font-weight: 400;
+    margin: 0 0 0.65rem;
+    color: var(--color-gray-50);
+    text-shadow: 0 2px 7px rgba(0, 0, 0, 0.8);
 }
 
 .year {
-    margin: 0 0 1rem;
-    color: var(--color-muted);
+    margin: 0 0 1.6rem;
+    color: var(--color-gray-100);
     font-size: 1rem;
+    font-weight: 600;
+}
+
+.plot-card {
+    margin: 0 0 1.25rem;
+    padding: 1.25rem 1.45rem;
+    background: rgba(18, 18, 20, 0.9);
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.26);
 }
 
 .plot {
-    margin: 0 0 1.25rem;
-    line-height: 1.55;
+    margin: 0;
+    line-height: 1.5;
     color: var(--color-gray-100);
 }
 
 .warning {
-    margin: 0.75rem 0 1rem;
-    padding: 0.5rem 0.75rem;
-    border-left: 3px solid var(--color-danger, #c8553d);
-    background: rgba(200, 85, 61, 0.12);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0 0 1.25rem;
+    padding: 1rem 1.15rem;
+    background: rgba(18, 18, 20, 0.9);
     font-size: 0.875rem;
 }
 
 .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
-    margin-top: 1rem;
+    margin-top: 0;
+    align-items: center;
+}
+
+.actions-portal {
+    position: absolute;
+    z-index: 4;
+    top: 16.6rem;
+    left: calc(50% - 20.5rem);
+}
+
+.add-menu {
+    position: relative;
+}
+
+.add-menu > summary {
+    list-style: none;
+}
+
+.add-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.action-item {
+    display: contents;
+}
+
+.btn-add,
+.btn-secondary,
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.1rem;
+    padding: 0.42rem 0.8rem;
+    border-radius: 2px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .btn-back {
-    padding: 0.4rem 0.85rem;
-    border-radius: var(--radius);
     background: var(--color-surface);
     color: var(--color-gray-100);
     border: 1px solid var(--color-border);
-    cursor: pointer;
-    font-size: 0.875rem;
+    text-transform: none;
+    font-weight: 500;
 }
 
 .btn-back:hover {
@@ -117,27 +180,192 @@
     color: var(--color-primary);
 }
 
-.facts {
-    display: grid;
-    gap: 0.4rem;
-    margin: 0;
-    padding: 1rem 1.25rem;
+.btn-add {
+    background: #00a000;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #0097a7;
+    color: #fff;
+}
+
+.btn-add:hover,
+.btn-secondary:hover {
+    filter: brightness(1.08);
+}
+
+.btn-add-label::before {
+    content: "Add To ...";
+}
+
+.btn-info-label::before {
+    content: "Show Media Info";
+}
+
+.btn-troubleshoot-label::before {
+    content: "Troubleshoot Playback";
+}
+
+.add-menu-popover {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    left: 0;
+    min-width: 13rem;
+    padding: 0.25rem;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+}
+
+.add-menu-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    background: transparent;
+    color: var(--color-gray-100);
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.add-menu-entry:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.62);
+}
+
+.modal-panel {
+    width: min(40rem, 100%);
+    max-height: min(42rem, 90vh);
+    overflow: auto;
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.55);
+}
+
+.modal-panel h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.modal-panel label {
+    display: grid;
+    gap: 0.25rem;
+    color: var(--color-gray-100);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.modal-panel select,
+.modal-panel input {
+    min-height: 2.15rem;
+    padding: 0.35rem 0.5rem;
+    color: var(--color-gray-100);
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
+}
+
+.modal-help,
+.modal-message {
+    margin: 0;
+    color: var(--color-gray-300);
+    font-size: 0.84rem;
+}
+
+.modal-message {
+    min-height: 1.2rem;
+    color: var(--color-gray-100);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.media-info-pre {
+    max-height: 26rem;
+    overflow: auto;
+    margin: 0;
+    padding: 0.8rem;
+    color: var(--color-gray-100);
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--color-border);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+}
+
+.entry-collection::before {
+    content: "Add To Collection";
+}
+
+.entry-playlist::before {
+    content: "Add To Playlist";
+}
+
+.state-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--color-danger, #c8553d);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.state-badge-error {
+    background: var(--color-danger, #c8553d);
+}
+
+.state-badge-warning {
+    background: #d29b2c;
+}
+
+.facts {
+    display: grid;
+    gap: 0.58rem;
+    margin: 1.25rem 0;
+    padding: 1.05rem 1.15rem;
+    background: rgba(18, 18, 20, 0.9);
     font-size: 0.875rem;
 }
 
 .fact-row {
     display: grid;
-    grid-template-columns: 8rem 1fr;
-    gap: 1rem;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem;
     align-items: baseline;
 }
 
 .fact-row dt {
-    color: var(--color-muted);
-    font-weight: 500;
+    color: var(--color-gray-100);
+    font-weight: 700;
+}
+
+.fact-row dt::after {
+    content: ":";
 }
 
 .fact-row dd {
@@ -146,10 +374,76 @@
     word-break: break-word;
 }
 
+.fact-row a {
+    color: #00a000;
+}
+
+.fact-row a:hover {
+    color: #15c715;
+}
+
 .fact-row code {
     font-size: 0.8rem;
     color: var(--color-gray-100);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.35rem;
     border-radius: 0.25rem;
+}
+
+.actors-section {
+    margin-top: 1.8rem;
+}
+
+.section-title {
+    margin: 0 0 0.9rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-gray-100);
+}
+
+.actor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+}
+
+@media (max-width: 720px) {
+    .content {
+        padding-top: 2rem;
+    }
+
+    .fanart-container {
+        height: 27rem;
+    }
+
+    .hero {
+        gap: 1rem;
+    }
+
+    .poster-wrap {
+        flex-basis: min(12rem, 52vw);
+        min-height: 0;
+    }
+
+    .title {
+        font-size: 2rem;
+    }
+
+    .actions {
+        align-items: stretch;
+    }
+
+    .actions-portal {
+        position: relative;
+        top: auto;
+        left: auto;
+        margin: -1rem 1.5rem 1rem;
+        z-index: 4;
+    }
+
+    .btn-add,
+    .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
 }
