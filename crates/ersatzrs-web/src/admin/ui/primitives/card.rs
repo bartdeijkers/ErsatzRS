@@ -144,6 +144,82 @@ pub fn MediaCard(
         <div class=style::card on:click=on_card_click>
             <div class=style::poster>
                 {poster_view()}
+                {has_menu.then(|| view! {
+                    <div
+                        class=style::item_menu
+                        on:click=|e: MouseEvent| e.stop_propagation()
+                        style:display=move || if select_mode.get() { "none" } else { "" }
+                    >
+                        <button
+                            type="button"
+                            class=style::item_menu_trigger
+                            title="Item actions"
+                            aria-label="Item actions"
+                            aria-expanded=move || menu_open.get().to_string()
+                            on:click=move |e: MouseEvent| {
+                                e.prevent_default();
+                                e.stop_propagation();
+                                menu_open.update(|v| *v = !*v);
+                            }
+                        >
+                            <span style=icon_style(IconName::MoreVert, "1.25rem") aria-hidden="true"></span>
+                        </button>
+                        <div
+                            class=style::item_menu_popover
+                            role="menu"
+                            style:display=move || if menu_open.get() { "" } else { "none" }
+                        >
+                            {on_add_to_collection.map(|cb| view! {
+                                <button
+                                    type="button"
+                                    class=style::item_menu_entry
+                                    role="menuitem"
+                                    on:click=move |e: MouseEvent| {
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                        menu_open.set(false);
+                                        cb.run(());
+                                    }
+                                >
+                                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                                    <span>"Add To Collection"</span>
+                                </button>
+                            })}
+                            {on_add_to_playlist.map(|cb| view! {
+                                <button
+                                    type="button"
+                                    class=style::item_menu_entry
+                                    role="menuitem"
+                                    on:click=move |e: MouseEvent| {
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                        menu_open.set(false);
+                                        cb.run(());
+                                    }
+                                >
+                                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                                    <span>"Add To Playlist"</span>
+                                </button>
+                            })}
+                            {on_show_media_info.map(|cb| view! {
+                                <button
+                                    type="button"
+                                    class=style::item_menu_entry
+                                    role="menuitem"
+                                    on:click=move |e: MouseEvent| {
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                        menu_open.set(false);
+                                        cb.run(());
+                                    }
+                                >
+                                    <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
+                                    <span>"Show Media Info"</span>
+                                </button>
+                            })}
+                        </div>
+                    </div>
+                })}
                 {state_overlay}
             </div>
             <div class=style::caption>
@@ -151,82 +227,6 @@ pub fn MediaCard(
                 {subtitle.map(|s| view! { <p class=style::caption_sub>{s}</p> })}
             </div>
             {selection_check}
-            {has_menu.then(|| view! {
-                <div
-                    class=style::item_menu
-                    on:click=|e: MouseEvent| e.stop_propagation()
-                    style:display=move || if select_mode.get() { "none" } else { "" }
-                >
-                    <button
-                        type="button"
-                        class=style::item_menu_trigger
-                        title="Item actions"
-                        aria-label="Item actions"
-                        aria-expanded=move || menu_open.get().to_string()
-                        on:click=move |e: MouseEvent| {
-                            e.prevent_default();
-                            e.stop_propagation();
-                            menu_open.update(|v| *v = !*v);
-                        }
-                    >
-                        <span style=icon_style(IconName::MoreVert, "1.25rem") aria-hidden="true"></span>
-                    </button>
-                    <div
-                        class=style::item_menu_popover
-                        role="menu"
-                        style:display=move || if menu_open.get() { "" } else { "none" }
-                    >
-                        {on_add_to_collection.map(|cb| view! {
-                            <button
-                                type="button"
-                                class=style::item_menu_entry
-                                role="menuitem"
-                                on:click=move |e: MouseEvent| {
-                                    e.prevent_default();
-                                    e.stop_propagation();
-                                    menu_open.set(false);
-                                    cb.run(());
-                                }
-                            >
-                                <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                                <span>"Add To Collection"</span>
-                            </button>
-                        })}
-                        {on_add_to_playlist.map(|cb| view! {
-                            <button
-                                type="button"
-                                class=style::item_menu_entry
-                                role="menuitem"
-                                on:click=move |e: MouseEvent| {
-                                    e.prevent_default();
-                                    e.stop_propagation();
-                                    menu_open.set(false);
-                                    cb.run(());
-                                }
-                            >
-                                <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                                <span>"Add To Playlist"</span>
-                            </button>
-                        })}
-                        {on_show_media_info.map(|cb| view! {
-                            <button
-                                type="button"
-                                class=style::item_menu_entry
-                                role="menuitem"
-                                on:click=move |e: MouseEvent| {
-                                    e.prevent_default();
-                                    e.stop_propagation();
-                                    menu_open.set(false);
-                                    cb.run(());
-                                }
-                            >
-                                <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
-                                <span>"Show Media Info"</span>
-                            </button>
-                        })}
-                    </div>
-                </div>
-            })}
         </div>
     };
 

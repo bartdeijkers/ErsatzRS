@@ -12,6 +12,7 @@
 .card:hover { border-color: var(--color-primary); }
 
 .poster {
+    position: relative;
     aspect-ratio: 2 / 3;
     background-color: var(--color-appbar);
     display: flex;
@@ -64,6 +65,7 @@
     position: absolute;
     bottom: 0.25rem;
     left: 0.25rem;
+    z-index: 2;
 }
 .item-menu-trigger {
     display: inline-flex;
