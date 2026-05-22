@@ -15,14 +15,14 @@ pub(super) fn NavDrawer() -> impl IntoView {
                 <NavLink href="/ffmpeg" label="FFmpeg Profiles" icon=IconName::Tune/>
                 <NavLink href="/watermarks" label="Watermarks" icon=IconName::Visibility/>
 
-                <NavGroup label="Media Sources">
+                <NavGroup storage_key="media-sources" label="Media Sources">
                     <NavLink href="/media/sources/local" label="Local" icon=IconName::Download/>
                     <NavLink href="/media/sources/emby" label="Emby" icon=IconName::Download/>
                     <NavLink href="/media/sources/jellyfin" label="Jellyfin" icon=IconName::Download/>
                     <NavLink href="/media/sources/plex" label="Plex" icon=IconName::Download/>
                 </NavGroup>
 
-                <NavGroup label="Media">
+                <NavGroup storage_key="media" label="Media">
                     <NavLink href="/media/libraries" label="Libraries" icon=IconName::Copy/>
                     <NavLink href="/media/trash" label="Trash" icon=IconName::Delete/>
                     <NavLink href="/media/tv/shows" label="TV Shows" icon=IconName::Play/>
@@ -34,7 +34,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/media/remote/streams" label="Remote Streams" icon=IconName::Download/>
                 </NavGroup>
 
-                <NavGroup label="Lists">
+                <NavGroup storage_key="lists" label="Lists">
                     <NavLink href="/media/collections" label="Collections" icon=IconName::Copy/>
                     <NavLink href="/media/smart-collections" label="Smart Collections" icon=IconName::Search/>
                     <NavLink href="/media/multi-collections" label="Multi-Collections" icon=IconName::Copy/>
@@ -53,7 +53,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/playouts" label="Playouts" icon=IconName::Play/>
                 </SchedulingNavGroup>
 
-                <NavGroup label="Settings">
+                <NavGroup storage_key="settings" label="Settings">
                     <NavLink href="/settings/ffmpeg" label="FFmpeg" icon=IconName::Settings/>
                     <NavLink href="/settings/logging" label="Logging" icon=IconName::Settings/>
                     <NavLink href="/settings/hdhr" label="HDHomeRun" icon=IconName::Settings/>
@@ -76,7 +76,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
 #[component]
 fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
     view! {
-        <details class=style::nav_group>
+        <details class=style::nav_group data-nav-group="scheduling">
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
                     <span>"Scheduling"</span>
@@ -96,7 +96,7 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
 #[component]
 fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
     view! {
-        <details class=style::nav_group open>
+        <details class=style::nav_group open data-nav-group="support">
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
                     <span>"Support"</span>
@@ -114,9 +114,9 @@ fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
 }
 
 #[component]
-fn NavGroup(label: &'static str, children: ChildrenFn) -> impl IntoView {
+fn NavGroup(storage_key: &'static str, label: &'static str, children: ChildrenFn) -> impl IntoView {
     view! {
-        <details class=style::nav_group>
+        <details class=style::nav_group data-nav-group=storage_key>
             <summary class=style::nav_group_header>
                 <span>{label}</span>
                 <span class=style::nav_group_chevron>

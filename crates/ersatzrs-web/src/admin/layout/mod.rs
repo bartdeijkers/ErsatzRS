@@ -12,7 +12,12 @@ stylance::import_crate_style!(style, "src/admin/layout/layout.module.css");
 pub fn AppShell(children: Children) -> impl IntoView {
     view! {
         <div class=style::shell>
-            <input type="checkbox" id="nav-toggle" class=style::drawer_toggle/>
+            <input
+                type="checkbox"
+                id="nav-toggle"
+                class=style::drawer_toggle
+                data-nav-drawer-toggle
+            />
             <TopBar/>
             <div class=style::body>
                 <NavDrawer/>
@@ -22,6 +27,7 @@ pub fn AppShell(children: Children) -> impl IntoView {
                     </main>
                 </div>
             </div>
+            <NavStateScript/>
         </div>
     }
 }
@@ -64,5 +70,84 @@ fn TopBar() -> impl IntoView {
                 <a href="/iptv/xmltv.xml" class=style::topbar_link target="_blank">"XMLTV"</a>
             </nav>
         </header>
+    }
+}
+
+#[component]
+fn NavStateScript() -> impl IntoView {
+    const SCRIPT: &str = r#"
+(() => {
+  const drawerKey = "ersatzrs.nav.drawer.checked.v1";
+  const groupsKey = "ersatzrs.nav.groups.v1";
+
+  function storage() {
+    try {
+      return window.sessionStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  function readGroups(store) {
+    if (!store) return {};
+    try {
+      return JSON.parse(store.getItem(groupsKey) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function initDrawer(store) {
+    const toggle = document.querySelector("[data-nav-drawer-toggle]");
+    if (!toggle) return;
+
+    const stored = store?.getItem(drawerKey);
+    if (stored === "true" || stored === "false") {
+      toggle.checked = stored === "true";
+    }
+
+    toggle.addEventListener("change", () => {
+      store?.setItem(drawerKey, toggle.checked ? "true" : "false");
+    });
+  }
+
+  function initGroups(store) {
+    const groups = Array.from(document.querySelectorAll("[data-nav-group]"));
+    const state = readGroups(store);
+
+    for (const group of groups) {
+      const key = group.getAttribute("data-nav-group");
+      if (!key) continue;
+
+      if (Object.prototype.hasOwnProperty.call(state, key)) {
+        group.open = state[key] === true;
+      }
+
+      group.addEventListener("toggle", () => {
+        const next = readGroups(store);
+        next[key] = group.open;
+        try {
+          store?.setItem(groupsKey, JSON.stringify(next));
+        } catch {}
+      });
+    }
+  }
+
+  function init() {
+    const store = storage();
+    initDrawer(store);
+    initGroups(store);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
+})();
+"#;
+
+    view! {
+        <script inner_html=SCRIPT></script>
     }
 }
