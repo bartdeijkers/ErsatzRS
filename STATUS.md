@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-22 (admin sidebar state parity)
+Last updated: 2026-05-22 (artist detail page parity)
 
 ## Current Phase
 
@@ -439,6 +439,7 @@ the summary below is the readiness view.
 `libraries`/`paths` sub-pages, `/media/libraries`, `/media/trash`,
 `/media/movies`, `/media/tv/shows` (alias `/media/shows`),
 `/media/browser/images` (alias `/media/images`), `/media/music/artists`,
+`/media/music/artists/:id`,
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
 `/media/smart-collections`, `/media/trakt/lists`, `/search`, `/blocks`
 (alias for `/scheduling/blocks`), `/playouts`, `/playouts/sequential/:id`,
@@ -476,6 +477,7 @@ yet.
 | `CollectionsPage`             | ✅     | Autocomplete island.                                           |
 | `MoviesPage`                  | TODO   | Item overflow menu wired; Playwright smoke pending.             |
 | `MoviePage` (`/media/movies/:id`) | ✅ | SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean. |
+| `ArtistPage` (`/media/music/artists/:id`) | ✅ | Detail page island wired; `/media/music/artists/2355` modal-open smoke clean. |
 | `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
@@ -522,6 +524,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-22 | Codex (GPT-5) | Added `/media/music/artists/:id` artist detail parity for the current media DB surface: ErsatzTV-style artist fanart/thumbnail header, disambiguation, 400-character biography excerpt, linked Languages/Genres/Styles/Moods, artist Add To Collection/Schedule actions with artist-level post-add navigation, and the first 100 sorted music videos with album links, state warnings, and per-video Add To Collection. Gates so far: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-web admin::server_fns::media_browser::tests::load_artist_languages_resolves_music_video_audio_stream_codes --features ssr`, `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`, and Playwright `/media/music/artists/2355` render + artist/music-video Add To modal-open smoke with zero console warnings/errors. |
 | 2026-05-22 | Codex (GPT-5) | Restored ErsatzTV-style admin sidebar state across SSR page navigations: the drawer toggle and collapsible nav groups now keep their per-tab state in browser session storage while preserving ErsatzRS defaults on a fresh session. Gates: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`, and Playwright `/channels` → open Media group → `/media/movies` plus drawer-toggle persistence back to `/channels` via `./run.sh serve`. |
 | 2026-05-22 | Codex (GPT-5) | Completed `/media/movies/:id` movie detail parity for 2001: stable SSR detail rendering, JSON-backed Add To Collection/Add To Playlist/Media Info actions, collection playout-refresh side effects, playlist success without redirecting to a missing route, and a hydration/UI bug-containment playbook in `TEST.md`. Gates: `cargo clean`, `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web --bin ersatzrs-web --no-default-features --features ssr`, `cargo test -p ersatzrs-web admin::server_fns::media_browser::tests::load_movie_languages_resolves_head_version_audio_stream_codes --features ssr`, `cargo clippy -p ersatzrs-web --bin ersatzrs-web --no-default-features --features ssr -- -D warnings`, `(cd crates/ersatzrs-web && cargo leptos build)`, and Playwright `/media/movies/7` with zero current console errors. |
 | 2026-05-22 | Codex (GPT-5) | Fixed the shared media-card action menu positioning so TV show season cards render the MoreVert/Add To Collection menu inside the poster instead of overlapping the season title caption. Gates: `cargo fmt --all`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`. |

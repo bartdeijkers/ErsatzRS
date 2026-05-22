@@ -50,6 +50,16 @@ mod card_style {
     pub use s::*;
 }
 
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
+
 pub const PAGE_SIZE: u32 = 50;
 
 /// Encodes per-kind configuration that the page wrapper supplies. The fields
@@ -652,6 +662,7 @@ const NEW_COLLECTION_ID: i64 = -1;
 pub(crate) fn AddToCollectionModal(
     open: RwSignal<bool>,
     selected: RwSignal<HashSet<i64>>,
+    #[prop(optional)] redirect_after_add: bool,
 ) -> impl IntoView {
     let refresh: RwSignal<u32> = RwSignal::new(0);
     let options: RwSignal<Vec<CollectionOption>> = RwSignal::new(Vec::new());
@@ -700,13 +711,16 @@ pub(crate) fn AddToCollectionModal(
     Effect::new(move |_| {
         if let Some(res) = submit_action.value().get() {
             match res {
-                Ok((requested, _added, _id)) => {
+                Ok((requested, _added, target_id)) => {
                     toast.push(
                         format!("Added {requested} items to collection"),
                         ToastSeverity::Success,
                     );
                     selected.update(HashSet::clear);
                     open.set(false);
+                    if redirect_after_add {
+                        set_browser_location(&format!("/media/collections/{target_id}"));
+                    }
                     refresh.update(|n| *n += 1);
                     collection_id.set(NEW_COLLECTION_ID);
                     new_name.set(String::new());

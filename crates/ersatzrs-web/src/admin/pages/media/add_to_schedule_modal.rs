@@ -6,12 +6,23 @@ use crate::admin::server_fns::media_browser::{add_media_item_to_schedule, Schedu
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
+
 #[component]
 pub(crate) fn AddToScheduleModal(
     open: RwSignal<bool>,
     media_item_id: i64,
     collection_type: i64,
     success_label: &'static str,
+    #[prop(optional)] redirect_after_add: bool,
 ) -> impl IntoView {
     let options: RwSignal<Vec<ScheduleOption>> = RwSignal::new(Vec::new());
     let schedule_id: RwSignal<i64> = RwSignal::new(0);
@@ -49,6 +60,12 @@ pub(crate) fn AddToScheduleModal(
                 Ok(()) => {
                     toast.push(success_label, ToastSeverity::Success);
                     open.set(false);
+                    if redirect_after_add {
+                        set_browser_location(&format!(
+                            "/schedules/{}/items",
+                            schedule_id.get_untracked()
+                        ));
+                    }
                 }
                 Err(e) => toast.push(format!("Add to schedule failed: {e}"), ToastSeverity::Error),
             }

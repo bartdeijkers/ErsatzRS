@@ -166,6 +166,40 @@ pub struct SeasonDetailRow {
     pub episodes: Vec<EpisodeCardRow>,
 }
 
+/// One music-video row on the artist details page. Mirrors
+/// `ErsatzTV.Application.MediaCards.MusicVideoCardViewModel`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ArtistMusicVideoRow {
+    pub id: i64,
+    pub title: String,
+    pub sort_title: String,
+    pub plot: Option<String>,
+    pub album: Option<String>,
+    pub thumbnail_url: Option<String>,
+    /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
+    pub media_item_state: i32,
+    pub file_path: Option<String>,
+    pub local_path: Option<String>,
+}
+
+/// Detailed projection for the artist details page. Mirrors the relevant
+/// subset of `ErsatzTV.Application.Artists.ArtistViewModel` plus the first
+/// 100 `GetMusicVideoCards` rows.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ArtistDetailRow {
+    pub id: i64,
+    pub title: String,
+    pub disambiguation: Option<String>,
+    pub biography: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub genres: Vec<String>,
+    pub styles: Vec<String>,
+    pub moods: Vec<String>,
+    pub languages: Vec<String>,
+    pub music_videos: Vec<ArtistMusicVideoRow>,
+}
+
 #[cfg(feature = "ssr")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -1045,6 +1079,40 @@ async fn load_movie_languages(
 }
 
 #[cfg(feature = "ssr")]
+async fn load_artist_languages(
+    pool: &ersatzrs_infra::db::DbPool,
+    artist_id: i64,
+) -> Result<Vec<String>, ServerFnError> {
+    // Mirrors `SearchRepository.GetLanguagesForArtist`; `MediaStreamKind = 2`
+    // is the ErsatzTV persisted enum value for audio streams.
+    let codes: Vec<Option<String>> = sqlx::query_scalar(
+        r#"SELECT DISTINCT ms."Language"
+           FROM "MediaStream" ms
+           JOIN "MediaVersion" mv ON mv."Id" = ms."MediaVersionId"
+           JOIN "MusicVideo" mv_item ON mv_item."Id" = mv."MusicVideoId"
+           WHERE ms."MediaStreamKind" = 2
+             AND mv_item."ArtistId" = ?"#,
+    )
+    .bind(artist_id)
+    .fetch_all(pool)
+    .await?;
+
+    let media_codes = codes
+        .into_iter()
+        .flatten()
+        .filter(|code| !code.trim().is_empty());
+
+    let mut languages: Vec<String> = ersatzrs_core::language_codes::all_language_codes(media_codes)
+        .into_iter()
+        .filter_map(|code| ersatzrs_core::language_codes::english_name(&code))
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+    languages.sort();
+    languages.dedup();
+    Ok(languages)
+}
+
+#[cfg(feature = "ssr")]
 async fn load_path_replacements_for_library_path(
     pool: &ersatzrs_infra::db::DbPool,
     library_path_id: i64,
@@ -1724,6 +1792,164 @@ pub async fn list_artists(
 
     #[allow(clippy::cast_sign_loss)]
     Ok((cards, total.max(0) as u64))
+}
+
+/// Artist details for `/media/music/artists/:id`. Ports
+/// `Pages/Artist.razor`, `GetArtistByIdHandler`, and
+/// `GetMusicVideoCardsHandler` for the currently implemented DB shape:
+/// artist metadata/artwork/facts plus the first 100 music videos sorted by
+/// `SortTitle`.
+#[server]
+pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let Some(row) = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  am."Id" AS "MetadataId",
+                  COALESCE(am."Title", '') AS "Title",
+                  am."Disambiguation" AS "Disambiguation",
+                  am."Biography" AS "Biography",
+                  thumb."Path" AS "Thumbnail",
+                  fanart."Path" AS "FanArt"
+           FROM "Artist" a
+           JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           LEFT JOIN "Artwork" thumb
+               ON thumb."ArtistMetadataId" = am."Id" AND thumb."ArtworkKind" = 1
+           LEFT JOIN "Artwork" fanart
+               ON fanart."ArtistMetadataId" = am."Id" AND fanart."ArtworkKind" = 3
+           WHERE a."Id" = ?
+           ORDER BY am."Id"
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+    let mut genres =
+        load_strings(&state.pool, r#""Genre""#, "ArtistMetadataId", metadata_id).await?;
+    let mut styles =
+        load_strings(&state.pool, r#""Style""#, "ArtistMetadataId", metadata_id).await?;
+    let mut moods = load_strings(&state.pool, r#""Mood""#, "ArtistMetadataId", metadata_id).await?;
+    genres.sort();
+    styles.sort();
+    moods.sort();
+
+    let languages = load_artist_languages(&state.pool, id).await?;
+    let music_videos = load_artist_music_videos(&state.pool, id).await?;
+
+    Ok(Some(ArtistDetailRow {
+        id,
+        title: row.try_get("Title").unwrap_or_default(),
+        disambiguation: row
+            .try_get::<Option<String>, _>("Disambiguation")
+            .unwrap_or(None)
+            .filter(|s| !s.trim().is_empty()),
+        biography: row
+            .try_get::<Option<String>, _>("Biography")
+            .unwrap_or(None)
+            .filter(|s| !s.trim().is_empty()),
+        thumbnail_url: row
+            .try_get::<Option<String>, _>("Thumbnail")
+            .unwrap_or(None)
+            .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+        fanart_url: row
+            .try_get::<Option<String>, _>("FanArt")
+            .unwrap_or(None)
+            .and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
+        genres,
+        styles,
+        moods,
+        languages,
+        music_videos,
+    }))
+}
+
+#[cfg(feature = "ssr")]
+async fn load_artist_music_videos(
+    pool: &ersatzrs_infra::db::DbPool,
+    artist_id: i64,
+) -> Result<Vec<ArtistMusicVideoRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT mv."Id" AS "Id",
+                  COALESCE(mvm."Title", '') AS "Title",
+                  COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
+                  mvm."Plot" AS "Plot",
+                  mvm."Album" AS "Album",
+                  art."Path" AS "Thumbnail",
+                  mi."State" AS "State",
+                  mi."LibraryPathId" AS "LibraryPathId",
+                  mf."Path" AS "Path"
+           FROM "MusicVideo" mv
+           JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+           JOIN "MediaItem" mi ON mi."Id" = mv."Id"
+           LEFT JOIN "Artwork" art
+               ON art."MusicVideoMetadataId" = mvm."Id" AND art."ArtworkKind" = 1
+           LEFT JOIN "MediaVersion" ver
+               ON ver."MusicVideoId" = mv."Id"
+              AND ver."Id" = (
+                  SELECT "Id" FROM "MediaVersion"
+                  WHERE "MusicVideoId" = mv."Id"
+                  ORDER BY "Id"
+                  LIMIT 1
+              )
+           LEFT JOIN "MediaFile" mf
+               ON mf."MediaVersionId" = ver."Id"
+              AND mf."Id" = (
+                  SELECT "Id" FROM "MediaFile"
+                  WHERE "MediaVersionId" = ver."Id"
+                  ORDER BY "Id"
+                  LIMIT 1
+              )
+           WHERE mv."ArtistId" = ?
+           ORDER BY mvm."SortTitle", mvm."Title"
+           LIMIT 100"#,
+    )
+    .bind(artist_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let file_path: Option<String> = r.try_get::<Option<String>, _>("Path").unwrap_or(None);
+        let library_path_id: Option<i64> = r.try_get("LibraryPathId").unwrap_or(None);
+        let local_path = match (file_path.as_deref(), library_path_id) {
+            (Some(path), Some(library_path_id)) => {
+                let replacements =
+                    load_path_replacements_for_library_path(pool, library_path_id).await?;
+                Some(resolve_local_path(path, &replacements))
+            }
+            (Some(path), None) => Some(path.to_owned()),
+            (None, _) => None,
+        };
+
+        out.push(ArtistMusicVideoRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            plot: r.try_get::<Option<String>, _>("Plot").unwrap_or(None),
+            album: r.try_get::<Option<String>, _>("Album").unwrap_or(None),
+            thumbnail_url: r
+                .try_get::<Option<String>, _>("Thumbnail")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+            media_item_state: r.try_get("State").unwrap_or(0),
+            file_path,
+            local_path,
+        });
+    }
+
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -4244,6 +4470,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn load_artist_languages_resolves_music_video_audio_stream_codes() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("artist-languages.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_artist_language_fixture(&pool).await;
+
+        let languages = load_artist_languages(&pool, 10)
+            .await
+            .expect("load artist languages");
+
+        assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
+    #[tokio::test]
     async fn playout_refresh_lookups_match_schedule_and_collection_contracts() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
@@ -4400,6 +4646,71 @@ mod tests {
                ) VALUES (
                    20, '2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z',
                    '00:22:00', 12, 1080, 0, 1920
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
+                   "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (30, 0, 'aac', 2, 'eng', 2, 1, 0, 20),
+                   (31, 1, 'aac', 2, 'en', 2, 0, 0, 20),
+                   (32, 2, 'aac', 2, 'nld', 2, 0, 0, 20),
+                   (33, 3, 'ass', 3, 'eng', 0, 0, 0, 20),
+                   (34, 4, 'aac', 2, NULL, 2, 0, 0, 20)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media streams");
+    }
+
+    async fn seed_artist_language_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Music Videos', 3, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/music', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+
+        for id in [10_i64, 11] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("seed media item");
+        }
+
+        sqlx::query(r#"INSERT INTO "Artist" ("Id") VALUES (10)"#)
+            .execute(pool)
+            .await
+            .expect("seed artist");
+        sqlx::query(r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (11, 10)"#)
+            .execute(pool)
+            .await
+            .expect("seed music video");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "MusicVideoId",
+                   "Height", "VideoScanKind", "Width"
+               ) VALUES (
+                   20, '2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z',
+                   '00:04:00', 11, 1080, 0, 1920
                )"#,
         )
         .execute(pool)
