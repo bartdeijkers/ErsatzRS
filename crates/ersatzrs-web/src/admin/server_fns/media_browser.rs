@@ -4470,6 +4470,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn load_movie_metadata_facts_resolves_studios_genres_and_tags() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("movie-facts.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_movie_metadata_fact_fixture(&pool).await;
+
+        let studios = load_strings(&pool, r#""Studio""#, "MovieMetadataId", 100)
+            .await
+            .expect("load studios");
+        let genres = load_strings(&pool, r#""Genre""#, "MovieMetadataId", 100)
+            .await
+            .expect("load genres");
+        let tags = load_strings(&pool, r#""Tag""#, "MovieMetadataId", 100)
+            .await
+            .expect("load tags");
+
+        assert_eq!(
+            studios,
+            vec!["A Studio".to_string(), "Z Studio".to_string()]
+        );
+        assert_eq!(
+            genres,
+            vec!["Drama".to_string(), "Science Fiction".to_string()]
+        );
+        assert_eq!(tags, vec!["Cult".to_string(), "Director's Cut".to_string()]);
+    }
+
+    #[tokio::test]
     async fn load_artist_languages_resolves_music_video_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
@@ -4595,6 +4629,22 @@ mod tests {
                 collection_type: 10,
                 media_item_id: 99,
             }]
+        );
+    }
+
+    #[test]
+    fn movie_fact_search_links_match_ersatztv_lowercase_queries() {
+        assert_eq!(
+            crate::admin::pages::media::movies::search_link("studio", "Z Studio", true),
+            "/search?query=studio%3A%22z%20studio%22"
+        );
+        assert_eq!(
+            crate::admin::pages::media::movies::search_link("genre", "Science Fiction", true),
+            "/search?query=genre%3A%22science%20fiction%22"
+        );
+        assert_eq!(
+            crate::admin::pages::media::movies::search_link("tag", "Director's Cut", true),
+            "/search?query=tag%3A%22director%27s%20cut%22"
         );
     }
 
@@ -4730,6 +4780,80 @@ mod tests {
         .execute(pool)
         .await
         .expect("seed media streams");
+    }
+
+    async fn seed_movie_metadata_fact_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Movies', 1, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/movies', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+               VALUES (10, 1, 0), (11, 1, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media items");
+        sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (10), (11)"#)
+            .execute(pool)
+            .await
+            .expect("seed movies");
+        sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                   "Id", "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "Title"
+               ) VALUES (
+                   100, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z', 0,
+                   10, 'Example Movie'
+               ), (
+                   101, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z', 0,
+                   11, 'Other Movie'
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed movie metadata");
+        sqlx::query(
+            r#"INSERT INTO "Studio" ("Name", "MovieMetadataId") VALUES
+                   ('Z Studio', 100),
+                   ('A Studio', 100),
+                   ('', 100),
+                   (NULL, 100),
+                   ('Other Movie Studio', 101)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed studios");
+        sqlx::query(
+            r#"INSERT INTO "Genre" ("Name", "MovieMetadataId") VALUES
+                   ('Science Fiction', 100),
+                   ('Drama', 100),
+                   ('Other Movie Genre', 101)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed genres");
+        sqlx::query(
+            r#"INSERT INTO "Tag" ("Name", "MovieMetadataId") VALUES
+                   ('Director''s Cut', 100),
+                   ('Cult', 100),
+                   ('Other Movie Tag', 101)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed tags");
     }
 
     async fn seed_movie_language_fixture(pool: &ersatzrs_infra::db::DbPool) {

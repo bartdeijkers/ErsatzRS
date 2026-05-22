@@ -635,7 +635,7 @@ fn media_state(state: i32) -> MediaItemState {
     }
 }
 
-fn search_link(field: &str, value: &str, lowercase_query: bool) -> String {
+pub(crate) fn search_link(field: &str, value: &str, lowercase_query: bool) -> String {
     let term = if lowercase_query {
         value.to_lowercase()
     } else {
