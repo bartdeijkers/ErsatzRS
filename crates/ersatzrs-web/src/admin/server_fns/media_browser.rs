@@ -79,6 +79,35 @@ pub struct MovieDetailRow {
     pub actors: Vec<ActorCardRow>,
 }
 
+/// Detailed projection for the other-video details page. ErsatzTV only ships
+/// `OtherVideoList.razor`; this detail projection uses the same
+/// `OtherVideoMetadata` graph that `OtherVideoRepository.GetOrAdd` loads and
+/// the same `OtherVideoCardViewModel` thumbnail-before-poster artwork rule.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct OtherVideoDetailRow {
+    pub id: i64,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub tagline: Option<String>,
+    pub content_ratings: Vec<String>,
+    pub release_date: Option<String>,
+    pub artwork_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub file_path: Option<String>,
+    pub local_path: Option<String>,
+    /// `MediaItem.State`: 0 = Normal, 1 = `FileNotFound`, 2 = Unavailable.
+    pub media_item_state: i32,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub languages: Vec<String>,
+    pub studios: Vec<String>,
+    pub directors: Vec<String>,
+    pub writers: Vec<String>,
+    pub actors: Vec<ActorCardRow>,
+}
+
 /// One season card on the show details page. Mirrors
 /// `ErsatzTV.Application.MediaCards.TelevisionSeasonCardViewModel`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -958,6 +987,106 @@ pub async fn get_media_item_info_json_with_pool(
         return serde_json::to_string_pretty(&info).map_err(ServerFnError::new);
     }
 
+    let other_video_row = sqlx::query(
+        r#"SELECT ov."Id" AS "Id",
+                  COALESCE(ovm."Title", '') AS "Title",
+                  ovm."Id" AS "MetadataId",
+                  COALESCE(mi."State", 0) AS "State",
+                  COALESCE(l."Name", '') AS "LibraryName",
+                  CASE
+                      WHEN ll."Id" IS NOT NULL THEN 'LocalLibrary'
+                      WHEN pl."Id" IS NOT NULL THEN 'PlexLibrary'
+                      WHEN jl."Id" IS NOT NULL THEN 'JellyfinLibrary'
+                      WHEN el."Id" IS NOT NULL THEN 'EmbyLibrary'
+                      ELSE 'Library'
+                  END AS "LibraryKind",
+                  COALESCE(pms."ServerName", jms."ServerName", ems."ServerName") AS "ServerName",
+                  mv."Id" AS "MediaVersionId",
+                  mv."Duration" AS "Duration",
+                  mv."SampleAspectRatio" AS "SampleAspectRatio",
+                  mv."DisplayAspectRatio" AS "DisplayAspectRatio",
+                  mv."RFrameRate" AS "RFrameRate",
+                  COALESCE(mv."VideoScanKind", 0) AS "VideoScanKind",
+                  mv."InterlacedRatio" AS "InterlacedRatio",
+                  COALESCE(mv."Width", 0) AS "Width",
+                  COALESCE(mv."Height", 0) AS "Height"
+           FROM "OtherVideo" ov
+           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           LEFT JOIN "MediaItem" mi ON mi."Id" = ov."Id"
+           LEFT JOIN "LibraryPath" lp ON lp."Id" = mi."LibraryPathId"
+           LEFT JOIN "Library" l ON l."Id" = lp."LibraryId"
+           LEFT JOIN "LocalLibrary" ll ON ll."Id" = l."Id"
+           LEFT JOIN "PlexLibrary" pl ON pl."Id" = l."Id"
+           LEFT JOIN "JellyfinLibrary" jl ON jl."Id" = l."Id"
+           LEFT JOIN "EmbyLibrary" el ON el."Id" = l."Id"
+           LEFT JOIN "MediaSource" ms ON ms."Id" = l."MediaSourceId"
+           LEFT JOIN "PlexMediaSource" pms ON pms."Id" = ms."Id"
+           LEFT JOIN "JellyfinMediaSource" jms ON jms."Id" = ms."Id"
+           LEFT JOIN "EmbyMediaSource" ems ON ems."Id" = ms."Id"
+           LEFT JOIN "MediaVersion" mv ON mv."OtherVideoId" = ov."Id"
+           WHERE mi."Id" = ?
+           ORDER BY mv."Id"
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(row) = other_video_row {
+        let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+        let version_id: Option<i64> = row.try_get("MediaVersionId").unwrap_or(None);
+        let is_local_library =
+            row.try_get::<String, _>("LibraryKind").unwrap_or_default() == "LocalLibrary";
+
+        let subtitles = load_other_video_subtitle_info(pool, metadata_id).await?;
+        let streams = if let Some(version_id) = version_id {
+            load_media_info_streams(pool, version_id, &subtitles, is_local_library).await?
+        } else {
+            Vec::new()
+        };
+        let chapters = if let Some(version_id) = version_id {
+            load_media_info_chapters(pool, version_id).await?
+        } else {
+            Vec::new()
+        };
+
+        let info = MediaItemInfoJson {
+            id: row.try_get("Id").unwrap_or(0),
+            title: row.try_get("Title").unwrap_or_default(),
+            kind: "OtherVideo".to_string(),
+            library_kind: row.try_get("LibraryKind").unwrap_or_default(),
+            server_name: row
+                .try_get::<Option<String>, _>("ServerName")
+                .unwrap_or(None),
+            library_name: row.try_get("LibraryName").unwrap_or_default(),
+            state: media_item_state_name(row.try_get("State").unwrap_or(0)).to_string(),
+            duration: row
+                .try_get::<Option<String>, _>("Duration")
+                .unwrap_or(None)
+                .unwrap_or_else(|| "00:00:00".to_string()),
+            sample_aspect_ratio: row
+                .try_get::<Option<String>, _>("SampleAspectRatio")
+                .unwrap_or(None),
+            display_aspect_ratio: row
+                .try_get::<Option<String>, _>("DisplayAspectRatio")
+                .unwrap_or(None),
+            r_frame_rate: row
+                .try_get::<Option<String>, _>("RFrameRate")
+                .unwrap_or(None),
+            video_scan_kind: video_scan_kind_name(row.try_get("VideoScanKind").unwrap_or(0))
+                .to_string(),
+            interlaced_ratio: row
+                .try_get::<Option<f64>, _>("InterlacedRatio")
+                .unwrap_or(None),
+            width: row.try_get("Width").unwrap_or(0),
+            height: row.try_get("Height").unwrap_or(0),
+            streams,
+            chapters,
+        };
+
+        return serde_json::to_string_pretty(&info).map_err(ServerFnError::new);
+    }
+
     let repo = SqliteTelevisionRepository(pool.clone());
     if let Some(episode) = repo.get_episode_media_item_info(id).await? {
         let subtitles = load_episode_subtitle_info(pool, episode.metadata_id).await?;
@@ -1060,6 +1189,46 @@ async fn load_movie_languages(
     )
     .bind(movie_id)
     .bind(movie_id)
+    .fetch_all(pool)
+    .await?;
+
+    let media_codes = codes
+        .into_iter()
+        .flatten()
+        .filter(|code| !code.trim().is_empty());
+
+    let mut languages: Vec<String> = ersatzrs_core::language_codes::all_language_codes(media_codes)
+        .into_iter()
+        .filter_map(|code| ersatzrs_core::language_codes::english_name(&code))
+        .filter(|name| !name.trim().is_empty())
+        .collect();
+    languages.sort();
+    languages.dedup();
+    Ok(languages)
+}
+
+#[cfg(feature = "ssr")]
+async fn load_other_video_languages(
+    pool: &ersatzrs_infra::db::DbPool,
+    other_video_id: i64,
+) -> Result<Vec<String>, ServerFnError> {
+    let codes: Vec<Option<String>> = sqlx::query_scalar(
+        r#"SELECT ms."Language"
+           FROM "MediaStream" ms
+           JOIN "MediaVersion" mv ON mv."Id" = ms."MediaVersionId"
+           WHERE ms."MediaStreamKind" = 2
+             AND mv."OtherVideoId" = ?
+             AND mv."Id" = (
+                 SELECT "Id"
+                 FROM "MediaVersion"
+                 WHERE "OtherVideoId" = ?
+                 ORDER BY "Id"
+                 LIMIT 1
+             )
+           ORDER BY ms."Index", ms."Id""#,
+    )
+    .bind(other_video_id)
+    .bind(other_video_id)
     .fetch_all(pool)
     .await?;
 
@@ -1329,6 +1498,47 @@ async fn load_movie_subtitle_info(
                   "IsExtracted"
            FROM "Subtitle"
            WHERE "MovieMetadataId" = ?
+           ORDER BY "StreamIndex", "Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| SubtitleInfoRow {
+            stream_index: r.try_get("StreamIndex").unwrap_or(0),
+            subtitle_kind: r.try_get("SubtitleKind").unwrap_or(0),
+            title: r.try_get::<Option<String>, _>("Title").unwrap_or(None),
+            codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+            default: r.try_get::<i64, _>("Default").unwrap_or(0) != 0,
+            forced: r.try_get::<i64, _>("Forced").unwrap_or(0) != 0,
+            path: r.try_get::<Option<String>, _>("Path").unwrap_or(None),
+            is_extracted: r.try_get::<i64, _>("IsExtracted").unwrap_or(0) != 0,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_other_video_subtitle_info(
+    pool: &ersatzrs_infra::db::DbPool,
+    metadata_id: i64,
+) -> Result<Vec<SubtitleInfoRow>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT "StreamIndex",
+                  "SubtitleKind",
+                  "Title",
+                  "Codec",
+                  "Language",
+                  "Default",
+                  "Forced",
+                  "Path",
+                  "IsExtracted"
+           FROM "Subtitle"
+           WHERE "OtherVideoMetadataId" = ?
            ORDER BY "StreamIndex", "Id""#,
     )
     .bind(metadata_id)
@@ -2018,6 +2228,193 @@ pub async fn list_other_videos(
 
     #[allow(clippy::cast_sign_loss)]
     Ok((cards, total.max(0) as u64))
+}
+
+/// Other-video details for `/media/other/videos/:id`. ErsatzTV has no
+/// separate Razor detail page for this route, so this ports the authoritative
+/// other-video data graph and action surface from `OtherVideoList.razor`,
+/// `OtherVideoCardViewModel`, and `OtherVideoRepository`.
+#[server]
+#[allow(clippy::too_many_lines)]
+pub async fn get_other_video_details(
+    id: i64,
+) -> Result<Option<OtherVideoDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+
+    let Some(row) = sqlx::query(
+        r#"SELECT ov."Id" AS "Id",
+                  COALESCE(ovm."Title", '') AS "Title",
+                  ovm."OriginalTitle" AS "OriginalTitle",
+                  ovm."Year" AS "Year",
+                  ovm."Plot" AS "Plot",
+                  ovm."Tagline" AS "Tagline",
+                  ovm."ContentRating" AS "ContentRating",
+                  ovm."ReleaseDate" AS "ReleaseDate",
+                  COALESCE(mi."State", 0) AS "State",
+                  mi."LibraryPathId" AS "LibraryPathId",
+                  ovm."Id" AS "MetadataId"
+           FROM "OtherVideo" ov
+           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           LEFT JOIN "MediaItem" mi ON mi."Id" = ov."Id"
+           WHERE ov."Id" = ?
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let metadata_id: i64 = row.try_get("MetadataId").unwrap_or(0);
+
+    let thumbnail_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 1 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+    let poster_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 0 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+    let fanart_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Path" FROM "Artwork"
+           WHERE "OtherVideoMetadataId" = ? AND "ArtworkKind" = 3 LIMIT 1"#,
+    )
+    .bind(metadata_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+
+    let file_path: Option<String> = sqlx::query_scalar(
+        r#"SELECT mf."Path"
+           FROM "MediaFile" mf
+           JOIN "MediaVersion" mv ON mv."Id" = mf."MediaVersionId"
+           WHERE mv."OtherVideoId" = ?
+           ORDER BY mv."Id" LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?
+    .and_then(|v: Option<String>| v);
+    let library_path_id: Option<i64> = row.try_get("LibraryPathId").unwrap_or(None);
+    let local_path = match (file_path.as_deref(), library_path_id) {
+        (Some(path), Some(library_path_id)) => {
+            let replacements =
+                load_path_replacements_for_library_path(&state.pool, library_path_id).await?;
+            Some(resolve_local_path(path, &replacements))
+        }
+        (Some(path), None) => Some(path.to_owned()),
+        (None, _) => None,
+    };
+
+    let content_ratings: Vec<String> = row
+        .try_get::<Option<String>, _>("ContentRating")
+        .unwrap_or(None)
+        .map(|cr| {
+            cr.split('/')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let genres = load_strings(
+        &state.pool,
+        r#""Genre""#,
+        "OtherVideoMetadataId",
+        metadata_id,
+    )
+    .await?;
+    let tags = load_strings(&state.pool, r#""Tag""#, "OtherVideoMetadataId", metadata_id).await?;
+    let studios = load_strings(
+        &state.pool,
+        r#""Studio""#,
+        "OtherVideoMetadataId",
+        metadata_id,
+    )
+    .await?;
+    let directors = load_strings(
+        &state.pool,
+        r#""Director""#,
+        "OtherVideoMetadataId",
+        metadata_id,
+    )
+    .await?;
+    let writers = load_strings(
+        &state.pool,
+        r#""Writer""#,
+        "OtherVideoMetadataId",
+        metadata_id,
+    )
+    .await?;
+    let languages = load_other_video_languages(&state.pool, id).await?;
+
+    let actor_rows = sqlx::query(
+        r#"SELECT a."Id" AS "Id",
+                  COALESCE(a."Name", '') AS "Name",
+                  a."Role" AS "Role",
+                  art."Path" AS "Thumb"
+           FROM "Actor" a
+           LEFT JOIN "Artwork" art ON art."Id" = a."ArtworkId"
+           WHERE a."OtherVideoMetadataId" = ?
+           ORDER BY a."Order", a."Id""#,
+    )
+    .bind(metadata_id)
+    .fetch_all(&state.pool)
+    .await?;
+    let actors = actor_rows
+        .iter()
+        .map(|r| ActorCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+            role: r.try_get::<Option<String>, _>("Role").unwrap_or(None),
+            thumb_url: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
+        })
+        .collect();
+
+    Ok(Some(OtherVideoDetailRow {
+        id: row.try_get("Id").unwrap_or(0),
+        title: row.try_get("Title").unwrap_or_default(),
+        original_title: row
+            .try_get::<Option<String>, _>("OriginalTitle")
+            .unwrap_or(None),
+        year: row.try_get::<Option<i64>, _>("Year").unwrap_or(None),
+        plot: row.try_get::<Option<String>, _>("Plot").unwrap_or(None),
+        tagline: row.try_get::<Option<String>, _>("Tagline").unwrap_or(None),
+        content_ratings,
+        release_date: row
+            .try_get::<Option<String>, _>("ReleaseDate")
+            .unwrap_or(None),
+        artwork_url: thumbnail_path
+            .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail))
+            .or_else(|| poster_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster))),
+        fanart_url: fanart_path.and_then(|p| artwork_url(&p, ArtworkUrlKind::FanArt)),
+        file_path,
+        local_path,
+        media_item_state: row.try_get("State").unwrap_or(0),
+        genres,
+        tags,
+        languages,
+        studios,
+        directors,
+        writers,
+        actors,
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -4280,6 +4677,7 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
             let href = match kind.as_str() {
                 "movie" => Some(format!("/media/movies/{item_id}")),
                 "show" => Some(format!("/media/tv/shows/{item_id}")),
+                "other_video" => Some(format!("/media/other/videos/{item_id}")),
                 _ => None,
             };
 
@@ -4521,6 +4919,64 @@ mod tests {
             .expect("load artist languages");
 
         assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn load_other_video_languages_resolves_head_version_audio_stream_codes() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir
+                .path()
+                .join("other-video-languages.db")
+                .display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_other_video_media_info_fixture(&pool).await;
+
+        let languages = load_other_video_languages(&pool, 10)
+            .await
+            .expect("load other-video languages");
+
+        assert_eq!(languages, vec!["Dutch".to_string(), "English".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn media_item_info_json_supports_other_videos() {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join("other-video-info.db").display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+
+        seed_other_video_media_info_fixture(&pool).await;
+
+        let json = get_media_item_info_json_with_pool(&pool, 10)
+            .await
+            .expect("load other-video media info");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("media info should be JSON");
+
+        assert_eq!(value["Kind"], "OtherVideo");
+        assert_eq!(value["Title"], "Example Other Video");
+        assert_eq!(value["LibraryKind"], "LocalLibrary");
+        assert_eq!(value["Streams"][0]["Kind"], "Video");
+        assert_eq!(value["Streams"][1]["Language"], "eng");
+        let subtitle_stream = value["Streams"]
+            .as_array()
+            .expect("streams should be an array")
+            .iter()
+            .find(|stream| stream["Kind"] == "Subtitle")
+            .expect("embedded subtitle stream");
+        assert_eq!(subtitle_stream["IsExtracted"], true);
+        assert_eq!(subtitle_stream["FileName"], "/cache/other.srt");
+        assert_eq!(value["Chapters"][0]["Title"], "Opening");
     }
 
     #[tokio::test]
@@ -4854,6 +5310,116 @@ mod tests {
         .execute(pool)
         .await
         .expect("seed tags");
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn seed_other_video_media_info_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed media source");
+        sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed local media source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Other Videos', 4, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library");
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .execute(pool)
+            .await
+            .expect("seed local library");
+        sqlx::query(
+            r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId") VALUES (1, '/other', 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed library path");
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (10, 1, 0)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media item");
+        sqlx::query(r#"INSERT INTO "OtherVideo" ("Id") VALUES (10)"#)
+            .execute(pool)
+            .await
+            .expect("seed other video");
+        sqlx::query(
+            r#"INSERT INTO "OtherVideoMetadata" (
+                   "Id", "DateAdded", "DateUpdated", "MetadataKind", "OtherVideoId",
+                   "Title", "OriginalTitle"
+               ) VALUES (
+                   100, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z', 0,
+                   10, 'Example Other Video', 'folder/example.mkv'
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed other-video metadata");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "OtherVideoId",
+                   "Height", "Width", "VideoScanKind", "SampleAspectRatio",
+                   "DisplayAspectRatio", "RFrameRate"
+               ) VALUES (
+                   20, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z',
+                   '00:30:00', 10, 1080, 1920, 1, '1:1', '16:9', '24000/1001'
+               ), (
+                   21, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z',
+                   '00:30:00', 10, 1080, 1920, 1, '1:1', '16:9', '24000/1001'
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media versions");
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("Id", "MediaVersionId", "Path", "PathHash")
+               VALUES (200, 20, '/other/example.mkv', 'hash')"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media file");
+        sqlx::query(
+            r#"INSERT INTO "MediaStream" (
+                   "Id", "Index", "Codec", "Profile", "MediaStreamKind", "Language",
+                   "Channels", "Title", "Default", "Forced", "MediaVersionId"
+               ) VALUES
+                   (300, 0, 'h264', 'High', 1, NULL, 0, NULL, 1, 0, 20),
+                   (301, 1, 'aac', NULL, 2, 'eng', 2, 'English', 1, 0, 20),
+                   (302, 2, 'aac', NULL, 2, 'en', 2, 'English Alt', 0, 0, 20),
+                   (303, 3, 'aac', NULL, 2, 'nld', 2, 'Dutch', 0, 0, 20),
+                   (304, 4, 'srt', NULL, 3, 'eng', 0, 'English SDH', 0, 0, 20),
+                   (305, 0, 'aac', NULL, 2, 'fra', 2, 'French', 1, 0, 21)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed media streams");
+        sqlx::query(
+            r#"INSERT INTO "Subtitle" (
+                   "Id", "OtherVideoMetadataId", "StreamIndex", "SubtitleKind", "Title",
+                   "Codec", "Language", "Default", "Forced", "Path", "IsExtracted",
+                   "DateAdded", "DateUpdated"
+               ) VALUES (
+                   400, 100, 4, 0, 'English SDH', 'srt', 'eng', 0, 0,
+                   '/cache/other.srt', 1, '2026-05-22T00:00:00Z', '2026-05-22T00:00:00Z'
+               )"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed subtitle");
+        sqlx::query(
+            r#"INSERT INTO "MediaChapter" (
+                   "Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title"
+               ) VALUES (500, 20, 1, '00:00:00', '00:01:00', 'Opening')"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed chapter");
     }
 
     async fn seed_movie_language_fixture(pool: &ersatzrs_infra::db::DbPool) {
