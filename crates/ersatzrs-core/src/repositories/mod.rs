@@ -19,7 +19,11 @@ mod television;
 mod template;
 
 pub use block::BlockRepository;
-pub use channel::ChannelRepository;
+pub use channel::{
+    ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
+    ChannelMirrorOption, ChannelRepository, ChannelSaveResult, ChannelSelectOption,
+    ChannelValidationError,
+};
 pub use collection::CollectionRepository;
 pub use config::ConfigRepository;
 pub use deco::DecoRepository;

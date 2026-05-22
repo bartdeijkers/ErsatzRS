@@ -68,6 +68,16 @@ pub fn build_app(app_state: AppState) -> Router {
         .route("/healthz", get(super::bootstrap::healthz))
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
+            "/api/channels/save-multipart",
+            post(api::channels::save_channel_multipart_form)
+                .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
+        )
+        .route(
+            "/api/channels/logo",
+            post(api::channels::upload_channel_logo)
+                .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),
+        )
+        .route(
             "/api/ffmpeg/save",
             post(api::ffmpeg_profiles::save_ffmpeg_profile_form),
         )
@@ -121,6 +131,10 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))
+        .route(
+            "/iptv/logos/{filename}",
+            get(api::channels::serve_channel_logo),
+        )
         .route("/iptv/channel/{file}", get(iptv::dispatch_channel_request))
         .route(
             "/iptv/session/{channel_number}/hls.m3u8",

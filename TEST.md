@@ -41,7 +41,7 @@ References:
 
 The hydration smoke layer exists because Leptos islands have sharp edges that
 unit/snapshot tests cannot catch. These rules come from real fixes shipped on
-the libraries page (commits 5484132, 4190407) and the channel editor
+the libraries page (commits 5484132, 4190407) and later admin island
 stabilisation. Apply them every time you wire interactive UI:
 
 1. **Page wrapper stays `#[component]`.** The interactive body becomes
@@ -60,8 +60,11 @@ stabilisation. Apply them every time you wire interactive UI:
    `Resource::new_blocking` internally and read from `data.get_untracked()` to
    seed signals — the blocking resource is resolved before HTML streams on SSR
    and deserialized immediately on the client. Pass only a plain id (e.g. `i64`)
-   from the page wrapper to the island. Reference: `ChannelEditorIsland` and
+   from the page wrapper to the island. Reference:
    `FfmpegProfileEditorIsland`.
+   `ChannelEditorPage` is intentionally an SSR multipart form now because the
+   broader app still has an island marker mismatch; do not use it as an island
+   reference pattern.
 4. **`DeleteDialog` always rendered.** `DeleteDialog` takes `entity_name: Signal<String>`
    (a reactive signal, not a `String`). Keep the dialog in the DOM at all times — control
    visibility via the `open: RwSignal<bool>` signal. Never conditionally render a dialog via
@@ -146,8 +149,8 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/libraries`       | ✅     | Stable DOM shape, no `<Show>` in island.                                |
 | `/search`                | ✅     | Stable DOM shape, no `<Show>` in island.                                |
 | `/channels`              | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
-| `/channels/:id`          | ✅     | Island owns blocking resource, no Suspense wrapper.                     |
-| `/channels/add`          | ✅     | Same island as `/channels/:id` (id=0).                                  |
+| `/channels/:id`          | ✅     | SSR multipart form; mode-specific fields visible without hydration.     |
+| `/channels/add`          | ✅     | Same SSR form as `/channels/:id` (id=0), with logo upload/remove smoke. |
 | `/ffmpeg/profiles`       | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/ffmpeg/profiles/:id`   | ✅     | Island owns blocking resource, no Suspense wrapper.                     |
 | `/media/sources/local`   | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |

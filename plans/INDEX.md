@@ -109,6 +109,10 @@ Feature-level porting plans live alongside this index:
   population for Jellyfin/Emby episodes, config keys + cache layout, the
   ffmpeg subtitle/font extraction engine, and the deep-scan wiring), closing
   the last documented deferral of the plan above.
+- `plans/channel-add-parity.md` — ports ErsatzTV's channel add/edit editor
+  contract into `/channels/add` and `/channels/:id`: full field surface,
+  repository-backed validation/persistence, logo artwork handling, save side
+  effects, and no-JS SSR form verification.
 
 ## Deferred Contract Work
 

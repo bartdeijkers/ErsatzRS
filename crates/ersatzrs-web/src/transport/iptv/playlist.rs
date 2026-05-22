@@ -42,6 +42,13 @@ pub async fn get_channels_m3u(
             HashMap::new()
         }
     };
+    let logo_paths = match load_channel_logo_paths(&state.pool).await {
+        Ok(paths) => paths,
+        Err(error) => {
+            tracing::warn!(%error, "failed to load channel logo paths; using generated logos");
+            HashMap::new()
+        }
+    };
 
     let scheme = request_scheme(&headers);
     let host = request_host(&headers);
@@ -51,7 +58,15 @@ pub async fn get_channels_m3u(
         .unwrap_or("");
     let access_token = AccessToken::new(query.access_token);
 
-    let body = build_m3u(&scheme, &host, user_agent, &access_token, &channels, &specs);
+    let body = build_m3u(
+        &scheme,
+        &host,
+        user_agent,
+        &access_token,
+        &channels,
+        &specs,
+        &logo_paths,
+    );
 
     let mut response = body.into_response();
     response.headers_mut().insert(
@@ -69,6 +84,7 @@ pub fn build_m3u(
     access_token: &AccessToken,
     channels: &[Channel],
     specs: &HashMap<i64, ChannelStreamingSpec>,
+    logo_paths: &HashMap<i64, String>,
 ) -> String {
     let mut ordered: Vec<&Channel> = channels.iter().collect();
     ordered.sort_by(|a, b| {
@@ -99,9 +115,13 @@ pub fn build_m3u(
             out.push_str("#KODIPROP:inputstream.ffmpegdirect.open_mode=ffmpeg\n");
         }
 
-        let logo = format!(
-            "{scheme}://{host}/iptv/logos/gen?text={}{token_uri_amp}",
-            channel.web_encoded_name()
+        let logo = channel_logo_url(
+            scheme,
+            host,
+            channel,
+            logo_paths,
+            &token_uri,
+            &token_uri_amp,
         );
         let short_id = short_unique_id(channel.unique_id);
         let tvg_id = channel_identifier(&channel.number);
@@ -138,6 +158,56 @@ pub fn build_m3u(
     }
 
     out
+}
+
+async fn load_channel_logo_paths(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<HashMap<i64, String>, sqlx::Error> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT "ChannelId", "Path"
+           FROM "Artwork"
+           WHERE "ChannelId" IS NOT NULL AND "ArtworkKind" = 2
+           ORDER BY "Id""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut paths = HashMap::new();
+    for row in rows {
+        let channel_id: i64 = row.try_get("ChannelId")?;
+        let path: Option<String> = row.try_get("Path")?;
+        if let Some(path) = path.filter(|path| !path.trim().is_empty()) {
+            paths.insert(channel_id, path);
+        }
+    }
+
+    Ok(paths)
+}
+
+fn channel_logo_url(
+    scheme: &str,
+    host: &str,
+    channel: &Channel,
+    logo_paths: &HashMap<i64, String>,
+    token_uri: &str,
+    token_uri_amp: &str,
+) -> String {
+    let Some(path) = logo_paths.get(&channel.id).map(|path| path.trim()) else {
+        return format!(
+            "{scheme}://{host}/iptv/logos/gen?text={}{token_uri_amp}",
+            channel.web_encoded_name()
+        );
+    };
+
+    if path.starts_with("http://") || path.starts_with("https://") {
+        path.to_string()
+    } else if let Some(filename) = path.strip_prefix("iptv/logos/") {
+        format!("{scheme}://{host}/iptv/logos/{filename}{token_uri}")
+    } else {
+        format!("{scheme}://{host}/iptv/logos/{path}{token_uri}")
+    }
 }
 
 fn parse_channel_number(number: &str) -> f64 {
@@ -342,6 +412,7 @@ mod tests {
             ),
         ];
         let specs = fixture_specs();
+        let logo_paths = HashMap::new();
 
         let output = build_m3u(
             "http",
@@ -350,6 +421,7 @@ mod tests {
             &AccessToken::default(),
             &channels,
             &specs,
+            &logo_paths,
         );
         insta::assert_snapshot!("m3u_mode_aware", output);
     }
@@ -365,6 +437,7 @@ mod tests {
             Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_0001),
         )];
         let specs = fixture_specs();
+        let logo_paths = HashMap::new();
 
         let output = build_m3u(
             "http",
@@ -373,6 +446,7 @@ mod tests {
             &AccessToken::default(),
             &channels,
             &specs,
+            &logo_paths,
         );
         insta::assert_snapshot!("m3u_kodi_headers", output);
     }
@@ -388,6 +462,7 @@ mod tests {
             Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_0001),
         )];
         let specs = fixture_specs();
+        let logo_paths = HashMap::new();
 
         let output = build_m3u(
             "http",
@@ -396,6 +471,7 @@ mod tests {
             &AccessToken::new(Some("secret")),
             &channels,
             &specs,
+            &logo_paths,
         );
         insta::assert_snapshot!("m3u_access_token", output);
     }

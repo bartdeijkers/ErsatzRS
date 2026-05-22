@@ -1,19 +1,26 @@
 use crate::db::DbRow;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{ChannelRepository, Result};
+use chrono::{Duration, Utc};
+use ersatzrs_core::repositories::{
+    ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
+    ChannelMirrorOption, ChannelRepository, ChannelSaveResult, ChannelSelectOption,
+    ChannelValidationError, Result,
+};
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
+use std::path::Path;
 use uuid::Uuid;
 
 use super::common::{
-    decode_bool_column, decode_duration_text, decode_enum_column, decode_message, encode_duration,
-    encode_enum, load_ids, not_found,
+    decode_bool_column, decode_duration_text, decode_enum_column, decode_message, encode_datetime,
+    encode_duration, encode_enum, load_ids, not_found,
 };
 
 #[derive(Clone)]
 pub struct SqliteChannelRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl ChannelRepository for SqliteChannelRepository {
     async fn get_with_profile(&self, id: EntityId) -> Result<Channel> {
         let row = sqlx::query(r#"SELECT * FROM "Channel" WHERE "Id" = ?"#)
@@ -133,6 +140,693 @@ impl ChannelRepository for SqliteChannelRepository {
             .await?;
         Ok(())
     }
+
+    async fn get_editor_state(&self, id: Option<EntityId>) -> Result<Option<ChannelEditorState>> {
+        let options = load_editor_options(&self.0).await?;
+        let Some(id) = id.filter(|value| *value > 0) else {
+            let number = next_channel_number(&self.0).await?;
+            return Ok(Some(ChannelEditorState {
+                form: ChannelEditorForm::new_defaults(options.default_ffmpeg_profile_id, number),
+                options,
+                playout_count: 0,
+            }));
+        };
+
+        let Some((form, playout_count)) = load_editor_form(&self.0, id).await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(ChannelEditorState {
+            form,
+            options,
+            playout_count,
+        }))
+    }
+
+    async fn save_editor_form(&self, form: ChannelEditorForm) -> Result<ChannelSaveResult> {
+        let validation_errors = validate_editor_form(&self.0, &form).await?;
+        if !validation_errors.is_empty() {
+            return Ok(ChannelSaveResult::validation(validation_errors));
+        }
+
+        let mut tx = self.0.begin().await?;
+        let now = encode_datetime(Utc::now());
+        let normalized = normalize_editor_form(form, &mut tx).await?;
+        let group = normalized.group.trim();
+        let show_in_epg = normalized.is_enabled && normalized.show_in_epg;
+        let sort_number = normalized.number.parse::<f64>().unwrap_or(0.0);
+        let playout_offset = normalized.playout_offset.map(encode_signed_duration);
+
+        let id = if normalized.id == 0 {
+            let result = sqlx::query(
+                r#"INSERT INTO "Channel" (
+                    "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
+                    "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
+                    "StreamingMode", "StreamSelectorMode", "StreamSelector",
+                    "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                    "PreferredSubtitleLanguageCode", "SubtitleMode",
+                    "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
+                    "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
+                    "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(&normalized.number)
+            .bind(sort_number)
+            .bind(&normalized.name)
+            .bind(group)
+            .bind(&normalized.categories)
+            .bind(normalized.ffmpeg_profile_id)
+            .bind(normalized.slug_seconds)
+            .bind(normalized.watermark_id)
+            .bind(normalized.fallback_filler_id)
+            .bind(normalized.streaming_mode)
+            .bind(normalized.stream_selector_mode)
+            .bind(&normalized.stream_selector)
+            .bind(&normalized.preferred_audio_language_code)
+            .bind(&normalized.preferred_audio_title)
+            .bind(&normalized.preferred_subtitle_language_code)
+            .bind(normalized.subtitle_mode)
+            .bind(normalized.music_video_credits_mode)
+            .bind(&normalized.music_video_credits_template)
+            .bind(normalized.song_video_mode)
+            .bind(normalized.playout_source)
+            .bind(normalized.playout_mode)
+            .bind(normalized.mirror_source_channel_id)
+            .bind(playout_offset)
+            .bind(normalized.transcode_mode)
+            .bind(normalized.idle_behavior)
+            .bind(normalized.is_enabled)
+            .bind(show_in_epg)
+            .execute(&mut *tx)
+            .await?;
+            crate::db::last_insert_id(result)
+        } else {
+            sqlx::query(
+                r#"UPDATE "Channel" SET
+                    "Number" = ?, "SortNumber" = ?, "Name" = ?, "Group" = ?,
+                    "Categories" = ?, "FFmpegProfileId" = ?, "SlugSeconds" = ?,
+                    "WatermarkId" = ?, "FallbackFillerId" = ?, "StreamingMode" = ?,
+                    "StreamSelectorMode" = ?, "StreamSelector" = ?,
+                    "PreferredAudioLanguageCode" = ?, "PreferredAudioTitle" = ?,
+                    "PreferredSubtitleLanguageCode" = ?, "SubtitleMode" = ?,
+                    "MusicVideoCreditsMode" = ?, "MusicVideoCreditsTemplate" = ?,
+                    "SongVideoMode" = ?, "PlayoutSource" = ?, "PlayoutMode" = ?,
+                    "MirrorSourceChannelId" = ?, "PlayoutOffset" = ?,
+                    "TranscodeMode" = ?, "IdleBehavior" = ?,
+                    "IsEnabled" = ?, "ShowInEpg" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(&normalized.number)
+            .bind(sort_number)
+            .bind(&normalized.name)
+            .bind(group)
+            .bind(&normalized.categories)
+            .bind(normalized.ffmpeg_profile_id)
+            .bind(normalized.slug_seconds)
+            .bind(normalized.watermark_id)
+            .bind(normalized.fallback_filler_id)
+            .bind(normalized.streaming_mode)
+            .bind(normalized.stream_selector_mode)
+            .bind(&normalized.stream_selector)
+            .bind(&normalized.preferred_audio_language_code)
+            .bind(&normalized.preferred_audio_title)
+            .bind(&normalized.preferred_subtitle_language_code)
+            .bind(normalized.subtitle_mode)
+            .bind(normalized.music_video_credits_mode)
+            .bind(&normalized.music_video_credits_template)
+            .bind(normalized.song_video_mode)
+            .bind(normalized.playout_source)
+            .bind(normalized.playout_mode)
+            .bind(normalized.mirror_source_channel_id)
+            .bind(playout_offset)
+            .bind(normalized.transcode_mode)
+            .bind(normalized.idle_behavior)
+            .bind(normalized.is_enabled)
+            .bind(show_in_epg)
+            .bind(normalized.id)
+            .execute(&mut *tx)
+            .await?;
+            normalized.id
+        };
+
+        replace_logo_artwork(&mut tx, id, &normalized, &now).await?;
+        tx.commit().await?;
+        Ok(ChannelSaveResult::success(id))
+    }
+}
+
+async fn load_editor_form(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+) -> Result<Option<(ChannelEditorForm, i64)>> {
+    let Some(row) = sqlx::query(
+        r#"SELECT c.*,
+                  (SELECT COUNT(*) FROM "Playout" p WHERE p."ChannelId" = c."Id") AS "PlayoutCount",
+                  a."Path" AS "LogoPath",
+                  a."OriginalContentType" AS "LogoContentType"
+           FROM "Channel" c
+           LEFT JOIN "Artwork" a ON a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+           WHERE c."Id" = ?
+           ORDER BY a."Id"
+           LIMIT 1"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let logo_path: Option<String> = row.try_get("LogoPath")?;
+    let logo_content_type: Option<String> = row.try_get("LogoContentType")?;
+    let is_external_logo = logo_path.as_deref().is_some_and(is_external_logo_url);
+    let playout_count = row.try_get("PlayoutCount")?;
+    let playout_offset = row
+        .try_get::<Option<String>, _>("PlayoutOffset")?
+        .as_deref()
+        .map(decode_duration_text);
+
+    Ok(Some((
+        ChannelEditorForm {
+            id: row.try_get("Id")?,
+            number: row.try_get("Number")?,
+            name: row.try_get("Name")?,
+            group: row.try_get("Group")?,
+            categories: row.try_get("Categories")?,
+            ffmpeg_profile_id: row.try_get("FFmpegProfileId")?,
+            slug_seconds: row.try_get("SlugSeconds")?,
+            logo: ChannelLogoForm {
+                path: if is_external_logo {
+                    None
+                } else {
+                    logo_path.as_ref().map(|path| format!("iptv/logos/{path}"))
+                },
+                content_type: logo_content_type,
+            },
+            external_logo_url: if is_external_logo { logo_path } else { None },
+            stream_selector_mode: row.try_get("StreamSelectorMode")?,
+            stream_selector: row.try_get("StreamSelector")?,
+            preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode")?,
+            preferred_audio_title: row.try_get("PreferredAudioTitle")?,
+            playout_source: row.try_get("PlayoutSource")?,
+            playout_mode: row.try_get("PlayoutMode")?,
+            mirror_source_channel_id: row.try_get("MirrorSourceChannelId")?,
+            playout_offset,
+            streaming_mode: row.try_get("StreamingMode")?,
+            watermark_id: row.try_get("WatermarkId")?,
+            fallback_filler_id: row.try_get("FallbackFillerId")?,
+            preferred_subtitle_language_code: row.try_get("PreferredSubtitleLanguageCode")?,
+            subtitle_mode: row.try_get("SubtitleMode")?,
+            music_video_credits_mode: row.try_get("MusicVideoCreditsMode")?,
+            music_video_credits_template: row.try_get("MusicVideoCreditsTemplate")?,
+            song_video_mode: row.try_get("SongVideoMode")?,
+            transcode_mode: row.try_get("TranscodeMode")?,
+            idle_behavior: row.try_get("IdleBehavior")?,
+            is_enabled: decode_bool_column(&row, "IsEnabled")?,
+            show_in_epg: decode_bool_column(&row, "ShowInEpg")?,
+        },
+        playout_count,
+    )))
+}
+
+async fn load_editor_options(pool: &Pool<crate::db::Db>) -> Result<ChannelEditorOptions> {
+    Ok(ChannelEditorOptions {
+        ffmpeg_profiles: select_options(pool, r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#).await?,
+        watermarks: select_options(pool, r#"SELECT "Id", "Name" FROM "ChannelWatermark" ORDER BY "Name", "Id""#).await?,
+        fallback_fillers: select_options(
+            pool,
+            r#"SELECT "Id", "Name" FROM "FillerPreset" WHERE "FillerKind" = 5 ORDER BY "Name", "Id""#,
+        )
+        .await?,
+        mirror_channels: load_mirror_channels(pool).await?,
+        language_codes: load_language_codes(pool).await?,
+        stream_selectors: list_file_names(Path::new("data/scripts/channel-stream-selectors"), true).await?,
+        music_video_credit_templates: list_file_names(
+            Path::new("data/templates/music-video-credits"),
+            false,
+        )
+        .await?,
+        default_ffmpeg_profile_id: load_default_ffmpeg_profile_id(pool).await?,
+    })
+}
+
+async fn select_options(
+    pool: &Pool<crate::db::Db>,
+    query: &'static str,
+) -> Result<Vec<ChannelSelectOption>> {
+    let rows = sqlx::query(query).fetch_all(pool).await?;
+    rows.iter()
+        .map(|row| {
+            Ok(ChannelSelectOption {
+                id: row.try_get("Id")?,
+                value: None,
+                label: row.try_get("Name")?,
+            })
+        })
+        .collect()
+}
+
+async fn load_mirror_channels(pool: &Pool<crate::db::Db>) -> Result<Vec<ChannelMirrorOption>> {
+    let rows = sqlx::query(
+        r#"SELECT c."Id", c."Number", c."Name", c."PlayoutSource",
+                  (SELECT COUNT(*) FROM "Playout" p WHERE p."ChannelId" = c."Id") AS "PlayoutCount"
+           FROM "Channel" c
+           ORDER BY c."SortNumber", c."Number""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(ChannelMirrorOption {
+                id: row.try_get("Id")?,
+                number: row.try_get("Number")?,
+                name: row.try_get("Name")?,
+                playout_source: row.try_get("PlayoutSource")?,
+                playout_count: row.try_get("PlayoutCount")?,
+            })
+        })
+        .collect()
+}
+
+async fn load_language_codes(pool: &Pool<crate::db::Db>) -> Result<Vec<ChannelSelectOption>> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "ThreeCode1", "EnglishName" FROM "LanguageCode" ORDER BY "EnglishName", "ThreeCode1""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(ChannelSelectOption {
+                id: row.try_get("Id")?,
+                value: Some(row.try_get("ThreeCode1")?),
+                label: row.try_get("EnglishName")?,
+            })
+        })
+        .collect()
+}
+
+async fn load_default_ffmpeg_profile_id(pool: &Pool<crate::db::Db>) -> Result<EntityId> {
+    let configured = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = 'ffmpeg.default_profile_id'"#,
+    )
+    .fetch_optional(pool)
+    .await?
+    .flatten()
+    .and_then(|value| value.parse::<EntityId>().ok())
+    .unwrap_or_default();
+
+    if configured > 0 {
+        return Ok(configured);
+    }
+
+    Ok(sqlx::query_scalar::<_, Option<EntityId>>(
+        r#"SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1"#,
+    )
+    .fetch_optional(pool)
+    .await?
+    .flatten()
+    .unwrap_or_default())
+}
+
+async fn next_channel_number(pool: &Pool<crate::db::Db>) -> Result<String> {
+    let rows = sqlx::query(r#"SELECT "Number" FROM "Channel""#)
+        .fetch_all(pool)
+        .await?;
+    let max_number = rows
+        .iter()
+        .filter_map(|row| row.try_get::<String, _>("Number").ok())
+        .filter_map(|number| {
+            number
+                .split('.')
+                .next()
+                .unwrap_or_default()
+                .parse::<i64>()
+                .ok()
+        })
+        .max()
+        .unwrap_or_default();
+    Ok((max_number + 1).to_string())
+}
+
+async fn list_file_names(path: &Path, keep_extension: bool) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    let Ok(mut entries) = tokio::fs::read_dir(path).await else {
+        return Ok(names);
+    };
+
+    while let Some(entry) = entries.next_entry().await.map_err(|error| {
+        ersatzrs_core::repositories::RepositoryError::Decode {
+            kind: "channel editor file list",
+            value: error.to_string(),
+        }
+    })? {
+        let file_type = entry.file_type().await.map_err(|error| {
+            ersatzrs_core::repositories::RepositoryError::Decode {
+                kind: "channel editor file type",
+                value: error.to_string(),
+            }
+        })?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let path = entry.path();
+        let name = if keep_extension {
+            path.file_name().map(std::ffi::OsStr::to_os_string)
+        } else {
+            path.file_stem().map(std::ffi::OsStr::to_os_string)
+        };
+        if let Some(name) = name.and_then(|value| value.into_string().ok()) {
+            names.push(name);
+        }
+    }
+
+    names.sort();
+    Ok(names)
+}
+
+async fn validate_editor_form(
+    pool: &Pool<crate::db::Db>,
+    form: &ChannelEditorForm,
+) -> Result<Vec<ChannelValidationError>> {
+    let mut errors = Vec::new();
+
+    if form.id > 0 {
+        let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel" WHERE "Id" = ?"#)
+            .bind(form.id)
+            .fetch_one(pool)
+            .await?;
+        if exists == 0 {
+            errors.push(ChannelValidationError::new("id", "Channel does not exist."));
+        }
+    }
+
+    if !is_valid_channel_number(&form.number) {
+        errors.push(ChannelValidationError::new(
+            "number",
+            "Invalid channel number; two decimals are allowed for subchannels",
+        ));
+    }
+
+    let existing_id = sqlx::query_scalar::<_, Option<EntityId>>(
+        r#"SELECT "Id" FROM "Channel" WHERE "Number" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(&form.number)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    if existing_id.is_some_and(|id| id != form.id) {
+        errors.push(ChannelValidationError::new(
+            "number",
+            "Channel number must be unique",
+        ));
+    }
+
+    let name = form.name.trim();
+    if name.is_empty() {
+        errors.push(ChannelValidationError::new("name", "Name is required"));
+    } else if name.chars().count() > 50 {
+        errors.push(ChannelValidationError::new(
+            "name",
+            "Name must be 50 characters or fewer",
+        ));
+    }
+
+    if form.group.trim().is_empty() {
+        errors.push(ChannelValidationError::new("group", "Group is required"));
+    }
+
+    if count_id(pool, "FFmpegProfile", form.ffmpeg_profile_id).await? == 0 {
+        errors.push(ChannelValidationError::new(
+            "ffmpeg_profile_id",
+            format!("FFmpegProfile {} does not exist.", form.ffmpeg_profile_id),
+        ));
+    }
+
+    if let Some(id) = form.watermark_id {
+        if count_id(pool, "ChannelWatermark", id).await? == 0 {
+            errors.push(ChannelValidationError::new(
+                "watermark_id",
+                format!("Watermark {id} does not exist."),
+            ));
+        }
+    }
+
+    if let Some(id) = form.fallback_filler_id {
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "FillerPreset" WHERE "Id" = ? AND "FillerKind" = 5"#,
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+        if count == 0 {
+            errors.push(ChannelValidationError::new(
+                "fallback_filler_id",
+                format!("Fallback filler {id} does not exist."),
+            ));
+        }
+    }
+
+    if let Some(url) = form
+        .external_logo_url
+        .as_deref()
+        .filter(|url| !url.trim().is_empty())
+    {
+        if !is_external_logo_url(url) {
+            errors.push(ChannelValidationError::new(
+                "external_logo_url",
+                "External logo url is invalid",
+            ));
+        }
+    }
+
+    if !form.is_enabled && form.show_in_epg {
+        errors.push(ChannelValidationError::new(
+            "show_in_epg",
+            "Disabled channels cannot be shown in EPG",
+        ));
+    }
+
+    if form.playout_source == 1 {
+        validate_mirror_source(pool, form, &mut errors).await?;
+    }
+
+    Ok(errors)
+}
+
+async fn validate_mirror_source(
+    pool: &Pool<crate::db::Db>,
+    form: &ChannelEditorForm,
+    errors: &mut Vec<ChannelValidationError>,
+) -> Result<()> {
+    let Some(source_id) = form.mirror_source_channel_id else {
+        errors.push(ChannelValidationError::new(
+            "mirror_source_channel_id",
+            "Mirror source channel does not exist.",
+        ));
+        return Ok(());
+    };
+
+    if source_id == form.id {
+        errors.push(ChannelValidationError::new(
+            "mirror_source_channel_id",
+            "Mirror source channel does not exist.",
+        ));
+        return Ok(());
+    }
+
+    let maybe_source =
+        sqlx::query(r#"SELECT "Name", "PlayoutSource" FROM "Channel" WHERE "Id" = ?"#)
+            .bind(source_id)
+            .fetch_optional(pool)
+            .await?;
+    match maybe_source {
+        None => errors.push(ChannelValidationError::new(
+            "mirror_source_channel_id",
+            "Mirror source channel does not exist.",
+        )),
+        Some(row) => {
+            let playout_source: i32 = row.try_get("PlayoutSource")?;
+            if playout_source != 0 {
+                let name: String = row.try_get("Name")?;
+                errors.push(ChannelValidationError::new(
+                    "mirror_source_channel_id",
+                    format!("Mirror source channel {name} must use generated playout source"),
+                ));
+            }
+        }
+    }
+
+    if let Some(offset) = form.playout_offset {
+        if offset < Duration::hours(-12) || offset > Duration::hours(12) {
+            errors.push(ChannelValidationError::new(
+                "playout_offset",
+                "Playout offset must not be greater than 12 hours",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+async fn count_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> Result<i64> {
+    let query = match table {
+        "FFmpegProfile" => r#"SELECT COUNT(*) FROM "FFmpegProfile" WHERE "Id" = ?"#,
+        "ChannelWatermark" => r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Id" = ?"#,
+        _ => unreachable!("validated table name"),
+    };
+    Ok(sqlx::query_scalar(query).bind(id).fetch_one(pool).await?)
+}
+
+async fn normalize_editor_form(
+    mut form: ChannelEditorForm,
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+) -> Result<ChannelEditorForm> {
+    form.name = form.name.trim().to_owned();
+    form.number = form.number.trim().to_owned();
+    form.group = form.group.trim().to_owned();
+    form.categories = clean_optional(form.categories);
+    form.preferred_audio_language_code = clean_optional(form.preferred_audio_language_code);
+    form.preferred_audio_title = clean_optional(form.preferred_audio_title);
+    form.preferred_subtitle_language_code = clean_optional(form.preferred_subtitle_language_code);
+    form.stream_selector = clean_optional(form.stream_selector);
+
+    if form.music_video_credits_mode == 1 {
+        form.music_video_credits_template = clean_optional(form.music_video_credits_template);
+    } else {
+        form.music_video_credits_template = None;
+    }
+
+    if form.playout_source == 1 {
+        form.playout_mode = 0;
+    } else {
+        form.mirror_source_channel_id = None;
+        form.playout_offset = None;
+    }
+
+    if form.id > 0 {
+        let playout_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playout" WHERE "ChannelId" = ?"#)
+                .bind(form.id)
+                .fetch_one(&mut **tx)
+                .await?;
+        if playout_count > 0 {
+            form.playout_source = 0;
+            form.mirror_source_channel_id = None;
+            form.playout_offset = None;
+        }
+    }
+
+    Ok(form)
+}
+
+async fn replace_logo_artwork(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    channel_id: EntityId,
+    form: &ChannelEditorForm,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "Artwork" WHERE "ChannelId" = ? AND "ArtworkKind" = 2"#)
+        .bind(channel_id)
+        .execute(&mut **tx)
+        .await?;
+
+    let logo_path = form
+        .external_logo_url
+        .as_ref()
+        .and_then(|path| non_empty(path))
+        .or_else(|| {
+            form.logo
+                .path
+                .as_ref()
+                .and_then(|path| non_empty(path))
+                .map(|path| normalize_logo_path(&path))
+        });
+
+    let Some(path) = logo_path else {
+        return Ok(());
+    };
+
+    let original_content_type = if form
+        .external_logo_url
+        .as_deref()
+        .is_some_and(|url| !url.trim().is_empty())
+    {
+        None
+    } else {
+        clean_optional(form.logo.content_type.clone())
+    };
+
+    sqlx::query(
+        r#"INSERT INTO "Artwork" (
+            "ArtworkKind", "ChannelId", "Path", "OriginalContentType",
+            "DateAdded", "DateUpdated"
+           ) VALUES (2, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(channel_id)
+    .bind(path)
+    .bind(original_content_type)
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|inner| non_empty(&inner))
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+fn normalize_logo_path(path: &str) -> String {
+    path.strip_prefix("iptv/logos/")
+        .unwrap_or(path)
+        .trim_start_matches('/')
+        .to_owned()
+}
+
+fn is_external_logo_url(value: &str) -> bool {
+    let trimmed = value.trim();
+    let rest = trimmed
+        .strip_prefix("http://")
+        .or_else(|| trimmed.strip_prefix("https://"));
+    rest.is_some_and(|rest| {
+        !rest.is_empty() && !rest.starts_with('/') && !rest.contains(char::is_whitespace)
+    })
+}
+
+fn is_valid_channel_number(value: &str) -> bool {
+    let value = value.trim();
+    let Some((whole, fractional)) = value.split_once('.') else {
+        return !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit());
+    };
+
+    !whole.is_empty()
+        && whole.chars().all(|ch| ch.is_ascii_digit())
+        && (1..=2).contains(&fractional.len())
+        && fractional.chars().all(|ch| ch.is_ascii_digit())
+        && !fractional.contains('.')
+}
+
+fn encode_signed_duration(value: Duration) -> String {
+    let total_seconds = value.num_seconds();
+    let sign = if total_seconds < 0 { "-" } else { "" };
+    let total_seconds = total_seconds.abs();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
 }
 
 fn map_channel(row: &DbRow) -> Result<Channel> {

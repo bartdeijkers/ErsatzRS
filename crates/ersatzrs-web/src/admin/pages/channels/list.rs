@@ -81,11 +81,11 @@ fn ChannelsListIsland() -> impl IntoView {
             .into_any()
         }),
         Column::new("Logo", |ch: &ChannelListRow| {
+            let url = ch.logo_url.clone();
             let name = ch.name.clone();
-            let encoded = urlencoding::encode(&name).into_owned();
             view! {
                 <img
-                    src=format!("/iptv/logos/gen?text={encoded}")
+                    src=url
                     class=style::logo_img
                     alt=format!("{name} logo")
                 />

@@ -1,9 +1,12 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
-use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
+use chrono::Duration;
+use ersatzrs_core::repositories::{
+    ChannelEditorForm, ChannelLogoForm, ChannelRepository, FfmpegProfileRepository,
+};
 use ersatzrs_infra::repositories::make_repositories;
-use sqlx::Executor;
+use sqlx::{Executor, Row};
 
 #[tokio::test]
 async fn channel_repository_round_trips_and_filters_enabled_channels() {
@@ -41,4 +44,297 @@ async fn channel_repository_round_trips_and_filters_enabled_channels() {
     assert_eq!(enabled_channels.len(), 1);
     assert_eq!(enabled_channels[0].id, 10);
     assert!(enabled_channels[0].artwork_ids.is_empty());
+}
+
+#[tokio::test]
+async fn channel_editor_save_round_trips_full_form_and_logo_artwork() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let result = repos
+        .channel
+        .save_editor_form(ChannelEditorForm {
+            number: "42.1".to_owned(),
+            name: "  Full Channel  ".to_owned(),
+            group: "  Prime  ".to_owned(),
+            categories: Some("Movies,TV".to_owned()),
+            ffmpeg_profile_id: 1,
+            slug_seconds: Some(2.5),
+            logo: ChannelLogoForm {
+                path: Some("iptv/logos/custom.png".to_owned()),
+                content_type: Some("image/png".to_owned()),
+            },
+            stream_selector_mode: 1,
+            stream_selector: Some("selector.lua".to_owned()),
+            preferred_audio_language_code: Some("eng".to_owned()),
+            preferred_audio_title: Some("Commentary".to_owned()),
+            playout_source: 0,
+            playout_mode: 1,
+            streaming_mode: 5,
+            watermark_id: Some(7),
+            fallback_filler_id: Some(9),
+            preferred_subtitle_language_code: Some("nld".to_owned()),
+            subtitle_mode: 3,
+            music_video_credits_mode: 1,
+            music_video_credits_template: Some("credits.svg".to_owned()),
+            song_video_mode: 1,
+            transcode_mode: 0,
+            idle_behavior: 1,
+            is_enabled: true,
+            show_in_epg: true,
+            ..ChannelEditorForm::default()
+        })
+        .await
+        .unwrap();
+
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+    let id = result.id;
+
+    let state = repos
+        .channel
+        .get_editor_state(Some(id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.form.number, "42.1");
+    assert_eq!(state.form.name, "Full Channel");
+    assert_eq!(state.form.group, "Prime");
+    assert_eq!(state.form.slug_seconds, Some(2.5));
+    assert_eq!(
+        state.form.logo.path.as_deref(),
+        Some("iptv/logos/custom.png")
+    );
+    assert_eq!(state.form.logo.content_type.as_deref(), Some("image/png"));
+    assert_eq!(state.form.watermark_id, Some(7));
+    assert_eq!(state.form.fallback_filler_id, Some(9));
+    assert_eq!(
+        state.form.music_video_credits_template.as_deref(),
+        Some("credits.svg")
+    );
+
+    let row = sqlx::query(
+        r#"SELECT c."SortNumber", c."ShowInEpg", a."Path", a."OriginalContentType"
+           FROM "Channel" c
+           JOIN "Artwork" a ON a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+           WHERE c."Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let sort_number = row.try_get::<f64, _>("SortNumber").unwrap();
+    assert!((sort_number - 42.1).abs() < f64::EPSILON);
+    assert_eq!(row.try_get::<i64, _>("ShowInEpg").unwrap(), 1);
+    assert_eq!(row.try_get::<String, _>("Path").unwrap(), "custom.png");
+    assert_eq!(
+        row.try_get::<String, _>("OriginalContentType").unwrap(),
+        "image/png"
+    );
+}
+
+#[tokio::test]
+async fn channel_editor_save_validates_parity_rules() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let result = repos
+        .channel
+        .save_editor_form(editor_form("50", "Existing"))
+        .await
+        .unwrap();
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+
+    let duplicate = repos
+        .channel
+        .save_editor_form(editor_form("50", "Duplicate"))
+        .await
+        .unwrap();
+    assert_has_error(&duplicate.validation_errors, "number");
+
+    let mut missing = editor_form("50.1", "Missing");
+    missing.id = 9999;
+    let missing = repos.channel.save_editor_form(missing).await.unwrap();
+    assert_has_error(&missing.validation_errors, "id");
+
+    let mut invalid = editor_form("51", "Invalid");
+    invalid.is_enabled = false;
+    invalid.show_in_epg = true;
+    invalid.fallback_filler_id = Some(10);
+    invalid.external_logo_url = Some("ftp://example.invalid/logo.png".to_owned());
+    let invalid = repos.channel.save_editor_form(invalid).await.unwrap();
+    assert_has_error(&invalid.validation_errors, "show_in_epg");
+    assert_has_error(&invalid.validation_errors, "fallback_filler_id");
+    assert_has_error(&invalid.validation_errors, "external_logo_url");
+
+    let mut localhost_logo = editor_form("51.1", "Localhost Logo");
+    localhost_logo.external_logo_url = Some("http://localhost/logo.png".to_owned());
+    let localhost_logo = repos
+        .channel
+        .save_editor_form(localhost_logo)
+        .await
+        .unwrap();
+    assert!(
+        localhost_logo.is_success(),
+        "{:?}",
+        localhost_logo.validation_errors
+    );
+
+    let mut mirror = editor_form("52", "Mirror");
+    mirror.playout_source = 1;
+    mirror.mirror_source_channel_id = Some(result.id);
+    mirror.playout_offset = Some(Duration::hours(13));
+    let mirror = repos.channel.save_editor_form(mirror).await.unwrap();
+    assert_has_error(&mirror.validation_errors, "playout_offset");
+}
+
+#[tokio::test]
+async fn channel_editor_save_replaces_logo_and_preserves_generated_source_with_playouts() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let mut source_form = editor_form("60", "Source");
+    source_form.playout_source = 0;
+    let source_id = repos
+        .channel
+        .save_editor_form(source_form)
+        .await
+        .unwrap()
+        .id;
+
+    let mut target_form = editor_form("61", "Target");
+    target_form.logo = ChannelLogoForm {
+        path: Some("iptv/logos/original.png".to_owned()),
+        content_type: Some("image/png".to_owned()),
+    };
+    let target_id = repos
+        .channel
+        .save_editor_form(target_form)
+        .await
+        .unwrap()
+        .id;
+
+    pool.execute(
+        format!(
+            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+               VALUES (600, {target_id}, 0, 1)"#
+        )
+        .as_str(),
+    )
+    .await
+    .unwrap();
+
+    let mut update = editor_form("61", "Target Updated");
+    update.id = target_id;
+    update.playout_source = 1;
+    update.mirror_source_channel_id = Some(source_id);
+    update.playout_offset = Some(Duration::hours(-1));
+    update.external_logo_url = Some("https://example.com/logo.png".to_owned());
+    update.logo = ChannelLogoForm::default();
+    let update = repos.channel.save_editor_form(update).await.unwrap();
+    assert!(update.is_success(), "{:?}", update.validation_errors);
+
+    let row = sqlx::query(
+        r#"SELECT c."PlayoutSource", c."MirrorSourceChannelId", c."PlayoutOffset",
+                  a."Path", a."OriginalContentType"
+           FROM "Channel" c
+           JOIN "Artwork" a ON a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
+           WHERE c."Id" = ?"#,
+    )
+    .bind(target_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.try_get::<i64, _>("PlayoutSource").unwrap(), 0);
+    assert_eq!(
+        row.try_get::<Option<i64>, _>("MirrorSourceChannelId")
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        row.try_get::<Option<String>, _>("PlayoutOffset").unwrap(),
+        None
+    );
+    assert_eq!(
+        row.try_get::<String, _>("Path").unwrap(),
+        "https://example.com/logo.png"
+    );
+    assert_eq!(
+        row.try_get::<Option<String>, _>("OriginalContentType")
+            .unwrap(),
+        None
+    );
+
+    let artwork_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "Artwork" WHERE "ChannelId" = ? AND "ArtworkKind" = 2"#,
+    )
+    .bind(target_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(artwork_count, 1);
+}
+
+fn editor_form(number: &str, name: &str) -> ChannelEditorForm {
+    ChannelEditorForm {
+        number: number.to_owned(),
+        name: name.to_owned(),
+        group: "ErsatzTV".to_owned(),
+        ffmpeg_profile_id: 1,
+        streaming_mode: 5,
+        playout_source: 0,
+        playout_mode: 0,
+        stream_selector_mode: 0,
+        music_video_credits_mode: 0,
+        song_video_mode: 0,
+        transcode_mode: 0,
+        idle_behavior: 0,
+        is_enabled: true,
+        show_in_epg: true,
+        ..ChannelEditorForm::default()
+    }
+}
+
+async fn seed_editor_dependencies(
+    pool: &sqlx::SqlitePool,
+    repos: &ersatzrs_infra::repositories::Repositories,
+) {
+    repos
+        .ffmpeg_profile
+        .upsert(&common::profile(1, "default"))
+        .await
+        .unwrap();
+
+    pool.execute(
+        r#"INSERT INTO "ChannelWatermark" (
+            "Id", "Name", "DurationSeconds", "FrequencyMinutes",
+            "HorizontalMarginPercent", "ImageSource", "Location", "Mode",
+            "Opacity", "PlaceWithinSourceContent", "Size",
+            "VerticalMarginPercent", "WidthPercent", "ZIndex"
+           ) VALUES (7, 'Bug', 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 10, 0)"#,
+    )
+    .await
+    .unwrap();
+
+    pool.execute(
+        r#"INSERT INTO "FillerPreset" (
+            "Id", "Name", "AllowWatermarks", "CollectionType", "FillerKind",
+            "FillerMode", "UseChaptersAsMediaItems"
+           ) VALUES
+           (9, 'Fallback', 1, 0, 5, 0, 0),
+           (10, 'Non Fallback', 1, 0, 1, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+}
+
+fn assert_has_error(errors: &[ersatzrs_core::repositories::ChannelValidationError], field: &str) {
+    assert!(
+        errors.iter().any(|error| error.field == field),
+        "expected validation error for {field}, got {errors:?}"
+    );
 }

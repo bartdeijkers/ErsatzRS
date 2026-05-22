@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-22 (TV season detail page parity)
+Last updated: 2026-05-22 (channel editor parity implementation)
 
 ## Current Phase
 
@@ -302,9 +302,19 @@ capability reports, Docker helper tools are pinned, the Bookworm FFmpeg 8.1
 build path handles Vulkan/SVT-AV1 correctly, and the Leptos hydration library
 target builds into the image. Review outcome: GO for the next Phase 7 slice.
 
-Next up: continue Phase 7 items from the master plan without starting a new
-slice in this session. The remaining non-web priorities are config/ADR closure,
-side-by-side benchmarking, and long soak tests.
+Next up: continue `/channels/add` parity from
+[`plans/channel-add-parity.md`](plans/channel-add-parity.md). The full editor
+contract, repository-backed load/save validation, logo artwork persistence/
+serving, IPTV/list logo preference, subtitle-extraction save side effect, and
+focused DB tests are in place. The channel editor renders as a no-JS SSR
+multipart form while the current app-wide Leptos island marker mismatch remains;
+all generated/mirror and default/custom selector fields stay reachable without
+client handlers, and local add/edit POST smoke tests persist expanded parity
+fields plus uploaded/external/removed logo artwork. Remaining channel-editor
+follow-up is final verification against the plan's full gate list and any
+ErsatzTV source-level edge cases discovered during that audit. The remaining
+non-web priorities are config/ADR closure, side-by-side benchmarking, and long
+soak tests.
 
 The `ersatzrs-web` structure refactor now has the target web-crate boundaries
 documented in [`docs/reference/web-crate-structure.md`](docs/reference/web-crate-structure.md).
@@ -468,7 +478,7 @@ yet.
 | `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
 | `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
-| `ChannelEditorPage`           | ❌     | Playwright hydration mismatch.                                  |
+| `ChannelEditorPage`           | ✅     | SSR multipart form; `/channels/add` and `/channels/:id` smoke clean. |
 | `LocalLibrariesPage`          | ❌     | Playwright hydration mismatch; static HTML add-form unchanged.  |
 | `JellyfinSourcesPage` etc.    | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
@@ -499,7 +509,7 @@ Tick a row when both the wiring change and the matching Playwright test in
   `PlexSourcesPage`. Each row is one slice; ship wiring + playbook together.
 - Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.
 - Replace bash `/dev/tcp` HEALTHCHECK with a purpose-built `ersatzrs-healthcheck` binary.
-- `axum = "0.7"` pinned to match `leptos_axum 0.7` — bump both when leptos_axum upgrades to axum 0.8.
+- Keep `axum` and `leptos_axum` on matching major versions; both are currently on 0.8.
 - `std::env::var("DATABASE_URL")` in `main.rs` uses `#[allow(clippy::disallowed_methods)]` — replace with a config crate in Phase 1.
 - `ffmpeg` module in `ersatzrs-web` migrated to `ersatzrs-ffmpeg` in Phase 2.
 
@@ -511,6 +521,10 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-22 | Codex (GPT-5) | Finished the SSR channel editor follow-up and source-level audit: `/channels/add` and `/channels/:id` now post as multipart forms with local logo upload, external logo replacement, stored-logo removal, visible mode-specific fields that do not depend on hydration, form-level validation error redirects, ErsatzTV-order logo fields, absolute stored-logo preview URLs, `http://localhost/...` external-logo validation parity, and explicit missing-edit-channel validation. Updated the channel parity plan/index, parity matrix, hydration notes, and status handoff. Gates: `cargo fmt --all -- --check`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-web api::channels::tests -- --nocapture`, `cargo test -p ersatzrs-infra --test channel_repository -- --nocapture`, `cargo test -p ersatzrs-infra --test extract_show_subtitles -- --nocapture`, `cargo test -p ersatzrs-web build_m3u -- --nocapture`, `cargo test -p ersatzrs-infra --all-features channel`, `cargo test -p ersatzrs-web --all-features channel`, `cargo clippy -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings`, `(cd crates/ersatzrs-web && cargo leptos build)`, and Playwright `/channels/add` + `/channels/3` with zero console warnings/errors. |
+| 2026-05-22 | Codex (GPT-5) | Removed the `/channels/add` runtime hydration blocker by rendering the channel editor as a server-rendered form while the broader Leptos island marker issue remains. Verified Playwright `/channels/add` with zero console errors, confirmed `/system/logs` still reproduces the app-wide island `failed_to_cast_marker_node`, and smoke-tested add/edit POSTs against SQLite for expanded channel fields and logo artwork persistence. Gates: `cargo fmt --all`, `cargo check -p ersatzrs-web`, `(cd crates/ersatzrs-web && cargo leptos build)`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-infra --test channel_repository -- --nocapture`, `cargo test -p ersatzrs-infra --test extract_show_subtitles -- --nocapture`, `cargo test -p ersatzrs-web build_m3u -- --nocapture`, `cargo clippy -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings`. |
+| 2026-05-22 | Codex (GPT-5) | Expanded `/channels/add` toward full ErsatzTV editor parity: visible full-field editor, channel editor repository tests, channel logo upload/serving and playlist/list logo preference, state-aware save side effects for embedded subtitle extraction, and Leptos asset builds. Gates: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web`, `cargo clippy -p ersatzrs-core -p ersatzrs-infra -p ersatzrs-web --all-targets -- -D warnings`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo test -p ersatzrs-infra --test channel_repository -- --nocapture`, `cargo test -p ersatzrs-infra --test extract_show_subtitles -- --nocapture`, `cargo test -p ersatzrs-web build_m3u -- --nocapture`, `(cd crates/ersatzrs-web && cargo leptos build)`. Browser smoke is not complete: Playwright still finds a runtime `failed_to_cast_marker_node` hydration error in the channel editor. |
+| 2026-05-22 | Codex (GPT-5) | Added `plans/channel-add-parity.md` for full ErsatzTV `/channels/add` parity and started the implementation by adding a core/infra channel-editor contract with full-field load/save validation, logo artwork persistence, default channel values, and web server/API wiring that preserves hidden full-form state while the visible editor is expanded. Gates: `cargo check -p ersatzrs-web`, focused clippy for core/infra/web, `cargo xtask hydration-lint -p ersatzrs-web`. |
 | 2026-05-22 | Codex (GPT-5) | Restored the show-detail season-card MoreVert action menu so seasons can be added directly to a collection from the TV show page. |
 | 2026-05-22 | Codex (GPT-5) | Fixed `/media/tv/seasons/:id` review findings: episode-card pagination now stays on unique `EpisodeMetadata` rows by selecting the head media file via subquery, and remote episode `local_path` now applies library-scoped Plex/Jellyfin/Emby path replacements while preserving the raw provider `file_path`. Added infra regressions for multi-version/multi-file episodes and Plex path replacement display. |
 | 2026-05-22 | Codex (GPT-5) | Ported `/media/tv/seasons/:id` from `TelevisionEpisodeList.razor`: added the core/infra `TelevisionRepository` season/episode read surface with DB-backed coverage, `get_season_details`, episode media-info JSON support, generic Add-to-Schedule for media items, shared schedule modal reuse, `SeasonPage` with fanart/poster header and vertical episode cards, routes `/media/tv/seasons/:id` + `/media/seasons/:id`, and parity/persistence matrix updates. |

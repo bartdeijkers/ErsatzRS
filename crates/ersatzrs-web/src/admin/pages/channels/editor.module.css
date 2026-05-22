@@ -2,7 +2,7 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    max-width: 42rem;
+    max-width: 74rem;
 }
 
 .breadcrumb {
@@ -36,27 +36,29 @@
     gap: 1.25rem;
 }
 
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-}
-@media (min-width: 640px) {
-    .form-grid { grid-template-columns: 1fr 1fr; }
+.form-error {
+    margin: 0;
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    color: var(--color-error);
+    font-size: 0.875rem;
 }
 
 .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    display: grid;
+    grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr);
+    column-gap: 2rem;
+    row-gap: 0.25rem;
+    align-items: center;
 }
 
 .label {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    color: var(--color-gray-400);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    color: var(--color-gray-200);
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .input {
@@ -90,16 +92,28 @@
 }
 
 .error {
+    grid-column: 2;
     min-height: 1rem;
     font-size: 0.75rem;
     color: var(--color-error);
 }
 
+.helper {
+    grid-column: 2;
+    font-size: 0.75rem;
+    color: var(--color-gray-400);
+}
+
 .checkboxes {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding-top: 0.25rem;
+    display: grid;
+    grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr);
+    row-gap: 1rem;
+    column-gap: 2rem;
+    padding: 0.25rem 0;
+}
+
+.checkboxes .checkbox-label {
+    grid-column: 2;
 }
 
 .checkbox-label {
@@ -108,6 +122,38 @@
     gap: 0.5rem;
     cursor: pointer;
     user-select: none;
+}
+
+.number-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.suffix {
+    color: var(--color-gray-400);
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.logo-preview {
+    max-width: 16rem;
+    max-height: 4rem;
+    object-fit: contain;
+}
+
+@media (max-width: 767px) {
+    .field,
+    .checkboxes {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+    }
+
+    .checkboxes .checkbox-label {
+        grid-column: auto;
+    }
 }
 
 .checkbox {
@@ -165,11 +211,6 @@
 .cancel-link:hover {
     background-color: var(--color-surface);
     color: var(--color-gray-200);
-}
-
-.loading {
-    color: var(--color-muted);
-    font-size: 0.875rem;
 }
 
 .no-profiles {

@@ -1,10 +1,12 @@
-//! Embedded text-subtitle and font extraction for deep show scans.
+//! Embedded text-subtitle and font extraction for deep show scans and channel
+//! save side effects.
 //!
 //! Ports `ErsatzTV.Application/Subtitles/Commands/ExtractEmbeddedShowSubtitlesHandler.cs`
 //! and `ExtractEmbeddedSubtitlesHandlerBase.cs`, scoped to TV episodes. ErsatzTV
 //! queues `ExtractEmbeddedShowSubtitles` after a successful deep show scan
-//! (`QueueShowScanByLibraryIdHandler` lines 92-95); the wiring side calls
-//! `extract_embedded_show_subtitles` in the same situation.
+//! (`QueueShowScanByLibraryIdHandler` lines 92-95) and
+//! `ExtractEmbeddedSubtitles(playoutId)` after a channel with subtitle mode
+//! enabled is saved (`UpdateChannelHandler` lines 143-150).
 //!
 //! Two deliberate divergences from ErsatzTV, both consistent with existing
 //! ErsatzRS patterns:
@@ -227,6 +229,36 @@ async fn episode_ids_with_text_subtitles(pool: &Pool<Db>, show_id: i64) -> Resul
     rows.into_iter().map(|row| Ok(row.try_get("Id")?)).collect()
 }
 
+async fn playout_episode_ids_with_text_subtitles(
+    pool: &Pool<Db>,
+    playout_id: i64,
+) -> Result<Vec<i64>> {
+    let placeholders = IMAGE_CODECS
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"SELECT DISTINCT E."Id" AS "Id"
+           FROM "PlayoutItem" PI
+           INNER JOIN "Episode" E ON E."Id" = PI."MediaItemId"
+           INNER JOIN "EpisodeMetadata" EM ON EM."EpisodeId" = E."Id"
+           INNER JOIN "Subtitle" SUB ON SUB."EpisodeMetadataId" = EM."Id"
+           WHERE PI."PlayoutId" = ?
+             AND SUB."SubtitleKind" = {embedded}
+             AND SUB."Codec" IS NOT NULL
+             AND SUB."Codec" NOT IN ({placeholders})
+           ORDER BY E."Id""#,
+        embedded = subtitle_kind::EMBEDDED,
+    );
+    let mut query = sqlx::query(&sql).bind(playout_id);
+    for codec in IMAGE_CODECS {
+        query = query.bind(*codec);
+    }
+    let rows = query.fetch_all(pool).await?;
+    rows.into_iter().map(|row| Ok(row.try_get("Id")?)).collect()
+}
+
 /// Extract embedded text subtitles + font attachments for every episode under
 /// `show_id`. Self-gates on the ffmpeg config keys, so a default-configured
 /// deployment (`extract_embedded_subtitles = false`) is a no-op. Per-episode
@@ -237,6 +269,27 @@ async fn episode_ids_with_text_subtitles(pool: &Pool<Db>, show_id: i64) -> Resul
 /// Returns an error only when a database query fails; ffmpeg spawn/exit
 /// failures are logged and do not abort the run.
 pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> Result<()> {
+    extract_embedded_episode_subtitles(pool, episode_ids_with_text_subtitles(pool, show_id).await?)
+        .await
+}
+
+/// Extract embedded text subtitles + font attachments for every episode in one
+/// playout. This is the ErsatzRS equivalent of ErsatzTV's
+/// `ExtractEmbeddedSubtitles(Some(playoutId))` background request.
+///
+/// # Errors
+///
+/// Returns an error only when a database query fails; ffmpeg spawn/exit
+/// failures are logged and do not abort the run.
+pub async fn extract_embedded_playout_subtitles(pool: &Pool<Db>, playout_id: i64) -> Result<()> {
+    extract_embedded_episode_subtitles(
+        pool,
+        playout_episode_ids_with_text_subtitles(pool, playout_id).await?,
+    )
+    .await
+}
+
+async fn extract_embedded_episode_subtitles(pool: &Pool<Db>, episode_ids: Vec<i64>) -> Result<()> {
     // Divergence: ffmpeg path from env, not the FFmpegPath config key.
     let ffmpeg_path = ffmpeg_path_from_env();
 
@@ -245,7 +298,6 @@ pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> R
         return Ok(());
     }
 
-    let episode_ids = episode_ids_with_text_subtitles(pool, show_id).await?;
     if episode_ids.is_empty() {
         return Ok(());
     }
