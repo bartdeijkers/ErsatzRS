@@ -21,6 +21,7 @@ pub fn AppShell(children: Children) -> impl IntoView {
             <TopBar/>
             <div class=style::body>
                 <NavDrawer/>
+                <NavGroupsStateScript/>
                 <div class=style::content_col>
                     <main class=style::main>
                         {children()}
@@ -29,6 +30,40 @@ pub fn AppShell(children: Children) -> impl IntoView {
             </div>
             <NavStateScript/>
         </div>
+    }
+}
+
+#[component]
+pub fn NavStateHeadScript() -> impl IntoView {
+    const SCRIPT: &str = r#"
+(() => {
+  const drawerKey = "ersatzrs.nav.drawer.checked.v1";
+
+  try {
+    const stored = window.sessionStorage.getItem(drawerKey);
+    if (stored === "true" || stored === "false") {
+      document.documentElement.dataset.navDrawerChecked = stored;
+    }
+  } catch {}
+})();
+"#;
+
+    const STYLE: &str = r#"
+@media (min-width: 768px) {
+  html[data-nav-drawer-checked="true"] [data-nav-drawer] {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  html[data-nav-drawer-checked="true"] [data-nav-drawer] {
+    transform: translateX(0);
+  }
+}
+"#;
+
+    view! {
+        <script inner_html=SCRIPT></script>
+        <style inner_html=STYLE></style>
     }
 }
 
@@ -74,6 +109,35 @@ fn TopBar() -> impl IntoView {
 }
 
 #[component]
+fn NavGroupsStateScript() -> impl IntoView {
+    const SCRIPT: &str = r#"
+(() => {
+  const groupsKey = "ersatzrs.nav.groups.v1";
+
+  function readGroups() {
+    try {
+      return JSON.parse(window.sessionStorage.getItem(groupsKey) || "{}") || {};
+    } catch {
+      return {};
+    }
+  }
+
+  const state = readGroups();
+  for (const group of document.querySelectorAll("[data-nav-group]")) {
+    const key = group.getAttribute("data-nav-group");
+    if (key && Object.prototype.hasOwnProperty.call(state, key)) {
+      group.open = state[key] === true;
+    }
+  }
+})();
+"#;
+
+    view! {
+        <script inner_html=SCRIPT></script>
+    }
+}
+
+#[component]
 fn NavStateScript() -> impl IntoView {
     const SCRIPT: &str = r#"
 (() => {
@@ -97,6 +161,10 @@ fn NavStateScript() -> impl IntoView {
     }
   }
 
+  function syncRootDrawerState(value) {
+    document.documentElement.dataset.navDrawerChecked = value ? "true" : "false";
+  }
+
   function initDrawer(store) {
     const toggle = document.querySelector("[data-nav-drawer-toggle]");
     if (!toggle) return;
@@ -105,8 +173,10 @@ fn NavStateScript() -> impl IntoView {
     if (stored === "true" || stored === "false") {
       toggle.checked = stored === "true";
     }
+    syncRootDrawerState(toggle.checked);
 
     toggle.addEventListener("change", () => {
+      syncRootDrawerState(toggle.checked);
       store?.setItem(drawerKey, toggle.checked ? "true" : "false");
     });
   }
@@ -139,11 +209,7 @@ fn NavStateScript() -> impl IntoView {
     initGroups(store);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
-  }
+  init();
 })();
 "#;
 

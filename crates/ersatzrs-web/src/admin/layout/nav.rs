@@ -9,7 +9,7 @@ use super::style;
 #[component]
 pub(super) fn NavDrawer() -> impl IntoView {
     view! {
-        <aside class=style::drawer>
+        <aside class=style::drawer data-nav-drawer>
             <nav class=style::drawer_nav>
                 <NavLink href="/channels" label="Channels" icon=IconName::Play/>
                 <NavLink href="/ffmpeg" label="FFmpeg Profiles" icon=IconName::Tune/>

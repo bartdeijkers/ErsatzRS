@@ -4,7 +4,7 @@ use leptos_meta::provide_meta_context;
 use leptos_router::components::Router;
 use std::path::{Path, PathBuf};
 
-use crate::admin::layout::AppShell;
+use crate::admin::layout::{AppShell, NavStateHeadScript};
 use crate::admin::routes::AdminRoutes;
 use crate::admin::ui::primitives::toast::provide_toast_store;
 
@@ -34,6 +34,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
                 <meta name="color-scheme" content="dark"/>
                 <title>"ErsatzRS"</title>
+                <NavStateHeadScript/>
                 <link rel="stylesheet" href="/public/bundle.css"/>
                 {hydration_assets_available.then(|| {
                     view! { <HydrationScripts options=options.clone() islands=true/> }
