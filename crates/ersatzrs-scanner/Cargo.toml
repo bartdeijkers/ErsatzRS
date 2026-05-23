@@ -11,7 +11,7 @@ clap = { version = "4", features = ["derive"] }
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
-md-5 = "0.10"
+md-5 = "0.11"
 quick-xml = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
