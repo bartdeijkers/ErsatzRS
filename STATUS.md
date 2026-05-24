@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-23 (admin sidebar pre-paint state)
+Last updated: 2026-05-24 (parity workflow hardening)
 
 ## Current Phase
 
@@ -525,6 +525,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-24 | Codex (GPT-5) | Hardened the parity workflow from the recent review: added a repo-local `parity-slice` Codex skill, updated the Leptos/ErsatzTV porter and port-planning skill to require source maps, `ParityDebt`, no-stopgap acceptance, and reusable regression thinking, expanded the PR parity rubric, documented the fast parity ladder in `PORTING.md`/`TEST.md`, and added `cargo xtask parity-check` for fmt + hydration lint + focused web tests/clippy. Gates: `cargo check -p xtask` and `cargo xtask parity-check workflow --skip-tests --skip-clippy`. |
 | 2026-05-23 | Codex (GPT-5) | Fixed `/media/multi-collections/add` hydration by moving the list and editor into Leptos islands, replacing router-context navigation inside the editor island with a browser location redirect, and moving pager total calculation inside the list Suspense boundary. Gates: `cargo leptos build`, `./run.sh serve`, Playwright add-page smoke adding both a collection and smart collection then saving, SQLite persistence check, and refreshed list-page console check with zero warnings/errors. |
 | 2026-05-23 | Codex (GPT-5) | Ported `/media/multi-collections` from ErsatzTV with list/search/page-size persistence, add/edit/delete routes, manual and smart collection item selectors, Schedule As Group and playback-order persistence, transactional item replacement, and playout refresh enqueue for edited multi-collections. Per user instruction, no intermediate quality-gate testing was run. |
 | 2026-05-23 | Codex (GPT-5) | Removed the admin sidebar state flicker by applying persisted drawer state from a head bootstrap before stylesheet paint and replaying persisted nav-group `open` state immediately after the drawer markup, while keeping the existing `sessionStorage` keys and listener wiring. Gates: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`, `./run.sh serve`, and Playwright `/channels` -> stored Media/drawer state -> `/media/movies` -> `/channels` persistence smoke with zero console warnings/errors. |

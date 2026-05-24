@@ -128,6 +128,39 @@ repo root. When you fix one, delete its line — new findings in files not
 listed there fail the linter as normal. To run without the baseline (e.g.
 to see the full debt): `cargo xtask hydration-lint -p ersatzrs-web --no-baseline`.
 
+### Fast parity check
+
+For admin/media parity slices, run the focused gate ladder with:
+
+```bash
+cargo xtask parity-check web
+```
+
+This wraps the cheap checks that have repeatedly caught late parity bugs:
+
+- `cargo fmt --all -- --check`
+- `cargo xtask hydration-lint -p ersatzrs-web`
+- `cargo test -p ersatzrs-web`
+- `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`
+
+Use extra scope words for traceability when the slice spans more than web UI,
+for example `cargo xtask parity-check web media`. The current command records
+those scopes in output; widen tests manually when the slice changes shared
+repository, scanner, provider, scheduler, or health behavior.
+
+### Reusable parity regressions
+
+When a parity review finds a repeated defect class, add or update a reusable
+regression instead of leaving only a one-off smoke note. Prioritize:
+
+- Card action menus and fallback links.
+- Hydrated islands attaching handlers.
+- SSR links, fallback modals, and no-JS save/action paths.
+- Side effects after add/remove/edit, especially generated playlists and
+  playout refresh enqueueing.
+- Health/troubleshooting visibility after runtime requirement, provider,
+  schema, media-state, or FFmpeg capability changes.
+
 ## Verification responsibility split
 
 The porter (`leptos-ersatztv-porter` agent) and the human reviewer share the

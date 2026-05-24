@@ -22,17 +22,73 @@ maintainer's local filesystem layout leaks into committed files.
 ## Procedure
 
 1. Find and read the relevant ErsatzTV source under `$ERSATZTV_SRC/`.
-2. Identify the ErsatzRS target crate from [ARCHITECTURE.md](ARCHITECTURE.md).
-3. Map C# concepts to Rust idioms using the table below.
-4. Define or reuse a trait in `ersatzrs-core` when behavior crosses infrastructure
+2. Create a source map for the slice:
+   - UI/pages and shared components.
+   - View models and validators.
+   - Handlers/services.
+   - Repository/query paths.
+   - Side effects such as playout refresh, generated playlists, media actions,
+     provider refresh, health checks, or troubleshooting visibility.
+   - Intentional deviations, with ADR/deviation links.
+3. Identify the ErsatzRS target crate from [ARCHITECTURE.md](ARCHITECTURE.md).
+4. Map C# concepts to Rust idioms using the table below.
+5. Define or reuse a trait in `ersatzrs-core` when behavior crosses infrastructure
    boundaries.
-5. Implement concrete storage, provider, or process behavior in `ersatzrs-infra`,
+6. Implement concrete storage, provider, or process behavior in `ersatzrs-infra`,
    `ersatzrs-ffmpeg`, `ersatzrs-web`, or `ersatzrs-scanner` as appropriate.
-6. Add tests at the narrowest useful level.
-7. Add `insta` snapshots for generated FFmpeg argv, filter graphs, YAML
+7. Add tests at the narrowest useful level.
+8. Add `insta` snapshots for generated FFmpeg argv, filter graphs, YAML
    scheduling output, and generated SVG/drawvg fragments.
-8. Update the parity matrix.
-9. Add an ADR if behavior deliberately diverges from ErsatzTV.
+9. Update the parity matrix.
+10. Add an ADR if behavior deliberately diverges from ErsatzTV.
+
+## No-Stopgap Parity Gate
+
+Parity is not complete until the implementation proves these items:
+
+- Visible UI fields, actions, labels, routes, and back-links match ErsatzTV or
+  an ADR records the deliberate deviation.
+- Validation behavior and error surfaces match the ErsatzTV validator/handler
+  layer, not only the Rust form type.
+- Persistence behavior and delete/copy/edit/add side effects match, including
+  playout refresh, generated playlists, provider updates, media actions, and
+  health/troubleshooting visibility where applicable.
+- Critical save/action flows have an SSR fallback or browser-safe fallback when
+  hydration is not guaranteed.
+- Detail/list route behavior and SSR fallback links work without relying on a
+  hidden hydrated-only path.
+- The parity matrix, `STATUS.md`, `TEST.md`, and any active plan file are in
+  sync with the actual route/runtime state.
+
+Use a visible `ParityDebt` section for anything incomplete:
+
+```md
+## ParityDebt
+
+- Behavior:
+  - Status: blocked by missing schema/data | intentionally divergent | next-slice required
+  - Evidence:
+  - Owner/follow-up:
+  - ADR/deviation link:
+```
+
+A feature with `next-slice required` debt must stay below `Ported` in the
+parity matrix.
+
+## Fast Parity Gate
+
+For admin/media slices, use the fast gate ladder before wider workspace gates:
+
+```bash
+cargo xtask parity-check web
+```
+
+The command runs formatting, hydration lint, focused web tests, and focused web
+clippy. Add more scopes for the command log when useful:
+
+```bash
+cargo xtask parity-check web media
+```
 
 ## C# to Rust Mapping
 

@@ -1,11 +1,12 @@
 ---
 name: port-ersatztv
-description: Plan a ErsatzRS port from an ErsatzTV C# source file or feature. Use when asked to map an ErsatzTV file, directory, class, or behavior to Rust targets before implementation.
+description: Plan an ErsatzRS port from an ErsatzTV C# source file or feature. Use when asked to map an ErsatzTV file, directory, class, or behavior to Rust targets before implementation.
 ---
 
 # Port ErsatzTV
 
-Produce a plan only. Do not write code.
+Produce a plan only. Do not write code. For implementation, switch to the
+`parity-slice` skill so the no-stopgap acceptance gate is applied.
 
 ## Inputs
 
@@ -17,10 +18,15 @@ Produce a plan only. Do not write code.
 1. Read [PORTING.md](../../PORTING.md).
 2. Read [ARCHITECTURE.md](../../ARCHITECTURE.md).
 3. Read the requested ErsatzTV source.
-4. Identify the ErsatzRS target crate and module.
-5. Map important C# concepts to Rust idioms.
-6. Identify traits, structs, tests, snapshots, and ADR needs.
-7. Point to the parity-matrix row that should be added or updated.
+4. Build a source map that covers UI/pages, components/view models,
+   validators, handlers/services, repository/query paths, and side effects.
+5. Identify the ErsatzRS target crate and module.
+6. Map important C# concepts to Rust idioms.
+7. Identify traits, structs, tests, snapshots, health/troubleshooting impact,
+   and ADR needs.
+8. Point to the parity-matrix row that should be added or updated.
+9. List any known `ParityDebt`; use `None` only when there is no hidden
+   deferred behavior.
 
 ## Output
 
@@ -28,11 +34,13 @@ Use this shape:
 
 ```text
 Source
+Source map
 Target
 Behavior summary
 Rust mapping
 Implementation steps
 Tests and snapshots
 ADR/parity updates
+ParityDebt
 Open questions
 ```

@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
 mod hydration_lint;
+mod parity_check;
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -10,6 +11,7 @@ fn main() -> ExitCode {
     };
     match sub.as_str() {
         "hydration-lint" => hydration_lint::run(args.collect()),
+        "parity-check" => parity_check::run(args.collect()),
         "help" | "--help" | "-h" => {
             print_help();
             ExitCode::SUCCESS
@@ -30,4 +32,5 @@ fn print_help() {
     eprintln!();
     eprintln!("SUBCOMMANDS:");
     eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
+    eprintln!("    parity-check      Run the fast parity gate ladder");
 }
