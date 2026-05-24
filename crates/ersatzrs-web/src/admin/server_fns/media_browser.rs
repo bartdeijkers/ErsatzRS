@@ -3516,7 +3516,7 @@ pub async fn get_multi_collection(id: i64) -> Result<Option<MultiCollectionForm>
     let mut items = multi_collection_items(&state.pool, id).await?;
     let mut smart_items = multi_collection_smart_items(&state.pool, id).await?;
     items.append(&mut smart_items);
-    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items.sort_by_key(|item| item.name.to_lowercase());
 
     Ok(Some(MultiCollectionForm {
         id: row.try_get("Id").unwrap_or(0),
@@ -3861,7 +3861,7 @@ async fn multi_collection_smart_items(
         .collect())
 }
 
-fn normalize_multi_collection_items(items: &mut Vec<MultiCollectionItemForm>) {
+fn normalize_multi_collection_items(items: &mut [MultiCollectionItemForm]) {
     for item in items.iter_mut() {
         item.name.clear();
         item.use_custom_playback_order = false;

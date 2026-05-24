@@ -30,6 +30,7 @@ pub enum FillerMode {
 pub struct FillerPreset {
     pub id: EntityId,
     pub name: String,
+    pub filler_kind: FillerKind,
     pub filler_mode: FillerMode,
     pub collection_type: crate::CollectionType,
     pub collection_id: Option<EntityId>,
@@ -39,7 +40,9 @@ pub struct FillerPreset {
     pub playlist_id: Option<EntityId>,
     pub duration: Option<Duration>,
     pub count: Option<i32>,
-    pub pad_to_next_hour: bool,
+    pub pad_to_nearest_minute: Option<i32>,
     pub allow_watermarks: bool,
+    pub expression: Option<String>,
+    pub use_chapters_as_media_items: bool,
     pub playback_order: PlaybackOrder,
 }

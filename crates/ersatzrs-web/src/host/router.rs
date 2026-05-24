@@ -83,6 +83,14 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::ffmpeg_profiles::save_ffmpeg_profile_form),
         )
         .route(
+            "/api/filler-presets/save",
+            post(api::filler::save_filler_preset_form),
+        )
+        .route(
+            "/api/filler-presets/delete",
+            post(api::filler::delete_filler_preset_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

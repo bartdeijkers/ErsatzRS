@@ -86,6 +86,7 @@ mapping from advertised nav link to backing route in
 | `/media/smart-collections` | list + add/`:id`/`:id/edit` editor |
 | `/media/multi-collections` | list + add/`:id/edit` editor with manual/smart collection items |
 | `/media/trakt/lists` | list + `:id` editor; add/search/match/delete actions |
+| `/media/filler/presets` | list + add/`:id/edit` editor; HTML POST fallback save/delete |
 | `/search` | scheduling search result page, including `trakt_list:{id}` queries |
 | `/blocks` | aliased to `/scheduling/blocks`; list + `:id` editor |
 | `/playouts` | list + embedded timeline + `/playouts/sequential/:id` editor |
@@ -99,7 +100,6 @@ mapping from advertised nav link to backing route in
 | `/media/remote/streams` | Remote-stream entities exist; no UI yet. |
 | `/media/rerun-collections` | No server fns or page yet. |
 | `/media/playlists` | No server fns or page yet. |
-| `/media/filler/presets` | Filler entities exist; no UI yet. |
 | `/schedules` | Only block scheduling UI is shipped. |
 | `/templates` | Only block scheduling UI is shipped. |
 | `/decos` | Deco data is loaded by block scheduling but has no editor. |

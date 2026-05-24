@@ -232,6 +232,8 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/collections/:id` | TODO   | Detail page port: poster grid, hover-checkbox multi-select, per-card trashcan, inline rename pencil, "Use Custom Playback Order" toggle with Move Up/Down (drag-and-drop deferred). Island owns blocking resource; sections rendered conditionally over stable signal state. |
 | `/media/collections/:id/edit` | ✅ | Rename-only form (port of `CollectionEditor.razor`).                  |
+| `/media/filler/presets` | TODO | Stable DOM shape, `DeleteDialog` always rendered; HTML POST fallback delete route. |
+| `/media/filler/presets/:id/edit` | TODO | Editor island owns blocking resources; save also posts to `/api/filler-presets/save` without hydration. |
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
 | `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |

@@ -3,6 +3,7 @@ pub mod artists;
 pub mod browser;
 pub mod collection_detail;
 pub mod collections;
+pub mod filler_presets;
 pub mod images;
 pub mod movies;
 pub mod multi_collections;

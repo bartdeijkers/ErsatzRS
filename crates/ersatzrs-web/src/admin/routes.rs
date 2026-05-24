@@ -16,6 +16,7 @@ use crate::admin::pages::libraries::LibrariesPage;
 use crate::admin::pages::media::artists::{ArtistPage, ArtistsPage};
 use crate::admin::pages::media::collection_detail::CollectionDetailPage;
 use crate::admin::pages::media::collections::{CollectionEditorPage, CollectionsPage};
+use crate::admin::pages::media::filler_presets::{FillerPresetEditorPage, FillerPresetsPage};
 use crate::admin::pages::media::images::ImagesPage;
 use crate::admin::pages::media::movies::{MoviePage, MoviesPage};
 use crate::admin::pages::media::multi_collections::{
@@ -320,6 +321,30 @@ pub fn AdminRoutes() -> impl IntoView {
                     ParamSegment("id"),
                 )
                 view=TraktListEditorPage
+            />
+
+            <Route
+                path=(StaticSegment("media"), StaticSegment("filler"), StaticSegment("presets"))
+                view=FillerPresetsPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("filler"),
+                    StaticSegment("presets"),
+                    StaticSegment("add"),
+                )
+                view=FillerPresetEditorPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("filler"),
+                    StaticSegment("presets"),
+                    ParamSegment("id"),
+                    StaticSegment("edit"),
+                )
+                view=FillerPresetEditorPage
             />
 
             <Route

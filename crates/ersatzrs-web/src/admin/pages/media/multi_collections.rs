@@ -357,7 +357,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                 <h1 class=style::page_title>"Multi Collection"</h1>
                 <Button
                     variant=ButtonVariant::Primary
-                    on_click=Some(on_save.clone())
+                    on_click=Some(on_save)
                 >
                     {move || if id_signal.get() == 0 {
                         "Add Multi Collection"
@@ -514,7 +514,7 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
                 <tbody>
                     {move || {
                         let mut rows: Vec<_> = items.get().into_iter().enumerate().collect();
-                        rows.sort_by(|(_, a), (_, b)| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                        rows.sort_by_key(|(_, item)| item.name.to_lowercase());
                         if rows.is_empty() {
                             return view! {
                                 <tr>
@@ -543,7 +543,7 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
                                             checked=checked
                                             prop:checked=move || {
                                                 items.with(|items| {
-                                                    items.get(index).map(|item| item.schedule_as_group).unwrap_or(false)
+                                                    items.get(index).is_some_and(|item| item.schedule_as_group)
                                                 })
                                             }
                                             on:change=move |event| {
