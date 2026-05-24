@@ -16,6 +16,9 @@
 //! - `Pages/SmartCollections.razor` + `SmartCollectionEditor.razor` →
 //!   [`list_smart_collections`], [`get_smart_collection`],
 //!   [`save_smart_collection`], [`delete_smart_collection`]
+//! - `Pages/MultiCollections.razor` + `MultiCollectionEditor.razor` →
+//!   [`list_multi_collections`], [`get_multi_collection`],
+//!   [`save_multi_collection`], [`delete_multi_collection`]
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -336,6 +339,44 @@ pub struct CollectionForm {
     pub name: String,
     /// Only used by smart collections.
     pub query: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MultiCollectionListRow {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MultiCollectionItemForm {
+    pub collection_id: Option<i64>,
+    pub smart_collection_id: Option<i64>,
+    pub name: String,
+    pub collection_type: i32,
+    pub use_custom_playback_order: bool,
+    pub schedule_as_group: bool,
+    pub playback_order: i32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MultiCollectionForm {
+    pub id: i64,
+    pub name: String,
+    pub items: Vec<MultiCollectionItemForm>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MultiCollectionSelectOption {
+    pub id: i64,
+    pub name: String,
+    pub collection_type: i32,
+    pub use_custom_playback_order: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MultiCollectionEditorOptions {
+    pub collections: Vec<MultiCollectionSelectOption>,
+    pub smart_collections: Vec<MultiCollectionSelectOption>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1408,6 +1449,16 @@ async fn enqueue_collection_playout_refresh(
 }
 
 #[cfg(feature = "ssr")]
+async fn enqueue_multi_collection_playout_refresh(
+    state: &crate::host::state::AppState,
+    multi_collection_id: i64,
+) -> Result<(), ServerFnError> {
+    let playout_ids = playout_ids_using_multi_collection(&state.pool, multi_collection_id).await?;
+    enqueue_playout_refreshes(state, playout_ids);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
 async fn playout_ids_using_schedule(
     pool: &ersatzrs_infra::db::DbPool,
     schedule_id: i64,
@@ -1437,6 +1488,24 @@ async fn playout_ids_using_collection(
            ORDER BY "PlayoutId""#,
     )
     .bind(collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn playout_ids_using_multi_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    multi_collection_id: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
+    // MediaCollectionRepository.cs` `PlayoutIdsUsingMultiCollection`.
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "MultiCollectionId" = ?
+           ORDER BY "PlayoutId""#,
+    )
+    .bind(multi_collection_id)
     .fetch_all(pool)
     .await
 }
@@ -3340,6 +3409,479 @@ pub async fn delete_smart_collection(id: i64) -> Result<(), ServerFnError> {
         .execute(&state.pool)
         .await?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Multi-collections
+// ---------------------------------------------------------------------------
+
+const MULTI_COLLECTIONS_PAGE_SIZE_KEY: &str = "pages.multi_collections.page_size";
+const PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
+const COLLECTION_TYPE_COLLECTION: i32 = 0;
+const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+
+#[server]
+pub async fn get_multi_collections_page_size() -> Result<u32, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let value: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(MULTI_COLLECTIONS_PAGE_SIZE_KEY)
+            .fetch_optional(&state.pool)
+            .await?;
+
+    Ok(value
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(10))
+}
+
+#[server]
+pub async fn list_multi_collections(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<MultiCollectionListRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    save_config_value(
+        &state.pool,
+        MULTI_COLLECTIONS_PAGE_SIZE_KEY,
+        &page_size.to_string(),
+    )
+    .await?;
+
+    let offset = i64::from(page) * i64::from(page_size);
+    let search = search.trim().to_string();
+    let like = format!("%{search}%");
+
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "MultiCollection" mc
+           WHERE (? = '' OR mc."Name" LIKE ?)"#,
+    )
+    .bind(&search)
+    .bind(&like)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT mc."Id", COALESCE(mc."Name", '') AS "Name"
+           FROM "MultiCollection" mc
+           WHERE (? = '' OR mc."Name" LIKE ?)
+           ORDER BY mc."Name"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(&search)
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let list = rows
+        .iter()
+        .map(|row| MultiCollectionListRow {
+            id: row.try_get("Id").unwrap_or(0),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((list, total.max(0) as u64))
+}
+
+#[server]
+pub async fn get_multi_collection(id: i64) -> Result<Option<MultiCollectionForm>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let row = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "MultiCollection"
+           WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    let mut items = multi_collection_items(&state.pool, id).await?;
+    let mut smart_items = multi_collection_smart_items(&state.pool, id).await?;
+    items.append(&mut smart_items);
+    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    Ok(Some(MultiCollectionForm {
+        id: row.try_get("Id").unwrap_or(0),
+        name: row.try_get("Name").unwrap_or_default(),
+        items,
+    }))
+}
+
+#[server]
+pub async fn get_multi_collection_editor_options(
+) -> Result<MultiCollectionEditorOptions, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let collection_rows = sqlx::query(
+        r#"SELECT "Id",
+                  COALESCE("Name", '') AS "Name",
+                  COALESCE("UseCustomPlaybackOrder", 0) AS "UseCustomPlaybackOrder"
+           FROM "Collection"
+           ORDER BY "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    let smart_rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "SmartCollection"
+           ORDER BY "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(MultiCollectionEditorOptions {
+        collections: collection_rows
+            .iter()
+            .map(|row| MultiCollectionSelectOption {
+                id: row.try_get("Id").unwrap_or(0),
+                name: row.try_get("Name").unwrap_or_default(),
+                collection_type: COLLECTION_TYPE_COLLECTION,
+                use_custom_playback_order: row
+                    .try_get::<i64, _>("UseCustomPlaybackOrder")
+                    .unwrap_or(0)
+                    != 0,
+            })
+            .collect(),
+        smart_collections: smart_rows
+            .iter()
+            .map(|row| MultiCollectionSelectOption {
+                id: row.try_get("Id").unwrap_or(0),
+                name: row.try_get("Name").unwrap_or_default(),
+                collection_type: COLLECTION_TYPE_SMART_COLLECTION,
+                use_custom_playback_order: false,
+            })
+            .collect(),
+    })
+}
+
+#[server]
+pub async fn save_multi_collection(form: MultiCollectionForm) -> Result<i64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let name = form.name.trim().to_string();
+    validate_multi_collection_name(&state.pool, form.id, &name).await?;
+    validate_multi_collection_items(&state.pool, &form.items).await?;
+
+    let existing_items = if form.id == 0 {
+        Vec::new()
+    } else {
+        let exists: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "MultiCollection" WHERE "Id" = ?"#)
+                .bind(form.id)
+                .fetch_one(&state.pool)
+                .await?;
+        if exists == 0 {
+            return Err(ServerFnError::new("MultiCollection does not exist."));
+        }
+        let mut items = multi_collection_items(&state.pool, form.id).await?;
+        let mut smart_items = multi_collection_smart_items(&state.pool, form.id).await?;
+        items.append(&mut smart_items);
+        normalize_multi_collection_items(&mut items);
+        items
+    };
+
+    let mut incoming_items = form.items.clone();
+    normalize_multi_collection_items(&mut incoming_items);
+
+    let mut tx = state.pool.begin().await?;
+    let id = if form.id == 0 {
+        let result = sqlx::query(r#"INSERT INTO "MultiCollection" ("Name") VALUES (?)"#)
+            .bind(&name)
+            .execute(&mut *tx)
+            .await?;
+        ersatzrs_infra::db::last_insert_id(result)
+    } else {
+        sqlx::query(r#"UPDATE "MultiCollection" SET "Name" = ? WHERE "Id" = ?"#)
+            .bind(&name)
+            .bind(form.id)
+            .execute(&mut *tx)
+            .await?;
+        form.id
+    };
+
+    if form.id == 0 || existing_items != incoming_items {
+        sqlx::query(r#"DELETE FROM "MultiCollectionItem" WHERE "MultiCollectionId" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(r#"DELETE FROM "MultiCollectionSmartItem" WHERE "MultiCollectionId" = ?"#)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+
+        for item in &incoming_items {
+            if let Some(collection_id) = item.collection_id {
+                sqlx::query(
+                    r#"INSERT INTO "MultiCollectionItem" (
+                           "MultiCollectionId", "CollectionId", "ScheduleAsGroup", "PlaybackOrder"
+                       ) VALUES (?, ?, ?, ?)"#,
+                )
+                .bind(id)
+                .bind(collection_id)
+                .bind(item.schedule_as_group)
+                .bind(item.playback_order)
+                .execute(&mut *tx)
+                .await?;
+            } else if let Some(smart_collection_id) = item.smart_collection_id {
+                sqlx::query(
+                    r#"INSERT INTO "MultiCollectionSmartItem" (
+                           "MultiCollectionId", "SmartCollectionId", "ScheduleAsGroup", "PlaybackOrder"
+                       ) VALUES (?, ?, ?, ?)"#,
+                )
+                .bind(id)
+                .bind(smart_collection_id)
+                .bind(item.schedule_as_group)
+                .bind(item.playback_order)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+    }
+    tx.commit().await?;
+
+    if form.id != 0 && existing_items != incoming_items {
+        enqueue_multi_collection_playout_refresh(&state, id).await?;
+    }
+
+    Ok(id)
+}
+
+#[server]
+pub async fn delete_multi_collection(id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let result = sqlx::query(r#"DELETE FROM "MultiCollection" WHERE "Id" = ?"#)
+        .bind(id)
+        .execute(&state.pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ServerFnError::new(format!(
+            "MultiCollection {id} does not exist."
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn save_config_value(
+    pool: &ersatzrs_infra::db::DbPool,
+    key: &str,
+    value: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(key)
+        .bind(value)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_multi_collection_name(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+    name: &str,
+) -> Result<(), ServerFnError> {
+    if name.is_empty() {
+        return Err(ServerFnError::new("Multi-collection name is required!"));
+    }
+    if name.chars().count() > 50 {
+        return Err(ServerFnError::new(
+            "Multi-collection name cannot be longer than 50 characters.",
+        ));
+    }
+
+    let duplicate: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "MultiCollection"
+           WHERE "Name" = ? AND "Id" <> ?"#,
+    )
+    .bind(name)
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("MultiCollection name must be unique"));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_multi_collection_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    items: &[MultiCollectionItemForm],
+) -> Result<(), ServerFnError> {
+    let mut collection_ids = std::collections::BTreeSet::new();
+    let mut smart_collection_ids = std::collections::BTreeSet::new();
+
+    for item in items {
+        match (item.collection_id, item.smart_collection_id) {
+            (Some(collection_id), None) => {
+                if !collection_ids.insert(collection_id) {
+                    return Err(ServerFnError::new(format!(
+                        "Collection {collection_id} is already present."
+                    )));
+                }
+                let exists: i64 =
+                    sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
+                        .bind(collection_id)
+                        .fetch_one(pool)
+                        .await?;
+                if exists == 0 {
+                    return Err(ServerFnError::new(format!(
+                        "Collection {collection_id} does not exist."
+                    )));
+                }
+            }
+            (None, Some(smart_collection_id)) => {
+                if !smart_collection_ids.insert(smart_collection_id) {
+                    return Err(ServerFnError::new(format!(
+                        "Smart collection {smart_collection_id} is already present."
+                    )));
+                }
+                let exists: i64 =
+                    sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SmartCollection" WHERE "Id" = ?"#)
+                        .bind(smart_collection_id)
+                        .fetch_one(pool)
+                        .await?;
+                if exists == 0 {
+                    return Err(ServerFnError::new(format!(
+                        "Smart collection {smart_collection_id} does not exist."
+                    )));
+                }
+            }
+            _ => {
+                return Err(ServerFnError::new(
+                    "Each multi-collection item must reference exactly one collection.",
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn multi_collection_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    multi_collection_id: i64,
+) -> Result<Vec<MultiCollectionItemForm>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT mci."CollectionId",
+                  mci."ScheduleAsGroup",
+                  mci."PlaybackOrder",
+                  COALESCE(c."Name", '') AS "Name",
+                  COALESCE(c."UseCustomPlaybackOrder", 0) AS "UseCustomPlaybackOrder"
+           FROM "MultiCollectionItem" mci
+           JOIN "Collection" c ON c."Id" = mci."CollectionId"
+           WHERE mci."MultiCollectionId" = ?"#,
+    )
+    .bind(multi_collection_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|row| MultiCollectionItemForm {
+            collection_id: Some(row.try_get("CollectionId").unwrap_or(0)),
+            smart_collection_id: None,
+            name: row.try_get("Name").unwrap_or_default(),
+            collection_type: COLLECTION_TYPE_COLLECTION,
+            use_custom_playback_order: row.try_get::<i64, _>("UseCustomPlaybackOrder").unwrap_or(0)
+                != 0,
+            schedule_as_group: row.try_get::<i64, _>("ScheduleAsGroup").unwrap_or(0) != 0,
+            playback_order: row
+                .try_get::<i64, _>("PlaybackOrder")
+                .unwrap_or(i64::from(PLAYBACK_ORDER_CHRONOLOGICAL))
+                .try_into()
+                .unwrap_or(PLAYBACK_ORDER_CHRONOLOGICAL),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn multi_collection_smart_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    multi_collection_id: i64,
+) -> Result<Vec<MultiCollectionItemForm>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT mcsi."SmartCollectionId",
+                  mcsi."ScheduleAsGroup",
+                  mcsi."PlaybackOrder",
+                  COALESCE(sc."Name", '') AS "Name"
+           FROM "MultiCollectionSmartItem" mcsi
+           JOIN "SmartCollection" sc ON sc."Id" = mcsi."SmartCollectionId"
+           WHERE mcsi."MultiCollectionId" = ?"#,
+    )
+    .bind(multi_collection_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|row| MultiCollectionItemForm {
+            collection_id: None,
+            smart_collection_id: Some(row.try_get("SmartCollectionId").unwrap_or(0)),
+            name: row.try_get("Name").unwrap_or_default(),
+            collection_type: COLLECTION_TYPE_SMART_COLLECTION,
+            use_custom_playback_order: false,
+            schedule_as_group: row.try_get::<i64, _>("ScheduleAsGroup").unwrap_or(0) != 0,
+            playback_order: row
+                .try_get::<i64, _>("PlaybackOrder")
+                .unwrap_or(i64::from(PLAYBACK_ORDER_CHRONOLOGICAL))
+                .try_into()
+                .unwrap_or(PLAYBACK_ORDER_CHRONOLOGICAL),
+        })
+        .collect())
+}
+
+fn normalize_multi_collection_items(items: &mut Vec<MultiCollectionItemForm>) {
+    for item in items.iter_mut() {
+        item.name.clear();
+        item.use_custom_playback_order = false;
+        item.collection_type = if item.smart_collection_id.is_some() {
+            COLLECTION_TYPE_SMART_COLLECTION
+        } else {
+            COLLECTION_TYPE_COLLECTION
+        };
+        if item.playback_order == 0 {
+            item.playback_order = PLAYBACK_ORDER_CHRONOLOGICAL;
+        }
+    }
+    items.sort_by_key(|item| {
+        (
+            item.collection_id.unwrap_or_default(),
+            item.smart_collection_id.unwrap_or_default(),
+            item.schedule_as_group,
+            item.playback_order,
+        )
+    });
 }
 
 // ---------------------------------------------------------------------------

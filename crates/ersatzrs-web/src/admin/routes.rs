@@ -18,6 +18,9 @@ use crate::admin::pages::media::collection_detail::CollectionDetailPage;
 use crate::admin::pages::media::collections::{CollectionEditorPage, CollectionsPage};
 use crate::admin::pages::media::images::ImagesPage;
 use crate::admin::pages::media::movies::{MoviePage, MoviesPage};
+use crate::admin::pages::media::multi_collections::{
+    MultiCollectionEditorPage, MultiCollectionsPage,
+};
 use crate::admin::pages::media::other_videos::{OtherVideoPage, OtherVideosPage};
 use crate::admin::pages::media::season_detail::SeasonPage;
 use crate::admin::pages::media::see_all_lists::{
@@ -281,6 +284,28 @@ pub fn AdminRoutes() -> impl IntoView {
                     ParamSegment("id"),
                 )
                 view=SmartCollectionEditorPage
+            />
+
+            <Route
+                path=(StaticSegment("media"), StaticSegment("multi-collections"))
+                view=MultiCollectionsPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("multi-collections"),
+                    StaticSegment("add"),
+                )
+                view=MultiCollectionEditorPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("multi-collections"),
+                    ParamSegment("id"),
+                    StaticSegment("edit"),
+                )
+                view=MultiCollectionEditorPage
             />
 
             <Route

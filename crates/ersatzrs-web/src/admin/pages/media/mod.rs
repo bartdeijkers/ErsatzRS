@@ -5,6 +5,7 @@ pub mod collection_detail;
 pub mod collections;
 pub mod images;
 pub mod movies;
+pub mod multi_collections;
 pub mod multi_select_browser;
 pub mod other_videos;
 pub mod season_detail;

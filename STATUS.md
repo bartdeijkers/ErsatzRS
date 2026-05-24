@@ -441,12 +441,13 @@ the summary below is the readiness view.
 `/media/browser/images` (alias `/media/images`), `/media/music/artists`,
 `/media/music/artists/:id`,
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
-`/media/smart-collections`, `/media/trakt/lists`, `/search`, `/blocks`
+`/media/smart-collections`, `/media/multi-collections`,
+`/media/trakt/lists`, `/search`, `/blocks`
 (alias for `/scheduling/blocks`), `/playouts`, `/playouts/sequential/:id`,
 `/system/health`, `/system/logs`, and `/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
-`/media/remote/streams`, `/media/multi-collections`, `/media/rerun-collections`,
+`/media/remote/streams`, `/media/rerun-collections`,
 `/media/playlists`, `/media/filler/presets`,
 `/schedules`, `/templates`, `/decos`, `/deco-templates`, and
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
@@ -524,6 +525,8 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-23 | Codex (GPT-5) | Fixed `/media/multi-collections/add` hydration by moving the list and editor into Leptos islands, replacing router-context navigation inside the editor island with a browser location redirect, and moving pager total calculation inside the list Suspense boundary. Gates: `cargo leptos build`, `./run.sh serve`, Playwright add-page smoke adding both a collection and smart collection then saving, SQLite persistence check, and refreshed list-page console check with zero warnings/errors. |
+| 2026-05-23 | Codex (GPT-5) | Ported `/media/multi-collections` from ErsatzTV with list/search/page-size persistence, add/edit/delete routes, manual and smart collection item selectors, Schedule As Group and playback-order persistence, transactional item replacement, and playout refresh enqueue for edited multi-collections. Per user instruction, no intermediate quality-gate testing was run. |
 | 2026-05-23 | Codex (GPT-5) | Removed the admin sidebar state flicker by applying persisted drawer state from a head bootstrap before stylesheet paint and replaying persisted nav-group `open` state immediately after the drawer markup, while keeping the existing `sessionStorage` keys and listener wiring. Gates: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web`, `cargo xtask hydration-lint -p ersatzrs-web`, `./run.sh serve`, and Playwright `/channels` -> stored Media/drawer state -> `/media/movies` -> `/channels` persistence smoke with zero console warnings/errors. |
 | 2026-05-22 | Codex (GPT-5) | Wired per-card `/search` result menu actions for Add To Collection and Add To Playlist through the existing JSON media-action APIs, with stable card button data attributes and an SSR-rendered fallback modal so the actions work even when search-result island hydration does not attach. Gates: `cargo fmt --all -- --check`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo clippy -p ersatzrs-web --all-targets --all-features -- -D warnings`, `cargo test -p ersatzrs-web --features ssr search`, `(cd crates/ersatzrs-web && cargo leptos build)`, and Playwright `/search?query=library_id%3A1` collection/playlist modal-open smoke. |
 | 2026-05-22 | Codex (GPT-5) | Fixed `/search?query=library_id:{id}` result cards: search cards now render native three-dot disclosure menus that open on SSR-rendered results, the shared `MediaCard` no longer nests menu controls inside card links, other videos link to `/media/other/videos/:id`, music videos link to `/media/music/artists/:artist_id#music-video-:id`, and the href helper records the future songs/images/remote-stream detail-route wiring point. Completed three feedback-loop reviews before gates. Gates: `cargo fmt --all -- --check`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo clippy -p ersatzrs-web --all-targets --all-features -- -D warnings`, `cargo test -p ersatzrs-web --features ssr search`, `(cd crates/ersatzrs-web && cargo leptos build)`, Playwright `/search?query=library_id%3A1` menu-open/link smoke, and curl checks for library ids 1-5 menu counts plus movie/show/other-video/music-video link targets. |
