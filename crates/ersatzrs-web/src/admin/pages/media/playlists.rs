@@ -15,10 +15,11 @@ use crate::admin::server_fns::media_browser::{
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
+    icon::{icon_style, IconName},
     toast::{use_toast, ToastSeverity},
 };
 
-stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
+stylance::import_crate_style!(style, "src/admin/pages/media/playlists.module.css");
 
 const COLLECTION_TYPE_COLLECTION: i32 = 0;
 const COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
@@ -117,30 +118,38 @@ fn PlaylistsIsland() -> impl IntoView {
         <div class=style::page>
             <section class=style::playlist_section>
                 <h1 class=style::page_title>"Playlist Groups"</h1>
-                <form method="post" action="/api/playlists/groups/create" class=style::playlist_form_row>
-                    <label for="playlist-group-name">"Playlist Group Name"</label>
-                    <input
-                        id="playlist-group-name"
-                        name="name"
-                        class=style::search
-                        prop:value=move || group_name.get()
-                        on:input=move |event| group_name.set(event_target_value(&event))
-                    />
-                    <button
-                        type="submit"
-                        class=style::btn_add
-                        on:click=move |event| {
-                            event.prevent_default();
-                            add_group.dispatch(group_name.get_untracked());
-                        }
-                    >
-                        "+ Add Playlist Group"
-                    </button>
+                <div class=style::divider/>
+                <form method="post" action="/api/playlists/groups/create" class=style::playlist_form>
+                    <div class=style::playlist_form_row>
+                        <label for="playlist-group-name">"Playlist Group Name"</label>
+                        <input
+                            id="playlist-group-name"
+                            name="name"
+                            class=style::search
+                            prop:value=move || group_name.get()
+                            on:input=move |event| group_name.set(event_target_value(&event))
+                        />
+                    </div>
+                    <div class=style::playlist_form_row>
+                        <span class=style::form_label_spacer aria-hidden="true"></span>
+                        <button
+                            type="submit"
+                            class=style::btn_add
+                            on:click=move |event| {
+                                event.prevent_default();
+                                add_group.dispatch(group_name.get_untracked());
+                            }
+                        >
+                            <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                            <span>"Add Playlist Group"</span>
+                        </button>
+                    </div>
                 </form>
             </section>
 
             <section class=style::playlist_section>
                 <h2 class=style::page_title>"Playlists"</h2>
+                <div class=style::divider/>
                 <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
                     {move || data.get().map(|page| {
                         if selected_group.get_untracked() == 0 {
@@ -149,72 +158,88 @@ fn PlaylistsIsland() -> impl IntoView {
                             }
                         }
                         view! {
-                            <form method="post" action="/api/playlists/create" class=style::playlist_form_row>
-                                <label for="playlist-group-select">"Playlist Group"</label>
-                                <select
-                                    id="playlist-group-select"
-                                    name="playlist_group_id"
-                                    class=style::select
-                                    prop:value=move || selected_group.get().to_string()
-                                    on:change=move |event| {
-                                        selected_group.set(event_target_value(&event).parse().unwrap_or(0));
-                                    }
-                                >
-                                    {page.groups.iter().map(|group| view! {
-                                        <option value=group.id.to_string()>{group.name.clone()}</option>
-                                    }).collect_view()}
-                                </select>
-                                <label for="playlist-name">"Playlist Name"</label>
-                                <input
-                                    id="playlist-name"
-                                    name="name"
-                                    class=style::search
-                                    prop:value=move || playlist_name.get()
-                                    on:input=move |event| playlist_name.set(event_target_value(&event))
-                                />
-                                <button
-                                    type="submit"
-                                    class=style::btn_add
-                                    on:click=move |event| {
-                                        event.prevent_default();
-                                        add_playlist.dispatch((selected_group.get_untracked(), playlist_name.get_untracked()));
-                                    }
-                                >
-                                    "+ Add Playlist"
-                                </button>
+                            <form method="post" action="/api/playlists/create" class=style::playlist_form>
+                                <div class=style::playlist_form_row>
+                                    <label for="playlist-group-select">"Playlist Group"</label>
+                                    <select
+                                        id="playlist-group-select"
+                                        name="playlist_group_id"
+                                        class=style::select
+                                        prop:value=move || selected_group.get().to_string()
+                                        on:change=move |event| {
+                                            selected_group.set(event_target_value(&event).parse().unwrap_or(0));
+                                        }
+                                    >
+                                        {page.groups.iter().map(|group| view! {
+                                            <option value=group.id.to_string()>{group.name.clone()}</option>
+                                        }).collect_view()}
+                                    </select>
+                                </div>
+                                <div class=style::playlist_form_row>
+                                    <label for="playlist-name">"Playlist Name"</label>
+                                    <input
+                                        id="playlist-name"
+                                        name="name"
+                                        class=style::search
+                                        prop:value=move || playlist_name.get()
+                                        on:input=move |event| playlist_name.set(event_target_value(&event))
+                                    />
+                                </div>
+                                <div class=style::playlist_form_row>
+                                    <span class=style::form_label_spacer aria-hidden="true"></span>
+                                    <button
+                                        type="submit"
+                                        class=style::btn_add
+                                        on:click=move |event| {
+                                            event.prevent_default();
+                                            add_playlist.dispatch((selected_group.get_untracked(), playlist_name.get_untracked()));
+                                        }
+                                    >
+                                        <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                                        <span>"Add Playlist"</span>
+                                    </button>
+                                </div>
                             </form>
-                            <div class=style::playlist_tree>
-                                {page.groups.into_iter().map(|group| {
-                                    let group_id = group.id;
-                                    let group_name = group.name.clone();
-                                    let group_name_for_delete = group.name.clone();
-                                    let disabled = group.is_system;
-                                    view! {
-                                        <div class=style::playlist_group>
-                                            <div class=style::playlist_group_header>
-                                                <span>{group_name}</span>
-                                                <form method="post" action="/api/playlists/groups/delete">
-                                                    <input type="hidden" name="id" value=group_id.to_string()/>
-                                                    <button
-                                                        type="submit"
-                                                        class=style::btn_delete
-                                                        disabled=disabled
-                                                        on:click=move |event| {
-                                                            event.prevent_default();
-                                                            delete_target.set(Some((true, group_id, group_name_for_delete.clone())));
-                                                            delete_open.set(true);
-                                                        }
-                                                    >
-                                                        "Delete"
-                                                    </button>
-                                                </form>
+                            <div class=style::playlist_form_row>
+                                <span class=style::form_label_spacer aria-hidden="true"></span>
+                                <div class=style::playlist_tree>
+                                    {page.groups.into_iter().map(|group| {
+                                        let group_id = group.id;
+                                        let group_name = group.name.clone();
+                                        let group_name_for_delete = group.name.clone();
+                                        let disabled = group.is_system;
+                                        view! {
+                                            <div class=style::playlist_group>
+                                                <div class=style::playlist_group_header>
+                                                    <div class=style::tree_item_text>
+                                                        <span class=style::tree_folder style=icon_style(IconName::Folder, "1.25rem") aria-hidden="true"></span>
+                                                        <span>{group_name}</span>
+                                                    </div>
+                                                    <form method="post" action="/api/playlists/groups/delete">
+                                                        <input type="hidden" name="id" value=group_id.to_string()/>
+                                                        <button
+                                                            type="submit"
+                                                            class=style::icon_button
+                                                            title="Delete"
+                                                            aria-label="Delete playlist group"
+                                                            disabled=disabled
+                                                            on:click=move |event| {
+                                                                event.prevent_default();
+                                                                delete_target.set(Some((true, group_id, group_name_for_delete.clone())));
+                                                                delete_open.set(true);
+                                                            }
+                                                        >
+                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                                <ul class=style::members_list>
+                                                    {group.playlists.into_iter().map(|playlist| playlist_row(playlist, delete_target, delete_open)).collect_view()}
+                                                </ul>
                                             </div>
-                                            <ul class=style::members_list>
-                                                {group.playlists.into_iter().map(|playlist| playlist_row(playlist, delete_target, delete_open)).collect_view()}
-                                            </ul>
-                                        </div>
-                                    }
-                                }).collect_view()}
+                                        }
+                                    }).collect_view()}
+                                </div>
                             </div>
                         }
                     })}
@@ -258,12 +283,16 @@ fn playlist_row(
     view! {
         <li class=style::member>
             <span class=style::member_title>{name}</span>
-            <a class=style::btn_edit href=format!("/media/playlists/{id}")>"Edit"</a>
+            <a class=style::icon_button href=format!("/media/playlists/{id}") title="Edit" aria-label="Edit playlist">
+                <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+            </a>
             <form method="post" action="/api/playlists/delete">
                 <input type="hidden" name="id" value=id.to_string()/>
                 <button
                     type="submit"
-                    class=style::btn_delete
+                    class=style::icon_button
+                    title="Delete"
+                    aria-label="Delete playlist"
                     disabled=is_system
                     on:click=move |event| {
                         event.prevent_default();
@@ -271,7 +300,7 @@ fn playlist_row(
                         delete_open.set(true);
                     }
                 >
-                    "Delete"
+                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
                 </button>
             </form>
         </li>
