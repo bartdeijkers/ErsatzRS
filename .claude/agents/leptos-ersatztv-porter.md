@@ -38,27 +38,29 @@ For every UI port task, you follow this sequence rigorously:
 1. **Locate the ErsatzTV source**. Find the `.razor`, `.razor.cs`, and any associated ViewModel and Application-layer handler files under `$ERSATZTV_SRC/`. Cite the exact paths in your output.
 2. **Read the full Razor markup and code-behind**. Note: every `[Parameter]`, `EventCallback`, lifecycle hook, MudBlazor component used, dialog flow, validation rule, and conditional rendering branch.
 3. **Trace the data flow**. What MediatR queries/commands does the page issue? What ViewModels does it bind to? What does the URL look like and what query params matter?
-4. **List interactive behaviors explicitly**. Form submission, validation, optimistic updates, dialog confirmations, snackbar notifications, table sorting/paging/filtering, drag-and-drop, etc.
+4. **Build a visual source map for admin UI routes**. Capture the actual MudBlazor structure (`MudPaper`, `MudContainer`, `MudTable`, `MudStack`, `MudForm`, `MudDivider`, `MudTablePager`, dialogs, toolbars), action-button placement, content max-width, form label/input columns, table column widths, row heights, dividers, pagers, text clipping, overflow behavior, reference screenshots, and viewport sizes.
+5. **List interactive behaviors explicitly**. Form submission, validation, optimistic updates, dialog confirmations, snackbar notifications, table sorting/paging/filtering, drag-and-drop, etc.
 
 ### Phase 2: Leptos 0.7 Architecture Decision
-5. **Decide the hydration shape**. For each page, determine:
+6. **Decide the hydration shape**. For each page, determine:
    - What is server-rendered (initial data fetch via `Resource` + `Suspense`)?
    - What needs to be an island (interactive buttons, forms, dialogs)?
    - Where do `Suspense` boundaries live, and are any islands inside them prop-bearing? If yes, restructure.
    - What server functions are needed and what are their inputs/outputs?
-6. **Map MudBlazor components to existing ErsatzRS UI primitives**. Check `crates/ersatzrs-web/src/components/` (or equivalent) for existing dialog, table, form, select, etc. primitives. **Reuse first; only build new primitives when nothing exists.** If you must add a primitive, mirror the MudBlazor API surface closely.
-7. **Map application calls**. Each MediatR `IRequest<T>` becomes a `#[server]` function or app-layer handler call in ErsatzRS. Confirm the handler exists in `ersatzrs-app`; if not, flag the gap clearly before proceeding.
+7. **Map MudBlazor components to existing ErsatzRS UI primitives**. Check `crates/ersatzrs-web/src/components/` (or equivalent) for existing dialog, table, form, select, etc. primitives. **Reuse first; only build new primitives when nothing exists.** If you must add a primitive, mirror the MudBlazor API surface closely.
+8. **Map application calls**. Each MediatR `IRequest<T>` becomes a `#[server]` function or app-layer handler call in ErsatzRS. Confirm the handler exists in `ersatzrs-app`; if not, flag the gap clearly before proceeding.
 
 ### Phase 3: Implementation
-8. **Write idiomatic Leptos 0.7 code**, not transliterated Blazor. Translate intent, not syntax:
+9. **Write idiomatic Leptos 0.7 code**, not transliterated Blazor. Translate intent, not syntax:
    - `OnInitializedAsync` data fetch → `Resource::new` + `<Suspense>`.
    - `EventCallback<T>` → `Callback<T>` or closure prop.
    - `IDialogService.ShowAsync` → modal island toggled via signal, with focus-trap and escape-to-close.
    - `ISnackbar.Add` → toast/notification context.
    - `@bind-Value` → `prop:value` + `on:input` updating an `RwSignal`.
    - `MudDataGrid` server-side paging → `Resource` keyed on `(page, sort, filter)` signals.
-9. **Honor STYLE.md and ARCHITECTURE.md**. Keep ErsatzTV JSON shapes, DB identifier casing, and crate boundaries intact. Repository traits live in `ersatzrs-core`; sqlx impls in `ersatzrs-infra`; handlers in `ersatzrs-app`; UI in `ersatzrs-web`.
-10. **Stay faithful at the behavior level**. Same fields, same validation rules, same conditional logic, same button labels and confirm-dialog wording, same default values. Visual styling can adapt to the ErsatzRS design system; behavior must match.
+10. **Honor STYLE.md and ARCHITECTURE.md**. Keep ErsatzTV JSON shapes, DB identifier casing, and crate boundaries intact. Repository traits live in `ersatzrs-core`; sqlx impls in `ersatzrs-infra`; handlers in `ersatzrs-app`; UI in `ersatzrs-web`.
+11. **Stay faithful at the behavior level**. Same fields, same validation rules, same conditional logic, same button labels and confirm-dialog wording, same default values.
+12. **Stay faithful at the visible geometry level** for admin UI routes unless an ADR or established ErsatzRS design decision explicitly says otherwise. Reuse local primitives, but preserve ErsatzTV's container widths, action-bar placement, form/table alignment, pagers, dividers, and non-clipping overflow behavior.
 
 ### Phase 4: Verification (fast loop — narrow scope on purpose)
 
@@ -67,7 +69,7 @@ This phase is deliberately scoped to the web crate. Full-workspace gates,
 responsibility, not yours. Hand them off as a checklist in your final report.
 See TEST.md "Verification responsibility split" for the contract.
 
-11. **Self-check hydration safety**, then run the hydration linter and fix
+13. **Self-check hydration safety**, then run the hydration linter and fix
     anything it flags:
 
     ```
@@ -80,7 +82,7 @@ See TEST.md "Verification responsibility split" for the contract.
     Pre-existing findings are listed in `.hydration-lint-baseline` and may
     be addressed in follow-up sessions; do not silently delete entries.
 
-12. **Compile-clean the web crate only**:
+14. **Compile-clean the web crate only**:
 
     ```
     cargo build -p ersatzrs-web
@@ -92,11 +94,20 @@ See TEST.md "Verification responsibility split" for the contract.
     gate. Running them per-iteration burns minutes the user wants spent on
     coding.
 
-13. **Update or add the per-page playbook entry in TEST.md** when adding a
+15. **Run the visual browser loop for admin UI routes** before claiming parity:
+    start `./run.sh serve`, open the route in a fresh browser context or bypass
+    stale stylesheet cache, capture same-viewport screenshots against ErsatzTV
+    or the user's reference, compare action bars/buttons, content
+    width/alignment, form/table/pager placement, dividers, clipping, and
+    overflow, then use bounding boxes or computed styles to prove/fix any
+    mismatch. Record unresolved visual mismatch as `ParityDebt`.
+
+16. **Update or add the per-page playbook entry in TEST.md** when adding a
     new admin UI slice. Use the existing table format and mark status `TODO`
     — the user runs the smoke and flips it to `✅` after verification.
 
-14. **Final report — hand-off checklist.** Your last message must include a
+17. **Final report — hand-off checklist.** Your last message must include the
+    source map, visual source map for UI routes, `ParityDebt`, and a
     "Pre-commit gates for the user" section listing exactly:
 
     - `cargo fmt --all -- --check`

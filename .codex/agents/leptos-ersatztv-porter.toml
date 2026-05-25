@@ -36,6 +36,7 @@ Critical hydration rules for this project, from `TEST.md`:
 - Use `rg`, `rg --files`, and parallel file reads for source analysis. Prefer `apply_patch` for manual edits.
 - Use `tool_search` to load Context7 or other documentation tooling before relying on memory for Leptos, leptos_router, cargo-leptos, Axum, or other version-sensitive library APIs. If no documentation tool is available, fall back to local project docs and official upstream docs only.
 - Use browser or Playwright tooling only when it is already available in the parent session and browser evidence is needed for a hydration/UI regression, or when the parent explicitly asks for an interactive smoke. Keep the normal implementation loop scoped to `cargo xtask hydration-lint -p ersatzrs-web`, `cargo build -p ersatzrs-web`, and `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`.
+- For admin UI visual parity, browser evidence is required before claiming a route matches ErsatzTV. Use same-viewport screenshots, fresh browser contexts, and bounding boxes/computed styles when layout is suspect. CSS module edits are not proven until the running app serves the rebuilt `/public/bundle.css`.
 - In the final report, distinguish commands you ran from pre-commit gates left for the user. Include exact touched page URLs and interactions for any Playwright hand-off.
 
 ## Workflow
@@ -65,26 +66,47 @@ Do not skip source analysis.
 - Intentional deviations: None, or ADR/deviation link.
 ```
 
-6. List interactive behaviors explicitly: form submission, validation, optimistic updates, dialog confirmations, snackbar notifications, table sorting/paging/filtering, drag-and-drop, etc.
+6. Create a visual source map for admin UI routes:
+
+```md
+## Visual Source Map
+
+- ErsatzTV layout containers:
+- ErsatzTV action bars/buttons:
+- ErsatzTV tables/forms/pagers/dialogs:
+- Width/alignment/spacing rules:
+- Reference screenshots and viewport sizes:
+- ErsatzRS shared primitives/CSS modules to reuse:
+- Known visual deviations:
+```
+
+Read the Razor markup for actual MudBlazor structure (`MudPaper`,
+`MudContainer`, `MudTable`, `MudStack`, `MudForm`, `MudDivider`,
+`MudTablePager`, dialogs, toolbars). Capture geometry that can regress:
+container max-width, action button placement, label/input column widths, table
+column widths, row heights, dividers, pagers, text clipping, and page overflow.
+
+7. List interactive behaviors explicitly: form submission, validation, optimistic updates, dialog confirmations, snackbar notifications, table sorting/paging/filtering, drag-and-drop, etc.
 
 ### Phase 2: Leptos 0.7 Architecture Decision
 
-7. Decide the hydration shape. Determine what is server-rendered, what needs to be an island, where `Suspense` boundaries live, whether any islands inside them are prop-bearing, and what server functions are needed. Critical save/action flows need an SSR or browser-safe fallback unless a tested hydrated-only path is intentional.
-8. Map MudBlazor components to existing ErsatzRS UI primitives. Check `crates/ersatzrs-web/src/components/` or equivalent for existing dialog, table, form, select, and related primitives. Reuse first; build new primitives only when nothing exists. If a primitive must be added, mirror the MudBlazor API surface closely.
-9. Map application calls. Each MediatR `IRequest<T>` becomes a `#[server]` function or app-layer handler call in ErsatzRS. Confirm the handler exists in `ersatzrs-app`; if not, flag the gap clearly before proceeding.
+8. Decide the hydration shape. Determine what is server-rendered, what needs to be an island, where `Suspense` boundaries live, whether any islands inside them are prop-bearing, and what server functions are needed. Critical save/action flows need an SSR or browser-safe fallback unless a tested hydrated-only path is intentional.
+9. Map MudBlazor components to existing ErsatzRS UI primitives. Check `crates/ersatzrs-web/src/components/` or equivalent for existing dialog, table, form, select, and related primitives. Reuse first; build new primitives only when nothing exists. If a primitive must be added, mirror the MudBlazor API surface closely.
+10. Map application calls. Each MediatR `IRequest<T>` becomes a `#[server]` function or app-layer handler call in ErsatzRS. Confirm the handler exists in `ersatzrs-app`; if not, flag the gap clearly before proceeding.
 
 ### Phase 3: Implementation
 
-10. Write idiomatic Leptos 0.7 code, not transliterated Blazor. Translate intent, not syntax:
+11. Write idiomatic Leptos 0.7 code, not transliterated Blazor. Translate intent, not syntax:
    - `OnInitializedAsync` data fetch maps to `Resource::new` plus `<Suspense>`.
    - `EventCallback<T>` maps to `Callback<T>` or a closure prop.
    - `IDialogService.ShowAsync` maps to a modal island toggled by signal, with focus trap and escape-to-close.
    - `ISnackbar.Add` maps to a toast/notification context.
    - `@bind-Value` maps to `prop:value` plus `on:input` updating an `RwSignal`.
    - `MudDataGrid` server-side paging maps to `Resource` keyed on `(page, sort, filter)` signals.
-11. Honor `STYLE.md` and `ARCHITECTURE.md`. Keep ErsatzTV JSON shapes, database identifier casing, and crate boundaries intact. Repository traits live in `ersatzrs-core`; sqlx implementations in `ersatzrs-infra`; handlers in `ersatzrs-app`; UI in `ersatzrs-web`.
-12. Stay faithful at the behavior level: same fields, validation rules, conditional logic, button labels, confirm-dialog wording, and default values. Visual styling can adapt to the ErsatzRS design system; behavior must match.
-13. Put visible incomplete behavior under `ParityDebt` in the active plan, `STATUS.md`, or final report:
+12. Honor `STYLE.md` and `ARCHITECTURE.md`. Keep ErsatzTV JSON shapes, database identifier casing, and crate boundaries intact. Repository traits live in `ersatzrs-core`; sqlx implementations in `ersatzrs-infra`; handlers in `ersatzrs-app`; UI in `ersatzrs-web`.
+13. Stay faithful at the behavior level: same fields, validation rules, conditional logic, button labels, confirm-dialog wording, and default values.
+14. Stay faithful at the visual geometry level for admin UI routes unless an ADR or established ErsatzRS design decision explicitly says otherwise. Reuse local primitives, but preserve ErsatzTV's container widths, action-bar placement, form/table alignment, pagers, dividers, and non-clipping overflow behavior.
+15. Put visible incomplete behavior under `ParityDebt` in the active plan, `STATUS.md`, or final report:
 
 ```md
 ## ParityDebt
@@ -102,7 +124,7 @@ Do not claim parity while a `next-slice required` item remains for the page.
 
 This phase starts with the fast parity ladder. Full-workspace gates, `cargo leptos build`, and Playwright MCP may still be the user's pre-commit responsibility when explicitly delegated. See `TEST.md` "Verification responsibility split" for the contract.
 
-14. Run the fast ladder for normal admin/media UI work:
+16. Run the fast ladder for normal admin/media UI work:
 
 ```bash
 cargo xtask parity-check web
@@ -110,7 +132,7 @@ cargo xtask parity-check web
 
 Use additional scopes for the command log when useful, such as `media`, `scanner`, or `infra`.
 
-15. If you need the individual commands, self-check hydration safety, then run the hydration linter and fix anything it flags:
+17. If you need the individual commands, self-check hydration safety, then run the hydration linter and fix anything it flags:
 
 ```bash
 cargo xtask hydration-lint -p ersatzrs-web
@@ -118,7 +140,7 @@ cargo xtask hydration-lint -p ersatzrs-web
 
 The linter enforces `TEST.md` hydration rules statically, including `<Show>` inside `#[island]` and prop-bearing islands across `<Suspense>`. New findings in files you touched fail the linter; fix the code, never the rule. Pre-existing findings are listed in `.hydration-lint-baseline` and may be addressed in follow-up sessions; do not silently delete entries.
 
-16. Compile-clean the web crate only:
+18. Compile-clean the web crate only:
 
 ```bash
 cargo build -p ersatzrs-web
@@ -127,11 +149,19 @@ cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 
 Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build` inside your loop. Those are the user's pre-commit gate. Running them per iteration burns minutes the user wants spent on coding.
 
-17. Turn repeated parity findings into reusable regressions where practical. Prioritize card action menus, hydrated islands attaching, SSR links/fallback modals, and post-add/remove/edit side effects.
+19. Run the visual browser loop for admin UI routes before claiming parity:
+   - Start the app with `./run.sh serve`.
+   - Open the route in a fresh browser context or otherwise bypass stale stylesheet cache.
+   - Capture screenshots at the same viewport as the ErsatzTV reference or user attachment.
+   - Compare visible geometry: action bars/buttons not clipped, content width/alignment, form/table/pager placement, dividers, text cropping, and overflow.
+   - Use browser snapshots, bounding boxes, or computed styles to prove/fix mismatches.
+   - Record any unresolved mismatch as `ParityDebt`.
 
-18. Update or add the per-page playbook entry in `TEST.md` when adding a new admin UI slice. Use the existing table format and mark status `TODO`; the user runs the smoke and flips it to checked after verification.
+20. Turn repeated parity findings into reusable regressions where practical. Prioritize card action menus, hydrated islands attaching, SSR links/fallback modals, post-add/remove/edit side effects, and visual layout classes that can regress across routes.
 
-19. Final report hand-off checklist. The last message must include source map evidence, `ParityDebt`, commands run, and a "Pre-commit gates for the user" section listing exactly:
+21. Update or add the per-page playbook entry in `TEST.md` when adding a new admin UI slice. Use the existing table format and mark status `TODO`; the user runs the smoke and flips it to checked after verification.
+
+22. Final report hand-off checklist. The last message must include source map evidence, visual source map evidence for UI routes, `ParityDebt`, commands run, and a "Pre-commit gates for the user" section listing exactly:
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
