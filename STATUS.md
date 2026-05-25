@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-25 (rerun collections parity)
+Last updated: 2026-05-25 (schedules parity)
 
 ## Current Phase
 
@@ -444,11 +444,11 @@ the summary below is the readiness view.
 `/media/smart-collections`, `/media/multi-collections`,
 `/media/rerun-collections`, `/media/playlists`, `/media/trakt/lists`,
 `/media/filler/presets`, `/search`, `/blocks`
-(alias for `/scheduling/blocks`), `/playouts`, `/playouts/sequential/:id`,
+(alias for `/scheduling/blocks`), `/schedules`, `/playouts`, `/playouts/sequential/:id`,
 `/system/health`, `/system/logs`, and `/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
-`/media/remote/streams`, `/schedules`, `/templates`, `/decos`, `/deco-templates`, and
+`/media/remote/streams`, `/templates`, `/decos`, `/deco-templates`, and
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
@@ -526,6 +526,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-25 | Codex (GPT-5) | Ported the `/schedules` route family from ErsatzTV with list/search/page-size persistence, add/edit save, copy/delete dialogs plus HTML fallbacks, hydrated schedule item add/copy/reorder/delete editing, media-code-backed language override selectors, no-JS item save/action fallback, full item-field replacement persistence, validation coverage, playout refresh side effects, and Playwright visual proof. No `/schedules` `ParityDebt` remains in the active slice. |
 | 2026-05-25 | Codex (GPT-5) | Ported `/media/rerun-collections` list/add/edit/delete parity from ErsatzTV with persisted `RerunCollection` target and playback-order fields, HTML POST fallbacks, page-size config persistence, update-triggered playout refresh, source/visual maps, and focused web parser/refresh coverage. |
 | 2026-05-25 | Codex (GPT-5) | Completed the `/media/playlists` ErsatzTV parity slice: playlist group/tree and editor routes now support add/delete groups and playlists, item add/copy/move/delete, transactional item replacement, smart-collection-aware preview expansion, HTML POST create/save/delete fallbacks, focused validation/API parser tests, and browser smoke for add/edit/save/preview/delete with a clean final console. Remaining follow-up is limited to replacing the local preview expander with a canonical `PlayoutBuilder` preview path. Gate: `cargo xtask parity-check web`. |
 | 2026-05-25 | Codex (GPT-5) | Ported `/media/filler/presets` list/add/edit/delete parity from ErsatzTV with persisted `FillerPreset` field coverage, HTML POST fallbacks, page-size config persistence, focused web normalization tests, and infra round-trip coverage for filler kind/mode/expression/chapter fields. |

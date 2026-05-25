@@ -49,6 +49,9 @@ use crate::admin::pages::media_sources::{
 use crate::admin::pages::scheduling::block_editor::BlockEditorPage;
 use crate::admin::pages::scheduling::blocks::BlocksPage;
 use crate::admin::pages::scheduling::playouts::PlayoutsPage;
+use crate::admin::pages::scheduling::schedules::{
+    ScheduleEditorPage, ScheduleItemsPage, SchedulesPage,
+};
 use crate::admin::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::admin::pages::search::SearchPage;
 use crate::admin::pages::system::{
@@ -124,6 +127,16 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=YamlEditorPage
             />
             <Route path=StaticSegment("blocks") view=BlocksPage/>
+            <Route path=StaticSegment("schedules") view=SchedulesPage/>
+            <Route
+                path=(StaticSegment("schedules"), StaticSegment("add"))
+                view=ScheduleEditorPage
+            />
+            <Route
+                path=(StaticSegment("schedules"), ParamSegment("id"), StaticSegment("items"))
+                view=ScheduleItemsPage
+            />
+            <Route path=(StaticSegment("schedules"), ParamSegment("id")) view=ScheduleEditorPage/>
             <Route path=StaticSegment("search") view=SearchPage/>
             <Route
                 path=(StaticSegment("system"), StaticSegment("health"))

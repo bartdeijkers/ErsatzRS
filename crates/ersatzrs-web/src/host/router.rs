@@ -119,6 +119,22 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::rerun_collections::delete_rerun_collection_form),
         )
         .route(
+            "/api/schedules/save",
+            post(api::schedules::save_schedule_form),
+        )
+        .route(
+            "/api/schedules/delete",
+            post(api::schedules::delete_schedule_form),
+        )
+        .route(
+            "/api/schedules/copy",
+            post(api::schedules::copy_schedule_form),
+        )
+        .route(
+            "/api/schedules/items/save",
+            post(api::schedules::save_schedule_items_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

@@ -225,6 +225,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/sources/jellyfin`| ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/sources/emby`    | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/playouts`              | TODO   | Needs URL-driven selection refactor.                                    |
+| `/schedules`             | TODO   | Browser smoke covered list/add/items route geometry, screenshots, no-JS schedule and item form POST fallbacks, and hydrated item editing; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/media/sources/plex`    | ✅     | Stable DOM shape, `PlexSignInIsland` all-arms always rendered.          |
 | `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered.                  |
 | `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`.                    |
