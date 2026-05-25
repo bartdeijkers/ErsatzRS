@@ -462,10 +462,6 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                 let on_save = on_save;
                 view! {
                     <div class=style::page>
-                        <div class=style::toolbar>
-                            <h1 class=style::page_title>{page_title}</h1>
-                            <a href="/media/filler/presets" class=style::btn_edit>"Filler Presets"</a>
-                        </div>
                         <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                             "Filler preset could not be saved. Check the form values and try again."
                         </p>
@@ -475,7 +471,14 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                             on:submit=move |event| on_save.run(event)
                         >
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>
+                            <div class=style::editor_action_bar>
+                                <button type="submit" class=style::btn_add>
+                                    <span aria-hidden="true">"+"</span>
+                                    {save_label.to_uppercase()}
+                                </button>
+                            </div>
                             <div class=style::editor>
+                                <h1 class=style::page_title>{page_title}</h1>
                                 {text_input("Name", "name", name, Signal::derive(|| false))}
                                 {select_i32("Kind", "filler_kind", filler_kind, vec![
                                     (FILLER_KIND_PRE_ROLL, "Pre-Roll"),
@@ -500,7 +503,7 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                     ("15", "15 (:00, :15, :30, :45)"),
                                     ("30", "30 (:00, :30)"),
                                 ], pad_disabled)}
-                                {checkbox_input("Allow Watermarks", "allow_watermarks", allow_watermarks, Signal::derive(|| false))}
+                                {checkbox_input("Allow Watermarks", "allow_watermarks", allow_watermarks, Signal::derive(|| false), None)}
                                 {collection_type_select("Collection Type", "collection_type", collection_type, filler_kind)}
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_COLLECTION)>
                                     {option_select("Collection", "collection_id", collection_id, opts.collections.clone())}
@@ -529,15 +532,28 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                     "use_chapters_as_media_items",
                                     use_chapters_as_media_items,
                                     chapters_disabled,
+                                    Some("Schedule individual chapters instead of entire files"),
                                 )}
                                 {text_input("Expression", "expression", expression, expression_disabled)}
-                                <p class=style::empty style:display=move || display_for(filler_kind.get() == FILLER_KIND_MID_ROLL)>
-                                    "total_points, matched_points, total_duration, total_progress, last_mid_filler, remaining_duration, point, num"
+                                <p class=style::expression_help>
+                                    "For mid-roll filler, only add filler when this expression evaluates to true for a given mid-roll point."
+                                    <br/><br/>
+                                    <strong>"total_points"</strong>": total number of potential mid-roll points"
+                                    <br/>
+                                    <strong>"matched_points"</strong>": number of mid-roll points that have already matched the expression"
+                                    <br/>
+                                    <strong>"total_duration"</strong>": total duration of the content, in seconds"
+                                    <br/>
+                                    <strong>"total_progress"</strong>": normalized position from 0 to 1"
+                                    <br/>
+                                    <strong>"last_mid_filler"</strong>": seconds since last mid-roll filler"
+                                    <br/>
+                                    <strong>"remaining_duration"</strong>": duration of the content after this mid-roll point, in seconds"
+                                    <br/>
+                                    <strong>"point"</strong>": the position of the mid-roll point, in seconds"
+                                    <br/>
+                                    <strong>"num"</strong>": the mid-roll point number, starting with 1"
                                 </p>
-                                <div class=style::form_actions>
-                                    <button type="submit" class=style::btn_add>{save_label}</button>
-                                    <a href="/media/filler/presets" class=style::btn_edit>"Back"</a>
-                                </div>
                             </div>
                         </form>
                     </div>
@@ -576,18 +592,20 @@ fn number_input(
     view! {
         <label>
             <span>{label}</span>
-            <input
-                type="number"
-                name=name_attr
-                disabled=move || disabled.get()
-                prop:value=move || value.get().to_string()
-                on:input=move |event| {
-                    if let Ok(parsed) = event_target_value(&event).parse::<i32>() {
-                        value.set(parsed);
+            <div class=style::input_with_suffix>
+                <input
+                    type="number"
+                    name=name_attr
+                    disabled=move || disabled.get()
+                    prop:value=move || value.get().to_string()
+                    on:input=move |event| {
+                        if let Ok(parsed) = event_target_value(&event).parse::<i32>() {
+                            value.set(parsed);
+                        }
                     }
-                }
-            />
-            <small>{suffix}</small>
+                />
+                <small>{suffix}</small>
+            </div>
         </label>
     }
 }
@@ -597,18 +615,22 @@ fn checkbox_input(
     name_attr: &'static str,
     value: RwSignal<bool>,
     disabled: Signal<bool>,
+    description: Option<&'static str>,
 ) -> impl IntoView {
     view! {
         <label>
             <span>{label}</span>
-            <input
-                type="checkbox"
-                name=name_attr
-                value="true"
-                prop:checked=move || value.get()
-                disabled=move || disabled.get()
-                on:change=move |event| value.set(event_target_checked(&event))
-            />
+            <div class=style::checkbox_row>
+                <input
+                    type="checkbox"
+                    name=name_attr
+                    value="true"
+                    prop:checked=move || value.get()
+                    disabled=move || disabled.get()
+                    on:change=move |event| value.set(event_target_checked(&event))
+                />
+                {description.map(|description| view! { <small>{description}</small> })}
+            </div>
         </label>
     }
 }

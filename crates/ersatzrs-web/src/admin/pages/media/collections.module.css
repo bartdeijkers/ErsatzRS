@@ -39,6 +39,13 @@
     color: var(--color-on-primary);
     transition: background-color 150ms;
     white-space: nowrap;
+    border: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    text-decoration: none;
 }
 .btn-add:hover { background-color: var(--color-primary-80); }
 .btn-add:disabled {
@@ -96,11 +103,155 @@ td {
 }
 
 /* Editor */
-.editor {
+.editor-action-bar {
+    min-height: 4.5rem;
+    margin: -1rem -1rem 2.5rem;
+    padding: 1.25rem 2rem;
     display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    max-width: 44rem;
+    align-items: center;
+    background-color: var(--color-bg);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.editor-action-bar .btn-add {
+    min-height: 3rem;
+    padding: 0 1.35rem;
+    font-size: 1rem;
+    line-height: 1;
+    text-transform: uppercase;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 30%);
+}
+
+.editor-action-bar .btn-add span {
+    font-size: 1.7rem;
+    font-weight: 300;
+    line-height: 1;
+}
+
+.editor {
+    display: grid;
+    grid-template-columns: minmax(12rem, 22rem) minmax(24rem, 42rem);
+    column-gap: 3rem;
+    row-gap: 1.75rem;
+    width: min(100%, 70rem);
+    margin: 0 auto;
+    align-items: center;
+}
+
+.editor .page-title {
+    grid-column: 1 / -1;
+    color: var(--color-gray-100);
+    font-size: 2rem;
+    font-weight: 400;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.editor label {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: center;
+    margin: 0;
+    min-height: 2.4rem;
+}
+
+.editor > div {
+    display: contents;
+}
+
+.editor label > span {
+    color: var(--color-gray-100);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.editor input:not([type="checkbox"]),
+.editor select {
+    width: 100%;
+    min-width: 0;
+    height: 2.2rem;
+    padding: 0;
+    background-color: transparent;
+    color: var(--color-gray-100);
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+    border-radius: 0;
+    font: inherit;
+    font-size: 1.25rem;
+    box-sizing: border-box;
+}
+
+.editor input:not([type="checkbox"]):focus,
+.editor select:focus {
+    outline: none;
+    border-bottom-color: var(--color-gray-300);
+}
+
+.editor input:disabled,
+.editor select:disabled {
+    opacity: 1;
+    color: var(--color-gray-300);
+}
+
+.editor input[type="number"] {
+    appearance: textfield;
+}
+
+.editor input[type="number"]::-webkit-outer-spin-button,
+.editor input[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+}
+
+.input-with-suffix {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.input-with-suffix input:not([type="checkbox"]) {
+    border-bottom: 0;
+}
+
+.input-with-suffix small {
+    padding-left: 0.5rem;
+    color: var(--color-gray-100);
+    font-size: 1.25rem;
+    pointer-events: none;
+}
+
+.editor input[type="checkbox"] {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 0;
+    accent-color: var(--color-primary);
+}
+
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.checkbox-row small {
+    color: var(--color-gray-100);
+    font-size: 1rem;
+    line-height: 1.35;
+}
+
+.expression-help {
+    grid-column: 2;
+    margin: -0.5rem 0 0;
+    color: var(--color-gray-100);
+    font-size: 1rem;
+    line-height: 1.45;
+}
+
+.expression-help strong {
+    font-weight: 700;
+    color: var(--color-gray-100);
 }
 
 .section-title {
@@ -114,6 +265,47 @@ td {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+}
+
+@media (max-width: 760px) {
+    .editor-action-bar {
+        margin: -1rem -1rem 1.5rem;
+        padding: 1rem;
+    }
+
+    .editor {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+
+    .editor .page-title {
+        font-size: 1.5rem;
+    }
+
+    .editor label {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.35rem;
+        min-height: 0;
+    }
+
+    .editor label > span,
+    .editor input:not([type="checkbox"]),
+    .editor select {
+        font-size: 1rem;
+    }
+
+    .input-with-suffix small,
+    .checkbox-row small {
+        font-size: 1rem;
+    }
+
+    .expression-help {
+        font-size: 0.9rem;
+    }
 }
 
 .field-group {
