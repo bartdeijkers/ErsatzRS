@@ -1,0 +1,636 @@
+//! Rerun collection list and editor. Ports `Pages/RerunCollections.razor`
+//! and `Pages/RerunCollectionEditor.razor`.
+#![allow(clippy::too_many_lines)]
+
+use leptos::prelude::*;
+use leptos_router::hooks::{use_params_map, use_query_map};
+
+use crate::admin::server_fns::media_browser::{
+    delete_rerun_collection, get_rerun_collection_editor_options, get_rerun_collection_form,
+    get_rerun_collections_page_size, list_rerun_collections, save_rerun_collection,
+    RerunCollectionEditorOptions, RerunCollectionForm, RerunCollectionListRow,
+    RerunCollectionSelectOption,
+};
+use crate::admin::ui::primitives::{
+    dialog::DeleteDialog,
+    icon::{icon_style, IconName},
+    toast::{use_toast, ToastSeverity},
+};
+
+stylance::import_crate_style!(style, "src/admin/pages/media/rerun_collections.module.css");
+
+const COLLECTION_TYPE_COLLECTION: i32 = 0;
+const COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+const COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+const COLLECTION_TYPE_ARTIST: i32 = 3;
+const COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+const COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+const COLLECTION_TYPE_PLAYLIST: i32 = 6;
+const PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
+const PLAYBACK_ORDER_RANDOM: i32 = 2;
+const PLAYBACK_ORDER_SHUFFLE: i32 = 3;
+const PLAYBACK_ORDER_SEASON_EPISODE: i32 = 6;
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
+
+#[component]
+pub fn RerunCollectionsPage() -> impl IntoView {
+    let query = use_query_map();
+    let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
+    view! { <RerunCollectionsIsland initial_error=error/> }
+}
+
+#[island]
+fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
+    let search = RwSignal::new(String::new());
+    let page = RwSignal::new(0u32);
+    let page_size = RwSignal::new(10u32);
+
+    let saved_page_size = Resource::new_blocking(
+        || (),
+        |()| async { get_rerun_collections_page_size().await.unwrap_or(10) },
+    );
+    Effect::new(move |_| {
+        if let Some(saved) = saved_page_size.get() {
+            page_size.set(saved);
+        }
+    });
+
+    let data: Resource<(Vec<RerunCollectionListRow>, u64)> = Resource::new_blocking(
+        move || (search.get(), page.get(), page_size.get()),
+        move |(search, page, page_size)| async move {
+            list_rerun_collections(search, page, page_size)
+                .await
+                .unwrap_or_default()
+        },
+    );
+    let delete_action = Action::new(|id: &i64| delete_rerun_collection(*id));
+    let delete_target: RwSignal<Option<RerunCollectionListRow>> = RwSignal::new(None);
+    let delete_open = RwSignal::new(false);
+    let toast = use_toast();
+    Effect::new(move |_| {
+        if let Some(result) = delete_action.value().get() {
+            match result {
+                Ok(()) => {
+                    toast.push("Rerun collection deleted.", ToastSeverity::Success);
+                    data.refetch();
+                }
+                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+            }
+            delete_open.set(false);
+        }
+    });
+
+    view! {
+        <div class=style::page>
+            <div class=style::action_bar>
+                <a href="/media/rerun-collections/add" class=style::btn_add>
+                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                    <span>"Add Rerun Collection"</span>
+                </a>
+            </div>
+            <section class=style::content>
+                <h1 class=style::page_title>"Rerun Collections"</h1>
+                <div class=style::divider/>
+                <p class=style::error style:display=move || if initial_error.is_empty() { "none" } else { "" }>
+                    "Rerun collection action failed."
+                </p>
+
+                <Suspense fallback=move || view! { <p class=style::empty_cell>"Loading..."</p> }>
+                    {move || {
+                        data.get().map(|(rows, total)| {
+                            let size = page_size.get().max(1);
+                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                                .unwrap_or(u32::MAX)
+                                .max(1);
+                            let current_page = page.get().min(total_pages.saturating_sub(1));
+                            let range_start = if total == 0 {
+                                0
+                            } else {
+                                u64::from(current_page) * u64::from(size) + 1
+                            };
+                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+
+                            view! {
+                                <div class=style::table_wrap>
+                                    <div class=style::table_toolbar>
+                                        <label class=style::search_field>
+                                            <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
+                                            <input
+                                                class=style::search
+                                                type="search"
+                                                placeholder="Search for rerun collections"
+                                                prop:value=move || search.get()
+                                                on:input=move |event| {
+                                                    search.set(event_target_value(&event));
+                                                    page.set(0);
+                                                }
+                                            />
+                                        </label>
+                                    </div>
+                                    <table>
+                                        <tbody>
+                                            {rows.into_iter().map(|row| {
+                                                let id = row.id;
+                                                let name = row.name.clone();
+                                                let row_for_delete = row.clone();
+                                                view! {
+                                                    <tr>
+                                                        <td>{name}</td>
+                                                        <td>
+                                                            <div class=style::row_actions>
+                                                                <a
+                                                                    class=style::icon_button
+                                                                    href=format!("/media/rerun-collections/{id}/edit")
+                                                                    title="Edit Rerun Collection"
+                                                                    aria-label="Edit Rerun Collection"
+                                                                >
+                                                                    <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                                </a>
+                                                                <form method="post" action="/api/rerun-collections/delete">
+                                                                    <input type="hidden" name="id" value=id.to_string()/>
+                                                                    <button
+                                                                        type="submit"
+                                                                        class=style::icon_button
+                                                                        title="Delete Rerun Collection"
+                                                                        aria-label="Delete Rerun Collection"
+                                                                        on:click=move |event| {
+                                                                            event.prevent_default();
+                                                                            delete_target.set(Some(row_for_delete.clone()));
+                                                                            delete_open.set(true);
+                                                                        }
+                                                                    >
+                                                                        <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }).collect_view()}
+                                        </tbody>
+                                    </table>
+                                    <div class=style::pager>
+                                        <span>"Rows per page:"</span>
+                                        <select
+                                            class=style::page_size
+                                            aria-label="Rows per page"
+                                            prop:value=move || page_size.get().to_string()
+                                            on:change=move |event| {
+                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                                    page_size.set(value.max(1));
+                                                    page.set(0);
+                                                }
+                                            }
+                                        >
+                                            <option value="10">"10"</option>
+                                            <option value="25">"25"</option>
+                                            <option value="50">"50"</option>
+                                            <option value="100">"100"</option>
+                                        </select>
+                                        <span class=style::pager_status>{format!("{range_start}-{range_end} of {total}")}</span>
+                                        <div class=style::pager_buttons>
+                                            <button
+                                                type="button"
+                                                class=style::icon_button
+                                                disabled=move || page.get() == 0
+                                                title="Previous page"
+                                                aria-label="Previous page"
+                                                on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
+                                            >
+                                                <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class=style::icon_button
+                                                disabled=move || { page.get() + 1 >= total_pages }
+                                                title="Next page"
+                                                aria-label="Next page"
+                                                on:click=move |_| {
+                                                    page.update(|page| *page = (*page + 1).min(total_pages.saturating_sub(1)));
+                                                }
+                                            >
+                                                <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            .into_any()
+                        })
+                    }}
+                </Suspense>
+            </section>
+            <DeleteDialog
+                open=delete_open
+                entity_name=Signal::derive(move || {
+                    delete_target.get().map(|row| row.name).unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if confirmed {
+                        if let Some(row) = delete_target.get_untracked() {
+                            delete_action.dispatch(row.id);
+                        } else {
+                            delete_open.set(false);
+                        }
+                    } else {
+                        delete_open.set(false);
+                    }
+                })
+            />
+        </div>
+    }
+}
+
+#[component]
+pub fn RerunCollectionEditorPage() -> impl IntoView {
+    let params = use_params_map();
+    let query = use_query_map();
+    let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
+    view! { <RerunCollectionEditorIsland id initial_error=error/> }
+}
+
+#[island]
+fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView {
+    let initial: Resource<RerunCollectionForm> = Resource::new_blocking(
+        move || id,
+        |id| async move {
+            if id == 0 {
+                RerunCollectionForm {
+                    name: "New Rerun Collection".to_string(),
+                    collection_type: COLLECTION_TYPE_COLLECTION,
+                    first_run_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                    rerun_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                    ..RerunCollectionForm::default()
+                }
+            } else {
+                get_rerun_collection_form(id)
+                    .await
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+            }
+        },
+    );
+    let options: Resource<RerunCollectionEditorOptions> = Resource::new_blocking(
+        || (),
+        |()| async {
+            get_rerun_collection_editor_options()
+                .await
+                .unwrap_or_default()
+        },
+    );
+
+    let form_id = RwSignal::new(id);
+    let name = RwSignal::new(String::new());
+    let collection_type = RwSignal::new(COLLECTION_TYPE_COLLECTION);
+    let collection_id = RwSignal::new(String::new());
+    let media_item_id = RwSignal::new(String::new());
+    let multi_collection_id = RwSignal::new(String::new());
+    let smart_collection_id = RwSignal::new(String::new());
+    let first_run_playback_order = RwSignal::new(PLAYBACK_ORDER_CHRONOLOGICAL);
+    let rerun_playback_order = RwSignal::new(PLAYBACK_ORDER_CHRONOLOGICAL);
+
+    Effect::new(move |_| {
+        if let Some(form) = initial.get() {
+            form_id.set(form.id);
+            name.set(form.name);
+            collection_type.set(form.collection_type);
+            collection_id.set(
+                form.collection_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+            );
+            media_item_id.set(
+                form.media_item_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+            );
+            multi_collection_id.set(
+                form.multi_collection_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+            );
+            smart_collection_id.set(
+                form.smart_collection_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+            );
+            first_run_playback_order.set(default_playback_order(
+                form.first_run_playback_order,
+                form.collection_type,
+            ));
+            rerun_playback_order.set(default_playback_order(
+                form.rerun_playback_order,
+                form.collection_type,
+            ));
+        }
+    });
+
+    let error_message = RwSignal::new(initial_error);
+    let save_action = Action::new(|form: &RerunCollectionForm| {
+        let form = form.clone();
+        async move { save_rerun_collection(form).await }
+    });
+    let toast = use_toast();
+    Effect::new(move |_| {
+        if let Some(result) = save_action.value().get() {
+            match result {
+                Ok(_) => {
+                    toast.push("Rerun collection saved.", ToastSeverity::Success);
+                    set_browser_location("/media/rerun-collections");
+                }
+                Err(error) => {
+                    let message = format!("Save failed: {error}");
+                    error_message.set(message.clone());
+                    toast.push(message, ToastSeverity::Error);
+                }
+            }
+        }
+    });
+
+    let submit_form = move || {
+        let collection_id_value = collection_id.get_untracked();
+        let media_item_id_value = media_item_id.get_untracked();
+        let multi_collection_id_value = multi_collection_id.get_untracked();
+        let smart_collection_id_value = smart_collection_id.get_untracked();
+        save_action.dispatch(normalize_form(
+            form_id.get_untracked(),
+            name.get_untracked(),
+            collection_type.get_untracked(),
+            &collection_id_value,
+            &media_item_id_value,
+            &multi_collection_id_value,
+            &smart_collection_id_value,
+            first_run_playback_order.get_untracked(),
+            rerun_playback_order.get_untracked(),
+        ));
+    };
+
+    view! {
+        <div class=style::page>
+            <form method="post" action="/api/rerun-collections/save">
+                <div class=style::editor_action_bar>
+                    <button
+                        type="submit"
+                        class=style::btn_add
+                        on:click=move |event| {
+                            event.prevent_default();
+                            submit_form();
+                        }
+                    >
+                        <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
+                        <span>{if id == 0 { "Add Rerun Collection" } else { "Save Rerun Collection" }}</span>
+                    </button>
+                </div>
+                <section class=style::editor>
+                    <h1 class=style::page_title>"Rerun Collection"</h1>
+                    <p class=style::error style:display=move || if error_message.with(String::is_empty) { "none" } else { "" }>
+                        {move || error_message.get()}
+                    </p>
+                    <input type="hidden" name="id" value=move || form_id.get().to_string()/>
+                    <label>
+                        <span>"Name"</span>
+                        <input
+                            type="text"
+                            name="name"
+                            required
+                            value=move || name.get()
+                            on:input=move |event| name.set(event_target_value(&event))
+                        />
+                    </label>
+                    <label>
+                        <span>"Collection Type"</span>
+                        <select
+                            name="collection_type"
+                            prop:value=move || collection_type.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(value) = event_target_value(&event).parse::<i32>() {
+                                    collection_type.set(value);
+                                    first_run_playback_order.set(default_playback_order(first_run_playback_order.get_untracked(), value));
+                                    rerun_playback_order.set(default_playback_order(rerun_playback_order.get_untracked(), value));
+                                }
+                            }
+                        >
+                            <option value=COLLECTION_TYPE_COLLECTION>"Collection"</option>
+                            <option value=COLLECTION_TYPE_TELEVISION_SHOW>"Television Show"</option>
+                            <option value=COLLECTION_TYPE_TELEVISION_SEASON>"Television Season"</option>
+                            <option value=COLLECTION_TYPE_ARTIST>"Artist"</option>
+                            <option value=COLLECTION_TYPE_MULTI_COLLECTION>"Multi Collection"</option>
+                            <option value=COLLECTION_TYPE_SMART_COLLECTION>"Smart Collection"</option>
+                            <option value=COLLECTION_TYPE_PLAYLIST>"Playlist"</option>
+                        </select>
+                    </label>
+                    <Suspense fallback=move || view! { <div/> }>
+                        {move || {
+                            options.get().map(|options| {
+                                view! {
+                                    <TargetSelect
+                                        label="Collection"
+                                        name="collection_id"
+                                        options=options.collections
+                                        value=collection_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_COLLECTION)
+                                    />
+                                    <TargetSelect
+                                        label="Multi Collection"
+                                        name="multi_collection_id"
+                                        options=options.multi_collections
+                                        value=multi_collection_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION)
+                                    />
+                                    <TargetSelect
+                                        label="Smart Collection"
+                                        name="smart_collection_id"
+                                        options=options.smart_collections
+                                        value=smart_collection_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_SMART_COLLECTION)
+                                    />
+                                    <TargetSelect
+                                        label="Television Show"
+                                        name="media_item_id"
+                                        options=options.shows
+                                        value=media_item_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_TELEVISION_SHOW)
+                                    />
+                                    <TargetSelect
+                                        label="Television Season"
+                                        name="media_item_id"
+                                        options=options.seasons
+                                        value=media_item_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_TELEVISION_SEASON)
+                                    />
+                                    <TargetSelect
+                                        label="Artist"
+                                        name="media_item_id"
+                                        options=options.artists
+                                        value=media_item_id
+                                        visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_ARTIST)
+                                    />
+                                }
+                            })
+                        }}
+                    </Suspense>
+                    <PlaybackOrderSelect
+                        label="First Run Playback Order"
+                        name="first_run_playback_order"
+                        value=first_run_playback_order
+                        collection_type=collection_type
+                    />
+                    <PlaybackOrderSelect
+                        label="Rerun Playback Order"
+                        name="rerun_playback_order"
+                        value=rerun_playback_order
+                        collection_type=collection_type
+                    />
+                </section>
+            </form>
+        </div>
+    }
+}
+
+#[component]
+fn TargetSelect(
+    label: &'static str,
+    name: &'static str,
+    options: Vec<RerunCollectionSelectOption>,
+    value: RwSignal<String>,
+    visible: Signal<bool>,
+) -> impl IntoView {
+    view! {
+        <label style:display=move || if visible.get() { "" } else { "none" }>
+            <span>{label}</span>
+            <select
+                name=name
+                disabled=move || !visible.get()
+                prop:value=move || value.get()
+                on:change=move |event| value.set(event_target_value(&event))
+            >
+                <option value="">"Type to search..."</option>
+                {options.into_iter().map(|option| {
+                    view! {
+                        <option value=option.id.to_string()>{option.name}</option>
+                    }
+                }).collect_view()}
+            </select>
+        </label>
+    }
+}
+
+#[component]
+fn PlaybackOrderSelect(
+    label: &'static str,
+    name: &'static str,
+    value: RwSignal<i32>,
+    collection_type: RwSignal<i32>,
+) -> impl IntoView {
+    view! {
+        <label>
+            <span>{label}</span>
+            <select
+                name=name
+                prop:value=move || value.get().to_string()
+                on:change=move |event| {
+                    if let Ok(parsed) = event_target_value(&event).parse::<i32>() {
+                        value.set(default_playback_order(parsed, collection_type.get_untracked()));
+                    }
+                }
+            >
+                <option
+                    value=PLAYBACK_ORDER_CHRONOLOGICAL
+                    disabled=move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION
+                >
+                    "Chronological"
+                </option>
+                <option
+                    value=PLAYBACK_ORDER_SEASON_EPISODE
+                    disabled=move || collection_type.get() != COLLECTION_TYPE_TELEVISION_SHOW
+                    style:display=move || if collection_type.get() == COLLECTION_TYPE_TELEVISION_SHOW { "" } else { "none" }
+                >
+                    "Season, Episode"
+                </option>
+                <option
+                    value=PLAYBACK_ORDER_RANDOM
+                    disabled=move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION
+                >
+                    "Random"
+                </option>
+                <option value=PLAYBACK_ORDER_SHUFFLE>"Shuffle"</option>
+            </select>
+        </label>
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn normalize_form(
+    id: i64,
+    name: String,
+    collection_type: i32,
+    collection_id: &str,
+    media_item_id: &str,
+    multi_collection_id: &str,
+    smart_collection_id: &str,
+    first_run_playback_order: i32,
+    rerun_playback_order: i32,
+) -> RerunCollectionForm {
+    RerunCollectionForm {
+        id,
+        name,
+        collection_type,
+        collection_id: (collection_type == COLLECTION_TYPE_COLLECTION)
+            .then(|| parse_id(collection_id))
+            .flatten(),
+        media_item_id: matches!(
+            collection_type,
+            COLLECTION_TYPE_TELEVISION_SHOW
+                | COLLECTION_TYPE_TELEVISION_SEASON
+                | COLLECTION_TYPE_ARTIST
+        )
+        .then(|| parse_id(media_item_id))
+        .flatten(),
+        multi_collection_id: (collection_type == COLLECTION_TYPE_MULTI_COLLECTION)
+            .then(|| parse_id(multi_collection_id))
+            .flatten(),
+        smart_collection_id: (collection_type == COLLECTION_TYPE_SMART_COLLECTION)
+            .then(|| parse_id(smart_collection_id))
+            .flatten(),
+        first_run_playback_order: default_playback_order(first_run_playback_order, collection_type),
+        rerun_playback_order: default_playback_order(rerun_playback_order, collection_type),
+    }
+}
+
+fn parse_id(value: &str) -> Option<i64> {
+    value.trim().parse::<i64>().ok().filter(|value| *value != 0)
+}
+
+fn default_playback_order(value: i32, collection_type: i32) -> i32 {
+    let allowed = match collection_type {
+        COLLECTION_TYPE_MULTI_COLLECTION => value == PLAYBACK_ORDER_SHUFFLE,
+        COLLECTION_TYPE_TELEVISION_SHOW => matches!(
+            value,
+            PLAYBACK_ORDER_CHRONOLOGICAL
+                | PLAYBACK_ORDER_SEASON_EPISODE
+                | PLAYBACK_ORDER_RANDOM
+                | PLAYBACK_ORDER_SHUFFLE
+        ),
+        _ => matches!(
+            value,
+            PLAYBACK_ORDER_CHRONOLOGICAL | PLAYBACK_ORDER_RANDOM | PLAYBACK_ORDER_SHUFFLE
+        ),
+    };
+    if allowed {
+        value
+    } else if collection_type == COLLECTION_TYPE_MULTI_COLLECTION {
+        PLAYBACK_ORDER_SHUFFLE
+    } else {
+        PLAYBACK_ORDER_CHRONOLOGICAL
+    }
+}

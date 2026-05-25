@@ -111,6 +111,14 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::playlists::save_playlist_form),
         )
         .route(
+            "/api/rerun-collections/save",
+            post(api::rerun_collections::save_rerun_collection_form),
+        )
+        .route(
+            "/api/rerun-collections/delete",
+            post(api::rerun_collections::delete_rerun_collection_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

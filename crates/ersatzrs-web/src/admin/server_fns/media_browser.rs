@@ -19,6 +19,9 @@
 //! - `Pages/MultiCollections.razor` + `MultiCollectionEditor.razor` →
 //!   [`list_multi_collections`], [`get_multi_collection`],
 //!   [`save_multi_collection`], [`delete_multi_collection`]
+//! - `Pages/RerunCollections.razor` + `RerunCollectionEditor.razor` →
+//!   [`list_rerun_collections`], [`get_rerun_collection_form`],
+//!   [`save_rerun_collection`], [`delete_rerun_collection`]
 //! - `Pages/Playlists.razor` + `PlaylistEditor.razor` →
 //!   [`get_playlist_page`], [`create_playlist_group`],
 //!   [`create_playlist`], [`delete_playlist_group`], [`delete_playlist`],
@@ -381,6 +384,41 @@ pub struct MultiCollectionSelectOption {
 pub struct MultiCollectionEditorOptions {
     pub collections: Vec<MultiCollectionSelectOption>,
     pub smart_collections: Vec<MultiCollectionSelectOption>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RerunCollectionListRow {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RerunCollectionForm {
+    pub id: i64,
+    pub name: String,
+    pub collection_type: i32,
+    pub collection_id: Option<i64>,
+    pub media_item_id: Option<i64>,
+    pub multi_collection_id: Option<i64>,
+    pub smart_collection_id: Option<i64>,
+    pub first_run_playback_order: i32,
+    pub rerun_playback_order: i32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RerunCollectionSelectOption {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RerunCollectionEditorOptions {
+    pub collections: Vec<RerunCollectionSelectOption>,
+    pub multi_collections: Vec<RerunCollectionSelectOption>,
+    pub smart_collections: Vec<RerunCollectionSelectOption>,
+    pub shows: Vec<RerunCollectionSelectOption>,
+    pub seasons: Vec<RerunCollectionSelectOption>,
+    pub artists: Vec<RerunCollectionSelectOption>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -1540,6 +1578,16 @@ async fn enqueue_multi_collection_playout_refresh(
 }
 
 #[cfg(feature = "ssr")]
+async fn enqueue_rerun_collection_playout_refresh(
+    state: &crate::host::state::AppState,
+    rerun_collection_id: i64,
+) -> Result<(), ServerFnError> {
+    let playout_ids = playout_ids_using_rerun_collection(&state.pool, rerun_collection_id).await?;
+    enqueue_playout_refreshes(state, playout_ids);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
 async fn playout_ids_using_schedule(
     pool: &ersatzrs_infra::db::DbPool,
     schedule_id: i64,
@@ -1587,6 +1635,24 @@ async fn playout_ids_using_multi_collection(
            ORDER BY "PlayoutId""#,
     )
     .bind(multi_collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn playout_ids_using_rerun_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    rerun_collection_id: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
+    // MediaCollectionRepository.cs` `PlayoutIdsUsingRerunCollection`.
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "RerunCollectionId" = ?
+           ORDER BY "PlayoutId""#,
+    )
+    .bind(rerun_collection_id)
     .fetch_all(pool)
     .await
 }
@@ -3963,6 +4029,428 @@ fn normalize_multi_collection_items(items: &mut [MultiCollectionItemForm]) {
             item.playback_order,
         )
     });
+}
+
+// ---------------------------------------------------------------------------
+// Rerun collections
+// ---------------------------------------------------------------------------
+
+const RERUN_COLLECTIONS_PAGE_SIZE_KEY: &str = "pages.rerun_collections.page_size";
+const RERUN_COLLECTION_TYPE_COLLECTION: i32 = 0;
+const RERUN_COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+const RERUN_COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+const RERUN_COLLECTION_TYPE_ARTIST: i32 = 3;
+const RERUN_COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+const RERUN_COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+const RERUN_COLLECTION_TYPE_PLAYLIST: i32 = 6;
+
+#[server]
+pub async fn get_rerun_collections_page_size() -> Result<u32, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let value: Option<String> =
+        sqlx::query_scalar(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(RERUN_COLLECTIONS_PAGE_SIZE_KEY)
+            .fetch_optional(&state.pool)
+            .await?;
+
+    Ok(value
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(10))
+}
+
+#[server]
+pub async fn list_rerun_collections(
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<RerunCollectionListRow>, u64), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    list_rerun_collections_with_pool(&state.pool, search, page, page_size).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn list_rerun_collections_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<RerunCollectionListRow>, u64), ServerFnError> {
+    use sqlx::Row;
+
+    save_config_value(
+        pool,
+        RERUN_COLLECTIONS_PAGE_SIZE_KEY,
+        &page_size.to_string(),
+    )
+    .await?;
+
+    let offset = i64::from(page) * i64::from(page_size);
+    let search = search.trim().to_string();
+    let like = format!("%{search}%");
+
+    // ErsatzTV's `GetPagedRerunCollectionsHandler` counts all rows before
+    // applying the search query; keep that table-pager behavior.
+    let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "RerunCollection""#)
+        .fetch_one(pool)
+        .await?;
+
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "RerunCollection"
+           WHERE (? = '' OR "Name" LIKE ?)
+           ORDER BY "Name"
+           LIMIT ? OFFSET ?"#,
+    )
+    .bind(&search)
+    .bind(&like)
+    .bind(i64::from(page_size))
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+
+    let list = rows
+        .iter()
+        .map(|row| RerunCollectionListRow {
+            id: row.try_get("Id").unwrap_or(0),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .collect();
+
+    #[allow(clippy::cast_sign_loss)]
+    Ok((list, total.max(0) as u64))
+}
+
+#[server]
+pub async fn get_rerun_collection_form(
+    id: i64,
+) -> Result<Option<RerunCollectionForm>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    get_rerun_collection_form_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn get_rerun_collection_form_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+) -> Result<Option<RerunCollectionForm>, ServerFnError> {
+    use sqlx::Row;
+
+    let row = sqlx::query(
+        r#"SELECT "Id",
+                  COALESCE("Name", '') AS "Name",
+                  "CollectionType",
+                  "CollectionId",
+                  "MediaItemId",
+                  "MultiCollectionId",
+                  "SmartCollectionId",
+                  "FirstRunPlaybackOrder",
+                  "RerunPlaybackOrder"
+           FROM "RerunCollection"
+           WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|row| RerunCollectionForm {
+        id: row.try_get("Id").unwrap_or(0),
+        name: row.try_get("Name").unwrap_or_default(),
+        collection_type: row_i32(&row, "CollectionType", RERUN_COLLECTION_TYPE_COLLECTION),
+        collection_id: row.try_get("CollectionId").unwrap_or_default(),
+        media_item_id: row.try_get("MediaItemId").unwrap_or_default(),
+        multi_collection_id: row.try_get("MultiCollectionId").unwrap_or_default(),
+        smart_collection_id: row.try_get("SmartCollectionId").unwrap_or_default(),
+        first_run_playback_order: row_i32(
+            &row,
+            "FirstRunPlaybackOrder",
+            PLAYBACK_ORDER_CHRONOLOGICAL,
+        ),
+        rerun_playback_order: row_i32(&row, "RerunPlaybackOrder", PLAYBACK_ORDER_CHRONOLOGICAL),
+    }))
+}
+
+#[server]
+pub async fn get_rerun_collection_editor_options(
+) -> Result<RerunCollectionEditorOptions, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    get_rerun_collection_editor_options_with_pool(&state.pool).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn get_rerun_collection_editor_options_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<RerunCollectionEditorOptions, ServerFnError> {
+    Ok(RerunCollectionEditorOptions {
+        collections: load_rerun_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+        multi_collections: load_rerun_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "MultiCollection" ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+        smart_collections: load_rerun_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "SmartCollection" ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+        shows: load_rerun_options(
+            pool,
+            r#"SELECT s."Id" AS "Id",
+                      COALESCE(sm."Title", '???') || ' (' || COALESCE(CAST(sm."Year" AS TEXT), '???') || ')' AS "Name"
+               FROM "Show" s
+               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+               ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+        seasons: load_rerun_options(
+            pool,
+            r#"SELECT se."Id" AS "Id",
+                      COALESCE(sm."Title", '???') || ' (' || COALESCE(CAST(sm."Year" AS TEXT), '???') || ') - ' ||
+                      CASE WHEN se."SeasonNumber" = 0 THEN 'Specials' ELSE 'Season ' || CAST(se."SeasonNumber" AS TEXT) END AS "Name"
+               FROM "Season" se
+               LEFT JOIN "Show" s ON s."Id" = se."ShowId"
+               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+               ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+        artists: load_rerun_options(
+            pool,
+            r#"SELECT a."Id" AS "Id", COALESCE(am."Title", '???') AS "Name"
+               FROM "Artist" a
+               LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+               ORDER BY "Name" COLLATE NOCASE"#,
+        )
+        .await?,
+    })
+}
+
+#[server]
+pub async fn save_rerun_collection(form: RerunCollectionForm) -> Result<i64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    save_rerun_collection_with_state(&state, form).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_rerun_collection_with_state(
+    state: &crate::host::state::AppState,
+    form: RerunCollectionForm,
+) -> Result<i64, ServerFnError> {
+    let existing = if form.id == 0 {
+        None
+    } else {
+        let existing = get_rerun_collection_form_with_pool(&state.pool, form.id).await?;
+        if existing.is_none() {
+            return Err(ServerFnError::new("Rerun collection does not exist."));
+        }
+        existing
+    };
+
+    validate_rerun_collection_form(&state.pool, &form).await?;
+
+    let mut tx = state.pool.begin().await?;
+    let id = if form.id == 0 {
+        let result = sqlx::query(
+            r#"INSERT INTO "RerunCollection" (
+                   "Name",
+                   "CollectionType",
+                   "CollectionId",
+                   "MediaItemId",
+                   "MultiCollectionId",
+                   "SmartCollectionId",
+                   "FirstRunPlaybackOrder",
+                   "RerunPlaybackOrder"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&form.name)
+        .bind(form.collection_type)
+        .bind(form.collection_id)
+        .bind(form.media_item_id)
+        .bind(form.multi_collection_id)
+        .bind(form.smart_collection_id)
+        .bind(form.first_run_playback_order)
+        .bind(form.rerun_playback_order)
+        .execute(&mut *tx)
+        .await?;
+        ersatzrs_infra::db::last_insert_id(result)
+    } else {
+        sqlx::query(
+            r#"UPDATE "RerunCollection"
+                  SET "Name" = ?,
+                      "CollectionType" = ?,
+                      "CollectionId" = ?,
+                      "MediaItemId" = ?,
+                      "MultiCollectionId" = ?,
+                      "SmartCollectionId" = ?,
+                      "FirstRunPlaybackOrder" = ?,
+                      "RerunPlaybackOrder" = ?
+                WHERE "Id" = ?"#,
+        )
+        .bind(&form.name)
+        .bind(form.collection_type)
+        .bind(form.collection_id)
+        .bind(form.media_item_id)
+        .bind(form.multi_collection_id)
+        .bind(form.smart_collection_id)
+        .bind(form.first_run_playback_order)
+        .bind(form.rerun_playback_order)
+        .bind(form.id)
+        .execute(&mut *tx)
+        .await?;
+        form.id
+    };
+    tx.commit().await?;
+
+    if existing.as_ref().is_some_and(|existing| existing != &form) {
+        enqueue_rerun_collection_playout_refresh(state, id).await?;
+    }
+
+    Ok(id)
+}
+
+#[server]
+pub async fn delete_rerun_collection(id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    delete_rerun_collection_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn delete_rerun_collection_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+) -> Result<(), ServerFnError> {
+    let result = sqlx::query(r#"DELETE FROM "RerunCollection" WHERE "Id" = ?"#)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ServerFnError::new(format!(
+            "Rerun collection {id} does not exist."
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_rerun_collection_form(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: &RerunCollectionForm,
+) -> Result<(), ServerFnError> {
+    if form.name.trim().is_empty() {
+        return Err(ServerFnError::new("[Name] is an empty string"));
+    }
+    if form.name.chars().count() > 50 {
+        return Err(ServerFnError::new("[Name] must not be longer than 50"));
+    }
+
+    let duplicate: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "RerunCollection"
+           WHERE "Name" = ? AND "Id" <> ?"#,
+    )
+    .bind(&form.name)
+    .bind(form.id)
+    .fetch_one(pool)
+    .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("Rerun collection name must be unique"));
+    }
+
+    validate_rerun_collection_target(pool, form).await?;
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_rerun_collection_target(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: &RerunCollectionForm,
+) -> Result<(), ServerFnError> {
+    match form.collection_type {
+        RERUN_COLLECTION_TYPE_COLLECTION => {
+            validate_optional_reference(pool, r#""Collection""#, form.collection_id).await?;
+        }
+        RERUN_COLLECTION_TYPE_TELEVISION_SHOW => {
+            validate_optional_reference(pool, r#""Show""#, form.media_item_id).await?;
+        }
+        RERUN_COLLECTION_TYPE_TELEVISION_SEASON => {
+            validate_optional_reference(pool, r#""Season""#, form.media_item_id).await?;
+        }
+        RERUN_COLLECTION_TYPE_ARTIST => {
+            validate_optional_reference(pool, r#""Artist""#, form.media_item_id).await?;
+        }
+        RERUN_COLLECTION_TYPE_MULTI_COLLECTION => {
+            validate_optional_reference(pool, r#""MultiCollection""#, form.multi_collection_id)
+                .await?;
+        }
+        RERUN_COLLECTION_TYPE_SMART_COLLECTION => {
+            validate_optional_reference(pool, r#""SmartCollection""#, form.smart_collection_id)
+                .await?;
+        }
+        RERUN_COLLECTION_TYPE_PLAYLIST => {}
+        _ => return Err(ServerFnError::new("Unsupported collection type.")),
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_optional_reference(
+    pool: &ersatzrs_infra::db::DbPool,
+    table_name: &str,
+    id: Option<i64>,
+) -> Result<(), ServerFnError> {
+    let Some(id) = id else {
+        return Ok(());
+    };
+    let sql = format!("SELECT COUNT(*) FROM {table_name} WHERE \"Id\" = ?");
+    let exists: i64 = sqlx::query_scalar(&sql).bind(id).fetch_one(pool).await?;
+    if exists == 0 {
+        return Err(ServerFnError::new(format!(
+            "Referenced item {id} does not exist."
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_rerun_options(
+    pool: &ersatzrs_infra::db::DbPool,
+    sql: &str,
+) -> Result<Vec<RerunCollectionSelectOption>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    Ok(rows
+        .iter()
+        .map(|row| RerunCollectionSelectOption {
+            id: row.try_get("Id").unwrap_or(0),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+fn row_i32(row: &ersatzrs_infra::db::DbRow, column: &str, fallback: i32) -> i32 {
+    use sqlx::Row;
+
+    row.try_get::<i64, _>(column)
+        .ok()
+        .and_then(|value| i32::try_from(value).ok())
+        .unwrap_or(fallback)
 }
 
 // ---------------------------------------------------------------------------
@@ -6637,6 +7125,10 @@ mod tests {
             playout_ids_using_collection(&pool, 20).await.unwrap(),
             vec![101, 102]
         );
+        assert_eq!(
+            playout_ids_using_rerun_collection(&pool, 30).await.unwrap(),
+            vec![100, 102]
+        );
     }
 
     #[test]
@@ -7167,6 +7659,15 @@ mod tests {
             .await
             .expect("seed collection");
         sqlx::query(
+            r#"INSERT INTO "RerunCollection" (
+                   "Id", "Name", "CollectionType", "CollectionId",
+                   "FirstRunPlaybackOrder", "RerunPlaybackOrder"
+               ) VALUES (30, 'Rerun 30', 0, 20, 1, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("seed rerun collection");
+        sqlx::query(
             r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
                VALUES
                    (100, 1, 10, 1, 0),
@@ -7178,11 +7679,13 @@ mod tests {
         .expect("seed playouts");
         sqlx::query(
             r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
-                   "Id", "CollectionId", "CollectionType", "PlayoutId"
+                   "Id", "CollectionId", "RerunCollectionId", "CollectionType", "PlayoutId"
                ) VALUES
-                   (200, 20, 10, 101),
-                   (201, 20, 10, 102),
-                   (202, 20, 10, 102)"#,
+                   (200, 20, NULL, 10, 101),
+                   (201, 20, NULL, 10, 102),
+                   (202, 20, NULL, 10, 102),
+                   (203, NULL, 30, 7, 100),
+                   (204, NULL, 30, 8, 102)"#,
         )
         .execute(pool)
         .await

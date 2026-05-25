@@ -5,4 +5,5 @@ pub mod filler;
 pub mod media_actions;
 pub mod media_sources;
 pub mod playlists;
+pub mod rerun_collections;
 pub mod watermarks;

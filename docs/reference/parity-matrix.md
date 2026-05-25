@@ -85,6 +85,7 @@ mapping from advertised nav link to backing route in
 | `/media/collections` | list + add/`:id` detail + `:id/edit` editor |
 | `/media/smart-collections` | list + add/`:id`/`:id/edit` editor |
 | `/media/multi-collections` | list + add/`:id/edit` editor with manual/smart collection items |
+| `/media/rerun-collections` | list + add/`:id/edit` editor with HTML POST fallback save/delete and playout-refresh side effect on update |
 | `/media/playlists` | list/tree + `:id` editor with HTML POST fallback create/save/delete; preview has a documented canonical-builder follow-up in `plans/playlists-parity-slice.md` |
 | `/media/trakt/lists` | list + `:id` editor; add/search/match/delete actions |
 | `/media/filler/presets` | list + add/`:id/edit` editor; HTML POST fallback save/delete |
@@ -99,7 +100,6 @@ mapping from advertised nav link to backing route in
 | Nav link | Notes |
 | --- | --- |
 | `/media/remote/streams` | Remote-stream entities exist; no UI yet. |
-| `/media/rerun-collections` | No server fns or page yet. |
 | `/schedules` | Only block scheduling UI is shipped. |
 | `/templates` | Only block scheduling UI is shipped. |
 | `/decos` | Deco data is loaded by block scheduling but has no editor. |
