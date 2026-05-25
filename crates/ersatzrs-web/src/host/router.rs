@@ -91,6 +91,26 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::filler::delete_filler_preset_form),
         )
         .route(
+            "/api/playlists/groups/create",
+            post(api::playlists::create_playlist_group_form),
+        )
+        .route(
+            "/api/playlists/create",
+            post(api::playlists::create_playlist_form),
+        )
+        .route(
+            "/api/playlists/groups/delete",
+            post(api::playlists::delete_playlist_group_form),
+        )
+        .route(
+            "/api/playlists/delete",
+            post(api::playlists::delete_playlist_form),
+        )
+        .route(
+            "/api/playlists/save",
+            post(api::playlists::save_playlist_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

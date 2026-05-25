@@ -9,6 +9,7 @@ pub mod movies;
 pub mod multi_collections;
 pub mod multi_select_browser;
 pub mod other_videos;
+pub mod playlists;
 pub mod season_detail;
 pub mod see_all_lists;
 pub mod shows;

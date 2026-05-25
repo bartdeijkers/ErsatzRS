@@ -19,6 +19,10 @@
 //! - `Pages/MultiCollections.razor` + `MultiCollectionEditor.razor` →
 //!   [`list_multi_collections`], [`get_multi_collection`],
 //!   [`save_multi_collection`], [`delete_multi_collection`]
+//! - `Pages/Playlists.razor` + `PlaylistEditor.razor` →
+//!   [`get_playlist_page`], [`create_playlist_group`],
+//!   [`create_playlist`], [`delete_playlist_group`], [`delete_playlist`],
+//!   [`get_playlist_editor`], [`save_playlist`]
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -377,6 +381,83 @@ pub struct MultiCollectionSelectOption {
 pub struct MultiCollectionEditorOptions {
     pub collections: Vec<MultiCollectionSelectOption>,
     pub smart_collections: Vec<MultiCollectionSelectOption>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistGroupRow {
+    pub id: i64,
+    pub name: String,
+    pub is_system: bool,
+    pub playlists: Vec<PlaylistRow>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistRow {
+    pub id: i64,
+    pub playlist_group_id: i64,
+    pub name: String,
+    pub is_system: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistPageData {
+    pub groups: Vec<PlaylistGroupRow>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistItemForm {
+    pub id: i64,
+    pub index: i32,
+    pub collection_type: i32,
+    pub collection_id: Option<i64>,
+    pub multi_collection_id: Option<i64>,
+    pub smart_collection_id: Option<i64>,
+    pub media_item_id: Option<i64>,
+    pub item_name: String,
+    pub playback_order: i32,
+    pub count: Option<i32>,
+    pub play_all: bool,
+    pub include_in_program_guide: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistEditorForm {
+    pub id: i64,
+    pub playlist_group_id: i64,
+    pub name: String,
+    pub is_system: bool,
+    pub items: Vec<PlaylistItemForm>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistEditorOptions {
+    pub collections: Vec<PlaylistItemOption>,
+    pub multi_collections: Vec<PlaylistItemOption>,
+    pub smart_collections: Vec<PlaylistItemOption>,
+    pub shows: Vec<PlaylistItemOption>,
+    pub seasons: Vec<PlaylistItemOption>,
+    pub artists: Vec<PlaylistItemOption>,
+    pub movies: Vec<PlaylistItemOption>,
+    pub episodes: Vec<PlaylistItemOption>,
+    pub music_videos: Vec<PlaylistItemOption>,
+    pub other_videos: Vec<PlaylistItemOption>,
+    pub songs: Vec<PlaylistItemOption>,
+    pub images: Vec<PlaylistItemOption>,
+    pub remote_streams: Vec<PlaylistItemOption>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistItemOption {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaylistPreviewRow {
+    pub start: String,
+    pub finish: String,
+    pub media_item: String,
+    pub duration: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -4062,7 +4143,7 @@ async fn add_media_item_to_schedule_impl(
     // Enum values from `ErsatzTV.Core.Domain`:
     // PlaybackOrder.Shuffle = 3, FillWithGroupMode.None = 0,
     // GuideMode.Normal = 0, MarathonGroupBy.None = 0.
-    const PLAYBACK_ORDER_SHUFFLE: i64 = 3;
+    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i64 = 3;
     const FILL_WITH_GROUP_MODE_NONE: i64 = 0;
     const GUIDE_MODE_NORMAL: i64 = 0;
     const MARATHON_GROUP_BY_NONE: i64 = 0;
@@ -4109,7 +4190,7 @@ async fn add_media_item_to_schedule_impl(
     .bind(schedule_id)
     .bind(collection_type)
     .bind(media_item_id)
-    .bind(PLAYBACK_ORDER_SHUFFLE)
+    .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
     .bind(FILL_WITH_GROUP_MODE_NONE)
     .bind(GUIDE_MODE_NORMAL)
     .bind(MARATHON_GROUP_BY_NONE)
@@ -4238,6 +4319,968 @@ pub async fn create_collection(name: String) -> Result<CollectionOption, ServerF
         id,
         name: trimmed.to_string(),
     })
+}
+
+const PLAYLIST_COLLECTION_TYPE_COLLECTION: i32 = 0;
+const PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW: i32 = 1;
+const PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON: i32 = 2;
+const PLAYLIST_COLLECTION_TYPE_ARTIST: i32 = 3;
+const PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION: i32 = 4;
+const PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION: i32 = 5;
+const PLAYLIST_COLLECTION_TYPE_MOVIE: i32 = 10;
+const PLAYLIST_COLLECTION_TYPE_EPISODE: i32 = 20;
+const PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO: i32 = 30;
+const PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO: i32 = 40;
+const PLAYLIST_COLLECTION_TYPE_SONG: i32 = 50;
+const PLAYLIST_COLLECTION_TYPE_IMAGE: i32 = 60;
+const PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM: i32 = 70;
+const PLAYLIST_PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
+
+#[server]
+pub async fn get_playlist_page() -> Result<PlaylistPageData, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let group_rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name", COALESCE("IsSystem", 0) AS "IsSystem"
+           FROM "PlaylistGroup"
+           ORDER BY COALESCE("IsSystem", 0) DESC, "Name" COLLATE NOCASE"#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut groups = Vec::with_capacity(group_rows.len());
+    for row in group_rows {
+        let group_id: i64 = row.try_get("Id").unwrap_or(0);
+        let playlists = sqlx::query(
+            r#"SELECT "Id", "PlaylistGroupId", COALESCE("Name", '') AS "Name",
+                      COALESCE("IsSystem", 0) AS "IsSystem"
+               FROM "Playlist"
+               WHERE "PlaylistGroupId" = ?
+               ORDER BY COALESCE("Name", '') COLLATE NOCASE"#,
+        )
+        .bind(group_id)
+        .fetch_all(&state.pool)
+        .await?
+        .into_iter()
+        .map(|playlist| PlaylistRow {
+            id: playlist.try_get("Id").unwrap_or(0),
+            playlist_group_id: playlist.try_get("PlaylistGroupId").unwrap_or(0),
+            name: playlist.try_get("Name").unwrap_or_default(),
+            is_system: playlist.try_get::<bool, _>("IsSystem").unwrap_or(false),
+        })
+        .collect();
+
+        groups.push(PlaylistGroupRow {
+            id: group_id,
+            name: row.try_get("Name").unwrap_or_default(),
+            is_system: row.try_get::<bool, _>("IsSystem").unwrap_or(false),
+            playlists,
+        });
+    }
+
+    Ok(PlaylistPageData { groups })
+}
+
+#[server]
+pub async fn create_playlist_group(name: String) -> Result<PlaylistGroupRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    create_playlist_group_with_pool(&state.pool, name).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn create_playlist_group_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    name: String,
+) -> Result<PlaylistGroupRow, ServerFnError> {
+    let name = validate_playlist_group_name(&name)?;
+    let result = sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 0)"#)
+        .bind(&name)
+        .execute(pool)
+        .await?;
+    Ok(PlaylistGroupRow {
+        id: ersatzrs_infra::db::last_insert_id(result),
+        name,
+        is_system: false,
+        playlists: Vec::new(),
+    })
+}
+
+#[server]
+pub async fn create_playlist(
+    playlist_group_id: i64,
+    name: String,
+) -> Result<PlaylistRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    create_playlist_with_pool(&state.pool, playlist_group_id, name).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn create_playlist_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    playlist_group_id: i64,
+    name: String,
+) -> Result<PlaylistRow, ServerFnError> {
+    let name = validate_playlist_name(&name)?;
+    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistGroup" WHERE "Id" = ?"#)
+        .bind(playlist_group_id)
+        .fetch_one(pool)
+        .await?;
+    if exists == 0 {
+        return Err(ServerFnError::new("[PlaylistGroupId] does not exist."));
+    }
+    let duplicate: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "Playlist"
+           WHERE "PlaylistGroupId" = ? AND "Name" = ? COLLATE NOCASE"#,
+    )
+    .bind(playlist_group_id)
+    .bind(&name)
+    .fetch_one(pool)
+    .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new(format!(
+            "A playlist named \"{name}\" already exists in that playlist group"
+        )));
+    }
+
+    let result = sqlx::query(
+        r#"INSERT INTO "Playlist" ("Name", "PlaylistGroupId", "IsSystem") VALUES (?, ?, 0)"#,
+    )
+    .bind(&name)
+    .bind(playlist_group_id)
+    .execute(pool)
+    .await?;
+
+    Ok(PlaylistRow {
+        id: ersatzrs_infra::db::last_insert_id(result),
+        playlist_group_id,
+        name,
+        is_system: false,
+    })
+}
+
+#[server]
+pub async fn delete_playlist_group(playlist_group_id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    delete_playlist_group_with_pool(&state.pool, playlist_group_id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn delete_playlist_group_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    playlist_group_id: i64,
+) -> Result<(), ServerFnError> {
+    use sqlx::Row;
+
+    let Some(row) = sqlx::query(
+        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem"
+           FROM "PlaylistGroup"
+           WHERE "Id" = ?"#,
+    )
+    .bind(playlist_group_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Err(ServerFnError::new(format!(
+            "PlaylistGroup {playlist_group_id} does not exist."
+        )));
+    };
+    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
+        return Err(ServerFnError::new("Cannot delete system playlist group"));
+    }
+    sqlx::query(r#"DELETE FROM "PlaylistGroup" WHERE "Id" = ?"#)
+        .bind(playlist_group_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[server]
+pub async fn delete_playlist(playlist_id: i64) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    delete_playlist_with_pool(&state.pool, playlist_id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn delete_playlist_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    playlist_id: i64,
+) -> Result<(), ServerFnError> {
+    use sqlx::Row;
+
+    let Some(row) = sqlx::query(
+        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem"
+           FROM "Playlist"
+           WHERE "Id" = ?"#,
+    )
+    .bind(playlist_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Err(ServerFnError::new(format!(
+            "Playlist {playlist_id} does not exist."
+        )));
+    };
+    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
+        return Err(ServerFnError::new(
+            "Cannot delete system (generated) playlist",
+        ));
+    }
+    sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
+        .bind(playlist_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[server]
+pub async fn get_playlist_editor(
+    playlist_id: i64,
+) -> Result<Option<PlaylistEditorForm>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let Some(row) = sqlx::query(
+        r#"SELECT "Id", "PlaylistGroupId", COALESCE("Name", '') AS "Name",
+                  COALESCE("IsSystem", 0) AS "IsSystem"
+           FROM "Playlist"
+           WHERE "Id" = ?"#,
+    )
+    .bind(playlist_id)
+    .fetch_optional(&state.pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let items = load_playlist_items(&state.pool, playlist_id).await?;
+    Ok(Some(PlaylistEditorForm {
+        id: row.try_get("Id").unwrap_or(0),
+        playlist_group_id: row.try_get("PlaylistGroupId").unwrap_or(0),
+        name: row.try_get("Name").unwrap_or_default(),
+        is_system: row.try_get::<bool, _>("IsSystem").unwrap_or(false),
+        items,
+    }))
+}
+
+#[server]
+#[allow(clippy::too_many_lines)]
+pub async fn get_playlist_editor_options() -> Result<PlaylistEditorOptions, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(PlaylistEditorOptions {
+        collections: load_named_options(
+            &state.pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        multi_collections: load_named_options(
+            &state.pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "MultiCollection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        smart_collections: load_named_options(
+            &state.pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "SmartCollection" ORDER BY "Name" COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        shows: load_named_options(
+            &state.pool,
+            r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Name"
+               FROM "Show" s JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+               ORDER BY COALESCE(sm."SortTitle", sm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        seasons: load_named_options(
+            &state.pool,
+            r#"SELECT se."Id",
+                      COALESCE(shm."Title", '') || ' - ' ||
+                      COALESCE(sem."Title", 'Season ' || CAST(se."SeasonNumber" AS TEXT)) AS "Name"
+               FROM "Season" se
+               JOIN "Show" sh ON sh."Id" = se."ShowId"
+               JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+               LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = se."Id"
+               ORDER BY COALESCE(shm."SortTitle", shm."Title", '') COLLATE NOCASE, se."SeasonNumber" LIMIT 500"#,
+        )
+        .await?,
+        artists: load_named_options(
+            &state.pool,
+            r#"SELECT a."Id", COALESCE(am."Title", '') AS "Name"
+               FROM "Artist" a JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+               ORDER BY COALESCE(am."SortTitle", am."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        movies: load_named_options(
+            &state.pool,
+            r#"SELECT m."Id", COALESCE(mm."Title", '') AS "Name"
+               FROM "Movie" m JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+               ORDER BY COALESCE(mm."SortTitle", mm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        episodes: load_named_options(
+            &state.pool,
+            r#"SELECT ep."Id",
+                      COALESCE(shm."Title", '') || ' - S' || CAST(COALESCE(se."SeasonNumber", 0) AS TEXT)
+                      || ' E' || CAST(COALESCE(em."EpisodeNumber", 0) AS TEXT)
+                      || ' - ' || COALESCE(em."Title", '') AS "Name"
+               FROM "Episode" ep
+               JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
+               JOIN "Season" se ON se."Id" = ep."SeasonId"
+               JOIN "Show" sh ON sh."Id" = se."ShowId"
+               JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+               ORDER BY COALESCE(shm."SortTitle", shm."Title", '') COLLATE NOCASE,
+                        se."SeasonNumber", em."EpisodeNumber" LIMIT 500"#,
+        )
+        .await?,
+        music_videos: load_named_options(
+            &state.pool,
+            r#"SELECT mv."Id", COALESCE(mvm."Title", '') AS "Name"
+               FROM "MusicVideo" mv JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+               ORDER BY COALESCE(mvm."SortTitle", mvm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        other_videos: load_named_options(
+            &state.pool,
+            r#"SELECT ov."Id", COALESCE(ovm."Title", '') AS "Name"
+               FROM "OtherVideo" ov JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+               ORDER BY COALESCE(ovm."SortTitle", ovm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        songs: load_named_options(
+            &state.pool,
+            r#"SELECT s."Id", COALESCE(sm."Title", '') AS "Name"
+               FROM "Song" s JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
+               ORDER BY COALESCE(sm."SortTitle", sm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        images: load_named_options(
+            &state.pool,
+            r#"SELECT i."Id", COALESCE(im."Title", '') AS "Name"
+               FROM "Image" i JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
+               ORDER BY COALESCE(im."SortTitle", im."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+        remote_streams: load_named_options(
+            &state.pool,
+            r#"SELECT rs."Id", COALESCE(rsm."Title", '') AS "Name"
+               FROM "RemoteStream" rs JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
+               ORDER BY COALESCE(rsm."SortTitle", rsm."Title", '') COLLATE NOCASE LIMIT 500"#,
+        )
+        .await?,
+    })
+}
+
+#[server]
+pub async fn save_playlist(form: PlaylistEditorForm) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    save_playlist_with_pool(&state.pool, form).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_playlist_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: PlaylistEditorForm,
+) -> Result<(), ServerFnError> {
+    use sqlx::Row;
+
+    let Some(row) = sqlx::query(
+        r#"SELECT COALESCE("IsSystem", 0) AS "IsSystem" FROM "Playlist" WHERE "Id" = ?"#,
+    )
+    .bind(form.id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Err(ServerFnError::new("[PlaylistId] does not exist."));
+    };
+    if row.try_get::<bool, _>("IsSystem").unwrap_or(false) {
+        return Err(ServerFnError::new(
+            "Cannot save system (generated) playlist",
+        ));
+    }
+
+    validate_playlist_items(&form.items)?;
+    let mut tx = pool.begin().await?;
+    sqlx::query(r#"UPDATE "Playlist" SET "Name" = ? WHERE "Id" = ?"#)
+        .bind(form.name.trim())
+        .bind(form.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+        .bind(form.id)
+        .execute(&mut *tx)
+        .await?;
+    for item in form.items {
+        sqlx::query(
+            r#"INSERT INTO "PlaylistItem"
+                   ("Index", "PlaylistId", "CollectionType", "CollectionId",
+                    "MediaItemId", "MultiCollectionId", "SmartCollectionId",
+                    "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide")
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(item.index)
+        .bind(form.id)
+        .bind(item.collection_type)
+        .bind(item.collection_id)
+        .bind(item.media_item_id)
+        .bind(item.multi_collection_id)
+        .bind(item.smart_collection_id)
+        .bind(item.playback_order)
+        .bind(item.count)
+        .bind(item.play_all)
+        .bind(item.include_in_program_guide)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+#[server]
+pub async fn preview_playlist_playout(
+    form: PlaylistEditorForm,
+) -> Result<Vec<PlaylistPreviewRow>, ServerFnError> {
+    use crate::host::state::AppState;
+    use chrono::Duration;
+
+    let state = expect_context::<AppState>();
+    validate_playlist_items(&form.items)?;
+    let mut rows = Vec::new();
+    let mut offset = Duration::zero();
+
+    for item in form
+        .items
+        .iter()
+        .filter(|item| item.include_in_program_guide)
+    {
+        let items = preview_media_items_for_playlist_item(&state.pool, item).await?;
+        let take = if item.play_all {
+            items.len()
+        } else {
+            usize::try_from(item.count.unwrap_or(1).max(1)).unwrap_or(1)
+        };
+        for media in items.into_iter().take(take) {
+            let start = offset;
+            offset += media.duration;
+            rows.push(PlaylistPreviewRow {
+                start: format_duration(start),
+                finish: format_duration(offset),
+                media_item: media.title,
+                duration: format_duration(media.duration),
+            });
+        }
+    }
+
+    if rows.is_empty() {
+        return Err(ServerFnError::new("Playlist playout preview has no items"));
+    }
+    Ok(rows)
+}
+
+fn validate_playlist_group_name(name: &str) -> Result<String, ServerFnError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ServerFnError::new("[Name] must not be empty."));
+    }
+    if name.chars().count() > 50 {
+        return Err(ServerFnError::new("[Name] must not be longer than 50."));
+    }
+    Ok(name.to_string())
+}
+
+fn validate_playlist_name(name: &str) -> Result<String, ServerFnError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ServerFnError::new("Playlist name is required"));
+    }
+    if name.chars().count() > 50 {
+        return Err(ServerFnError::new(format!(
+            "Playlist name \"{name}\" is invalid"
+        )));
+    }
+    Ok(name.to_string())
+}
+
+fn validate_playlist_items(items: &[PlaylistItemForm]) -> Result<(), ServerFnError> {
+    for item in items {
+        match item.collection_type {
+            PLAYLIST_COLLECTION_TYPE_COLLECTION if item.collection_id.is_none() => {
+                return Err(ServerFnError::new(
+                    "[Collection] is required for collection type 'Collection'",
+                ));
+            }
+            PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW
+            | PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON
+            | PLAYLIST_COLLECTION_TYPE_ARTIST
+            | PLAYLIST_COLLECTION_TYPE_MOVIE
+            | PLAYLIST_COLLECTION_TYPE_EPISODE
+            | PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO
+            | PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO
+            | PLAYLIST_COLLECTION_TYPE_SONG
+            | PLAYLIST_COLLECTION_TYPE_IMAGE
+            | PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM
+                if item.media_item_id.is_none() =>
+            {
+                return Err(ServerFnError::new(format!(
+                    "[MediaItem] is required for type '{}'",
+                    collection_type_name(item.collection_type)
+                )));
+            }
+            PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION if item.multi_collection_id.is_none() => {
+                return Err(ServerFnError::new(
+                    "[MultiCollection] is required for collection type 'MultiCollection'",
+                ));
+            }
+            PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION if item.smart_collection_id.is_none() => {
+                return Err(ServerFnError::new(
+                    "[SmartCollection] is required for collection type 'SmartCollection'",
+                ));
+            }
+            PLAYLIST_COLLECTION_TYPE_COLLECTION
+            | PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW
+            | PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON
+            | PLAYLIST_COLLECTION_TYPE_ARTIST
+            | PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION
+            | PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION
+            | PLAYLIST_COLLECTION_TYPE_MOVIE
+            | PLAYLIST_COLLECTION_TYPE_EPISODE
+            | PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO
+            | PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO
+            | PLAYLIST_COLLECTION_TYPE_SONG
+            | PLAYLIST_COLLECTION_TYPE_IMAGE
+            | PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => {}
+            _ => return Err(ServerFnError::new("[CollectionType] is invalid")),
+        }
+    }
+    Ok(())
+}
+
+fn collection_type_name(collection_type: i32) -> &'static str {
+    match collection_type {
+        PLAYLIST_COLLECTION_TYPE_COLLECTION => "Collection",
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => "TelevisionShow",
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON => "TelevisionSeason",
+        PLAYLIST_COLLECTION_TYPE_ARTIST => "Artist",
+        PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION => "MultiCollection",
+        PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION => "SmartCollection",
+        PLAYLIST_COLLECTION_TYPE_MOVIE => "Movie",
+        PLAYLIST_COLLECTION_TYPE_EPISODE => "Episode",
+        PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO => "MusicVideo",
+        PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO => "OtherVideo",
+        PLAYLIST_COLLECTION_TYPE_SONG => "Song",
+        PLAYLIST_COLLECTION_TYPE_IMAGE => "Image",
+        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => "RemoteStream",
+        _ => "Unknown",
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn load_named_options(
+    pool: &ersatzrs_infra::db::DbPool,
+    sql: &str,
+) -> Result<Vec<PlaylistItemOption>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| PlaylistItemOption {
+            id: row.try_get("Id").unwrap_or(0),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_playlist_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    playlist_id: i64,
+) -> Result<Vec<PlaylistItemForm>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT pi."Id", pi."Index", pi."CollectionType", pi."CollectionId",
+                  pi."MediaItemId", pi."MultiCollectionId", pi."SmartCollectionId",
+                  pi."PlaybackOrder", pi."Count", pi."PlayAll", pi."IncludeInProgramGuide",
+                  c."Name" AS "CollectionName",
+                  mc."Name" AS "MultiCollectionName",
+                  sc."Name" AS "SmartCollectionName",
+                  sm."Title" AS "ShowTitle",
+                  sem."Title" AS "SeasonTitle",
+                  mm."Title" AS "MovieTitle",
+                  am."Title" AS "ArtistTitle",
+                  em."Title" AS "EpisodeTitle",
+                  mvm."Title" AS "MusicVideoTitle",
+                  ovm."Title" AS "OtherVideoTitle",
+                  songm."Title" AS "SongTitle",
+                  im."Title" AS "ImageTitle",
+                  rsm."Title" AS "RemoteStreamTitle"
+           FROM "PlaylistItem" pi
+           LEFT JOIN "Collection" c ON c."Id" = pi."CollectionId"
+           LEFT JOIN "MultiCollection" mc ON mc."Id" = pi."MultiCollectionId"
+           LEFT JOIN "SmartCollection" sc ON sc."Id" = pi."SmartCollectionId"
+           LEFT JOIN "Show" show_item ON show_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 1
+           LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = show_item."Id"
+           LEFT JOIN "Season" season_item ON season_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 2
+           LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = season_item."Id"
+           LEFT JOIN "Movie" movie_item ON movie_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 10
+           LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = movie_item."Id"
+           LEFT JOIN "Artist" artist_item ON artist_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 3
+           LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = artist_item."Id"
+           LEFT JOIN "Episode" episode_item ON episode_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 20
+           LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = episode_item."Id"
+           LEFT JOIN "MusicVideo" music_video_item ON music_video_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 30
+           LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = music_video_item."Id"
+           LEFT JOIN "OtherVideo" other_video_item ON other_video_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 40
+           LEFT JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = other_video_item."Id"
+           LEFT JOIN "Song" song_item ON song_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 50
+           LEFT JOIN "SongMetadata" songm ON songm."SongId" = song_item."Id"
+           LEFT JOIN "Image" image_item ON image_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 60
+           LEFT JOIN "ImageMetadata" im ON im."ImageId" = image_item."Id"
+           LEFT JOIN "RemoteStream" remote_stream_item ON remote_stream_item."Id" = pi."MediaItemId"
+                AND pi."CollectionType" = 70
+           LEFT JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = remote_stream_item."Id"
+           WHERE pi."PlaylistId" = ?
+           ORDER BY pi."Index", pi."Id""#,
+    )
+    .bind(playlist_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let collection_type = row
+                .try_get("CollectionType")
+                .unwrap_or(PLAYLIST_COLLECTION_TYPE_COLLECTION);
+            PlaylistItemForm {
+                id: row.try_get("Id").unwrap_or(0),
+                index: row.try_get("Index").unwrap_or(0),
+                collection_type,
+                collection_id: row.try_get("CollectionId").unwrap_or_default(),
+                multi_collection_id: row.try_get("MultiCollectionId").unwrap_or_default(),
+                smart_collection_id: row.try_get("SmartCollectionId").unwrap_or_default(),
+                media_item_id: row.try_get("MediaItemId").unwrap_or_default(),
+                item_name: playlist_item_name(&row, collection_type),
+                playback_order: row
+                    .try_get("PlaybackOrder")
+                    .unwrap_or(PLAYLIST_PLAYBACK_ORDER_CHRONOLOGICAL),
+                count: row.try_get("Count").unwrap_or_default(),
+                play_all: row.try_get("PlayAll").unwrap_or(false),
+                include_in_program_guide: row.try_get("IncludeInProgramGuide").unwrap_or(false),
+            }
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+fn playlist_item_name(row: &ersatzrs_infra::db::DbRow, collection_type: i32) -> String {
+    use sqlx::Row;
+
+    let column = match collection_type {
+        PLAYLIST_COLLECTION_TYPE_COLLECTION => "CollectionName",
+        PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION => "MultiCollectionName",
+        PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION => "SmartCollectionName",
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => "ShowTitle",
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON => "SeasonTitle",
+        PLAYLIST_COLLECTION_TYPE_ARTIST => "ArtistTitle",
+        PLAYLIST_COLLECTION_TYPE_MOVIE => "MovieTitle",
+        PLAYLIST_COLLECTION_TYPE_EPISODE => "EpisodeTitle",
+        PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO => "MusicVideoTitle",
+        PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO => "OtherVideoTitle",
+        PLAYLIST_COLLECTION_TYPE_SONG => "SongTitle",
+        PLAYLIST_COLLECTION_TYPE_IMAGE => "ImageTitle",
+        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => "RemoteStreamTitle",
+        _ => "",
+    };
+    if column.is_empty() {
+        String::new()
+    } else {
+        row.try_get::<Option<String>, _>(column)
+            .unwrap_or_default()
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug)]
+#[cfg(feature = "ssr")]
+struct PreviewMediaItem {
+    title: String,
+    duration: chrono::Duration,
+}
+
+#[cfg(feature = "ssr")]
+async fn preview_media_items_for_playlist_item(
+    pool: &ersatzrs_infra::db::DbPool,
+    item: &PlaylistItemForm,
+) -> Result<Vec<PreviewMediaItem>, ServerFnError> {
+    let media_item_ids = match item.collection_type {
+        PLAYLIST_COLLECTION_TYPE_COLLECTION => {
+            media_ids_for_collection(pool, item.collection_id).await?
+        }
+        PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION => {
+            media_ids_for_multi_collection(pool, item.multi_collection_id).await?
+        }
+        PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION => {
+            media_ids_for_smart_collection(pool, item.smart_collection_id).await?
+        }
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => {
+            media_ids_for_show(pool, item.media_item_id).await?
+        }
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON => {
+            media_ids_for_season(pool, item.media_item_id).await?
+        }
+        PLAYLIST_COLLECTION_TYPE_ARTIST
+        | PLAYLIST_COLLECTION_TYPE_MOVIE
+        | PLAYLIST_COLLECTION_TYPE_EPISODE
+        | PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO
+        | PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO
+        | PLAYLIST_COLLECTION_TYPE_SONG
+        | PLAYLIST_COLLECTION_TYPE_IMAGE
+        | PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => item.media_item_id.into_iter().collect(),
+        _ => Vec::new(),
+    };
+    load_preview_media_items(pool, media_item_ids).await
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_smart_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    smart_collection_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    use std::collections::BTreeSet;
+
+    use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+
+    let Some(smart_collection_id) = smart_collection_id else {
+        return Ok(Vec::new());
+    };
+    let Some(query) =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Query" FROM "SmartCollection" WHERE "Id" = ?"#)
+            .bind(smart_collection_id)
+            .fetch_optional(pool)
+            .await?
+    else {
+        return Ok(Vec::new());
+    };
+
+    let repository = SqliteSchedulingContentRepository(pool.clone());
+    let (hits, _, _) = repository.search_documents_page(&query, 0, 0).await?;
+    let mut ids = Vec::new();
+    let mut seen = BTreeSet::new();
+    for hit in hits {
+        let hit_ids = match hit.media_kind.as_str() {
+            "show" => media_ids_for_show(pool, Some(hit.media_item_id)).await?,
+            "season" => media_ids_for_season(pool, Some(hit.media_item_id)).await?,
+            "artist" => media_ids_for_artist(pool, Some(hit.media_item_id)).await?,
+            _ => vec![hit.media_item_id],
+        };
+        for id in hit_ids {
+            if seen.insert(id) {
+                ids.push(id);
+            }
+        }
+    }
+
+    Ok(ids)
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    collection_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    let Some(collection_id) = collection_id else {
+        return Ok(Vec::new());
+    };
+    Ok(sqlx::query_scalar(
+        r#"SELECT "MediaItemId" FROM "CollectionItem" WHERE "CollectionId" = ? ORDER BY "MediaItemId""#,
+    )
+    .bind(collection_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_multi_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    multi_collection_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    let Some(multi_collection_id) = multi_collection_id else {
+        return Ok(Vec::new());
+    };
+    Ok(sqlx::query_scalar(
+        r#"SELECT ci."MediaItemId"
+           FROM "MultiCollectionItem" mci
+           JOIN "CollectionItem" ci ON ci."CollectionId" = mci."CollectionId"
+           WHERE mci."MultiCollectionId" = ?
+           ORDER BY mci."CollectionId", ci."MediaItemId""#,
+    )
+    .bind(multi_collection_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_artist(
+    pool: &ersatzrs_infra::db::DbPool,
+    artist_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    let Some(artist_id) = artist_id else {
+        return Ok(Vec::new());
+    };
+    Ok(
+        sqlx::query_scalar(r#"SELECT "Id" FROM "MusicVideo" WHERE "ArtistId" = ? ORDER BY "Id""#)
+            .bind(artist_id)
+            .fetch_all(pool)
+            .await?,
+    )
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_show(
+    pool: &ersatzrs_infra::db::DbPool,
+    show_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    let Some(show_id) = show_id else {
+        return Ok(Vec::new());
+    };
+    Ok(sqlx::query_scalar(
+        r#"SELECT ep."Id"
+           FROM "Episode" ep
+           JOIN "Season" se ON se."Id" = ep."SeasonId"
+           WHERE se."ShowId" = ?
+           ORDER BY se."SeasonNumber", ep."Id""#,
+    )
+    .bind(show_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+#[cfg(feature = "ssr")]
+async fn media_ids_for_season(
+    pool: &ersatzrs_infra::db::DbPool,
+    season_id: Option<i64>,
+) -> Result<Vec<i64>, ServerFnError> {
+    let Some(season_id) = season_id else {
+        return Ok(Vec::new());
+    };
+    Ok(
+        sqlx::query_scalar(r#"SELECT "Id" FROM "Episode" WHERE "SeasonId" = ? ORDER BY "Id""#)
+            .bind(season_id)
+            .fetch_all(pool)
+            .await?,
+    )
+}
+
+#[cfg(feature = "ssr")]
+async fn load_preview_media_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    ids: Vec<i64>,
+) -> Result<Vec<PreviewMediaItem>, ServerFnError> {
+    use chrono::Duration;
+    use sqlx::Row;
+
+    let mut result = Vec::new();
+    for id in ids {
+        let Some(row) = sqlx::query(
+            r#"SELECT COALESCE(mm."Title", sm."Title", sem."Title", am."Title",
+                              em."Title", mvm."Title", ovm."Title", songm."Title",
+                              im."Title", 'Media Item ' || CAST(mi."Id" AS TEXT)) AS "Title",
+                      COALESCE(mv."Duration", ev."Duration", muv."Duration",
+                               ovv."Duration", sv."Duration", iv."Duration", '00:30:00') AS "Duration"
+               FROM "MediaItem" mi
+               LEFT JOIN "Movie" movie_item ON movie_item."Id" = mi."Id"
+               LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = movie_item."Id"
+               LEFT JOIN "MediaVersion" mv ON mv."MovieId" = movie_item."Id"
+               LEFT JOIN "Show" show_item ON show_item."Id" = mi."Id"
+               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = show_item."Id"
+               LEFT JOIN "Season" season_item ON season_item."Id" = mi."Id"
+               LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = season_item."Id"
+               LEFT JOIN "Artist" artist_item ON artist_item."Id" = mi."Id"
+               LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = artist_item."Id"
+               LEFT JOIN "Episode" episode_item ON episode_item."Id" = mi."Id"
+               LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = episode_item."Id"
+               LEFT JOIN "MediaVersion" ev ON ev."EpisodeId" = episode_item."Id"
+               LEFT JOIN "MusicVideo" music_video_item ON music_video_item."Id" = mi."Id"
+               LEFT JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = music_video_item."Id"
+               LEFT JOIN "MediaVersion" muv ON muv."MusicVideoId" = music_video_item."Id"
+               LEFT JOIN "OtherVideo" other_video_item ON other_video_item."Id" = mi."Id"
+               LEFT JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = other_video_item."Id"
+               LEFT JOIN "MediaVersion" ovv ON ovv."OtherVideoId" = other_video_item."Id"
+               LEFT JOIN "Song" song_item ON song_item."Id" = mi."Id"
+               LEFT JOIN "SongMetadata" songm ON songm."SongId" = song_item."Id"
+               LEFT JOIN "MediaVersion" sv ON sv."SongId" = song_item."Id"
+               LEFT JOIN "Image" image_item ON image_item."Id" = mi."Id"
+               LEFT JOIN "ImageMetadata" im ON im."ImageId" = image_item."Id"
+               LEFT JOIN "MediaVersion" iv ON iv."ImageId" = image_item."Id"
+               WHERE mi."Id" = ?
+               LIMIT 1"#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        else {
+            continue;
+        };
+        let duration_text: String = row
+            .try_get::<Option<String>, _>("Duration")
+            .unwrap_or_default()
+            .unwrap_or_else(|| "00:30:00".to_string());
+        result.push(PreviewMediaItem {
+            title: row
+                .try_get("Title")
+                .unwrap_or_else(|_| format!("Media Item {id}")),
+            duration: parse_hhmmss_duration(&duration_text)
+                .unwrap_or_else(|| Duration::minutes(30)),
+        });
+    }
+    Ok(result)
+}
+
+fn parse_hhmmss_duration(value: &str) -> Option<chrono::Duration> {
+    let mut parts = value.split(':');
+    let hours = parts.next()?.parse::<i64>().ok()?;
+    let minutes = parts.next()?.parse::<i64>().ok()?;
+    let seconds = parts
+        .next()
+        .and_then(|part| part.split('.').next())
+        .and_then(|part| part.parse::<i64>().ok())?;
+    Some(chrono::Duration::seconds(
+        hours * 3600 + minutes * 60 + seconds,
+    ))
+}
+
+fn format_duration(duration: chrono::Duration) -> String {
+    let seconds = duration.num_seconds().max(0);
+    format!(
+        "{:02}:{:02}:{:02}",
+        seconds / 3600,
+        (seconds % 3600) / 60,
+        seconds % 60
+    )
 }
 
 /// All playlist groups, ordered system-first then by name. Mirrors
@@ -4508,7 +5551,7 @@ pub async fn add_media_items_to_playlist(
     media_item_ids: Vec<i64>,
 ) -> Result<u64, ServerFnError> {
     // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
-    const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
+    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i32 = 1;
 
     use crate::host::state::AppState;
 
@@ -4545,7 +5588,7 @@ pub async fn add_media_items_to_playlist(
         .bind(playlist_id)
         .bind(collection_type)
         .bind(id)
-        .bind(PLAYBACK_ORDER_SHUFFLE)
+        .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
         .execute(&state.pool)
         .await?;
         added += result.rows_affected();
@@ -4633,7 +5676,7 @@ pub async fn add_media_items_to_playlist_mixed(
     ids: crate::admin::server_fns::search::SearchAllIds,
 ) -> Result<u64, ServerFnError> {
     // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
-    const PLAYBACK_ORDER_SHUFFLE: i32 = 1;
+    const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i32 = 1;
 
     use crate::host::state::AppState;
 
@@ -4671,7 +5714,7 @@ pub async fn add_media_items_to_playlist_mixed(
         .bind(playlist_id)
         .bind(row.collection_type)
         .bind(row.media_item_id)
-        .bind(PLAYBACK_ORDER_SHUFFLE)
+        .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
         .execute(&state.pool)
         .await?;
         added += result.rows_affected();
@@ -4688,6 +5731,55 @@ pub async fn add_media_items_to_playlist_mixed(
 // flatten the projection into a single `Vec<CollectionItemCard>` carrying a
 // `kind` discriminant — the UI groups by kind for rendering but operates on a
 // uniform `(media_item_id, custom_index)` everywhere else.
+
+#[cfg(test)]
+mod playlist_tests {
+    use super::{
+        validate_playlist_group_name, validate_playlist_items, PlaylistItemForm,
+        PLAYLIST_COLLECTION_TYPE_COLLECTION, PLAYLIST_COLLECTION_TYPE_MOVIE,
+        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM,
+    };
+
+    #[test]
+    fn playlist_group_name_validation_matches_ersatztv_limits() {
+        assert_eq!(
+            validate_playlist_group_name("  Favorites  ").unwrap(),
+            "Favorites"
+        );
+        assert!(validate_playlist_group_name("").is_err());
+        assert!(validate_playlist_group_name(&"x".repeat(51)).is_err());
+    }
+
+    #[test]
+    fn playlist_item_validation_requires_matching_target_id() {
+        let mut item = PlaylistItemForm {
+            collection_type: PLAYLIST_COLLECTION_TYPE_COLLECTION,
+            ..PlaylistItemForm::default()
+        };
+        assert!(validate_playlist_items(&[item.clone()]).is_err());
+
+        item.collection_id = Some(10);
+        assert!(validate_playlist_items(&[item.clone()]).is_ok());
+
+        item.collection_type = PLAYLIST_COLLECTION_TYPE_MOVIE;
+        item.collection_id = None;
+        assert!(validate_playlist_items(&[item.clone()]).is_err());
+
+        item.media_item_id = Some(20);
+        assert!(validate_playlist_items(&[item]).is_ok());
+    }
+
+    #[test]
+    fn playlist_item_validation_accepts_remote_stream_items_created_elsewhere() {
+        let item = PlaylistItemForm {
+            collection_type: PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM,
+            media_item_id: Some(70),
+            ..PlaylistItemForm::default()
+        };
+
+        assert!(validate_playlist_items(&[item]).is_ok());
+    }
+}
 
 #[cfg(test)]
 mod season_detail_tests {
