@@ -139,6 +139,30 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::schedules::save_schedule_items_form),
         )
         .route(
+            "/api/templates/groups/create",
+            post(api::templates::create_template_group_form),
+        )
+        .route(
+            "/api/templates/create",
+            post(api::templates::create_template_form),
+        )
+        .route(
+            "/api/templates/groups/delete",
+            post(api::templates::delete_template_group_form),
+        )
+        .route(
+            "/api/templates/delete",
+            post(api::templates::delete_template_form),
+        )
+        .route(
+            "/api/templates/copy",
+            post(api::templates::copy_template_form),
+        )
+        .route(
+            "/api/templates/items/save",
+            post(api::templates::save_template_items_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

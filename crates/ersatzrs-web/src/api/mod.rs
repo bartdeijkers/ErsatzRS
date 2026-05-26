@@ -8,4 +8,5 @@ pub mod media_sources;
 pub mod playlists;
 pub mod rerun_collections;
 pub mod schedules;
+pub mod templates;
 pub mod watermarks;

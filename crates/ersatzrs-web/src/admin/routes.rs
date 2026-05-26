@@ -52,6 +52,7 @@ use crate::admin::pages::scheduling::playouts::PlayoutsPage;
 use crate::admin::pages::scheduling::schedules::{
     ScheduleEditorPage, ScheduleItemsPage, SchedulesPage,
 };
+use crate::admin::pages::scheduling::templates::{TemplateEditorPage, TemplatesPage};
 use crate::admin::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::admin::pages::search::SearchPage;
 use crate::admin::pages::system::{
@@ -127,6 +128,8 @@ pub fn AdminRoutes() -> impl IntoView {
                 view=YamlEditorPage
             />
             <Route path=StaticSegment("blocks") view=BlocksPage/>
+            <Route path=StaticSegment("templates") view=TemplatesPage/>
+            <Route path=(StaticSegment("templates"), ParamSegment("id")) view=TemplateEditorPage/>
             <Route path=StaticSegment("schedules") view=SchedulesPage/>
             <Route
                 path=(StaticSegment("schedules"), StaticSegment("add"))

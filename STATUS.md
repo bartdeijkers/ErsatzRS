@@ -443,12 +443,12 @@ the summary below is the readiness view.
 `/media/music/songs`, `/media/other/videos`, `/media/collections`,
 `/media/smart-collections`, `/media/multi-collections`,
 `/media/rerun-collections`, `/media/playlists`, `/media/trakt/lists`,
-`/media/filler/presets`, `/search`, `/blocks`
-(alias for `/scheduling/blocks`), `/schedules`, `/playouts`, `/playouts/sequential/:id`,
+`/media/filler/presets`, `/search`, `/blocks` (alias for `/scheduling/blocks`),
+`/templates`, `/schedules`, `/playouts`, `/playouts/sequential/:id`,
 `/system/health`, `/system/logs`, and `/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
-`/media/remote/streams`, `/templates`, `/decos`, `/deco-templates`, and
+`/media/remote/streams`, `/decos`, `/deco-templates`, and
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
@@ -487,6 +487,8 @@ yet.
 | `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `PlayoutsPage` row selection  | ⏳     | Slice F — lift selection to URL query param.                   |
 | `BlocksPage`                  | ⏳     | Group add/delete buttons.                                      |
+| `TemplatesPage`               | TODO   | Hydrated list actions and visual smoke covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
+| `TemplateEditorPage`          | TODO   | Hydrated add/remove/save and no-JS save fallback covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
 | `WatermarksListPage`          | ⏳     | DeleteDialog action.                                           |
 | `TraktListsPage`              | ⏳     |                                                                |
 | `TraktListEditorPage`         | ⏳     |                                                                |
@@ -526,6 +528,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-26 | Codex (GPT-5) | Ported `/templates` and `/templates/:id` from ErsatzTV with template group/template add/copy/delete, grouped search table, template editor block add/remove, item replacement persistence, HTML POST fallbacks, validation/parser tests, and source/visual maps in `plans/templates-parity-slice.md`. |
 | 2026-05-26 | Codex (GPT-5) | Completed the `/blocks` parity slice: added source/visual maps, fixed block create default duration, surfaced empty block groups, added block copy, multi-collection block items, watermark/graphics selectors, unsaved-form preview input, SSR/no-JS item save fallback, hydrated browser coverage for copy/add-item/preview/save, and 3840x1918 visual evidence against the ErsatzTV reference screenshot. No open `/blocks` `ParityDebt` remains in `plans/blocks-parity-slice.md`. Gates: `cargo test -p ersatzrs-web blocks -- --nocapture`; `cargo xtask parity-check web`. |
 | 2026-05-25 | Codex (GPT-5) | Ported the `/schedules` route family from ErsatzTV with list/search/page-size persistence, add/edit save, copy/delete dialogs plus HTML fallbacks, hydrated schedule item add/copy/reorder/delete editing, media-code-backed language override selectors, no-JS item save/action fallback, full item-field replacement persistence, validation coverage, playout refresh side effects, and Playwright visual proof. No `/schedules` `ParityDebt` remains in the active slice. |
 | 2026-05-25 | Codex (GPT-5) | Ported `/media/rerun-collections` list/add/edit/delete parity from ErsatzTV with persisted `RerunCollection` target and playback-order fields, HTML POST fallbacks, page-size config persistence, update-triggered playout refresh, source/visual maps, and focused web parser/refresh coverage. |
