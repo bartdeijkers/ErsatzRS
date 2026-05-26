@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     cleanup_history, history, history_details_for_media_item, history_key_for_collection_key,
-    playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlayoutSchedulingEngine,
-    SchedulingCollectionKey, SchedulingError, SchedulingMediaItem, SchedulingReferenceData,
-    SchedulingRequest, SchedulingResult,
+    playout_item, shuffle_with_seed, yaml, MediaEnumerator, PlaylistEnumerator,
+    PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingError, SchedulingMediaItem,
+    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
 };
 
 /// ErsatzTV-compatible scheduler for Classic program schedules.
@@ -101,6 +101,7 @@ struct ClassicContext {
     schedule_order: Vec<usize>,
     state: ClassicState,
     media: BTreeMap<String, MediaEnumerator>,
+    playlists: BTreeMap<String, PlaylistEnumerator>,
     media_states: BTreeMap<String, CollectionEnumeratorState>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
     result: SchedulingResult,
@@ -115,10 +116,16 @@ impl ClassicContext {
         state: ClassicState,
     ) -> Self {
         let mut media = BTreeMap::new();
+        let mut playlists = BTreeMap::new();
         let mut media_states = BTreeMap::new();
         for item in &schedule_items {
             let key = item_key(item);
             let seed = request.playout.seed;
+            if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
+                playlists.insert(key.clone(), PlaylistEnumerator::new(playlist_items.clone()));
+                media_states.insert(key, CollectionEnumeratorState { seed, index: 0 });
+                continue;
+            }
             let mut enumerator = MediaEnumerator::new(
                 key.clone(),
                 request
@@ -170,6 +177,7 @@ impl ClassicContext {
             schedule_order: Vec::new(),
             state,
             media,
+            playlists,
             media_states,
             fill_group_states,
             result: SchedulingResult {
@@ -308,7 +316,7 @@ impl ClassicContext {
         if self.state.multiple_remaining.is_none() {
             self.state.multiple_remaining = Some(multiple_count(
                 schedule_item,
-                self.media(schedule_item),
+                self.enumerator_len(schedule_item),
                 self.media_seed(schedule_item),
             ));
         }
@@ -380,7 +388,7 @@ impl ClassicContext {
                 self.state.current_time = self.request.finish;
                 break;
             }
-            let Some(media_item) = self.media(schedule_item).current().cloned() else {
+            let Some(media_item) = self.current_media(schedule_item) else {
                 break;
             };
             if media_item.duration > duration {
@@ -452,7 +460,7 @@ impl ClassicContext {
                 break;
             }
 
-            let Some(media_item) = self.media(schedule_item).current().cloned() else {
+            let Some(media_item) = self.current_media(schedule_item) else {
                 break;
             };
             let peek_start = if schedule_item.id != next_schedule_item.id
@@ -519,7 +527,7 @@ impl ClassicContext {
         guide_finish: Option<DateTime<Utc>>,
         scheduler: &'static str,
     ) -> bool {
-        let Some(media_item) = self.media(schedule_item).current().cloned() else {
+        let Some(media_item) = self.current_media(schedule_item) else {
             self.result.warnings.push(format!(
                 "classic schedule item {} skipped empty content",
                 schedule_item.id
@@ -757,8 +765,36 @@ impl ClassicContext {
         })
     }
 
+    fn current_media(&self, schedule_item: &ProgramScheduleItem) -> Option<SchedulingMediaItem> {
+        let key = item_key(schedule_item);
+        self.playlists
+            .get(&key)
+            .and_then(PlaylistEnumerator::current)
+            .cloned()
+            .or_else(|| {
+                self.media
+                    .get(&key)
+                    .and_then(MediaEnumerator::current)
+                    .cloned()
+            })
+    }
+
+    fn enumerator_len(&self, schedule_item: &ProgramScheduleItem) -> usize {
+        let key = item_key(schedule_item);
+        self.playlists
+            .get(&key)
+            .map_or_else(|| self.media(schedule_item).len(), PlaylistEnumerator::len)
+    }
+
     fn advance_media(&mut self, schedule_item: &ProgramScheduleItem) {
         let key = item_key(schedule_item);
+        if let Some(playlist) = self.playlists.get_mut(&key) {
+            playlist.advance();
+            if let Some(state) = self.media_states.get_mut(&key) {
+                state.index = i32::try_from(playlist.index).unwrap_or_default();
+            }
+            return;
+        }
         if let Some(enumerator) = self.media.get_mut(&key) {
             enumerator.advance();
             let index = i32::try_from(enumerator.current_index()).unwrap_or_default();
@@ -955,18 +991,14 @@ fn seconds_since_midnight(value: DateTime<Utc>) -> Duration {
     Duration::seconds(i64::from(value.time().num_seconds_from_midnight()))
 }
 
-fn multiple_count(
-    schedule_item: &ProgramScheduleItem,
-    enumerator: &MediaEnumerator,
-    seed: u64,
-) -> i32 {
+fn multiple_count(schedule_item: &ProgramScheduleItem, enumerator_len: usize, seed: u64) -> i32 {
     let evaluated = schedule_item.multiple_count.as_deref().map_or(0, |value| {
-        yaml::eval_count_expression(value, enumerator.len(), seed)
+        yaml::eval_count_expression(value, enumerator_len, seed)
     });
     let fallback = match schedule_item.multiple_mode {
         MultipleMode::CollectionSize
         | MultipleMode::PlaylistItemSize
-        | MultipleMode::MultiEpisodeGroupSize => enumerator.len(),
+        | MultipleMode::MultiEpisodeGroupSize => enumerator_len,
         MultipleMode::Count => 1,
     };
     i32::try_from(if evaluated == 0 { fallback } else { evaluated })
@@ -1061,12 +1093,14 @@ impl DirectContentResolver for SchedulingReferenceData {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use chrono::{TimeZone, Utc};
     use ersatzrs_domain::{CollectionType, Playout, PlayoutMode, PlayoutScheduleKind};
     use insta::assert_json_snapshot;
 
     use super::*;
-    use crate::scheduling::{PlayoutBuildMode, SchedulingReferenceData};
+    use crate::scheduling::{PlayoutBuildMode, SchedulingPlaylistItem, SchedulingReferenceData};
 
     #[test]
     fn classic_one_and_multiple_schedule_items_snapshot() {
@@ -1169,6 +1203,72 @@ mod tests {
         assert_eq!(
             result.anchor.and_then(|anchor| anchor.duration_finish),
             None
+        );
+    }
+
+    #[test]
+    fn classic_playlist_schedule_uses_playlist_children() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            collection_type: CollectionType::Playlist,
+            collection_id: None,
+            playlist_id: Some(99),
+            playout_mode: PlayoutMode::Flood,
+            ..schedule_item(1, PlayoutMode::Flood, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            playlist_items_by_key: BTreeMap::from([(
+                key,
+                vec![
+                    SchedulingPlaylistItem {
+                        collection_key: SchedulingCollectionKey::fake_playlist_item(1),
+                        playback_order: PlaybackOrder::Chronological,
+                        play_all: false,
+                        count: Some(2),
+                        media_items: vec![
+                            SchedulingMediaItem::new(101, Duration::minutes(10)),
+                            SchedulingMediaItem::new(102, Duration::minutes(10)),
+                        ],
+                    },
+                    SchedulingPlaylistItem {
+                        collection_key: SchedulingCollectionKey::fake_playlist_item(2),
+                        playback_order: PlaybackOrder::Chronological,
+                        play_all: true,
+                        count: None,
+                        media_items: vec![
+                            SchedulingMediaItem::new(201, Duration::minutes(10)),
+                            SchedulingMediaItem::new(202, Duration::minutes(10)),
+                        ],
+                    },
+                ],
+            )]),
+            ..SchedulingReferenceData::default()
+        };
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(40),
+                mode: PlayoutBuildMode::Reset,
+                reference_data,
+            })
+            .expect("classic playlist preview should build");
+
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| item.media_item_id)
+                .collect::<Vec<_>>(),
+            vec![101, 102, 201, 202]
         );
     }
 

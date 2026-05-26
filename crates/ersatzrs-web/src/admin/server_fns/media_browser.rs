@@ -4824,6 +4824,44 @@ const PLAYLIST_COLLECTION_TYPE_IMAGE: i32 = 60;
 const PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM: i32 = 70;
 const PLAYLIST_PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
 
+fn playlist_collection_type(value: i32) -> ersatzrs_domain::CollectionType {
+    match value {
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SHOW => ersatzrs_domain::CollectionType::TelevisionShow,
+        PLAYLIST_COLLECTION_TYPE_TELEVISION_SEASON => {
+            ersatzrs_domain::CollectionType::TelevisionSeason
+        }
+        PLAYLIST_COLLECTION_TYPE_ARTIST => ersatzrs_domain::CollectionType::Artist,
+        PLAYLIST_COLLECTION_TYPE_MULTI_COLLECTION => {
+            ersatzrs_domain::CollectionType::MultiCollection
+        }
+        PLAYLIST_COLLECTION_TYPE_SMART_COLLECTION => {
+            ersatzrs_domain::CollectionType::SmartCollection
+        }
+        PLAYLIST_COLLECTION_TYPE_MOVIE => ersatzrs_domain::CollectionType::Movie,
+        PLAYLIST_COLLECTION_TYPE_EPISODE => ersatzrs_domain::CollectionType::Episode,
+        PLAYLIST_COLLECTION_TYPE_MUSIC_VIDEO => ersatzrs_domain::CollectionType::MusicVideo,
+        PLAYLIST_COLLECTION_TYPE_OTHER_VIDEO => ersatzrs_domain::CollectionType::OtherVideo,
+        PLAYLIST_COLLECTION_TYPE_SONG => ersatzrs_domain::CollectionType::Song,
+        PLAYLIST_COLLECTION_TYPE_IMAGE => ersatzrs_domain::CollectionType::Image,
+        PLAYLIST_COLLECTION_TYPE_REMOTE_STREAM => ersatzrs_domain::CollectionType::RemoteStream,
+        _ => ersatzrs_domain::CollectionType::Collection,
+    }
+}
+
+fn playlist_playback_order(value: i32) -> ersatzrs_domain::PlaybackOrder {
+    match value {
+        1 => ersatzrs_domain::PlaybackOrder::Chronological,
+        2 => ersatzrs_domain::PlaybackOrder::Random,
+        3 => ersatzrs_domain::PlaybackOrder::Shuffle,
+        4 => ersatzrs_domain::PlaybackOrder::ShuffleInOrder,
+        5 => ersatzrs_domain::PlaybackOrder::MultiEpisodeShuffle,
+        6 => ersatzrs_domain::PlaybackOrder::SeasonEpisode,
+        7 => ersatzrs_domain::PlaybackOrder::RandomRotation,
+        8 => ersatzrs_domain::PlaybackOrder::Marathon,
+        _ => ersatzrs_domain::PlaybackOrder::None,
+    }
+}
+
 #[server]
 pub async fn get_playlist_page() -> Result<PlaylistPageData, ServerFnError> {
     use crate::host::state::AppState;
@@ -5242,40 +5280,165 @@ pub async fn preview_playlist_playout(
     form: PlaylistEditorForm,
 ) -> Result<Vec<PlaylistPreviewRow>, ServerFnError> {
     use crate::host::state::AppState;
-    use chrono::Duration;
+    use chrono::{Duration, Utc};
+    use ersatzrs_core::playout_builder::PlayoutBuilder;
+    use ersatzrs_core::scheduling::SchedulingRequest;
+    use ersatzrs_domain::{Playout, PlayoutScheduleKind};
 
     let state = expect_context::<AppState>();
     validate_playlist_items(&form.items)?;
-    let mut rows = Vec::new();
-    let mut offset = Duration::zero();
+    let (reference_data, one_pass_duration, max_items) =
+        playlist_preview_reference_data(&state.pool, &form).await?;
+    let now = Utc::now();
+    let result = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: Playout {
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 1,
+                ..Playout::default()
+            },
+            start: now,
+            finish: now + one_pass_duration + Duration::seconds(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Reset,
+            reference_data,
+        })
+        .map_err(|error| ServerFnError::new(format!("Playlist preview failed: {error}")))?;
+
+    let preview_media = load_preview_media_items(
+        &state.pool,
+        result
+            .added_items
+            .iter()
+            .take(max_items)
+            .map(|item| item.media_item_id)
+            .collect(),
+    )
+    .await?;
+    let rows = result
+        .added_items
+        .into_iter()
+        .take(max_items)
+        .zip(preview_media)
+        .map(|(item, media)| {
+            let start = item.start - now;
+            let finish = item.finish - now;
+            PlaylistPreviewRow {
+                start: format_duration(start),
+                finish: format_duration(finish),
+                media_item: media.title,
+                duration: format_duration(finish - start),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if rows.is_empty() {
+        return Err(ServerFnError::new("Playlist playout preview has no items"));
+    }
+    Ok(rows)
+}
+
+#[cfg(feature = "ssr")]
+async fn playlist_preview_reference_data(
+    pool: &ersatzrs_infra::db::DbPool,
+    form: &PlaylistEditorForm,
+) -> Result<
+    (
+        ersatzrs_core::scheduling::SchedulingReferenceData,
+        chrono::Duration,
+        usize,
+    ),
+    ServerFnError,
+> {
+    use chrono::Duration;
+    use ersatzrs_core::scheduling::{
+        classic_schedule_item_key, SchedulingCollectionKey, SchedulingPlaylistItem,
+        SchedulingReferenceData,
+    };
+    use ersatzrs_domain::{
+        CollectionType, FixedStartTimeBehavior, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
+        StartType,
+    };
+    use std::collections::BTreeMap;
+
+    let mut playlist_items = Vec::new();
+    let mut one_pass_duration = Duration::zero();
+    let mut max_items = 0usize;
 
     for item in form
         .items
         .iter()
         .filter(|item| item.include_in_program_guide)
     {
-        let items = preview_media_items_for_playlist_item(&state.pool, item).await?;
+        let media_items = preview_media_items_for_playlist_item(pool, item).await?;
         let take = if item.play_all {
-            items.len()
+            media_items.len()
         } else {
             usize::try_from(item.count.unwrap_or(1).max(1)).unwrap_or(1)
         };
-        for media in items.into_iter().take(take) {
-            let start = offset;
-            offset += media.duration;
-            rows.push(PlaylistPreviewRow {
-                start: format_duration(start),
-                finish: format_duration(offset),
-                media_item: media.title,
-                duration: format_duration(media.duration),
+        max_items = max_items.saturating_add(take);
+        one_pass_duration += media_items
+            .iter()
+            .cycle()
+            .take(take)
+            .fold(Duration::zero(), |duration, media| {
+                duration + media.duration
             });
-        }
+        playlist_items.push(SchedulingPlaylistItem {
+            collection_key: SchedulingCollectionKey {
+                collection_type: playlist_collection_type(item.collection_type),
+                collection_id: item.collection_id,
+                multi_collection_id: item.multi_collection_id,
+                smart_collection_id: item.smart_collection_id,
+                media_item_id: item.media_item_id,
+                ..SchedulingCollectionKey::default()
+            },
+            playback_order: playlist_playback_order(item.playback_order),
+            play_all: item.play_all,
+            count: item
+                .count
+                .and_then(|count| usize::try_from(count.max(1)).ok()),
+            media_items: media_items
+                .into_iter()
+                .map(|media| ersatzrs_core::scheduling::SchedulingMediaItem {
+                    id: media.id,
+                    duration: media.duration,
+                    title: Some(media.title),
+                    show_id: None,
+                    season_id: None,
+                    season: None,
+                    episode: None,
+                    release_date: None,
+                })
+                .collect(),
+        });
     }
 
-    if rows.is_empty() {
+    if max_items == 0 || one_pass_duration <= Duration::zero() {
         return Err(ServerFnError::new("Playlist playout preview has no items"));
     }
-    Ok(rows)
+
+    let schedule_item = ProgramScheduleItem {
+        id: 1,
+        program_schedule_id: 1,
+        collection_type: CollectionType::Playlist,
+        playlist_id: Some(form.id),
+        playout_mode: PlayoutMode::Flood,
+        playback_order: PlaybackOrder::Shuffle,
+        start_type: StartType::Dynamic,
+        fixed_start_time_behavior: Some(FixedStartTimeBehavior::Strict),
+        ..ProgramScheduleItem::default()
+    };
+    let schedule_key = classic_schedule_item_key(&schedule_item);
+    Ok((
+        SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            playlist_items_by_key: BTreeMap::from([(schedule_key, playlist_items)]),
+            classic_fixed_start_time_behavior: FixedStartTimeBehavior::Strict,
+            ..SchedulingReferenceData::default()
+        },
+        one_pass_duration,
+        max_items,
+    ))
 }
 
 fn validate_playlist_group_name(name: &str) -> Result<String, ServerFnError> {
@@ -5515,6 +5678,7 @@ fn playlist_item_name(row: &ersatzrs_infra::db::DbRow, collection_type: i32) -> 
 #[derive(Debug)]
 #[cfg(feature = "ssr")]
 struct PreviewMediaItem {
+    id: i64,
     title: String,
     duration: chrono::Duration,
 }
@@ -5738,6 +5902,7 @@ async fn load_preview_media_items(
             .unwrap_or_default()
             .unwrap_or_else(|| "00:30:00".to_string());
         result.push(PreviewMediaItem {
+            id,
             title: row
                 .try_get("Title")
                 .unwrap_or_else(|_| format!("Media Item {id}")),

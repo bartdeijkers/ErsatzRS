@@ -192,6 +192,7 @@ pub struct SchedulingReferenceData {
     pub playlists_by_group_and_name: BTreeMap<(Option<String>, String), Vec<SchedulingMediaItem>>,
     pub playlist_items_by_group_and_name:
         BTreeMap<(Option<String>, String), Vec<SchedulingPlaylistItem>>,
+    pub playlist_items_by_key: BTreeMap<String, Vec<SchedulingPlaylistItem>>,
     pub searches_by_query: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub shows_by_name: BTreeMap<String, Vec<SchedulingMediaItem>>,
     pub media_by_show_guid: BTreeMap<String, Vec<SchedulingMediaItem>>,

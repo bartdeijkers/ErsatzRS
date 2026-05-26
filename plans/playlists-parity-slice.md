@@ -64,15 +64,12 @@
 
 ## ParityDebt
 
-- Behavior: Preview does not yet use the canonical `PlayoutBuilder` path.
-  - Status: accepted follow-up
-  - Evidence: `preview_playlist_playout` expands a one-pass preview locally, including collection, multi-collection, smart-collection search, show, season, artist, and direct item targets. The route has browser smoke coverage, but the preview implementation does not yet dispatch through the full scheduling builder.
-  - Owner/follow-up: Build preview reference data from the current unsaved form and dispatch through `PlayoutBuilder` when the web preview can reuse the canonical scheduling path without broadening this route slice.
-  - ADR/deviation link: None.
+- None.
 
 ## Verification
 
 - [x] `cargo xtask parity-check web`
 - [x] Focused server-function tests for playlist validation and replace planning.
+- [x] Focused Classic scheduling test proving playlist preview reference data uses `PlaylistEnumerator` through `PlayoutBuilder`.
 - [x] Focused API parser test for HTML POST playlist save fields.
 - [x] Browser smoke for `/media/playlists` and `/media/playlists/:id`: add group, add playlist, edit/save redirect, preview empty state, delete playlist, delete group, and console warning/error check on an isolated SQLite database with `./run.sh serve`.
