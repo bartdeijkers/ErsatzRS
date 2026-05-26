@@ -5,13 +5,15 @@
 //! client-side without round-trips. The `#[server]` functions are called only
 //! for the initial data load (SSR) and for the save / preview actions.
 #![allow(clippy::too_many_lines, dead_code)]
+use std::fmt::Write;
+
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::server_fns::blocks::{
-    get_block, get_block_items, playback_order_label, preview_block_playout, save_block_with_items,
-    BlockForm, BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
+    collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
+    playback_order_label, preview_block_playout, save_block_with_items, stop_scheduling,
+    BlockEditorOptions, BlockForm, BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
 };
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -36,23 +38,28 @@ pub fn BlockEditorPage() -> impl IntoView {
 
 #[island]
 fn BlockEditorIsland(block_id: i64) -> impl IntoView {
-    let data: Resource<(Option<BlockForm>, Vec<BlockItemForm>)> = Resource::new_blocking(
-        move || block_id,
-        |id| async move {
-            let block_fut = async move { get_block(id).await.unwrap_or(None) };
-            let items_fut = async move { get_block_items(id).await.unwrap_or_default() };
-            tokio::join!(block_fut, items_fut)
-        },
-    );
+    let data: Resource<(Option<BlockForm>, Vec<BlockItemForm>, BlockEditorOptions)> =
+        Resource::new_blocking(
+            move || block_id,
+            |id| async move {
+                let block_fut = async move { get_block(id).await.unwrap_or(None) };
+                let items_fut = async move { get_block_items(id).await.unwrap_or_default() };
+                let options_fut =
+                    async move { load_block_editor_options().await.unwrap_or_default() };
+                let (block, items, options) = tokio::join!(block_fut, items_fut, options_fut);
+                (block, items, options)
+            },
+        );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
             {move || {
-                data.get().map(|(maybe_block, items)| match maybe_block {
+                data.get().map(|(maybe_block, items, options)| match maybe_block {
                     Some(block) => view! {
                         <BlockEditorForm
                             initial_block=block
                             initial_items=items
+                            options=options
                         />
                     }.into_any(),
                     None => view! {
@@ -65,9 +72,11 @@ fn BlockEditorIsland(block_id: i64) -> impl IntoView {
 }
 
 #[component]
-fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) -> impl IntoView {
-    use crate::admin::server_fns::blocks::{collection_type, playback_order, stop_scheduling};
-
+fn BlockEditorForm(
+    initial_block: BlockForm,
+    initial_items: Vec<BlockItemForm>,
+    options: BlockEditorOptions,
+) -> impl IntoView {
     // ── Block metadata state ────────────────────────────────────────────
     let block_id = initial_block.id;
     let name = RwSignal::new(initial_block.name.clone());
@@ -94,14 +103,16 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
     });
 
     let toast = use_toast();
-    let navigate = use_navigate();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(()) => {
                     toast.push("Block saved.", ToastSeverity::Success);
-                    navigate("/blocks", NavigateOptions::default());
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let _ = window().location().set_href("/blocks");
+                    }
                 }
                 Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
             }
@@ -122,12 +133,20 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
     };
 
     let on_preview = move |()| {
+        let minutes = duration_hours.get_untracked() * 60 + duration_minutes.get_untracked();
+        let form = BlockWithItemsForm {
+            id: block_id,
+            group_id: initial_block.group_id,
+            name: name.get_untracked().trim().to_string(),
+            minutes,
+            stop_scheduling: stop_sched.get_untracked(),
+            items: items.get_untracked(),
+        };
         preview_rows.set(Vec::new());
         preview_open.set(true);
         preview_pending.set(true);
-        let id = block_id;
         leptos::task::spawn_local(async move {
-            let result = preview_block_playout(id).await.unwrap_or_default();
+            let result = preview_block_playout(form).await.unwrap_or_default();
             preview_rows.set(result);
             preview_pending.set(false);
         });
@@ -148,6 +167,7 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
             index: next_idx,
             collection_type: collection_type::COLLECTION,
             playback_order: playback_order::CHRONOLOGICAL,
+            include_in_program_guide: true,
             ..Default::default()
         };
         items.update(|v| v.push(new_item));
@@ -185,6 +205,11 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
 
     view! {
         <div class=style::page>
+            <noscript inner_html=block_editor_fallback_html(
+                &initial_block,
+                &items.get_untracked(),
+                &options,
+            )></noscript>
             // ── Sticky action bar ───────────────────────────────────────
             <div class=style::action_bar>
                 <span class=style::action_bar_title>
@@ -360,7 +385,7 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
                                                             </button>
                                                             <button
                                                                 class=style::icon_btn
-                                                                disabled=move || idx + 1 >= items.get().len()
+                                                                disabled=move || { idx + 1 >= items.get().len() }
                                                                 on:click=move |_| {
                                                                     items.update(|v| {
                                                                         let cur = v[idx].index;
@@ -406,7 +431,7 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
                     {move || {
                         selected_idx.get().and_then(|idx| {
                             items.get().into_iter().nth(idx).map(|item| {
-                                view! { <ItemEditor item=item idx=idx items=items/> }
+                                view! { <ItemEditor item=item idx=idx items=items options=options.clone()/> }
                             })
                         })
                     }}
@@ -475,6 +500,222 @@ fn BlockEditorForm(initial_block: BlockForm, initial_items: Vec<BlockItemForm>) 
     }
 }
 
+fn block_editor_fallback_html(
+    block: &BlockForm,
+    items: &[BlockItemForm],
+    options: &BlockEditorOptions,
+) -> String {
+    let mut sorted_items = items.to_vec();
+    sorted_items.sort_by_key(|item| item.index);
+    let mut rows = String::new();
+    if sorted_items.is_empty() {
+        let _ = write!(
+            rows,
+            r#"<tr><td colspan="5" class="{}">No block items.</td></tr>"#,
+            style::empty
+        );
+    } else {
+        for (index, item) in sorted_items.iter().enumerate() {
+            rows.push_str(&block_item_fallback_row_html(index, item, options));
+        }
+    }
+
+    format!(
+        r#"<div class="{action_bar}"><span class="{action_title}">{group} / {name}</span><button type="submit" form="block-items-fallback-form" class="{btn_primary}" name="action" value="save">Save Block</button><button type="submit" form="block-items-fallback-form" class="{btn_secondary}" name="action" value="add">Add Block Item</button><a href="/blocks" class="{btn_secondary}">Back</a></div><section class="{content}"><form id="block-items-fallback-form" method="post" action="/api/blocks/items/save" class="{fallback_form}"><input type="hidden" name="block_id" value="{id}"><input type="hidden" name="group_id" value="{group_id}"><h2 class="{section_title}">Block</h2><label class="{field}"><span class="{label}">Block Group Name</span><input class="{input}" value="{group}" disabled></label><label class="{field}"><span class="{label}">Block Name</span><input class="{input}" name="name" value="{name}"></label><label class="{field}"><span class="{label}">Duration</span><span class="{duration_row}"><input class="{duration_input}" type="number" name="duration_hours" value="{hours}"><select class="{select}" name="duration_minutes">{minute_options}</select></span></label><label class="{field}"><span class="{label}">Stop scheduling block items</span>{stop_select}</label><h2 class="{section_title}">Block Items</h2><div class="{items_table_wrap}"><table class="{items_table}"><thead><tr><th>Collection</th><th>Target</th><th>Playback</th><th>Flags</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">Add Block Item</h2><label class="{field}"><span class="{label}">Collection</span>{new_collection}</label></form></section>"#,
+        action_bar = style::action_bar,
+        action_title = style::action_bar_title,
+        group = escape_html(&block.group_name),
+        name = escape_html(&block.name),
+        btn_primary = style::btn_primary,
+        btn_secondary = style::btn_secondary,
+        content = style::content,
+        fallback_form = style::fallback_form,
+        id = block.id,
+        group_id = block.group_id,
+        section_title = style::section_title,
+        field = style::field,
+        label = style::label,
+        input = style::input,
+        hours = block.minutes / 60,
+        duration_row = style::duration_row,
+        duration_input = style::duration_input,
+        select = style::select,
+        minute_options = minute_options_html(block.minutes % 60),
+        stop_select = select_html(
+            "stop_scheduling",
+            block.stop_scheduling,
+            &[
+                (stop_scheduling::BEFORE_DURATION_END, "Before Duration End"),
+                (stop_scheduling::AFTER_DURATION_END, "After Duration End"),
+            ],
+        ),
+        items_table_wrap = style::items_table_wrap,
+        items_table = style::items_table,
+        rows = rows,
+        new_collection = option_select_html("new_collection_id", None, &options.collections),
+    )
+}
+
+fn block_item_fallback_row_html(
+    index: usize,
+    item: &BlockItemForm,
+    options: &BlockEditorOptions,
+) -> String {
+    format!(
+        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="Search Title" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="Search Query" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>Show In EPG</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>Disable Watermarks</label><input class="{input}" name="item_watermark_ids" placeholder="Watermark IDs" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="Graphics IDs" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">Copy</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>Up</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">Down</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">Delete</button></div></td></tr>"#,
+        item_index = item.index,
+        id = item.id,
+        collection_type = select_html(
+            "item_collection_type",
+            item.collection_type,
+            &[
+                (collection_type::COLLECTION, "Collection"),
+                (collection_type::TELEVISION_SHOW, "Television Show"),
+                (collection_type::TELEVISION_SEASON, "Television Season"),
+                (collection_type::MULTI_COLLECTION, "Multi Collection"),
+                (collection_type::SMART_COLLECTION, "Smart Collection"),
+                (collection_type::SEARCH_QUERY, "Search Query"),
+            ],
+        ),
+        collection = option_select_html(
+            "item_collection_id",
+            item.collection_id,
+            &options.collections
+        ),
+        multi_collection = option_select_html(
+            "item_multi_collection_id",
+            item.multi_collection_id,
+            &options.multi_collections
+        ),
+        smart_collection = option_select_html(
+            "item_smart_collection_id",
+            item.smart_collection_id,
+            &options.smart_collections
+        ),
+        media_item = media_item_select_html(item, options),
+        input = style::input,
+        search_title = escape_html(&item.search_title.clone().unwrap_or_default()),
+        search_query = escape_html(&item.search_query.clone().unwrap_or_default()),
+        collection_name = escape_html(&item.collection_name),
+        playback = select_html(
+            "item_playback_order",
+            item.playback_order,
+            &[
+                (playback_order::CHRONOLOGICAL, "Chronological"),
+                (playback_order::RANDOM, "Random"),
+                (playback_order::SHUFFLE, "Shuffle"),
+                (playback_order::SHUFFLE_IN_ORDER, "Shuffle In Order"),
+                (playback_order::SEASON_EPISODE, "Season, Episode"),
+                (playback_order::RANDOM_ROTATION, "Random Rotation"),
+            ],
+        ),
+        check = style::check,
+        epg_checked = if item.include_in_program_guide {
+            "checked"
+        } else {
+            ""
+        },
+        watermark_checked = if item.disable_watermarks {
+            "checked"
+        } else {
+            ""
+        },
+        watermark_ids = id_csv(&item.watermark_ids),
+        graphics_ids = id_csv(&item.graphics_element_ids),
+        row_actions = style::row_actions,
+        icon_btn = style::icon_btn,
+        index = index,
+        move_up_disabled = if index == 0 { "disabled" } else { "" },
+    )
+}
+
+fn media_item_select_html(item: &BlockItemForm, options: &BlockEditorOptions) -> String {
+    let source = if item.collection_type == collection_type::TELEVISION_SEASON {
+        &options.seasons
+    } else {
+        &options.shows
+    };
+    option_select_html("item_media_item_id", item.media_item_id, source)
+}
+
+fn minute_options_html(selected: i32) -> String {
+    [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+        .into_iter()
+        .fold(String::new(), |mut html, value| {
+            let selected_attr = if value == selected { " selected" } else { "" };
+            let _ = write!(
+                html,
+                r#"<option value="{value}"{selected_attr}>{value}</option>"#
+            );
+            html
+        })
+}
+
+fn select_html(name: &str, selected: i32, options: &[(i32, &'static str)]) -> String {
+    let options = options
+        .iter()
+        .fold(String::new(), |mut html, (value, label)| {
+            let selected_attr = if *value == selected { " selected" } else { "" };
+            let _ = write!(
+                html,
+                r#"<option value="{}"{}>{}</option>"#,
+                value,
+                selected_attr,
+                escape_html(label)
+            );
+            html
+        });
+    format!(
+        r#"<select class="{}" name="{}">{}</select>"#,
+        style::select,
+        escape_html(name),
+        options
+    )
+}
+
+fn option_select_html(
+    name: &str,
+    selected: Option<i64>,
+    options: &[crate::admin::server_fns::blocks::BlockEditorOption],
+) -> String {
+    let mut option_html = r#"<option value=""></option>"#.to_string();
+    for option in options {
+        let selected_attr = if Some(option.id) == selected {
+            " selected"
+        } else {
+            ""
+        };
+        let _ = write!(
+            option_html,
+            r#"<option value="{}"{}>{}</option>"#,
+            option.id,
+            selected_attr,
+            escape_html(&option.name)
+        );
+    }
+    format!(
+        r#"<select class="{}" name="{}">{}</select>"#,
+        style::select,
+        escape_html(name),
+        option_html
+    )
+}
+
+fn id_csv(ids: &[i64]) -> String {
+    ids.iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 // ---------------------------------------------------------------------------
 // Item editor sub-component (inside the island, not a separate island)
 // ---------------------------------------------------------------------------
@@ -484,10 +725,12 @@ fn ItemEditor(
     item: BlockItemForm,
     idx: usize,
     items: RwSignal<Vec<BlockItemForm>>,
+    options: BlockEditorOptions,
 ) -> impl IntoView {
     use crate::admin::server_fns::blocks::{
-        collection_type, playback_order, search_collections_for_block, search_seasons_for_block,
-        search_shows_for_block, search_smart_collections_for_block,
+        collection_type, playback_order, search_collections_for_block,
+        search_multi_collections_for_block, search_seasons_for_block, search_shows_for_block,
+        search_smart_collections_for_block,
     };
 
     let col_type = RwSignal::new(item.collection_type);
@@ -510,6 +753,7 @@ fn ItemEditor(
             if let Some(i) = v.get_mut(idx) {
                 i.collection_type = ct;
                 i.collection_id = None;
+                i.multi_collection_id = None;
                 i.smart_collection_id = None;
                 i.media_item_id = None;
                 i.collection_name = String::new();
@@ -521,7 +765,10 @@ fn ItemEditor(
     });
 
     // Sync pb_order → items
-    Effect::new(move |_| {
+    Effect::new(move |prev: Option<()>| {
+        if prev.is_none() {
+            return;
+        }
         let order = pb_order.get();
         items.update(|v| {
             if let Some(i) = v.get_mut(idx) {
@@ -531,7 +778,10 @@ fn ItemEditor(
     });
 
     // Sync search fields → items
-    Effect::new(move |_| {
+    Effect::new(move |prev: Option<()>| {
+        if prev.is_none() {
+            return;
+        }
         let title = search_title.get();
         let query = search_query_val.get();
         items.update(|v| {
@@ -568,6 +818,11 @@ fn ItemEditor(
                         .await
                         .unwrap_or_default()
                 }
+                t if t == collection_type::MULTI_COLLECTION => {
+                    search_multi_collections_for_block(trimmed)
+                        .await
+                        .unwrap_or_default()
+                }
                 t if t == collection_type::TELEVISION_SHOW => {
                     search_shows_for_block(trimmed).await.unwrap_or_default()
                 }
@@ -592,6 +847,9 @@ fn ItemEditor(
                     t if t == collection_type::SMART_COLLECTION => {
                         item.smart_collection_id = Some(id);
                     }
+                    t if t == collection_type::MULTI_COLLECTION => {
+                        item.multi_collection_id = Some(id);
+                    }
                     t if t == collection_type::TELEVISION_SHOW
                         || t == collection_type::TELEVISION_SEASON =>
                     {
@@ -609,12 +867,24 @@ fn ItemEditor(
     let playback_order_options = move || {
         let ct = col_type.get();
         match ct {
+            t if t == collection_type::MULTI_COLLECTION => vec![
+                (playback_order::SHUFFLE, "Shuffle"),
+                (playback_order::SHUFFLE_IN_ORDER, "Shuffle In Order"),
+            ],
             t if t == collection_type::TELEVISION_SHOW => vec![
                 (playback_order::SEASON_EPISODE, "Season, Episode"),
                 (playback_order::CHRONOLOGICAL, "Chronological"),
                 (playback_order::SHUFFLE, "Shuffle"),
                 (playback_order::RANDOM, "Random"),
             ],
+            t if t == collection_type::COLLECTION || t == collection_type::SMART_COLLECTION => {
+                vec![
+                    (playback_order::CHRONOLOGICAL, "Chronological"),
+                    (playback_order::SHUFFLE, "Shuffle"),
+                    (playback_order::RANDOM, "Random"),
+                    (playback_order::RANDOM_ROTATION, "Random Rotation"),
+                ]
+            }
             _ => vec![
                 (playback_order::CHRONOLOGICAL, "Chronological"),
                 (playback_order::SHUFFLE, "Shuffle"),
@@ -627,6 +897,7 @@ fn ItemEditor(
         let ct = col_type.get();
         ct == collection_type::COLLECTION
             || ct == collection_type::SMART_COLLECTION
+            || ct == collection_type::MULTI_COLLECTION
             || ct == collection_type::TELEVISION_SHOW
             || ct == collection_type::TELEVISION_SEASON
     };
@@ -651,6 +922,7 @@ fn ItemEditor(
                     <option value=collection_type::COLLECTION.to_string()>"Collection"</option>
                     <option value=collection_type::TELEVISION_SHOW.to_string()>"Television Show"</option>
                     <option value=collection_type::TELEVISION_SEASON.to_string()>"Television Season"</option>
+                    <option value=collection_type::MULTI_COLLECTION.to_string()>"Multi Collection"</option>
                     <option value=collection_type::SMART_COLLECTION.to_string()>"Smart Collection"</option>
                     <option value=collection_type::SEARCH_QUERY.to_string()>"Search Query"</option>
                 </select>
@@ -755,6 +1027,70 @@ fn ItemEditor(
                     }).collect_view()}
                 </select>
             </div>
+            {multi_select_i64("Watermarks", &item.watermark_ids, options.watermarks.clone(), move |values| {
+                update_item(items, idx, |item| item.watermark_ids = values);
+            })}
+            {multi_select_i64("Graphics Elements", &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
+                update_item(items, idx, |item| item.graphics_element_ids = values);
+            })}
         </div>
     }
+}
+
+fn update_item<F>(items: RwSignal<Vec<BlockItemForm>>, idx: usize, update: F)
+where
+    F: FnOnce(&mut BlockItemForm),
+{
+    items.update(|values| {
+        if let Some(item) = values.get_mut(idx) {
+            update(item);
+        }
+    });
+}
+
+fn multi_select_i64<F>(
+    label: &'static str,
+    selected: &[i64],
+    options: Vec<crate::admin::server_fns::blocks::BlockEditorOption>,
+    on_change: F,
+) -> AnyView
+where
+    F: Fn(Vec<i64>) + Copy + 'static,
+{
+    let selected = selected.to_vec();
+    view! {
+        <label class=style::field>
+            <span class=style::label>{label}</span>
+            <span class=style::check_list>
+                {options.into_iter().map(|option| {
+                    let selected_values = selected.clone();
+                    let is_selected = selected_values.contains(&option.id);
+                    let option_id = option.id;
+                    view! {
+                        <label class=style::check>
+                            <input
+                                type="checkbox"
+                                value=option.id.to_string()
+                                checked=is_selected
+                                prop:checked=is_selected
+                                on:change=move |event| {
+                                    let mut values = selected_values.clone();
+                                    if event_target_checked(&event) {
+                                        if !values.contains(&option_id) {
+                                            values.push(option_id);
+                                        }
+                                    } else {
+                                        values.retain(|value| *value != option_id);
+                                    }
+                                    on_change(values);
+                                }
+                            />
+                            <span>{option.name}</span>
+                        </label>
+                    }
+                }).collect_view()}
+            </span>
+        </label>
+    }
+    .into_any()
 }

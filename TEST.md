@@ -227,8 +227,8 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/playouts`              | TODO   | Needs URL-driven selection refactor.                                    |
 | `/schedules`             | TODO   | Browser smoke covered list/add/items route geometry, screenshots, no-JS schedule and item form POST fallbacks, and hydrated item editing; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/media/sources/plex`    | ✅     | Stable DOM shape, `PlexSignInIsland` all-arms always rendered.          |
-| `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered.                  |
-| `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`.                    |
+| `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered; copy modal, copy redirect, and 3840x1918 visual comparison covered in `plans/blocks-parity-slice.md`. |
+| `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`; hydrated add-item/preview/save plus no-JS item fallback verified in `plans/blocks-parity-slice.md`. |
 | `/playouts/sequential/:id`| ✅    | Stable DOM shape, validation error banner always rendered.              |
 | `/watermarks`            | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/watermarks/:id`        | ✅     | Stable DOM shape, all conditional sections via `style:display`.         |

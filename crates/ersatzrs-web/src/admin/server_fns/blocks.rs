@@ -2,12 +2,12 @@
 //! Ports:
 //! - `Pages/Blocks.razor` → [`list_block_groups`], [`list_blocks`],
 //!   [`create_block_group`], [`delete_block_group`], [`create_block`],
-//!   [`delete_block`]
+//!   [`copy_block`], [`delete_block`]
 //! - `Pages/BlockEditor.razor` → [`get_block`], [`get_block_items`],
 //!   [`save_block_with_items`], [`preview_block_playout`]
 //! - Autocomplete helpers → [`search_collections_for_block`],
-//!   [`search_smart_collections_for_block`], [`search_shows_for_block`],
-//!   [`search_seasons_for_block`]
+//!   [`search_multi_collections_for_block`], [`search_smart_collections_for_block`],
+//!   [`search_shows_for_block`], [`search_seasons_for_block`]
 #[cfg(feature = "ssr")]
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use leptos::prelude::*;
@@ -22,6 +22,7 @@ pub mod collection_type {
     pub const COLLECTION: i32 = 0;
     pub const TELEVISION_SHOW: i32 = 1;
     pub const TELEVISION_SEASON: i32 = 2;
+    pub const MULTI_COLLECTION: i32 = 4;
     pub const SMART_COLLECTION: i32 = 5;
     pub const SEARCH_QUERY: i32 = 9;
 }
@@ -31,7 +32,9 @@ pub mod playback_order {
     pub const CHRONOLOGICAL: i32 = 1;
     pub const RANDOM: i32 = 2;
     pub const SHUFFLE: i32 = 3;
+    pub const SHUFFLE_IN_ORDER: i32 = 4;
     pub const SEASON_EPISODE: i32 = 6;
+    pub const RANDOM_ROTATION: i32 = 7;
 }
 
 /// `BlockStopScheduling` discriminants.
@@ -76,6 +79,7 @@ pub struct BlockItemForm {
     pub index: i32,
     pub collection_type: i32,
     pub collection_id: Option<i64>,
+    pub multi_collection_id: Option<i64>,
     pub smart_collection_id: Option<i64>,
     pub media_item_id: Option<i64>,
     pub search_title: Option<String>,
@@ -86,9 +90,28 @@ pub struct BlockItemForm {
     /// Resolved display name for the referenced collection / show / season.
     pub collection_name: String,
     /// IDs from `BlockItemWatermark` — round-tripped through save unchanged.
+    #[serde(default)]
     pub watermark_ids: Vec<i64>,
     /// IDs from `BlockItemGraphicsElement` — round-tripped through save unchanged.
+    #[serde(default)]
     pub graphics_element_ids: Vec<i64>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BlockEditorOption {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BlockEditorOptions {
+    pub collections: Vec<BlockEditorOption>,
+    pub shows: Vec<BlockEditorOption>,
+    pub seasons: Vec<BlockEditorOption>,
+    pub multi_collections: Vec<BlockEditorOption>,
+    pub smart_collections: Vec<BlockEditorOption>,
+    pub watermarks: Vec<BlockEditorOption>,
+    pub graphics_elements: Vec<BlockEditorOption>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -139,13 +162,10 @@ pub async fn create_block_group(name: String) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Block group name is required"));
-    }
+    let name = validate_block_group_name(&state.pool, &name).await?;
 
     let result = sqlx::query(r#"INSERT INTO "BlockGroup" ("Name") VALUES (?)"#)
-        .bind(name)
+        .bind(&name)
         .execute(&state.pool)
         .await?;
     let id = ersatzrs_infra::db::last_insert_id(result);
@@ -186,10 +206,21 @@ pub async fn list_blocks(search: String) -> Result<Vec<BlockRow>, ServerFnError>
            FROM "Block" b
            JOIN "BlockGroup" bg ON bg."Id" = b."BlockGroupId"
            WHERE (? = '' OR b."Name" LIKE ?)
-           ORDER BY bg."Name", b."Name""#,
+           UNION ALL
+           SELECT -1 AS "Id",
+                  bg."Id" AS "BlockGroupId",
+                  COALESCE(bg."Name", '') AS "GroupName",
+                  '' AS "Name",
+                  0 AS "Minutes",
+                  0 AS "StopScheduling"
+           FROM "BlockGroup" bg
+           WHERE NOT EXISTS (SELECT 1 FROM "Block" b WHERE b."BlockGroupId" = bg."Id")
+             AND ? = ''
+           ORDER BY "GroupName", "Name""#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(search.trim())
     .fetch_all(&state.pool)
     .await?;
 
@@ -211,22 +242,139 @@ pub async fn create_block(group_id: i64, name: String) -> Result<i64, ServerFnEr
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let name = name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Block name is required"));
-    }
+    let name = validate_block_name(&state.pool, group_id, None, &name).await?;
 
     let result = sqlx::query(
         r#"INSERT INTO "Block" ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
-           VALUES (?, ?, 60, 0, CURRENT_TIMESTAMP)"#,
+           VALUES (?, ?, 30, 0, CURRENT_TIMESTAMP)"#,
     )
     .bind(group_id)
-    .bind(name)
+    .bind(&name)
     .execute(&state.pool)
     .await?;
     let id = ersatzrs_infra::db::last_insert_id(result);
 
     Ok(id)
+}
+
+#[server]
+#[allow(clippy::too_many_lines)]
+pub async fn copy_block(
+    block_id: i64,
+    new_group_id: i64,
+    new_name: String,
+) -> Result<i64, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let new_name = validate_block_name(&state.pool, new_group_id, None, &new_name).await?;
+    let block = sqlx::query(r#"SELECT "Minutes", "StopScheduling" FROM "Block" WHERE "Id" = ?"#)
+        .bind(block_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ServerFnError::new("Block does not exist."))?;
+
+    let mut tx = state.pool.begin().await?;
+    let result = sqlx::query(
+        r#"INSERT INTO "Block" ("BlockGroupId", "Name", "Minutes", "StopScheduling", "DateUpdated")
+           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)"#,
+    )
+    .bind(new_group_id)
+    .bind(&new_name)
+    .bind(block.try_get::<i32, _>("Minutes").unwrap_or(30))
+    .bind(block.try_get::<i32, _>("StopScheduling").unwrap_or(0))
+    .execute(&mut *tx)
+    .await?;
+    let new_block_id = ersatzrs_infra::db::last_insert_id(result);
+
+    let items = sqlx::query(
+        r#"SELECT "Id", "Index", "CollectionType", "CollectionId", "MultiCollectionId",
+                  "SmartCollectionId", "MediaItemId", "SearchTitle", "SearchQuery",
+                  "PlaybackOrder", "IncludeInProgramGuide", "DisableWatermarks"
+           FROM "BlockItem"
+           WHERE "BlockId" = ?
+           ORDER BY "Index""#,
+    )
+    .bind(block_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    for item in items {
+        let old_item_id = item.try_get::<i64, _>("Id").unwrap_or(0);
+        let result = sqlx::query(
+            r#"INSERT INTO "BlockItem"
+               ("BlockId", "Index", "CollectionType", "CollectionId", "MultiCollectionId",
+                "SmartCollectionId", "MediaItemId", "SearchTitle", "SearchQuery",
+                "PlaybackOrder", "IncludeInProgramGuide", "DisableWatermarks")
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(new_block_id)
+        .bind(item.try_get::<i32, _>("Index").unwrap_or(0))
+        .bind(
+            item.try_get::<i32, _>("CollectionType")
+                .unwrap_or(collection_type::COLLECTION),
+        )
+        .bind(
+            item.try_get::<Option<i64>, _>("CollectionId")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<Option<i64>, _>("MultiCollectionId")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<Option<i64>, _>("SmartCollectionId")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<Option<i64>, _>("MediaItemId")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<Option<String>, _>("SearchTitle")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<Option<String>, _>("SearchQuery")
+                .unwrap_or(None),
+        )
+        .bind(
+            item.try_get::<i32, _>("PlaybackOrder")
+                .unwrap_or(playback_order::CHRONOLOGICAL),
+        )
+        .bind(
+            item.try_get::<bool, _>("IncludeInProgramGuide")
+                .unwrap_or(false),
+        )
+        .bind(
+            item.try_get::<bool, _>("DisableWatermarks")
+                .unwrap_or(false),
+        )
+        .execute(&mut *tx)
+        .await?;
+        let new_item_id = ersatzrs_infra::db::last_insert_id(result);
+
+        copy_block_item_join_rows(
+            &mut tx,
+            r#""BlockItemWatermark""#,
+            r#""WatermarkId""#,
+            old_item_id,
+            new_item_id,
+        )
+        .await?;
+        copy_block_item_join_rows(
+            &mut tx,
+            r#""BlockItemGraphicsElement""#,
+            r#""GraphicsElementId""#,
+            old_item_id,
+            new_item_id,
+        )
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(new_block_id)
 }
 
 #[server]
@@ -250,6 +398,141 @@ fn parse_id_list(s: Option<String>) -> Vec<i64> {
         .filter(|p| !p.is_empty())
         .filter_map(|p| p.parse::<i64>().ok())
         .collect()
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_block_group_name(pool: &DbPool, name: &str) -> Result<String, ServerFnError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ServerFnError::new("Block group name is required"));
+    }
+    if name.len() > 50 {
+        return Err(ServerFnError::new(format!(
+            "Block group name \"{name}\" is invalid"
+        )));
+    }
+    let duplicate: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "BlockGroup" WHERE "Name" = ?"#)
+            .bind(name)
+            .fetch_one(pool)
+            .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("Block group name must be unique"));
+    }
+    Ok(name.to_string())
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_block_name(
+    pool: &DbPool,
+    group_id: i64,
+    block_id: Option<i64>,
+    name: &str,
+) -> Result<String, ServerFnError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ServerFnError::new("Block name is required"));
+    }
+    if name.len() > 50 {
+        return Err(ServerFnError::new(format!(
+            "Block name \"{name}\" is invalid"
+        )));
+    }
+    let duplicate: i64 = match block_id {
+        Some(id) => {
+            sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "Block"
+                   WHERE "BlockGroupId" = ? AND "Name" = ? AND "Id" != ?"#,
+            )
+            .bind(group_id)
+            .bind(name)
+            .bind(id)
+            .fetch_one(pool)
+            .await?
+        }
+        None => {
+            sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "Block"
+                   WHERE "BlockGroupId" = ? AND "Name" = ?"#,
+            )
+            .bind(group_id)
+            .bind(name)
+            .fetch_one(pool)
+            .await?
+        }
+    };
+    if duplicate > 0 {
+        return Err(ServerFnError::new(
+            "A block named with that value already exists in that block group",
+        ));
+    }
+    Ok(name.to_string())
+}
+
+fn validate_block_duration(minutes: i32) -> Result<(), ServerFnError> {
+    if minutes > 0 && minutes % 5 == 0 && minutes <= 24 * 60 {
+        Ok(())
+    } else {
+        Err(ServerFnError::new(
+            "Block duration must be between 5 minutes and 24 hours",
+        ))
+    }
+}
+
+fn validate_block_item(item: &BlockItemForm) -> Result<(), ServerFnError> {
+    match item.collection_type {
+        collection_type::COLLECTION if item.collection_id.is_none() => Err(ServerFnError::new(
+            "[Collection] is required for collection type 'Collection'",
+        )),
+        collection_type::TELEVISION_SHOW if item.media_item_id.is_none() => Err(
+            ServerFnError::new("[MediaItem] is required for collection type 'TelevisionShow'"),
+        ),
+        collection_type::TELEVISION_SEASON if item.media_item_id.is_none() => Err(
+            ServerFnError::new("[MediaItem] is required for collection type 'TelevisionSeason'"),
+        ),
+        collection_type::MULTI_COLLECTION if item.multi_collection_id.is_none() => {
+            Err(ServerFnError::new(
+                "[MultiCollection] is required for collection type 'MultiCollection'",
+            ))
+        }
+        collection_type::SMART_COLLECTION if item.smart_collection_id.is_none() => {
+            Err(ServerFnError::new(
+                "[SmartCollection] is required for collection type 'SmartCollection'",
+            ))
+        }
+        collection_type::SEARCH_QUERY if item.search_query.as_deref().is_none_or(str::is_empty) => {
+            Err(ServerFnError::new(
+                "[SearchQuery] is required for collection type 'SearchQuery'",
+            ))
+        }
+        collection_type::COLLECTION
+        | collection_type::TELEVISION_SHOW
+        | collection_type::TELEVISION_SEASON
+        | collection_type::MULTI_COLLECTION
+        | collection_type::SMART_COLLECTION
+        | collection_type::SEARCH_QUERY => Ok(()),
+        _ => Err(ServerFnError::new("[CollectionType] is invalid")),
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_block_form(
+    pool: &DbPool,
+    form: &BlockWithItemsForm,
+) -> Result<(), ServerFnError> {
+    let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Block" WHERE "Id" = ?"#)
+        .bind(form.id)
+        .fetch_one(pool)
+        .await?;
+    if exists == 0 {
+        return Err(ServerFnError::new("[BlockId] does not exist."));
+    }
+    validate_block_duration(form.minutes)?;
+    validate_block_name(pool, form.group_id, Some(form.id), &form.name).await?;
+    for item in &form.items {
+        validate_block_item(item)?;
+    }
+    Ok(())
 }
 
 #[server]
@@ -295,6 +578,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                bi."Index",
                bi."CollectionType",
                bi."CollectionId",
+               bi."MultiCollectionId",
                bi."SmartCollectionId",
                bi."MediaItemId",
                bi."SearchTitle",
@@ -307,6 +591,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                    WHEN 0 THEN COALESCE(c."Name", '')
                    WHEN 1 THEN COALESCE(sm."Title", '')
                    WHEN 2 THEN COALESCE(sh."Title", '')
+                   WHEN 4 THEN COALESCE(mc."Name", '')
                    WHEN 5 THEN COALESCE(sc."Name", '')
                    WHEN 9 THEN COALESCE(bi."SearchTitle", bi."SearchQuery", '')
                    ELSE ''
@@ -317,6 +602,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
                 FROM "BlockItemGraphicsElement" bige WHERE bige."BlockItemId" = bi."Id") AS "GraphicsElementIds"
            FROM "BlockItem" bi
            LEFT JOIN "Collection"     c  ON c."Id"  = bi."CollectionId"
+           LEFT JOIN "MultiCollection" mc ON mc."Id" = bi."MultiCollectionId"
            LEFT JOIN "SmartCollection" sc ON sc."Id" = bi."SmartCollectionId"
            LEFT JOIN "Season"         s  ON s."Id"  = bi."MediaItemId" AND bi."CollectionType" = 2
            LEFT JOIN "Show"           sh_row ON sh_row."Id" = s."ShowId"
@@ -337,6 +623,7 @@ pub async fn get_block_items(block_id: i64) -> Result<Vec<BlockItemForm>, Server
             index: r.try_get("Index").unwrap_or(0),
             collection_type: r.try_get("CollectionType").unwrap_or(0),
             collection_id: r.try_get("CollectionId").unwrap_or(None),
+            multi_collection_id: r.try_get("MultiCollectionId").unwrap_or(None),
             smart_collection_id: r.try_get("SmartCollectionId").unwrap_or(None),
             media_item_id: r.try_get("MediaItemId").unwrap_or(None),
             search_title: r.try_get("SearchTitle").unwrap_or(None),
@@ -368,12 +655,18 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let name = form.name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Block name is required"));
-    }
+    save_block_with_pool(&state.pool, form).await
+}
 
-    let mut tx = state.pool.begin().await?;
+#[cfg(feature = "ssr")]
+pub async fn save_block_with_pool(
+    pool: &DbPool,
+    form: BlockWithItemsForm,
+) -> Result<(), ServerFnError> {
+    validate_block_form(pool, &form).await?;
+    let name = form.name.trim();
+
+    let mut tx = pool.begin().await?;
 
     sqlx::query(
         r#"UPDATE "Block"
@@ -396,14 +689,15 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
         let result = sqlx::query(
             r#"INSERT INTO "BlockItem"
                ("BlockId", "Index", "CollectionType", "CollectionId",
-                "SmartCollectionId", "MediaItemId", "SearchTitle", "SearchQuery",
+                "MultiCollectionId", "SmartCollectionId", "MediaItemId", "SearchTitle", "SearchQuery",
                 "PlaybackOrder", "IncludeInProgramGuide", "DisableWatermarks")
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(form.id)
         .bind(item.index)
         .bind(item.collection_type)
         .bind(item.collection_id)
+        .bind(item.multi_collection_id)
         .bind(item.smart_collection_id)
         .bind(item.media_item_id)
         .bind(item.search_title.as_deref())
@@ -447,17 +741,17 @@ pub async fn save_block_with_items(form: BlockWithItemsForm) -> Result<(), Serve
 // ---------------------------------------------------------------------------
 
 #[server]
-pub async fn preview_block_playout(block_id: i64) -> Result<Vec<PlayoutPreviewRow>, ServerFnError> {
+pub async fn preview_block_playout(
+    form: BlockWithItemsForm,
+) -> Result<Vec<PlayoutPreviewRow>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
 
-    let items = get_block_items(block_id).await?;
-
     let mut rows: Vec<PlayoutPreviewRow> = Vec::new();
     let mut elapsed_secs: i64 = 0;
 
-    for item in &items {
+    for item in &form.items {
         let media_rows = query_items_for_preview(item, &state.pool, state.database_backend).await;
         for (title, dur_secs) in media_rows {
             let start = format_hms(elapsed_secs);
@@ -609,6 +903,39 @@ async fn query_items_for_preview(
                 .collect()
         }
 
+        // Multi collection — expand nested collection and smart collection items.
+        4 => {
+            let Some(mid) = item.multi_collection_id else {
+                return vec![];
+            };
+            let rows = sqlx::query(
+                r#"SELECT ci."MediaItemId", COALESCE(mm."Title", em."Title", '') AS "Title",
+                          COALESCE(mvm."Duration", mve."Duration") AS "Duration"
+                   FROM "MultiCollectionItem" mci
+                   JOIN "CollectionItem" ci ON ci."CollectionId" = mci."CollectionId"
+                   LEFT JOIN "Movie" mv ON mv."Id" = ci."MediaItemId"
+                   LEFT JOIN "MovieMetadata" mm ON mm."MovieId" = mv."Id"
+                   LEFT JOIN "MediaVersion" mvm ON mvm."MovieId" = mv."Id"
+                   LEFT JOIN "Episode" ep ON ep."Id" = ci."MediaItemId"
+                   LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
+                   LEFT JOIN "MediaVersion" mve ON mve."EpisodeId" = ep."Id"
+                   WHERE mci."MultiCollectionId" = ?
+                   ORDER BY "Title""#,
+            )
+            .bind(mid)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+
+            rows.iter()
+                .map(|r| {
+                    let title: String = r.try_get("Title").unwrap_or_default();
+                    let duration: Option<String> = r.try_get("Duration").unwrap_or(None);
+                    (title, duration_secs(duration.as_deref()))
+                })
+                .collect()
+        }
+
         // Search query — name placeholder
         9 => {
             let label = item
@@ -714,6 +1041,42 @@ pub async fn search_smart_collections_for_block(
 }
 
 #[server]
+pub async fn search_multi_collections_for_block(
+    prefix: String,
+) -> Result<Vec<(i64, String)>, ServerFnError> {
+    use crate::host::state::AppState;
+    use sqlx::Row;
+
+    let state = expect_context::<AppState>();
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return Ok(vec![]);
+    }
+    let like = format!("{prefix}%");
+
+    let rows = sqlx::query(
+        r#"SELECT "Id", COALESCE("Name", '') AS "Name"
+           FROM "MultiCollection"
+           WHERE "Name" LIKE ?
+           ORDER BY "Name"
+           LIMIT 10"#,
+    )
+    .bind(&like)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| {
+            (
+                r.try_get("Id").unwrap_or(0),
+                r.try_get("Name").unwrap_or_default(),
+            )
+        })
+        .collect())
+}
+
+#[server]
 pub async fn search_shows_for_block(prefix: String) -> Result<Vec<(i64, String)>, ServerFnError> {
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -793,13 +1156,111 @@ fn season_label(title: &str, season_number: i64) -> String {
     format!("{title} S{season_number:02}")
 }
 
+#[cfg(feature = "ssr")]
+async fn load_block_options(
+    pool: &DbPool,
+    sql: &str,
+) -> Result<Vec<BlockEditorOption>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    Ok(rows
+        .iter()
+        .map(|row| BlockEditorOption {
+            id: row.try_get("Id").unwrap_or(0),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn copy_block_item_join_rows(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    table: &str,
+    target_column: &str,
+    old_item_id: i64,
+    new_item_id: i64,
+) -> Result<(), ServerFnError> {
+    let sql = format!(
+        r#"INSERT INTO {table} ("BlockItemId", {target_column})
+           SELECT ?, {target_column} FROM {table} WHERE "BlockItemId" = ?"#
+    );
+    sqlx::query(&sql)
+        .bind(new_item_id)
+        .bind(old_item_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+#[server]
+pub async fn load_block_editor_options() -> Result<BlockEditorOptions, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    load_block_editor_options_with_pool(&state.pool).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn load_block_editor_options_with_pool(
+    pool: &DbPool,
+) -> Result<BlockEditorOptions, ServerFnError> {
+    Ok(BlockEditorOptions {
+        collections: load_block_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "Collection" ORDER BY "Name""#,
+        )
+        .await?,
+        shows: load_block_options(
+            pool,
+            r#"SELECT sh."Id", COALESCE(sm."Title", '') AS "Name"
+               FROM "Show" sh
+               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = sh."Id"
+               ORDER BY sm."Title", sh."Id""#,
+        )
+        .await?,
+        seasons: load_block_options(
+            pool,
+            r#"SELECT s."Id",
+                      COALESCE(sm."Title", 'Season ' || s."SeasonNumber") || ' S' || printf('%02d', s."SeasonNumber") AS "Name"
+               FROM "Season" s
+               LEFT JOIN "Show" sh ON sh."Id" = s."ShowId"
+               LEFT JOIN "ShowMetadata" sm ON sm."ShowId" = sh."Id"
+               ORDER BY sm."Title", s."SeasonNumber", s."Id""#,
+        )
+        .await?,
+        multi_collections: load_block_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "MultiCollection" ORDER BY "Name""#,
+        )
+        .await?,
+        smart_collections: load_block_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "SmartCollection" ORDER BY "Name""#,
+        )
+        .await?,
+        watermarks: load_block_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "ChannelWatermark" ORDER BY "Name""#,
+        )
+        .await?,
+        graphics_elements: load_block_options(
+            pool,
+            r#"SELECT "Id", COALESCE("Name", "Path", '') AS "Name" FROM "GraphicsElement" ORDER BY "Name", "Id""#,
+        )
+        .await?,
+    })
+}
+
 /// Human-readable label for a `PlaybackOrder` integer.
 #[must_use]
 pub fn playback_order_label(order: i32, collection_type: i32) -> &'static str {
     match order {
         2 => "Random",
         3 => "Shuffle",
-        6 if collection_type == 1 => "Season, Episode",
+        4 => "Shuffle In Order",
+        6 if collection_type == collection_type::TELEVISION_SHOW => "Season, Episode",
+        7 => "Random Rotation",
         _ => "Chronological",
     }
 }
@@ -829,3 +1290,68 @@ pub fn format_duration_label(minutes: i32) -> String {
 // suppress dead-code warning on parse_hms which is only used transitively
 #[allow(dead_code)]
 const _: fn(&str) -> i64 = parse_hms;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_duration_validation_matches_ersatztv_bounds() {
+        assert!(validate_block_duration(5).is_ok());
+        assert!(validate_block_duration(24 * 60).is_ok());
+
+        assert!(validate_block_duration(0).is_err());
+        assert!(validate_block_duration(7).is_err());
+        assert!(validate_block_duration(24 * 60 + 5).is_err());
+    }
+
+    #[test]
+    fn block_item_validation_requires_matching_target() {
+        let mut item = BlockItemForm {
+            collection_type: collection_type::COLLECTION,
+            ..BlockItemForm::default()
+        };
+        assert!(validate_block_item(&item)
+            .unwrap_err()
+            .to_string()
+            .contains("Collection"));
+
+        item.collection_id = Some(10);
+        assert!(validate_block_item(&item).is_ok());
+
+        item.collection_type = collection_type::MULTI_COLLECTION;
+        item.collection_id = None;
+        assert!(validate_block_item(&item)
+            .unwrap_err()
+            .to_string()
+            .contains("MultiCollection"));
+        item.multi_collection_id = Some(20);
+        assert!(validate_block_item(&item).is_ok());
+
+        item.collection_type = collection_type::SEARCH_QUERY;
+        item.multi_collection_id = None;
+        item.search_query = Some(String::new());
+        assert!(validate_block_item(&item)
+            .unwrap_err()
+            .to_string()
+            .contains("SearchQuery"));
+        item.search_query = Some("genre:comedy".to_string());
+        assert!(validate_block_item(&item).is_ok());
+    }
+
+    #[test]
+    fn block_labels_cover_copy_and_multi_collection_options() {
+        assert_eq!(
+            playback_order_label(
+                playback_order::SHUFFLE_IN_ORDER,
+                collection_type::MULTI_COLLECTION
+            ),
+            "Shuffle In Order"
+        );
+        assert_eq!(
+            playback_order_label(playback_order::RANDOM_ROTATION, collection_type::COLLECTION),
+            "Random Rotation"
+        );
+        assert_eq!(format_duration_label(30), "30m");
+    }
+}

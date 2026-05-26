@@ -82,6 +82,12 @@
     gap: 1rem;
 }
 
+.fallback-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .field {
     display: flex;
     flex-direction: column;
@@ -91,6 +97,25 @@
 .label {
     font-size: 0.75rem;
     color: var(--color-muted);
+}
+
+.check-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.375rem 0.75rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background-color: var(--color-bg);
+}
+
+.check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 1.5rem;
+    font-size: 0.8125rem;
+    color: var(--color-gray-200);
 }
 
 .input {

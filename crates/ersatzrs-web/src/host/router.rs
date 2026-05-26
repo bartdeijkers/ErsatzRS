@@ -67,6 +67,10 @@ pub fn build_app(app_state: AppState) -> Router {
 
     let api_router: Router = Router::new()
         .route("/healthz", get(super::bootstrap::healthz))
+        .route(
+            "/api/blocks/items/save",
+            post(api::blocks::save_block_items_form),
+        )
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
             "/api/channels/save-multipart",

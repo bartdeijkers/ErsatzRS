@@ -3,8 +3,8 @@
 use leptos::prelude::*;
 
 use crate::admin::server_fns::blocks::{
-    create_block, create_block_group, delete_block, delete_block_group, format_duration_label,
-    list_block_groups, list_blocks, BlockGroupRow, BlockRow,
+    copy_block, create_block, create_block_group, delete_block, delete_block_group,
+    format_duration_label, list_block_groups, list_blocks, BlockGroupRow, BlockRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -15,6 +15,11 @@ stylance::import_crate_style!(style, "src/admin/pages/scheduling/blocks.module.c
 
 #[component]
 pub fn BlocksPage() -> impl IntoView {
+    view! { <BlocksIsland/> }
+}
+
+#[island]
+fn BlocksIsland() -> impl IntoView {
     // ── Groups ─────────────────────────────────────────────────────────────
     let groups: Resource<Vec<BlockGroupRow>> = Resource::new(
         || (),
@@ -35,6 +40,14 @@ pub fn BlocksPage() -> impl IntoView {
     let new_block_group_id: RwSignal<i64> = RwSignal::new(0);
     let create_block_action =
         Action::new(|(gid, name): &(i64, String)| create_block(*gid, name.clone()));
+
+    // ── Copy block ─────────────────────────────────────────────────────────
+    let copy_target: RwSignal<Option<BlockRow>> = RwSignal::new(None);
+    let copy_open = RwSignal::new(false);
+    let copy_name = RwSignal::new(String::new());
+    let copy_group_id: RwSignal<i64> = RwSignal::new(0);
+    let copy_action =
+        Action::new(|(id, gid, name): &(i64, i64, String)| copy_block(*id, *gid, name.clone()));
 
     // ── Delete block group ─────────────────────────────────────────────────
     let del_group_target: RwSignal<Option<BlockGroupRow>> = RwSignal::new(None);
@@ -75,6 +88,28 @@ pub fn BlocksPage() -> impl IntoView {
     });
 
     Effect::new(move |_| {
+        if let Some(res) = copy_action.value().get() {
+            match res {
+                Ok(id) => {
+                    toast.push("Block copied.", ToastSeverity::Success);
+                    copy_open.set(false);
+                    copy_target.set(None);
+                    blocks.refetch();
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let _ = window().location().set_href(&format!("/blocks/{id}"));
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let _ = id;
+                    }
+                }
+                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+            }
+        }
+    });
+
+    Effect::new(move |_| {
         if let Some(res) = del_group_action.value().get() {
             match res {
                 Ok(()) => {
@@ -103,11 +138,10 @@ pub fn BlocksPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <h1 class=style::page_title>"Blocks"</h1>
+            <h1 class=style::page_title>"Block Groups"</h1>
 
             // ── Add block group ─────────────────────────────────────────
             <section class=style::section>
-                <h2 class=style::section_title>"Add Block Group"</h2>
                 <div class=style::add_row>
                     <div class=style::add_field>
                         <label class=style::add_label>"Group Name"</label>
@@ -128,14 +162,14 @@ pub fn BlocksPage() -> impl IntoView {
                             }
                         }
                     >
-                        "+ Add Group"
+                        "+ Add Block Group"
                     </button>
                 </div>
             </section>
 
             // ── Add block ───────────────────────────────────────────────
             <section class=style::section>
-                <h2 class=style::section_title>"Add Block"</h2>
+                <h2 class=style::page_title>"Blocks"</h2>
                 <div class=style::add_row>
                     <div class=style::add_field>
                         <label class=style::add_label>"Block Group"</label>
@@ -190,11 +224,11 @@ pub fn BlocksPage() -> impl IntoView {
 
             // ── Blocks table ────────────────────────────────────────────
             <div class=style::toolbar>
-                <h2 class=style::section_title>"All Blocks"</h2>
+                <span class=style::search_icon aria-hidden="true"></span>
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Filter blocks…"
+                    placeholder="Search for blocks"
                     prop:value=move || search.get()
                     on:input=move |e| search.set(event_target_value(&e))
                 />
@@ -204,10 +238,7 @@ pub fn BlocksPage() -> impl IntoView {
                 {move || {
                     blocks.get().map(|rows| {
                         if rows.is_empty() {
-                            return view! {
-                                <p class=style::empty>"No blocks yet."</p>
-                            }
-                            .into_any();
+                            return view! { <div></div> }.into_any();
                         }
 
                         // Group rows by group_name for display
@@ -268,16 +299,17 @@ pub fn BlocksPage() -> impl IntoView {
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {block_rows.into_iter().map(|b| {
+                                                {block_rows.into_iter().filter(|b| b.id >= 0).map(|b| {
                                                     let id = b.id;
                                                     let name = b.name.clone();
                                                     let dur = format_duration_label(b.minutes);
                                                     let stop = crate::admin::server_fns::blocks::stop_scheduling_label(b.stop_scheduling);
                                                     let b_for_del = b.clone();
+                                                    let b_for_copy = b.clone();
                                                     view! {
                                                         <tr>
                                                             <td>
-                                                                <a href=format!("/blocks/{id}")>{name}</a>
+                                                                <a href=format!("/blocks/{id}")>{name.clone()}</a>
                                                             </td>
                                                             <td class=style::cell_muted>{dur}</td>
                                                             <td class=style::cell_muted>{stop}</td>
@@ -286,6 +318,17 @@ pub fn BlocksPage() -> impl IntoView {
                                                                     <a class=style::btn_edit href=format!("/blocks/{id}")>
                                                                         "Edit"
                                                                     </a>
+                                                                    <button
+                                                                        class=style::btn_edit
+                                                                        on:click=move |_| {
+                                                                            copy_name.set(format!("{name} Copy"));
+                                                                            copy_group_id.set(b_for_copy.group_id);
+                                                                            copy_target.set(Some(b_for_copy.clone()));
+                                                                            copy_open.set(true);
+                                                                        }
+                                                                    >
+                                                                        "Copy"
+                                                                    </button>
                                                                     <button
                                                                         class=style::btn_delete
                                                                         on:click=move |_| {
@@ -340,6 +383,71 @@ pub fn BlocksPage() -> impl IntoView {
                     }
                 })
             />
+            <div
+                class=style::modal_backdrop
+                style:display=move || if copy_open.get() { "" } else { "none" }
+                on:click=move |_| copy_open.set(false)
+            />
+            <div
+                class=style::modal_panel
+                style:display=move || if copy_open.get() { "" } else { "none" }
+            >
+                <h2 class=style::section_title>"Copy Block"</h2>
+                <label class=style::add_field>
+                    <span class=style::add_label>"Block Group"</span>
+                    <Suspense>
+                        {move || groups.get().map(|grps| {
+                            view! {
+                                <select
+                                    class=style::add_select
+                                    prop:value=move || copy_group_id.get().to_string()
+                                    on:change=move |e| {
+                                        if let Ok(id) = event_target_value(&e).parse::<i64>() {
+                                            copy_group_id.set(id);
+                                        }
+                                    }
+                                >
+                                    {grps.into_iter().map(|g| {
+                                        let id = g.id;
+                                        let name = g.name.clone();
+                                        view! { <option value=id.to_string()>{name}</option> }
+                                    }).collect_view()}
+                                </select>
+                            }
+                        })}
+                    </Suspense>
+                </label>
+                <label class=style::add_field>
+                    <span class=style::add_label>"Block Name"</span>
+                    <input
+                        class=style::add_input
+                        prop:value=move || copy_name.get()
+                        on:input=move |e| copy_name.set(event_target_value(&e))
+                    />
+                </label>
+                <div class=style::modal_actions>
+                    <button class=style::btn_edit on:click=move |_| copy_open.set(false)>"Cancel"</button>
+                    <button
+                        class=style::btn_add
+                        disabled=move || {
+                            copy_target.get().is_none()
+                                || copy_group_id.get() == 0
+                                || copy_name.get().trim().is_empty()
+                        }
+                        on:click=move |_| {
+                            if let Some(target) = copy_target.get_untracked() {
+                                copy_action.dispatch((
+                                    target.id,
+                                    copy_group_id.get_untracked(),
+                                    copy_name.get_untracked().trim().to_string(),
+                                ));
+                            }
+                        }
+                    >
+                        "Copy Block"
+                    </button>
+                </div>
+            </div>
         </div>
     }
 }
