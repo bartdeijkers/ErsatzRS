@@ -2,7 +2,7 @@ use axum::{
     extract::{Form, State},
     response::Redirect,
 };
-use serde::Deserialize;
+use serde::{de, Deserialize, Deserializer};
 
 use crate::{
     admin::server_fns::templates::{
@@ -110,13 +110,13 @@ pub struct TemplateItemsSaveForm {
     group_id: i64,
     #[serde(default)]
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     item_block_id: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     item_block_name: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     item_start_minutes: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_string_vec")]
     item_duration_minutes: Vec<String>,
 }
 
@@ -173,6 +173,48 @@ fn parse_i64(value: Option<&String>) -> Option<i64> {
     value.and_then(|value| value.trim().parse().ok())
 }
 
+fn deserialize_string_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringVecVisitor;
+
+    impl<'de> de::Visitor<'de> for StringVecVisitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a string or a sequence of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value.to_string()])
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            let mut values = Vec::new();
+            while let Some(value) = seq.next_element::<String>()? {
+                values.push(value);
+            }
+            Ok(values)
+        }
+    }
+
+    deserializer.deserialize_any(StringVecVisitor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +258,21 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].block_id, 5);
         assert_eq!(items[0].block_name, "good");
+    }
+
+    #[test]
+    fn template_items_form_deserializes_single_item_fields() {
+        let form: TemplateItemsSaveForm = serde_urlencoded::from_str(
+            "template_id=7&group_id=3&name=Prime&item_block_id=10&item_block_name=Movies&item_start_minutes=60&item_duration_minutes=30",
+        )
+        .expect("single-item form should deserialize");
+
+        let result = form.into_template_form();
+
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.items[0].block_id, 10);
+        assert_eq!(result.items[0].block_name, "Movies");
+        assert_eq!(result.items[0].start_minutes, 60);
+        assert_eq!(result.items[0].duration_minutes, 30);
     }
 }

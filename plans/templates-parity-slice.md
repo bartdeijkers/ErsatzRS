@@ -64,23 +64,25 @@
   - The editor action bar must not clip buttons and must remain full width above content.
 - Reference screenshots and viewport sizes:
   - `plans/references/ersatztv_screenshots/0052_scheduling_templates.png`, 3840x1918.
-  - Editor reference still needs live capture or a route-specific screenshot after seeded data exists.
+  - `plans/references/templates_ersatzrs_list_2026-05-26.png`, 3840x1918, captured from `./run.sh serve` with a seeded template group/template.
+  - `plans/references/templates_ersatzrs_editor_2026-05-26.png`, 3840x1918, captured from `./run.sh serve` after editing a seeded template item.
+  - `plans/references/templates_console_2026-05-26.txt`, final browser console capture with 0 warnings/errors.
 - ErsatzRS shared primitives/CSS modules to reuse:
   - Scheduling route structure from `blocks.rs`, `block_editor.rs`, and `schedules.rs`.
   - `DeleteDialog` and `toast` primitives.
   - Existing block editor option loading for block groups/blocks where possible, with route-specific template server functions.
 - Known visual deviations:
-  - None intended. If the Rust day timeline cannot match `MudCalendar` geometry after browser verification, record it below as `ParityDebt`.
+  - None intended. The Rust day timeline maps the upstream `MudCalendar` day-view geometry and supports drag repositioning, overlap rejection, and midnight rejection without the disabled month/week/date/today controls.
 
 ## Acceptance
 
-- [ ] UI fields/actions/routes/back-links match ErsatzTV.
-- [ ] Validation and error surfaces match ErsatzTV.
-- [ ] Persistence and side effects match ErsatzTV.
-- [ ] Critical save/action paths have SSR or browser-safe fallback.
-- [ ] UI layout has screenshot/bounding-box evidence against ErsatzTV or an attached reference screenshot when this is an admin UI route.
-- [ ] Repeated defect classes have reusable tests or playbook coverage.
-- [ ] Parity docs, status, and active plan files are updated.
+- [x] UI fields/actions/routes/back-links match ErsatzTV.
+- [x] Validation and error surfaces match ErsatzTV.
+- [x] Persistence and side effects match ErsatzTV.
+- [x] Critical save/action paths have SSR or browser-safe fallback.
+- [x] UI layout has screenshot/bounding-box evidence against ErsatzTV or an attached reference screenshot when this is an admin UI route.
+- [x] Repeated defect classes have reusable tests or playbook coverage.
+- [x] Parity docs, status, and active plan files are updated.
 
 ## ParityDebt
 
@@ -88,6 +90,6 @@
 
 ## Verification
 
-- [ ] `cargo xtask parity-check web`
-- [ ] Focused repository/app/scanner tests, when non-web behavior changed.
-- [ ] Browser smoke for hydrated or fallback UI.
+- [x] `cargo xtask parity-check web`
+- [x] Focused repository/app/scanner tests, when non-web behavior changed: `cargo test -p ersatzrs-web templates -- --nocapture`.
+- [x] Browser smoke for hydrated or fallback UI: `./run.sh serve`; fresh 3840x1918 browser context; list screenshot, editor screenshot, delete template/group confirmation dialogs, copy/edit navigation, block select/add, timeline drag, save POST fallback redirect to `/templates`, and final console warnings/errors = 0.

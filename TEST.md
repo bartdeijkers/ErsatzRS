@@ -226,8 +226,8 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/sources/emby`    | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/playouts`              | TODO   | Needs URL-driven selection refactor.                                    |
 | `/schedules`             | TODO   | Browser smoke covered list/add/items route geometry, screenshots, no-JS schedule and item form POST fallbacks, and hydrated item editing; add a durable Playwright spec when the route gets automated admin UI coverage. |
-| `/templates`             | TODO   | Browser smoke covered list geometry, template group/template add/copy/delete, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
-| `/templates/:id`         | TODO   | Browser smoke covered editor geometry, block add/remove/save, and no-JS item form POST fallback; add a durable Playwright spec when the route gets automated admin UI coverage. |
+| `/templates`             | TODO   | Browser smoke covered list geometry, template group/template add/copy/delete confirmations, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
+| `/templates/:id`         | TODO   | Browser smoke covered editor geometry, browser-navigation edit link, block add/remove/drag/save, and no-JS item form POST fallback; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/media/sources/plex`    | ✅     | Stable DOM shape, `PlexSignInIsland` all-arms always rendered.          |
 | `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered; copy modal, copy redirect, and 3840x1918 visual comparison covered in `plans/blocks-parity-slice.md`. |
 | `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`; hydrated add-item/preview/save plus no-JS item fallback verified in `plans/blocks-parity-slice.md`. |

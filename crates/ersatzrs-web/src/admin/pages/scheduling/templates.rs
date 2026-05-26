@@ -9,11 +9,13 @@ use leptos_router::hooks::use_params_map;
 use crate::admin::server_fns::templates::{
     copy_template, create_template, create_template_group, delete_template, delete_template_group,
     format_short_time, get_template, get_template_items, list_template_block_groups,
-    list_template_blocks_for_group, list_template_groups, list_templates, save_template_with_items,
-    TemplateBlockGroupOption, TemplateBlockOption, TemplateForm, TemplateGroupRow,
-    TemplateItemForm, TemplateRow, TemplateWithItemsForm,
+    list_template_blocks_for_group, list_template_groups, list_templates, TemplateBlockGroupOption,
+    TemplateBlockOption, TemplateForm, TemplateGroupRow, TemplateItemForm, TemplateRow,
 };
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::{
+    dialog::DeleteDialog,
+    toast::{use_toast, ToastSeverity},
+};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/templates.module.css");
 
@@ -49,6 +51,10 @@ fn TemplatesIsland() -> impl IntoView {
         copy_template(*id, *group_id, name.clone())
     });
 
+    let delete_group_open = RwSignal::new(false);
+    let delete_group_target = RwSignal::new(None::<(i64, String)>);
+    let delete_template_open = RwSignal::new(false);
+    let delete_template_target = RwSignal::new(None::<(i64, String)>);
     let delete_group_action = Action::new(|id: &i64| delete_template_group(*id));
     let delete_template_action = Action::new(|id: &i64| delete_template(*id));
 
@@ -239,8 +245,10 @@ fn TemplatesIsland() -> impl IntoView {
                             copy_target=copy_target
                             copy_group_id=copy_group_id
                             copy_name=copy_name
-                            delete_group_action=delete_group_action
-                            delete_template_action=delete_template_action
+                            delete_group_open=delete_group_open
+                            delete_group_target=delete_group_target
+                            delete_template_open=delete_template_open
+                            delete_template_target=delete_template_target
                         />
                     })}
                 </Suspense>
@@ -321,6 +329,47 @@ fn TemplatesIsland() -> impl IntoView {
                     </div>
                 </form>
             </div>
+
+            <DeleteDialog
+                open=delete_group_open
+                entity_name=Signal::derive(move || {
+                    delete_group_target
+                        .get()
+                        .map(|(_, name)| name)
+                        .unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some((id, _)) = delete_group_target.get_untracked() {
+                        if confirmed {
+                            delete_group_action.dispatch(id);
+                        } else {
+                            delete_group_open.set(false);
+                        }
+                    } else {
+                        delete_group_open.set(false);
+                    }
+                })
+            />
+            <DeleteDialog
+                open=delete_template_open
+                entity_name=Signal::derive(move || {
+                    delete_template_target
+                        .get()
+                        .map(|(_, name)| name)
+                        .unwrap_or_default()
+                })
+                on_confirm=Callback::new(move |confirmed: bool| {
+                    if let Some((id, _)) = delete_template_target.get_untracked() {
+                        if confirmed {
+                            delete_template_action.dispatch(id);
+                        } else {
+                            delete_template_open.set(false);
+                        }
+                    } else {
+                        delete_template_open.set(false);
+                    }
+                })
+            />
         </div>
     }
 }
@@ -332,8 +381,10 @@ fn TemplateTable(
     copy_target: RwSignal<Option<TemplateRow>>,
     copy_group_id: RwSignal<i64>,
     copy_name: RwSignal<String>,
-    delete_group_action: Action<i64, Result<(), ServerFnError>>,
-    delete_template_action: Action<i64, Result<(), ServerFnError>>,
+    delete_group_open: RwSignal<bool>,
+    delete_group_target: RwSignal<Option<(i64, String)>>,
+    delete_template_open: RwSignal<bool>,
+    delete_template_target: RwSignal<Option<(i64, String)>>,
 ) -> impl IntoView {
     if rows.is_empty() {
         return view! { <p class=style::empty>"No templates found."</p> }.into_any();
@@ -372,8 +423,9 @@ fn TemplateTable(
                                                 class=format!("{} {}", style::icon_button, style::danger)
                                                 on:click=move |event| {
                                                     event.prevent_default();
-                                                    let _ = &delete_group_name;
-                                                    delete_group_action.dispatch(group_id);
+                                                    delete_group_target
+                                                        .set(Some((group_id, delete_group_name.clone())));
+                                                    delete_group_open.set(true);
                                                 }
                                             >
                                                 <span class=style::delete_icon aria-hidden="true"></span>
@@ -386,12 +438,21 @@ fn TemplateTable(
                                 let id = row.id;
                                 let name = row.name.clone();
                                 let copy_row = row.clone();
+                                let copy_name_value = name.clone();
                                 let delete_name = name.clone();
                                 view! {
                                     <tr>
                                         <td>
                                             {if id >= 0 {
-                                                view! { <a href=format!("/templates/{id}")>{name}</a> }.into_any()
+                                                let href = format!("/templates/{id}");
+                                                view! {
+                                                    <a
+                                                        href=href.clone()
+                                                        on:click=move |event| navigate_by_browser(event, &href)
+                                                    >
+                                                        {name}
+                                                    </a>
+                                                }.into_any()
                                             } else {
                                                 view! { <span>{name}</span> }.into_any()
                                             }}
@@ -399,8 +460,14 @@ fn TemplateTable(
                                         <td>
                                             <div class=style::actions>
                                                 {if id >= 0 {
+                                                    let href = format!("/templates/{id}");
                                                     view! {
-                                                        <a class=style::icon_button title="Edit Template" href=format!("/templates/{id}")>
+                                                        <a
+                                                            class=style::icon_button
+                                                            title="Edit Template"
+                                                            href=href.clone()
+                                                            on:click=move |event| navigate_by_browser(event, &href)
+                                                        >
                                                             <span class=style::edit_icon aria-hidden="true"></span>
                                                         </a>
                                                         <button
@@ -409,7 +476,7 @@ fn TemplateTable(
                                                             title="Copy Template"
                                                             on:click=move |_| {
                                                                 copy_group_id.set(copy_row.group_id);
-                                                                copy_name.set(format!("{delete_name} Copy"));
+                                                                copy_name.set(format!("{copy_name_value} Copy"));
                                                                 copy_target.set(Some(copy_row.clone()));
                                                                 copy_open.set(true);
                                                             }
@@ -424,7 +491,9 @@ fn TemplateTable(
                                                                 title="Delete Template"
                                                                 on:click=move |event| {
                                                                     event.prevent_default();
-                                                                    delete_template_action.dispatch(id);
+                                                                    delete_template_target
+                                                                        .set(Some((id, delete_name.clone())));
+                                                                    delete_template_open.set(true);
                                                                 }
                                                             >
                                                                 <span class=style::delete_icon aria-hidden="true"></span>
@@ -485,11 +554,28 @@ fn TemplateEditorIsland(template_id: i64) -> impl IntoView {
                         <TemplateEditorForm template=template initial_items=items block_groups=groups/>
                     }.into_any(),
                     None => view! {
-                        <p class=style::empty>"Template not found."</p>
+                        <TemplateNotFoundRedirect/>
                     }.into_any(),
                 }
             })}
         </Suspense>
+    }
+}
+
+#[component]
+fn TemplateNotFoundRedirect() -> impl IntoView {
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = window().location().set_href("/templates");
+        }
+    });
+
+    view! {
+        <p class=style::empty>
+            "Template not found. "
+            <a href="/templates">"Back to templates"</a>
+        </p>
     }
 }
 
@@ -520,26 +606,8 @@ fn TemplateEditorForm(
     let selected_block = RwSignal::new(None::<TemplateBlockOption>);
     let selected_start = RwSignal::new(0i32);
     let block_to_remove = RwSignal::new(None::<usize>);
-    let save_action = Action::new(|form: &TemplateWithItemsForm| {
-        let form = form.clone();
-        async move { save_template_with_items(form).await }
-    });
+    let drag_index = RwSignal::new(None::<usize>);
     let toast = use_toast();
-
-    Effect::new(move |_| {
-        if let Some(result) = save_action.value().get() {
-            match result {
-                Ok(()) => {
-                    toast.push("Template saved.", ToastSeverity::Success);
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        let _ = window().location().set_href("/templates");
-                    }
-                }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
-            }
-        }
-    });
 
     let add_block = move || {
         if let Some(block) = selected_block.get_untracked() {
@@ -568,15 +636,6 @@ fn TemplateEditorForm(
         }
     };
 
-    let save = move || {
-        save_action.dispatch(TemplateWithItemsForm {
-            id: template_id,
-            group_id,
-            name: name.get_untracked().trim().to_string(),
-            items: items.get_untracked(),
-        });
-    };
-
     view! {
         <div class=style::page>
             <div class=style::action_bar>
@@ -587,18 +646,19 @@ fn TemplateEditorForm(
                         name="action"
                         value="save"
                         class=style::btn_primary
-                        disabled=move || save_action.pending().get()
-                        on:click=move |event| {
-                            event.prevent_default();
-                            save();
-                        }
                     >
                         "Save Template"
                     </button>
                     <span class=style::action_title>
                         {group_name.clone()} " / " {move || name.get()}
                     </span>
-                    <a class=style::btn_default href="/templates">"Back"</a>
+                    <a
+                        class=style::btn_default
+                        href="/templates"
+                        on:click=move |event| navigate_by_browser(event, "/templates")
+                    >
+                        "Back"
+                    </a>
                 </div>
             </div>
             <div class=style::content>
@@ -634,6 +694,7 @@ fn TemplateEditorForm(
                         <select
                             id="template-block-group"
                             class=style::select
+                            prop:value=move || selected_block_group.get().to_string()
                             on:change=move |event| {
                                 if let Ok(group_id) = event_target_value(&event).parse::<i64>() {
                                     selected_block_group.set(group_id);
@@ -653,6 +714,11 @@ fn TemplateEditorForm(
                                 <select
                                     id="template-block"
                                     class=style::select
+                                    prop:value=move || {
+                                        selected_block
+                                            .get()
+                                            .map_or_else(|| "0".to_string(), |block| block.id.to_string())
+                                    }
                                     on:change=move |event| {
                                         let selected_id = event_target_value(&event).parse::<i64>().unwrap_or_default();
                                         selected_block.set(
@@ -746,15 +812,74 @@ fn TemplateEditorForm(
                                     <div class=style::time_label>{format!("{hour:02}:00")}</div>
                                 }).collect_view()}
                             </div>
-                            <div class=style::time_grid>
-                                {move || items.get().into_iter().map(|item| {
+                            <div
+                                class=style::time_grid
+                                on:dragover=move |event| event.prevent_default()
+                                on:drop=move |event| {
+                                    event.prevent_default();
+                                    let Some(index) = drag_index.get_untracked() else {
+                                        return;
+                                    };
+                                    drag_index.set(None);
+
+                                    #[cfg(target_arch = "wasm32")]
+                                    {
+                                        use wasm_bindgen::JsCast;
+
+                                        let Some(target) = event.current_target() else {
+                                            return;
+                                        };
+                                        let Ok(element) = target.dyn_into::<web_sys::Element>() else {
+                                            return;
+                                        };
+                                        let rect = element.get_bounding_client_rect();
+                                        let Some(new_start) = snap_drop_minutes(
+                                            f64::from(event.client_y()) - rect.top(),
+                                            rect.height(),
+                                        ) else {
+                                            return;
+                                        };
+
+                                        let current = items.get_untracked();
+                                        let Some(item) = current.get(index).cloned() else {
+                                            return;
+                                        };
+                                        let new_end = new_start + item.duration_minutes;
+                                        if new_end > 24 * 60
+                                            || intersects_any(&current, new_start, new_end, Some(index))
+                                        {
+                                            toast.push(
+                                                "Block cannot be moved there because it would overlap or cross midnight.",
+                                                ToastSeverity::Error,
+                                            );
+                                            return;
+                                        }
+
+                                        items.update(|rows| {
+                                            if let Some(row) = rows.get_mut(index) {
+                                                row.start_minutes = new_start;
+                                            }
+                                            rows.sort_by_key(|row| row.start_minutes);
+                                        });
+                                    }
+
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    {
+                                        let _ = index;
+                                    }
+                                }
+                            >
+                                {move || items.get().into_iter().enumerate().map(|(index, item)| {
                                     let top = f64::from(item.start_minutes) / 60.0 * 3.0;
                                     let height = (f64::from(item.duration_minutes.max(5)) / 60.0 * 3.0).max(1.5);
                                     let end = item.start_minutes + item.duration_minutes;
                                     view! {
                                         <div
                                             class=style::timeline_item
+                                            draggable="true"
                                             style=format!("top: {top:.3}rem; height: {height:.3}rem;")
+                                            on:dragstart=move |_| drag_index.set(Some(index))
+                                            on:dragend=move |_| drag_index.set(None)
                                         >
                                             <strong>{item.block_name}</strong>
                                             <span class=style::timeline_time>
@@ -802,4 +927,42 @@ fn intersects_any(
         let other_end = item.start_minutes + item.duration_minutes;
         start < other_end && other_start < end
     })
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+#[allow(clippy::cast_possible_truncation)]
+fn snap_drop_minutes(offset_y: f64, grid_height: f64) -> Option<i32> {
+    if !offset_y.is_finite() || !grid_height.is_finite() || grid_height <= 0.0 {
+        return None;
+    }
+    let clamped = offset_y.clamp(0.0, grid_height);
+    let raw_minutes = clamped / grid_height * f64::from(24 * 60);
+    let snapped = (raw_minutes / 5.0).round() as i32 * 5;
+    Some(snapped.clamp(0, 24 * 60))
+}
+
+fn navigate_by_browser(event: leptos::ev::MouseEvent, href: &str) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        event.prevent_default();
+        let _ = window().location().set_href(href);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (event, href);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::snap_drop_minutes;
+
+    #[test]
+    fn drop_offsets_snap_to_five_minute_day_grid() {
+        assert_eq!(snap_drop_minutes(0.0, 1440.0), Some(0));
+        assert_eq!(snap_drop_minutes(480.0, 1440.0), Some(480));
+        assert_eq!(snap_drop_minutes(1440.0, 1440.0), Some(1440));
+        assert_eq!(snap_drop_minutes(-10.0, 1440.0), Some(0));
+    }
 }
