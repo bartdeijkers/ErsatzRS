@@ -163,6 +163,22 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::templates::save_template_items_form),
         )
         .route(
+            "/api/trakt-lists/add",
+            post(api::trakt::add_trakt_list_form),
+        )
+        .route(
+            "/api/trakt-lists/match",
+            post(api::trakt::match_trakt_list_form),
+        )
+        .route(
+            "/api/trakt-lists/save",
+            post(api::trakt::save_trakt_list_form),
+        )
+        .route(
+            "/api/trakt-lists/delete",
+            post(api::trakt::delete_trakt_list_form),
+        )
+        .route(
             "/api/media-sources/local/save",
             post(api::media_sources::save_local_library_form),
         )

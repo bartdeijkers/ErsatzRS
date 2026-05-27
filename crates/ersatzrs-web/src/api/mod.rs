@@ -9,4 +9,5 @@ pub mod playlists;
 pub mod rerun_collections;
 pub mod schedules;
 pub mod templates;
+pub mod trakt;
 pub mod watermarks;

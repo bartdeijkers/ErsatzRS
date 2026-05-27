@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::{Form, State},
     response::Redirect,
 };
@@ -111,10 +112,8 @@ pub async fn delete_playlist_form(
     }
 }
 
-pub async fn save_playlist_form(
-    State(state): State<AppState>,
-    Form(input): Form<PlaylistSaveForm>,
-) -> Redirect {
+pub async fn save_playlist_form(State(state): State<AppState>, body: Bytes) -> Redirect {
+    let input = PlaylistSaveForm::from_urlencoded_bytes(&body);
     let id = input.id;
     let form = input.into_editor_form();
     match save_playlist_with_pool(&state.pool, form).await {
@@ -127,6 +126,34 @@ pub async fn save_playlist_form(
 }
 
 impl PlaylistSaveForm {
+    fn from_urlencoded_bytes(body: &[u8]) -> Self {
+        let mut form = Self::default();
+        let body = String::from_utf8_lossy(body);
+        for pair in body.split('&').filter(|pair| !pair.is_empty()) {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            let value = decode_form_value(value);
+            match key {
+                "id" => form.id = value.trim().parse().unwrap_or_default(),
+                "name" => form.name = value,
+                "item_index" => form.item_index.push(value),
+                "item_id" => form.item_id.push(value),
+                "item_collection_type" => form.item_collection_type.push(value),
+                "item_collection_id" => form.item_collection_id.push(value),
+                "item_multi_collection_id" => form.item_multi_collection_id.push(value),
+                "item_smart_collection_id" => form.item_smart_collection_id.push(value),
+                "item_media_item_id" => form.item_media_item_id.push(value),
+                "item_playback_order" => form.item_playback_order.push(value),
+                "item_count" => form.item_count.push(value),
+                "item_play_all_index" => form.item_play_all_index.push(value),
+                "item_include_in_program_guide_index" => {
+                    form.item_include_in_program_guide_index.push(value);
+                }
+                _ => {}
+            }
+        }
+        form
+    }
+
     fn into_editor_form(self) -> PlaylistEditorForm {
         let play_all_indexes = parse_index_set(&self.item_play_all_index);
         let epg_indexes = parse_index_set(&self.item_include_in_program_guide_index);
@@ -177,6 +204,13 @@ fn parse_i64(value: Option<String>) -> Option<i64> {
         .filter(|value| *value != 0)
 }
 
+fn decode_form_value(value: &str) -> String {
+    let value = value.replace('+', " ");
+    urlencoding::decode(&value)
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +244,39 @@ mod tests {
         assert_eq!(parsed.items[1].count, None);
         assert!(parsed.items[1].play_all);
         assert!(parsed.items[1].include_in_program_guide);
+    }
+
+    #[test]
+    fn playlist_save_form_deserializes_single_item_payload() {
+        let form = PlaylistSaveForm::from_urlencoded_bytes(
+            b"id=3&name=firefly+and+star+trek+tng&item_index=0&item_id=0&item_collection_type=1&item_collection_id=&item_multi_collection_id=&item_smart_collection_id=&item_media_item_id=2124&item_playback_order=1&item_count=1&item_include_in_program_guide_index=0",
+        );
+
+        let parsed = form.into_editor_form();
+
+        assert_eq!(parsed.id, 3);
+        assert_eq!(parsed.name, "firefly and star trek tng");
+        assert_eq!(parsed.items.len(), 1);
+        assert_eq!(parsed.items[0].index, 0);
+        assert_eq!(parsed.items[0].collection_type, 1);
+        assert_eq!(parsed.items[0].media_item_id, Some(2124));
+        assert_eq!(parsed.items[0].count, Some(1));
+        assert!(!parsed.items[0].play_all);
+        assert!(parsed.items[0].include_in_program_guide);
+    }
+
+    #[test]
+    fn playlist_save_form_deserializes_repeated_item_payload() {
+        let form = PlaylistSaveForm::from_urlencoded_bytes(
+            b"id=3&name=firefly+and+star+trek+tng&item_index=0&item_id=0&item_collection_type=1&item_collection_id=&item_multi_collection_id=&item_smart_collection_id=&item_media_item_id=1197&item_playback_order=1&item_count=1&item_index=1&item_id=0&item_collection_type=1&item_collection_id=&item_multi_collection_id=&item_smart_collection_id=&item_media_item_id=2124&item_playback_order=1&item_count=1",
+        );
+
+        let parsed = form.into_editor_form();
+
+        assert_eq!(parsed.items.len(), 2);
+        assert_eq!(parsed.items[0].media_item_id, Some(1197));
+        assert_eq!(parsed.items[1].media_item_id, Some(2124));
+        assert_eq!(parsed.items[0].index, 0);
+        assert_eq!(parsed.items[1].index, 1);
     }
 }

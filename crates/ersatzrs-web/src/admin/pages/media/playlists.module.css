@@ -299,6 +299,14 @@
     overflow-x: auto;
 }
 
+.playlist-items-table-wrap th:last-child,
+.playlist-items-table-wrap td:last-child {
+    position: sticky;
+    right: 0;
+    background-color: var(--color-bg);
+    box-shadow: -1px 0 0 var(--color-table-line);
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -323,6 +331,11 @@ td {
     display: flex;
     gap: 0.375rem;
     justify-content: flex-end;
+}
+
+.readonly-value {
+    color: var(--color-gray-300);
+    white-space: nowrap;
 }
 
 .btn-edit,
@@ -352,14 +365,25 @@ td {
 
 .playlist-editor-grid {
     display: grid;
-    grid-template-columns: minmax(34rem, 1fr) minmax(22rem, 34rem);
+    grid-template-columns: minmax(0, 1fr);
     gap: 2rem;
     align-items: start;
 }
 
 .playlist-item-panel {
-    border-left: 1px solid var(--color-table-line);
-    padding-left: 2rem;
+    border-top: 1px solid var(--color-table-line);
+    padding-top: 1.25rem;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.panel-header .page-title {
+    margin-bottom: 0;
 }
 
 .selected-row td {
@@ -367,7 +391,7 @@ td {
     color: var(--color-gray-100);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1024px) {
     .page {
         padding: 0 0 3rem;
     }

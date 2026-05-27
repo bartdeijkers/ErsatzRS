@@ -3,13 +3,14 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_core::trakt::{TraktApiClient as TraktApiClientTrait, TraktListItemWithGuids};
 use ersatzrs_domain::{TraktList, TraktListItemKind};
 use reqwest::{
-    header::{HeaderValue, ACCEPT},
+    header::{HeaderValue, ACCEPT, USER_AGENT},
     Client,
 };
 use serde::Deserialize;
 
 const TRAKT_BASE_URL: &str = "https://api.trakt.tv";
 const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
+const ERSATZRS_USER_AGENT: HeaderValue = HeaderValue::from_static("ErsatzRS");
 
 /// HTTP client for the Trakt list API ported from
 /// `ErsatzTV.Infrastructure/Trakt/TraktApiClient.cs`.
@@ -93,6 +94,7 @@ impl TraktApiClient {
         self.client
             .get(url)
             .header(ACCEPT, APPLICATION_JSON)
+            .header(USER_AGENT, ERSATZRS_USER_AGENT)
             .header("trakt-api-version", "2")
             .header("trakt-api-key", &self.client_id)
             .send()
@@ -353,6 +355,7 @@ mod tests {
                 when.method(GET)
                     .path("/users/me/lists/favorites")
                     .header("accept", "application/json")
+                    .header("user-agent", "ErsatzRS")
                     .header("trakt-api-version", "2")
                     .header("trakt-api-key", "client-id");
                 then.status(200).json_body_obj(&serde_json::json!({

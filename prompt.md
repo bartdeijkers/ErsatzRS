@@ -1,4 +1,4 @@
-Fix the next ErsatzTV parity gap in ErsatzRS: <FEATURE/ROUTE/GAP>.
+Fix the next ErsatzTV parity gap in ErsatzRS: page `/decos` and related page `/deco-templates`.
 
 Use the repo workflow from AGENTS.md plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.

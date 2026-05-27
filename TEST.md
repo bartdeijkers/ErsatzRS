@@ -218,6 +218,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/rerun-collections` | TODO | Browser smoke covered list render, add/save redirect, delete dialog, cleanup, route geometry screenshot, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/channels`              | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/channels/:id`          | ✅     | SSR multipart form; mode-specific fields visible without hydration.     |
+| `/media/trakt/lists`     | TODO   | Browser smoke should cover Add dialog, row Search/Match/Delete, pager, editor save POST fallback, visual geometry, and console warning/error check; see `plans/trakt-lists-parity-slice.md`. |
 | `/channels/add`          | ✅     | Same SSR form as `/channels/:id` (id=0), with logo upload/remove smoke. |
 | `/ffmpeg/profiles`       | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/ffmpeg/profiles/:id`   | ✅     | Island owns blocking resource, no Suspense wrapper.                     |

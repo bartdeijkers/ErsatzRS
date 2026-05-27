@@ -336,7 +336,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
             name.set(form.name);
             is_system.set(form.is_system);
             items.set(form.items);
-            selected.set((!items.get_untracked().is_empty()).then_some(0));
+            selected.set(None);
         }
     });
 
@@ -425,7 +425,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                             <section class=style::playlist_editor_grid>
                                 <div>
                                     <h2 class=style::page_title>"Playlist Items"</h2>
-                                    <div class=style::table_wrap>
+                                    <div class=format!("{} {}", style::table_wrap, style::playlist_items_table_wrap)>
                                         <table>
                                             <thead>
                                                 <tr>
@@ -440,52 +440,79 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                             </thead>
                                             <tbody>
                                                 {move || items.get().into_iter().enumerate().map(|(idx, item)| {
+                                                    let readonly = is_system.get();
                                                     let selected_row = selected.get() == Some(idx);
+                                                    let item_name = item.item_name.clone();
+                                                    let count_label = playlist_count_label(&item, readonly);
+                                                    let play_all = item.play_all;
+                                                    let include_in_program_guide = item.include_in_program_guide;
+                                                    let collection_type = item.collection_type;
+                                                    let playback_order = item.playback_order;
                                                     view! {
                                                         <tr
                                                             class=if selected_row { style::selected_row } else { "" }
-                                                            on:click=move |_| selected.set(Some(idx))
+                                                            on:click=move |_| {
+                                                                selected.update(|current| {
+                                                                    *current = if *current == Some(idx) { None } else { Some(idx) };
+                                                                });
+                                                            }
                                                         >
-                                                            <td>{item_type_label(item.collection_type)}</td>
-                                                            <td>{item.item_name}</td>
-                                                            <td>{playback_order_label(item.playback_order)}</td>
-                                                            <td>{if item.play_all { String::new() } else { item.count.unwrap_or(1).to_string() }}</td>
+                                                            <td>{item_type_label(collection_type)}</td>
+                                                            <td>{item_name}</td>
+                                                            <td>{playback_order_label(playback_order)}</td>
+                                                            <td>{count_label}</td>
                                                             <td>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    name="item_play_all_index"
-                                                                    value=idx.to_string()
-                                                                    checked=item.play_all
-                                                                    disabled=move || is_system.get()
-                                                                    on:change=move |event| update_item(items, idx, |row| {
-                                                                        row.play_all = event_target_checked(&event);
-                                                                        if row.play_all {
-                                                                            row.count = None;
-                                                                        } else if row.count.is_none() {
-                                                                            row.count = Some(1);
-                                                                        }
-                                                                    })
-                                                                />
+                                                                {if readonly {
+                                                                    view! { <span class=style::readonly_value>{bool_label(play_all)}</span> }.into_any()
+                                                                } else {
+                                                                    view! {
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            name="item_play_all_index"
+                                                                            value=idx.to_string()
+                                                                            checked=play_all
+                                                                            on:change=move |event| update_item(items, idx, |row| {
+                                                                                row.play_all = event_target_checked(&event);
+                                                                                if row.play_all {
+                                                                                    row.count = None;
+                                                                                } else if row.count.is_none() {
+                                                                                    row.count = Some(1);
+                                                                                }
+                                                                            })
+                                                                        />
+                                                                    }.into_any()
+                                                                }}
                                                             </td>
                                                             <td>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    name="item_include_in_program_guide_index"
-                                                                    value=idx.to_string()
-                                                                    checked=item.include_in_program_guide
-                                                                    disabled=move || is_system.get()
-                                                                    on:change=move |event| update_item(items, idx, |row| {
-                                                                        row.include_in_program_guide = event_target_checked(&event);
-                                                                    })
-                                                                />
+                                                                {if readonly {
+                                                                    view! { <span class=style::readonly_value>{bool_label(include_in_program_guide)}</span> }.into_any()
+                                                                } else {
+                                                                    view! {
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            name="item_include_in_program_guide_index"
+                                                                            value=idx.to_string()
+                                                                            checked=include_in_program_guide
+                                                                            on:change=move |event| update_item(items, idx, |row| {
+                                                                                row.include_in_program_guide = event_target_checked(&event);
+                                                                            })
+                                                                        />
+                                                                    }.into_any()
+                                                                }}
                                                             </td>
                                                             <td>
-                                                                <div class=style::row_actions>
-                                                                    <button type="button" class=style::btn_edit disabled=move || is_system.get() on:click=move |_| copy_item(items, selected, idx)>"Copy"</button>
-                                                                    <button type="button" class=style::btn_edit disabled=move || is_system.get() || idx == 0 on:click=move |_| move_item(items, selected, idx, -1)>"Up"</button>
-                                                                    <button type="button" class=style::btn_edit disabled=move || is_system.get() || (idx + 1 >= items.get().len()) on:click=move |_| move_item(items, selected, idx, 1)>"Down"</button>
-                                                                    <button type="button" class=style::btn_delete disabled=move || is_system.get() on:click=move |_| remove_item(items, selected, idx)>"Delete"</button>
-                                                                </div>
+                                                                {if readonly {
+                                                                    view! { <span class=style::readonly_value aria-hidden="true"></span> }.into_any()
+                                                                } else {
+                                                                    view! {
+                                                                        <div class=style::row_actions>
+                                                                            <button type="button" class=style::btn_edit on:click=move |_| copy_item(items, selected, idx)>"Copy"</button>
+                                                                            <button type="button" class=style::btn_edit disabled=idx == 0 on:click=move |_| move_item(items, selected, idx, -1)>"Up"</button>
+                                                                            <button type="button" class=style::btn_edit disabled=move || { idx + 1 >= items.get().len() } on:click=move |_| move_item(items, selected, idx, 1)>"Down"</button>
+                                                                            <button type="button" class=style::btn_delete on:click=move |_| remove_item(items, selected, idx)>"Delete"</button>
+                                                                        </div>
+                                                                    }.into_any()
+                                                                }}
                                                             </td>
                                                         </tr>
                                                     }
@@ -495,7 +522,18 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                     </div>
                                 </div>
                                 <div class=style::playlist_item_panel style:display=move || if selected.get().is_some() && !is_system.get() { "" } else { "none" }>
-                                    <h2 class=style::page_title>"Playlist Item"</h2>
+                                    <div class=style::panel_header>
+                                        <h2 class=style::page_title>"Playlist Item"</h2>
+                                        <button
+                                            type="button"
+                                            class=style::icon_button
+                                            title="Close"
+                                            aria-label="Close playlist item editor"
+                                            on:click=move |_| selected.set(None)
+                                        >
+                                            <span style=icon_style(IconName::Close, "1.25rem") aria-hidden="true"></span>
+                                        </button>
+                                    </div>
                                     {move || {
                                         selected
                                             .get()
@@ -941,6 +979,34 @@ fn playback_order_label(playback_order: i32) -> &'static str {
         PLAYBACK_ORDER_SHUFFLE_IN_ORDER => "Shuffle In Order",
         PLAYBACK_ORDER_SEASON_EPISODE => "Season, Episode",
         _ => "",
+    }
+}
+
+fn playlist_count_label(item: &PlaylistItemForm, readonly: bool) -> String {
+    if item.play_all {
+        "All".to_string()
+    } else if let Some(count) = item.count {
+        count_per_pass_label(count)
+    } else if readonly {
+        "1 per pass".to_string()
+    } else {
+        "1 per pass".to_string()
+    }
+}
+
+fn count_per_pass_label(count: i32) -> String {
+    if count == 1 {
+        "1 per pass".to_string()
+    } else {
+        format!("{count} per pass")
+    }
+}
+
+fn bool_label(value: bool) -> &'static str {
+    if value {
+        "Yes"
+    } else {
+        "No"
     }
 }
 

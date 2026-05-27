@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-25 (schedules parity)
+Last updated: 2026-05-27 (generated playlist read-only UI ADR)
 
 ## Current Phase
 
@@ -220,6 +220,11 @@ Delete and toggle editing, and `/search?query=trakt_list:{id}` resolves through
 the scheduling search projection. `TRAKT__CLIENTID` is required only for API
 refresh/add operations; match/update/delete remain DB-only. Review outcome:
 GO for the next Phase 7 slice.
+
+Generated Trakt playlist UI hardening is documented in ADR 0011. ErsatzRS
+preserves ErsatzTV scheduling semantics for generated playlist rows, but renders
+system playlists as read-only projections instead of disabled editable controls
+so Count and Play All behavior is explicit in the editor.
 
 Slice 9 ports the first explicit readiness and downgrade/schema-check surface.
 `ersatzrs-infra` now opens the mediaserver database before running migrations,
@@ -490,8 +495,8 @@ yet.
 | `TemplatesPage`               | TODO   | Hydrated list actions, delete confirmations, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
 | `TemplateEditorPage`          | TODO   | Hydrated add/remove/drag, browser-navigation edit link, save POST fallback, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
 | `WatermarksListPage`          | ⏳     | DeleteDialog action.                                           |
-| `TraktListsPage`              | ⏳     |                                                                |
-| `TraktListEditorPage`         | ⏳     |                                                                |
+| `TraktListsPage`              | TODO   | Browser smoke covered Add dialog, Search/Match/Delete row actions, pager geometry, and console check; add durable E2E spec when automated admin coverage is broadened. |
+| `TraktListEditorPage`         | TODO   | Browser smoke covered editor layout, checkbox state, save POST fallback form, and console check; add durable E2E spec when automated admin coverage is broadened. |
 | `FillerPresetsPage`           | ⏳     | List/editor islands with POST fallback save/delete paths.       |
 | `RerunCollectionsPage`        | ⏳     | List/editor islands with POST fallback save/delete paths.       |
 | `SmartCollectionsPage`        | ⏳     |                                                                |
@@ -528,6 +533,8 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-27 | Codex (GPT-5) | Added ADR 0011 for generated playlist read-only UI and updated `/media/playlists/:id` so system/generated playlist rows show Count as `1 per pass`, Play All/Show In EPG as read-only Yes/No values, and omit disabled row action buttons while keeping preview behavior unchanged. |
+| 2026-05-27 | Codex (GPT-5) | Completed `/media/trakt/lists` admin parity: added source/visual map, route-specific MudTable-style layout, Add dialog, row icon actions, rows-per-page persistence, editor checkbox captions, HTML POST fallbacks for add/match/save/delete, focused parser and synchronizer coverage, live route visual/browser smoke, and verified the supplied Trakt list URL responds without storing it in the repo. Gates: `cargo test -p ersatzrs-web trakt --lib`, `cargo test -p ersatzrs-infra --test trakt_sync`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo xtask parity-check web`, and `./run.sh serve` browser checks. |
 | 2026-05-26 | Codex (GPT-5) | Ported `/templates` and `/templates/:id` from ErsatzTV with template group/template add/copy/delete, grouped search table, delete/copy dialogs, template editor block add/remove/drag, item replacement persistence, HTML POST fallbacks, validation/parser tests, and source/visual maps plus screenshots in `plans/templates-parity-slice.md`. |
 | 2026-05-26 | Codex (GPT-5) | Completed the `/blocks` parity slice: added source/visual maps, fixed block create default duration, surfaced empty block groups, added block copy, multi-collection block items, watermark/graphics selectors, unsaved-form preview input, SSR/no-JS item save fallback, hydrated browser coverage for copy/add-item/preview/save, and 3840x1918 visual evidence against the ErsatzTV reference screenshot. No open `/blocks` `ParityDebt` remains in `plans/blocks-parity-slice.md`. Gates: `cargo test -p ersatzrs-web blocks -- --nocapture`; `cargo xtask parity-check web`. |
 | 2026-05-25 | Codex (GPT-5) | Ported the `/schedules` route family from ErsatzTV with list/search/page-size persistence, add/edit save, copy/delete dialogs plus HTML fallbacks, hydrated schedule item add/copy/reorder/delete editing, media-code-backed language override selectors, no-JS item save/action fallback, full item-field replacement persistence, validation coverage, playout refresh side effects, and Playwright visual proof. No `/schedules` `ParityDebt` remains in the active slice. |
