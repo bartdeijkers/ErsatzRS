@@ -1,5 +1,6 @@
 pub mod blocks;
 pub mod channels;
+pub mod decos;
 pub mod ffmpeg_profiles;
 pub mod filler;
 pub mod layout;

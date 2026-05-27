@@ -982,13 +982,11 @@ fn playback_order_label(playback_order: i32) -> &'static str {
     }
 }
 
-fn playlist_count_label(item: &PlaylistItemForm, readonly: bool) -> String {
+fn playlist_count_label(item: &PlaylistItemForm, _readonly: bool) -> String {
     if item.play_all {
         "All".to_string()
     } else if let Some(count) = item.count {
         count_per_pass_label(count)
-    } else if readonly {
-        "1 per pass".to_string()
     } else {
         "1 per pass".to_string()
     }

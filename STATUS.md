@@ -449,11 +449,12 @@ the summary below is the readiness view.
 `/media/smart-collections`, `/media/multi-collections`,
 `/media/rerun-collections`, `/media/playlists`, `/media/trakt/lists`,
 `/media/filler/presets`, `/search`, `/blocks` (alias for `/scheduling/blocks`),
-`/templates`, `/schedules`, `/playouts`, `/playouts/sequential/:id`,
-`/system/health`, `/system/logs`, and `/system/troubleshooting`.
+`/templates`, `/decos`, `/deco-templates`, `/schedules`, `/playouts`,
+`/playouts/sequential/:id`, `/system/health`, `/system/logs`, and
+`/system/troubleshooting`.
 
 **Advertised but currently 404** (placeholders pending Phase 7):
-`/media/remote/streams`, `/decos`, `/deco-templates`, and
+`/media/remote/streams` and
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`. These should not be read as Phase 6
 regressions; they were intentionally shipped in the navigation tree for layout
 parity ahead of the corresponding pages.
@@ -533,6 +534,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-27 | Codex (GPT-5) | Completed `/decos` and `/deco-templates` admin parity: added list/editor routes, MudTreeView-derived row surfaces, deco and deco-template save POST fallbacks, server-side validation/persistence for deco watermarks/graphics/break content/filler/dead-air fields, deco-template item replacement, `/decos/:id` break-content table behavior, and a `/deco-templates/:id` day timeline surface with hydrated/no-JS browser evidence. Gates: `cargo fmt --all -- --check`, `cargo check -p ersatzrs-web --all-features`, `cargo test -p ersatzrs-web decos --all-features`, and `cargo xtask parity-check web`. No `ParityDebt` remains in `plans/decos-parity-slice.md`. |
 | 2026-05-27 | Codex (GPT-5) | Added ADR 0011 for generated playlist read-only UI and updated `/media/playlists/:id` so system/generated playlist rows show Count as `1 per pass`, Play All/Show In EPG as read-only Yes/No values, and omit disabled row action buttons while keeping preview behavior unchanged. |
 | 2026-05-27 | Codex (GPT-5) | Completed `/media/trakt/lists` admin parity: added source/visual map, route-specific MudTable-style layout, Add dialog, row icon actions, rows-per-page persistence, editor checkbox captions, HTML POST fallbacks for add/match/save/delete, focused parser and synchronizer coverage, live route visual/browser smoke, and verified the supplied Trakt list URL responds without storing it in the repo. Gates: `cargo test -p ersatzrs-web trakt --lib`, `cargo test -p ersatzrs-infra --test trakt_sync`, `cargo xtask hydration-lint -p ersatzrs-web`, `cargo xtask parity-check web`, and `./run.sh serve` browser checks. |
 | 2026-05-26 | Codex (GPT-5) | Ported `/templates` and `/templates/:id` from ErsatzTV with template group/template add/copy/delete, grouped search table, delete/copy dialogs, template editor block add/remove/drag, item replacement persistence, HTML POST fallbacks, validation/parser tests, and source/visual maps plus screenshots in `plans/templates-parity-slice.md`. |

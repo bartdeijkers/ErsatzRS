@@ -163,6 +163,37 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::templates::save_template_items_form),
         )
         .route(
+            "/api/decos/groups/create",
+            post(api::decos::create_deco_group_form),
+        )
+        .route("/api/decos/create", post(api::decos::create_deco_form))
+        .route("/api/decos/save", post(api::decos::save_deco_form))
+        .route(
+            "/api/decos/groups/delete",
+            post(api::decos::delete_deco_group_form),
+        )
+        .route("/api/decos/delete", post(api::decos::delete_deco_form))
+        .route(
+            "/api/deco-templates/groups/create",
+            post(api::decos::create_deco_template_group_form),
+        )
+        .route(
+            "/api/deco-templates/create",
+            post(api::decos::create_deco_template_form),
+        )
+        .route(
+            "/api/deco-templates/groups/delete",
+            post(api::decos::delete_deco_template_group_form),
+        )
+        .route(
+            "/api/deco-templates/delete",
+            post(api::decos::delete_deco_template_form),
+        )
+        .route(
+            "/api/deco-templates/items/save",
+            post(api::decos::save_deco_template_items_form),
+        )
+        .route(
             "/api/trakt-lists/add",
             post(api::trakt::add_trakt_list_form),
         )

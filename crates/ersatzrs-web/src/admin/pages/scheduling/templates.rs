@@ -17,7 +17,11 @@ use crate::admin::ui::primitives::{
     toast::{use_toast, ToastSeverity},
 };
 
-stylance::import_crate_style!(style, "src/admin/pages/scheduling/templates.module.css");
+mod style {
+    #![allow(dead_code)]
+    stylance::import_crate_style!(s, "src/admin/pages/scheduling/templates.module.css");
+    pub use s::*;
+}
 
 #[component]
 pub fn TemplatesPage() -> impl IntoView {
