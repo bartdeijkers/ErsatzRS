@@ -58,6 +58,10 @@ use crate::admin::pages::scheduling::schedules::{
 use crate::admin::pages::scheduling::templates::{TemplateEditorPage, TemplatesPage};
 use crate::admin::pages::scheduling::yaml_editor::YamlEditorPage;
 use crate::admin::pages::search::SearchPage;
+use crate::admin::pages::settings::{
+    FfmpegSettingsPage, HdhrSettingsPage, LoggingSettingsPage, PlayoutSettingsPage,
+    ScannerSettingsPage, UiSettingsPage, XmltvSettingsPage,
+};
 use crate::admin::pages::system::{
     health::HealthPage,
     logs::LogsPage,
@@ -151,6 +155,31 @@ pub fn AdminRoutes() -> impl IntoView {
             />
             <Route path=(StaticSegment("schedules"), ParamSegment("id")) view=ScheduleEditorPage/>
             <Route path=StaticSegment("search") view=SearchPage/>
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("ffmpeg"))
+                view=FfmpegSettingsPage
+            />
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("logging"))
+                view=LoggingSettingsPage
+            />
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("hdhr"))
+                view=HdhrSettingsPage
+            />
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("scanner"))
+                view=ScannerSettingsPage
+            />
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("playout"))
+                view=PlayoutSettingsPage
+            />
+            <Route path=(StaticSegment("settings"), StaticSegment("ui")) view=UiSettingsPage/>
+            <Route
+                path=(StaticSegment("settings"), StaticSegment("xmltv"))
+                view=XmltvSettingsPage
+            />
             <Route
                 path=(StaticSegment("system"), StaticSegment("health"))
                 view=HealthPage

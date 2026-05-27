@@ -271,9 +271,8 @@ pub async fn list_supported_hw_accelerations() -> Result<Vec<(i32, String)>, Ser
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(hw_acceleration_select_items(
-        &state.ffmpeg_runtime.capabilities,
-    ))
+    let runtime = state.ffmpeg_runtime.read().await;
+    Ok(hw_acceleration_select_items(&runtime.capabilities))
 }
 
 #[cfg(feature = "ssr")]

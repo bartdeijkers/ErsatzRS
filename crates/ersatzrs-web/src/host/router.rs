@@ -87,6 +87,42 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::ffmpeg_profiles::save_ffmpeg_profile_form),
         )
         .route(
+            "/api/settings/ffmpeg/save",
+            post(api::settings::save_ffmpeg_settings_form),
+        )
+        .route(
+            "/api/settings/ffmpeg/resolutions/add",
+            post(api::settings::add_custom_resolution_form),
+        )
+        .route(
+            "/api/settings/ffmpeg/resolutions/delete",
+            post(api::settings::delete_custom_resolution_form),
+        )
+        .route(
+            "/api/settings/logging/save",
+            post(api::settings::save_logging_settings_form),
+        )
+        .route(
+            "/api/settings/hdhr/save",
+            post(api::settings::save_hdhr_settings_form),
+        )
+        .route(
+            "/api/settings/scanner/save",
+            post(api::settings::save_scanner_settings_form),
+        )
+        .route(
+            "/api/settings/playout/save",
+            post(api::settings::save_playout_settings_form),
+        )
+        .route(
+            "/api/settings/ui/save",
+            post(api::settings::save_ui_settings_form),
+        )
+        .route(
+            "/api/settings/xmltv/save",
+            post(api::settings::save_xmltv_settings_form),
+        )
+        .route(
             "/api/filler-presets/save",
             post(api::filler::save_filler_preset_form),
         )

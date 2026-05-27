@@ -5,8 +5,10 @@ use std::{
     fs::{File, OpenOptions},
     io::{self, Write},
     path::PathBuf,
+    sync::OnceLock,
 };
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::registry::Registry;
+use tracing_subscriber::{layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter};
 use uuid::Uuid;
 
 use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
@@ -19,6 +21,7 @@ const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
 const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
+static LOG_FILTER_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 
 pub async fn run() {
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
@@ -69,7 +72,7 @@ pub async fn run() {
     super::tasks::spawn_background_tasks(
         app_state.pool.clone(),
         app_state.device_uuid,
-        app_state.tuner_count,
+        app_state.tuner_count.clone(),
         LISTEN_PORT,
         playout_build_rx,
     );
@@ -88,23 +91,47 @@ pub async fn run() {
 }
 
 async fn init_logging(pool: &DbPool) {
-    #[allow(clippy::disallowed_methods)]
-    let base_filter = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
-    let filter = ersatzrs_infra::logging::logging_filter_from_database(pool, base_filter)
+    let filter = logging_filter_from_database(pool)
         .await
         .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
 
     let writer = FileAndStdoutWriter::new(ersatzrs_infra::logging::default_log_file_path());
+    let env_filter = EnvFilter::try_new(filter)
+        .unwrap_or_else(|_| EnvFilter::new(ersatzrs_infra::logging::default_filter()));
+    let (filter_layer, reload_handle) = reload::Layer::new(env_filter);
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_new(filter)
-                .unwrap_or_else(|_| EnvFilter::new(ersatzrs_infra::logging::default_filter())),
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(writer),
         )
-        .with_ansi(false)
-        .with_writer(writer)
         .init();
+
+    let _ = LOG_FILTER_RELOAD.set(reload_handle);
+}
+
+pub async fn reload_logging_from_database(pool: &DbPool) -> Result<(), String> {
+    let filter = logging_filter_from_database(pool)
+        .await
+        .map_err(|error| error.to_string())?;
+    let env_filter = EnvFilter::try_new(filter).map_err(|error| error.to_string())?;
+
+    if let Some(handle) = LOG_FILTER_RELOAD.get() {
+        handle
+            .reload(env_filter)
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+async fn logging_filter_from_database(pool: &DbPool) -> Result<String, sqlx::Error> {
+    #[allow(clippy::disallowed_methods)]
+    let base_filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| ersatzrs_infra::logging::default_filter().to_owned());
+    ersatzrs_infra::logging::logging_filter_from_database(pool, base_filter).await
 }
 
 #[derive(Clone)]
@@ -284,7 +311,7 @@ fn sqlx_repo_error(error: &RepositoryError) -> sqlx::Error {
 }
 
 pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>) -> StatusCode {
-    if state.system_startup.is_ready() && !state.ffmpeg_runtime.has_errors() {
+    if state.system_startup.is_ready() && !state.ffmpeg_runtime.read().await.has_errors() {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE

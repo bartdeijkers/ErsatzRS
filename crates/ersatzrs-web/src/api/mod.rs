@@ -9,6 +9,7 @@ pub mod media_sources;
 pub mod playlists;
 pub mod rerun_collections;
 pub mod schedules;
+pub mod settings;
 pub mod templates;
 pub mod trakt;
 pub mod watermarks;

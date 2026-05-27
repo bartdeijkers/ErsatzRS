@@ -23,7 +23,7 @@ pub async fn count_health_issues() -> Result<(u32, u32), ServerFnError> {
     use ersatzrs_infra::health::SqlHealthCheckStore;
 
     let state = expect_context::<AppState>();
-    let (mut errors, mut warnings) = state.health_issue_counts();
+    let (mut errors, mut warnings) = state.health_issue_counts().await;
 
     let store = SqlHealthCheckStore::new(state.pool.clone());
     if let Ok(summary) = store.load_summary().await {
@@ -67,7 +67,7 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
     if results.is_empty() {
         let service = make_health_check_service(
             state.pool.clone(),
-            state.ffmpeg_runtime.as_ref().clone(),
+            state.ffmpeg_runtime.read().await.clone(),
             state.system_startup.schema_status.clone(),
         );
         results = service.perform_health_checks().await;

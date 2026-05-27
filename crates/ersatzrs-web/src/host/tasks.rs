@@ -3,12 +3,13 @@ use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
 use ersatzrs_infra::trakt_sync::TraktSynchronizer;
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
+use std::sync::{atomic::AtomicI32, Arc};
 use tokio::sync::mpsc;
 
 pub fn spawn_background_tasks(
     pool: DbPool,
     device_uuid: uuid::Uuid,
-    tuner_count: i32,
+    tuner_count: Arc<AtomicI32>,
     listen_port: u16,
     playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
 ) {

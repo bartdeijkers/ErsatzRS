@@ -92,7 +92,7 @@ pub async fn get_discover_json(
     Json(Discover::new(
         &scheme,
         &host,
-        state.tuner_count,
+        state.tuner_count(),
         state.device_uuid,
     ))
 }

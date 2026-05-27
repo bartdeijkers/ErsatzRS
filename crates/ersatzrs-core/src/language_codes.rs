@@ -59,6 +59,25 @@ pub fn english_name(code: &str) -> Option<String> {
         .cloned()
 }
 
+/// Return one display option per ISO-639 language group, using the primary
+/// three-letter bibliographic code as the persisted value.
+#[must_use]
+pub fn language_options() -> Vec<(String, String)> {
+    let cache = cache();
+    let mut options: Vec<(String, String)> = cache
+        .code_to_group
+        .values()
+        .filter_map(|group| {
+            let code = group.first()?.clone();
+            let name = cache.english_name_by_code.get(&code)?.clone();
+            Some((code, name))
+        })
+        .collect();
+    options.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    options.dedup_by(|a, b| a.0 == b.0);
+    options
+}
+
 fn cache() -> &'static LanguageCodeCache {
     LANGUAGE_CODES.get_or_init(|| LanguageCodeCache::parse(LANGUAGE_DATA))
 }

@@ -1,5 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicI32, Ordering},
+    Arc, Mutex,
+};
 
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
@@ -157,9 +160,9 @@ pub struct AppState {
     pub pool: DbPool,
     pub database_backend: DatabaseBackend,
     pub system_startup: Arc<SystemStartup>,
-    pub ffmpeg_runtime: Arc<FfmpegRuntimeReport>,
+    pub ffmpeg_runtime: Arc<RwLock<FfmpegRuntimeReport>>,
     pub device_uuid: Uuid,
-    pub tuner_count: i32,
+    pub tuner_count: Arc<AtomicI32>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
@@ -195,9 +198,9 @@ impl AppState {
             pool,
             database_backend,
             system_startup: Arc::new(system_startup),
-            ffmpeg_runtime: Arc::new(ffmpeg_runtime),
+            ffmpeg_runtime: Arc::new(RwLock::new(ffmpeg_runtime)),
             device_uuid,
-            tuner_count,
+            tuner_count: Arc::new(AtomicI32::new(tuner_count)),
             hls_sessions,
             hls_direct_indices,
             iptv_access_token_verifier,
@@ -230,19 +233,28 @@ impl AppState {
     }
 
     #[must_use]
-    pub fn health_issue_counts(&self) -> (u32, u32) {
+    pub async fn health_issue_counts(&self) -> (u32, u32) {
         let (startup_errors, startup_warnings) = self.system_startup.health_issue_counts();
-        let (ffmpeg_errors, ffmpeg_warnings) = self.ffmpeg_runtime.issue_counts();
+        let (ffmpeg_errors, ffmpeg_warnings) = self.ffmpeg_runtime.read().await.issue_counts();
         (
             startup_errors.saturating_add(ffmpeg_errors),
             startup_warnings.saturating_add(ffmpeg_warnings),
         )
     }
+
+    #[must_use]
+    pub fn tuner_count(&self) -> i32 {
+        self.tuner_count.load(Ordering::Relaxed)
+    }
+
+    pub fn set_tuner_count(&self, tuner_count: i32) {
+        self.tuner_count.store(tuner_count, Ordering::Relaxed);
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ScanProgressMap, SystemStartup};
+    use super::{AppState, IptvAccessTokenVerifier, ScanProgressMap, SystemStartup};
     use ersatzrs_domain::ScanProgressSink;
     use ersatzrs_infra::db::DatabaseSchemaStatus;
 
@@ -285,6 +297,16 @@ mod tests {
         sink.report(0.5);
         sink.report(0.9);
         assert_eq!(map.snapshot().get(&42).copied(), Some(0.9));
+    }
+
+    #[tokio::test]
+    async fn app_state_tuner_count_updates_in_place() {
+        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        assert_eq!(state.tuner_count(), 2);
+
+        state.set_tuner_count(4);
+
+        assert_eq!(state.tuner_count(), 4);
     }
 
     #[test]

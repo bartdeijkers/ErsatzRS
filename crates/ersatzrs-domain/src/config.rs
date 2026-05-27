@@ -8,8 +8,33 @@ pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING: &str = "log.minimum_level.sch
 pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING: &str = "log.minimum_level.searching";
 pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING: &str = "log.minimum_level.streaming";
 pub const CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP: &str = "log.minimum_level.http";
+pub const CONFIG_KEY_FFMPEG_PATH: &str = "ffmpeg.ffmpeg_path";
+pub const CONFIG_KEY_FFPROBE_PATH: &str = "ffmpeg.ffprobe_path";
+pub const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
+pub const CONFIG_KEY_FFMPEG_SAVE_REPORTS: &str = "ffmpeg.save_reports";
+pub const CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES: &str = "ffmpeg.use_embedded_subtitles";
+pub const CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES: &str = "ffmpeg.extract_embedded_subtitles";
+pub const CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES: &str =
+    "ffmpeg.probe_for_interlaced_frames";
+pub const CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE: &str = "ffmpeg.preferred_language_code";
 pub const CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID: &str = "ffmpeg.global_watermark_id";
 pub const CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID: &str = "ffmpeg.global_fallback_filler_id";
+pub const CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT: &str = "ffmpeg.segmenter.timeout_seconds";
+pub const CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS: &str = "ffmpeg.segmenter.work_ahead_limit";
+pub const CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT: &str = "ffmpeg.segmenter.initial_segment_count";
+pub const CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_format";
+pub const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";
+pub const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
+pub const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
+pub const CONFIG_KEY_PAGES_IS_DARK_MODE: &str = "pages.is_dark_mode";
+pub const CONFIG_KEY_PAGES_LANGUAGE: &str = "pages.language";
+pub const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
+pub const CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD: &str = "playout.days_to_build";
+pub const CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS: &str = "playout.skip_missing_items";
+pub const CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS: &str =
+    "playout.scripted_schedule_timeout_seconds";
+pub const CONFIG_KEY_XMLTV_TIME_ZONE: &str = "xmltv.time_zone";
+pub const CONFIG_KEY_XMLTV_DAYS_TO_BUILD: &str = "xmltv.days_to_build";
 pub const CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR: &str = "xmltv.block_behavior";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
