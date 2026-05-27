@@ -1,25 +1,14 @@
 use leptos::prelude::*;
 
 use crate::admin::server_fns::settings::{
-    add_custom_resolution, load_ffmpeg_settings, load_hdhr_settings, load_logging_settings,
-    load_playout_settings, load_scanner_settings, load_ui_settings, load_xmltv_settings,
-    FfmpegSettingsPageData, HdhrSettingsForm, LoggingSettingsForm, PlayoutSettingsForm,
-    ScannerSettingsForm, SelectOption, UiSettingsForm, XmltvSettingsForm,
+    load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
+    load_scanner_settings, load_ui_settings, load_xmltv_settings, FfmpegSettingsPageData,
+    HdhrSettingsForm, LoggingSettingsForm, PlayoutSettingsForm, ScannerSettingsForm, SelectOption,
+    UiSettingsForm, XmltvSettingsForm,
 };
-use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 stylance::import_crate_style!(style, "src/admin/pages/settings.module.css");
-
-#[cfg(target_arch = "wasm32")]
-fn reload_current_page() {
-    if let Some(window) = web_sys::window() {
-        let _ = window.location().reload();
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn reload_current_page() {}
 
 #[component]
 pub fn FfmpegSettingsPage() -> impl IntoView {
@@ -219,17 +208,14 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
         <section class=style::content>
             <h2 class=style::section_title>"Custom Resolutions"</h2>
             <div class=style::divider></div>
-            <AddCustomResolutionDialog/>
-            <noscript>
-                <form method="post" action="/api/settings/ffmpeg/resolutions/add" class=style::inline_form>
-                    <input class=format!("{} {}", style::input, style::inline_input) name="width" type="number" min="1" required placeholder="Width"/>
-                    <input class=format!("{} {}", style::input, style::inline_input) name="height" type="number" min="1" required placeholder="Height"/>
-                    <button class=style::button type="submit">
-                        <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                        "Add Custom Resolution"
-                    </button>
-                </form>
-            </noscript>
+            <form method="post" action="/api/settings/ffmpeg/resolutions/add" class=style::inline_form>
+                <input class=format!("{} {}", style::input, style::inline_input) name="width" type="number" min="1" required placeholder="Width" aria-label="Custom resolution width"/>
+                <input class=format!("{} {}", style::input, style::inline_input) name="height" type="number" min="1" required placeholder="Height" aria-label="Custom resolution height"/>
+                <button class=style::button type="submit">
+                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                    "Add Custom Resolution"
+                </button>
+            </form>
             <div class=style::table_wrap>
                 <table class=style::table>
                     <tbody>
@@ -252,67 +238,6 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 </table>
             </div>
         </section>
-    }
-}
-
-#[island]
-fn AddCustomResolutionDialog() -> impl IntoView {
-    let open = RwSignal::new(false);
-    let width = RwSignal::new(String::new());
-    let height = RwSignal::new(String::new());
-    let add_action = Action::new(move |(width, height): &(i32, i32)| {
-        let width = *width;
-        let height = *height;
-        async move { add_custom_resolution(width, height).await }
-    });
-
-    Effect::new(move |_| {
-        if matches!(add_action.value().get(), Some(Ok(()))) {
-            reload_current_page();
-        }
-    });
-
-    let on_close = Callback::new(move |confirmed: bool| {
-        if !confirmed {
-            return;
-        }
-        let parsed_width = width.get().trim().parse::<i32>().unwrap_or_default();
-        let parsed_height = height.get().trim().parse::<i32>().unwrap_or_default();
-        add_action.dispatch((parsed_width, parsed_height));
-    });
-
-    view! {
-        <button class=style::button type="button" on:click=move |_| open.set(true)>
-            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-            "Add Custom Resolution"
-        </button>
-        <Modal
-            open=open
-            title="Add Custom Resolution".to_string()
-            on_close=on_close
-            confirm_label="Add"
-        >
-            <div class=style::dialog_grid>
-                <label class=style::label for="custom-resolution-width">"Width"</label>
-                <input
-                    id="custom-resolution-width"
-                    class=style::input
-                    type="number"
-                    min="1"
-                    prop:value=move || width.get()
-                    on:input=move |event| width.set(event_target_value(&event))
-                />
-                <label class=style::label for="custom-resolution-height">"Height"</label>
-                <input
-                    id="custom-resolution-height"
-                    class=style::input
-                    type="number"
-                    min="1"
-                    prop:value=move || height.get()
-                    on:input=move |event| height.set(event_target_value(&event))
-                />
-            </div>
-        </Modal>
     }
 }
 
@@ -389,7 +314,7 @@ fn render_ui(form: UiSettingsForm) -> impl IntoView {
                 label="Language"
                 name="language"
                 selected=form.language
-                options=vec![SelectOption { value: "en".to_owned(), label: "English".to_owned() }]
+                options=supported_ui_language_options()
                 include_none=false
             />
         </SettingsForm>
@@ -521,4 +446,33 @@ fn log_level_options() -> Vec<SelectOption> {
             label: level.to_owned(),
         })
         .collect()
+}
+
+pub fn supported_ui_language_options() -> Vec<SelectOption> {
+    [
+        ("en-us", "English"),
+        ("pl", "Polski"),
+        ("pt-br", "Português (Brasil)"),
+    ]
+    .into_iter()
+    .map(|(value, label)| SelectOption {
+        value: value.to_owned(),
+        label: label.to_owned(),
+    })
+    .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ui_language_options_match_ersatztv_supported_languages() {
+        let values: Vec<String> = supported_ui_language_options()
+            .into_iter()
+            .map(|option| option.value)
+            .collect();
+
+        assert_eq!(values, vec!["en-us", "pl", "pt-br"]);
+    }
 }

@@ -6,9 +6,17 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use ersatzrs_domain::{
+    CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
+    CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
+    CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, CONFIG_KEY_FFMPEG_SAVE_REPORTS,
+    CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
+    CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
     CONFIG_KEY_MINIMUM_LOG_LEVEL, CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
     CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
     CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING, CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
+    CONFIG_KEY_PAGES_IS_DARK_MODE, CONFIG_KEY_PAGES_LANGUAGE, CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
+    CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
+    CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE,
 };
 
 #[cfg(feature = "mysql")]
@@ -62,6 +70,7 @@ const DEFAULT_CHANNEL_NUMBER: &str = "1";
 const DEFAULT_CHANNEL_NAME: &str = "ErsatzTV";
 const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_RESOLUTION_ID: &str = "ffmpeg.default_resolution_id";
+const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";
 
 static SQLITE_MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
 #[cfg(feature = "mysql")]
@@ -474,6 +483,30 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Err
     )
     .await?;
 
+    for (key, value) in [
+        (CONFIG_KEY_FFMPEG_SAVE_REPORTS, "False"),
+        (CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE, "eng"),
+        (CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES, "True"),
+        (CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, "False"),
+        (CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, "False"),
+        (CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, "60"),
+        (CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, "1"),
+        (CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, "1"),
+        (CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT, "2"),
+        (CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT, "default"),
+        (CONFIG_KEY_PAGES_IS_DARK_MODE, "True"),
+        (CONFIG_KEY_PAGES_LANGUAGE, "en-us"),
+        (CONFIG_KEY_LIBRARY_REFRESH_INTERVAL, "6"),
+        (CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD, "2"),
+        (CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS, "False"),
+        (CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS, "30"),
+        (CONFIG_KEY_XMLTV_DAYS_TO_BUILD, "2"),
+        (CONFIG_KEY_XMLTV_TIME_ZONE, "Local"),
+        (CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR, "SplitTimeEvenly"),
+    ] {
+        ensure_config_value(pool, key, value).await?;
+    }
+
     for key in [
         CONFIG_KEY_MINIMUM_LOG_LEVEL,
         CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
@@ -802,7 +835,26 @@ mod tests {
                    'log.minimum_level.scheduling',
                    'log.minimum_level.searching',
                    'log.minimum_level.streaming',
-                   'log.minimum_level.http'
+                   'log.minimum_level.http',
+                   'ffmpeg.save_reports',
+                   'ffmpeg.preferred_language_code',
+                   'ffmpeg.use_embedded_subtitles',
+                   'ffmpeg.extract_embedded_subtitles',
+                   'ffmpeg.probe_for_interlaced_frames',
+                   'ffmpeg.segmenter.timeout_seconds',
+                   'ffmpeg.segmenter.work_ahead_limit',
+                   'ffmpeg.segmenter.initial_segment_count',
+                   'ffmpeg.hls_direct.output_format',
+                   'ffmpeg.default_mpegts_script',
+                   'pages.is_dark_mode',
+                   'pages.language',
+                   'scanner.library_refresh_interval',
+                   'playout.days_to_build',
+                   'playout.skip_missing_items',
+                   'playout.scripted_schedule_timeout_seconds',
+                   'xmltv.days_to_build',
+                   'xmltv.time_zone',
+                   'xmltv.block_behavior'
                )
                ORDER BY "Key""#,
         )
@@ -814,11 +866,40 @@ mod tests {
         assert_eq!(profile_name, "1920x1080 x264 aac");
         assert_eq!(channel_name, "ErsatzTV");
         assert_eq!(group_name, "Trakt Lists");
-        assert_eq!(config_rows.len(), 8);
-        for row in config_rows {
-            let value: Option<String> = row.try_get("Value").expect("config value");
-            assert!(value.is_some());
-        }
+        let config_rows: std::collections::HashMap<String, String> = config_rows
+            .into_iter()
+            .map(|row| {
+                (
+                    row.try_get("Key").expect("config key"),
+                    row.try_get::<Option<String>, _>("Value")
+                        .expect("config value")
+                        .expect("config value present"),
+                )
+            })
+            .collect();
+
+        assert_eq!(config_rows.len(), 27);
+        assert_eq!(config_rows["ffmpeg.preferred_language_code"], "eng");
+        assert_eq!(config_rows["ffmpeg.use_embedded_subtitles"], "True");
+        assert_eq!(config_rows["ffmpeg.extract_embedded_subtitles"], "False");
+        assert_eq!(config_rows["ffmpeg.probe_for_interlaced_frames"], "False");
+        assert_eq!(config_rows["ffmpeg.segmenter.timeout_seconds"], "60");
+        assert_eq!(config_rows["ffmpeg.segmenter.work_ahead_limit"], "1");
+        assert_eq!(config_rows["ffmpeg.segmenter.initial_segment_count"], "1");
+        assert_eq!(config_rows["ffmpeg.hls_direct.output_format"], "2");
+        assert_eq!(config_rows["ffmpeg.default_mpegts_script"], "default");
+        assert_eq!(config_rows["pages.is_dark_mode"], "True");
+        assert_eq!(config_rows["pages.language"], "en-us");
+        assert_eq!(config_rows["scanner.library_refresh_interval"], "6");
+        assert_eq!(config_rows["playout.days_to_build"], "2");
+        assert_eq!(config_rows["playout.skip_missing_items"], "False");
+        assert_eq!(
+            config_rows["playout.scripted_schedule_timeout_seconds"],
+            "30"
+        );
+        assert_eq!(config_rows["xmltv.days_to_build"], "2");
+        assert_eq!(config_rows["xmltv.time_zone"], "Local");
+        assert_eq!(config_rows["xmltv.block_behavior"], "SplitTimeEvenly");
     }
 
     #[tokio::test]

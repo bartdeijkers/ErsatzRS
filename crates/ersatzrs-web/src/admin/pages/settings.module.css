@@ -146,14 +146,6 @@
     width: 8rem;
 }
 
-.dialog-grid {
-    display: grid;
-    grid-template-columns: minmax(5rem, 8rem) minmax(10rem, 1fr);
-    align-items: center;
-    gap: 1rem;
-    min-width: min(28rem, 80vw);
-}
-
 .table-wrap {
     max-width: 800px;
     margin: 1.5rem 0 3rem;

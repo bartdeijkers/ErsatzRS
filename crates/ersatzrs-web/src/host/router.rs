@@ -30,13 +30,14 @@ pub fn build_app(app_state: AppState) -> Router {
     let output_name = leptos_options.output_name.clone();
 
     let leptos_options_clone = leptos_options.clone();
+    let app_state_for_shell = app_state.clone();
     let app_state_for_leptos = app_state.clone();
     let mut leptos_router: Router = Router::new()
         .leptos_routes_with_context(
             &leptos_options,
             routes,
             move || provide_context(app_state_for_leptos.clone()),
-            move || shell(leptos_options_clone.clone()),
+            move || shell(leptos_options_clone.clone(), app_state_for_shell.clone()),
         )
         .nest_service("/public", ServeDir::new(WEB_PUBLIC_DIR))
         .with_state(leptos_options);
@@ -118,6 +119,7 @@ pub fn build_app(app_state: AppState) -> Router {
             "/api/settings/ui/save",
             post(api::settings::save_ui_settings_form),
         )
+        .route("/api/settings/ui/theme", get(api::settings::ui_theme))
         .route(
             "/api/settings/xmltv/save",
             post(api::settings::save_xmltv_settings_form),

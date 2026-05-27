@@ -10,8 +10,13 @@ stylance::import_crate_style!(style, "src/admin/layout/layout.module.css");
 
 #[component]
 pub fn AppShell(children: Children) -> impl IntoView {
+    let theme = load_shell_theme_initial();
+
     view! {
-        <div class=style::shell>
+        <div
+            class=style::shell
+            data-theme=theme
+        >
             <input
                 type="checkbox"
                 id="nav-toggle"
@@ -29,7 +34,69 @@ pub fn AppShell(children: Children) -> impl IntoView {
                 </div>
             </div>
             <NavStateScript/>
+            <ThemeStateScript/>
         </div>
+    }
+}
+
+fn load_shell_theme_initial() -> String {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::host::state::AppState;
+
+        let Some(state) = use_context::<AppState>() else {
+            return "dark".to_owned();
+        };
+        let is_dark_mode = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(crate::admin::server_fns::settings::load_bool_for_api(
+                    &state.pool,
+                    ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
+                    true,
+                ))
+            })
+            .unwrap_or(true),
+            Err(_) => true,
+        };
+        return if is_dark_mode { "dark" } else { "light" }.to_owned();
+    }
+
+    #[cfg(all(not(feature = "ssr"), target_arch = "wasm32"))]
+    {
+        web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.query_selector("[data-theme]").ok().flatten())
+            .and_then(|element| element.get_attribute("data-theme"))
+            .filter(|theme| theme == "light")
+            .unwrap_or_else(|| "dark".to_owned())
+    }
+
+    #[cfg(all(not(feature = "ssr"), not(target_arch = "wasm32")))]
+    {
+        "dark".to_owned()
+    }
+}
+
+#[component]
+fn ThemeStateScript() -> impl IntoView {
+    const SCRIPT: &str = r#"
+(() => {
+  async function initTheme() {
+    try {
+      const response = await fetch("/api/settings/ui/theme", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      const theme = payload && payload.theme === "light" ? "light" : "dark";
+      document.querySelector("[data-theme]")?.setAttribute("data-theme", theme);
+    } catch {}
+  }
+
+  initTheme();
+})();
+"#;
+
+    view! {
+        <script inner_html=SCRIPT></script>
     }
 }
 

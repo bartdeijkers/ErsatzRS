@@ -44,7 +44,7 @@ impl Default for FfmpegSettingsForm {
             work_ahead_segmenter_limit: 1,
             initial_segment_count: 1,
             hls_direct_output_format: 2,
-            default_mpeg_ts_script: "Default".to_owned(),
+            default_mpeg_ts_script: "default".to_owned(),
         }
     }
 }
@@ -130,7 +130,7 @@ impl Default for UiSettingsForm {
     fn default() -> Self {
         Self {
             is_dark_mode: true,
-            language: "en".to_owned(),
+            language: "en-us".to_owned(),
         }
     }
 }
@@ -254,9 +254,10 @@ pub async fn load_ui_settings() -> Result<UiSettingsForm, ServerFnError> {
         language: load_string(
             &state.pool,
             ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE,
-            "en",
+            "en-us",
         )
-        .await?,
+        .await
+        .map(|language| normalize_ui_language(&language))?,
     })
 }
 
@@ -379,7 +380,7 @@ pub async fn load_ffmpeg_settings_with_pool(
         default_mpeg_ts_script: load_string(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT,
-            "Default",
+            "default",
         )
         .await?,
     };
@@ -406,7 +407,7 @@ pub async fn load_ffmpeg_settings_with_pool(
         )
         .await?,
         mpeg_ts_scripts: vec![SelectOption {
-            value: "Default".to_owned(),
+            value: "default".to_owned(),
             label: "Default".to_owned(),
         }],
         custom_resolutions: select_options(
@@ -824,18 +825,14 @@ pub async fn save_ui_settings_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
     form: UiSettingsForm,
 ) -> Result<(), ServerFnError> {
+    let language = normalize_ui_language(&form.language);
     save_config_value(
         pool,
         ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
         bool_value(form.is_dark_mode),
     )
     .await?;
-    save_config_value(
-        pool,
-        ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE,
-        &form.language,
-    )
-    .await
+    save_config_value(pool, ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE, &language).await
 }
 
 #[cfg(feature = "ssr")]
@@ -1038,6 +1035,14 @@ fn validate_one_of(value: &str, allowed: &[&str]) -> Result<(), ServerFnError> {
     }
 }
 
+fn normalize_ui_language(language: &str) -> String {
+    match language.trim().to_ascii_lowercase().as_str() {
+        "pl" => "pl".to_owned(),
+        "pt-br" => "pt-br".to_owned(),
+        _ => "en-us".to_owned(),
+    }
+}
+
 #[cfg(feature = "ssr")]
 fn bool_value(value: bool) -> &'static str {
     if value {
@@ -1127,6 +1132,15 @@ async fn load_bool(
 }
 
 #[cfg(feature = "ssr")]
+pub(crate) async fn load_bool_for_api(
+    pool: &ersatzrs_infra::db::DbPool,
+    key: &str,
+    default: bool,
+) -> Result<bool, ServerFnError> {
+    load_bool(pool, key, default).await
+}
+
+#[cfg(feature = "ssr")]
 pub async fn save_config_value(
     pool: &ersatzrs_infra::db::DbPool,
     key: &str,
@@ -1179,5 +1193,69 @@ fn enqueue_playout_builds(
                 "dropping requested settings-triggered playout build; periodic scheduler will retry later"
             );
         }
+    }
+}
+
+#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+mod tests {
+    use super::*;
+    use sqlx::Row;
+
+    async fn fresh_pool() -> ersatzrs_infra::db::DbPool {
+        let dir = tempfile::tempdir().expect("temp db dir");
+        let database_url = format!("sqlite://{}", dir.path().join("settings.db").display());
+        std::mem::forget(dir);
+        ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database")
+    }
+
+    #[tokio::test]
+    async fn create_custom_resolution_persists_custom_resolution() {
+        let pool = fresh_pool().await;
+
+        create_custom_resolution(&pool, 1234, 567)
+            .await
+            .expect("create custom resolution");
+
+        let row = sqlx::query(
+            r#"SELECT "Name", "IsCustom", "Width", "Height"
+               FROM "Resolution" WHERE "Width" = ? AND "Height" = ?"#,
+        )
+        .bind(1234)
+        .bind(567)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch custom resolution");
+
+        assert_eq!(row.try_get::<String, _>("Name").unwrap(), "1234x567");
+        assert_eq!(row.try_get::<i32, _>("IsCustom").unwrap(), 1);
+        assert_eq!(row.try_get::<i32, _>("Width").unwrap(), 1234);
+        assert_eq!(row.try_get::<i32, _>("Height").unwrap(), 567);
+    }
+
+    #[tokio::test]
+    async fn create_custom_resolution_rejects_duplicates() {
+        let pool = fresh_pool().await;
+
+        create_custom_resolution(&pool, 1234, 567)
+            .await
+            .expect("create custom resolution");
+
+        let error = create_custom_resolution(&pool, 1234, 567)
+            .await
+            .expect_err("duplicate resolution should fail");
+
+        assert!(error
+            .to_string()
+            .contains("Resolution width and height must be unique"));
+    }
+
+    #[test]
+    fn normalize_ui_language_falls_back_to_ersatztv_default() {
+        assert_eq!(normalize_ui_language("en"), "en-us");
+        assert_eq!(normalize_ui_language("en-us"), "en-us");
+        assert_eq!(normalize_ui_language("pl"), "pl");
+        assert_eq!(normalize_ui_language("pt-br"), "pt-br");
     }
 }

@@ -2,11 +2,16 @@
 use leptos::prelude::*;
 use leptos_meta::provide_meta_context;
 use leptos_router::components::Router;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-use crate::admin::layout::{AppShell, NavStateHeadScript};
+use crate::admin::layout::AppShell;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::admin::layout::NavStateHeadScript;
 use crate::admin::routes::AdminRoutes;
 use crate::admin::ui::primitives::toast::provide_toast_store;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::host::state::AppState;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -23,7 +28,8 @@ pub fn App() -> impl IntoView {
 }
 
 #[allow(clippy::needless_pass_by_value)] // signature dictated by leptos_axum
-pub fn shell(options: LeptosOptions) -> impl IntoView {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
     let hydration_assets_available = resolve_hydration_assets(&options).is_some();
 
     view! {
@@ -32,7 +38,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="UTF-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-                <meta name="color-scheme" content="dark"/>
+                <meta name="color-scheme" content="dark light"/>
                 <title>"ErsatzRS"</title>
                 <NavStateHeadScript/>
                 <link rel="stylesheet" href="/public/bundle.css"/>
@@ -41,12 +47,20 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 })}
             </head>
             <body>
-                <App/>
+                <AppWithState app_state=app_state/>
             </body>
         </html>
     }
 }
 
+#[component]
+#[cfg(not(target_arch = "wasm32"))]
+fn AppWithState(app_state: AppState) -> impl IntoView {
+    provide_context(app_state);
+    view! { <App/> }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_hydration_assets(options: &LeptosOptions) -> Option<PathBuf> {
     let js_name = format!("{}.js", options.output_name);
     let wasm_names = [
@@ -65,6 +79,7 @@ fn resolve_hydration_assets(options: &LeptosOptions) -> Option<PathBuf> {
         })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn candidate_site_roots(site_root: impl AsRef<Path>) -> Vec<PathBuf> {
     let site_root = site_root.as_ref();
     let configured = PathBuf::from(site_root);

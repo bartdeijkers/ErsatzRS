@@ -3,7 +3,9 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
+    Json,
 };
+use serde::Serialize;
 
 use crate::admin::server_fns::settings::{
     create_custom_resolution, delete_custom_resolution_with_pool, save_ffmpeg_settings_with_state,
@@ -13,6 +15,24 @@ use crate::admin::server_fns::settings::{
     PlayoutSettingsForm, ScannerSettingsForm, UiSettingsForm, XmltvSettingsForm,
 };
 use crate::host::state::AppState;
+
+#[derive(Serialize)]
+pub struct UiThemeResponse {
+    theme: &'static str,
+}
+
+pub async fn ui_theme(State(state): State<AppState>) -> Json<UiThemeResponse> {
+    let is_dark_mode = crate::admin::server_fns::settings::load_bool_for_api(
+        &state.pool,
+        ersatzrs_domain::CONFIG_KEY_PAGES_IS_DARK_MODE,
+        true,
+    )
+    .await
+    .unwrap_or(true);
+    Json(UiThemeResponse {
+        theme: if is_dark_mode { "dark" } else { "light" },
+    })
+}
 
 pub async fn save_ffmpeg_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
     let fields = parse_form(&body);
