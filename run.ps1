@@ -31,13 +31,35 @@ if ((Test-Path $ffprobeBin) -and -not $env:ErsatzRS_FFPROBE__PATH) {
     $env:ErsatzRS_FFPROBE__PATH = $ffprobeBin
 }
 
+function Test-TargetSize {
+    $targetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }
+    if (-not (Test-Path $targetDir)) { return }
+
+    $thresholdGiB = if ($env:ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB) {
+        [double]$env:ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB
+    } else {
+        40
+    }
+    $thresholdBytes = $thresholdGiB * 1GB
+    $sizeBytes = (Get-ChildItem -LiteralPath $targetDir -Recurse -Force -ErrorAction SilentlyContinue |
+        Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sizeBytes) { return }
+
+    if ($sizeBytes -ge $thresholdBytes) {
+        $sizeGiB = [math]::Round($sizeBytes / 1GB, 1)
+        Write-Warning "$targetDir is $sizeGiB GiB; run 'cargo clean' before continuing large builds (threshold: $thresholdGiB GiB)"
+    }
+}
+
 switch ($Command) {
     'dev' {
+        Test-TargetSize
         Set-Location -Path 'crates/ersatzrs-web'
         cargo leptos watch
         exit $LASTEXITCODE
     }
     'build' {
+        Test-TargetSize
         Push-Location 'crates/ersatzrs-web'
         try {
             cargo leptos build
@@ -49,6 +71,7 @@ switch ($Command) {
         exit $LASTEXITCODE
     }
     'serve' {
+        Test-TargetSize
         Set-Location -Path 'crates/ersatzrs-web'
         cargo leptos serve
         exit $LASTEXITCODE

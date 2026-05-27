@@ -39,6 +39,12 @@ subcommands. See [Windows development](#windows-development) below.
 For the longer commands (clippy, test, deny, snapshot review), see the
 "Commands" block in [AGENTS.md](AGENTS.md).
 
+`./run.sh dev`, `./run.sh build`, `./run.sh serve`, and
+`cargo xtask parity-check` check `target/` size before starting expensive
+build/test work and warn when it exceeds the 40 GiB `cargo clean` threshold.
+When running broad cargo commands directly, check first with
+`cargo xtask target-size`.
+
 ## Windows development
 
 Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
@@ -113,8 +119,10 @@ Trade-offs:
 - `split-debuginfo = "unpacked"` shrinks the resulting `target/` and speeds
   up linking on Linux. On other OSes, drop or change this line.
 - `target/` will be larger than before — the per-package optimisation level
-  generates more codegen artifacts. On WSL2, `cargo clean` periodically (and
-  consider `cargo install cargo-sweep && cargo sweep --time 30`).
+  generates more codegen artifacts. Run `cargo clean` when `target/` grows
+  beyond 40 GiB; between cleanups, use
+  `cargo install cargo-sweep && cargo sweep --time 30` to prune stale
+  artifacts while preserving the warm cache.
 
 ## Cross-compiling
 
@@ -209,5 +217,6 @@ oversized `target/`** (observed at 102–136 GB), not a linker problem — on a
 healthy `target/` the cold cost is ~2.5 min and warm rebuilds are seconds.
 Keep `target/` pruned: run `cargo sweep --time 30` routinely (prunes only
 artifacts older than 30 days, preserves the warm cache) and reserve the heavy
-`cargo clean` for reclaiming all space. See the disk-space note in
+`cargo clean` for when `target/` exceeds 40 GiB or when reclaiming all space.
+See the disk-space note in
 [CLAUDE.md](CLAUDE.md).

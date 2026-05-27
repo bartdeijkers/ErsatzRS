@@ -9,6 +9,8 @@ use std::{
     process::{Command, ExitCode},
 };
 
+use crate::target_size;
+
 pub fn run(args: Vec<String>) -> ExitCode {
     match Opts::parse(args) {
         Ok(opts) => run_inner(&opts),
@@ -25,6 +27,8 @@ pub fn run(args: Vec<String>) -> ExitCode {
 }
 
 fn run_inner(opts: &Opts) -> ExitCode {
+    target_size::warn_if_oversized();
+
     let scopes = if opts.scopes.is_empty() {
         "default".to_owned()
     } else {

@@ -138,6 +138,7 @@ cargo xtask parity-check web
 
 This wraps the cheap checks that have repeatedly caught late parity bugs:
 
+- `cargo xtask target-size` warning check before the gate ladder
 - `cargo fmt --all -- --check`
 - `cargo xtask hydration-lint -p ersatzrs-web`
 - `cargo test -p ersatzrs-web`
