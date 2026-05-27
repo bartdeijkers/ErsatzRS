@@ -506,7 +506,16 @@ pub async fn save_schedule_with_pool(
         .bind(form.fixed_start_time_behavior)
         .execute(pool)
         .await?;
-        Ok(ersatzrs_infra::db::last_insert_id(result))
+        let id = ersatzrs_infra::db::last_insert_id(result);
+        if id != 0 {
+            return Ok(id);
+        }
+
+        let id = sqlx::query_scalar(r#"SELECT "Id" FROM "ProgramSchedule" WHERE "Name" = ?"#)
+            .bind(name)
+            .fetch_one(pool)
+            .await?;
+        Ok(id)
     } else {
         let result = sqlx::query(
             r#"UPDATE "ProgramSchedule"
@@ -1611,15 +1620,36 @@ async fn save_config_value(pool: &DbPool, key: &str, value: &str) -> Result<(), 
 mod tests {
     use super::*;
 
+    async fn test_db() -> DbPool {
+        #[cfg(feature = "mysql")]
+        {
+            sqlx::any::install_default_drivers();
+            sqlx::any::AnyPoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap()
+        }
+
+        #[cfg(not(feature = "mysql"))]
+        {
+            sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap()
+        }
+    }
+
     async fn create_program_schedule_table(pool: &DbPool) {
         sqlx::query(
             r#"CREATE TABLE "ProgramSchedule" (
                 "Id" INTEGER PRIMARY KEY,
                 "Name" TEXT NOT NULL,
-                "KeepMultiPartEpisodesTogether" BOOLEAN NOT NULL DEFAULT 0,
-                "TreatCollectionsAsShows" BOOLEAN NOT NULL DEFAULT 0,
-                "ShuffleScheduleItems" BOOLEAN NOT NULL DEFAULT 0,
-                "RandomStartPoint" BOOLEAN NOT NULL DEFAULT 0,
+                "KeepMultiPartEpisodesTogether" INTEGER NOT NULL DEFAULT 0,
+                "TreatCollectionsAsShows" INTEGER NOT NULL DEFAULT 0,
+                "ShuffleScheduleItems" INTEGER NOT NULL DEFAULT 0,
+                "RandomStartPoint" INTEGER NOT NULL DEFAULT 0,
                 "FixedStartTimeBehavior" INTEGER NOT NULL DEFAULT 0
             )"#,
         )
@@ -1636,8 +1666,10 @@ mod tests {
         }
     }
 
-    #[sqlx::test]
-    async fn padded_filler_ids_only_returns_true_flags(pool: DbPool) {
+    #[tokio::test]
+    async fn padded_filler_ids_only_returns_true_flags() {
+        let pool = test_db().await;
+
         sqlx::query(
             r#"CREATE TABLE "FillerPreset" (
                 "Id" INTEGER PRIMARY KEY,
@@ -1671,8 +1703,10 @@ mod tests {
         assert_eq!(ids, HashSet::from([2]));
     }
 
-    #[sqlx::test]
-    async fn load_language_options_matches_media_language_codes(pool: DbPool) {
+    #[tokio::test]
+    async fn load_language_options_matches_media_language_codes() {
+        let pool = test_db().await;
+
         sqlx::query(
             r#"CREATE TABLE "MediaStream" (
                 "Id" INTEGER PRIMARY KEY,
@@ -1732,8 +1766,10 @@ mod tests {
         }));
     }
 
-    #[sqlx::test]
-    async fn save_config_value_updates_or_inserts_without_backend_specific_upsert(pool: DbPool) {
+    #[tokio::test]
+    async fn save_config_value_updates_or_inserts_without_backend_specific_upsert() {
+        let pool = test_db().await;
+
         sqlx::query(
             r#"CREATE TABLE "ConfigElement" (
                 "Key" TEXT PRIMARY KEY,
@@ -1761,8 +1797,10 @@ mod tests {
         assert_eq!(value, "50");
     }
 
-    #[sqlx::test]
-    async fn save_schedule_enforces_unique_and_max_length_names(pool: DbPool) {
+    #[tokio::test]
+    async fn save_schedule_enforces_unique_and_max_length_names() {
+        let pool = test_db().await;
+
         create_program_schedule_table(&pool).await;
         sqlx::query(
             r#"INSERT INTO "ProgramSchedule" (
@@ -1797,10 +1835,10 @@ mod tests {
         assert!(too_long.to_string().contains("50"));
     }
 
-    #[sqlx::test]
-    async fn save_schedule_persists_treat_collections_only_when_keep_multi_part_is_enabled(
-        pool: DbPool,
-    ) {
+    #[tokio::test]
+    async fn save_schedule_persists_treat_collections_only_when_keep_multi_part_is_enabled() {
+        let pool = test_db().await;
+
         create_program_schedule_table(&pool).await;
 
         let id = save_schedule_with_pool(
@@ -1815,14 +1853,14 @@ mod tests {
         .await
         .unwrap();
 
-        let stored: bool = sqlx::query_scalar(
+        let stored: i64 = sqlx::query_scalar(
             r#"SELECT "TreatCollectionsAsShows" FROM "ProgramSchedule" WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert!(!stored);
+        assert_eq!(stored, 0);
     }
 
     #[test]
