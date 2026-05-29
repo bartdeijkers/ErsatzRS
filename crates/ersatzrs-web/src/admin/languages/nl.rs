@@ -1557,6 +1557,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::QsvExtraHardwareFrames => "Extra QSV-hardwareframes",
         TextKey::Resolution => "Resolutie",
         TextKey::SampleRateKhz => "Samplefrequentie (kHz)",
+        TextKey::SaveDecoTemplate => "Decoratiesjabloon opslaan",
         TextKey::SaveProfile => "Profiel opslaan",
         TextKey::SaveFillerPreset => "Opvulvoorinstelling opslaan",
         TextKey::SaveRerunCollection => "Herhalingscollectie opslaan",

@@ -1428,7 +1428,7 @@ fn DecoTemplateEditorForm(
                     <form method="post" action="/api/deco-templates/items/save">
                         <input type="hidden" name="template_id" value=template_id.to_string()/>
                         <input type="hidden" name="group_id" value=group_id.to_string()/>
-                        <button type="submit" name="action" value="save">{tr(TextKey::SaveTemplate)}</button>
+                        <button type="submit" name="action" value="save">{tr(TextKey::SaveDecoTemplate)}</button>
                     </form>
                 </noscript>
                 <form
@@ -1562,7 +1562,7 @@ fn DecoTemplateEditorForm(
                             disabled=move || selected_deco.get().is_none()
                             on:click=move |_| add_deco()
                         >
-                            {tr(TextKey::AddDecoTemplate)}
+                            {tr(TextKey::AddDecoToTemplate)}
                         </button>
 
                         <label class=style::label for="template-deco-remove">{tr(TextKey::DecoToRemove)}</label>
@@ -1640,7 +1640,7 @@ fn DecoTemplateEditorForm(
                 </div>
                     {move || hidden_deco_template_item_inputs(items.get())}
                     <button type="submit" name="action" value="save" class=style::hidden>
-                        {tr(TextKey::SaveTemplate)}
+                        {tr(TextKey::SaveDecoTemplate)}
                     </button>
                 </form>
             </div>

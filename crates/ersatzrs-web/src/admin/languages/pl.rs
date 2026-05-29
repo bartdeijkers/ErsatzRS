@@ -1569,6 +1569,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::QsvExtraHardwareFrames => "Dodatkowe klatki sprzętowe QSV",
         TextKey::Resolution => "Rozdzielczość",
         TextKey::SampleRateKhz => "Częstotliwość próbkowania (kHz)",
+        TextKey::SaveDecoTemplate => "Zapisz szablon dekoracji",
         TextKey::SaveProfile => "Zapisz profil",
         TextKey::SaveFillerPreset => "Zapisz szablon wypełniacza",
         TextKey::SaveRerunCollection => "Zapisz kolekcję powtórek",

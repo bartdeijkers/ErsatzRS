@@ -651,6 +651,7 @@ pub enum TextKey {
     QsvExtraHardwareFrames,
     Resolution,
     SampleRateKhz,
+    SaveDecoTemplate,
     SaveProfile,
     SaveFillerPreset,
     SaveRerunCollection,
@@ -1583,6 +1584,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::QsvExtraHardwareFrames,
     TextKey::Resolution,
     TextKey::SampleRateKhz,
+    TextKey::SaveDecoTemplate,
     TextKey::SaveProfile,
     TextKey::SaveFillerPreset,
     TextKey::SaveRerunCollection,
@@ -2539,6 +2541,26 @@ mod tests {
         assert_eq!(
             ffmpeg_profile_audio_format_text(UiLanguage::Dutch, 99),
             "Kopiëren"
+        );
+    }
+
+    #[test]
+    fn deco_template_action_labels_follow_active_language() {
+        assert_eq!(
+            languages_for(UiLanguage::English).text(TextKey::AddDecoToTemplate),
+            "Add Deco To Template"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Polish).text(TextKey::SaveDecoTemplate),
+            "Zapisz szablon dekoracji"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::PortugueseBrazil).text(TextKey::SaveDecoTemplate),
+            "Salvar modelo de decoração"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).text(TextKey::AddDecoToTemplate),
+            "Decoratie aan sjabloon toevoegen"
         );
     }
 
