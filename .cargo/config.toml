@@ -1,5 +1,8 @@
 [env]
 SQLX_OFFLINE = "true"
 
+[build]
+target-dir = "/mnt/f/ErsatzRS/target"
+
 [alias]
 xtask = "run --quiet --package xtask --"
