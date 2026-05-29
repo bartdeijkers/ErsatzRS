@@ -8,6 +8,7 @@ const DEFAULT_THRESHOLD_GIB: u64 = 40;
 const GIB: u64 = 1024 * 1024 * 1024;
 
 pub fn warn_if_oversized() {
+    #[allow(clippy::disallowed_methods)]
     let target_dir = env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target"));
@@ -15,6 +16,7 @@ pub fn warn_if_oversized() {
         return;
     }
 
+    #[allow(clippy::disallowed_methods)]
     let threshold_gib = env::var("ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
