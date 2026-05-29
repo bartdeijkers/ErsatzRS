@@ -87,6 +87,32 @@ impl LanguageStrings for PolishStrings {
         format!("Element harmonogramu #{id}")
     }
 
+    fn channel_streaming_mode_label(&self, mode: i32) -> String {
+        match mode {
+            1 => "MPEG-TS (starszy)".to_owned(),
+            2 => "HLS Direct".to_owned(),
+            4 => "Segmenter HLS".to_owned(),
+            5 => "MPEG-TS".to_owned(),
+            _ => format!("Nieznany ({mode})"),
+        }
+    }
+
+    fn channel_language_label(&self, code: &str) -> String {
+        match code.trim().to_ascii_lowercase().as_str() {
+            "" => String::new(),
+            "eng" | "en" => "Angielski".to_owned(),
+            "nld" | "dut" | "nl" => "Niderlandzki".to_owned(),
+            "deu" | "ger" | "de" => "Niemiecki".to_owned(),
+            "fra" | "fre" | "fr" => "Francuski".to_owned(),
+            "spa" | "es" => "Hiszpański".to_owned(),
+            "ita" | "it" => "Włoski".to_owned(),
+            "jpn" | "ja" => "Japoński".to_owned(),
+            "kor" | "ko" => "Koreański".to_owned(),
+            "zho" | "chi" | "zh" => "Chiński".to_owned(),
+            value => value.to_owned(),
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }

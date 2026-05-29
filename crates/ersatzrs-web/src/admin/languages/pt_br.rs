@@ -87,6 +87,32 @@ impl LanguageStrings for PortugueseBrazilStrings {
         format!("Item de programação #{id}")
     }
 
+    fn channel_streaming_mode_label(&self, mode: i32) -> String {
+        match mode {
+            1 => "MPEG-TS (legado)".to_owned(),
+            2 => "HLS direto".to_owned(),
+            4 => "Segmentador HLS".to_owned(),
+            5 => "MPEG-TS".to_owned(),
+            _ => format!("Desconhecido ({mode})"),
+        }
+    }
+
+    fn channel_language_label(&self, code: &str) -> String {
+        match code.trim().to_ascii_lowercase().as_str() {
+            "" => String::new(),
+            "eng" | "en" => "Inglês".to_owned(),
+            "nld" | "dut" | "nl" => "Neerlandês".to_owned(),
+            "deu" | "ger" | "de" => "Alemão".to_owned(),
+            "fra" | "fre" | "fr" => "Francês".to_owned(),
+            "spa" | "es" => "Espanhol".to_owned(),
+            "ita" | "it" => "Italiano".to_owned(),
+            "jpn" | "ja" => "Japonês".to_owned(),
+            "kor" | "ko" => "Coreano".to_owned(),
+            "zho" | "chi" | "zh" => "Chinês".to_owned(),
+            value => value.to_owned(),
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }

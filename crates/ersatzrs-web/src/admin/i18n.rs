@@ -1927,6 +1927,14 @@ pub fn log_level_text(language: UiLanguage, level: &str) -> String {
     text(language, key).to_owned()
 }
 
+pub fn channel_streaming_mode_label(mode: i32) -> String {
+    languages_for(use_i18n()).channel_streaming_mode_label(mode)
+}
+
+pub fn channel_language_label(code: &str) -> String {
+    languages_for(use_i18n()).channel_language_label(code)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2026,6 +2034,8 @@ pub trait LanguageStrings: Sync {
     fn season_display_name(&self, number: i64) -> String;
     fn media_item_fallback_label(&self, id: i64) -> String;
     fn schedule_item_fallback_label(&self, id: i64) -> String;
+    fn channel_streaming_mode_label(&self, mode: i32) -> String;
+    fn channel_language_label(&self, code: &str) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
     fn select_playlist_to_add_selected_items(&self, count: usize) -> String;
@@ -2169,5 +2179,33 @@ mod tests {
         );
         assert_eq!(log_level_text(UiLanguage::Dutch, "Fatal"), "Fataal");
         assert_eq!(log_level_text(UiLanguage::Dutch, "TRACE"), "TRACE");
+    }
+
+    #[test]
+    fn channel_labels_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            languages_for(UiLanguage::English).channel_streaming_mode_label(1),
+            "MPEG-TS (Legacy)"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Polish).channel_streaming_mode_label(1),
+            "MPEG-TS (starszy)"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::PortugueseBrazil).channel_language_label("deu"),
+            "Alemão"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).channel_language_label("nld"),
+            "Nederlands"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).channel_streaming_mode_label(99),
+            "Onbekend (99)"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).channel_language_label("tlh"),
+            "tlh"
+        );
     }
 }

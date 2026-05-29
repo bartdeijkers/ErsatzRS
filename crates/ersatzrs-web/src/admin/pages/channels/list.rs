@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{channel_language_label, channel_streaming_mode_label, tr, TextKey};
 use crate::admin::server_fns::channels::{
     count_channels, delete_channel, list_channel_rows, ChannelListRow,
 };
@@ -98,11 +98,11 @@ fn ChannelsListIsland() -> impl IntoView {
             view! { <span>{n}</span> }.into_any()
         }),
         Column::new(tr(TextKey::Language), |ch: &ChannelListRow| {
-            let language = ch.preferred_audio_language.clone();
+            let language = channel_language_label(&ch.preferred_audio_language_code);
             view! { <span>{language}</span> }.into_any()
         }),
         Column::new(tr(TextKey::Mode), |ch: &ChannelListRow| {
-            let m = ch.streaming_mode_label.clone();
+            let m = channel_streaming_mode_label(ch.streaming_mode);
             view! { <span>{m}</span> }.into_any()
         }),
         Column::new(tr(TextKey::FfmpegProfile), |ch: &ChannelListRow| {

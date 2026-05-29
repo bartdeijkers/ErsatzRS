@@ -7,9 +7,11 @@ pub struct ChannelListRow {
     pub id: i64,
     pub number: String,
     pub name: String,
+    pub preferred_audio_language_code: String,
     pub preferred_audio_language: String,
     pub is_enabled: bool,
     pub show_in_epg: bool,
+    pub streaming_mode: i32,
     pub streaming_mode_label: String,
     pub ffmpeg_profile_name: String,
     pub logo_url: String,
@@ -281,17 +283,19 @@ pub async fn list_channel_rows(
         .iter()
         .map(|row| {
             let mode: i32 = row.try_get("StreamingMode").unwrap_or(1);
+            let preferred_audio_language_code = row
+                .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+                .unwrap_or_default()
+                .unwrap_or_default();
             ChannelListRow {
                 id: row.try_get("Id").unwrap_or(0),
                 number: row.try_get("Number").unwrap_or_default(),
                 name: row.try_get("Name").unwrap_or_default(),
-                preferred_audio_language: language_label(
-                    row.try_get::<Option<String>, _>("PreferredAudioLanguageCode")
-                        .unwrap_or_default()
-                        .as_deref(),
-                ),
+                preferred_audio_language: language_label(Some(&preferred_audio_language_code)),
+                preferred_audio_language_code,
                 is_enabled: row.try_get("IsEnabled").unwrap_or(true),
                 show_in_epg: row.try_get("ShowInEpg").unwrap_or(true),
+                streaming_mode: mode,
                 streaming_mode_label: streaming_mode_label(mode),
                 ffmpeg_profile_name: row.try_get("ProfileName").unwrap_or_default(),
                 logo_url: channel_logo_url(

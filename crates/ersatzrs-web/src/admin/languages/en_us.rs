@@ -91,6 +91,32 @@ impl LanguageStrings for EnglishStrings {
         format!("Schedule Item #{id}")
     }
 
+    fn channel_streaming_mode_label(&self, mode: i32) -> String {
+        match mode {
+            1 => "MPEG-TS (Legacy)".to_owned(),
+            2 => "HLS Direct".to_owned(),
+            4 => "HLS Segmenter".to_owned(),
+            5 => "MPEG-TS".to_owned(),
+            _ => format!("Unknown ({mode})"),
+        }
+    }
+
+    fn channel_language_label(&self, code: &str) -> String {
+        match code.trim().to_ascii_lowercase().as_str() {
+            "" => String::new(),
+            "eng" | "en" => "English".to_owned(),
+            "nld" | "dut" | "nl" => "Dutch".to_owned(),
+            "deu" | "ger" | "de" => "German".to_owned(),
+            "fra" | "fre" | "fr" => "French".to_owned(),
+            "spa" | "es" => "Spanish".to_owned(),
+            "ita" | "it" => "Italian".to_owned(),
+            "jpn" | "ja" => "Japanese".to_owned(),
+            "kor" | "ko" => "Korean".to_owned(),
+            "zho" | "chi" | "zh" => "Chinese".to_owned(),
+            value => value.to_owned(),
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }

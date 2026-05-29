@@ -91,6 +91,32 @@ impl LanguageStrings for DutchStrings {
         format!("Schema-item #{id}")
     }
 
+    fn channel_streaming_mode_label(&self, mode: i32) -> String {
+        match mode {
+            1 => "MPEG-TS (verouderd)".to_owned(),
+            2 => "HLS direct".to_owned(),
+            4 => "HLS-segmenter".to_owned(),
+            5 => "MPEG-TS".to_owned(),
+            _ => format!("Onbekend ({mode})"),
+        }
+    }
+
+    fn channel_language_label(&self, code: &str) -> String {
+        match code.trim().to_ascii_lowercase().as_str() {
+            "" => String::new(),
+            "eng" | "en" => "Engels".to_owned(),
+            "nld" | "dut" | "nl" => "Nederlands".to_owned(),
+            "deu" | "ger" | "de" => "Duits".to_owned(),
+            "fra" | "fre" | "fr" => "Frans".to_owned(),
+            "spa" | "es" => "Spaans".to_owned(),
+            "ita" | "it" => "Italiaans".to_owned(),
+            "jpn" | "ja" => "Japans".to_owned(),
+            "kor" | "ko" => "Koreaans".to_owned(),
+            "zho" | "chi" | "zh" => "Chinees".to_owned(),
+            value => value.to_owned(),
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }

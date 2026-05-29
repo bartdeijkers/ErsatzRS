@@ -2,7 +2,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{channel_streaming_mode_label, tr, TextKey};
 use crate::admin::server_fns::channels::{
     get_channel_editor_data, ChannelEditorData, ChannelMirrorOption, ChannelSelectOption,
 };
@@ -254,10 +254,10 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         "streaming_mode",
                         streaming_mode,
                         Signal::derive(|| vec![
-                            (5, "MPEG-TS".to_string()),
-                            (1, "MPEG-TS (Legacy)".to_string()),
-                            (2, tr(TextKey::HlsDirect).to_string()),
-                            (4, tr(TextKey::HlsSegmenter).to_string()),
+                            (5, channel_streaming_mode_label(5)),
+                            (1, channel_streaming_mode_label(1)),
+                            (2, channel_streaming_mode_label(2)),
+                            (4, channel_streaming_mode_label(4)),
                         ]),
                         None,
                         "",
