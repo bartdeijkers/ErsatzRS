@@ -214,6 +214,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         media_browser_error_message(error)
     }
 
+    fn media_source_error_message(&self, error: &str) -> String {
+        media_source_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -731,6 +735,20 @@ fn media_browser_error_message(error: &str) -> String {
             "A coleção inteligente é obrigatória.".to_owned()
         }
         "[CollectionType] is invalid" => "O tipo de coleção é inválido.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_source_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Could not reach Jellyfin: ") {
+        return format!("Não foi possível acessar o Jellyfin: {error}");
+    }
+
+    match trimmed {
+        "Address is required." => "O endereço é obrigatório.".to_owned(),
+        "API key is required." => "A chave de API é obrigatória.".to_owned(),
+        "'Address' must be a valid URL" => "O endereço deve ser uma URL válida.".to_owned(),
         _ => error.to_owned(),
     }
 }

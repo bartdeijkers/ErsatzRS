@@ -4,7 +4,7 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
 use crate::admin::i18n::{
-    media_kind_label, provider_libraries_title, provider_path_label,
+    media_kind_label, media_source_error_message, provider_libraries_title, provider_path_label,
     provider_path_replacements_title, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::media_sources::{
@@ -282,7 +282,7 @@ pub fn PlexLibrariesPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(save_failed(e))),
+        Some(Err(e)) => err.set(Some(save_failed(media_source_error_message(e)))),
         None => {}
     });
 
@@ -393,7 +393,7 @@ pub fn PlexPathsPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(save_failed(e))),
+        Some(Err(e)) => err.set(Some(save_failed(media_source_error_message(e)))),
         None => {}
     });
 

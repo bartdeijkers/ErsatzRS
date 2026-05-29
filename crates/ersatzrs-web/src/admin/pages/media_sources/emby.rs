@@ -3,9 +3,9 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
-    media_kind_label, no_media_source_configured, provider_connection_title,
-    provider_libraries_title, provider_path_label, provider_path_replacements_title, save_failed,
-    tr, TextKey,
+    media_kind_label, media_source_error_message, no_media_source_configured,
+    provider_connection_title, provider_libraries_title, provider_path_label,
+    provider_path_replacements_title, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::media_sources::{
     delete_emby_source, get_emby_connection, list_emby_libraries, list_emby_paths,
@@ -173,7 +173,7 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
         }
         Some(Err(e)) => {
             saving.set(false);
-            err.set(Some(save_failed(e)));
+            err.set(Some(save_failed(media_source_error_message(e))));
         }
         None => {}
     });
@@ -271,7 +271,7 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(save_failed(e))),
+        Some(Err(e)) => err.set(Some(save_failed(media_source_error_message(e)))),
         None => {}
     });
 
@@ -372,7 +372,7 @@ pub fn EmbyPathsPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(save_failed(e))),
+        Some(Err(e)) => err.set(Some(save_failed(media_source_error_message(e)))),
         None => {}
     });
 

@@ -214,6 +214,10 @@ impl LanguageStrings for PolishStrings {
         media_browser_error_message(error)
     }
 
+    fn media_source_error_message(&self, error: &str) -> String {
+        media_source_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -725,6 +729,20 @@ fn media_browser_error_message(error: &str) -> String {
             "Kolekcja inteligentna jest wymagana.".to_owned()
         }
         "[CollectionType] is invalid" => "Typ kolekcji jest nieprawidłowy.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_source_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Could not reach Jellyfin: ") {
+        return format!("Nie można połączyć się z Jellyfin: {error}");
+    }
+
+    match trimmed {
+        "Address is required." => "Adres jest wymagany.".to_owned(),
+        "API key is required." => "Klucz API jest wymagany.".to_owned(),
+        "'Address' must be a valid URL" => "Adres musi być prawidłowym adresem URL.".to_owned(),
         _ => error.to_owned(),
     }
 }

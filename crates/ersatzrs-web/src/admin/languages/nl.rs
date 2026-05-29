@@ -218,6 +218,10 @@ impl LanguageStrings for DutchStrings {
         media_browser_error_message(error)
     }
 
+    fn media_source_error_message(&self, error: &str) -> String {
+        media_source_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -715,6 +719,20 @@ fn media_browser_error_message(error: &str) -> String {
             "Slimme collectie is verplicht.".to_owned()
         }
         "[CollectionType] is invalid" => "Collectietype is ongeldig.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_source_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Could not reach Jellyfin: ") {
+        return format!("Kan Jellyfin niet bereiken: {error}");
+    }
+
+    match trimmed {
+        "Address is required." => "Adres is verplicht.".to_owned(),
+        "API key is required." => "API-sleutel is verplicht.".to_owned(),
+        "'Address' must be a valid URL" => "Adres moet een geldige URL zijn.".to_owned(),
         _ => error.to_owned(),
     }
 }

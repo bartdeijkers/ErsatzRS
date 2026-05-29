@@ -218,6 +218,10 @@ impl LanguageStrings for EnglishStrings {
         media_browser_error_message(error)
     }
 
+    fn media_source_error_message(&self, error: &str) -> String {
+        media_source_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1679,6 +1683,20 @@ fn media_browser_error_message(error: &str) -> String {
             "Smart collection is required.".to_owned()
         }
         "[CollectionType] is invalid" => "Collection type is invalid.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_source_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Could not reach Jellyfin: ") {
+        return format!("Could not reach Jellyfin: {error}");
+    }
+
+    match trimmed {
+        "Address is required." => "Address is required.".to_owned(),
+        "API key is required." => "API key is required.".to_owned(),
+        "'Address' must be a valid URL" => "'Address' must be a valid URL".to_owned(),
         _ => error.to_owned(),
     }
 }
