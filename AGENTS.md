@@ -126,6 +126,11 @@ npx commitlint --from HEAD~1
 
 - Repository-bound content is English: code, comments, commit messages, docs,
   ADRs, issue templates, changelog entries, and skill files.
+- User-facing admin UX/UI must be localized whenever it is built or changed.
+  Add or update translations for every supported culture in
+  `crates/ersatzrs-web/src/admin/languages/`, keep `i18n.rs` as routing/helper
+  glue rather than a translation dump, and follow the translation boundary in
+  [ADR 0012](docs/adr/0012-admin-ui-nl-localization.md).
 - Interactive conversation with the maintainer may be Dutch or English.
 - When translating existing notes, preserve technical decisions and replace
   Dutch section titles with English equivalents.
