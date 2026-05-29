@@ -206,6 +206,10 @@ impl LanguageStrings for EnglishStrings {
         settings_error_message(error)
     }
 
+    fn media_action_error_message(&self, error: &str) -> String {
+        media_action_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1520,6 +1524,26 @@ fn settings_error_message(error: &str) -> String {
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "HLS Segmenter initial segment count must be greater than or equal to 1".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_action_error_message(error: &str) -> String {
+    match error.trim() {
+        "Collection name is required" => "Collection name is required".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Collection name must be 50 characters or less".to_owned()
+        }
+        "Collection name must be unique" => "Collection name must be unique".to_owned(),
+        "Media item does not exist" => "Media item does not exist".to_owned(),
+        "Collection does not exist" | "Collection does not exist." => {
+            "Collection does not exist.".to_owned()
+        }
+        "Playlist does not exist" | "Playlist does not exist." => {
+            "Playlist does not exist.".to_owned()
+        }
+        "Unable to locate media item" => "Unable to locate media item".to_owned(),
+        "Media action failed" => "Media action failed".to_owned(),
         _ => error.to_owned(),
     }
 }

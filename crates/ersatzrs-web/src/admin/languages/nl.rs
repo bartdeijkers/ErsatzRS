@@ -206,6 +206,10 @@ impl LanguageStrings for DutchStrings {
         settings_error_message(error)
     }
 
+    fn media_action_error_message(&self, error: &str) -> String {
+        media_action_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -542,6 +546,26 @@ fn settings_error_message(error: &str) -> String {
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "Initieel segmentaantal van HLS-segmenter moet groter dan of gelijk aan 1 zijn.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_action_error_message(error: &str) -> String {
+    match error.trim() {
+        "Collection name is required" => "Collectienaam is verplicht.".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Collectienaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Collection name must be unique" => "Collectienaam moet uniek zijn.".to_owned(),
+        "Media item does not exist" => "Media-item bestaat niet.".to_owned(),
+        "Collection does not exist" | "Collection does not exist." => {
+            "Collectie bestaat niet.".to_owned()
+        }
+        "Playlist does not exist" | "Playlist does not exist." => {
+            "Afspeellijst bestaat niet.".to_owned()
+        }
+        "Unable to locate media item" => "Kan media-item niet vinden.".to_owned(),
+        "Media action failed" => "Media-actie mislukt.".to_owned(),
         _ => error.to_owned(),
     }
 }

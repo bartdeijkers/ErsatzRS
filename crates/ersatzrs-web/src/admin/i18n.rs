@@ -2119,6 +2119,10 @@ pub fn settings_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).settings_error_message(error)
 }
 
+pub fn media_action_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).media_action_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2231,6 +2235,7 @@ pub trait LanguageStrings: Sync {
     fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String;
     fn ffmpeg_profile_error_message(&self, error: &str) -> String;
     fn settings_error_message(&self, error: &str) -> String;
+    fn media_action_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2636,6 +2641,30 @@ mod tests {
         );
         assert_eq!(
             settings_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn media_action_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            media_action_error_text(UiLanguage::English, "Collection name must be unique"),
+            "Collection name must be unique"
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Polish, "Collection name is required"),
+            "Nazwa kolekcji jest wymagana."
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::PortugueseBrazil, "Playlist does not exist."),
+            "A playlist não existe."
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Dutch, "Unable to locate media item"),
+            "Kan media-item niet vinden."
+        );
+        assert_eq!(
+            media_action_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }

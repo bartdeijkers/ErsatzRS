@@ -202,6 +202,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         settings_error_message(error)
     }
 
+    fn media_action_error_message(&self, error: &str) -> String {
+        media_action_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -548,6 +552,26 @@ fn settings_error_message(error: &str) -> String {
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "A contagem inicial de segmentos do segmentador HLS deve ser maior ou igual a 1.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_action_error_message(error: &str) -> String {
+    match error.trim() {
+        "Collection name is required" => "O nome da coleção é obrigatório.".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "O nome da coleção deve ter 50 caracteres ou menos.".to_owned()
+        }
+        "Collection name must be unique" => "O nome da coleção deve ser único.".to_owned(),
+        "Media item does not exist" => "O item de mídia não existe.".to_owned(),
+        "Collection does not exist" | "Collection does not exist." => {
+            "A coleção não existe.".to_owned()
+        }
+        "Playlist does not exist" | "Playlist does not exist." => {
+            "A playlist não existe.".to_owned()
+        }
+        "Unable to locate media item" => "Não foi possível localizar o item de mídia.".to_owned(),
+        "Media action failed" => "Falha na ação de mídia.".to_owned(),
         _ => error.to_owned(),
     }
 }

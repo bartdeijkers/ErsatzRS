@@ -202,6 +202,10 @@ impl LanguageStrings for PolishStrings {
         settings_error_message(error)
     }
 
+    fn media_action_error_message(&self, error: &str) -> String {
+        media_action_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -546,6 +550,26 @@ fn settings_error_message(error: &str) -> String {
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "Początkowa liczba segmentów segmentera HLS musi być większa lub równa 1.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_action_error_message(error: &str) -> String {
+    match error.trim() {
+        "Collection name is required" => "Nazwa kolekcji jest wymagana.".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Nazwa kolekcji może mieć najwyżej 50 znaków.".to_owned()
+        }
+        "Collection name must be unique" => "Nazwa kolekcji musi być unikatowa.".to_owned(),
+        "Media item does not exist" => "Element multimedialny nie istnieje.".to_owned(),
+        "Collection does not exist" | "Collection does not exist." => {
+            "Kolekcja nie istnieje.".to_owned()
+        }
+        "Playlist does not exist" | "Playlist does not exist." => {
+            "Playlista nie istnieje.".to_owned()
+        }
+        "Unable to locate media item" => "Nie można znaleźć elementu multimedialnego.".to_owned(),
+        "Media action failed" => "Akcja multimediów nie powiodła się.".to_owned(),
         _ => error.to_owned(),
     }
 }
