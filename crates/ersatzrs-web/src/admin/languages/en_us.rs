@@ -155,6 +155,28 @@ impl LanguageStrings for EnglishStrings {
         }
     }
 
+    fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String {
+        match algorithm {
+            0 => "Linear",
+            1 => "Clip",
+            2 => "Gamma",
+            3 => "Reinhard",
+            4 => "Mobius",
+            5 => "Hable",
+            _ => return format!("Unknown ({algorithm})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
+        match mode {
+            0 => text(TextKey::Off),
+            1 => "loudnorm",
+            _ => return format!("Unknown ({mode})"),
+        }
+        .to_owned()
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }

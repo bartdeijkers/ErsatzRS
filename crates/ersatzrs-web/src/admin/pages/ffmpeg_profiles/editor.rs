@@ -12,7 +12,10 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{hardware_acceleration_option_text, save_failed, tr, use_i18n, TextKey};
+use crate::admin::i18n::{
+    ffmpeg_loudness_mode_label, ffmpeg_tonemap_algorithm_label, hardware_acceleration_option_text,
+    save_failed, tr, use_i18n, TextKey,
+};
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
     list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, FfmpegProfileForm,
@@ -503,12 +506,12 @@ fn FfmpegProfileEditorForm(
                             label=tr(TextKey::TonemapAlgorithm)
                             value=tonemap_algorithm
                             items=vec![
-                                (0i32, "Linear".to_string()),
-                                (1i32, "Clip".to_string()),
-                                (2i32, "Gamma".to_string()),
-                                (3i32, "Reinhard".to_string()),
-                                (4i32, "Mobius".to_string()),
-                                (5i32, "Hable".to_string()),
+                                (0i32, ffmpeg_tonemap_algorithm_label(0)),
+                                (1i32, ffmpeg_tonemap_algorithm_label(1)),
+                                (2i32, ffmpeg_tonemap_algorithm_label(2)),
+                                (3i32, ffmpeg_tonemap_algorithm_label(3)),
+                                (4i32, ffmpeg_tonemap_algorithm_label(4)),
+                                (5i32, ffmpeg_tonemap_algorithm_label(5)),
                             ]
                         />
                     </div>
@@ -540,8 +543,8 @@ fn FfmpegProfileEditorForm(
                         label=tr(TextKey::NormalizeLoudness)
                         value=normalize_loudness_mode
                         items=vec![
-                            (0i32, tr(TextKey::Off).to_string()),
-                            (1i32, "LoudNorm".to_string()),
+                            (0i32, ffmpeg_loudness_mode_label(0)),
+                            (1i32, ffmpeg_loudness_mode_label(1)),
                         ]
                     />
                     // Target loudness — always rendered; hidden when LoudNorm is not selected.

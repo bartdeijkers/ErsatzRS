@@ -155,6 +155,28 @@ impl LanguageStrings for DutchStrings {
         }
     }
 
+    fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String {
+        match algorithm {
+            0 => "Lineair",
+            1 => "Clippen",
+            2 => "Gamma",
+            3 => "Reinhard",
+            4 => "Mobius",
+            5 => "Hable",
+            _ => return format!("Onbekend ({algorithm})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
+        match mode {
+            0 => text(TextKey::Off),
+            1 => "loudnorm",
+            _ => return format!("Onbekend ({mode})"),
+        }
+        .to_owned()
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }

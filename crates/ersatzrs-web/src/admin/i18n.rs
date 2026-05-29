@@ -1981,6 +1981,22 @@ pub fn hardware_acceleration_option_label(label: &str, supported: bool) -> Strin
     hardware_acceleration_option_text(use_i18n(), label, supported)
 }
 
+pub fn ffmpeg_tonemap_algorithm_label(algorithm: i32) -> String {
+    ffmpeg_tonemap_algorithm_text(use_i18n(), algorithm)
+}
+
+pub fn ffmpeg_tonemap_algorithm_text(language: UiLanguage, algorithm: i32) -> String {
+    languages_for(language).ffmpeg_tonemap_algorithm_label(algorithm)
+}
+
+pub fn ffmpeg_loudness_mode_label(mode: i32) -> String {
+    ffmpeg_loudness_mode_text(use_i18n(), mode)
+}
+
+pub fn ffmpeg_loudness_mode_text(language: UiLanguage, mode: i32) -> String {
+    languages_for(language).ffmpeg_loudness_mode_label(mode)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2086,6 +2102,8 @@ pub trait LanguageStrings: Sync {
     fn channel_language_label(&self, code: &str) -> String;
     fn media_kind_label(&self, kind: i64) -> String;
     fn library_kind_label(&self, kind: &str) -> String;
+    fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String;
+    fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2295,6 +2313,31 @@ mod tests {
         assert_eq!(
             hardware_acceleration_option_text(UiLanguage::Dutch, "VAAPI", true),
             "VAAPI"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_option_labels_follow_active_language() {
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::English, 1),
+            "Clip"
+        );
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::Polish, 0),
+            "Liniowy"
+        );
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::PortugueseBrazil, 2),
+            "Gama"
+        );
+        assert_eq!(
+            ffmpeg_tonemap_algorithm_text(UiLanguage::Dutch, 99),
+            "Onbekend (99)"
+        );
+        assert_eq!(ffmpeg_loudness_mode_text(UiLanguage::Dutch, 0), "Uit");
+        assert_eq!(
+            ffmpeg_loudness_mode_text(UiLanguage::PortugueseBrazil, 1),
+            "loudnorm"
         );
     }
 

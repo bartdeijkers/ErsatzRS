@@ -151,6 +151,28 @@ impl LanguageStrings for PortugueseBrazilStrings {
         }
     }
 
+    fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String {
+        match algorithm {
+            0 => "Linear",
+            1 => "Corte",
+            2 => "Gama",
+            3 => "Reinhard",
+            4 => "Mobius",
+            5 => "Hable",
+            _ => return format!("Desconhecido ({algorithm})"),
+        }
+        .to_owned()
+    }
+
+    fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String {
+        match mode {
+            0 => text(TextKey::Off),
+            1 => "loudnorm",
+            _ => return format!("Desconhecido ({mode})"),
+        }
+        .to_owned()
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
