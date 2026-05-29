@@ -222,6 +222,10 @@ impl LanguageStrings for DutchStrings {
         media_source_error_message(error)
     }
 
+    fn trakt_error_message(&self, error: &str) -> String {
+        trakt_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -861,6 +865,28 @@ fn media_source_error_message(error: &str) -> String {
         "Address is required." => "Adres is verplicht.".to_owned(),
         "API key is required." => "API-sleutel is verplicht.".to_owned(),
         "'Address' must be a valid URL" => "Adres moet een geldige URL zijn.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn trakt_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
+    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
+        return format!("Kan Trakt niet bereiken: {error}");
+    }
+    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
+        return "Trakt-lijst bestaat niet.".to_owned();
+    }
+
+    match normalized {
+        "Invalid Trakt list url" => "Ongeldige Trakt-lijst-URL.".to_owned(),
+        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
+            "Trakt ClientId is niet geconfigureerd; stel TRAKT__CLIENTID in.".to_owned()
+        }
+        "Trakt API client is not configured for this operation" => {
+            "Trakt API-client is niet geconfigureerd voor deze bewerking.".to_owned()
+        }
         _ => error.to_owned(),
     }
 }

@@ -2150,6 +2150,15 @@ pub fn media_source_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).media_source_error_message(error)
 }
 
+pub fn trakt_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).trakt_error_message(&message)
+}
+
+pub fn trakt_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).trakt_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2266,6 +2275,7 @@ pub trait LanguageStrings: Sync {
     fn filler_error_message(&self, error: &str) -> String;
     fn media_browser_error_message(&self, error: &str) -> String;
     fn media_source_error_message(&self, error: &str) -> String;
+    fn trakt_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2807,6 +2817,36 @@ mod tests {
         );
         assert_eq!(
             media_source_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn trakt_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            trakt_error_text(UiLanguage::English, "Invalid Trakt list url"),
+            "Invalid Trakt list URL."
+        );
+        assert_eq!(
+            trakt_error_text(
+                UiLanguage::Polish,
+                "conflict: Trakt ClientId is not configured; set TRAKT__CLIENTID"
+            ),
+            "Identyfikator klienta Trakt nie jest skonfigurowany; ustaw TRAKT__CLIENTID."
+        );
+        assert_eq!(
+            trakt_error_text(
+                UiLanguage::PortugueseBrazil,
+                "failed to decode trakt http: status 404 Not Found"
+            ),
+            "Não foi possível acessar o Trakt: status 404 Not Found"
+        );
+        assert_eq!(
+            trakt_error_text(UiLanguage::Dutch, "trakt list with id 42 not found"),
+            "Trakt-lijst bestaat niet."
+        );
+        assert_eq!(
+            trakt_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }

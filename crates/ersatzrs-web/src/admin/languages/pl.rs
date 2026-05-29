@@ -218,6 +218,10 @@ impl LanguageStrings for PolishStrings {
         media_source_error_message(error)
     }
 
+    fn trakt_error_message(&self, error: &str) -> String {
+        trakt_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -871,6 +875,28 @@ fn media_source_error_message(error: &str) -> String {
         "Address is required." => "Adres jest wymagany.".to_owned(),
         "API key is required." => "Klucz API jest wymagany.".to_owned(),
         "'Address' must be a valid URL" => "Adres musi być prawidłowym adresem URL.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn trakt_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
+    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
+        return format!("Nie można połączyć się z Trakt: {error}");
+    }
+    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
+        return "Lista Trakt nie istnieje.".to_owned();
+    }
+
+    match normalized {
+        "Invalid Trakt list url" => "Nieprawidłowy URL listy Trakt.".to_owned(),
+        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
+            "Identyfikator klienta Trakt nie jest skonfigurowany; ustaw TRAKT__CLIENTID.".to_owned()
+        }
+        "Trakt API client is not configured for this operation" => {
+            "Klient API Trakt nie jest skonfigurowany dla tej operacji.".to_owned()
+        }
         _ => error.to_owned(),
     }
 }

@@ -5,7 +5,9 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, match_status, range_of, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, match_status, range_of, save_failed, tr, trakt_error_message, TextKey,
+};
 use crate::admin::server_fns::trakt::{
     add_trakt_list, delete_trakt_list, get_trakt_list_form, get_trakt_lists_page_size,
     list_trakt_lists, match_trakt_list, update_trakt_list, TraktListForm, TraktListRow,
@@ -82,7 +84,7 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!("{}: {}", tr(TextKey::AddFailed), trakt_error_message(error)),
                     ToastSeverity::Error,
                 ),
             }
@@ -100,7 +102,11 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::MatchFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::MatchFailed),
+                        trakt_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -117,7 +123,10 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                     );
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(trakt_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
             delete_target.set(None);
@@ -449,7 +458,10 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                     );
                     set_browser_location("/media/trakt/lists");
                 }
-                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    save_failed(trakt_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

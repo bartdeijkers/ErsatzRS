@@ -222,6 +222,10 @@ impl LanguageStrings for EnglishStrings {
         media_source_error_message(error)
     }
 
+    fn trakt_error_message(&self, error: &str) -> String {
+        trakt_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1814,6 +1818,28 @@ fn media_source_error_message(error: &str) -> String {
         "Address is required." => "Address is required.".to_owned(),
         "API key is required." => "API key is required.".to_owned(),
         "'Address' must be a valid URL" => "'Address' must be a valid URL".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn trakt_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    let normalized = trimmed.strip_prefix("conflict: ").unwrap_or(trimmed);
+    if let Some(error) = normalized.strip_prefix("failed to decode trakt http: ") {
+        return format!("Could not reach Trakt: {error}");
+    }
+    if normalized.starts_with("trakt list with id ") && normalized.ends_with(" not found") {
+        return "Trakt list does not exist.".to_owned();
+    }
+
+    match normalized {
+        "Invalid Trakt list url" => "Invalid Trakt list URL.".to_owned(),
+        "Trakt ClientId is not configured; set TRAKT__CLIENTID" => {
+            "Trakt ClientId is not configured; set TRAKT__CLIENTID.".to_owned()
+        }
+        "Trakt API client is not configured for this operation" => {
+            "Trakt API client is not configured for this operation.".to_owned()
+        }
         _ => error.to_owned(),
     }
 }
