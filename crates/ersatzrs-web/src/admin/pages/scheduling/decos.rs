@@ -7,6 +7,7 @@ use leptos::ev;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{delete_failed, save_failed, tr, TextKey};
 use crate::admin::server_fns::decos::{
     create_deco, create_deco_group, create_deco_template, create_deco_template_group, delete_deco,
     delete_deco_group, delete_deco_template, delete_deco_template_group, format_short_time,
@@ -57,7 +58,7 @@ fn DecosNoScriptRows() -> impl IntoView {
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h2 class=style::section_title>"Saved Decos"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::SavedDecos)}</h2>
                     <div class=style::divider></div>
                     <NoScriptDecoTree groups=groups rows=rows/>
                 </section>
@@ -101,9 +102,12 @@ fn DecosIsland() -> impl IntoView {
                     new_deco_group_id.set(id);
                     groups.refetch();
                     decos.refetch();
-                    toast.push("Deco group created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoGroupCreated), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -115,9 +119,12 @@ fn DecosIsland() -> impl IntoView {
                     new_deco_name.set(String::new());
                     groups.refetch();
                     decos.refetch();
-                    toast.push("Deco created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoCreated), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -128,9 +135,9 @@ fn DecosIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     decos.refetch();
-                    toast.push("Deco group deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoGroupDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -141,9 +148,9 @@ fn DecosIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     decos.refetch();
-                    toast.push("Deco deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -152,10 +159,10 @@ fn DecosIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>"Deco Groups"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::DecoGroups)}</h1>
                     <div class=style::divider></div>
                     <form method="post" action="/api/decos/groups/create" class=style::form_grid>
-                        <label class=style::label for="deco-group-name">"Deco Group Name"</label>
+                        <label class=style::label for="deco-group-name">{tr(TextKey::DecoGroupName)}</label>
                         <input
                             id="deco-group-name"
                             class=style::input
@@ -175,16 +182,16 @@ fn DecosIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Deco Group"
+                            {tr(TextKey::AddDecoGroup)}
                         </button>
                     </form>
                 </section>
 
                 <section class=style::section>
-                    <h2 class=style::section_title>"Decos"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Decos)}</h2>
                     <div class=style::divider></div>
                     <form method="post" action="/api/decos/create" class=style::form_grid>
-                        <label class=style::label for="deco-group">"Deco Group"</label>
+                        <label class=style::label for="deco-group">{tr(TextKey::DecoGroup)}</label>
                         <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                             {move || groups.get().map(|rows| view! {
                                 <select
@@ -206,7 +213,7 @@ fn DecosIsland() -> impl IntoView {
                             })}
                         </Suspense>
 
-                        <label class=style::label for="deco-name">"Deco Name"</label>
+                        <label class=style::label for="deco-name">{tr(TextKey::DecoName)}</label>
                         <input
                             id="deco-name"
                             class=style::input
@@ -227,7 +234,7 @@ fn DecosIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Deco"
+                            {tr(TextKey::AddDeco)}
                         </button>
                     </form>
                 </section>
@@ -236,13 +243,13 @@ fn DecosIsland() -> impl IntoView {
                     <span class=style::filter_icon aria-hidden="true"></span>
                     <input
                         type="search"
-                        placeholder="Search for decos"
+                        placeholder=tr(TextKey::SearchForDecos)
                         prop:value=move || search.get()
                         on:input=move |event| search.set(event_target_value(&event))
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || decos.get().map(|rows| view! {
                         <DecoTable
                             rows=rows
@@ -302,7 +309,7 @@ fn DecoTable(
     delete_deco_target: RwSignal<Option<(i64, String)>>,
 ) -> impl IntoView {
     if rows.is_empty() {
-        return view! { <p class=style::empty>"No decos found."</p> }.into_any();
+        return view! { <p class=style::empty>{tr(TextKey::NoDecosFound)}</p> }.into_any();
     }
 
     let mut grouped: BTreeMap<(String, i64), Vec<DecoRow>> = BTreeMap::new();
@@ -328,7 +335,7 @@ fn DecoTable(
                                         <input type="hidden" name="id" value=group_id.to_string()/>
                                         <button
                                             type="submit"
-                                            title="Delete Deco Group"
+                                            title=tr(TextKey::DeleteDecoGroup)
                                             class=format!("{} {}", style::icon_button, style::danger)
                                             on:click=move |event| {
                                                 event.prevent_default();
@@ -361,7 +368,7 @@ fn DecoTable(
                                                 {if id >= 0 {
                                                     let href = format!("/decos/{id}");
                                                     view! {
-                                                        <a class=style::icon_button title="Edit Deco" href=href>
+                                                        <a class=style::icon_button title=tr(TextKey::EditDeco) href=href>
                                                             <span class=style::edit_icon aria-hidden="true"></span>
                                                         </a>
                                                         <form method="post" action="/api/decos/delete">
@@ -369,7 +376,7 @@ fn DecoTable(
                                                             <button
                                                                 type="submit"
                                                                 class=format!("{} {}", style::icon_button, style::danger)
-                                                                title="Delete Deco"
+                                                                title=tr(TextKey::DeleteDeco)
                                                                 on:click=move |event| {
                                                                     event.prevent_default();
                                                                     delete_deco_target.set(Some((id, delete_name.clone())));
@@ -472,13 +479,13 @@ fn DecoEditorIsland(deco_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || data.get().map(|(deco, options)| match deco {
                 Some(deco) => view! { <DecoEditorForm initial=deco options=options/> }.into_any(),
                 None => view! {
                     <p class=style::empty>
-                        "Deco not found. "
-                        <a href="/decos">"Back to decos"</a>
+                        {tr(TextKey::DecoNotFound)} " "
+                        <a href="/decos">{tr(TextKey::BackToDecos)}</a>
                     </p>
                 }.into_any(),
             })}
@@ -494,8 +501,8 @@ fn DecoEditorNoScript(deco_id: i64) -> impl IntoView {
         }
         None => view! {
             <p class=style::empty>
-                "Deco not found. "
-                <a href="/decos">"Back to decos"</a>
+                {tr(TextKey::DecoNotFound)} " "
+                <a href="/decos">{tr(TextKey::BackToDecos)}</a>
             </p>
         }
         .into_any(),
@@ -526,13 +533,13 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Deco saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoSaved), ToastSeverity::Success);
                     #[cfg(target_arch = "wasm32")]
                     {
                         let _ = window().location().set_href("/decos");
                     }
                 }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -566,10 +573,10 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                                 save_action.dispatch(form.get_untracked());
                             }
                         >
-                            "Save Changes"
+                            {tr(TextKey::Save)}
                         </button>
-                        <span class=style::action_title>{move || format!("Deco: {}", form.get().name)}</span>
-                        <a class=style::btn_default href="/decos">"Back"</a>
+                        <span class=style::action_title>{move || format!("{}: {}", tr(TextKey::Deco), form.get().name)}</span>
+                        <a class=style::btn_default href="/decos">{tr(TextKey::Back)}</a>
                     </div>
                 </div>
 
@@ -577,17 +584,17 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     {move || hidden_deco_inputs(form.get())}
 
                     <section class=style::section>
-                        <h1 class=style::page_title>"Deco"</h1>
+                        <h1 class=style::page_title>{tr(TextKey::Deco)}</h1>
                         <div class=style::divider></div>
                         <div class=style::form_grid>
-                            <label class=style::label>"Deco Group Name"</label>
+                            <label class=style::label>{tr(TextKey::DecoGroupName)}</label>
                             <input
                                 class=style::input
                                 disabled=true
                                 value=move || form.get().group_name
                                 prop:value=move || form.get().group_name
                             />
-                            <label class=style::label for="deco-editor-name">"Deco Name"</label>
+                            <label class=style::label for="deco-editor-name">{tr(TextKey::DecoName)}</label>
                             <input
                                 id="deco-editor-name"
                                 class=style::input
@@ -603,31 +610,31 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     </section>
 
                     <DecoModeAndMultiSelectSection
-                        title="Watermark"
-                        mode_label="Watermark Mode"
-                        item_label="Watermark"
-                        use_during_filler_label="Use Watermark During Filler"
+                        title_key=TextKey::Watermark
+                        mode_label_key=TextKey::WatermarkMode
+                        item_label_key=TextKey::Watermark
+                        use_during_filler_label_key=TextKey::UseWatermarkDuringFiller
                         options=watermarks.clone()
                         form=form
                         target="watermark"
                     />
 
                     <DecoModeAndMultiSelectSection
-                        title="Graphics Elements"
-                        mode_label="Graphics Elements Mode"
-                        item_label="Graphics Elements"
-                        use_during_filler_label="Use Graphics Elements During Filler"
+                        title_key=TextKey::GraphicsElements
+                        mode_label_key=TextKey::GraphicsElementsMode
+                        item_label_key=TextKey::GraphicsElements
+                        use_during_filler_label_key=TextKey::UseGraphicsElementsDuringFiller
                         options=graphics_elements.clone()
                         form=form
                         target="graphics"
                     />
 
                     <section class=style::section>
-                        <h2 class=style::section_title>"Break Content"</h2>
+                        <h2 class=style::section_title>{tr(TextKey::BreakContent)}</h2>
                         <div class=style::divider></div>
-                        <p class=style::label>"Break content can be used to play specific items (using playlists), and to pad blocks to their full configured duration."</p>
+                        <p class=style::label>{tr(TextKey::BreakContentBody)}</p>
                         <div class=style::form_grid>
-                            <label class=style::label for="deco-break-mode">"Break Content Mode"</label>
+                            <label class=style::label for="deco-break-mode">{tr(TextKey::BreakContentMode)}</label>
                             <select
                                 id="deco-break-mode"
                                 class=style::select
@@ -648,7 +655,7 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                                 disabled=move || form.get().break_content_mode != 2
                                 on:click=move |_| add_break_content()
                             >
-                                "Add Break Content"
+                                {tr(TextKey::AddBreakContent)}
                             </button>
                         </div>
 
@@ -680,8 +687,8 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     </section>
 
                     <DecoCollectionSection
-                        title="Default Filler"
-                        body="After all blocks have been scheduled, a second pass will be made to fill unscheduled time using random items from this collection."
+                        title_key=TextKey::DefaultFiller
+                        body_key=TextKey::DefaultFillerBody
                         target="default"
                         form=form
                         collections=collections.clone()
@@ -693,8 +700,8 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     />
 
                     <DecoCollectionSection
-                        title="Dead Air Fallback"
-                        body="When no playout item is found for the current time, one item will be randomly selected from this collection and looped and trimmed to exactly fit until the start of the next playout item. This replaces the Channel is Offline image that would otherwise display."
+                        title_key=TextKey::DeadAirFallback
+                        body_key=TextKey::DeadAirFallbackBody
                         target="dead-air"
                         form=form
                         collections=collections.clone()
@@ -706,7 +713,7 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                     />
 
                     <button type="submit" name="action" value="save" class=style::hidden>
-                        "Save Changes"
+                        {tr(TextKey::Save)}
                     </button>
                 </form>
             </div>
@@ -735,7 +742,7 @@ fn DecoTemplatesNoScriptRows() -> impl IntoView {
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h2 class=style::section_title>"Saved Deco Templates"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::SavedDecoTemplates)}</h2>
                     <div class=style::divider></div>
                     <NoScriptDecoTemplateTree groups=groups rows=rows/>
                 </section>
@@ -779,9 +786,15 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     new_template_group_id.set(id);
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Deco template group created.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::DecoTemplateGroupCreated),
+                        ToastSeverity::Success,
+                    );
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -793,9 +806,12 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     new_template_name.set(String::new());
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Deco template created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoTemplateCreated), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -806,9 +822,12 @@ fn DecoTemplatesIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Deco template group deleted.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::DecoTemplateGroupDeleted),
+                        ToastSeverity::Success,
+                    );
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -819,9 +838,9 @@ fn DecoTemplatesIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Deco template deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoTemplateDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -830,10 +849,10 @@ fn DecoTemplatesIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>"Deco Template Groups"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::DecoTemplateGroups)}</h1>
                     <div class=style::divider></div>
                     <form method="post" action="/api/deco-templates/groups/create" class=style::form_grid>
-                        <label class=style::label for="deco-template-group-name">"Deco Template Group Name"</label>
+                        <label class=style::label for="deco-template-group-name">{tr(TextKey::DecoTemplateGroupName)}</label>
                         <input
                             id="deco-template-group-name"
                             class=style::input
@@ -853,16 +872,16 @@ fn DecoTemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Deco Template Group"
+                            {tr(TextKey::AddDecoTemplateGroup)}
                         </button>
                     </form>
                 </section>
 
                 <section class=style::section>
-                    <h2 class=style::section_title>"Deco Templates"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::DecoTemplates)}</h2>
                     <div class=style::divider></div>
                     <form method="post" action="/api/deco-templates/create" class=style::form_grid>
-                        <label class=style::label for="deco-template-group">"Deco Template Group"</label>
+                        <label class=style::label for="deco-template-group">{tr(TextKey::DecoTemplateGroup)}</label>
                         <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                             {move || groups.get().map(|rows| view! {
                                 <select
@@ -884,7 +903,7 @@ fn DecoTemplatesIsland() -> impl IntoView {
                             })}
                         </Suspense>
 
-                        <label class=style::label for="deco-template-name">"Deco Template Name"</label>
+                        <label class=style::label for="deco-template-name">{tr(TextKey::DecoTemplateName)}</label>
                         <input
                             id="deco-template-name"
                             class=style::input
@@ -905,7 +924,7 @@ fn DecoTemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Deco Template"
+                            {tr(TextKey::AddDecoToTemplate)}
                         </button>
                     </form>
                 </section>
@@ -914,13 +933,13 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     <span class=style::filter_icon aria-hidden="true"></span>
                     <input
                         type="search"
-                        placeholder="Search for deco templates"
+                        placeholder=tr(TextKey::SearchForDecoTemplates)
                         prop:value=move || search.get()
                         on:input=move |event| search.set(event_target_value(&event))
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || templates.get().map(|rows| view! {
                         <DecoTemplateTable
                             rows=rows
@@ -980,7 +999,7 @@ fn DecoTemplateTable(
     delete_template_target: RwSignal<Option<(i64, String)>>,
 ) -> impl IntoView {
     if rows.is_empty() {
-        return view! { <p class=style::empty>"No deco templates found."</p> }.into_any();
+        return view! { <p class=style::empty>{tr(TextKey::NoDecoTemplatesFound)}</p> }.into_any();
     }
 
     let mut grouped: BTreeMap<(String, i64), Vec<DecoTemplateRow>> = BTreeMap::new();
@@ -1006,7 +1025,7 @@ fn DecoTemplateTable(
                                         <input type="hidden" name="id" value=group_id.to_string()/>
                                         <button
                                             type="submit"
-                                            title="Delete Deco Template Group"
+                                            title=tr(TextKey::DeleteDecoTemplateGroup)
                                             class=format!("{} {}", style::icon_button, style::danger)
                                             on:click=move |event| {
                                                 event.prevent_default();
@@ -1039,7 +1058,7 @@ fn DecoTemplateTable(
                                                 {if id >= 0 {
                                                     let href = format!("/deco-templates/{id}");
                                                     view! {
-                                                        <a class=style::icon_button title="Edit Deco Template" href=href>
+                                                        <a class=style::icon_button title=tr(TextKey::EditDecoTemplate) href=href>
                                                             <span class=style::edit_icon aria-hidden="true"></span>
                                                         </a>
                                                         <form method="post" action="/api/deco-templates/delete">
@@ -1047,7 +1066,7 @@ fn DecoTemplateTable(
                                                             <button
                                                                 type="submit"
                                                                 class=format!("{} {}", style::icon_button, style::danger)
-                                                                title="Delete Deco Template"
+                                                                title=tr(TextKey::DeleteDecoTemplate)
                                                                 on:click=move |event| {
                                                                     event.prevent_default();
                                                                     delete_template_target.set(Some((id, delete_name.clone())));
@@ -1158,7 +1177,7 @@ fn DecoTemplateEditorIsland(template_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || data.get().map(|(template, items, groups)| {
                 match template {
                     Some(template) => view! {
@@ -1166,8 +1185,8 @@ fn DecoTemplateEditorIsland(template_id: i64) -> impl IntoView {
                     }.into_any(),
                     None => view! {
                         <p class=style::empty>
-                            "Deco template not found. "
-                            <a href="/deco-templates">"Back to deco templates"</a>
+                            {tr(TextKey::DecoTemplateNotFound)} " "
+                            <a href="/deco-templates">{tr(TextKey::BackToDecoTemplates)}</a>
                         </p>
                     }.into_any(),
                 }
@@ -1185,8 +1204,8 @@ fn DecoTemplateEditorNoScript(template_id: i64) -> impl IntoView {
         .into_any(),
         None => view! {
             <p class=style::empty>
-                "Deco template not found. "
-                <a href="/deco-templates">"Back to deco templates"</a>
+                {tr(TextKey::DecoTemplateNotFound)} " "
+                <a href="/deco-templates">{tr(TextKey::BackToDecoTemplates)}</a>
             </p>
         }
         .into_any(),
@@ -1253,10 +1272,7 @@ fn DecoTemplateEditorForm(
                 start += 5;
             }
 
-            toast.push(
-                "Deco cannot be added because it would overlap or cross midnight.",
-                ToastSeverity::Error,
-            );
+            toast.push(tr(TextKey::DecoCannotBeAdded), ToastSeverity::Error);
         }
     };
 
@@ -1271,10 +1287,7 @@ fn DecoTemplateEditorForm(
             || new_end > 24 * 60
             || intersects_any(&current, new_start, new_end, Some(index))
         {
-            toast.push(
-                "Deco cannot be moved there because it would overlap or cross midnight.",
-                ToastSeverity::Error,
-            );
+            toast.push(tr(TextKey::DecoCannotBeMoved), ToastSeverity::Error);
             return;
         }
 
@@ -1336,13 +1349,13 @@ fn DecoTemplateEditorForm(
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Deco template saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::DecoTemplateSaved), ToastSeverity::Success);
                     #[cfg(target_arch = "wasm32")]
                     {
                         let _ = window().location().set_href("/deco-templates");
                     }
                 }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -1352,8 +1365,8 @@ fn DecoTemplateEditorForm(
             <div class=style::content>
                 <div class=style::action_bar>
                     <div class=style::action_row>
-                        <a class=style::btn_default href="/deco-templates">"Back"</a>
-                        <span class=style::action_title>{move || format!("Deco Template: {}", name.get())}</span>
+                        <a class=style::btn_default href="/deco-templates">{tr(TextKey::Back)}</a>
+                        <span class=style::action_title>{move || format!("{}: {}", tr(TextKey::DecoTemplate), name.get())}</span>
                         <button
                             type="submit"
                             form="deco-template-editor-form"
@@ -1370,7 +1383,7 @@ fn DecoTemplateEditorForm(
                                 });
                             }
                         >
-                            "Save"
+                            {tr(TextKey::Save)}
                         </button>
                     </div>
                 </div>
@@ -1379,7 +1392,7 @@ fn DecoTemplateEditorForm(
                     <form method="post" action="/api/deco-templates/items/save">
                         <input type="hidden" name="template_id" value=template_id.to_string()/>
                         <input type="hidden" name="group_id" value=group_id.to_string()/>
-                        <button type="submit" name="action" value="save">"Save Deco Template"</button>
+                        <button type="submit" name="action" value="save">{tr(TextKey::SaveTemplate)}</button>
                     </form>
                 </noscript>
                 <form
@@ -1390,12 +1403,12 @@ fn DecoTemplateEditorForm(
                     <input type="hidden" name="template_id" value=template_id.to_string()/>
                     <input type="hidden" name="group_id" value=group_id.to_string()/>
                     <section class=style::section>
-                    <h1 class=style::page_title>"Deco Template"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::DecoTemplate)}</h1>
                     <div class=style::divider></div>
                     <div class=style::form_grid>
-                        <label class=style::label>"Deco Template Group Name"</label>
+                        <label class=style::label>{tr(TextKey::DecoTemplateGroupName)}</label>
                         <input class=style::input value=group_name disabled=true/>
-                        <label class=style::label for="deco-template-editor-name">"Deco Template Name"</label>
+                        <label class=style::label for="deco-template-editor-name">{tr(TextKey::DecoTemplateName)}</label>
                         <input
                             id="deco-template-editor-name"
                             class=style::input
@@ -1408,10 +1421,10 @@ fn DecoTemplateEditorForm(
                 </section>
 
                 <section class=style::section>
-                    <h2 class=style::section_title>"Decos"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Decos)}</h2>
                     <div class=style::divider></div>
                     <div class=style::form_grid>
-                        <label class=style::label for="template-deco-group">"Deco Group"</label>
+                        <label class=style::label for="template-deco-group">{tr(TextKey::DecoGroup)}</label>
                         <select
                             id="template-deco-group"
                             class=style::select
@@ -1429,7 +1442,7 @@ fn DecoTemplateEditorForm(
                             }).collect_view()}
                         </select>
 
-                        <label class=style::label for="template-deco">"Deco"</label>
+                        <label class=style::label for="template-deco">{tr(TextKey::Deco)}</label>
                         <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                             {move || decos.get().map(|rows| {
                                 let selected_value = selected_deco.get().map(|row| row.id).unwrap_or_default();
@@ -1458,7 +1471,7 @@ fn DecoTemplateEditorForm(
                             })}
                         </Suspense>
 
-                        <label class=style::label for="template-deco-start">"Start Time On Or After"</label>
+                        <label class=style::label for="template-deco-start">{tr(TextKey::StartTimeOnOrAfter)}</label>
                         <select
                             id="template-deco-start"
                             class=style::select
@@ -1474,7 +1487,7 @@ fn DecoTemplateEditorForm(
                             }).collect_view()}
                         </select>
 
-                        <label class=style::label for="template-deco-duration-hours">"Duration"</label>
+                        <label class=style::label for="template-deco-duration-hours">{tr(TextKey::Duration)}</label>
                         <input
                             id="template-deco-duration-hours"
                             class=style::input
@@ -1502,7 +1515,7 @@ fn DecoTemplateEditorForm(
                             }
                         >
                             {(0..60).step_by(5).map(|minutes| {
-                                view! { <option value=minutes.to_string()>{format!("{minutes} minutes")}</option> }
+                                view! { <option value=minutes.to_string()>{format!("{} {}", minutes, tr(TextKey::Minutes))}</option> }
                             }).collect_view()}
                         </select>
 
@@ -1513,10 +1526,10 @@ fn DecoTemplateEditorForm(
                             disabled=move || selected_deco.get().is_none()
                             on:click=move |_| add_deco()
                         >
-                            "Add Deco To Template"
+                            {tr(TextKey::AddDecoTemplate)}
                         </button>
 
-                        <label class=style::label for="template-deco-remove">"Deco To Remove"</label>
+                        <label class=style::label for="template-deco-remove">{tr(TextKey::DecoToRemove)}</label>
                         <select
                             id="template-deco-remove"
                             class=style::select
@@ -1526,7 +1539,7 @@ fn DecoTemplateEditorForm(
                                 deco_to_remove.set(value.parse::<usize>().ok());
                             }
                         >
-                            <option value="">"(none)"</option>
+                            <option value="">{format!("({})", tr(TextKey::NoneOption))}</option>
                             {move || items.get().into_iter().enumerate().map(|(index, item)| {
                                 view! {
                                     <option value=index.to_string()>
@@ -1548,12 +1561,12 @@ fn DecoTemplateEditorForm(
                             disabled=move || deco_to_remove.get().is_none()
                             on:click=move |_| remove_deco()
                         >
-                            "Remove Deco From Template"
+                            {tr(TextKey::RemoveDecoFromTemplate)}
                         </button>
                     </div>
                 </section>
 
-                <h2 class=style::section_title>"Content"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Content)}</h2>
                 <div class=style::divider></div>
                 <div class=style::timeline_wrap>
                     <div class=style::timeline>
@@ -1591,7 +1604,7 @@ fn DecoTemplateEditorForm(
                 </div>
                     {move || hidden_deco_template_item_inputs(items.get())}
                     <button type="submit" name="action" value="save" class=style::hidden>
-                        "Save Deco Template"
+                        {tr(TextKey::SaveTemplate)}
                     </button>
                 </form>
             </div>
@@ -1708,10 +1721,10 @@ fn load_deco_template_editor_no_script_data(
 
 #[component]
 fn DecoModeAndMultiSelectSection(
-    title: &'static str,
-    mode_label: &'static str,
-    item_label: &'static str,
-    use_during_filler_label: &'static str,
+    title_key: TextKey,
+    mode_label_key: TextKey,
+    item_label_key: TextKey,
+    use_during_filler_label_key: TextKey,
     options: Vec<DecoOption>,
     form: RwSignal<DecoForm>,
     target: &'static str,
@@ -1722,10 +1735,10 @@ fn DecoModeAndMultiSelectSection(
     };
     view! {
         <section class=style::section>
-            <h2 class=style::section_title>{title}</h2>
+            <h2 class=style::section_title>{tr(title_key)}</h2>
             <div class=style::divider></div>
             <div class=style::form_grid>
-                <label class=style::label>{mode_label}</label>
+                <label class=style::label>{tr(mode_label_key)}</label>
                 <select
                     class=style::select
                     name=match target {
@@ -1744,7 +1757,7 @@ fn DecoModeAndMultiSelectSection(
                 >
                     {mode_options(mode(), true)}
                 </select>
-                <label class=style::label>{item_label}</label>
+                <label class=style::label>{tr(item_label_key)}</label>
                 <div>
                     {options.into_iter().map(|option| {
                         let id = option.id;
@@ -1778,7 +1791,7 @@ fn DecoModeAndMultiSelectSection(
                         }
                     }).collect_view()}
                 </div>
-                <label class=style::label>{use_during_filler_label}</label>
+                <label class=style::label>{tr(use_during_filler_label_key)}</label>
                 <input
                     type="checkbox"
                     name=match target {
@@ -1821,9 +1834,9 @@ fn DecoBreakContentTable(
             <table>
                 <thead>
                     <tr>
-                        <th>"Type"</th>
-                        <th>"Name"</th>
-                        <th>"Placement"</th>
+                        <th>{tr(TextKey::Type)}</th>
+                        <th>{tr(TextKey::Name)}</th>
+                        <th>{tr(TextKey::Placement)}</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -1852,7 +1865,7 @@ fn DecoBreakContentTable(
                                     <button
                                         type="button"
                                         class=format!("{} {}", style::icon_button, style::danger)
-                                        title="Remove Break Content"
+                                        title=tr(TextKey::RemoveBreakContent)
                                         on:click=move |event| {
                                             event.stop_propagation();
                                             form.update(|form| {
@@ -1891,10 +1904,10 @@ fn DecoBreakContentEditor(
 ) -> impl IntoView {
     view! {
         <div style:display=move || if selected_break_index.get().is_some() { "" } else { "none" }>
-            <h2 class=style::section_title>"Break Content Item"</h2>
+            <h2 class=style::section_title>{tr(TextKey::BreakContentItem)}</h2>
             <div class=style::divider></div>
             <div class=style::form_grid>
-                <label class=style::label>"Placement"</label>
+                <label class=style::label>{tr(TextKey::Placement)}</label>
                 <select
                     class=style::select
                     disabled=true
@@ -1915,7 +1928,7 @@ fn DecoBreakContentEditor(
                     {placement_options(selected_break_item(form, selected_break_index).map(|item| item.placement).unwrap_or_default())}
                 </select>
 
-                <label class=style::label>"Collection Type"</label>
+                <label class=style::label>{tr(TextKey::CollectionType)}</label>
                 <select
                     class=style::select
                     disabled=true
@@ -1969,13 +1982,13 @@ fn DecoBreakSelectionRows(
     selected_playlist_group: RwSignal<i64>,
 ) -> impl IntoView {
     view! {
-        <CollectionSelectRow label="Collection" collection_type=0 form=form selected_break_index=selected_break_index options=collections field="collection"/>
-        <CollectionSelectRow label="Television Show" collection_type=1 form=form selected_break_index=selected_break_index options=shows field="media"/>
-        <CollectionSelectRow label="Television Season" collection_type=2 form=form selected_break_index=selected_break_index options=seasons field="media"/>
-        <CollectionSelectRow label="Artist" collection_type=3 form=form selected_break_index=selected_break_index options=artists field="media"/>
-        <CollectionSelectRow label="Multi Collection" collection_type=4 form=form selected_break_index=selected_break_index options=multi_collections field="multi"/>
-        <CollectionSelectRow label="Smart Collection" collection_type=5 form=form selected_break_index=selected_break_index options=smart_collections field="smart"/>
-        <label class=style::label style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }>"Playlist Group"</label>
+        <CollectionSelectRow label_key=TextKey::Collection collection_type=0 form=form selected_break_index=selected_break_index options=collections field="collection"/>
+        <CollectionSelectRow label_key=TextKey::TelevisionShow collection_type=1 form=form selected_break_index=selected_break_index options=shows field="media"/>
+        <CollectionSelectRow label_key=TextKey::TelevisionSeason collection_type=2 form=form selected_break_index=selected_break_index options=seasons field="media"/>
+        <CollectionSelectRow label_key=TextKey::Artist collection_type=3 form=form selected_break_index=selected_break_index options=artists field="media"/>
+        <CollectionSelectRow label_key=TextKey::MultiCollection collection_type=4 form=form selected_break_index=selected_break_index options=multi_collections field="multi"/>
+        <CollectionSelectRow label_key=TextKey::SmartCollection collection_type=5 form=form selected_break_index=selected_break_index options=smart_collections field="smart"/>
+        <label class=style::label style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }>{tr(TextKey::PlaylistGroup)}</label>
         <select
             class=style::select
             style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }
@@ -1991,7 +2004,7 @@ fn DecoBreakSelectionRows(
                 <option value=option.id.to_string()>{option.name}</option>
             }).collect_view()}
         </select>
-        <label class=style::label style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }>"Playlist"</label>
+        <label class=style::label style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }>{tr(TextKey::Playlist)}</label>
         <select
             class=style::select
             style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == 6) { "" } else { "none" }
@@ -2021,7 +2034,7 @@ fn DecoBreakSelectionRows(
 
 #[component]
 fn CollectionSelectRow(
-    label: &'static str,
+    label_key: TextKey,
     collection_type: i32,
     form: RwSignal<DecoForm>,
     selected_break_index: RwSignal<Option<usize>>,
@@ -2033,7 +2046,7 @@ fn CollectionSelectRow(
             class=style::label
             style:display=move || if selected_break_item(form, selected_break_index).is_some_and(|item| item.collection_type == collection_type) { "" } else { "none" }
         >
-            {label}
+            {tr(label_key)}
         </label>
         <select
             class=style::select
@@ -2062,8 +2075,8 @@ fn CollectionSelectRow(
 
 #[component]
 fn DecoCollectionSection(
-    title: &'static str,
-    body: &'static str,
+    title_key: TextKey,
+    body_key: TextKey,
     target: &'static str,
     form: RwSignal<DecoForm>,
     collections: Vec<DecoOption>,
@@ -2075,11 +2088,14 @@ fn DecoCollectionSection(
 ) -> impl IntoView {
     view! {
         <section class=style::section>
-            <h2 class=style::section_title>{title}</h2>
+            <h2 class=style::section_title>{tr(title_key)}</h2>
             <div class=style::divider></div>
-            <p class=style::label>{body}</p>
+            <p class=style::label>{tr(body_key)}</p>
             <div class=style::form_grid>
-                <label class=style::label>{format!("{title} Mode")}</label>
+                <label class=style::label>{match target {
+                    "default" => tr(TextKey::DefaultFillerMode),
+                    _ => tr(TextKey::DeadAirFallbackMode),
+                }}</label>
                 <select
                     class=style::select
                     name=match target {
@@ -2095,7 +2111,10 @@ fn DecoCollectionSection(
                 >
                     {mode_options(collection_mode(form, target), false)}
                 </select>
-                <label class=style::label>{format!("{title} Collection Type")}</label>
+                <label class=style::label>{match target {
+                    "default" => tr(TextKey::DefaultFillerCollectionType),
+                    _ => tr(TextKey::DeadAirFallbackCollectionType),
+                }}</label>
                 <select
                     class=style::select
                     name=match target {
@@ -2112,15 +2131,15 @@ fn DecoCollectionSection(
                 >
                     {collection_type_options(collection_type_for_target(form, target), false)}
                 </select>
-                <TargetCollectionSelect label="Collection" collection_type=0 target=target form=form options=collections field="collection"/>
-                <TargetCollectionSelect label="Television Show" collection_type=1 target=target form=form options=shows field="media"/>
-                <TargetCollectionSelect label="Television Season" collection_type=2 target=target form=form options=seasons field="media"/>
-                <TargetCollectionSelect label="Artist" collection_type=3 target=target form=form options=artists field="media"/>
-                <TargetCollectionSelect label="Multi Collection" collection_type=4 target=target form=form options=multi_collections field="multi"/>
-                <TargetCollectionSelect label="Smart Collection" collection_type=5 target=target form=form options=smart_collections field="smart"/>
+                <TargetCollectionSelect label_key=TextKey::Collection collection_type=0 target=target form=form options=collections field="collection"/>
+                <TargetCollectionSelect label_key=TextKey::TelevisionShow collection_type=1 target=target form=form options=shows field="media"/>
+                <TargetCollectionSelect label_key=TextKey::TelevisionSeason collection_type=2 target=target form=form options=seasons field="media"/>
+                <TargetCollectionSelect label_key=TextKey::Artist collection_type=3 target=target form=form options=artists field="media"/>
+                <TargetCollectionSelect label_key=TextKey::MultiCollection collection_type=4 target=target form=form options=multi_collections field="multi"/>
+                <TargetCollectionSelect label_key=TextKey::SmartCollection collection_type=5 target=target form=form options=smart_collections field="smart"/>
                 {if target == "default" {
                     view! {
-                        <label class=style::label>"Trim To Fit"</label>
+                        <label class=style::label>{tr(TextKey::TrimToFit)}</label>
                         <input
                             type="checkbox"
                             name="default_filler_trim_to_fit"
@@ -2143,7 +2162,7 @@ fn DecoCollectionSection(
 
 #[component]
 fn TargetCollectionSelect(
-    label: &'static str,
+    label_key: TextKey,
     collection_type: i32,
     target: &'static str,
     form: RwSignal<DecoForm>,
@@ -2155,7 +2174,7 @@ fn TargetCollectionSelect(
             class=style::label
             style:display=move || if collection_mode(form, target) == 2 && collection_type_for_target(form, target) == collection_type { "" } else { "none" }
         >
-            {label}
+            {tr(label_key)}
         </label>
         <select
             class=style::select
@@ -2222,11 +2241,11 @@ fn snap_drop_minutes(offset_y: f64, grid_height: f64) -> Option<i32> {
 fn mode_options(selected: i32, allow_merge: bool) -> impl IntoView {
     view! {
         <>
-            <option value="0" selected=selected == 0>"Inherit"</option>
-            <option value="1" selected=selected == 1>"Disable"</option>
-            <option value="2" selected=selected == 2>{if allow_merge { "Replace" } else { "Override" }}</option>
+            <option value="0" selected=selected == 0>{tr(TextKey::Inherit)}</option>
+            <option value="1" selected=selected == 1>{tr(TextKey::Disable)}</option>
+            <option value="2" selected=selected == 2>{if allow_merge { tr(TextKey::Replace) } else { tr(TextKey::Override) }}</option>
             {if allow_merge {
-                view! { <option value="3" selected=selected == 3>"Merge"</option> }.into_any()
+                view! { <option value="3" selected=selected == 3>{tr(TextKey::Merge)}</option> }.into_any()
             } else {
                 ().into_any()
             }}
@@ -2237,14 +2256,14 @@ fn mode_options(selected: i32, allow_merge: bool) -> impl IntoView {
 fn collection_type_options(selected: i32, include_playlist: bool) -> impl IntoView {
     view! {
         <>
-            <option value="0" selected=selected == 0>"Collection"</option>
-            <option value="1" selected=selected == 1>"Television Show"</option>
-            <option value="2" selected=selected == 2>"Television Season"</option>
-            <option value="3" selected=selected == 3>"Artist"</option>
-            <option value="4" selected=selected == 4>"Multi Collection"</option>
-            <option value="5" selected=selected == 5>"Smart Collection"</option>
+            <option value="0" selected=selected == 0>{tr(TextKey::Collection)}</option>
+            <option value="1" selected=selected == 1>{tr(TextKey::TelevisionShow)}</option>
+            <option value="2" selected=selected == 2>{tr(TextKey::TelevisionSeason)}</option>
+            <option value="3" selected=selected == 3>{tr(TextKey::Artist)}</option>
+            <option value="4" selected=selected == 4>{tr(TextKey::MultiCollection)}</option>
+            <option value="5" selected=selected == 5>{tr(TextKey::SmartCollection)}</option>
             {if include_playlist {
-                view! { <option value="6" selected=selected == 6>"Playlist"</option> }.into_any()
+                view! { <option value="6" selected=selected == 6>{tr(TextKey::Playlist)}</option> }.into_any()
             } else {
                 ().into_any()
             }}
@@ -2255,33 +2274,33 @@ fn collection_type_options(selected: i32, include_playlist: bool) -> impl IntoVi
 fn placement_options(selected: i32) -> impl IntoView {
     view! {
         <>
-            <option value="0" selected=selected == 0>"Block Start"</option>
-            <option value="2" selected=selected == 2>"Between Block Items"</option>
-            <option value="3" selected=selected == 3>"At Chapter Markers"</option>
-            <option value="1" selected=selected == 1>"Block Finish"</option>
+            <option value="0" selected=selected == 0>{tr(TextKey::BlockStart)}</option>
+            <option value="2" selected=selected == 2>{tr(TextKey::BetweenBlockItems)}</option>
+            <option value="3" selected=selected == 3>{tr(TextKey::AtChapterMarkers)}</option>
+            <option value="1" selected=selected == 1>{tr(TextKey::BlockFinish)}</option>
         </>
     }
 }
 
 fn collection_type_label(value: i32) -> &'static str {
     match value {
-        0 => "Collection",
-        1 => "Television Show",
-        2 => "Television Season",
-        3 => "Artist",
-        4 => "Multi Collection",
-        5 => "Smart Collection",
-        6 => "Playlist",
+        0 => tr(TextKey::Collection),
+        1 => tr(TextKey::TelevisionShow),
+        2 => tr(TextKey::TelevisionSeason),
+        3 => tr(TextKey::Artist),
+        4 => tr(TextKey::MultiCollection),
+        5 => tr(TextKey::SmartCollection),
+        6 => tr(TextKey::Playlist),
         _ => "",
     }
 }
 
 fn placement_label(value: i32) -> &'static str {
     match value {
-        0 => "Block Start",
-        1 => "Block Finish",
-        2 => "Between Block Items",
-        3 => "At Chapter Markers",
+        0 => tr(TextKey::BlockStart),
+        1 => tr(TextKey::BlockFinish),
+        2 => tr(TextKey::BetweenBlockItems),
+        3 => tr(TextKey::AtChapterMarkers),
         _ => "",
     }
 }
