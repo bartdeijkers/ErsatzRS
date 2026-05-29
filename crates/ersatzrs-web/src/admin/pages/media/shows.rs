@@ -30,7 +30,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
 use crate::admin::server_fns::libraries::scan_show;
@@ -252,7 +252,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                         };
                         view! {
                             <MediaCard
-                                title=s.title
+                                title=season_display_name(s.season_number)
                                 artwork_url=s.poster_url
                                 href=Some(format!("/media/tv/seasons/{season_id}"))
                                 placeholder=placeholder

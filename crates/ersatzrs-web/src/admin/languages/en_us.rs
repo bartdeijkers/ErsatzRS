@@ -75,6 +75,14 @@ impl LanguageStrings for EnglishStrings {
         }
     }
 
+    fn season_display_name(&self, number: i64) -> String {
+        if number == 0 {
+            "Specials".to_owned()
+        } else {
+            format!("Season {number}")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }

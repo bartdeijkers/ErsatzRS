@@ -37,6 +37,8 @@ pub struct MediaCardRow {
     pub sort_title: String,
     pub subtitle: Option<String>,
     pub artwork_path: Option<String>,
+    #[serde(default)]
+    pub season_number: Option<i64>,
 }
 
 /// Page-map for the alphabetic jump-bar. Mirrors `ErsatzTV`'s
@@ -613,6 +615,7 @@ pub async fn list_movies(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2079,6 +2082,7 @@ pub async fn list_shows(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2147,6 +2151,7 @@ pub async fn list_images(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2213,6 +2218,7 @@ pub async fn list_artists(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2439,6 +2445,7 @@ pub async fn list_other_videos(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2715,6 +2722,7 @@ pub async fn list_seasons(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                season_number: Some(number),
             }
         })
         .collect();
@@ -2801,6 +2809,7 @@ pub async fn list_episodes(
                     .try_get::<Option<String>, _>("Poster")
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                season_number: None,
             }
         })
         .collect();
@@ -2875,6 +2884,7 @@ pub async fn list_music_videos(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -2945,6 +2955,7 @@ pub async fn list_remote_streams(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -3015,6 +3026,7 @@ pub async fn list_songs(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect();
 
@@ -3120,6 +3132,7 @@ async fn load_trash_movies(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }
@@ -3161,6 +3174,7 @@ async fn load_trash_shows(
                 .try_get::<Option<String>, _>("Poster")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }
@@ -3199,6 +3213,7 @@ async fn load_trash_artists(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }
@@ -3239,6 +3254,7 @@ async fn load_trash_other_videos(
                 .try_get::<Option<String>, _>("Artwork")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }
@@ -3281,6 +3297,7 @@ async fn load_trash_songs(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }
@@ -3320,6 +3337,7 @@ async fn load_trash_images(
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
         })
         .collect())
 }

@@ -125,6 +125,7 @@ pub enum SearchArtworkKind {
 pub struct SearchCard {
     pub media_item_id: i64,
     pub kind: SearchCardKind,
+    pub season_number: Option<i32>,
     pub title: String,
     pub sort_title: String,
     pub subtitle: Option<String>,
@@ -522,6 +523,7 @@ fn build_card(
     SearchCard {
         media_item_id: hit.media_item_id,
         kind,
+        season_number: hit.season_number,
         title,
         sort_title,
         subtitle,

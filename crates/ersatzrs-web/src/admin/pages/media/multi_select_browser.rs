@@ -27,8 +27,9 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, item_count, range_of, select_collection_to_add_selected_items,
-    select_playlist_to_add_selected_items, selected_items_count, tr, TextKey,
+    added_items_to_playlist, item_count, range_of, season_display_name,
+    select_collection_to_add_selected_items, select_playlist_to_add_selected_items,
+    selected_items_count, tr, TextKey,
 };
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
@@ -486,10 +487,12 @@ fn SelectableCard(
     config: BrowserKindConfig,
 ) -> impl IntoView {
     let item_id = row.id;
-    let title = row.title.clone();
-    let title_for_link = row.title.clone();
-    let title_for_collection = row.title.clone();
-    let title_for_info = row.title.clone();
+    let title = row
+        .season_number
+        .map_or_else(|| row.title.clone(), season_display_name);
+    let title_for_link = title.clone();
+    let title_for_collection = title.clone();
+    let title_for_info = title.clone();
     let subtitle = row.subtitle.clone();
     let artwork = row.artwork_path.clone();
     let href = format!("{}/{}", config.base_path, item_id);

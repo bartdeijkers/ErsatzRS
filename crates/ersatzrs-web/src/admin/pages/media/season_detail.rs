@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
@@ -79,8 +79,8 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
         show_id,
         show_title,
         show_year: _,
-        name,
-        season_number: _,
+        name: _,
+        season_number,
         poster_url,
         fanart_url,
         episode_count: _,
@@ -127,7 +127,8 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
 
     let show_href = format!("/media/tv/shows/{show_id}");
     let show_href_for_back = show_href.clone();
-    let poster_alt = format!("{show_title} {name}");
+    let localized_season_name = season_display_name(season_number);
+    let poster_alt = format!("{show_title} {localized_season_name}");
 
     view! {
         <div class=detail_style::page>
@@ -149,7 +150,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                         <a class=style::show_link href=show_href>
                             <h1 class=detail_style::title>{show_title.clone()}</h1>
                         </a>
-                        <p class=detail_style::year>{name.clone()}</p>
+                        <p class=detail_style::year>{localized_season_name.clone()}</p>
                         <div class=show_style::action_bar>
                             <button
                                 type="button"

@@ -1892,6 +1892,10 @@ pub fn deleted_items_from_database(count: u64) -> String {
     languages_for(use_i18n()).deleted_items_from_database(count)
 }
 
+pub fn season_display_name(number: i64) -> String {
+    languages_for(use_i18n()).season_display_name(number)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -1988,6 +1992,7 @@ pub trait LanguageStrings: Sync {
     fn selected_items_count(&self, count: usize) -> String;
     fn delete_selected_count(&self, count: usize) -> String;
     fn deleted_items_from_database(&self, count: u64) -> String;
+    fn season_display_name(&self, number: i64) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
     fn select_playlist_to_add_selected_items(&self, count: usize) -> String;
@@ -2072,5 +2077,29 @@ mod tests {
                 assert!(!text(language, *key).trim().is_empty());
             }
         }
+    }
+
+    #[test]
+    fn season_display_names_follow_active_language() {
+        assert_eq!(
+            languages_for(UiLanguage::English).season_display_name(0),
+            "Specials"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::English).season_display_name(2),
+            "Season 2"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Polish).season_display_name(0),
+            "Odcinki specjalne"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::PortugueseBrazil).season_display_name(2),
+            "Temporada 2"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).season_display_name(2),
+            "Seizoen 2"
+        );
     }
 }

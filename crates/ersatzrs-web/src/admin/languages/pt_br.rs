@@ -71,6 +71,14 @@ impl LanguageStrings for PortugueseBrazilStrings {
         }
     }
 
+    fn season_display_name(&self, number: i64) -> String {
+        if number == 0 {
+            "Especiais".to_owned()
+        } else {
+            format!("Temporada {number}")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }

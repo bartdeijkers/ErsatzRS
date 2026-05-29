@@ -8,7 +8,7 @@ use std::future::Future;
 
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::server_fns::media_browser::MediaCardRow;
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
@@ -111,9 +111,13 @@ where
                                                 Some(format!("{hp}/{}", r.id))
                                             };
                                             let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&r.sort_title);
+                                            let title = r
+                                                .season_number
+                                                .map(season_display_name)
+                                                .unwrap_or(r.title);
                                             view! {
                                                 <MediaCard
-                                                    title=r.title
+                                                    title=title
                                                     subtitle=r.subtitle
                                                     artwork_url=r.artwork_path
                                                     href=href

@@ -71,6 +71,14 @@ impl LanguageStrings for PolishStrings {
         }
     }
 
+    fn season_display_name(&self, number: i64) -> String {
+        if number == 0 {
+            "Odcinki specjalne".to_owned()
+        } else {
+            format!("Sezon {number}")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }

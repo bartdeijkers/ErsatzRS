@@ -26,7 +26,7 @@ use leptos_router::hooks::use_query_map;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, search_count, selected_items_count, tr, TextKey,
+    added_items_to_playlist, search_count, season_display_name, selected_items_count, tr, TextKey,
 };
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist_mixed, CollectionOption,
@@ -526,12 +526,19 @@ fn SearchResultCard(
     };
 
     let href = (!card.href.is_empty()).then(|| card.href.clone());
+    let subtitle = if kind == SearchCardKind::Season {
+        card.season_number
+            .map(|number| season_display_name(i64::from(number)))
+            .or(card.subtitle)
+    } else {
+        card.subtitle
+    };
 
     view! {
         <div class=wrap_class>
             <MediaCard
                 title=card.title
-                subtitle=card.subtitle
+                subtitle=subtitle
                 href=href
                 artwork_url=card.artwork_url
                 placeholder=card.placeholder
