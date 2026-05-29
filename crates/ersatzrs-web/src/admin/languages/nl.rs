@@ -95,6 +95,10 @@ impl LanguageStrings for DutchStrings {
         schedule_error_message(error)
     }
 
+    fn scheduling_content_error_message(&self, error: &str) -> String {
+        scheduling_content_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (verouderd)".to_owned(),
@@ -238,6 +242,79 @@ fn schedule_error_message(error: &str) -> String {
         }
         "Padding filler requires a fallback filler." => {
             "Aanvulfiller vereist een fallback-filler.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn scheduling_content_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
+        return "Blokgroepnaam mag maximaal 50 tekens zijn.".to_owned();
+    }
+    if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
+        return "Bloknaam mag maximaal 50 tekens zijn.".to_owned();
+    }
+    if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Sjabloonnaam mag maximaal 50 tekens zijn.".to_owned();
+    }
+    if trimmed.starts_with("A template named \"")
+        && trimmed.ends_with("\" already exists in that template group")
+    {
+        return "Er bestaat al een sjabloon met die naam in die sjabloongroep.".to_owned();
+    }
+    if trimmed.starts_with("Block from ") && trimmed.contains(" intersects block from ") {
+        return "Blok overlapt met een ander blok.".to_owned();
+    }
+    if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Sjabloongroep bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
+        return "Sjabloon bestaat niet.".to_owned();
+    }
+
+    match trimmed {
+        "Block does not exist." => "Blok bestaat niet.".to_owned(),
+        "Block group name is required" => "Blokgroepnaam is verplicht".to_owned(),
+        "Block group name must be unique" => "Blokgroepnaam moet uniek zijn".to_owned(),
+        "Block name is required" => "Bloknaam is verplicht".to_owned(),
+        "A block named with that value already exists in that block group" => {
+            "Er bestaat al een blok met die naam in die blokgroep.".to_owned()
+        }
+        "Block duration must be between 5 minutes and 24 hours" => {
+            "Blokduur moet tussen 5 minuten en 24 uur liggen.".to_owned()
+        }
+        "[Collection] is required for collection type 'Collection'" => {
+            "Collectie is verplicht voor collectietype Collectie.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionShow'" => {
+            "Media-item is verplicht voor collectietype Tv-serie.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionSeason'" => {
+            "Media-item is verplicht voor collectietype Tv-seizoen.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "Multicollectie is verplicht voor collectietype Multicollectie.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "Slimme collectie is verplicht voor collectietype Slimme collectie.".to_owned()
+        }
+        "[SearchQuery] is required for collection type 'SearchQuery'" => {
+            "Zoekquery is verplicht voor collectietype Zoekquery.".to_owned()
+        }
+        "[CollectionType] is invalid" => "Collectietype is ongeldig.".to_owned(),
+        "[BlockId] does not exist." => "Blok bestaat niet.".to_owned(),
+        "Template does not exist." => "Sjabloon bestaat niet.".to_owned(),
+        "Template group name is required" => "Sjabloongroepnaam is verplicht".to_owned(),
+        "Template group name must be 50 characters or fewer" => {
+            "Sjabloongroepnaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Template group name must be unique" => "Sjabloongroepnaam moet uniek zijn".to_owned(),
+        "Template group does not exist." => "Sjabloongroep bestaat niet.".to_owned(),
+        "[TemplateId] does not exist." => "Sjabloon bestaat niet.".to_owned(),
+        "Template name is required" => "Sjabloonnaam is verplicht".to_owned(),
+        "Template items cannot cross midnight." => {
+            "Sjabloonitems mogen middernacht niet overschrijden.".to_owned()
         }
         _ => error.to_owned(),
     }

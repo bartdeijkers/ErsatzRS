@@ -10,7 +10,7 @@ use std::fmt::Write;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{save_failed, tr, TextKey};
+use crate::admin::i18n::{save_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
     preview_block_playout, save_block_with_items, stop_scheduling, BlockEditorOptions, BlockForm,
@@ -115,7 +115,10 @@ fn BlockEditorForm(
                         let _ = window().location().set_href("/blocks");
                     }
                 }
-                Err(e) => toast.push(save_failed(&e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    save_failed(scheduling_content_error_message(e)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

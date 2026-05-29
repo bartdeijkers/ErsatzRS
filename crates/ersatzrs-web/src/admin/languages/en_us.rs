@@ -95,6 +95,10 @@ impl LanguageStrings for EnglishStrings {
         schedule_error_message(error)
     }
 
+    fn scheduling_content_error_message(&self, error: &str) -> String {
+        scheduling_content_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (Legacy)".to_owned(),
@@ -1195,6 +1199,79 @@ fn schedule_error_message(error: &str) -> String {
         }
         "Padding filler requires a fallback filler." => {
             "Padding filler requires a fallback filler.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn scheduling_content_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("A template named \"")
+        && trimmed.ends_with("\" already exists in that template group")
+    {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Block from ") && trimmed.contains(" intersects block from ") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return trimmed.to_owned();
+    }
+    if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
+        return trimmed.to_owned();
+    }
+
+    match trimmed {
+        "Block does not exist." => "Block does not exist.".to_owned(),
+        "Block group name is required" => "Block group name is required".to_owned(),
+        "Block group name must be unique" => "Block group name must be unique".to_owned(),
+        "Block name is required" => "Block name is required".to_owned(),
+        "A block named with that value already exists in that block group" => {
+            "A block named with that value already exists in that block group".to_owned()
+        }
+        "Block duration must be between 5 minutes and 24 hours" => {
+            "Block duration must be between 5 minutes and 24 hours".to_owned()
+        }
+        "[Collection] is required for collection type 'Collection'" => {
+            "[Collection] is required for collection type 'Collection'".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionShow'" => {
+            "[MediaItem] is required for collection type 'TelevisionShow'".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionSeason'" => {
+            "[MediaItem] is required for collection type 'TelevisionSeason'".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "[MultiCollection] is required for collection type 'MultiCollection'".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "[SmartCollection] is required for collection type 'SmartCollection'".to_owned()
+        }
+        "[SearchQuery] is required for collection type 'SearchQuery'" => {
+            "[SearchQuery] is required for collection type 'SearchQuery'".to_owned()
+        }
+        "[CollectionType] is invalid" => "[CollectionType] is invalid".to_owned(),
+        "[BlockId] does not exist." => "[BlockId] does not exist.".to_owned(),
+        "Template does not exist." => "Template does not exist.".to_owned(),
+        "Template group name is required" => "Template group name is required".to_owned(),
+        "Template group name must be 50 characters or fewer" => {
+            "Template group name must be 50 characters or fewer".to_owned()
+        }
+        "Template group name must be unique" => "Template group name must be unique".to_owned(),
+        "Template group does not exist." => "Template group does not exist.".to_owned(),
+        "[TemplateId] does not exist." => "[TemplateId] does not exist.".to_owned(),
+        "Template name is required" => "Template name is required".to_owned(),
+        "Template items cannot cross midnight." => {
+            "Template items cannot cross midnight.".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -2,7 +2,7 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{delete_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     copy_block, create_block, create_block_group, delete_block, delete_block_group,
     format_duration_label, list_block_groups, list_blocks, BlockGroupRow, BlockRow,
@@ -70,7 +70,14 @@ fn BlocksIsland() -> impl IntoView {
                     groups.refetch();
                     new_group_name.set(String::new());
                 }
-                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::Error),
+                        scheduling_content_error_message(e)
+                    ),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -83,7 +90,14 @@ fn BlocksIsland() -> impl IntoView {
                     blocks.refetch();
                     new_block_name.set(String::new());
                 }
-                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::Error),
+                        scheduling_content_error_message(e)
+                    ),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -105,7 +119,14 @@ fn BlocksIsland() -> impl IntoView {
                         let _ = id;
                     }
                 }
-                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::Error),
+                        scheduling_content_error_message(e)
+                    ),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -118,7 +139,10 @@ fn BlocksIsland() -> impl IntoView {
                     groups.refetch();
                     blocks.refetch();
                 }
-                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    delete_failed(scheduling_content_error_message(e)),
+                    ToastSeverity::Error,
+                ),
             }
             del_group_open.set(false);
         }
@@ -131,7 +155,10 @@ fn BlocksIsland() -> impl IntoView {
                     toast.push(tr(TextKey::BlockDeleted), ToastSeverity::Success);
                     blocks.refetch();
                 }
-                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    delete_failed(scheduling_content_error_message(e)),
+                    ToastSeverity::Error,
+                ),
             }
             del_block_open.set(false);
         }

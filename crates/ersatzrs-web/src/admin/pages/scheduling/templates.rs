@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{delete_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, scheduling_content_error_message, tr, TextKey};
 use crate::admin::server_fns::templates::{
     copy_template, create_template, create_template_group, delete_template, delete_template_group,
     format_short_time, get_template, get_template_items, list_template_block_groups,
@@ -76,7 +76,11 @@ fn TemplatesIsland() -> impl IntoView {
                     toast.push(tr(TextKey::TemplateGroupCreated), ToastSeverity::Success);
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -93,7 +97,11 @@ fn TemplatesIsland() -> impl IntoView {
                     toast.push(tr(TextKey::TemplateCreated), ToastSeverity::Success);
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -119,7 +127,11 @@ fn TemplatesIsland() -> impl IntoView {
                     }
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::CopyFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::CopyFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -134,7 +146,10 @@ fn TemplatesIsland() -> impl IntoView {
                     templates.refetch();
                     toast.push(tr(TextKey::TemplateGroupDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(delete_failed(&error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -147,7 +162,10 @@ fn TemplatesIsland() -> impl IntoView {
                     templates.refetch();
                     toast.push(tr(TextKey::TemplateDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(delete_failed(&error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

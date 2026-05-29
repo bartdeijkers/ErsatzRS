@@ -91,6 +91,10 @@ impl LanguageStrings for PolishStrings {
         schedule_error_message(error)
     }
 
+    fn scheduling_content_error_message(&self, error: &str) -> String {
+        scheduling_content_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (starszy)".to_owned(),
@@ -234,6 +238,83 @@ fn schedule_error_message(error: &str) -> String {
         }
         "Padding filler requires a fallback filler." => {
             "Filler dopełniający wymaga fillera awaryjnego.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn scheduling_content_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa grupy bloków może mieć maksymalnie 50 znaków.".to_owned();
+    }
+    if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa bloku może mieć maksymalnie 50 znaków.".to_owned();
+    }
+    if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa szablonu może mieć maksymalnie 50 znaków.".to_owned();
+    }
+    if trimmed.starts_with("A template named \"")
+        && trimmed.ends_with("\" already exists in that template group")
+    {
+        return "Szablon o tej nazwie już istnieje w tej grupie szablonów.".to_owned();
+    }
+    if trimmed.starts_with("Block from ") && trimmed.contains(" intersects block from ") {
+        return "Blok nakłada się na inny blok.".to_owned();
+    }
+    if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Grupa szablonów nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
+        return "Szablon nie istnieje.".to_owned();
+    }
+
+    match trimmed {
+        "Block does not exist." => "Blok nie istnieje.".to_owned(),
+        "Block group name is required" => "Nazwa grupy bloków jest wymagana".to_owned(),
+        "Block group name must be unique" => "Nazwa grupy bloków musi być unikalna".to_owned(),
+        "Block name is required" => "Nazwa bloku jest wymagana".to_owned(),
+        "A block named with that value already exists in that block group" => {
+            "Blok o tej nazwie już istnieje w tej grupie bloków.".to_owned()
+        }
+        "Block duration must be between 5 minutes and 24 hours" => {
+            "Czas trwania bloku musi wynosić od 5 minut do 24 godzin.".to_owned()
+        }
+        "[Collection] is required for collection type 'Collection'" => {
+            "Kolekcja jest wymagana dla typu kolekcji Kolekcja.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionShow'" => {
+            "Element multimedialny jest wymagany dla typu kolekcji Serial.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionSeason'" => {
+            "Element multimedialny jest wymagany dla typu kolekcji Sezon serialu.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "Multikolekcja jest wymagana dla typu kolekcji Multikolekcja.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "Inteligentna kolekcja jest wymagana dla typu kolekcji Inteligentna kolekcja."
+                .to_owned()
+        }
+        "[SearchQuery] is required for collection type 'SearchQuery'" => {
+            "Zapytanie wyszukiwania jest wymagane dla typu kolekcji Zapytanie wyszukiwania."
+                .to_owned()
+        }
+        "[CollectionType] is invalid" => "Typ kolekcji jest nieprawidłowy.".to_owned(),
+        "[BlockId] does not exist." => "Blok nie istnieje.".to_owned(),
+        "Template does not exist." => "Szablon nie istnieje.".to_owned(),
+        "Template group name is required" => "Nazwa grupy szablonów jest wymagana".to_owned(),
+        "Template group name must be 50 characters or fewer" => {
+            "Nazwa grupy szablonów może mieć maksymalnie 50 znaków.".to_owned()
+        }
+        "Template group name must be unique" => {
+            "Nazwa grupy szablonów musi być unikalna".to_owned()
+        }
+        "Template group does not exist." => "Grupa szablonów nie istnieje.".to_owned(),
+        "[TemplateId] does not exist." => "Szablon nie istnieje.".to_owned(),
+        "Template name is required" => "Nazwa szablonu jest wymagana".to_owned(),
+        "Template items cannot cross midnight." => {
+            "Elementy szablonu nie mogą przekraczać północy.".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -91,6 +91,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         schedule_error_message(error)
     }
 
+    fn scheduling_content_error_message(&self, error: &str) -> String {
+        scheduling_content_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (legado)".to_owned(),
@@ -238,6 +242,83 @@ fn schedule_error_message(error: &str) -> String {
         }
         "Padding filler requires a fallback filler." => {
             "O filler de preenchimento exige um filler de fallback.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn scheduling_content_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Block group name \"") && trimmed.ends_with("\" is invalid") {
+        return "O nome do grupo de blocos deve ter no máximo 50 caracteres.".to_owned();
+    }
+    if trimmed.starts_with("Block name \"") && trimmed.ends_with("\" is invalid") {
+        return "O nome do bloco deve ter no máximo 50 caracteres.".to_owned();
+    }
+    if trimmed.starts_with("Template name \"") && trimmed.ends_with("\" is invalid") {
+        return "O nome do modelo deve ter no máximo 50 caracteres.".to_owned();
+    }
+    if trimmed.starts_with("A template named \"")
+        && trimmed.ends_with("\" already exists in that template group")
+    {
+        return "Já existe um modelo com esse nome nesse grupo de modelos.".to_owned();
+    }
+    if trimmed.starts_with("Block from ") && trimmed.contains(" intersects block from ") {
+        return "O bloco se sobrepõe a outro bloco.".to_owned();
+    }
+    if trimmed.starts_with("TemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "O grupo de modelos não existe.".to_owned();
+    }
+    if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
+        return "O modelo não existe.".to_owned();
+    }
+
+    match trimmed {
+        "Block does not exist." => "O bloco não existe.".to_owned(),
+        "Block group name is required" => "O nome do grupo de blocos é obrigatório".to_owned(),
+        "Block group name must be unique" => "O nome do grupo de blocos deve ser único".to_owned(),
+        "Block name is required" => "O nome do bloco é obrigatório".to_owned(),
+        "A block named with that value already exists in that block group" => {
+            "Já existe um bloco com esse nome nesse grupo de blocos.".to_owned()
+        }
+        "Block duration must be between 5 minutes and 24 hours" => {
+            "A duração do bloco deve ser entre 5 minutos e 24 horas.".to_owned()
+        }
+        "[Collection] is required for collection type 'Collection'" => {
+            "A coleção é obrigatória para o tipo de coleção Coleção.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionShow'" => {
+            "O item de mídia é obrigatório para o tipo de coleção Série de TV.".to_owned()
+        }
+        "[MediaItem] is required for collection type 'TelevisionSeason'" => {
+            "O item de mídia é obrigatório para o tipo de coleção Temporada de TV.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "A multicoleção é obrigatória para o tipo de coleção Multicoleção.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "A coleção inteligente é obrigatória para o tipo de coleção Coleção inteligente."
+                .to_owned()
+        }
+        "[SearchQuery] is required for collection type 'SearchQuery'" => {
+            "A consulta de pesquisa é obrigatória para o tipo de coleção Consulta de pesquisa."
+                .to_owned()
+        }
+        "[CollectionType] is invalid" => "O tipo de coleção é inválido.".to_owned(),
+        "[BlockId] does not exist." => "O bloco não existe.".to_owned(),
+        "Template does not exist." => "O modelo não existe.".to_owned(),
+        "Template group name is required" => "O nome do grupo de modelos é obrigatório".to_owned(),
+        "Template group name must be 50 characters or fewer" => {
+            "O nome do grupo de modelos deve ter no máximo 50 caracteres.".to_owned()
+        }
+        "Template group name must be unique" => {
+            "O nome do grupo de modelos deve ser único".to_owned()
+        }
+        "Template group does not exist." => "O grupo de modelos não existe.".to_owned(),
+        "[TemplateId] does not exist." => "O modelo não existe.".to_owned(),
+        "Template name is required" => "O nome do modelo é obrigatório".to_owned(),
+        "Template items cannot cross midnight." => {
+            "Os itens do modelo não podem atravessar a meia-noite.".to_owned()
         }
         _ => error.to_owned(),
     }

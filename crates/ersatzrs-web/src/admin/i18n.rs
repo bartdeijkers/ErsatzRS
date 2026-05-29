@@ -1919,6 +1919,15 @@ pub fn schedule_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).schedule_error_message(error)
 }
 
+pub fn scheduling_content_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).scheduling_content_error_message(&message)
+}
+
+pub fn scheduling_content_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).scheduling_content_error_message(error)
+}
+
 pub fn log_level_label(level: &str) -> String {
     log_level_text(use_i18n(), level)
 }
@@ -2056,6 +2065,7 @@ pub trait LanguageStrings: Sync {
     fn media_item_fallback_label(&self, id: i64) -> String;
     fn schedule_item_fallback_label(&self, id: i64) -> String;
     fn schedule_error_message(&self, error: &str) -> String;
+    fn scheduling_content_error_message(&self, error: &str) -> String;
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
@@ -2279,6 +2289,40 @@ mod tests {
         );
         assert_eq!(
             schedule_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn scheduling_content_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::English, "Block name is required"),
+            "Block name is required"
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Polish, "Template group name must be unique"),
+            "Nazwa grupy szablonów musi być unikalna"
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Template items cannot cross midnight."
+            ),
+            "Os itens do modelo não podem atravessar a meia-noite."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Dutch,
+                "[Collection] is required for collection type 'Collection'"
+            ),
+            "Collectie is verplicht voor collectietype Collectie."
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Dutch, "Template 12 does not exist."),
+            "Sjabloon bestaat niet."
+        );
+        assert_eq!(
+            scheduling_content_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }
