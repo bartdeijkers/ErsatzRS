@@ -87,6 +87,10 @@ impl LanguageStrings for PolishStrings {
         format!("Element harmonogramu #{id}")
     }
 
+    fn schedule_error_message(&self, error: &str) -> String {
+        schedule_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (starszy)".to_owned(),
@@ -175,6 +179,63 @@ impl LanguageStrings for PolishStrings {
 
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Nie można wczytać kontekstu diagnostyki odtwarzania: {error}")
+    }
+}
+
+fn schedule_error_message(error: &str) -> String {
+    match error.trim() {
+        "Schedule name is required!" => "Nazwa harmonogramu jest wymagana!".to_owned(),
+        "New Schedule Name is required." => "Nazwa nowego harmonogramu jest wymagana.".to_owned(),
+        "Schedule name must be 50 characters or less." => {
+            "Nazwa harmonogramu może mieć maksymalnie 50 znaków.".to_owned()
+        }
+        "Schedule name must be unique" => "Nazwa harmonogramu musi być unikalna".to_owned(),
+        "Schedule does not exist" => "Harmonogram nie istnieje".to_owned(),
+        "[ProgramScheduleId] does not exist." => "[ProgramScheduleId] nie istnieje.".to_owned(),
+        "A collection must use the same playback order in every schedule item." => {
+            "Kolekcja musi używać tej samej kolejności odtwarzania w każdym elemencie harmonogramu.".to_owned()
+        }
+        "Shuffle In Order cannot be used with Fill With Group Mode." => {
+            "Kolejności losowej z zachowaniem porządku nie można używać z trybem wypełniania grupą.".to_owned()
+        }
+        "Fixed schedule items require a start time." => {
+            "Stałe elementy harmonogramu wymagają godziny rozpoczęcia.".to_owned()
+        }
+        "Multi Collection items can only use Shuffle or Shuffle In Order." => {
+            "Elementy multikolekcji mogą używać tylko kolejności losowej albo losowej z zachowaniem porządku.".to_owned()
+        }
+        "Playlist Item Size can only be used with Playlist schedule items." => {
+            "Rozmiaru elementu playlisty można używać tylko z elementami harmonogramu typu playlista.".to_owned()
+        }
+        "Multiple playout mode with Count requires a count expression." => {
+            "Tryb wielu odtworzeń z liczbą wymaga wyrażenia liczby.".to_owned()
+        }
+        "Duration playout mode requires a duration between 1 minute and 24 hours." => {
+            "Tryb odtwarzania według czasu wymaga czasu od 1 minuty do 24 godzin.".to_owned()
+        }
+        "Duration playout mode requires discard-to-fill attempts." => {
+            "Tryb odtwarzania według czasu wymaga liczby prób odrzucania do wypełnienia.".to_owned()
+        }
+        "Tail Mode Filler requires a tail filler preset." => {
+            "Tryb końcówki Filler wymaga presetu fillera końcowego.".to_owned()
+        }
+        "Tail filler can only be set when Tail Mode is Filler." => {
+            "Filler końcowy można ustawić tylko wtedy, gdy tryb końcówki to Filler.".to_owned()
+        }
+        "Collection is required." => "Kolekcja jest wymagana.".to_owned(),
+        "Media item is required." => "Element multimedialny jest wymagany.".to_owned(),
+        "Multi Collection is required." => "Multikolekcja jest wymagana.".to_owned(),
+        "Smart Collection is required." => "Inteligentna kolekcja jest wymagana.".to_owned(),
+        "Playlist is required." => "Playlista jest wymagana.".to_owned(),
+        "Rerun Collection is required." => "Kolekcja powtórek jest wymagana.".to_owned(),
+        "Search Query is required." => "Zapytanie wyszukiwania jest wymagane.".to_owned(),
+        "Only one pre-, mid-, or post-roll filler can pad to the nearest minute." => {
+            "Tylko jeden filler przed, w trakcie albo po może dopełniać do najbliższej minuty.".to_owned()
+        }
+        "Padding filler requires a fallback filler." => {
+            "Filler dopełniający wymaga fillera awaryjnego.".to_owned()
+        }
+        _ => error.to_owned(),
     }
 }
 

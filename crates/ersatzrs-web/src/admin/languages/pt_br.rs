@@ -87,6 +87,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         format!("Item de programação #{id}")
     }
 
+    fn schedule_error_message(&self, error: &str) -> String {
+        schedule_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (legado)".to_owned(),
@@ -177,6 +181,65 @@ impl LanguageStrings for PortugueseBrazilStrings {
         format!(
             "Não foi possível carregar o contexto de solução de problemas de reprodução: {error}"
         )
+    }
+}
+
+fn schedule_error_message(error: &str) -> String {
+    match error.trim() {
+        "Schedule name is required!" => "O nome da programação é obrigatório!".to_owned(),
+        "New Schedule Name is required." => {
+            "O nome da nova programação é obrigatório.".to_owned()
+        }
+        "Schedule name must be 50 characters or less." => {
+            "O nome da programação deve ter no máximo 50 caracteres.".to_owned()
+        }
+        "Schedule name must be unique" => "O nome da programação deve ser único".to_owned(),
+        "Schedule does not exist" => "A programação não existe".to_owned(),
+        "[ProgramScheduleId] does not exist." => "[ProgramScheduleId] não existe.".to_owned(),
+        "A collection must use the same playback order in every schedule item." => {
+            "Uma coleção deve usar a mesma ordem de reprodução em todos os itens da programação.".to_owned()
+        }
+        "Shuffle In Order cannot be used with Fill With Group Mode." => {
+            "Embaralhar em ordem não pode ser usado com o modo Preencher com grupo.".to_owned()
+        }
+        "Fixed schedule items require a start time." => {
+            "Itens de programação fixos exigem um horário de início.".to_owned()
+        }
+        "Multi Collection items can only use Shuffle or Shuffle In Order." => {
+            "Itens de multicoleção só podem usar Embaralhar ou Embaralhar em ordem.".to_owned()
+        }
+        "Playlist Item Size can only be used with Playlist schedule items." => {
+            "Tamanho do item da playlist só pode ser usado com itens de programação do tipo playlist.".to_owned()
+        }
+        "Multiple playout mode with Count requires a count expression." => {
+            "O modo de playout múltiplo com contagem exige uma expressão de contagem.".to_owned()
+        }
+        "Duration playout mode requires a duration between 1 minute and 24 hours." => {
+            "O modo de playout por duração exige uma duração entre 1 minuto e 24 horas.".to_owned()
+        }
+        "Duration playout mode requires discard-to-fill attempts." => {
+            "O modo de playout por duração exige tentativas de descarte para preencher.".to_owned()
+        }
+        "Tail Mode Filler requires a tail filler preset." => {
+            "O modo de cauda Filler exige um preset de filler de cauda.".to_owned()
+        }
+        "Tail filler can only be set when Tail Mode is Filler." => {
+            "O filler de cauda só pode ser definido quando o modo de cauda é Filler.".to_owned()
+        }
+        "Collection is required." => "A coleção é obrigatória.".to_owned(),
+        "Media item is required." => "O item de mídia é obrigatório.".to_owned(),
+        "Multi Collection is required." => "A multicoleção é obrigatória.".to_owned(),
+        "Smart Collection is required." => "A coleção inteligente é obrigatória.".to_owned(),
+        "Playlist is required." => "A playlist é obrigatória.".to_owned(),
+        "Rerun Collection is required." => "A coleção de reprises é obrigatória.".to_owned(),
+        "Search Query is required." => "A consulta de pesquisa é obrigatória.".to_owned(),
+        "Only one pre-, mid-, or post-roll filler can pad to the nearest minute." => {
+            "Apenas um filler pre-roll, mid-roll ou post-roll pode preencher até o minuto mais próximo.".to_owned()
+        }
+        "Padding filler requires a fallback filler." => {
+            "O filler de preenchimento exige um filler de fallback.".to_owned()
+        }
+        _ => error.to_owned(),
     }
 }
 

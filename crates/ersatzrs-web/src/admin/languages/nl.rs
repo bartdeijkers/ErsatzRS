@@ -91,6 +91,10 @@ impl LanguageStrings for DutchStrings {
         format!("Schema-item #{id}")
     }
 
+    fn schedule_error_message(&self, error: &str) -> String {
+        schedule_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (verouderd)".to_owned(),
@@ -179,6 +183,63 @@ impl LanguageStrings for DutchStrings {
 
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kan context voor afspeelprobleemoplossing niet laden: {error}")
+    }
+}
+
+fn schedule_error_message(error: &str) -> String {
+    match error.trim() {
+        "Schedule name is required!" => "Schemanaam is verplicht!".to_owned(),
+        "New Schedule Name is required." => "Nieuwe schemanaam is verplicht.".to_owned(),
+        "Schedule name must be 50 characters or less." => {
+            "Schemanaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Schedule name must be unique" => "Schemanaam moet uniek zijn".to_owned(),
+        "Schedule does not exist" => "Schema bestaat niet".to_owned(),
+        "[ProgramScheduleId] does not exist." => "[ProgramScheduleId] bestaat niet.".to_owned(),
+        "A collection must use the same playback order in every schedule item." => {
+            "Een collectie moet in elk schema-item dezelfde afspeelvolgorde gebruiken.".to_owned()
+        }
+        "Shuffle In Order cannot be used with Fill With Group Mode." => {
+            "Shuffle in volgorde kan niet worden gebruikt met Fill With Group Mode.".to_owned()
+        }
+        "Fixed schedule items require a start time." => {
+            "Vaste schema-items vereisen een starttijd.".to_owned()
+        }
+        "Multi Collection items can only use Shuffle or Shuffle In Order." => {
+            "Multicollectie-items kunnen alleen Shuffle of Shuffle in volgorde gebruiken.".to_owned()
+        }
+        "Playlist Item Size can only be used with Playlist schedule items." => {
+            "Playlistitemgrootte kan alleen worden gebruikt met schema-items van het type playlist.".to_owned()
+        }
+        "Multiple playout mode with Count requires a count expression." => {
+            "Meervoudige playoutmodus met Aantal vereist een aantalexpressie.".to_owned()
+        }
+        "Duration playout mode requires a duration between 1 minute and 24 hours." => {
+            "Duur-playoutmodus vereist een duur tussen 1 minuut en 24 uur.".to_owned()
+        }
+        "Duration playout mode requires discard-to-fill attempts." => {
+            "Duur-playoutmodus vereist pogingen voor discard-to-fill.".to_owned()
+        }
+        "Tail Mode Filler requires a tail filler preset." => {
+            "Tailmodus Filler vereist een tail-fillerpreset.".to_owned()
+        }
+        "Tail filler can only be set when Tail Mode is Filler." => {
+            "Tail-filler kan alleen worden ingesteld wanneer Tailmodus Filler is.".to_owned()
+        }
+        "Collection is required." => "Collectie is verplicht.".to_owned(),
+        "Media item is required." => "Media-item is verplicht.".to_owned(),
+        "Multi Collection is required." => "Multicollectie is verplicht.".to_owned(),
+        "Smart Collection is required." => "Slimme collectie is verplicht.".to_owned(),
+        "Playlist is required." => "Playlist is verplicht.".to_owned(),
+        "Rerun Collection is required." => "Herhalingscollectie is verplicht.".to_owned(),
+        "Search Query is required." => "Zoekquery is verplicht.".to_owned(),
+        "Only one pre-, mid-, or post-roll filler can pad to the nearest minute." => {
+            "Slechts een pre-, mid- of post-roll filler kan aanvullen tot de dichtstbijzijnde minuut.".to_owned()
+        }
+        "Padding filler requires a fallback filler." => {
+            "Aanvulfiller vereist een fallback-filler.".to_owned()
+        }
+        _ => error.to_owned(),
     }
 }
 

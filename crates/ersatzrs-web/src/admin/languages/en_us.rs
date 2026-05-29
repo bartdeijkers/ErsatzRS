@@ -91,6 +91,10 @@ impl LanguageStrings for EnglishStrings {
         format!("Schedule Item #{id}")
     }
 
+    fn schedule_error_message(&self, error: &str) -> String {
+        schedule_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (Legacy)".to_owned(),
@@ -1136,5 +1140,62 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::XmltvTimeZone => "XMLTV Time Zone",
         TextKey::Xmltv => "XMLTV",
         TextKey::Yes => "Yes",
+    }
+}
+
+fn schedule_error_message(error: &str) -> String {
+    match error.trim() {
+        "Schedule name is required!" => "Schedule name is required!".to_owned(),
+        "New Schedule Name is required." => "New Schedule Name is required.".to_owned(),
+        "Schedule name must be 50 characters or less." => {
+            "Schedule name must be 50 characters or less.".to_owned()
+        }
+        "Schedule name must be unique" => "Schedule name must be unique".to_owned(),
+        "Schedule does not exist" => "Schedule does not exist".to_owned(),
+        "[ProgramScheduleId] does not exist." => "[ProgramScheduleId] does not exist.".to_owned(),
+        "A collection must use the same playback order in every schedule item." => {
+            "A collection must use the same playback order in every schedule item.".to_owned()
+        }
+        "Shuffle In Order cannot be used with Fill With Group Mode." => {
+            "Shuffle In Order cannot be used with Fill With Group Mode.".to_owned()
+        }
+        "Fixed schedule items require a start time." => {
+            "Fixed schedule items require a start time.".to_owned()
+        }
+        "Multi Collection items can only use Shuffle or Shuffle In Order." => {
+            "Multi Collection items can only use Shuffle or Shuffle In Order.".to_owned()
+        }
+        "Playlist Item Size can only be used with Playlist schedule items." => {
+            "Playlist Item Size can only be used with Playlist schedule items.".to_owned()
+        }
+        "Multiple playout mode with Count requires a count expression." => {
+            "Multiple playout mode with Count requires a count expression.".to_owned()
+        }
+        "Duration playout mode requires a duration between 1 minute and 24 hours." => {
+            "Duration playout mode requires a duration between 1 minute and 24 hours.".to_owned()
+        }
+        "Duration playout mode requires discard-to-fill attempts." => {
+            "Duration playout mode requires discard-to-fill attempts.".to_owned()
+        }
+        "Tail Mode Filler requires a tail filler preset." => {
+            "Tail Mode Filler requires a tail filler preset.".to_owned()
+        }
+        "Tail filler can only be set when Tail Mode is Filler." => {
+            "Tail filler can only be set when Tail Mode is Filler.".to_owned()
+        }
+        "Collection is required." => "Collection is required.".to_owned(),
+        "Media item is required." => "Media item is required.".to_owned(),
+        "Multi Collection is required." => "Multi Collection is required.".to_owned(),
+        "Smart Collection is required." => "Smart Collection is required.".to_owned(),
+        "Playlist is required." => "Playlist is required.".to_owned(),
+        "Rerun Collection is required." => "Rerun Collection is required.".to_owned(),
+        "Search Query is required." => "Search Query is required.".to_owned(),
+        "Only one pre-, mid-, or post-roll filler can pad to the nearest minute." => {
+            "Only one pre-, mid-, or post-roll filler can pad to the nearest minute.".to_owned()
+        }
+        "Padding filler requires a fallback filler." => {
+            "Padding filler requires a fallback filler.".to_owned()
+        }
+        _ => error.to_owned(),
     }
 }

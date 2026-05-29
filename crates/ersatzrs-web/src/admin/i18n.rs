@@ -1910,6 +1910,15 @@ pub fn schedule_item_fallback_label(id: i64) -> String {
     languages_for(use_i18n()).schedule_item_fallback_label(id)
 }
 
+pub fn schedule_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).schedule_error_message(&message)
+}
+
+pub fn schedule_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).schedule_error_message(error)
+}
+
 pub fn log_level_label(level: &str) -> String {
     log_level_text(use_i18n(), level)
 }
@@ -2046,6 +2055,7 @@ pub trait LanguageStrings: Sync {
     fn season_display_name(&self, number: i64) -> String;
     fn media_item_fallback_label(&self, id: i64) -> String;
     fn schedule_item_fallback_label(&self, id: i64) -> String;
+    fn schedule_error_message(&self, error: &str) -> String;
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
@@ -2243,6 +2253,33 @@ mod tests {
         assert_eq!(
             hardware_acceleration_option_text(UiLanguage::Dutch, "VAAPI", true),
             "VAAPI"
+        );
+    }
+
+    #[test]
+    fn schedule_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            schedule_error_text(UiLanguage::English, "Schedule name is required!"),
+            "Schedule name is required!"
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::Polish, "Collection is required."),
+            "Kolekcja jest wymagana."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::PortugueseBrazil, "Search Query is required."),
+            "A consulta de pesquisa é obrigatória."
+        );
+        assert_eq!(
+            schedule_error_text(
+                UiLanguage::Dutch,
+                "Fixed schedule items require a start time."
+            ),
+            "Vaste schema-items vereisen een starttijd."
+        );
+        assert_eq!(
+            schedule_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
         );
     }
 }

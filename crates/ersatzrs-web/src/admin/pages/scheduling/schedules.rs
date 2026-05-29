@@ -6,7 +6,8 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{
-    media_item_fallback_label, range_of, schedule_item_fallback_label, tr, TextKey,
+    media_item_fallback_label, range_of, schedule_error_message, schedule_item_fallback_label, tr,
+    TextKey,
 };
 use crate::admin::server_fns::schedules::{
     copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
@@ -112,7 +113,7 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                     let _ = id;
                 }
                 Err(error) => {
-                    copy_error.set(error.to_string());
+                    copy_error.set(schedule_error_message(error));
                     copy_open.set(true);
                 }
             }
@@ -458,6 +459,11 @@ pub fn ScheduleEditorPage() -> impl IntoView {
 #[island]
 fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     let form = RwSignal::new(ScheduleForm::default());
+    let save_error = RwSignal::new(if initial_error.is_empty() {
+        String::new()
+    } else {
+        tr(TextKey::ScheduleSaveFailed).to_owned()
+    });
     let data = Resource::new_blocking(
         move || id,
         |id| async move { get_schedule_form(id).await.ok().flatten() },
@@ -470,18 +476,24 @@ fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
 
     let save_action = Action::new(|form: &ScheduleForm| save_schedule(form.clone()));
     Effect::new(move |_| {
-        if let Some(Ok(saved_id)) = save_action.value().get() {
-            #[cfg(target_arch = "wasm32")]
-            {
-                let target = if id == 0 {
-                    format!("/schedules/{saved_id}/items")
-                } else {
-                    "/schedules".to_string()
-                };
-                let _ = window().location().set_href(&target);
+        if let Some(result) = save_action.value().get() {
+            match result {
+                Ok(saved_id) => {
+                    save_error.set(String::new());
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let target = if id == 0 {
+                            format!("/schedules/{saved_id}/items")
+                        } else {
+                            "/schedules".to_string()
+                        };
+                        let _ = window().location().set_href(&target);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let _ = saved_id;
+                }
+                Err(error) => save_error.set(schedule_error_message(error)),
             }
-            #[cfg(not(target_arch = "wasm32"))]
-            let _ = saved_id;
         }
     });
 
@@ -496,8 +508,8 @@ fn ScheduleEditorIsland(id: i64, initial_error: String) -> impl IntoView {
             <section class=style::editor>
                 <h1 class=style::page_title>{tr(TextKey::Schedule)}</h1>
                 <div class=style::divider/>
-                <p class=style::error style:display=move || if initial_error.is_empty() { "none" } else { "" }>
-                    {tr(TextKey::ScheduleSaveFailed)}
+                <p class=style::error style:display=move || if save_error.get().is_empty() { "none" } else { "" }>
+                    {move || save_error.get()}
                 </p>
                 <form
                     id="schedule-editor-form"
@@ -919,7 +931,7 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                     error.set(String::new());
                     data.refetch();
                 }
-                Err(err) => error.set(err.to_string()),
+                Err(err) => error.set(schedule_error_message(err)),
             }
         }
     });
