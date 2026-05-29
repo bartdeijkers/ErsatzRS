@@ -32,6 +32,29 @@ ErsatzTV's `pl` and `pt-br` values verbatim. Normalize `nl`, `nl-NL`, and
 In the future we may also support Flemish Dutch as `nl-be`, but that is out of
 scope for now.
 
+## Translation boundary
+
+Translate the admin product surface: page headings, form labels, table headers,
+buttons, empty/loading states, help text, stable toasts, and validation or
+operation errors emitted by admin workflows. Semantic option labels should also
+be translated when the value represents a user-facing choice rather than a
+technical identifier.
+
+Keep stable identifiers untranslated. This includes product and provider names
+such as ErsatzRS, FFmpeg, Plex, Jellyfin, Emby, and Trakt; protocol, container,
+codec, and driver names such as MPEG-TS, MP4, MKV, H264, HEVC, AAC, QSV, NVENC,
+and VAAPI; configuration keys, routes, SQL/API field names, CSS and HTML
+attribute values, search query syntax tokens, and user-authored media, library,
+or provider names.
+
+Dynamic diagnostic payloads remain verbatim by default. Raw log messages,
+unknown server errors, and health-check details should be preserved for
+troubleshooting unless the message is promoted into a stable reusable admin UI
+contract with translations in every supported culture.
+
+Development-only or demo-only pages are outside product i18n unless they become
+normal admin routes.
+
 ## Consequences
 
 The ErsatzRS UI language selector is intentionally wider than upstream ErsatzTV.
@@ -43,6 +66,10 @@ Any future import/export or compatibility work that validates `pages.language`
 must allow `nl` in ErsatzRS databases while still falling back safely for
 unknown values. New admin UI text must include Dutch translations before the
 i18n slice can be considered complete.
+
+Future translation work should prioritize untranslated admin product text before
+technical identifiers. A literal all-strings translation target is not the
+parity contract.
 
 ## Alternatives Considered
 
