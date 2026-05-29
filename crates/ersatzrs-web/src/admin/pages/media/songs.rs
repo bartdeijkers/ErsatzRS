@@ -1,6 +1,7 @@
 //! Song browser — port of `Pages/SongList.razor`.
 use leptos::prelude::*;
 
+use crate::admin::i18n::TextKey;
 use crate::admin::pages::media::browser::MediaBrowserPage;
 use crate::admin::server_fns::media_browser::list_songs;
 
@@ -8,7 +9,7 @@ use crate::admin::server_fns::media_browser::list_songs;
 pub fn SongsPage() -> impl IntoView {
     view! {
         <MediaBrowserPage
-            title="Songs"
+            title=TextKey::Songs
             loader=move |q, p, ps| list_songs(q, p, ps)
         />
     }

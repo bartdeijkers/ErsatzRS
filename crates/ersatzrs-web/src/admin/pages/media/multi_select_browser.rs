@@ -73,8 +73,8 @@ pub const PAGE_SIZE: u32 = 50;
 #[derive(Clone, Copy, Debug)]
 pub struct BrowserKindConfig {
     pub kind: MediaBrowserKind,
-    /// Page title shown in the toolbar (e.g. "Movies", "TV Shows").
-    pub title: &'static str,
+    /// Page title shown in the toolbar.
+    pub title: TextKey,
     /// Base URL for search/pager links and per-card detail navigation,
     /// without a trailing slash (e.g. "/media/movies").
     pub base_path: &'static str,
@@ -89,56 +89,56 @@ pub struct BrowserKindConfig {
 impl BrowserKindConfig {
     pub const MOVIES: Self = Self {
         kind: MediaBrowserKind::Movie,
-        title: "Movies",
+        title: TextKey::Movies,
         base_path: "/media/movies",
         has_media_info: true,
         placeholder_icon: "🎬",
     };
     pub const SHOWS: Self = Self {
         kind: MediaBrowserKind::Show,
-        title: "TV Shows",
+        title: TextKey::TvShows,
         base_path: "/media/tv/shows",
         has_media_info: false,
         placeholder_icon: "📺",
     };
     pub const ARTISTS: Self = Self {
         kind: MediaBrowserKind::Artist,
-        title: "Artists",
+        title: TextKey::Artists,
         base_path: "/media/music/artists",
         has_media_info: false,
         placeholder_icon: "🎤",
     };
     pub const OTHER_VIDEOS: Self = Self {
         kind: MediaBrowserKind::OtherVideo,
-        title: "Other Videos",
+        title: TextKey::OtherVideos,
         base_path: "/media/other/videos",
         has_media_info: true,
         placeholder_icon: "🎞️",
     };
     pub const SEASONS: Self = Self {
         kind: MediaBrowserKind::Season,
-        title: "Seasons",
+        title: TextKey::Seasons,
         base_path: "/media/tv/seasons",
         has_media_info: false,
         placeholder_icon: "📺",
     };
     pub const EPISODES: Self = Self {
         kind: MediaBrowserKind::Episode,
-        title: "Episodes",
+        title: TextKey::Episodes,
         base_path: "/media/tv/episodes",
         has_media_info: true,
         placeholder_icon: "📺",
     };
     pub const MUSIC_VIDEOS: Self = Self {
         kind: MediaBrowserKind::MusicVideo,
-        title: "Music Videos",
+        title: TextKey::MusicVideos,
         base_path: "/media/music/videos",
         has_media_info: true,
         placeholder_icon: "🎵",
     };
     pub const REMOTE_STREAMS: Self = Self {
         kind: MediaBrowserKind::RemoteStream,
-        title: "Remote Streams",
+        title: TextKey::RemoteStreams,
         base_path: "/media/remote/streams",
         has_media_info: false,
         placeholder_icon: "📡",
@@ -207,12 +207,12 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     view! {
         <div class=style::page>
             <form method="get" action=base_path class=style::toolbar>
-                <h1 class=style::page_title>{title}</h1>
+                <h1 class=style::page_title>{tr(title)}</h1>
                 <input
                     class=style::search
                     type="search"
                     name="query"
-                    placeholder="Search…"
+                    placeholder=tr(TextKey::Search)
                     value=toolbar_query
                 />
             </form>
@@ -522,10 +522,7 @@ fn SelectableCard(
                     e.prevent_default();
                     toggle();
                 }
-                aria-label=move || format!(
-                    "Select {}",
-                    if is_selected.get() { "off" } else { "on" }
-                )
+                aria-label=tr(TextKey::Select)
             >
                 <input
                     type="checkbox"

@@ -8,6 +8,7 @@ use std::future::Future;
 
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::media_browser::MediaCardRow;
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
@@ -33,7 +34,7 @@ pub type Loader = fn(
 /// each page can inject its own server function (e.g. `list_movies`).
 #[component]
 pub fn MediaBrowserPage<L, Fut>(
-    title: &'static str,
+    title: TextKey,
     loader: L,
     /// Href prefix for per-card links — final link is `{href_prefix}/{id}`.
     /// Pass `""` to disable linking.
@@ -73,11 +74,11 @@ where
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>{title}</h1>
+                <h1 class=style::page_title>{tr(title)}</h1>
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Search…"
+                    placeholder=tr(TextKey::Search)
                     prop:value=move || search.get()
                     on:input=move |e| search.set(event_target_value(&e))
                 />
@@ -87,13 +88,13 @@ where
 
             <MediaCardPager total=total page=page page_size=PAGE_SIZE/>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get()
                         .map(|(rows, _)| {
                             if rows.is_empty() {
                                 return view! {
-                                    <p class=style::empty>"No items to display."</p>
+                                    <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p>
                                 }
                                 .into_any();
                             }
