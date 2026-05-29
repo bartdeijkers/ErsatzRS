@@ -221,7 +221,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
 #[component]
 fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) -> impl IntoView {
     let title = video.title.clone();
-    let thumb_alt = format!("{title} thumbnail");
+    let thumb_alt = format!("{} {}", title, tr(TextKey::Thumbnail));
     let album = video.album.unwrap_or_default();
     let album_style = if album.trim().is_empty() {
         "display:none"
