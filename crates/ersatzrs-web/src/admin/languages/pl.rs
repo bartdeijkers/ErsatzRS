@@ -357,6 +357,44 @@ fn scheduling_content_error_message(error: &str) -> String {
     if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
         return "Szablon nie istnieje.".to_owned();
     }
+    if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Grupa dekoracji nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Deco ") && trimmed.ends_with(" does not exist.") {
+        return "Dekoracja nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Grupa szablonów dekoracji nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplate ") && trimmed.ends_with(" does not exist.") {
+        return "Szablon dekoracji nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Deco name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa dekoracji może mieć maksymalnie 50 znaków.".to_owned();
+    }
+    if trimmed.starts_with("A deco named \"")
+        && trimmed.ends_with("\" already exists in that deco group")
+    {
+        return "Dekoracja o tej nazwie już istnieje w tej grupie dekoracji.".to_owned();
+    }
+    if trimmed.starts_with("Deco template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa szablonu dekoracji może mieć maksymalnie 50 znaków.".to_owned();
+    }
+    if trimmed.starts_with("A deco template named \"")
+        && trimmed.ends_with("\" already exists in that deco template group")
+    {
+        return "Szablon dekoracji o tej nazwie już istnieje w tej grupie szablonów dekoracji."
+            .to_owned();
+    }
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Znak wodny nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
+        return "Element graficzny nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Deco from ") && trimmed.contains(" intersects deco from ") {
+        return "Dekoracja nakłada się na inną dekorację.".to_owned();
+    }
 
     match trimmed {
         "Block does not exist." => "Blok nie istnieje.".to_owned(),
@@ -404,6 +442,96 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "Nazwa szablonu jest wymagana".to_owned(),
         "Template items cannot cross midnight." => {
             "Elementy szablonu nie mogą przekraczać północy.".to_owned()
+        }
+        "Deco group name is required" => "Nazwa grupy dekoracji jest wymagana".to_owned(),
+        "Deco group name must be 50 characters or fewer" => {
+            "Nazwa grupy dekoracji może mieć maksymalnie 50 znaków.".to_owned()
+        }
+        "Deco group name must be unique" => "Nazwa grupy dekoracji musi być unikalna".to_owned(),
+        "Deco group does not exist." => "Grupa dekoracji nie istnieje.".to_owned(),
+        "Deco name is required" => "Nazwa dekoracji jest wymagana".to_owned(),
+        "Deco does not exist" => "Dekoracja nie istnieje.".to_owned(),
+        "Default filler has unsupported collection type." => {
+            "Domyślne wypełnienie ma nieobsługiwany typ kolekcji.".to_owned()
+        }
+        "Dead air fallback has unsupported collection type." => {
+            "Awaryjna plansza martwej emisji ma nieobsługiwany typ kolekcji.".to_owned()
+        }
+        "Break content has unsupported collection type." => {
+            "Treść przerwy ma nieobsługiwany typ kolekcji.".to_owned()
+        }
+        "Default filler must have valid item" => {
+            "Domyślne wypełnienie musi mieć prawidłowy element.".to_owned()
+        }
+        "Dead air fallback must have valid item" => {
+            "Awaryjna plansza martwej emisji musi mieć prawidłowy element.".to_owned()
+        }
+        "Break content collection must have valid item" => {
+            "Kolekcja treści przerwy musi mieć prawidłowy element.".to_owned()
+        }
+        "Break content multi collection must have valid item" => {
+            "Multikolekcja treści przerwy musi mieć prawidłowy element.".to_owned()
+        }
+        "Break content smart collection must have valid item" => {
+            "Inteligentna kolekcja treści przerwy musi mieć prawidłowy element.".to_owned()
+        }
+        "Break content media item must have valid item" => {
+            "Element multimedialny treści przerwy musi być prawidłowy.".to_owned()
+        }
+        "Break content playlist must have valid item" => {
+            "Playlista treści przerwy musi mieć prawidłowy element.".to_owned()
+        }
+        "Default filler item does not exist." => {
+            "Element domyślnego wypełnienia nie istnieje.".to_owned()
+        }
+        "Dead air fallback item does not exist." => {
+            "Element awaryjnej planszy martwej emisji nie istnieje.".to_owned()
+        }
+        "Break content collection item does not exist." => {
+            "Element kolekcji treści przerwy nie istnieje.".to_owned()
+        }
+        "Break content multi collection item does not exist." => {
+            "Element multikolekcji treści przerwy nie istnieje.".to_owned()
+        }
+        "Break content smart collection item does not exist." => {
+            "Element inteligentnej kolekcji treści przerwy nie istnieje.".to_owned()
+        }
+        "Break content media item item does not exist." => {
+            "Element multimedialny treści przerwy nie istnieje.".to_owned()
+        }
+        "Break content playlist item does not exist." => {
+            "Playlista treści przerwy nie istnieje.".to_owned()
+        }
+        "Deco may only contain one [Block Start] break content" => {
+            "Dekoracja może zawierać tylko jedną treść przerwy na początku bloku.".to_owned()
+        }
+        "Deco may only contain one [Between Block Items] break content" => {
+            "Dekoracja może zawierać tylko jedną treść przerwy między elementami bloku.".to_owned()
+        }
+        "Deco may only contain one [At Chapter Markers] break content" => {
+            "Dekoracja może zawierać tylko jedną treść przerwy przy znacznikach rozdziałów."
+                .to_owned()
+        }
+        "Deco may only contain one [Block Finish] break content" => {
+            "Dekoracja może zawierać tylko jedną treść przerwy na końcu bloku.".to_owned()
+        }
+        "Deco template group name is required" => {
+            "Nazwa grupy szablonów dekoracji jest wymagana".to_owned()
+        }
+        "Deco template group name must be 50 characters or fewer" => {
+            "Nazwa grupy szablonów dekoracji może mieć maksymalnie 50 znaków.".to_owned()
+        }
+        "Deco template group name must be unique" => {
+            "Nazwa grupy szablonów dekoracji musi być unikalna".to_owned()
+        }
+        "Deco template group does not exist." => {
+            "Grupa szablonów dekoracji nie istnieje.".to_owned()
+        }
+        "[DecoTemplateId] does not exist." => "Szablon dekoracji nie istnieje.".to_owned(),
+        "Deco template name is required" => "Nazwa szablonu dekoracji jest wymagana".to_owned(),
+        "[DecoId] does not exist." => "Dekoracja nie istnieje.".to_owned(),
+        "Deco template items cannot be empty." => {
+            "Elementy szablonu dekoracji nie mogą być puste.".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -1358,6 +1358,44 @@ fn scheduling_content_error_message(error: &str) -> String {
     if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
         return trimmed.to_owned();
     }
+    if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Deco group does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Deco ") && trimmed.ends_with(" does not exist.") {
+        return "Deco does not exist.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Deco template group does not exist.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplate ") && trimmed.ends_with(" does not exist.") {
+        return "Deco template does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Deco name \"") && trimmed.ends_with("\" is invalid") {
+        return "Deco name must be 50 characters or fewer.".to_owned();
+    }
+    if trimmed.starts_with("A deco named \"")
+        && trimmed.ends_with("\" already exists in that deco group")
+    {
+        return "A deco with that name already exists in that deco group.".to_owned();
+    }
+    if trimmed.starts_with("Deco template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Deco template name must be 50 characters or fewer.".to_owned();
+    }
+    if trimmed.starts_with("A deco template named \"")
+        && trimmed.ends_with("\" already exists in that deco template group")
+    {
+        return "A deco template with that name already exists in that deco template group."
+            .to_owned();
+    }
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Watermark does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
+        return "Graphics element does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Deco from ") && trimmed.contains(" intersects deco from ") {
+        return "Deco overlaps another deco.".to_owned();
+    }
 
     match trimmed {
         "Block does not exist." => "Block does not exist.".to_owned(),
@@ -1402,6 +1440,85 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template items cannot cross midnight." => {
             "Template items cannot cross midnight.".to_owned()
         }
+        "Deco group name is required" => "Deco group name is required".to_owned(),
+        "Deco group name must be 50 characters or fewer" => {
+            "Deco group name must be 50 characters or fewer".to_owned()
+        }
+        "Deco group name must be unique" => "Deco group name must be unique".to_owned(),
+        "Deco group does not exist." => "Deco group does not exist.".to_owned(),
+        "Deco name is required" => "Deco name is required".to_owned(),
+        "Deco does not exist" => "Deco does not exist.".to_owned(),
+        "Default filler has unsupported collection type." => {
+            "Default filler has unsupported collection type.".to_owned()
+        }
+        "Dead air fallback has unsupported collection type." => {
+            "Dead air fallback has unsupported collection type.".to_owned()
+        }
+        "Break content has unsupported collection type." => {
+            "Break content has unsupported collection type.".to_owned()
+        }
+        "Default filler must have valid item" => "Default filler must have a valid item".to_owned(),
+        "Dead air fallback must have valid item" => {
+            "Dead air fallback must have a valid item".to_owned()
+        }
+        "Break content collection must have valid item" => {
+            "Break content collection must have a valid item".to_owned()
+        }
+        "Break content multi collection must have valid item" => {
+            "Break content multi-collection must have a valid item".to_owned()
+        }
+        "Break content smart collection must have valid item" => {
+            "Break content smart collection must have a valid item".to_owned()
+        }
+        "Break content media item must have valid item" => {
+            "Break content media item must have a valid item".to_owned()
+        }
+        "Break content playlist must have valid item" => {
+            "Break content playlist must have a valid item".to_owned()
+        }
+        "Default filler item does not exist." => "Default filler item does not exist.".to_owned(),
+        "Dead air fallback item does not exist." => {
+            "Dead air fallback item does not exist.".to_owned()
+        }
+        "Break content collection item does not exist." => {
+            "Break content collection item does not exist.".to_owned()
+        }
+        "Break content multi collection item does not exist." => {
+            "Break content multi-collection item does not exist.".to_owned()
+        }
+        "Break content smart collection item does not exist." => {
+            "Break content smart collection item does not exist.".to_owned()
+        }
+        "Break content media item item does not exist." => {
+            "Break content media item does not exist.".to_owned()
+        }
+        "Break content playlist item does not exist." => {
+            "Break content playlist does not exist.".to_owned()
+        }
+        "Deco may only contain one [Block Start] break content" => {
+            "Deco may only contain one Block Start break content.".to_owned()
+        }
+        "Deco may only contain one [Between Block Items] break content" => {
+            "Deco may only contain one Between Block Items break content.".to_owned()
+        }
+        "Deco may only contain one [At Chapter Markers] break content" => {
+            "Deco may only contain one At Chapter Markers break content.".to_owned()
+        }
+        "Deco may only contain one [Block Finish] break content" => {
+            "Deco may only contain one Block Finish break content.".to_owned()
+        }
+        "Deco template group name is required" => "Deco template group name is required".to_owned(),
+        "Deco template group name must be 50 characters or fewer" => {
+            "Deco template group name must be 50 characters or fewer".to_owned()
+        }
+        "Deco template group name must be unique" => {
+            "Deco template group name must be unique".to_owned()
+        }
+        "Deco template group does not exist." => "Deco template group does not exist.".to_owned(),
+        "[DecoTemplateId] does not exist." => "Deco template does not exist.".to_owned(),
+        "Deco template name is required" => "Deco template name is required".to_owned(),
+        "[DecoId] does not exist." => "Deco does not exist.".to_owned(),
+        "Deco template items cannot be empty." => "Deco template items cannot be empty.".to_owned(),
         _ => error.to_owned(),
     }
 }

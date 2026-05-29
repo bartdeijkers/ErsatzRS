@@ -361,6 +361,44 @@ fn scheduling_content_error_message(error: &str) -> String {
     if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
         return "Sjabloon bestaat niet.".to_owned();
     }
+    if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Decoratiegroep bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Deco ") && trimmed.ends_with(" does not exist.") {
+        return "Decoratie bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Decoratiesjabloongroep bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplate ") && trimmed.ends_with(" does not exist.") {
+        return "Decoratiesjabloon bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Deco name \"") && trimmed.ends_with("\" is invalid") {
+        return "Decoratienaam mag maximaal 50 tekens zijn.".to_owned();
+    }
+    if trimmed.starts_with("A deco named \"")
+        && trimmed.ends_with("\" already exists in that deco group")
+    {
+        return "Er bestaat al een decoratie met die naam in die decoratiegroep.".to_owned();
+    }
+    if trimmed.starts_with("Deco template name \"") && trimmed.ends_with("\" is invalid") {
+        return "Decoratiesjabloonnaam mag maximaal 50 tekens zijn.".to_owned();
+    }
+    if trimmed.starts_with("A deco template named \"")
+        && trimmed.ends_with("\" already exists in that deco template group")
+    {
+        return "Er bestaat al een decoratiesjabloon met die naam in die decoratiesjabloongroep."
+            .to_owned();
+    }
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Watermerk bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
+        return "Grafisch element bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Deco from ") && trimmed.contains(" intersects deco from ") {
+        return "Decoratie overlapt met een andere decoratie.".to_owned();
+    }
 
     match trimmed {
         "Block does not exist." => "Blok bestaat niet.".to_owned(),
@@ -404,6 +442,96 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "Sjabloonnaam is verplicht".to_owned(),
         "Template items cannot cross midnight." => {
             "Sjabloonitems mogen middernacht niet overschrijden.".to_owned()
+        }
+        "Deco group name is required" => "Decoratiegroepnaam is verplicht".to_owned(),
+        "Deco group name must be 50 characters or fewer" => {
+            "Decoratiegroepnaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Deco group name must be unique" => "Decoratiegroepnaam moet uniek zijn".to_owned(),
+        "Deco group does not exist." => "Decoratiegroep bestaat niet.".to_owned(),
+        "Deco name is required" => "Decoratienaam is verplicht".to_owned(),
+        "Deco does not exist" => "Decoratie bestaat niet.".to_owned(),
+        "Default filler has unsupported collection type." => {
+            "Standaardfiller heeft een niet-ondersteund collectietype.".to_owned()
+        }
+        "Dead air fallback has unsupported collection type." => {
+            "Dead-air-fallback heeft een niet-ondersteund collectietype.".to_owned()
+        }
+        "Break content has unsupported collection type." => {
+            "Onderbrekingsinhoud heeft een niet-ondersteund collectietype.".to_owned()
+        }
+        "Default filler must have valid item" => {
+            "Standaardfiller moet een geldig item hebben.".to_owned()
+        }
+        "Dead air fallback must have valid item" => {
+            "Dead-air-fallback moet een geldig item hebben.".to_owned()
+        }
+        "Break content collection must have valid item" => {
+            "Collectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
+        }
+        "Break content multi collection must have valid item" => {
+            "Multicollectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
+        }
+        "Break content smart collection must have valid item" => {
+            "Slimme collectie voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
+        }
+        "Break content media item must have valid item" => {
+            "Media-item voor onderbrekingsinhoud moet geldig zijn.".to_owned()
+        }
+        "Break content playlist must have valid item" => {
+            "Afspeellijst voor onderbrekingsinhoud moet een geldig item hebben.".to_owned()
+        }
+        "Default filler item does not exist." => {
+            "Item voor standaardfiller bestaat niet.".to_owned()
+        }
+        "Dead air fallback item does not exist." => {
+            "Item voor dead-air-fallback bestaat niet.".to_owned()
+        }
+        "Break content collection item does not exist." => {
+            "Collectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
+        }
+        "Break content multi collection item does not exist." => {
+            "Multicollectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
+        }
+        "Break content smart collection item does not exist." => {
+            "Slimme-collectie-item voor onderbrekingsinhoud bestaat niet.".to_owned()
+        }
+        "Break content media item item does not exist." => {
+            "Media-item voor onderbrekingsinhoud bestaat niet.".to_owned()
+        }
+        "Break content playlist item does not exist." => {
+            "Afspeellijst voor onderbrekingsinhoud bestaat niet.".to_owned()
+        }
+        "Deco may only contain one [Block Start] break content" => {
+            "Decoratie mag maar een onderbrekingsinhoud aan het begin van het blok bevatten."
+                .to_owned()
+        }
+        "Deco may only contain one [Between Block Items] break content" => {
+            "Decoratie mag maar een onderbrekingsinhoud tussen blokitems bevatten.".to_owned()
+        }
+        "Deco may only contain one [At Chapter Markers] break content" => {
+            "Decoratie mag maar een onderbrekingsinhoud bij hoofdstukmarkeringen bevatten."
+                .to_owned()
+        }
+        "Deco may only contain one [Block Finish] break content" => {
+            "Decoratie mag maar een onderbrekingsinhoud aan het einde van het blok bevatten."
+                .to_owned()
+        }
+        "Deco template group name is required" => {
+            "Decoratiesjabloongroepnaam is verplicht".to_owned()
+        }
+        "Deco template group name must be 50 characters or fewer" => {
+            "Decoratiesjabloongroepnaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Deco template group name must be unique" => {
+            "Decoratiesjabloongroepnaam moet uniek zijn".to_owned()
+        }
+        "Deco template group does not exist." => "Decoratiesjabloongroep bestaat niet.".to_owned(),
+        "[DecoTemplateId] does not exist." => "Decoratiesjabloon bestaat niet.".to_owned(),
+        "Deco template name is required" => "Decoratiesjabloonnaam is verplicht".to_owned(),
+        "[DecoId] does not exist." => "Decoratie bestaat niet.".to_owned(),
+        "Deco template items cannot be empty." => {
+            "Decoratiesjabloonitems mogen niet leeg zijn.".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -7,7 +7,9 @@ use leptos::ev;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{delete_failed, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, save_failed, scheduling_content_error_message, tr, TextKey,
+};
 use crate::admin::server_fns::decos::{
     create_deco, create_deco_group, create_deco_template, create_deco_template_group, delete_deco,
     delete_deco_group, delete_deco_template, delete_deco_template_group, format_short_time,
@@ -105,7 +107,11 @@ fn DecosIsland() -> impl IntoView {
                     toast.push(tr(TextKey::DecoGroupCreated), ToastSeverity::Success);
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -122,7 +128,11 @@ fn DecosIsland() -> impl IntoView {
                     toast.push(tr(TextKey::DecoCreated), ToastSeverity::Success);
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -137,7 +147,10 @@ fn DecosIsland() -> impl IntoView {
                     decos.refetch();
                     toast.push(tr(TextKey::DecoGroupDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -150,7 +163,10 @@ fn DecosIsland() -> impl IntoView {
                     decos.refetch();
                     toast.push(tr(TextKey::DecoDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -539,7 +555,10 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
                         let _ = window().location().set_href("/decos");
                     }
                 }
-                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    save_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -792,7 +811,11 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     );
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -809,7 +832,11 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     toast.push(tr(TextKey::DecoTemplateCreated), ToastSeverity::Success);
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        scheduling_content_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -827,7 +854,10 @@ fn DecoTemplatesIsland() -> impl IntoView {
                         ToastSeverity::Success,
                     );
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -840,7 +870,10 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     templates.refetch();
                     toast.push(tr(TextKey::DecoTemplateDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -1355,7 +1388,10 @@ fn DecoTemplateEditorForm(
                         let _ = window().location().set_href("/deco-templates");
                     }
                 }
-                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    save_failed(scheduling_content_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

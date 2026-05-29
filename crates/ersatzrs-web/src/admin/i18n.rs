@@ -2610,6 +2610,34 @@ mod tests {
             "Sjabloon bestaat niet."
         );
         assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::English,
+                "A deco named \"example\" already exists in that deco group"
+            ),
+            "A deco with that name already exists in that deco group."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Polish,
+                "Deco may only contain one [Block Start] break content"
+            ),
+            "Dekoracja może zawierać tylko jedną treść przerwy na początku bloku."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Deco from 01:00:00 to 01:30:00 intersects deco from 01:15:00 to 01:45:00"
+            ),
+            "A decoração se sobrepõe a outra decoração."
+        );
+        assert_eq!(
+            scheduling_content_error_text(
+                UiLanguage::Dutch,
+                "Break content playlist item does not exist."
+            ),
+            "Afspeellijst voor onderbrekingsinhoud bestaat niet."
+        );
+        assert_eq!(
             scheduling_content_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );

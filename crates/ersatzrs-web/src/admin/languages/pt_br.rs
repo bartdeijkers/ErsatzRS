@@ -361,6 +361,44 @@ fn scheduling_content_error_message(error: &str) -> String {
     if trimmed.starts_with("Template ") && trimmed.ends_with(" does not exist.") {
         return "O modelo não existe.".to_owned();
     }
+    if trimmed.starts_with("DecoGroup ") && trimmed.ends_with(" does not exist.") {
+        return "O grupo de decorações não existe.".to_owned();
+    }
+    if trimmed.starts_with("Deco ") && trimmed.ends_with(" does not exist.") {
+        return "A decoração não existe.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplateGroup ") && trimmed.ends_with(" does not exist.") {
+        return "O grupo de modelos de decoração não existe.".to_owned();
+    }
+    if trimmed.starts_with("DecoTemplate ") && trimmed.ends_with(" does not exist.") {
+        return "O modelo de decoração não existe.".to_owned();
+    }
+    if trimmed.starts_with("Deco name \"") && trimmed.ends_with("\" is invalid") {
+        return "O nome da decoração deve ter no máximo 50 caracteres.".to_owned();
+    }
+    if trimmed.starts_with("A deco named \"")
+        && trimmed.ends_with("\" already exists in that deco group")
+    {
+        return "Já existe uma decoração com esse nome nesse grupo de decorações.".to_owned();
+    }
+    if trimmed.starts_with("Deco template name \"") && trimmed.ends_with("\" is invalid") {
+        return "O nome do modelo de decoração deve ter no máximo 50 caracteres.".to_owned();
+    }
+    if trimmed.starts_with("A deco template named \"")
+        && trimmed.ends_with("\" already exists in that deco template group")
+    {
+        return "Já existe um modelo de decoração com esse nome nesse grupo de modelos de decoração."
+            .to_owned();
+    }
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "A marca d'água não existe.".to_owned();
+    }
+    if trimmed.starts_with("Graphics element ") && trimmed.ends_with(" does not exist.") {
+        return "O elemento gráfico não existe.".to_owned();
+    }
+    if trimmed.starts_with("Deco from ") && trimmed.contains(" intersects deco from ") {
+        return "A decoração se sobrepõe a outra decoração.".to_owned();
+    }
 
     match trimmed {
         "Block does not exist." => "O bloco não existe.".to_owned(),
@@ -408,6 +446,100 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "O nome do modelo é obrigatório".to_owned(),
         "Template items cannot cross midnight." => {
             "Os itens do modelo não podem atravessar a meia-noite.".to_owned()
+        }
+        "Deco group name is required" => "O nome do grupo de decorações é obrigatório".to_owned(),
+        "Deco group name must be 50 characters or fewer" => {
+            "O nome do grupo de decorações deve ter no máximo 50 caracteres.".to_owned()
+        }
+        "Deco group name must be unique" => {
+            "O nome do grupo de decorações deve ser único".to_owned()
+        }
+        "Deco group does not exist." => "O grupo de decorações não existe.".to_owned(),
+        "Deco name is required" => "O nome da decoração é obrigatório".to_owned(),
+        "Deco does not exist" => "A decoração não existe.".to_owned(),
+        "Default filler has unsupported collection type." => {
+            "O preenchimento padrão tem um tipo de coleção sem suporte.".to_owned()
+        }
+        "Dead air fallback has unsupported collection type." => {
+            "O fallback de dead air tem um tipo de coleção sem suporte.".to_owned()
+        }
+        "Break content has unsupported collection type." => {
+            "O conteúdo de intervalo tem um tipo de coleção sem suporte.".to_owned()
+        }
+        "Default filler must have valid item" => {
+            "O preenchimento padrão deve ter um item válido.".to_owned()
+        }
+        "Dead air fallback must have valid item" => {
+            "O fallback de dead air deve ter um item válido.".to_owned()
+        }
+        "Break content collection must have valid item" => {
+            "A coleção do conteúdo de intervalo deve ter um item válido.".to_owned()
+        }
+        "Break content multi collection must have valid item" => {
+            "A multi-coleção do conteúdo de intervalo deve ter um item válido.".to_owned()
+        }
+        "Break content smart collection must have valid item" => {
+            "A coleção inteligente do conteúdo de intervalo deve ter um item válido.".to_owned()
+        }
+        "Break content media item must have valid item" => {
+            "O item de mídia do conteúdo de intervalo deve ser válido.".to_owned()
+        }
+        "Break content playlist must have valid item" => {
+            "A playlist do conteúdo de intervalo deve ter um item válido.".to_owned()
+        }
+        "Default filler item does not exist." => {
+            "O item do preenchimento padrão não existe.".to_owned()
+        }
+        "Dead air fallback item does not exist." => {
+            "O item do fallback de dead air não existe.".to_owned()
+        }
+        "Break content collection item does not exist." => {
+            "O item da coleção do conteúdo de intervalo não existe.".to_owned()
+        }
+        "Break content multi collection item does not exist." => {
+            "O item da multi-coleção do conteúdo de intervalo não existe.".to_owned()
+        }
+        "Break content smart collection item does not exist." => {
+            "O item da coleção inteligente do conteúdo de intervalo não existe.".to_owned()
+        }
+        "Break content media item item does not exist." => {
+            "O item de mídia do conteúdo de intervalo não existe.".to_owned()
+        }
+        "Break content playlist item does not exist." => {
+            "A playlist do conteúdo de intervalo não existe.".to_owned()
+        }
+        "Deco may only contain one [Block Start] break content" => {
+            "A decoração só pode conter um conteúdo de intervalo no início do bloco.".to_owned()
+        }
+        "Deco may only contain one [Between Block Items] break content" => {
+            "A decoração só pode conter um conteúdo de intervalo entre itens do bloco.".to_owned()
+        }
+        "Deco may only contain one [At Chapter Markers] break content" => {
+            "A decoração só pode conter um conteúdo de intervalo nos marcadores de capítulo."
+                .to_owned()
+        }
+        "Deco may only contain one [Block Finish] break content" => {
+            "A decoração só pode conter um conteúdo de intervalo no fim do bloco.".to_owned()
+        }
+        "Deco template group name is required" => {
+            "O nome do grupo de modelos de decoração é obrigatório".to_owned()
+        }
+        "Deco template group name must be 50 characters or fewer" => {
+            "O nome do grupo de modelos de decoração deve ter no máximo 50 caracteres.".to_owned()
+        }
+        "Deco template group name must be unique" => {
+            "O nome do grupo de modelos de decoração deve ser único".to_owned()
+        }
+        "Deco template group does not exist." => {
+            "O grupo de modelos de decoração não existe.".to_owned()
+        }
+        "[DecoTemplateId] does not exist." => "O modelo de decoração não existe.".to_owned(),
+        "Deco template name is required" => {
+            "O nome do modelo de decoração é obrigatório".to_owned()
+        }
+        "[DecoId] does not exist." => "A decoração não existe.".to_owned(),
+        "Deco template items cannot be empty." => {
+            "Os itens do modelo de decoração não podem ficar vazios.".to_owned()
         }
         _ => error.to_owned(),
     }
