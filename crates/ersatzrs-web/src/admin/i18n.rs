@@ -1935,6 +1935,18 @@ pub fn channel_language_label(code: &str) -> String {
     languages_for(use_i18n()).channel_language_label(code)
 }
 
+pub fn hardware_acceleration_option_text(
+    language: UiLanguage,
+    label: &str,
+    supported: bool,
+) -> String {
+    languages_for(language).hardware_acceleration_option_label(label, supported)
+}
+
+pub fn hardware_acceleration_option_label(label: &str, supported: bool) -> String {
+    hardware_acceleration_option_text(use_i18n(), label, supported)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2036,6 +2048,7 @@ pub trait LanguageStrings: Sync {
     fn schedule_item_fallback_label(&self, id: i64) -> String;
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
+    fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
     fn select_playlist_to_add_selected_items(&self, count: usize) -> String;
@@ -2206,6 +2219,30 @@ mod tests {
         assert_eq!(
             languages_for(UiLanguage::Dutch).channel_language_label("tlh"),
             "tlh"
+        );
+    }
+
+    #[test]
+    fn hardware_acceleration_availability_labels_follow_active_language() {
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::English, "NVENC", false),
+            "NVENC (not available on this system)"
+        );
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Polish, "NVENC", false),
+            "NVENC (niedostępne w tym systemie)"
+        );
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::PortugueseBrazil, "NVENC", false),
+            "NVENC (não disponível neste sistema)"
+        );
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Dutch, "NVENC", false),
+            "NVENC (niet beschikbaar op dit systeem)"
+        );
+        assert_eq!(
+            hardware_acceleration_option_text(UiLanguage::Dutch, "VAAPI", true),
+            "VAAPI"
         );
     }
 }

@@ -113,6 +113,14 @@ impl LanguageStrings for PolishStrings {
         }
     }
 
+    fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String {
+        if supported {
+            label.to_owned()
+        } else {
+            format!("{label} (niedostępne w tym systemie)")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }

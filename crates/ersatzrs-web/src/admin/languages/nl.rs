@@ -117,6 +117,14 @@ impl LanguageStrings for DutchStrings {
         }
     }
 
+    fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String {
+        if supported {
+            label.to_owned()
+        } else {
+            format!("{label} (niet beschikbaar op dit systeem)")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }

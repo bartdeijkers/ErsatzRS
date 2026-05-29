@@ -113,6 +113,14 @@ impl LanguageStrings for PortugueseBrazilStrings {
         }
     }
 
+    fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String {
+        if supported {
+            label.to_owned()
+        } else {
+            format!("{label} (não disponível neste sistema)")
+        }
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }

@@ -12,10 +12,11 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{save_failed, tr, TextKey};
+use crate::admin::i18n::{hardware_acceleration_option_text, save_failed, tr, use_i18n, TextKey};
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
     list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, FfmpegProfileForm,
+    HardwareAccelerationOption,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -58,6 +59,7 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
 #[island]
 fn FfmpegProfileEditorIsland(profile_id: i64) -> impl IntoView {
     let none_label = tr(TextKey::NoneOption).to_string();
+    let language = use_i18n();
     #[allow(clippy::type_complexity)]
     let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
         Resource::new_blocking(
@@ -75,7 +77,10 @@ fn FfmpegProfileEditorIsland(profile_id: i64) -> impl IntoView {
                         });
                     let resolutions = resolutions.unwrap_or_default();
                     let hw_accels = list_supported_hw_accelerations().await;
-                    let hw_accels = hw_accels.unwrap_or_else(|_| vec![(0, none_label)]);
+                    let hw_accels = hw_accels.map_or_else(
+                        |_| vec![(0, none_label)],
+                        |options| localized_hw_accel_items(language, options),
+                    );
                     form.map(|f| (f, resolutions, hw_accels))
                 }
             },
@@ -101,6 +106,20 @@ fn FfmpegProfileEditorIsland(profile_id: i64) -> impl IntoView {
             }}
         </Suspense>
     }
+}
+
+fn localized_hw_accel_items(
+    language: crate::admin::i18n::UiLanguage,
+    options: Vec<HardwareAccelerationOption>,
+) -> Vec<(i32, String)> {
+    options
+        .into_iter()
+        .map(|option| {
+            let label =
+                hardware_acceleration_option_text(language, &option.label, option.supported);
+            (option.value, label)
+        })
+        .collect()
 }
 
 /// Fully hydrated `FFmpegProfile` editor body.

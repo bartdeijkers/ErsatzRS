@@ -105,6 +105,7 @@ pub fn XmltvSettingsPage() -> impl IntoView {
 #[allow(clippy::too_many_lines)]
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let form = data.form;
+    let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
     view! {
         <SettingsForm title=tr(TextKey::Ffmpeg) action="/api/settings/ffmpeg/save">
             <Field label=tr(TextKey::FfmpegPath)>
@@ -200,7 +201,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 <Select
                     name="default_mpeg_ts_script"
                     selected=form.default_mpeg_ts_script
-                    options=data.mpeg_ts_scripts
+                    options=mpeg_ts_scripts
                     include_none=false
                 />
                 <p class=style::help>{tr(TextKey::DefaultMpegTsScriptHelp)}</p>
@@ -240,6 +241,18 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
             </div>
         </section>
     }
+}
+
+fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOption> {
+    options
+        .into_iter()
+        .map(|mut option| {
+            if option.value == "default" {
+                tr(TextKey::DefaultOption).clone_into(&mut option.label);
+            }
+            option
+        })
+        .collect()
 }
 
 fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
