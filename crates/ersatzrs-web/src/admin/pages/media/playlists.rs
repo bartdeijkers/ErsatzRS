@@ -7,6 +7,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{delete_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     create_playlist, create_playlist_group, delete_playlist, delete_playlist_group,
     get_playlist_editor, get_playlist_editor_options, get_playlist_page, preview_playlist_playout,
@@ -70,10 +71,13 @@ fn PlaylistsIsland() -> impl IntoView {
             match result {
                 Ok(_) => {
                     group_name.set(String::new());
-                    toast.push("Playlist group added.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::PlaylistGroupAdded), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -82,10 +86,13 @@ fn PlaylistsIsland() -> impl IntoView {
             match result {
                 Ok(_) => {
                     playlist_name.set(String::new());
-                    toast.push("Playlist added.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::PlaylistAdded), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -93,10 +100,10 @@ fn PlaylistsIsland() -> impl IntoView {
         if let Some(result) = delete_group.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Playlist group deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::PlaylistGroupDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -105,10 +112,10 @@ fn PlaylistsIsland() -> impl IntoView {
         if let Some(result) = delete_item.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Playlist deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::PlaylistDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -117,11 +124,11 @@ fn PlaylistsIsland() -> impl IntoView {
     view! {
         <div class=style::page>
             <section class=style::playlist_section>
-                <h1 class=style::page_title>"Playlist Groups"</h1>
+                <h1 class=style::page_title>{tr(TextKey::PlaylistGroups)}</h1>
                 <div class=style::divider/>
                 <form method="post" action="/api/playlists/groups/create" class=style::playlist_form>
                     <div class=style::playlist_form_row>
-                        <label for="playlist-group-name">"Playlist Group Name"</label>
+                        <label for="playlist-group-name">{tr(TextKey::PlaylistGroupName)}</label>
                         <input
                             id="playlist-group-name"
                             name="name"
@@ -141,16 +148,16 @@ fn PlaylistsIsland() -> impl IntoView {
                             }
                         >
                             <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                            <span>"Add Playlist Group"</span>
+                            <span>{tr(TextKey::AddPlaylistGroup)}</span>
                         </button>
                     </div>
                 </form>
             </section>
 
             <section class=style::playlist_section>
-                <h2 class=style::page_title>"Playlists"</h2>
+                <h2 class=style::page_title>{tr(TextKey::Playlists)}</h2>
                 <div class=style::divider/>
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || data.get().map(|page| {
                         if selected_group.get_untracked() == 0 {
                             if let Some(first) = page.groups.first() {
@@ -160,7 +167,7 @@ fn PlaylistsIsland() -> impl IntoView {
                         view! {
                             <form method="post" action="/api/playlists/create" class=style::playlist_form>
                                 <div class=style::playlist_form_row>
-                                    <label for="playlist-group-select">"Playlist Group"</label>
+                                    <label for="playlist-group-select">{tr(TextKey::PlaylistGroup)}</label>
                                     <select
                                         id="playlist-group-select"
                                         name="playlist_group_id"
@@ -176,7 +183,7 @@ fn PlaylistsIsland() -> impl IntoView {
                                     </select>
                                 </div>
                                 <div class=style::playlist_form_row>
-                                    <label for="playlist-name">"Playlist Name"</label>
+                                    <label for="playlist-name">{tr(TextKey::PlaylistName)}</label>
                                     <input
                                         id="playlist-name"
                                         name="name"
@@ -196,7 +203,7 @@ fn PlaylistsIsland() -> impl IntoView {
                                         }
                                     >
                                         <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                                        <span>"Add Playlist"</span>
+                                        <span>{tr(TextKey::AddPlaylist)}</span>
                                     </button>
                                 </div>
                             </form>
@@ -220,8 +227,8 @@ fn PlaylistsIsland() -> impl IntoView {
                                                         <button
                                                             type="submit"
                                                             class=style::icon_button
-                                                            title="Delete"
-                                                            aria-label="Delete playlist group"
+                                                            title=tr(TextKey::Delete)
+                                                            aria-label=tr(TextKey::DeletePlaylistGroup)
                                                             disabled=disabled
                                                             on:click=move |event| {
                                                                 event.prevent_default();
@@ -283,7 +290,12 @@ fn playlist_row(
     view! {
         <li class=style::member>
             <span class=style::member_title>{name}</span>
-            <a class=style::icon_button href=format!("/media/playlists/{id}") title="Edit" aria-label="Edit playlist">
+            <a
+                class=style::icon_button
+                href=format!("/media/playlists/{id}")
+                title=tr(TextKey::Edit)
+                aria-label=tr(TextKey::EditPlaylist)
+            >
                 <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
             </a>
             <form method="post" action="/api/playlists/delete">
@@ -291,8 +303,8 @@ fn playlist_row(
                 <button
                     type="submit"
                     class=style::icon_button
-                    title="Delete"
-                    aria-label="Delete playlist"
+                    title=tr(TextKey::Delete)
+                    aria-label=tr(TextKey::DeletePlaylist)
                     disabled=is_system
                     on:click=move |event| {
                         event.prevent_default();
@@ -353,7 +365,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
         preview_message.set(String::new());
         let form = current_form();
         if form.items.iter().all(|item| !item.include_in_program_guide) {
-            preview_message.set("Playlist playout preview has no items".to_string());
+            preview_message.set(tr(TextKey::PlaylistPreviewEmpty).to_string());
             return;
         }
         spawn_local(async move {
@@ -374,7 +386,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                     class=style::btn_add
                     disabled=move || is_system.get()
                 >
-                    "Save Playlist"
+                    {tr(TextKey::SavePlaylist)}
                 </button>
                 <button
                     type="button"
@@ -394,25 +406,25 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                         });
                     }
                 >
-                    "Add Playlist Item"
+                    {tr(TextKey::AddPlaylistItem)}
                 </button>
                 <button type="button" class=style::btn_add on:click=move |_| preview()>
-                    "Preview Playlist Playout"
+                    {tr(TextKey::PreviewPlaylistPlayout)}
                 </button>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let opts = options.get().unwrap_or_default();
                     initial.get().map(move |maybe| {
                         if maybe.is_none() {
-                            return view! { <p class=style::empty>"Playlist not found."</p> }.into_any();
+                            return view! { <p class=style::empty>{tr(TextKey::PlaylistNotFound)}</p> }.into_any();
                         }
                         view! {
                             <section class=style::editor>
-                                <h1 class=style::page_title>"Playlist"</h1>
+                                <h1 class=style::page_title>{tr(TextKey::Playlist)}</h1>
                                 <label>
-                                    <span>"Name"</span>
+                                    <span>{tr(TextKey::Name)}</span>
                                     <input
                                         name="name"
                                         prop:value=move || name.get()
@@ -424,17 +436,17 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
 
                             <section class=style::playlist_editor_grid>
                                 <div>
-                                    <h2 class=style::page_title>"Playlist Items"</h2>
+                                    <h2 class=style::page_title>{tr(TextKey::PlaylistItems)}</h2>
                                     <div class=format!("{} {}", style::table_wrap, style::playlist_items_table_wrap)>
                                         <table>
                                             <thead>
                                                 <tr>
-                                                    <th>"Item Type"</th>
-                                                    <th>"Item"</th>
-                                                    <th>"Playback Order"</th>
-                                                    <th>"Count"</th>
-                                                    <th>"Play All"</th>
-                                                    <th>"Show In EPG"</th>
+                                                    <th>{tr(TextKey::ItemType)}</th>
+                                                    <th>{tr(TextKey::Item)}</th>
+                                                    <th>{tr(TextKey::PlaybackOrder)}</th>
+                                                    <th>{tr(TextKey::Count)}</th>
+                                                    <th>{tr(TextKey::PlayAll)}</th>
+                                                    <th>{tr(TextKey::ShowInEpg)}</th>
                                                     <th/>
                                                 </tr>
                                             </thead>
@@ -457,9 +469,9 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                                                 });
                                                             }
                                                         >
-                                                            <td>{item_type_label(collection_type)}</td>
+                                                            <td>{item_type_label_i18n(collection_type)}</td>
                                                             <td>{item_name}</td>
-                                                            <td>{playback_order_label(playback_order)}</td>
+                                                            <td>{playback_order_label_i18n(playback_order)}</td>
                                                             <td>{count_label}</td>
                                                             <td>
                                                                 {if readonly {
@@ -506,10 +518,10 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                                                 } else {
                                                                     view! {
                                                                         <div class=style::row_actions>
-                                                                            <button type="button" class=style::btn_edit on:click=move |_| copy_item(items, selected, idx)>"Copy"</button>
-                                                                            <button type="button" class=style::btn_edit disabled=idx == 0 on:click=move |_| move_item(items, selected, idx, -1)>"Up"</button>
-                                                                            <button type="button" class=style::btn_edit disabled=move || { idx + 1 >= items.get().len() } on:click=move |_| move_item(items, selected, idx, 1)>"Down"</button>
-                                                                            <button type="button" class=style::btn_delete on:click=move |_| remove_item(items, selected, idx)>"Delete"</button>
+                                                                            <button type="button" class=style::btn_edit on:click=move |_| copy_item(items, selected, idx)>{tr(TextKey::Copy)}</button>
+                                                                            <button type="button" class=style::btn_edit disabled=idx == 0 on:click=move |_| move_item(items, selected, idx, -1)>{tr(TextKey::MoveUp)}</button>
+                                                                            <button type="button" class=style::btn_edit disabled=move || { idx + 1 >= items.get().len() } on:click=move |_| move_item(items, selected, idx, 1)>{tr(TextKey::MoveDown)}</button>
+                                                                            <button type="button" class=style::btn_delete on:click=move |_| remove_item(items, selected, idx)>{tr(TextKey::Delete)}</button>
                                                                         </div>
                                                                     }.into_any()
                                                                 }}
@@ -523,12 +535,12 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                 </div>
                                 <div class=style::playlist_item_panel style:display=move || if selected.get().is_some() && !is_system.get() { "" } else { "none" }>
                                     <div class=style::panel_header>
-                                        <h2 class=style::page_title>"Playlist Item"</h2>
+                                        <h2 class=style::page_title>{tr(TextKey::PlaylistItem)}</h2>
                                         <button
                                             type="button"
                                             class=style::icon_button
-                                            title="Close"
-                                            aria-label="Close playlist item editor"
+                                            title=tr(TextKey::Close)
+                                            aria-label=tr(TextKey::Close)
                                             on:click=move |_| selected.set(None)
                                         >
                                             <span style=icon_style(IconName::Close, "1.25rem") aria-hidden="true"></span>
@@ -558,7 +570,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                             </section>
 
                             <section class=style::playlist_section style:display=move || if !preview_message.get().is_empty() || !preview_rows.get().is_empty() { "" } else { "none" }>
-                                <h2 class=style::page_title>"Preview"</h2>
+                                <h2 class=style::page_title>{tr(TextKey::Preview)}</h2>
                                 <p class=style::empty style:display=move || if preview_message.get().is_empty() { "none" } else { "" }>
                                     {move || preview_message.get()}
                                 </p>
@@ -566,10 +578,10 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th>"Start"</th>
-                                                <th>"Finish"</th>
-                                                <th>"Media Item"</th>
-                                                <th>"Duration"</th>
+                                                <th>{tr(TextKey::Start)}</th>
+                                                <th>{tr(TextKey::Finish)}</th>
+                                                <th>{tr(TextKey::MediaItem)}</th>
+                                                <th>{tr(TextKey::Duration)}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -603,7 +615,7 @@ fn playlist_item_editor(
     view! {
         <div class=style::editor>
             <label>
-                <span>"Collection Type"</span>
+                <span>{tr(TextKey::CollectionType)}</span>
                 <select
                     prop:value=collection_type.to_string()
                     on:change=move |event| {
@@ -628,7 +640,7 @@ fn playlist_item_editor(
             </label>
             {source_select(idx, items, collection_type, options)}
             <label>
-                <span>"Playback Order"</span>
+                <span>{tr(TextKey::PlaybackOrder)}</span>
                 <select
                     prop:value=playback_order.to_string()
                     disabled=individual_media_type(collection_type)
@@ -640,7 +652,7 @@ fn playlist_item_editor(
                 </select>
             </label>
             <label>
-                <span>"Count"</span>
+                <span>{tr(TextKey::Count)}</span>
                 <input
                     type="number"
                     min="1"
@@ -665,10 +677,10 @@ fn source_select(
     collection_type: i32,
     options: &PlaylistEditorOptions,
 ) -> AnyView {
-    let (label, selected, source): (&str, Option<i64>, Vec<PlaylistItemOption>) =
+    let (label, selected, source): (TextKey, Option<i64>, Vec<PlaylistItemOption>) =
         match collection_type {
             COLLECTION_TYPE_COLLECTION => (
-                "Collection",
+                TextKey::Collection,
                 items
                     .get_untracked()
                     .get(idx)
@@ -676,7 +688,7 @@ fn source_select(
                 options.collections.clone(),
             ),
             COLLECTION_TYPE_MULTI_COLLECTION => (
-                "Multi Collection",
+                TextKey::MultiCollection,
                 items
                     .get_untracked()
                     .get(idx)
@@ -684,7 +696,7 @@ fn source_select(
                 options.multi_collections.clone(),
             ),
             COLLECTION_TYPE_SMART_COLLECTION => (
-                "Smart Collection",
+                TextKey::SmartCollection,
                 items
                     .get_untracked()
                     .get(idx)
@@ -692,7 +704,7 @@ fn source_select(
                 options.smart_collections.clone(),
             ),
             COLLECTION_TYPE_TELEVISION_SHOW => (
-                "Television Show",
+                TextKey::TelevisionShow,
                 items
                     .get_untracked()
                     .get(idx)
@@ -700,7 +712,7 @@ fn source_select(
                 options.shows.clone(),
             ),
             COLLECTION_TYPE_TELEVISION_SEASON => (
-                "Television Season",
+                TextKey::TelevisionSeason,
                 items
                     .get_untracked()
                     .get(idx)
@@ -708,7 +720,7 @@ fn source_select(
                 options.seasons.clone(),
             ),
             COLLECTION_TYPE_ARTIST => (
-                "Artist",
+                TextKey::Artist,
                 items
                     .get_untracked()
                     .get(idx)
@@ -716,7 +728,7 @@ fn source_select(
                 options.artists.clone(),
             ),
             COLLECTION_TYPE_MOVIE => (
-                "Movie",
+                TextKey::Movie,
                 items
                     .get_untracked()
                     .get(idx)
@@ -724,7 +736,7 @@ fn source_select(
                 options.movies.clone(),
             ),
             COLLECTION_TYPE_EPISODE => (
-                "Episode",
+                TextKey::Episode,
                 items
                     .get_untracked()
                     .get(idx)
@@ -732,7 +744,7 @@ fn source_select(
                 options.episodes.clone(),
             ),
             COLLECTION_TYPE_MUSIC_VIDEO => (
-                "Music Video",
+                TextKey::MusicVideo,
                 items
                     .get_untracked()
                     .get(idx)
@@ -740,7 +752,7 @@ fn source_select(
                 options.music_videos.clone(),
             ),
             COLLECTION_TYPE_OTHER_VIDEO => (
-                "Other Video",
+                TextKey::OtherVideo,
                 items
                     .get_untracked()
                     .get(idx)
@@ -748,7 +760,7 @@ fn source_select(
                 options.other_videos.clone(),
             ),
             COLLECTION_TYPE_SONG => (
-                "Song",
+                TextKey::Song,
                 items
                     .get_untracked()
                     .get(idx)
@@ -756,7 +768,7 @@ fn source_select(
                 options.songs.clone(),
             ),
             COLLECTION_TYPE_IMAGE => (
-                "Image",
+                TextKey::Image,
                 items
                     .get_untracked()
                     .get(idx)
@@ -764,20 +776,20 @@ fn source_select(
                 options.images.clone(),
             ),
             COLLECTION_TYPE_REMOTE_STREAM => (
-                "Remote Stream",
+                TextKey::RemoteStream,
                 items
                     .get_untracked()
                     .get(idx)
                     .and_then(|row| row.media_item_id),
                 options.remote_streams.clone(),
             ),
-            _ => ("Item", None, Vec::new()),
+            _ => (TextKey::Item, None, Vec::new()),
         };
     let selected_value = selected.unwrap_or(0).to_string();
     let source_for_handler = source.clone();
     view! {
         <label>
-            <span>{label}</span>
+            <span>{tr(label)}</span>
             <select
                 prop:value=selected_value
                 on:change=move |event| {
@@ -796,7 +808,7 @@ fn source_select(
                     });
                 }
             >
-                <option value="0">"Type to search..."</option>
+                <option value="0">{tr(TextKey::TypeToSearch)}</option>
                 {source.iter().map(|option| view! {
                     <option value=option.id.to_string()>{option.name.clone()}</option>
                 }).collect_view()}
@@ -807,49 +819,49 @@ fn source_select(
 
 fn collection_type_options() -> impl IntoView {
     [
-        (COLLECTION_TYPE_COLLECTION, "Collection"),
-        (COLLECTION_TYPE_TELEVISION_SHOW, "Television Show"),
-        (COLLECTION_TYPE_TELEVISION_SEASON, "Television Season"),
-        (COLLECTION_TYPE_ARTIST, "Artist"),
-        (COLLECTION_TYPE_MULTI_COLLECTION, "Multi Collection"),
-        (COLLECTION_TYPE_SMART_COLLECTION, "Smart Collection"),
-        (COLLECTION_TYPE_MOVIE, "Movie"),
-        (COLLECTION_TYPE_EPISODE, "Episode"),
-        (COLLECTION_TYPE_MUSIC_VIDEO, "Music Video"),
-        (COLLECTION_TYPE_OTHER_VIDEO, "Other Video"),
-        (COLLECTION_TYPE_SONG, "Song"),
-        (COLLECTION_TYPE_IMAGE, "Image"),
-        (COLLECTION_TYPE_REMOTE_STREAM, "Remote Stream"),
+        (COLLECTION_TYPE_COLLECTION, TextKey::Collection),
+        (COLLECTION_TYPE_TELEVISION_SHOW, TextKey::TelevisionShow),
+        (COLLECTION_TYPE_TELEVISION_SEASON, TextKey::TelevisionSeason),
+        (COLLECTION_TYPE_ARTIST, TextKey::Artist),
+        (COLLECTION_TYPE_MULTI_COLLECTION, TextKey::MultiCollection),
+        (COLLECTION_TYPE_SMART_COLLECTION, TextKey::SmartCollection),
+        (COLLECTION_TYPE_MOVIE, TextKey::Movie),
+        (COLLECTION_TYPE_EPISODE, TextKey::Episode),
+        (COLLECTION_TYPE_MUSIC_VIDEO, TextKey::MusicVideo),
+        (COLLECTION_TYPE_OTHER_VIDEO, TextKey::OtherVideo),
+        (COLLECTION_TYPE_SONG, TextKey::Song),
+        (COLLECTION_TYPE_IMAGE, TextKey::Image),
+        (COLLECTION_TYPE_REMOTE_STREAM, TextKey::RemoteStream),
     ]
     .into_iter()
-    .map(|(value, label)| view! { <option value=value.to_string()>{label}</option> })
+    .map(|(value, label)| view! { <option value=value.to_string()>{tr(label)}</option> })
     .collect_view()
 }
 
 fn playback_order_options(collection_type: i32) -> impl IntoView {
-    let options: Vec<(i32, &str)> = match collection_type {
-        COLLECTION_TYPE_MULTI_COLLECTION => vec![(PLAYBACK_ORDER_SHUFFLE, "Shuffle")],
+    let options: Vec<(i32, TextKey)> = match collection_type {
+        COLLECTION_TYPE_MULTI_COLLECTION => vec![(PLAYBACK_ORDER_SHUFFLE, TextKey::Shuffle)],
         COLLECTION_TYPE_COLLECTION | COLLECTION_TYPE_SMART_COLLECTION => vec![
-            (PLAYBACK_ORDER_CHRONOLOGICAL, "Chronological"),
-            (PLAYBACK_ORDER_SHUFFLE, "Shuffle"),
-            (PLAYBACK_ORDER_RANDOM, "Random"),
-            (PLAYBACK_ORDER_SHUFFLE_IN_ORDER, "Shuffle In Order"),
+            (PLAYBACK_ORDER_CHRONOLOGICAL, TextKey::Chronological),
+            (PLAYBACK_ORDER_SHUFFLE, TextKey::Shuffle),
+            (PLAYBACK_ORDER_RANDOM, TextKey::Random),
+            (PLAYBACK_ORDER_SHUFFLE_IN_ORDER, TextKey::ShuffleInOrder),
         ],
         COLLECTION_TYPE_TELEVISION_SHOW => vec![
-            (PLAYBACK_ORDER_SEASON_EPISODE, "Season, Episode"),
-            (PLAYBACK_ORDER_CHRONOLOGICAL, "Chronological"),
-            (PLAYBACK_ORDER_SHUFFLE, "Shuffle"),
-            (PLAYBACK_ORDER_RANDOM, "Random"),
+            (PLAYBACK_ORDER_SEASON_EPISODE, TextKey::SeasonEpisode),
+            (PLAYBACK_ORDER_CHRONOLOGICAL, TextKey::Chronological),
+            (PLAYBACK_ORDER_SHUFFLE, TextKey::Shuffle),
+            (PLAYBACK_ORDER_RANDOM, TextKey::Random),
         ],
         _ => vec![
-            (PLAYBACK_ORDER_CHRONOLOGICAL, "Chronological"),
-            (PLAYBACK_ORDER_SHUFFLE, "Shuffle"),
-            (PLAYBACK_ORDER_RANDOM, "Random"),
+            (PLAYBACK_ORDER_CHRONOLOGICAL, TextKey::Chronological),
+            (PLAYBACK_ORDER_SHUFFLE, TextKey::Shuffle),
+            (PLAYBACK_ORDER_RANDOM, TextKey::Random),
         ],
     };
     options
         .into_iter()
-        .map(|(value, label)| view! { <option value=value.to_string()>{label}</option> })
+        .map(|(value, label)| view! { <option value=value.to_string()>{tr(label)}</option> })
         .collect_view()
 }
 
@@ -952,59 +964,55 @@ fn playlist_item_hidden_fields(items: Vec<PlaylistItemForm>) -> impl IntoView {
         .collect_view()
 }
 
-fn item_type_label(collection_type: i32) -> &'static str {
+fn item_type_label_i18n(collection_type: i32) -> &'static str {
     match collection_type {
-        COLLECTION_TYPE_COLLECTION => "Collection",
-        COLLECTION_TYPE_TELEVISION_SHOW => "Show",
-        COLLECTION_TYPE_TELEVISION_SEASON => "Season",
-        COLLECTION_TYPE_ARTIST => "Artist",
-        COLLECTION_TYPE_MULTI_COLLECTION => "Multi-Collection",
-        COLLECTION_TYPE_SMART_COLLECTION => "Smart Collection",
-        COLLECTION_TYPE_MOVIE => "Movie",
-        COLLECTION_TYPE_EPISODE => "Episode",
-        COLLECTION_TYPE_MUSIC_VIDEO => "Music Video",
-        COLLECTION_TYPE_OTHER_VIDEO => "Other Video",
-        COLLECTION_TYPE_SONG => "Song",
-        COLLECTION_TYPE_IMAGE => "Image",
-        COLLECTION_TYPE_REMOTE_STREAM => "Remote Stream",
+        COLLECTION_TYPE_COLLECTION => tr(TextKey::Collection),
+        COLLECTION_TYPE_TELEVISION_SHOW => tr(TextKey::Show),
+        COLLECTION_TYPE_TELEVISION_SEASON => tr(TextKey::Season),
+        COLLECTION_TYPE_ARTIST => tr(TextKey::Artist),
+        COLLECTION_TYPE_MULTI_COLLECTION => tr(TextKey::MultiCollection),
+        COLLECTION_TYPE_SMART_COLLECTION => tr(TextKey::SmartCollection),
+        COLLECTION_TYPE_MOVIE => tr(TextKey::Movie),
+        COLLECTION_TYPE_EPISODE => tr(TextKey::Episode),
+        COLLECTION_TYPE_MUSIC_VIDEO => tr(TextKey::MusicVideo),
+        COLLECTION_TYPE_OTHER_VIDEO => tr(TextKey::OtherVideo),
+        COLLECTION_TYPE_SONG => tr(TextKey::Song),
+        COLLECTION_TYPE_IMAGE => tr(TextKey::Image),
+        COLLECTION_TYPE_REMOTE_STREAM => tr(TextKey::RemoteStream),
         _ => "",
     }
 }
 
-fn playback_order_label(playback_order: i32) -> &'static str {
+fn playback_order_label_i18n(playback_order: i32) -> &'static str {
     match playback_order {
-        PLAYBACK_ORDER_CHRONOLOGICAL => "Chronological",
-        PLAYBACK_ORDER_RANDOM => "Random",
-        PLAYBACK_ORDER_SHUFFLE => "Shuffle",
-        PLAYBACK_ORDER_SHUFFLE_IN_ORDER => "Shuffle In Order",
-        PLAYBACK_ORDER_SEASON_EPISODE => "Season, Episode",
+        PLAYBACK_ORDER_CHRONOLOGICAL => tr(TextKey::Chronological),
+        PLAYBACK_ORDER_RANDOM => tr(TextKey::Random),
+        PLAYBACK_ORDER_SHUFFLE => tr(TextKey::Shuffle),
+        PLAYBACK_ORDER_SHUFFLE_IN_ORDER => tr(TextKey::ShuffleInOrder),
+        PLAYBACK_ORDER_SEASON_EPISODE => tr(TextKey::SeasonEpisode),
         _ => "",
     }
 }
 
 fn playlist_count_label(item: &PlaylistItemForm, _readonly: bool) -> String {
     if item.play_all {
-        "All".to_string()
+        tr(TextKey::All).to_string()
     } else if let Some(count) = item.count {
         count_per_pass_label(count)
     } else {
-        "1 per pass".to_string()
+        count_per_pass_label(1)
     }
 }
 
 fn count_per_pass_label(count: i32) -> String {
-    if count == 1 {
-        "1 per pass".to_string()
-    } else {
-        format!("{count} per pass")
-    }
+    format!("{count} {}", tr(TextKey::PerPass))
 }
 
 fn bool_label(value: bool) -> &'static str {
     if value {
-        "Yes"
+        tr(TextKey::Yes)
     } else {
-        "No"
+        tr(TextKey::No)
     }
 }
 

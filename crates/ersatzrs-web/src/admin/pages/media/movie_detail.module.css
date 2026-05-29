@@ -195,18 +195,6 @@
     filter: brightness(1.08);
 }
 
-.btn-add-label::before {
-    content: "Add To ...";
-}
-
-.btn-info-label::before {
-    content: "Show Media Info";
-}
-
-.btn-troubleshoot-label::before {
-    content: "Troubleshoot Playback";
-}
-
 .add-menu-popover {
     position: absolute;
     top: calc(100% + 0.25rem);
@@ -311,14 +299,6 @@
     border: 1px solid var(--color-border);
     font-size: 0.78rem;
     white-space: pre-wrap;
-}
-
-.entry-collection::before {
-    content: "Add To Collection";
-}
-
-.entry-playlist::before {
-    content: "Add To Playlist";
 }
 
 .state-badge {

@@ -5,6 +5,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use crate::admin::i18n::{delete_failed, range_of, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     delete_rerun_collection, get_rerun_collection_editor_options, get_rerun_collection_form,
     get_rerun_collections_page_size, list_rerun_collections, save_rerun_collection,
@@ -80,10 +81,10 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
         if let Some(result) = delete_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Rerun collection deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::RerunCollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -94,17 +95,17 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
             <div class=style::action_bar>
                 <a href="/media/rerun-collections/add" class=style::btn_add>
                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>"Add Rerun Collection"</span>
+                    <span>{tr(TextKey::AddRerunCollection)}</span>
                 </a>
             </div>
             <section class=style::content>
-                <h1 class=style::page_title>"Rerun Collections"</h1>
+                <h1 class=style::page_title>{tr(TextKey::RerunCollections)}</h1>
                 <div class=style::divider/>
                 <p class=style::error style:display=move || if initial_error.is_empty() { "none" } else { "" }>
-                    "Rerun collection action failed."
+                    {tr(TextKey::RerunCollectionActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty_cell>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
                     {move || {
                         data.get().map(|(rows, total)| {
                             let size = page_size.get().max(1);
@@ -127,7 +128,7 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                             <input
                                                 class=style::search
                                                 type="search"
-                                                placeholder="Search for rerun collections"
+                                                placeholder=tr(TextKey::SearchForRerunCollections)
                                                 prop:value=move || search.get()
                                                 on:input=move |event| {
                                                     search.set(event_target_value(&event));
@@ -150,8 +151,8 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                                                 <a
                                                                     class=style::icon_button
                                                                     href=format!("/media/rerun-collections/{id}/edit")
-                                                                    title="Edit Rerun Collection"
-                                                                    aria-label="Edit Rerun Collection"
+                                                                    title=tr(TextKey::EditRerunCollection)
+                                                                    aria-label=tr(TextKey::EditRerunCollection)
                                                                 >
                                                                     <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
                                                                 </a>
@@ -160,8 +161,8 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                                                     <button
                                                                         type="submit"
                                                                         class=style::icon_button
-                                                                        title="Delete Rerun Collection"
-                                                                        aria-label="Delete Rerun Collection"
+                                                                        title=tr(TextKey::DeleteRerunCollection)
+                                                                        aria-label=tr(TextKey::DeleteRerunCollection)
                                                                         on:click=move |event| {
                                                                             event.prevent_default();
                                                                             delete_target.set(Some(row_for_delete.clone()));
@@ -179,10 +180,10 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                         </tbody>
                                     </table>
                                     <div class=style::pager>
-                                        <span>"Rows per page:"</span>
+                                        <span>{tr(TextKey::RowsPerPage)}</span>
                                         <select
                                             class=style::page_size
-                                            aria-label="Rows per page"
+                                            aria-label=tr(TextKey::RowsPerPage)
                                             prop:value=move || page_size.get().to_string()
                                             on:change=move |event| {
                                                 if let Ok(value) = event_target_value(&event).parse::<u32>() {
@@ -196,14 +197,18 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                             <option value="50">"50"</option>
                                             <option value="100">"100"</option>
                                         </select>
-                                        <span class=style::pager_status>{format!("{range_start}-{range_end} of {total}")}</span>
+                                        <span class=style::pager_status>{range_of(
+                                            u32::try_from(range_start).unwrap_or(u32::MAX),
+                                            u32::try_from(range_end).unwrap_or(u32::MAX),
+                                            total,
+                                        )}</span>
                                         <div class=style::pager_buttons>
                                             <button
                                                 type="button"
                                                 class=style::icon_button
                                                 disabled=move || page.get() == 0
-                                                title="Previous page"
-                                                aria-label="Previous page"
+                                                title=tr(TextKey::PreviousPage)
+                                                aria-label=tr(TextKey::PreviousPage)
                                                 on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
                                             >
                                                 <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
@@ -212,8 +217,8 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                                                 type="button"
                                                 class=style::icon_button
                                                 disabled=move || { page.get() + 1 >= total_pages }
-                                                title="Next page"
-                                                aria-label="Next page"
+                                                title=tr(TextKey::NextPage)
+                                                aria-label=tr(TextKey::NextPage)
                                                 on:click=move |_| {
                                                     page.update(|page| *page = (*page + 1).min(total_pages.saturating_sub(1)));
                                                 }
@@ -261,22 +266,26 @@ pub fn RerunCollectionEditorPage() -> impl IntoView {
 
 #[island]
 fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView {
+    let new_collection_name = tr(TextKey::NewCollection).to_owned();
     let initial: Resource<RerunCollectionForm> = Resource::new_blocking(
         move || id,
-        |id| async move {
-            if id == 0 {
-                RerunCollectionForm {
-                    name: "New Rerun Collection".to_string(),
-                    collection_type: COLLECTION_TYPE_COLLECTION,
-                    first_run_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
-                    rerun_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
-                    ..RerunCollectionForm::default()
+        move |id| {
+            let new_collection_name = new_collection_name.clone();
+            async move {
+                if id == 0 {
+                    RerunCollectionForm {
+                        name: new_collection_name,
+                        collection_type: COLLECTION_TYPE_COLLECTION,
+                        first_run_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                        rerun_playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+                        ..RerunCollectionForm::default()
+                    }
+                } else {
+                    get_rerun_collection_form(id)
+                        .await
+                        .unwrap_or_default()
+                        .unwrap_or_default()
                 }
-            } else {
-                get_rerun_collection_form(id)
-                    .await
-                    .unwrap_or_default()
-                    .unwrap_or_default()
             }
         },
     );
@@ -345,11 +354,11 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(_) => {
-                    toast.push("Rerun collection saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::RerunCollectionSaved), ToastSeverity::Success);
                     set_browser_location("/media/rerun-collections");
                 }
                 Err(error) => {
-                    let message = format!("Save failed: {error}");
+                    let message = save_failed(error);
                     error_message.set(message.clone());
                     toast.push(message, ToastSeverity::Error);
                 }
@@ -388,17 +397,17 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                         }
                     >
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                        <span>{if id == 0 { "Add Rerun Collection" } else { "Save Rerun Collection" }}</span>
+                        <span>{if id == 0 { tr(TextKey::AddRerunCollection) } else { tr(TextKey::SaveRerunCollection) }}</span>
                     </button>
                 </div>
                 <section class=style::editor>
-                    <h1 class=style::page_title>"Rerun Collection"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::RerunCollection)}</h1>
                     <p class=style::error style:display=move || if error_message.with(String::is_empty) { "none" } else { "" }>
                         {move || error_message.get()}
                     </p>
                     <input type="hidden" name="id" value=move || form_id.get().to_string()/>
                     <label>
-                        <span>"Name"</span>
+                        <span>{tr(TextKey::Name)}</span>
                         <input
                             type="text"
                             name="name"
@@ -408,7 +417,7 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                         />
                     </label>
                     <label>
-                        <span>"Collection Type"</span>
+                        <span>{tr(TextKey::CollectionType)}</span>
                         <select
                             name="collection_type"
                             prop:value=move || collection_type.get().to_string()
@@ -420,13 +429,13 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                                 }
                             }
                         >
-                            <option value=COLLECTION_TYPE_COLLECTION>"Collection"</option>
-                            <option value=COLLECTION_TYPE_TELEVISION_SHOW>"Television Show"</option>
-                            <option value=COLLECTION_TYPE_TELEVISION_SEASON>"Television Season"</option>
-                            <option value=COLLECTION_TYPE_ARTIST>"Artist"</option>
-                            <option value=COLLECTION_TYPE_MULTI_COLLECTION>"Multi Collection"</option>
-                            <option value=COLLECTION_TYPE_SMART_COLLECTION>"Smart Collection"</option>
-                            <option value=COLLECTION_TYPE_PLAYLIST>"Playlist"</option>
+                            <option value=COLLECTION_TYPE_COLLECTION>{tr(TextKey::Collection)}</option>
+                            <option value=COLLECTION_TYPE_TELEVISION_SHOW>{tr(TextKey::TelevisionShow)}</option>
+                            <option value=COLLECTION_TYPE_TELEVISION_SEASON>{tr(TextKey::TelevisionSeason)}</option>
+                            <option value=COLLECTION_TYPE_ARTIST>{tr(TextKey::Artist)}</option>
+                            <option value=COLLECTION_TYPE_MULTI_COLLECTION>{tr(TextKey::MultiCollection)}</option>
+                            <option value=COLLECTION_TYPE_SMART_COLLECTION>{tr(TextKey::SmartCollection)}</option>
+                            <option value=COLLECTION_TYPE_PLAYLIST>{tr(TextKey::Playlist)}</option>
                         </select>
                     </label>
                     <Suspense fallback=move || view! { <div/> }>
@@ -434,42 +443,42 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                             options.get().map(|options| {
                                 view! {
                                     <TargetSelect
-                                        label="Collection"
+                                        label=TextKey::Collection
                                         name="collection_id"
                                         options=options.collections
                                         value=collection_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_COLLECTION)
                                     />
                                     <TargetSelect
-                                        label="Multi Collection"
+                                        label=TextKey::MultiCollection
                                         name="multi_collection_id"
                                         options=options.multi_collections
                                         value=multi_collection_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION)
                                     />
                                     <TargetSelect
-                                        label="Smart Collection"
+                                        label=TextKey::SmartCollection
                                         name="smart_collection_id"
                                         options=options.smart_collections
                                         value=smart_collection_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_SMART_COLLECTION)
                                     />
                                     <TargetSelect
-                                        label="Television Show"
+                                        label=TextKey::TelevisionShow
                                         name="media_item_id"
                                         options=options.shows
                                         value=media_item_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_TELEVISION_SHOW)
                                     />
                                     <TargetSelect
-                                        label="Television Season"
+                                        label=TextKey::TelevisionSeason
                                         name="media_item_id"
                                         options=options.seasons
                                         value=media_item_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_TELEVISION_SEASON)
                                     />
                                     <TargetSelect
-                                        label="Artist"
+                                        label=TextKey::Artist
                                         name="media_item_id"
                                         options=options.artists
                                         value=media_item_id
@@ -480,13 +489,13 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                         }}
                     </Suspense>
                     <PlaybackOrderSelect
-                        label="First Run Playback Order"
+                        label=TextKey::FirstRunPlaybackOrder
                         name="first_run_playback_order"
                         value=first_run_playback_order
                         collection_type=collection_type
                     />
                     <PlaybackOrderSelect
-                        label="Rerun Playback Order"
+                        label=TextKey::RerunPlaybackOrder
                         name="rerun_playback_order"
                         value=rerun_playback_order
                         collection_type=collection_type
@@ -499,7 +508,7 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
 
 #[component]
 fn TargetSelect(
-    label: &'static str,
+    label: TextKey,
     name: &'static str,
     options: Vec<RerunCollectionSelectOption>,
     value: RwSignal<String>,
@@ -507,14 +516,14 @@ fn TargetSelect(
 ) -> impl IntoView {
     view! {
         <label style:display=move || if visible.get() { "" } else { "none" }>
-            <span>{label}</span>
+            <span>{tr(label)}</span>
             <select
                 name=name
                 disabled=move || !visible.get()
                 prop:value=move || value.get()
                 on:change=move |event| value.set(event_target_value(&event))
             >
-                <option value="">"Type to search..."</option>
+                <option value="">{tr(TextKey::TypeToSearch)}</option>
                 {options.into_iter().map(|option| {
                     view! {
                         <option value=option.id.to_string()>{option.name}</option>
@@ -527,14 +536,14 @@ fn TargetSelect(
 
 #[component]
 fn PlaybackOrderSelect(
-    label: &'static str,
+    label: TextKey,
     name: &'static str,
     value: RwSignal<i32>,
     collection_type: RwSignal<i32>,
 ) -> impl IntoView {
     view! {
         <label>
-            <span>{label}</span>
+            <span>{tr(label)}</span>
             <select
                 name=name
                 prop:value=move || value.get().to_string()
@@ -548,22 +557,22 @@ fn PlaybackOrderSelect(
                     value=PLAYBACK_ORDER_CHRONOLOGICAL
                     disabled=move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION
                 >
-                    "Chronological"
+                    {tr(TextKey::Chronological)}
                 </option>
                 <option
                     value=PLAYBACK_ORDER_SEASON_EPISODE
                     disabled=move || collection_type.get() != COLLECTION_TYPE_TELEVISION_SHOW
                     style:display=move || if collection_type.get() == COLLECTION_TYPE_TELEVISION_SHOW { "" } else { "none" }
                 >
-                    "Season, Episode"
+                    {tr(TextKey::SeasonEpisode)}
                 </option>
                 <option
                     value=PLAYBACK_ORDER_RANDOM
                     disabled=move || collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION
                 >
-                    "Random"
+                    {tr(TextKey::Random)}
                 </option>
-                <option value=PLAYBACK_ORDER_SHUFFLE>"Shuffle"</option>
+                <option value=PLAYBACK_ORDER_SHUFFLE>{tr(TextKey::Shuffle)}</option>
             </select>
         </label>
     }

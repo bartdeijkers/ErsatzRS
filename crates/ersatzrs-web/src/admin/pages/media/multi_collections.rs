@@ -5,6 +5,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{delete_failed, page_of, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     delete_multi_collection, get_multi_collection, get_multi_collection_editor_options,
     get_multi_collections_page_size, list_multi_collections, save_multi_collection,
@@ -68,10 +69,10 @@ fn MultiCollectionsIsland() -> impl IntoView {
         if let Some(res) = delete_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Multi collection deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::MultiCollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -80,11 +81,11 @@ fn MultiCollectionsIsland() -> impl IntoView {
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"Multi Collections"</h1>
+                <h1 class=style::page_title>{tr(TextKey::MultiCollections)}</h1>
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Search for multi collections"
+                    placeholder=tr(TextKey::SearchForMultiCollections)
                     prop:value=move || search.get()
                     on:input=move |event| {
                         search.set(event_target_value(&event));
@@ -92,11 +93,11 @@ fn MultiCollectionsIsland() -> impl IntoView {
                     }
                 />
                 <a href="/media/multi-collections/add" class=style::btn_add>
-                    "+ Add Multi Collection"
+                    {tr(TextKey::AddMultiCollection)}
                 </a>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get().map(|(rows, total)| {
                         let size = u64::from(page_size.get().max(1));
@@ -105,7 +106,7 @@ fn MultiCollectionsIsland() -> impl IntoView {
                             .max(1);
 
                         let rows_view = if rows.is_empty() {
-                            view! { <p class=style::empty>"No multi collections yet."</p> }
+                            view! { <p class=style::empty>{tr(TextKey::NoMultiCollections)}</p> }
                                 .into_any()
                         } else {
                             view! {
@@ -113,7 +114,7 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th>"Name"</th>
+                                                <th>{tr(TextKey::Name)}</th>
                                                 <th/>
                                             </tr>
                                         </thead>
@@ -131,7 +132,7 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                                                     class=style::btn_edit
                                                                     href=format!("/media/multi-collections/{id}/edit")
                                                                 >
-                                                                    "Edit"
+                                                                    {tr(TextKey::Edit)}
                                                                 </a>
                                                                 <button
                                                                     type="button"
@@ -141,7 +142,7 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                                                         delete_open.set(true);
                                                                     }
                                                                 >
-                                                                    "Delete"
+                                                                    {tr(TextKey::Delete)}
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -166,10 +167,10 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                         page.update(|page| *page = page.saturating_sub(1));
                                     }
                                 >
-                                    "Previous"
+                                    {tr(TextKey::PreviousPage)}
                                 </button>
                                 <span class=style::pager_status>
-                                    {move || format!("Page {} of {}", page.get() + 1, total_pages)}
+                                    {move || page_of(page.get() + 1, total_pages)}
                                 </span>
                                 <button
                                     type="button"
@@ -180,7 +181,7 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                         page.update(|page| *page = (*page + 1).min(max_page));
                                     }
                                 >
-                                    "Next"
+                                    {tr(TextKey::NextPage)}
                                 </button>
                                 <select
                                     class=style::page_size
@@ -243,7 +244,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                 .unwrap_or_default()
                 .unwrap_or_default(),
             None => MultiCollectionForm {
-                name: "New Multi Collection".to_string(),
+                name: tr(TextKey::NewMultiCollection).to_string(),
                 ..MultiCollectionForm::default()
             },
         }
@@ -283,10 +284,10 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(_) => {
-                    toast.push("Multi collection saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::MultiCollectionSaved), ToastSeverity::Success);
                     set_browser_location("/media/multi-collections");
                 }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -334,13 +335,11 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
     let on_save = Callback::new(move |()| {
         let trimmed = name.get().trim().to_string();
         if trimmed.is_empty() {
-            name_err.set(Some("Multi-collection name is required!".to_string()));
+            name_err.set(Some(tr(TextKey::MultiCollectionNameRequired).to_string()));
             return;
         }
         if trimmed.chars().count() > 50 {
-            name_err.set(Some(
-                "Multi-collection name cannot be longer than 50 characters.".to_string(),
-            ));
+            name_err.set(Some(tr(TextKey::MultiCollectionNameTooLong).to_string()));
             return;
         }
         name_err.set(None);
@@ -354,28 +353,28 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"Multi Collection"</h1>
+                <h1 class=style::page_title>{tr(TextKey::MultiCollection)}</h1>
                 <Button
                     variant=ButtonVariant::Primary
                     on_click=Some(on_save)
                 >
                     {move || if id_signal.get() == 0 {
-                        "Add Multi Collection"
+                        tr(TextKey::AddMultiCollection)
                     } else {
-                        "Save Multi Collection"
+                        tr(TextKey::SaveMultiCollection)
                     }}
                 </Button>
             </div>
 
             <div class=style::editor>
-                <TextField label="Name" value=name error=Some(name_err_signal)/>
+                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || {
                         options.get().map(|options| {
                             view! {
                                 <div class=style::field_group>
-                                    <label class=style::field_label>"Collections"</label>
+                                    <label class=style::field_label>{tr(TextKey::Collections)}</label>
                                     <select
                                         class=style::select
                                         prop:value=move || selected_collection.get().to_string()
@@ -385,7 +384,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                             );
                                         }
                                     >
-                                        <option value="0">"Select collection"</option>
+                                        <option value="0">{tr(TextKey::SelectCollection)}</option>
                                         {options.collections.iter().map(|option| {
                                             let id = option.id;
                                             let disabled = items.with(|items| {
@@ -399,7 +398,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                         }).collect_view()}
                                     </select>
                                     <p class=style::help_text>
-                                        "Disabled collections are already present in this multi collection"
+                                        {tr(TextKey::DisabledCollectionsAlreadyPresent)}
                                     </p>
                                     <button
                                         type="button"
@@ -415,12 +414,12 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                             }
                                         }
                                     >
-                                        "Add Collection"
+                                        {tr(TextKey::AddCollection)}
                                     </button>
                                 </div>
 
                                 <div class=style::field_group>
-                                    <label class=style::field_label>"Smart Collections"</label>
+                                    <label class=style::field_label>{tr(TextKey::SmartCollections)}</label>
                                     <select
                                         class=style::select
                                         prop:value=move || selected_smart_collection.get().to_string()
@@ -430,7 +429,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                             );
                                         }
                                     >
-                                        <option value="0">"Select smart collection"</option>
+                                        <option value="0">{tr(TextKey::SelectSmartCollection)}</option>
                                         {options.smart_collections.iter().map(|option| {
                                             let id = option.id;
                                             let disabled = items.with(|items| {
@@ -444,7 +443,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                         }).collect_view()}
                                     </select>
                                     <p class=style::help_text>
-                                        "Disabled collections are already present in this multi collection"
+                                        {tr(TextKey::DisabledCollectionsAlreadyPresent)}
                                     </p>
                                     <button
                                         type="button"
@@ -460,7 +459,7 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                             }
                                         }
                                     >
-                                        "Add Smart Collection"
+                                        {tr(TextKey::AddSmartCollection)}
                                     </button>
                                 </div>
                             }
@@ -470,7 +469,14 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
 
                 <section>
                     <h2 class=style::section_title>
-                        {move || format!("{} Items", name.get())}
+                        {move || {
+                            let current = name.get();
+                            if current.trim().is_empty() {
+                                tr(TextKey::MultiCollectionItems).to_string()
+                            } else {
+                                format!("{current} {}", tr(TextKey::Items))
+                            }
+                        }}
                     </h2>
                     <MultiCollectionItemsTable items=items/>
                 </section>
@@ -480,17 +486,17 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                         variant=ButtonVariant::Primary
                         on_click=Some(on_save)
                     >
-                        {move || if id_signal.get() == 0 {
-                            "Add Multi Collection"
-                        } else {
-                            "Save Multi Collection"
-                        }}
-                    </Button>
+                    {move || if id_signal.get() == 0 {
+                        tr(TextKey::AddMultiCollection)
+                    } else {
+                        tr(TextKey::SaveMultiCollection)
+                    }}
+                </Button>
                     <LinkButton
                         href="/media/multi-collections".to_string()
                         variant=ButtonVariant::Text
                     >
-                        "Back"
+                        {tr(TextKey::Back)}
                     </LinkButton>
                 </div>
             </div>
@@ -505,9 +511,9 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
             <table>
                 <thead>
                     <tr>
-                        <th>"Collection"</th>
-                        <th>"Schedule As Group"</th>
-                        <th>"Playback Order"</th>
+                        <th>{tr(TextKey::Collection)}</th>
+                        <th>{tr(TextKey::ScheduleAsGroup)}</th>
+                        <th>{tr(TextKey::PlaybackOrder)}</th>
                         <th/>
                     </tr>
                 </thead>
@@ -518,7 +524,7 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
                         if rows.is_empty() {
                             return view! {
                                 <tr>
-                                    <td colspan="4">"No items yet."</td>
+                                    <td colspan="4">{tr(TextKey::NoItems)}</td>
                                 </tr>
                             }
                             .into_any();
@@ -527,9 +533,9 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
                             let checked = item.schedule_as_group;
                             let label = if item.schedule_as_group {
                                 if item.use_custom_playback_order {
-                                    "Custom"
+                                    tr(TextKey::Custom)
                                 } else {
-                                    "Chronological"
+                                    tr(TextKey::Chronological)
                                 }
                             } else {
                                 ""
@@ -570,7 +576,7 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
                                                     });
                                                 }
                                             >
-                                                "Delete"
+                                                {tr(TextKey::Delete)}
                                             </button>
                                         </div>
                                     </td>

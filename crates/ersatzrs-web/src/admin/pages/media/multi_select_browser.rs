@@ -25,6 +25,11 @@ use std::collections::HashSet;
 
 use leptos::prelude::*;
 
+use crate::admin::i18n::{
+    add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
+    added_items_to_playlist, item_count, range_of, select_collection_to_add_selected_items,
+    select_playlist_to_add_selected_items, selected_items_count, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
     get_media_item_info_json, list_artists, list_episodes, list_movies, list_music_videos,
@@ -251,7 +256,7 @@ fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView 
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 let query_for_links = query.clone();
                 let query_for_jump = query.clone();
@@ -328,8 +333,11 @@ fn GridWithSelection(
                     media_info_body.set(json);
                 }
                 Err(error) => {
-                    media_info_body.set(format!("Unable to load media info: {error}"));
-                    toast.push("Show media info failed".to_string(), ToastSeverity::Error);
+                    media_info_body.set(format!("{}: {error}", tr(TextKey::UnableToLoadMediaInfo)));
+                    toast.push(
+                        tr(TextKey::UnableToLoadMediaInfo).to_string(),
+                        ToastSeverity::Error,
+                    );
                 }
             }
         }
@@ -348,7 +356,7 @@ fn GridWithSelection(
                 }
                 MenuCommand::ShowMediaInfo(target) => {
                     media_info_title.set(target.title.clone());
-                    media_info_body.set("Loading media info…".to_string());
+                    media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
                     media_info_open.set(true);
                     media_info_action.dispatch(target);
                 }
@@ -393,7 +401,7 @@ fn GridWithSelection(
                     disabled=move || select_all_disabled.get()
                     on:click=select_all_click
                 >
-                    "☑ Select All"
+                    {format!("☑ {}", tr(TextKey::SelectAll))}
                 </button>
             </div>
         </div>
@@ -404,32 +412,31 @@ fn GridWithSelection(
         >
             <span class=style::selection_count>
                 {move || {
-                    let n = selected_count.get();
-                    if n == 1 { "1 Item Selected".to_string() } else { format!("{n} Items Selected") }
+                    selected_items_count(selected_count.get())
                 }}
             </span>
             <button
                 class=style::selection_btn
                 on:click=move |_| collection_open.set(true)
             >
-                "+ Add To Collection"
+                {format!("+ {}", tr(TextKey::AddToCollection))}
             </button>
             <button
                 class=style::selection_btn
                 on:click=move |_| playlist_open.set(true)
             >
-                "+ Add To Playlist"
+                {format!("+ {}", tr(TextKey::AddToPlaylist))}
             </button>
             <button
                 class=style::selection_btn_secondary
                 on:click=move |_| selected.update(HashSet::clear)
             >
-                "✓ Clear Selection"
+                {format!("✓ {}", tr(TextKey::ClearSelection))}
             </button>
         </div>
 
         {if rows.is_empty() {
-            view! { <p class=style::empty>"No items to display."</p> }.into_any()
+            view! { <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p> }.into_any()
         } else {
             let rows_for_grid = rows;
             view! {
@@ -583,8 +590,8 @@ fn ItemMenu(
             <button
                 type="button"
                 class=style::item_menu_trigger
-                title="Item actions"
-                aria-label="Item actions"
+                title=tr(TextKey::ItemActions)
+                aria-label=tr(TextKey::ItemActions)
                 aria-expanded=move || open.get().to_string()
                 on:click=move |e| {
                     e.prevent_default();
@@ -614,7 +621,7 @@ fn ItemMenu(
                     }
                 >
                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>"Add To Collection"</span>
+                    <span>{tr(TextKey::AddToCollection)}</span>
                 </button>
                 {has_media_info.then(|| view! {
                     <button
@@ -632,7 +639,7 @@ fn ItemMenu(
                         }
                     >
                         <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
-                        <span>"Show Media Info"</span>
+                        <span>{tr(TextKey::ShowMediaInfo)}</span>
                     </button>
                 })}
                 <a
@@ -645,7 +652,7 @@ fn ItemMenu(
                     }
                 >
                     <span style=icon_style(IconName::FindReplace, "1.125rem") aria-hidden="true"></span>
-                    <span>"Troubleshoot Playback"</span>
+                    <span>{tr(TextKey::TroubleshootPlayback)}</span>
                 </a>
             </div>
         </div>
@@ -697,7 +704,7 @@ pub(crate) fn AddToCollectionModal(
             let target_id = if chosen_id == NEW_COLLECTION_ID {
                 let name = new_collection_name.trim();
                 if name.is_empty() {
-                    return Err(ServerFnError::new("Collection name is required"));
+                    return Err(ServerFnError::new(tr(TextKey::CollectionNameRequired)));
                 }
                 create_collection(name.to_string()).await?.id
             } else {
@@ -712,10 +719,7 @@ pub(crate) fn AddToCollectionModal(
         if let Some(res) = submit_action.value().get() {
             match res {
                 Ok((requested, _added, target_id)) => {
-                    toast.push(
-                        format!("Added {requested} items to collection"),
-                        ToastSeverity::Success,
-                    );
+                    toast.push(added_items_to_collection(requested), ToastSeverity::Success);
                     selected.update(HashSet::clear);
                     open.set(false);
                     if redirect_after_add {
@@ -725,10 +729,7 @@ pub(crate) fn AddToCollectionModal(
                     collection_id.set(NEW_COLLECTION_ID);
                     new_name.set(String::new());
                 }
-                Err(e) => toast.push(
-                    format!("Add to collection failed: {e}"),
-                    ToastSeverity::Error,
-                ),
+                Err(e) => toast.push(add_to_collection_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -738,24 +739,21 @@ pub(crate) fn AddToCollectionModal(
     view! {
         <Modal
             open=open
-            title="Add To Collection".to_string()
+            title=tr(TextKey::AddToCollection).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if confirmed {
                     submit_action.dispatch(());
                 }
             })
-            confirm_label="Add To Collection"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::AddToCollection))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
             <p>
-                {move || format!(
-                    "Select the collection to add the {} selected items",
-                    count_label.get()
-                )}
+                {move || select_collection_to_add_selected_items(count_label.get())}
             </p>
 
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
-                <label>"Collection"</label>
+                <label>{tr(TextKey::Collection)}</label>
                 <select
                     prop:value=move || collection_id.get().to_string()
                     on:change=move |e| {
@@ -764,7 +762,7 @@ pub(crate) fn AddToCollectionModal(
                         }
                     }
                 >
-                    <option value=NEW_COLLECTION_ID.to_string()>"(New Collection)"</option>
+                    <option value=NEW_COLLECTION_ID.to_string()>{tr(TextKey::NewCollection)}</option>
                     {move || {
                         options.get().into_iter().map(|c| view! {
                             <option value=c.id.to_string()>{c.name}</option>
@@ -772,7 +770,7 @@ pub(crate) fn AddToCollectionModal(
                     }}
                 </select>
 
-                <label>"New Collection Name"</label>
+                <label>{tr(TextKey::NewCollectionName)}</label>
                 <input
                     type="text"
                     prop:value=move || new_name.get()
@@ -807,7 +805,7 @@ pub(crate) fn MediaInfoModal(
                 </div>
                 <div class=style::media_info_footer>
                     <button type="button" class=style::selection_btn on:click=move |_| open.set(false)>
-                        "Close"
+                        {tr(TextKey::Close)}
                     </button>
                 </div>
             </div>
@@ -862,7 +860,7 @@ pub(crate) fn AddToPlaylistModal(
         let pid = playlist_id.get_untracked();
         async move {
             if pid == 0 {
-                return Err(ServerFnError::new("Please choose a playlist"));
+                return Err(ServerFnError::new(tr(TextKey::PleaseChoosePlaylist)));
             }
             let added = add_media_items_to_playlist(kind, pid, ids.clone()).await?;
             Ok::<(usize, u64), ServerFnError>((ids.len(), added))
@@ -873,14 +871,11 @@ pub(crate) fn AddToPlaylistModal(
         if let Some(res) = submit_action.value().get() {
             match res {
                 Ok((requested, _added)) => {
-                    toast.push(
-                        format!("Added {requested} items to playlist"),
-                        ToastSeverity::Success,
-                    );
+                    toast.push(added_items_to_playlist(requested), ToastSeverity::Success);
                     selected.update(HashSet::clear);
                     open.set(false);
                 }
-                Err(e) => toast.push(format!("Add to playlist failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(add_to_playlist_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -890,24 +885,21 @@ pub(crate) fn AddToPlaylistModal(
     view! {
         <Modal
             open=open
-            title="Add To Playlist".to_string()
+            title=tr(TextKey::AddToPlaylist).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if confirmed {
                     submit_action.dispatch(());
                 }
             })
-            confirm_label="Add To Playlist"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::AddToPlaylist))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
             <p>
-                {move || format!(
-                    "Select the playlist to add the {} selected items",
-                    count_label.get()
-                )}
+                {move || select_playlist_to_add_selected_items(count_label.get())}
             </p>
 
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
-                <label>"Playlist Group"</label>
+                <label>{tr(TextKey::PlaylistGroup)}</label>
                 <select
                     prop:value=move || group_id.get().to_string()
                     on:change=move |e| {
@@ -917,7 +909,7 @@ pub(crate) fn AddToPlaylistModal(
                         }
                     }
                 >
-                    <option value="0">"(Select a group)"</option>
+                    <option value="0">{tr(TextKey::SelectGroup)}</option>
                     {move || {
                         groups.get().into_iter().map(|g| view! {
                             <option value=g.id.to_string()>{g.name}</option>
@@ -925,7 +917,7 @@ pub(crate) fn AddToPlaylistModal(
                     }}
                 </select>
 
-                <label>"Playlist"</label>
+                <label>{tr(TextKey::Playlist)}</label>
                 <select
                     prop:value=move || playlist_id.get().to_string()
                     on:change=move |e| {
@@ -935,7 +927,7 @@ pub(crate) fn AddToPlaylistModal(
                     }
                     disabled=move || group_id.get() == 0
                 >
-                    <option value="0">"(Select a playlist)"</option>
+                    <option value="0">{tr(TextKey::SelectPlaylist)}</option>
                     {move || {
                         playlists.get().into_iter().map(|p| view! {
                             <option value=p.id.to_string()>{p.name}</option>
@@ -957,9 +949,9 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
     let start = page * PAGE_SIZE + 1;
     let end = ((page + 1) * PAGE_SIZE).min(u32::try_from(total).unwrap_or(u32::MAX));
     let summary = if total == 0 {
-        "0 items".to_string()
+        item_count(0)
     } else {
-        format!("{start}–{end} of {total}")
+        range_of(start, end, total)
     };
 
     let prev_disabled = page == 0;

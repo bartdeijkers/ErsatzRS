@@ -1,6 +1,9 @@
 use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 
+use crate::admin::i18n::{
+    item_count, range_of, selected_count as selected_count_label, tr, TextKey,
+};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 pub use ersatzrs_domain::MediaItemState;
@@ -97,7 +100,7 @@ pub fn MediaCard(
         MediaItemState::FileNotFound => Some(
             view! {
                 <div class=format!("{} {}", style::state_overlay, style::state_overlay_error)
-                     aria-label="File not found">
+                     aria-label=tr(TextKey::FileNotFound)>
                     <span style=icon_style(IconName::Warning, "1.25rem") aria-hidden="true"></span>
                 </div>
             }
@@ -106,7 +109,7 @@ pub fn MediaCard(
         MediaItemState::Unavailable => Some(
             view! {
                 <div class=format!("{} {}", style::state_overlay, style::state_overlay_warning)
-                     aria-label="Unavailable">
+                     aria-label=tr(TextKey::Unavailable)>
                     <span style=icon_style(IconName::Warning, "1.25rem") aria-hidden="true"></span>
                 </div>
             }
@@ -172,8 +175,8 @@ pub fn MediaCard(
                     >
                         <summary
                             class=style::item_menu_trigger
-                            title="Item actions"
-                            aria-label="Item actions"
+                            title=tr(TextKey::ItemActions)
+                            aria-label=tr(TextKey::ItemActions)
                             on:click=move |e: MouseEvent| {
                                 e.stop_propagation();
                             }
@@ -198,7 +201,7 @@ pub fn MediaCard(
                                     }
                                 >
                                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                                    <span>"Add To Collection"</span>
+                                    <span>{tr(TextKey::AddToCollection)}</span>
                                 </button>
                             })}
                             {on_add_to_playlist.map(|cb| view! {
@@ -215,7 +218,7 @@ pub fn MediaCard(
                                     }
                                 >
                                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                                    <span>"Add To Playlist"</span>
+                                    <span>{tr(TextKey::AddToPlaylist)}</span>
                                 </button>
                             })}
                             {on_show_media_info.map(|cb| view! {
@@ -230,7 +233,7 @@ pub fn MediaCard(
                                     }
                                 >
                                     <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
-                                    <span>"Show Media Info"</span>
+                                    <span>{tr(TextKey::ShowMediaInfo)}</span>
                                 </button>
                             })}
                         </div>
@@ -280,16 +283,16 @@ pub fn MediaCardPager(
                 {selected_count.map(|cnt| view! {
                     <Show when=move || cnt.get() != 0>
                         <span class=style::selected_label>
-                            {move || format!("{} selected", cnt.get())}
+                            {move || selected_count_label(cnt.get())}
                         </span>
                         {on_add_to_collection.map(|cb| view! {
                             <button class=style::add_btn on:click=move |_| cb.run(())>
-                                "Add to Collection"
+                                {tr(TextKey::AddToCollection)}
                             </button>
                         })}
                         {on_clear_selection.map(|cb| view! {
                             <button class=style::clear_btn on:click=move |_| cb.run(())>
-                                "Clear"
+                                {tr(TextKey::Clear)}
                             </button>
                         })}
                     </Show>
@@ -297,7 +300,7 @@ pub fn MediaCardPager(
             </div>
             <div class=style::pager_right>
                 <Suspense fallback=move || view! {
-                    <span>"Loading..."</span>
+                    <span>{tr(TextKey::Loading)}</span>
                     <button class=style::pager_btn disabled=true>"‹"</button>
                     <button class=style::pager_btn disabled=true>"›"</button>
                 }>
@@ -311,9 +314,9 @@ pub fn MediaCardPager(
                                         let end = ((p + 1) * page_size)
                                             .min(u32::try_from(total_items).unwrap_or(u32::MAX));
                                         if total_items == 0 {
-                                            "0 items".to_string()
+                                            item_count(0)
                                         } else {
-                                            format!("{start}–{end} of {total_items}")
+                                            range_of(start, end, total_items)
                                         }
                                     }}
                                 </span>

@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::list_program_schedules;
 use crate::admin::server_fns::media_browser::{add_media_item_to_schedule, ScheduleOption};
@@ -47,7 +48,7 @@ pub(crate) fn AddToScheduleModal(
         let chosen = schedule_id.get_untracked();
         async move {
             if chosen == 0 {
-                return Err(ServerFnError::new("Select a schedule"));
+                return Err(ServerFnError::new(tr(TextKey::SelectSchedule)));
             }
             add_media_item_to_schedule(chosen, collection_type, media_item_id).await
         }
@@ -67,7 +68,10 @@ pub(crate) fn AddToScheduleModal(
                         ));
                     }
                 }
-                Err(e) => toast.push(format!("Add to schedule failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -75,17 +79,17 @@ pub(crate) fn AddToScheduleModal(
     view! {
         <Modal
             open=open
-            title="Add To Schedule".to_string()
+            title=tr(TextKey::AddToSchedule).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if confirmed {
                     submit_action.dispatch(());
                 }
             })
-            confirm_label="Add To Schedule"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::AddToSchedule))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
-                <label>"Schedule"</label>
+                <label>{tr(TextKey::Schedule)}</label>
                 <select
                     prop:value=move || schedule_id.get().to_string()
                     on:change=move |e| {

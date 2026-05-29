@@ -6,6 +6,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
+use crate::admin::i18n::{delete_failed, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     add_item_to_collection, delete_collection, get_collection, list_collection_members,
     list_collections, remove_item_from_collection, save_collection, CollectionForm,
@@ -45,10 +46,10 @@ pub fn CollectionsPage() -> impl IntoView {
         if let Some(res) = delete_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Collection deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::CollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(e) => toast.push(format!("Delete failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -57,23 +58,23 @@ pub fn CollectionsPage() -> impl IntoView {
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"Collections"</h1>
+                <h1 class=style::page_title>{tr(TextKey::ManualCollections)}</h1>
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Search…"
+                    placeholder=tr(TextKey::SearchForManualCollections)
                     prop:value=move || search.get()
                     on:input=move |e| search.set(event_target_value(&e))
                 />
-                <a href="/media/collections/add" class=style::btn_add>"+ Add Collection"</a>
+                <a href="/media/collections/add" class=style::btn_add>{tr(TextKey::AddCollection)}</a>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get().map(|(rows, _)| {
                         if rows.is_empty() {
                             return view! {
-                                <p class=style::empty>"No collections yet."</p>
+                                <p class=style::empty>{tr(TextKey::NoCollections)}</p>
                             }
                             .into_any();
                         }
@@ -82,7 +83,7 @@ pub fn CollectionsPage() -> impl IntoView {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Name"</th>
+                                            <th>{tr(TextKey::Name)}</th>
                                             <th/>
                                         </tr>
                                     </thead>
@@ -104,7 +105,7 @@ pub fn CollectionsPage() -> impl IntoView {
                                                                 class=style::btn_edit
                                                                 href=format!("/media/collections/{id}")
                                                             >
-                                                                "Edit"
+                                                                {tr(TextKey::Edit)}
                                                             </a>
                                                             <button
                                                                 class=style::btn_delete
@@ -113,7 +114,7 @@ pub fn CollectionsPage() -> impl IntoView {
                                                                     delete_open.set(true);
                                                                 }
                                                             >
-                                                                "Delete"
+                                                                {tr(TextKey::Delete)}
                                                             </button>
                                                         </div>
                                                     </td>
@@ -193,14 +194,14 @@ pub fn CollectionEditorPage() -> impl IntoView {
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(new_id) => {
-                    toast.push("Collection saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::CollectionSaved), ToastSeverity::Success);
                     if id_signal.get_untracked() == 0 {
                         let target = format!("/media/collections/{new_id}");
                         navigate(&target, NavigateOptions::default());
                     }
                     id_signal.set(new_id);
                 }
-                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(save_failed(&e), ToastSeverity::Error),
             }
         }
     });
@@ -208,7 +209,7 @@ pub fn CollectionEditorPage() -> impl IntoView {
     let on_save = move |()| {
         let trimmed = name.get().trim().to_string();
         if trimmed.is_empty() {
-            name_err.set(Some("Name is required".into()));
+            name_err.set(Some(tr(TextKey::NameRequired).into()));
             return;
         }
         name_err.set(None);
@@ -222,20 +223,20 @@ pub fn CollectionEditorPage() -> impl IntoView {
     view! {
         <div class=style::page>
             <h1 class=style::page_title>
-                {move || if id_signal.get() == 0 { "New Collection".to_string() } else { "Edit Collection".to_string() }}
+                {move || if id_signal.get() == 0 { tr(TextKey::NewCollectionTitle).to_string() } else { tr(TextKey::EditCollection).to_string() }}
             </h1>
             <div class=style::editor>
-                <TextField label="Name" value=name error=Some(name_err_signal)/>
+                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
 
                 <div class=style::form_actions>
                     <Button
                         variant=ButtonVariant::Primary
                         on_click=Some(Callback::new(on_save))
                     >
-                        "Save"
+                        {tr(TextKey::Save)}
                     </Button>
                     <LinkButton href="/media/collections".to_string() variant=ButtonVariant::Text>
-                        "Back"
+                        {tr(TextKey::Back)}
                     </LinkButton>
                 </div>
 
@@ -307,13 +308,13 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
 
     view! {
         <div>
-            <h2 class=style::section_title>"Members"</h2>
+            <h2 class=style::section_title>{tr(TextKey::Members)}</h2>
 
             <div class=style::autocomplete>
                 <input
                     class=style::autocomplete_input
                     type="text"
-                    placeholder="Search movies or shows…"
+                    placeholder=tr(TextKey::SearchMoviesOrShows)
                     prop:value=move || query.get()
                     on:input=move |e| query.set(event_target_value(&e))
                     on:focus=move |_| {
@@ -348,12 +349,12 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
                 </ul>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading members…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::LoadingMembers)}</p> }>
                 {move || {
                     members.get().map(|rows| {
                         if rows.is_empty() {
                             return view! {
-                                <p class=style::empty>"No members yet."</p>
+                                <p class=style::empty>{tr(TextKey::NoMembers)}</p>
                             }
                             .into_any();
                         }
@@ -373,7 +374,7 @@ fn MembersSection(collection_id: i64) -> impl IntoView {
                                                     remove_action.dispatch((collection_id, mid));
                                                 }
                                             >
-                                                "Remove"
+                                                {tr(TextKey::Remove)}
                                             </button>
                                         </li>
                                     }

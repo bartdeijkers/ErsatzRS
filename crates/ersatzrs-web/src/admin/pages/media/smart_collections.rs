@@ -6,6 +6,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
+use crate::admin::i18n::{delete_failed, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     delete_smart_collection, get_smart_collection, list_smart_collections, save_smart_collection,
     CollectionForm, CollectionListRow,
@@ -48,10 +49,10 @@ pub fn SmartCollectionsPage() -> impl IntoView {
         if let Some(res) = delete_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Smart collection deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::SmartCollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(e) => toast.push(format!("Delete failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(delete_failed(e), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -60,23 +61,23 @@ pub fn SmartCollectionsPage() -> impl IntoView {
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"Smart Collections"</h1>
+                <h1 class=style::page_title>{tr(TextKey::SmartCollections)}</h1>
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Search…"
+                    placeholder=tr(TextKey::SearchForSmartCollections)
                     prop:value=move || search.get()
                     on:input=move |e| search.set(event_target_value(&e))
                 />
-                <a href="/media/smart-collections/add" class=style::btn_add>"+ Add Smart Collection"</a>
+                <a href="/media/smart-collections/add" class=style::btn_add>{format!("+ {}", tr(TextKey::AddSmartCollection))}</a>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get().map(|(rows, _)| {
                         if rows.is_empty() {
                             return view! {
-                                <p class=style::empty>"No smart collections yet."</p>
+                                <p class=style::empty>{tr(TextKey::NoItems)}</p>
                             }
                             .into_any();
                         }
@@ -85,8 +86,8 @@ pub fn SmartCollectionsPage() -> impl IntoView {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Name"</th>
-                                            <th>"Query"</th>
+                                            <th>{tr(TextKey::Name)}</th>
+                                            <th>{tr(TextKey::SearchQuery)}</th>
                                             <th/>
                                         </tr>
                                     </thead>
@@ -110,7 +111,7 @@ pub fn SmartCollectionsPage() -> impl IntoView {
                                                                 class=style::btn_edit
                                                                 href=format!("/media/smart-collections/{id}")
                                                             >
-                                                                "Edit"
+                                                                {tr(TextKey::Edit)}
                                                             </a>
                                                             <button
                                                                 class=style::btn_delete
@@ -119,7 +120,7 @@ pub fn SmartCollectionsPage() -> impl IntoView {
                                                                     delete_open.set(true);
                                                                 }
                                                             >
-                                                                "Delete"
+                                                                {tr(TextKey::Delete)}
                                                             </button>
                                                         </div>
                                                     </td>
@@ -203,14 +204,14 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(new_id) => {
-                    toast.push("Smart collection saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::SmartCollectionSaved), ToastSeverity::Success);
                     if id_signal.get_untracked() == 0 {
                         let target = format!("/media/smart-collections/{new_id}");
                         navigate(&target, NavigateOptions::default());
                     }
                     id_signal.set(new_id);
                 }
-                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(save_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -220,13 +221,13 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
         let trimmed_query = query.get().trim().to_string();
         let mut ok = true;
         if trimmed_name.is_empty() {
-            name_err.set(Some("Name is required".into()));
+            name_err.set(Some(tr(TextKey::NameRequired).into()));
             ok = false;
         } else {
             name_err.set(None);
         }
         if trimmed_query.is_empty() {
-            query_err.set(Some("Query is required".into()));
+            query_err.set(Some(tr(TextKey::SearchQueryRequired).into()));
             ok = false;
         } else {
             query_err.set(None);
@@ -245,17 +246,17 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
         <div class=style::page>
             <h1 class=style::page_title>
                 {move || if id_signal.get() == 0 {
-                    "New Smart Collection".to_string()
+                    tr(TextKey::NewSmartCollection).to_string()
                 } else {
-                    "Edit Smart Collection".to_string()
+                    tr(TextKey::EditSmartCollection).to_string()
                 }}
             </h1>
             <div class=style::editor>
-                <TextField label="Name" value=name error=Some(name_err_signal)/>
+                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
                 <TextArea
-                    label="Query"
+                    label=tr(TextKey::SearchQuery)
                     value=query
-                    placeholder="e.g. genre:action OR genre:comedy"
+                    placeholder=tr(TextKey::SmartCollectionQueryPlaceholder)
                     error=Some(query_err_signal)
                 />
 
@@ -264,13 +265,13 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
                         variant=ButtonVariant::Primary
                         on_click=Some(Callback::new(on_save))
                     >
-                        "Save"
+                        {tr(TextKey::Save)}
                     </Button>
                     <LinkButton
                         href="/media/smart-collections".to_string()
                         variant=ButtonVariant::Text
                     >
-                        "Back"
+                        {tr(TextKey::Back)}
                     </LinkButton>
                 </div>
             </div>

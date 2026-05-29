@@ -12,6 +12,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
@@ -53,18 +54,18 @@ fn SeasonDetailIsland(id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
             {move || {
                 match data.get() {
                     Some(Some(season)) => view! { <SeasonDetailView season/> }.into_any(),
                     Some(None) => view! {
                         <div class=detail_style::not_found>
-                            <h1>"Season not found"</h1>
-                            <a href="/media/tv/shows">"Back to TV shows"</a>
+                            <h1>{tr(TextKey::SeasonNotFound)}</h1>
+                            <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
                         </div>
                     }
                     .into_any(),
-                    None => view! { <p class=detail_style::loading>"Loading…"</p> }.into_any(),
+                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
                 }
             }}
         </Suspense>
@@ -117,8 +118,8 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                     media_info_body.set(json);
                 }
                 Err(error) => {
-                    media_info_body.set(format!("Unable to load media info: {error}"));
-                    toast.push("Show media info failed", ToastSeverity::Error);
+                    media_info_body.set(format!("{}: {error}", tr(TextKey::UnableToLoadMediaInfo)));
+                    toast.push(tr(TextKey::UnableToLoadMediaInfo), ToastSeverity::Error);
                 }
             }
         }
@@ -133,7 +134,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
             <div class=detail_style::fanart_container>
                 <div class=detail_style::fanart_tint/>
                 {fanart_url.map(|src| view! {
-                    <img class=detail_style::fanart src=src alt="fan art"/>
+                    <img class=detail_style::fanart src=src alt=tr(TextKey::FanArt)/>
                 })}
             </div>
 
@@ -158,7 +159,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                                     season_collection_open.set(true);
                                 }
                             >
-                                "Add To Collection"
+                                {tr(TextKey::AddToCollection)}
                             </button>
                             <button
                                 type="button"
@@ -168,16 +169,16 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                                     season_playlist_open.set(true);
                                 }
                             >
-                                "Add To Playlist"
+                                {tr(TextKey::AddToPlaylist)}
                             </button>
                             <button
                                 type="button"
                                 class=show_style::action_btn
                                 on:click=move |_| schedule_open.set(true)
                             >
-                                "Add To Schedule"
+                                {tr(TextKey::AddToSchedule)}
                             </button>
-                            <a class=detail_style::btn_back href=show_href_for_back>"Back"</a>
+                            <a class=detail_style::btn_back href=show_href_for_back>{tr(TextKey::Back)}</a>
                         </div>
                     </div>
                 </div>
@@ -205,7 +206,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                                 })
                                 on_show_info=Callback::new(move |(): ()| {
                                     media_info_title.set(title_for_info.clone());
-                                    media_info_body.set("Loading media info…".to_string());
+                                    media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
                                     media_info_open.set(true);
                                     media_info_action.dispatch((episode_id, title_for_info.clone()));
                                 })
@@ -231,7 +232,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                 open=schedule_open
                 media_item_id=id
                 collection_type=2
-                success_label="Added season to schedule"
+                success_label=tr(TextKey::AddedSeasonToSchedule)
             />
             <MediaInfoModal open=media_info_open title=media_info_title body=media_info_body/>
         </div>
@@ -247,7 +248,7 @@ fn EpisodeRow(
 ) -> impl IntoView {
     let episode_id = episode.episode_id;
     let title = episode.title.clone();
-    let thumbnail_alt = format!("{} thumbnail", episode.title);
+    let thumbnail_alt = format!("{} {}", episode.title, tr(TextKey::Thumbnail));
     let troubleshoot_href = format!("/system/troubleshooting/playback?mediaItem={episode_id}");
     let status = file_status(&episode);
     let mut directors = episode.directors.clone();
@@ -277,33 +278,33 @@ fn EpisodeRow(
                             class=show_style::action_btn
                             on:click=move |_| on_add_collection.run(episode_id)
                         >
-                            "Add To Collection"
+                            {tr(TextKey::AddToCollection)}
                         </button>
                         <button
                             type="button"
                             class=show_style::action_btn
                             on:click=move |_| on_add_playlist.run(episode_id)
                         >
-                            "Add To Playlist"
+                            {tr(TextKey::AddToPlaylist)}
                         </button>
                         <button
                             type="button"
                             class=style::secondary_btn
                             on:click=move |_| on_show_info.run(())
                         >
-                            "Show Media Info"
+                            {tr(TextKey::ShowMediaInfo)}
                         </button>
                         <a class=style::secondary_btn href=troubleshoot_href>
-                            "Troubleshoot Playback"
+                            {tr(TextKey::TroubleshootPlayback)}
                         </a>
                     </div>
                 </div>
             </div>
             <div class=style::episode_meta>
                 {status}
-                <p>"Released: " {episode.aired}</p>
-                {people_row("Directors", "director", directors)}
-                {people_row("Writers", "writer", writers)}
+                <p>{tr(TextKey::Released)} ": " {episode.aired}</p>
+                {people_row(tr(TextKey::Directors), "director", directors)}
+                {people_row(tr(TextKey::Writers), "writer", writers)}
             </div>
         </article>
     }
@@ -322,7 +323,7 @@ fn file_status(episode: &EpisodeCardRow) -> Option<AnyView> {
             view! {
                 <p class=style::status_line>
                     <span class=style::status_icon>"!"</span>
-                    "File Not Found: "
+                    {tr(TextKey::FileNotFound)} ": "
                     <code>{episode.file_path.clone().unwrap_or_default()}</code>
                 </p>
             }
@@ -332,7 +333,7 @@ fn file_status(episode: &EpisodeCardRow) -> Option<AnyView> {
             view! {
                 <p class=style::status_line>
                     <span class=style::status_icon>"!"</span>
-                    "Unavailable: "
+                    {tr(TextKey::Unavailable)} ": "
                     <code>{episode.local_path.clone().unwrap_or_default()}</code>
                 </p>
             }

@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use crate::admin::i18n::{delete_failed, range_of, save_failed, tr, TextKey};
 use crate::admin::server_fns::filler::{
     delete_filler_preset, get_filler_preset_editor_options, get_filler_preset_form,
     get_filler_presets_page_size, list_filler_presets, save_filler_preset,
@@ -73,10 +74,10 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
         if let Some(result) = delete_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Filler preset deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::FillerPresetDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
         }
@@ -87,17 +88,17 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
             <div class=style::action_bar>
                 <a href="/media/filler/presets/add" class=style::btn_add>
                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>"Add Filler Preset"</span>
+                    <span>{tr(TextKey::AddFillerPreset)}</span>
                 </a>
             </div>
             <section class=style::content>
-                <h1 class=style::page_title>"Filler Presets"</h1>
+                <h1 class=style::page_title>{tr(TextKey::FillerPresets)}</h1>
                 <div class=style::divider/>
                 <p class=style::empty style:display=move || if initial_error.is_empty() { "none" } else { "" }>
-                    "Filler preset action failed."
+                    {tr(TextKey::FillerPresetActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || {
                         data.get().map(|(rows, total)| {
                             let size = page_size.get().max(1);
@@ -117,8 +118,8 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                     <table>
                                         <thead>
                                             <tr>
-                                                <th>"Name"</th>
-                                                <th>"Filler Kind"</th>
+                                                <th>{tr(TextKey::Name)}</th>
+                                                <th>{tr(TextKey::FillerKind)}</th>
                                                 <th/>
                                             </tr>
                                         </thead>
@@ -126,7 +127,7 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                             {if rows.is_empty() {
                                                 view! {
                                                     <tr>
-                                                        <td class=style::empty_cell colspan="3">"No filler presets yet."</td>
+                                                        <td class=style::empty_cell colspan="3">{tr(TextKey::NoFillerPresets)}</td>
                                                     </tr>
                                                 }.into_any()
                                             } else {
@@ -143,8 +144,8 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                                                     <a
                                                                         class=style::icon_button
                                                                         href=format!("/media/filler/presets/{id}/edit")
-                                                                        title="Edit Filler Preset"
-                                                                        aria-label="Edit Filler Preset"
+                                                                        title=tr(TextKey::EditFillerPreset)
+                                                                        aria-label=tr(TextKey::EditFillerPreset)
                                                                     >
                                                                         <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
@@ -153,8 +154,8 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                                                         <button
                                                                             type="submit"
                                                                             class=style::icon_button
-                                                                            title="Delete Filler Preset"
-                                                                            aria-label="Delete Filler Preset"
+                                                                            title=tr(TextKey::DeleteFillerPreset)
+                                                                            aria-label=tr(TextKey::DeleteFillerPreset)
                                                                             on:click=move |event| {
                                                                                 event.prevent_default();
                                                                                 delete_target.set(Some(row_for_delete.clone()));
@@ -174,10 +175,10 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                     </table>
                                 </div>
                                 <div class=style::pager>
-                                    <span>"Rows per page:"</span>
+                                    <span>{tr(TextKey::RowsPerPage)} ":"</span>
                                     <select
                                         class=style::page_size
-                                        aria-label="Rows per page"
+                                        aria-label=tr(TextKey::RowsPerPage)
                                         prop:value=move || page_size.get().to_string()
                                         on:change=move |event| {
                                             if let Ok(value) = event_target_value(&event).parse::<u32>() {
@@ -192,15 +193,19 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                         <option value="100">"100"</option>
                                     </select>
                                     <span class=style::pager_status>
-                                        {format!("{range_start}-{range_end} of {total}")}
+                                        {range_of(
+                                            u32::try_from(range_start).unwrap_or(u32::MAX),
+                                            u32::try_from(range_end).unwrap_or(u32::MAX),
+                                            total,
+                                        )}
                                     </span>
                                     <div class=style::pager_buttons>
                                         <button
                                             type="button"
                                             class=style::icon_button
                                             disabled=move || page.get() == 0
-                                            title="Previous page"
-                                            aria-label="Previous page"
+                                            title=tr(TextKey::PreviousPage)
+                                            aria-label=tr(TextKey::PreviousPage)
                                             on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
                                         >
                                             <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
@@ -209,8 +214,8 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                                             type="button"
                                             class=style::icon_button
                                             disabled=move || { page.get() + 1 >= total_pages }
-                                            title="Next page"
-                                            aria-label="Next page"
+                                            title=tr(TextKey::NextPage)
+                                            aria-label=tr(TextKey::NextPage)
                                             on:click=move |_| {
                                                 page.update(|page| {
                                                     *page = (*page + 1).min(total_pages.saturating_sub(1));
@@ -259,16 +264,23 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
 
 #[island]
 fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
+    let new_filler_preset_name = tr(TextKey::NewFillerPreset).to_owned();
     let initial: Resource<FillerPresetForm> = Resource::new_blocking(
         move || id,
-        |id| async move {
-            if id == 0 {
-                FillerPresetForm::default()
-            } else {
-                get_filler_preset_form(id)
-                    .await
-                    .unwrap_or_default()
-                    .unwrap_or_default()
+        move |id| {
+            let new_filler_preset_name = new_filler_preset_name.clone();
+            async move {
+                if id == 0 {
+                    FillerPresetForm {
+                        name: new_filler_preset_name,
+                        ..FillerPresetForm::default()
+                    }
+                } else {
+                    get_filler_preset_form(id)
+                        .await
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                }
             }
         },
     );
@@ -421,9 +433,9 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                         let _ = window.location().set_href("/media/filler/presets");
                     }
                     #[cfg(not(target_arch = "wasm32"))]
-                    toast.push("Filler preset saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::FillerPresetSaved), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -457,11 +469,11 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     });
 
     let is_edit = id != 0;
-    let page_title = "Filler Preset";
+    let page_title = tr(TextKey::FillerPreset);
     let save_label = if is_edit {
-        "Save Filler Preset"
+        tr(TextKey::SaveFillerPreset)
     } else {
-        "Add Filler Preset"
+        tr(TextKey::AddFillerPreset)
     };
     let has_initial_error = !initial_error.is_empty();
     let mode_disabled = Signal::derive(move || {
@@ -480,14 +492,14 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     let expression_disabled = Signal::derive(move || filler_kind.get() != FILLER_KIND_MID_ROLL);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 let opts = options.get().unwrap_or_default();
                 let on_save = on_save;
                 view! {
                     <div class=style::page>
                         <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                            "Filler preset could not be saved. Check the form values and try again."
+                            {tr(TextKey::FillerPresetCouldNotBeSaved)}
                         </p>
                         <form
                             method="post"
@@ -498,85 +510,85 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                             <div class=style::editor_action_bar>
                                 <button type="submit" class=style::btn_add>
                                     <span aria-hidden="true">"+"</span>
-                                    {save_label.to_uppercase()}
+                                    {save_label}
                                 </button>
                             </div>
                             <div class=style::editor>
                                 <h1 class=style::page_title>{page_title}</h1>
-                                {text_input("Name", "name", name, Signal::derive(|| false))}
-                                {select_i32("Kind", "filler_kind", filler_kind, vec![
-                                    (FILLER_KIND_PRE_ROLL, "Pre-Roll"),
-                                    (FILLER_KIND_MID_ROLL, "Mid-Roll"),
-                                    (FILLER_KIND_POST_ROLL, "Post-Roll"),
-                                    (FILLER_KIND_TAIL, "Tail"),
-                                    (FILLER_KIND_FALLBACK, "Fallback"),
+                                {text_input(tr(TextKey::Name), "name", name, Signal::derive(|| false))}
+                                {select_i32(tr(TextKey::Kind), "filler_kind", filler_kind, vec![
+                                    (FILLER_KIND_PRE_ROLL, tr(TextKey::PreRoll)),
+                                    (FILLER_KIND_MID_ROLL, tr(TextKey::MidRoll)),
+                                    (FILLER_KIND_POST_ROLL, tr(TextKey::PostRoll)),
+                                    (FILLER_KIND_TAIL, tr(TextKey::Tail)),
+                                    (FILLER_KIND_FALLBACK, tr(TextKey::Fallback)),
                                 ], Signal::derive(move || is_edit))}
-                                {select_i32("Mode", "filler_mode", filler_mode, vec![
-                                    (FILLER_MODE_DURATION, "Duration"),
-                                    (FILLER_MODE_COUNT, "Count"),
-                                    (FILLER_MODE_PAD, "Pad"),
-                                    (FILLER_MODE_RANDOM_COUNT, "Random Count"),
+                                {select_i32(tr(TextKey::Mode), "filler_mode", filler_mode, vec![
+                                    (FILLER_MODE_DURATION, tr(TextKey::Duration)),
+                                    (FILLER_MODE_COUNT, tr(TextKey::Count)),
+                                    (FILLER_MODE_PAD, tr(TextKey::Pad)),
+                                    (FILLER_MODE_RANDOM_COUNT, tr(TextKey::RandomCount)),
                                 ], mode_disabled)}
-                                {number_input("Duration", "duration_hours", duration_hours, "hours", duration_disabled)}
-                                {number_input("", "duration_minutes", duration_minutes, "minutes", duration_disabled)}
-                                {number_input("", "duration_seconds", duration_seconds, "seconds", duration_disabled)}
-                                {text_input("Count", "count", count, count_disabled)}
-                                {select_string("Pad To Nearest Minute", "pad_to_nearest_minute", pad_to_nearest_minute, vec![
-                                    ("5", "5 (:00, :05, :10, :15, :20, etc)"),
-                                    ("10", "10 (:00, :10, :20, :30, :40, :50)"),
-                                    ("15", "15 (:00, :15, :30, :45)"),
-                                    ("30", "30 (:00, :30)"),
+                                {number_input(tr(TextKey::Duration), "duration_hours", duration_hours, tr(TextKey::Hours), duration_disabled)}
+                                {number_input("", "duration_minutes", duration_minutes, tr(TextKey::Minutes), duration_disabled)}
+                                {number_input("", "duration_seconds", duration_seconds, tr(TextKey::Seconds), duration_disabled)}
+                                {text_input(tr(TextKey::Count), "count", count, count_disabled)}
+                                {select_string(tr(TextKey::PadToNearestMinute), "pad_to_nearest_minute", pad_to_nearest_minute, vec![
+                                    ("5", tr(TextKey::PadNearestFiveMinutes)),
+                                    ("10", tr(TextKey::PadNearestTenMinutes)),
+                                    ("15", tr(TextKey::PadNearestFifteenMinutes)),
+                                    ("30", tr(TextKey::PadNearestThirtyMinutes)),
                                 ], pad_disabled)}
-                                {checkbox_input("Allow Watermarks", "allow_watermarks", allow_watermarks, Signal::derive(|| false), None)}
-                                {collection_type_select("Collection Type", "collection_type", collection_type, filler_kind)}
+                                {checkbox_input(tr(TextKey::AllowWatermarks), "allow_watermarks", allow_watermarks, Signal::derive(|| false), None)}
+                                {collection_type_select(tr(TextKey::CollectionType), "collection_type", collection_type, filler_kind)}
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_COLLECTION)>
-                                    {option_select("Collection", "collection_id", collection_id, opts.collections.clone())}
+                                    {option_select(tr(TextKey::Collection), "collection_id", collection_id, opts.collections.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_MULTI_COLLECTION)>
-                                    {option_select("Multi Collection", "multi_collection_id", multi_collection_id, opts.multi_collections.clone())}
+                                    {option_select(tr(TextKey::MultiCollection), "multi_collection_id", multi_collection_id, opts.multi_collections.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_SMART_COLLECTION)>
-                                    {option_select("Smart Collection", "smart_collection_id", smart_collection_id, opts.smart_collections.clone())}
+                                    {option_select(tr(TextKey::SmartCollection), "smart_collection_id", smart_collection_id, opts.smart_collections.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_TELEVISION_SHOW)>
-                                    {option_select("Television Show", "media_item_id", media_item_id, opts.television_shows.clone())}
+                                    {option_select(tr(TextKey::TelevisionShow), "media_item_id", media_item_id, opts.television_shows.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_TELEVISION_SEASON)>
-                                    {option_select("Television Season", "media_item_id", media_item_id, opts.television_seasons.clone())}
+                                    {option_select(tr(TextKey::TelevisionSeason), "media_item_id", media_item_id, opts.television_seasons.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_ARTIST)>
-                                    {option_select("Artist", "media_item_id", media_item_id, opts.artists.clone())}
+                                    {option_select(tr(TextKey::Artist), "media_item_id", media_item_id, opts.artists.clone())}
                                 </div>
                                 <div style:display=move || display_for(collection_type.get() == COLLECTION_TYPE_PLAYLIST)>
-                                    {option_select("Playlist Group", "playlist_group_id", playlist_group_id, opts.playlist_groups.clone())}
-                                    {playlist_select("Playlist", "playlist_id", playlist_id, playlist_group_id, opts.playlists.clone())}
+                                    {option_select(tr(TextKey::PlaylistGroup), "playlist_group_id", playlist_group_id, opts.playlist_groups.clone())}
+                                    {playlist_select(tr(TextKey::Playlist), "playlist_id", playlist_id, playlist_group_id, opts.playlists.clone())}
                                 </div>
                                 {checkbox_input(
-                                    "Use Chapters As Media Items",
+                                    tr(TextKey::UseChaptersAsMediaItems),
                                     "use_chapters_as_media_items",
                                     use_chapters_as_media_items,
                                     chapters_disabled,
-                                    Some("Schedule individual chapters instead of entire files"),
+                                    Some(tr(TextKey::UseChaptersAsMediaItemsHelp)),
                                 )}
-                                {text_input("Expression", "expression", expression, expression_disabled)}
+                                {text_input(tr(TextKey::Expression), "expression", expression, expression_disabled)}
                                 <p class=style::expression_help>
-                                    "For mid-roll filler, only add filler when this expression evaluates to true for a given mid-roll point."
+                                    {tr(TextKey::FillerPresetExpressionHelp)}
                                     <br/><br/>
-                                    <strong>"total_points"</strong>": total number of potential mid-roll points"
+                                    <strong>"total_points"</strong>": " {tr(TextKey::TotalPointsHelp)}
                                     <br/>
-                                    <strong>"matched_points"</strong>": number of mid-roll points that have already matched the expression"
+                                    <strong>"matched_points"</strong>": " {tr(TextKey::MatchedPointsHelp)}
                                     <br/>
-                                    <strong>"total_duration"</strong>": total duration of the content, in seconds"
+                                    <strong>"total_duration"</strong>": " {tr(TextKey::TotalDurationHelp)}
                                     <br/>
-                                    <strong>"total_progress"</strong>": normalized position from 0 to 1"
+                                    <strong>"total_progress"</strong>": " {tr(TextKey::TotalProgressHelp)}
                                     <br/>
-                                    <strong>"last_mid_filler"</strong>": seconds since last mid-roll filler"
+                                    <strong>"last_mid_filler"</strong>": " {tr(TextKey::LastMidFillerHelp)}
                                     <br/>
-                                    <strong>"remaining_duration"</strong>": duration of the content after this mid-roll point, in seconds"
+                                    <strong>"remaining_duration"</strong>": " {tr(TextKey::RemainingDurationHelp)}
                                     <br/>
-                                    <strong>"point"</strong>": the position of the mid-roll point, in seconds"
+                                    <strong>"point"</strong>": " {tr(TextKey::PointHelp)}
                                     <br/>
-                                    <strong>"num"</strong>": the mid-roll point number, starting with 1"
+                                    <strong>"num"</strong>": " {tr(TextKey::NumHelp)}
                                 </p>
                             </div>
                         </form>
@@ -705,12 +717,12 @@ fn collection_type_select(
                     }
                 }
             >
-                <option value=COLLECTION_TYPE_COLLECTION.to_string()>"Collection"</option>
-                <option value=COLLECTION_TYPE_TELEVISION_SHOW.to_string()>"Television Show"</option>
-                <option value=COLLECTION_TYPE_TELEVISION_SEASON.to_string()>"Television Season"</option>
-                <option value=COLLECTION_TYPE_ARTIST.to_string()>"Artist"</option>
-                <option value=COLLECTION_TYPE_MULTI_COLLECTION.to_string()>"Multi Collection"</option>
-                <option value=COLLECTION_TYPE_SMART_COLLECTION.to_string()>"Smart Collection"</option>
+                <option value=COLLECTION_TYPE_COLLECTION.to_string()>{tr(TextKey::Collection)}</option>
+                <option value=COLLECTION_TYPE_TELEVISION_SHOW.to_string()>{tr(TextKey::TelevisionShow)}</option>
+                <option value=COLLECTION_TYPE_TELEVISION_SEASON.to_string()>{tr(TextKey::TelevisionSeason)}</option>
+                <option value=COLLECTION_TYPE_ARTIST.to_string()>{tr(TextKey::Artist)}</option>
+                <option value=COLLECTION_TYPE_MULTI_COLLECTION.to_string()>{tr(TextKey::MultiCollection)}</option>
+                <option value=COLLECTION_TYPE_SMART_COLLECTION.to_string()>{tr(TextKey::SmartCollection)}</option>
                 {move || {
                     (!matches!(
                         filler_kind.get(),
@@ -718,7 +730,7 @@ fn collection_type_select(
                     ))
                     .then(|| {
                         view! {
-                            <option value=COLLECTION_TYPE_PLAYLIST.to_string()>"Playlist"</option>
+                            <option value=COLLECTION_TYPE_PLAYLIST.to_string()>{tr(TextKey::Playlist)}</option>
                         }
                     })
                 }}
@@ -809,12 +821,12 @@ fn playlist_select(
 
 fn filler_kind_label(kind: i32) -> &'static str {
     match kind {
-        FILLER_KIND_PRE_ROLL => "Pre-Roll",
-        FILLER_KIND_MID_ROLL => "Mid-Roll",
-        FILLER_KIND_POST_ROLL => "Post-Roll",
-        FILLER_KIND_FALLBACK => "Fallback",
-        FILLER_KIND_TAIL => "Tail",
-        _ => "None",
+        FILLER_KIND_PRE_ROLL => tr(TextKey::PreRoll),
+        FILLER_KIND_MID_ROLL => tr(TextKey::MidRoll),
+        FILLER_KIND_POST_ROLL => tr(TextKey::PostRoll),
+        FILLER_KIND_FALLBACK => tr(TextKey::Fallback),
+        FILLER_KIND_TAIL => tr(TextKey::Tail),
+        _ => tr(TextKey::NoneOption),
     }
 }
 
