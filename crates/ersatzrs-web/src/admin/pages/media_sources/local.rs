@@ -2,7 +2,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{media_kind_label, tr, TextKey};
 use crate::admin::server_fns::media_sources::{
     delete_local_library, get_local_library_form, list_local_libraries, LocalLibraryForm,
     LocalLibraryRow,
@@ -48,7 +48,7 @@ fn LocalLibrariesIsland() -> impl IntoView {
             view! { <span>{n}</span> }.into_any()
         }),
         Column::new(tr(TextKey::MediaKind), |r: &LocalLibraryRow| {
-            let label = crate::admin::server_fns::media_sources::media_kind_label(r.media_kind);
+            let label = media_kind_label(i64::from(r.media_kind));
             view! { <span class=style::cell_muted>{label}</span> }.into_any()
         }),
         Column::new(tr(TextKey::Paths), |r: &LocalLibraryRow| {

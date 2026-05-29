@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{library_kind_label, media_kind_label, tr, TextKey};
 use crate::admin::server_fns::libraries::{
     list_external_collections, list_libraries, scan_external_collections, scan_library,
     ExternalCollectionRow, LibraryRow,
@@ -151,6 +151,8 @@ fn LibrariesIsland() -> impl IntoView {
                                             .map(|lib| {
                                                 let id = lib.id;
                                                 let kind = lib.kind.clone();
+                                                let display_kind = library_kind_label(&kind);
+                                                let display_media_kind = media_kind_label(lib.media_kind);
                                                 let is_remote = kind != "Local";
                                                 let kind_scan = kind.clone();
                                                 let kind_deep = kind.clone();
@@ -158,10 +160,10 @@ fn LibrariesIsland() -> impl IntoView {
                                                 let search_href = format!("/search?query=library_id%3a{id}");
                                                 view! {
                                                     <tr>
-                                                        <td>{kind}</td>
+                                                        <td>{display_kind}</td>
                                                         <td class=style::cell_muted>{srv}</td>
                                                         <td>{lib.name.clone()}</td>
-                                                        <td class=style::cell_muted>{lib.media_kind_label()}</td>
+                                                        <td class=style::cell_muted>{display_media_kind}</td>
                                                         <td>
                                                             <div class=style::actions>
                                                                 // Scan indicator goes first (left) so it occupies the

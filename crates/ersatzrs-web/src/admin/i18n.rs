@@ -1953,6 +1953,22 @@ pub fn channel_language_label(code: &str) -> String {
     languages_for(use_i18n()).channel_language_label(code)
 }
 
+pub fn media_kind_label(kind: i64) -> String {
+    media_kind_text(use_i18n(), kind)
+}
+
+pub fn media_kind_text(language: UiLanguage, kind: i64) -> String {
+    languages_for(language).media_kind_label(kind)
+}
+
+pub fn library_kind_label(kind: &str) -> String {
+    library_kind_text(use_i18n(), kind)
+}
+
+pub fn library_kind_text(language: UiLanguage, kind: &str) -> String {
+    languages_for(language).library_kind_label(kind)
+}
+
 pub fn hardware_acceleration_option_text(
     language: UiLanguage,
     label: &str,
@@ -2068,6 +2084,8 @@ pub trait LanguageStrings: Sync {
     fn scheduling_content_error_message(&self, error: &str) -> String;
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
+    fn media_kind_label(&self, kind: i64) -> String;
+    fn library_kind_label(&self, kind: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2240,6 +2258,20 @@ mod tests {
             languages_for(UiLanguage::Dutch).channel_language_label("tlh"),
             "tlh"
         );
+    }
+
+    #[test]
+    fn media_and_library_kind_labels_follow_active_language() {
+        assert_eq!(media_kind_text(UiLanguage::English, 3), "Music Videos");
+        assert_eq!(media_kind_text(UiLanguage::Polish, 7), "Zdalne strumienie");
+        assert_eq!(
+            media_kind_text(UiLanguage::PortugueseBrazil, 4),
+            "Outros vídeos"
+        );
+        assert_eq!(media_kind_text(UiLanguage::Dutch, 1), "Films");
+        assert_eq!(media_kind_text(UiLanguage::Dutch, 99), "Onbekend");
+        assert_eq!(library_kind_text(UiLanguage::Dutch, "Local"), "Lokaal");
+        assert_eq!(library_kind_text(UiLanguage::Polish, "Plex"), "Plex");
     }
 
     #[test]

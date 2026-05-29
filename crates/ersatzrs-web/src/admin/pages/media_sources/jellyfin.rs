@@ -3,8 +3,9 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
-    no_media_source_configured, provider_connection_title, provider_libraries_title,
-    provider_path_label, provider_path_replacements_title, save_failed, tr, TextKey,
+    media_kind_label, no_media_source_configured, provider_connection_title,
+    provider_libraries_title, provider_path_label, provider_path_replacements_title, save_failed,
+    tr, TextKey,
 };
 use crate::admin::server_fns::media_sources::{
     delete_jellyfin_source, get_jellyfin_connection, list_jellyfin_libraries, list_jellyfin_paths,
@@ -313,7 +314,7 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
                                         <tr>
                                             <td style="padding:0.5rem;font-size:0.875rem">{lib.name.clone()}</td>
                                             <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>
-                                                {crate::admin::server_fns::media_sources::media_kind_label(lib.media_kind)}
+                                                {media_kind_label(i64::from(lib.media_kind))}
                                             </td>
                                             <td style="padding:0.5rem;text-align:center">
                                                 <input

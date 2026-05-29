@@ -125,6 +125,28 @@ impl LanguageStrings for EnglishStrings {
         }
     }
 
+    fn media_kind_label(&self, kind: i64) -> String {
+        match kind {
+            1 => text(TextKey::Movies),
+            2 => text(TextKey::Shows),
+            3 => text(TextKey::MusicVideos),
+            4 => text(TextKey::OtherVideos),
+            5 => text(TextKey::Songs),
+            6 => text(TextKey::Images),
+            7 => text(TextKey::RemoteStreams),
+            _ => "Unknown",
+        }
+        .to_owned()
+    }
+
+    fn library_kind_label(&self, kind: &str) -> String {
+        match kind {
+            "Local" => text(TextKey::Local).to_owned(),
+            "Plex" | "Jellyfin" | "Emby" => kind.to_owned(),
+            _ => kind.to_owned(),
+        }
+    }
+
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String {
         if supported {
             label.to_owned()
