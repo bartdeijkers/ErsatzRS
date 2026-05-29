@@ -30,6 +30,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
 use crate::admin::server_fns::libraries::scan_show;
@@ -81,18 +82,18 @@ fn ShowDetailIsland(id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
             {move || {
                 match data.get() {
                     Some(Some(show)) => view! { <ShowDetailView show/> }.into_any(),
                     Some(None) => view! {
                         <div class=detail_style::not_found>
-                            <h1>"Show not found"</h1>
-                            <a href="/media/tv/shows">"Back to TV shows"</a>
+                            <h1>{tr(TextKey::ShowNotFound)}</h1>
+                            <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
                         </div>
                     }
                     .into_any(),
-                    None => view! { <p class=detail_style::loading>"Loading…"</p> }.into_any(),
+                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
                 }
             }}
         </Suspense>
@@ -143,15 +144,22 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
     Effect::new(move |_| {
         if let Some(res) = scan_action.value().get() {
             match res {
-                Ok(()) => toast.push("Scan queued", ToastSeverity::Success),
-                Err(e) => toast.push(format!("Scan failed: {e}"), ToastSeverity::Error),
+                Ok(()) => toast.push(tr(TextKey::ScanQueued), ToastSeverity::Success),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::ScanFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
 
     let warning = match media_item_state {
-        1 => Some(view! { <div class=detail_style::warning>"File not found"</div> }.into_any()),
-        2 => Some(view! { <div class=detail_style::warning>"Source unavailable"</div> }.into_any()),
+        1 => Some(
+            view! { <div class=detail_style::warning>{tr(TextKey::FileNotFound)}</div> }.into_any(),
+        ),
+        2 => Some(
+            view! { <div class=detail_style::warning>{tr(TextKey::Unavailable)}</div> }.into_any(),
+        ),
         _ => None,
     };
 
@@ -162,7 +170,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
             <div class=detail_style::fanart_container>
                 <div class=detail_style::fanart_tint/>
                 {fanart_url.map(|src| view! {
-                    <img class=detail_style::fanart src=src alt="fan art"/>
+                    <img class=detail_style::fanart src=src alt=tr(TextKey::FanArt)/>
                 })}
             </div>
 
@@ -186,21 +194,21 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                                 class=style::action_btn
                                 on:click=move |_| open_with_selection(collection_open)
                             >
-                                "Add to Collection"
+                                {tr(TextKey::AddToCollection)}
                             </button>
                             <button
                                 type="button"
                                 class=style::action_btn
                                 on:click=move |_| open_with_selection(playlist_open)
                             >
-                                "Add to Playlist"
+                                {tr(TextKey::AddToPlaylist)}
                             </button>
                             <button
                                 type="button"
                                 class=style::action_btn
                                 on:click=move |_| schedule_open.set(true)
                             >
-                                "Add to Schedule"
+                                {tr(TextKey::AddToSchedule)}
                             </button>
                             {is_remote.then(|| view! {
                                 <button
@@ -208,31 +216,31 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                                     class=style::action_btn
                                     on:click=move |_| { scan_action.dispatch(false); }
                                 >
-                                    "Quick Scan"
+                                    {tr(TextKey::QuickScan)}
                                 </button>
                                 <button
                                     type="button"
                                     class=style::action_btn
                                     on:click=move |_| { scan_action.dispatch(true); }
                                 >
-                                    "Deep Scan"
+                                    {tr(TextKey::DeepScan)}
                                 </button>
                             })}
-                            <a class=detail_style::btn_back href="/media/tv/shows">"Back"</a>
+                            <a class=detail_style::btn_back href="/media/tv/shows">{tr(TextKey::Back)}</a>
                         </div>
                     </div>
                 </div>
 
                 <dl class=detail_style::facts>
-                    {fact_row("Content Ratings", &content_ratings)}
-                    {fact_row("Studios", &studios)}
-                    {fact_row("Networks", &networks)}
-                    {fact_row("Languages", &languages)}
-                    {fact_row("Genres", &genres)}
-                    {fact_row("Tags", &tags)}
+                    {fact_row(TextKey::ContentRatings, &content_ratings)}
+                    {fact_row(TextKey::Studios, &studios)}
+                    {fact_row(TextKey::Networks, &networks)}
+                    {fact_row(TextKey::Languages, &languages)}
+                    {fact_row(TextKey::Genres, &genres)}
+                    {fact_row(TextKey::Tags, &tags)}
                 </dl>
 
-                <h2 class=style::section_title>"Seasons"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Seasons)}</h2>
                 <div class=style::divider/>
                 <div class=style::grid>
                     {seasons.into_iter().map(|s| {
@@ -259,7 +267,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                 </div>
 
                 {(!actors.is_empty()).then(|| view! {
-                    <h2 class=style::section_title>"Cast"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Actors)}</h2>
                     <div class=style::divider/>
                     <div class=style::grid>
                         {actors.into_iter().map(|a| {
@@ -286,7 +294,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                 open=schedule_open
                 media_item_id=id
                 collection_type=1
-                success_label="Added show to schedule"
+                success_label=tr(TextKey::AddedShowToSchedule)
             />
         </div>
     }
@@ -294,7 +302,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
 
 /// Definition-list fact row — same contract as the movies detail page:
 /// `None` when every value is blank, comma-joined otherwise.
-fn fact_row(label: &'static str, values: &[String]) -> Option<AnyView> {
+fn fact_row(label: TextKey, values: &[String]) -> Option<AnyView> {
     if values.iter().all(|s| s.trim().is_empty()) {
         return None;
     }
@@ -307,7 +315,7 @@ fn fact_row(label: &'static str, values: &[String]) -> Option<AnyView> {
     Some(
         view! {
             <div class=detail_style::fact_row>
-                <dt>{label}</dt>
+                <dt>{tr(label)}</dt>
                 <dd>{joined}</dd>
             </div>
         }
