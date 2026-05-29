@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{tr, watermark_error_message, TextKey};
 use crate::admin::server_fns::watermarks::{
     copy_watermark, count_watermarks, delete_watermark, list_watermark_rows, WatermarkListRow,
 };
@@ -75,7 +75,11 @@ pub fn WatermarksListPage() -> impl IntoView {
                     );
                 }
                 Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::CopyFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::CopyFailed),
+                        watermark_error_message(e)
+                    ),
                     ToastSeverity::Error,
                 ),
             }

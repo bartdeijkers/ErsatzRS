@@ -99,6 +99,10 @@ impl LanguageStrings for DutchStrings {
         scheduling_content_error_message(error)
     }
 
+    fn watermark_error_message(&self, error: &str) -> String {
+        watermark_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (verouderd)".to_owned(),
@@ -359,6 +363,41 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "Sjabloonnaam is verplicht".to_owned(),
         "Template items cannot cross midnight." => {
             "Sjabloonitems mogen middernacht niet overschrijden.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn watermark_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Watermerk niet gevonden.".to_owned();
+    }
+
+    match trimmed {
+        "Name is required" => "Naam is verplicht".to_owned(),
+        "Name must be 50 characters or fewer" => "Naam mag maximaal 50 tekens bevatten".to_owned(),
+        "Watermark image is required" | "Watermark image is required!" => {
+            "Afbeelding voor watermerk is verplicht".to_owned()
+        }
+        "Width must be between 0 and 100%" => "Breedte moet tussen 0 en 100% liggen".to_owned(),
+        "Horizontal margin must be between 0 and 50%" => {
+            "Horizontale marge moet tussen 0 en 50% liggen".to_owned()
+        }
+        "Vertical margin must be between 0 and 50%" => {
+            "Verticale marge moet tussen 0 en 50% liggen".to_owned()
+        }
+        "Duration must be positive and less than frequency window" => {
+            "Duur moet positief zijn en korter dan het frequentievenster".to_owned()
+        }
+        "Opacity must be between 1 and 100" => {
+            "Ondoorzichtigheid moet tussen 1 en 100 liggen".to_owned()
+        }
+        "Watermark name must be unique" | "ChannelWatermark name must be unique" => {
+            "Naam van watermerk moet uniek zijn".to_owned()
+        }
+        "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
+            "Watermerk niet gevonden.".to_owned()
         }
         _ => error.to_owned(),
     }

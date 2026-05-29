@@ -99,6 +99,10 @@ impl LanguageStrings for EnglishStrings {
         scheduling_content_error_message(error)
     }
 
+    fn watermark_error_message(&self, error: &str) -> String {
+        watermark_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (Legacy)".to_owned(),
@@ -1316,6 +1320,39 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "Template name is required".to_owned(),
         "Template items cannot cross midnight." => {
             "Template items cannot cross midnight.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn watermark_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Watermark not found.".to_owned();
+    }
+
+    match trimmed {
+        "Name is required" => "Name is required".to_owned(),
+        "Name must be 50 characters or fewer" => "Name must be 50 characters or fewer".to_owned(),
+        "Watermark image is required" | "Watermark image is required!" => {
+            "Watermark image is required".to_owned()
+        }
+        "Width must be between 0 and 100%" => "Width must be between 0 and 100%".to_owned(),
+        "Horizontal margin must be between 0 and 50%" => {
+            "Horizontal margin must be between 0 and 50%".to_owned()
+        }
+        "Vertical margin must be between 0 and 50%" => {
+            "Vertical margin must be between 0 and 50%".to_owned()
+        }
+        "Duration must be positive and less than frequency window" => {
+            "Duration must be positive and less than frequency window".to_owned()
+        }
+        "Opacity must be between 1 and 100" => "Opacity must be between 1 and 100".to_owned(),
+        "Watermark name must be unique" | "ChannelWatermark name must be unique" => {
+            "Watermark name must be unique".to_owned()
+        }
+        "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
+            "Watermark not found.".to_owned()
         }
         _ => error.to_owned(),
     }

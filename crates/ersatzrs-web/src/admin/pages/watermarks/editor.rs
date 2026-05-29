@@ -9,7 +9,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
-use crate::admin::i18n::{save_failed, tr, TextKey};
+use crate::admin::i18n::{save_failed, tr, watermark_error_message, TextKey};
 use crate::admin::server_fns::watermarks::{
     get_watermark_form, preview_watermark_placement, save_watermark, WatermarkForm,
     WatermarkPreviewParams,
@@ -152,7 +152,10 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(_) => navigate("/watermarks", NavigateOptions::default()),
-                Err(e) => toast.push(save_failed(e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    save_failed(watermark_error_message(e)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

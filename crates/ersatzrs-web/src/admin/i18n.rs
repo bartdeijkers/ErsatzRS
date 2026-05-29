@@ -1928,6 +1928,15 @@ pub fn scheduling_content_error_text(language: UiLanguage, error: &str) -> Strin
     languages_for(language).scheduling_content_error_message(error)
 }
 
+pub fn watermark_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).watermark_error_message(&message)
+}
+
+pub fn watermark_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).watermark_error_message(error)
+}
+
 pub fn log_level_label(level: &str) -> String {
     log_level_text(use_i18n(), level)
 }
@@ -2098,6 +2107,7 @@ pub trait LanguageStrings: Sync {
     fn schedule_item_fallback_label(&self, id: i64) -> String;
     fn schedule_error_message(&self, error: &str) -> String;
     fn scheduling_content_error_message(&self, error: &str) -> String;
+    fn watermark_error_message(&self, error: &str) -> String;
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
     fn media_kind_label(&self, kind: i64) -> String;
@@ -2398,6 +2408,33 @@ mod tests {
         );
         assert_eq!(
             scheduling_content_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn watermark_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            watermark_error_text(UiLanguage::English, "Watermark image is required"),
+            "Watermark image is required"
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Polish, "Watermark name must be unique"),
+            "Nazwa znaku wodnego musi być unikalna"
+        );
+        assert_eq!(
+            watermark_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Width must be between 0 and 100%"
+            ),
+            "A largura deve estar entre 0 e 100%"
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Dutch, "Watermark 12 does not exist."),
+            "Watermerk niet gevonden."
+        );
+        assert_eq!(
+            watermark_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }

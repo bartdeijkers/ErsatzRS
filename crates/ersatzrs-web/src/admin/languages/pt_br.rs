@@ -95,6 +95,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         scheduling_content_error_message(error)
     }
 
+    fn watermark_error_message(&self, error: &str) -> String {
+        watermark_error_message(error)
+    }
+
     fn channel_streaming_mode_label(&self, mode: i32) -> String {
         match mode {
             1 => "MPEG-TS (legado)".to_owned(),
@@ -363,6 +367,41 @@ fn scheduling_content_error_message(error: &str) -> String {
         "Template name is required" => "O nome do modelo é obrigatório".to_owned(),
         "Template items cannot cross midnight." => {
             "Os itens do modelo não podem atravessar a meia-noite.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn watermark_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Watermark ") && trimmed.ends_with(" does not exist.") {
+        return "Marca d'água não encontrada.".to_owned();
+    }
+
+    match trimmed {
+        "Name is required" => "O nome é obrigatório".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "O nome deve ter 50 caracteres ou menos".to_owned()
+        }
+        "Watermark image is required" | "Watermark image is required!" => {
+            "A imagem da marca d'água é obrigatória".to_owned()
+        }
+        "Width must be between 0 and 100%" => "A largura deve estar entre 0 e 100%".to_owned(),
+        "Horizontal margin must be between 0 and 50%" => {
+            "A margem horizontal deve estar entre 0 e 50%".to_owned()
+        }
+        "Vertical margin must be between 0 and 50%" => {
+            "A margem vertical deve estar entre 0 e 50%".to_owned()
+        }
+        "Duration must be positive and less than frequency window" => {
+            "A duração deve ser positiva e menor que a janela de frequência".to_owned()
+        }
+        "Opacity must be between 1 and 100" => "A opacidade deve estar entre 1 e 100".to_owned(),
+        "Watermark name must be unique" | "ChannelWatermark name must be unique" => {
+            "O nome da marca d'água deve ser único".to_owned()
+        }
+        "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
+            "Marca d'água não encontrada.".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct WatermarkListRow {
     pub id: i64,
     pub name: String,
-    pub mode: String,
     pub mode_id: i32,
-    pub location: String,
     pub location_id: i32,
     pub image_path: Option<String>,
     pub image_source: i32,
@@ -79,31 +77,6 @@ pub struct WatermarkPreviewParams {
     pub opacity: i32,
 }
 
-fn mode_label(mode: i64) -> &'static str {
-    match mode {
-        0 => "None",
-        1 => "Permanent",
-        2 => "Intermittent",
-        3 => "Opacity Expression",
-        _ => "Unknown",
-    }
-}
-
-fn location_label(loc: i64) -> &'static str {
-    match loc {
-        0 => "Bottom Right",
-        1 => "Bottom Left",
-        2 => "Top Right",
-        3 => "Top Left",
-        4 => "Top Middle",
-        5 => "Right Middle",
-        6 => "Bottom Middle",
-        7 => "Left Middle",
-        8 => "Middle Center",
-        _ => "Unknown",
-    }
-}
-
 #[server]
 pub async fn list_watermark_rows(
     page: u32,
@@ -133,9 +106,7 @@ pub async fn list_watermark_rows(
             WatermarkListRow {
                 id: r.try_get("Id").unwrap_or(0),
                 name: r.try_get("Name").unwrap_or_default(),
-                mode: mode_label(mode_id).to_string(),
                 mode_id: i32::try_from(mode_id).unwrap_or(0),
-                location: location_label(location_id).to_string(),
                 location_id: i32::try_from(location_id).unwrap_or(0),
                 image_path: r.try_get("Image").ok(),
                 image_source: i32::try_from(r.try_get::<i64, _>("ImageSource").unwrap_or(0))
