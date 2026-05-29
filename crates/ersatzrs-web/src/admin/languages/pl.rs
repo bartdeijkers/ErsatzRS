@@ -210,6 +210,10 @@ impl LanguageStrings for PolishStrings {
         filler_error_message(error)
     }
 
+    fn media_browser_error_message(&self, error: &str) -> String {
+        media_browser_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -613,6 +617,114 @@ fn filler_error_message(error: &str) -> String {
         "Media item must not be empty" => {
             "Element multimedialny nie może być pusty.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn media_browser_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
+        return "Kolekcja jest już obecna.".to_owned();
+    }
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" does not exist.") {
+        return "Kolekcja nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" is already present.") {
+        return "Kolekcja inteligentna jest już obecna.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" does not exist.") {
+        return "Kolekcja inteligentna nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("MultiCollection ") && trimmed.ends_with(" does not exist.") {
+        return "Multi-kolekcja nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Rerun collection ") && trimmed.ends_with(" does not exist.") {
+        return "Kolekcja powtórek nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Referenced item ") && trimmed.ends_with(" does not exist.") {
+        return "Element referencyjny nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("PlaylistGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Grupa playlist nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Playlist ") && trimmed.ends_with(" does not exist.") {
+        return "Playlista nie istnieje.".to_owned();
+    }
+    if trimmed.starts_with("Playlist name \"") && trimmed.ends_with("\" is invalid") {
+        return "Nazwa playlisty jest nieprawidłowa.".to_owned();
+    }
+    if let Some(error) = trimmed.strip_prefix("Playlist preview failed: ") {
+        return format!("Podgląd playlisty nie powiódł się: {error}");
+    }
+    if trimmed.starts_with("Media item ") && trimmed.ends_with(" does not exist.") {
+        return "Element multimedialny nie istnieje.".to_owned();
+    }
+
+    match trimmed {
+        "Collection name is required" => "Nazwa kolekcji jest wymagana.".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Nazwa kolekcji może mieć najwyżej 50 znaków.".to_owned()
+        }
+        "Collection name must be unique" => "Nazwa kolekcji musi być unikatowa.".to_owned(),
+        "Collection does not exist." => "Kolekcja nie istnieje.".to_owned(),
+        "Smart collection name is required" => {
+            "Nazwa kolekcji inteligentnej jest wymagana.".to_owned()
+        }
+        "Smart collection query is required" => {
+            "Zapytanie kolekcji inteligentnej jest wymagane.".to_owned()
+        }
+        "SmartCollection name must be unique" => {
+            "Nazwa kolekcji inteligentnej musi być unikatowa.".to_owned()
+        }
+        "MultiCollection does not exist." => "Multi-kolekcja nie istnieje.".to_owned(),
+        "Multi-collection name is required!" => "Nazwa multi-kolekcji jest wymagana.".to_owned(),
+        "Multi-collection name cannot be longer than 50 characters." => {
+            "Nazwa multi-kolekcji może mieć najwyżej 50 znaków.".to_owned()
+        }
+        "MultiCollection name must be unique" => {
+            "Nazwa multi-kolekcji musi być unikatowa.".to_owned()
+        }
+        "Each multi-collection item must reference exactly one collection." => {
+            "Każdy element multi-kolekcji musi wskazywać dokładnie jedną kolekcję.".to_owned()
+        }
+        "Rerun collection does not exist." => "Kolekcja powtórek nie istnieje.".to_owned(),
+        "[Name] is an empty string" | "[Name] must not be empty." => {
+            "Nazwa nie może być pusta.".to_owned()
+        }
+        "[Name] must not be longer than 50" | "[Name] must not be longer than 50." => {
+            "Nazwa może mieć najwyżej 50 znaków.".to_owned()
+        }
+        "Rerun collection name must be unique" => {
+            "Nazwa kolekcji powtórek musi być unikatowa.".to_owned()
+        }
+        "Unsupported collection type." => "Nieobsługiwany typ kolekcji.".to_owned(),
+        "[ProgramScheduleId] does not exist." => "Harmonogram nie istnieje.".to_owned(),
+        "[MediaItem] does not exist." => "Element multimedialny nie istnieje.".to_owned(),
+        "[PlaylistGroupId] does not exist." => "Grupa playlist nie istnieje.".to_owned(),
+        "Cannot delete system playlist group" => {
+            "Nie można usunąć systemowej grupy playlist.".to_owned()
+        }
+        "Cannot delete system (generated) playlist" => {
+            "Nie można usunąć systemowej playlisty.".to_owned()
+        }
+        "[PlaylistId] does not exist." => "Playlista nie istnieje.".to_owned(),
+        "Cannot save system (generated) playlist" => {
+            "Nie można zapisać systemowej playlisty.".to_owned()
+        }
+        "Playlist playout preview has no items" => {
+            "Podgląd emisji playlisty nie ma elementów.".to_owned()
+        }
+        "Playlist name is required" => "Nazwa playlisty jest wymagana.".to_owned(),
+        "[Collection] is required for collection type 'Collection'" => {
+            "Kolekcja jest wymagana.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "Multi-kolekcja jest wymagana.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "Kolekcja inteligentna jest wymagana.".to_owned()
+        }
+        "[CollectionType] is invalid" => "Typ kolekcji jest nieprawidłowy.".to_owned(),
         _ => error.to_owned(),
     }
 }

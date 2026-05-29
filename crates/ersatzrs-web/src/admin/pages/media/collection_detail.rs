@@ -34,7 +34,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{media_browser_error_message, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     get_collection_detail, remove_items_from_collection, save_collection,
     set_collection_use_custom_order, update_collection_custom_order, CollectionDetail,
@@ -175,9 +175,10 @@ fn CollectionDetailView(
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => {
-                    name_error.set(Some(format!("{e}")));
+                    let message = media_browser_error_message(e);
+                    name_error.set(Some(message.clone()));
                     toast.push(
-                        format!("{}: {e}", tr(TextKey::RenameFailed)),
+                        format!("{}: {message}", tr(TextKey::RenameFailed)),
                         ToastSeverity::Error,
                     );
                 }
@@ -201,7 +202,11 @@ fn CollectionDetailView(
                     // Revert on failure.
                     use_custom_order.update(|v| *v = !*v);
                     toast.push(
-                        format!("{}: {e}", tr(TextKey::PlaybackOrderUpdateFailed)),
+                        format!(
+                            "{}: {}",
+                            tr(TextKey::PlaybackOrderUpdateFailed),
+                            media_browser_error_message(e)
+                        ),
                         ToastSeverity::Error,
                     );
                 }
@@ -223,7 +228,11 @@ fn CollectionDetailView(
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::RemoveFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::RemoveFailed),
+                        media_browser_error_message(e)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -238,7 +247,11 @@ fn CollectionDetailView(
     Effect::new(move |_| {
         if let Some(Err(e)) = reorder_action.value().get() {
             toast.push(
-                format!("{}: {e}", tr(TextKey::ReorderFailed)),
+                format!(
+                    "{}: {}",
+                    tr(TextKey::ReorderFailed),
+                    media_browser_error_message(e)
+                ),
                 ToastSeverity::Error,
             );
             refresh.update(|n| *n += 1);

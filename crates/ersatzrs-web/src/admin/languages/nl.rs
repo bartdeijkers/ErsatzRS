@@ -214,6 +214,10 @@ impl LanguageStrings for DutchStrings {
         filler_error_message(error)
     }
 
+    fn media_browser_error_message(&self, error: &str) -> String {
+        media_browser_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -605,6 +609,112 @@ fn filler_error_message(error: &str) -> String {
         "Multi Collection must not be empty" => "Multi-collectie mag niet leeg zijn.".to_owned(),
         "Smart Collection must not be empty" => "Slimme collectie mag niet leeg zijn.".to_owned(),
         "Media item must not be empty" => "Media-item mag niet leeg zijn.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_browser_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
+        return "Collectie is al aanwezig.".to_owned();
+    }
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" does not exist.") {
+        return "Collectie bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" is already present.") {
+        return "Slimme collectie is al aanwezig.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" does not exist.") {
+        return "Slimme collectie bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("MultiCollection ") && trimmed.ends_with(" does not exist.") {
+        return "Multi-collectie bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Rerun collection ") && trimmed.ends_with(" does not exist.") {
+        return "Herhalingscollectie bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Referenced item ") && trimmed.ends_with(" does not exist.") {
+        return "Verwezen item bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("PlaylistGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Afspeellijstgroep bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Playlist ") && trimmed.ends_with(" does not exist.") {
+        return "Afspeellijst bestaat niet.".to_owned();
+    }
+    if trimmed.starts_with("Playlist name \"") && trimmed.ends_with("\" is invalid") {
+        return "Afspeellijstnaam is ongeldig.".to_owned();
+    }
+    if let Some(error) = trimmed.strip_prefix("Playlist preview failed: ") {
+        return format!("Voorbeeld van afspeellijst mislukt: {error}");
+    }
+    if trimmed.starts_with("Media item ") && trimmed.ends_with(" does not exist.") {
+        return "Media-item bestaat niet.".to_owned();
+    }
+
+    match trimmed {
+        "Collection name is required" => "Collectienaam is verplicht.".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Collectienaam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Collection name must be unique" => "Collectienaam moet uniek zijn.".to_owned(),
+        "Collection does not exist." => "Collectie bestaat niet.".to_owned(),
+        "Smart collection name is required" => "Naam van slimme collectie is verplicht.".to_owned(),
+        "Smart collection query is required" => {
+            "Zoekopdracht voor slimme collectie is verplicht.".to_owned()
+        }
+        "SmartCollection name must be unique" => {
+            "Naam van slimme collectie moet uniek zijn.".to_owned()
+        }
+        "MultiCollection does not exist." => "Multi-collectie bestaat niet.".to_owned(),
+        "Multi-collection name is required!" => "Naam van multi-collectie is verplicht.".to_owned(),
+        "Multi-collection name cannot be longer than 50 characters." => {
+            "Naam van multi-collectie mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "MultiCollection name must be unique" => {
+            "Naam van multi-collectie moet uniek zijn.".to_owned()
+        }
+        "Each multi-collection item must reference exactly one collection." => {
+            "Elk multi-collectie-item moet precies een collectie verwijzen.".to_owned()
+        }
+        "Rerun collection does not exist." => "Herhalingscollectie bestaat niet.".to_owned(),
+        "[Name] is an empty string" | "[Name] must not be empty." => {
+            "Naam mag niet leeg zijn.".to_owned()
+        }
+        "[Name] must not be longer than 50" | "[Name] must not be longer than 50." => {
+            "Naam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Rerun collection name must be unique" => {
+            "Naam van herhalingscollectie moet uniek zijn.".to_owned()
+        }
+        "Unsupported collection type." => "Niet-ondersteund collectietype.".to_owned(),
+        "[ProgramScheduleId] does not exist." => "Schema bestaat niet.".to_owned(),
+        "[MediaItem] does not exist." => "Media-item bestaat niet.".to_owned(),
+        "[PlaylistGroupId] does not exist." => "Afspeellijstgroep bestaat niet.".to_owned(),
+        "Cannot delete system playlist group" => {
+            "Systeemafspeellijstgroep kan niet worden verwijderd.".to_owned()
+        }
+        "Cannot delete system (generated) playlist" => {
+            "Systeemafspeellijst kan niet worden verwijderd.".to_owned()
+        }
+        "[PlaylistId] does not exist." => "Afspeellijst bestaat niet.".to_owned(),
+        "Cannot save system (generated) playlist" => {
+            "Systeemafspeellijst kan niet worden opgeslagen.".to_owned()
+        }
+        "Playlist playout preview has no items" => {
+            "Voorbeeld van afspeellijst heeft geen items.".to_owned()
+        }
+        "Playlist name is required" => "Afspeellijstnaam is verplicht.".to_owned(),
+        "[Collection] is required for collection type 'Collection'" => {
+            "Collectie is verplicht.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "Multi-collectie is verplicht.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "Slimme collectie is verplicht.".to_owned()
+        }
+        "[CollectionType] is invalid" => "Collectietype is ongeldig.".to_owned(),
         _ => error.to_owned(),
     }
 }

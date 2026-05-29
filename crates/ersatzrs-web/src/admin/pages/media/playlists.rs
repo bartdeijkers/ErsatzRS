@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{delete_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, media_browser_error_message, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     create_playlist, create_playlist_group, delete_playlist, delete_playlist_group,
     get_playlist_editor, get_playlist_editor_options, get_playlist_page, preview_playlist_playout,
@@ -75,7 +75,11 @@ fn PlaylistsIsland() -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        media_browser_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -90,7 +94,11 @@ fn PlaylistsIsland() -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => toast.push(
-                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        media_browser_error_message(error)
+                    ),
                     ToastSeverity::Error,
                 ),
             }
@@ -103,7 +111,10 @@ fn PlaylistsIsland() -> impl IntoView {
                     toast.push(tr(TextKey::PlaylistGroupDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(media_browser_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -115,7 +126,10 @@ fn PlaylistsIsland() -> impl IntoView {
                     toast.push(tr(TextKey::PlaylistDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(media_browser_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -371,7 +385,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
         spawn_local(async move {
             match preview_playlist_playout(form).await {
                 Ok(rows) => preview_rows.set(rows),
-                Err(error) => preview_message.set(error.to_string()),
+                Err(error) => preview_message.set(media_browser_error_message(error)),
             }
         });
     };

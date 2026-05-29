@@ -5,7 +5,9 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, range_of, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, media_browser_error_message, range_of, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     delete_rerun_collection, get_rerun_collection_editor_options, get_rerun_collection_form,
     get_rerun_collections_page_size, list_rerun_collections, save_rerun_collection,
@@ -84,7 +86,10 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                     toast.push(tr(TextKey::RerunCollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(media_browser_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -358,7 +363,7 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                     set_browser_location("/media/rerun-collections");
                 }
                 Err(error) => {
-                    let message = save_failed(error);
+                    let message = save_failed(media_browser_error_message(error));
                     error_message.set(message.clone());
                     toast.push(message, ToastSeverity::Error);
                 }

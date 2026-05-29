@@ -214,6 +214,10 @@ impl LanguageStrings for EnglishStrings {
         filler_error_message(error)
     }
 
+    fn media_browser_error_message(&self, error: &str) -> String {
+        media_browser_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1579,6 +1583,102 @@ fn filler_error_message(error: &str) -> String {
         "Multi Collection must not be empty" => "Multi Collection must not be empty".to_owned(),
         "Smart Collection must not be empty" => "Smart Collection must not be empty".to_owned(),
         "Media item must not be empty" => "Media item must not be empty".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn media_browser_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" is already present.") {
+        return "Collection is already present.".to_owned();
+    }
+    if trimmed.starts_with("Collection ") && trimmed.ends_with(" does not exist.") {
+        return "Collection does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" is already present.") {
+        return "Smart collection is already present.".to_owned();
+    }
+    if trimmed.starts_with("Smart collection ") && trimmed.ends_with(" does not exist.") {
+        return "Smart collection does not exist.".to_owned();
+    }
+    if trimmed.starts_with("MultiCollection ") && trimmed.ends_with(" does not exist.") {
+        return "Multi-collection does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Rerun collection ") && trimmed.ends_with(" does not exist.") {
+        return "Rerun collection does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Referenced item ") && trimmed.ends_with(" does not exist.") {
+        return "Referenced item does not exist.".to_owned();
+    }
+    if trimmed.starts_with("PlaylistGroup ") && trimmed.ends_with(" does not exist.") {
+        return "Playlist group does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Playlist ") && trimmed.ends_with(" does not exist.") {
+        return "Playlist does not exist.".to_owned();
+    }
+    if trimmed.starts_with("Playlist name \"") && trimmed.ends_with("\" is invalid") {
+        return "Playlist name is invalid.".to_owned();
+    }
+    if let Some(error) = trimmed.strip_prefix("Playlist preview failed: ") {
+        return format!("Playlist preview failed: {error}");
+    }
+    if trimmed.starts_with("Media item ") && trimmed.ends_with(" does not exist.") {
+        return "Media item does not exist.".to_owned();
+    }
+
+    match trimmed {
+        "Collection name is required" => "Collection name is required".to_owned(),
+        "Collection name must be 50 characters or less" => {
+            "Collection name must be 50 characters or less".to_owned()
+        }
+        "Collection name must be unique" => "Collection name must be unique".to_owned(),
+        "Collection does not exist." => "Collection does not exist.".to_owned(),
+        "Smart collection name is required" => "Smart collection name is required".to_owned(),
+        "Smart collection query is required" => "Smart collection query is required".to_owned(),
+        "SmartCollection name must be unique" => "Smart collection name must be unique".to_owned(),
+        "MultiCollection does not exist." => "Multi-collection does not exist.".to_owned(),
+        "Multi-collection name is required!" => "Multi-collection name is required.".to_owned(),
+        "Multi-collection name cannot be longer than 50 characters." => {
+            "Multi-collection name cannot be longer than 50 characters.".to_owned()
+        }
+        "MultiCollection name must be unique" => "Multi-collection name must be unique".to_owned(),
+        "Each multi-collection item must reference exactly one collection." => {
+            "Each multi-collection item must reference exactly one collection.".to_owned()
+        }
+        "Rerun collection does not exist." => "Rerun collection does not exist.".to_owned(),
+        "[Name] is an empty string" | "[Name] must not be empty." => {
+            "Name must not be empty.".to_owned()
+        }
+        "[Name] must not be longer than 50" | "[Name] must not be longer than 50." => {
+            "Name must not be longer than 50 characters.".to_owned()
+        }
+        "Rerun collection name must be unique" => "Rerun collection name must be unique".to_owned(),
+        "Unsupported collection type." => "Unsupported collection type.".to_owned(),
+        "[ProgramScheduleId] does not exist." => "Schedule does not exist.".to_owned(),
+        "[MediaItem] does not exist." => "Media item does not exist.".to_owned(),
+        "[PlaylistGroupId] does not exist." => "Playlist group does not exist.".to_owned(),
+        "Cannot delete system playlist group" => "Cannot delete system playlist group".to_owned(),
+        "Cannot delete system (generated) playlist" => {
+            "Cannot delete system (generated) playlist".to_owned()
+        }
+        "[PlaylistId] does not exist." => "Playlist does not exist.".to_owned(),
+        "Cannot save system (generated) playlist" => {
+            "Cannot save system (generated) playlist".to_owned()
+        }
+        "Playlist playout preview has no items" => {
+            "Playlist playout preview has no items".to_owned()
+        }
+        "Playlist name is required" => "Playlist name is required".to_owned(),
+        "[Collection] is required for collection type 'Collection'" => {
+            "Collection is required.".to_owned()
+        }
+        "[MultiCollection] is required for collection type 'MultiCollection'" => {
+            "Multi-collection is required.".to_owned()
+        }
+        "[SmartCollection] is required for collection type 'SmartCollection'" => {
+            "Smart collection is required.".to_owned()
+        }
+        "[CollectionType] is invalid" => "Collection type is invalid.".to_owned(),
         _ => error.to_owned(),
     }
 }

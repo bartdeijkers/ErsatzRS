@@ -5,7 +5,9 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{delete_failed, page_of, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, media_browser_error_message, page_of, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     delete_multi_collection, get_multi_collection, get_multi_collection_editor_options,
     get_multi_collections_page_size, list_multi_collections, save_multi_collection,
@@ -72,7 +74,10 @@ fn MultiCollectionsIsland() -> impl IntoView {
                     toast.push(tr(TextKey::MultiCollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(media_browser_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -287,7 +292,10 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                     toast.push(tr(TextKey::MultiCollectionSaved), ToastSeverity::Success);
                     set_browser_location("/media/multi-collections");
                 }
-                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    save_failed(media_browser_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
-use crate::admin::i18n::{delete_failed, save_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, media_browser_error_message, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     add_item_to_collection, delete_collection, get_collection, list_collection_members,
     list_collections, remove_item_from_collection, save_collection, CollectionForm,
@@ -49,7 +49,10 @@ pub fn CollectionsPage() -> impl IntoView {
                     toast.push(tr(TextKey::CollectionDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    delete_failed(media_browser_error_message(&e)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -201,7 +204,10 @@ pub fn CollectionEditorPage() -> impl IntoView {
                     }
                     id_signal.set(new_id);
                 }
-                Err(e) => toast.push(save_failed(&e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    save_failed(media_browser_error_message(&e)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
