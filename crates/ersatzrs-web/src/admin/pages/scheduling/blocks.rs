@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{delete_failed, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     copy_block, create_block, create_block_group, delete_block, delete_block_group,
     format_duration_label, list_block_groups, list_blocks, BlockGroupRow, BlockRow,
@@ -65,11 +66,11 @@ fn BlocksIsland() -> impl IntoView {
         if let Some(res) = create_group_action.value().get() {
             match res {
                 Ok(_) => {
-                    toast.push("Block group created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::BlockGroupCreated), ToastSeverity::Success);
                     groups.refetch();
                     new_group_name.set(String::new());
                 }
-                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
             }
         }
     });
@@ -78,11 +79,11 @@ fn BlocksIsland() -> impl IntoView {
         if let Some(res) = create_block_action.value().get() {
             match res {
                 Ok(_) => {
-                    toast.push("Block created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::BlockCreated), ToastSeverity::Success);
                     blocks.refetch();
                     new_block_name.set(String::new());
                 }
-                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
             }
         }
     });
@@ -91,7 +92,7 @@ fn BlocksIsland() -> impl IntoView {
         if let Some(res) = copy_action.value().get() {
             match res {
                 Ok(id) => {
-                    toast.push("Block copied.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::BlockCopied), ToastSeverity::Success);
                     copy_open.set(false);
                     copy_target.set(None);
                     blocks.refetch();
@@ -104,7 +105,7 @@ fn BlocksIsland() -> impl IntoView {
                         let _ = id;
                     }
                 }
-                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(format!("{}: {e}", tr(TextKey::Error)), ToastSeverity::Error),
             }
         }
     });
@@ -113,11 +114,11 @@ fn BlocksIsland() -> impl IntoView {
         if let Some(res) = del_group_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Block group deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::BlockGroupDeleted), ToastSeverity::Success);
                     groups.refetch();
                     blocks.refetch();
                 }
-                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
             }
             del_group_open.set(false);
         }
@@ -127,10 +128,10 @@ fn BlocksIsland() -> impl IntoView {
         if let Some(res) = del_block_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Block deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::BlockDeleted), ToastSeverity::Success);
                     blocks.refetch();
                 }
-                Err(e) => toast.push(format!("Error: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(delete_failed(&e), ToastSeverity::Error),
             }
             del_block_open.set(false);
         }
@@ -138,16 +139,16 @@ fn BlocksIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <h1 class=style::page_title>"Block Groups"</h1>
+            <h1 class=style::page_title>{tr(TextKey::BlockGroups)}</h1>
 
             // ── Add block group ─────────────────────────────────────────
             <section class=style::section>
                 <div class=style::add_row>
                     <div class=style::add_field>
-                        <label class=style::add_label>"Group Name"</label>
+                        <label class=style::add_label>{tr(TextKey::GroupName)}</label>
                         <input
                             class=style::add_input
-                            placeholder="Group name…"
+                            placeholder=tr(TextKey::GroupName)
                             prop:value=move || new_group_name.get()
                             on:input=move |e| new_group_name.set(event_target_value(&e))
                         />
@@ -162,17 +163,17 @@ fn BlocksIsland() -> impl IntoView {
                             }
                         }
                     >
-                        "+ Add Block Group"
+                        {format!("+ {}", tr(TextKey::AddBlockGroup))}
                     </button>
                 </div>
             </section>
 
             // ── Add block ───────────────────────────────────────────────
             <section class=style::section>
-                <h2 class=style::page_title>"Blocks"</h2>
+                <h2 class=style::page_title>{tr(TextKey::Blocks)}</h2>
                 <div class=style::add_row>
                     <div class=style::add_field>
-                        <label class=style::add_label>"Block Group"</label>
+                        <label class=style::add_label>{tr(TextKey::BlockGroup)}</label>
                         <Suspense>
                             {move || groups.get().map(|grps| {
                                 view! {
@@ -184,7 +185,7 @@ fn BlocksIsland() -> impl IntoView {
                                             }
                                         }
                                     >
-                                        <option value="0">"— select group —"</option>
+                                        <option value="0">{tr(TextKey::SelectGroup)}</option>
                                         {grps.into_iter().map(|g| {
                                             let id = g.id;
                                             let name = g.name.clone();
@@ -196,10 +197,10 @@ fn BlocksIsland() -> impl IntoView {
                         </Suspense>
                     </div>
                     <div class=style::add_field>
-                        <label class=style::add_label>"Block Name"</label>
+                        <label class=style::add_label>{tr(TextKey::BlockName)}</label>
                         <input
                             class=style::add_input
-                            placeholder="Block name…"
+                            placeholder=tr(TextKey::BlockName)
                             prop:value=move || new_block_name.get()
                             on:input=move |e| new_block_name.set(event_target_value(&e))
                         />
@@ -217,7 +218,7 @@ fn BlocksIsland() -> impl IntoView {
                             }
                         }
                     >
-                        "+ Add Block"
+                        {format!("+ {}", tr(TextKey::AddBlock))}
                     </button>
                 </div>
             </section>
@@ -228,13 +229,13 @@ fn BlocksIsland() -> impl IntoView {
                 <input
                     class=style::search
                     type="search"
-                    placeholder="Search for blocks"
+                    placeholder=tr(TextKey::SearchForBlocks)
                     prop:value=move || search.get()
                     on:input=move |e| search.set(event_target_value(&e))
                 />
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     blocks.get().map(|rows| {
                         if rows.is_empty() {
@@ -270,9 +271,9 @@ fn BlocksIsland() -> impl IntoView {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Name"</th>
-                                            <th>"Duration"</th>
-                                            <th>"Stop Scheduling"</th>
+                                            <th>{tr(TextKey::Name)}</th>
+                                            <th>{tr(TextKey::Duration)}</th>
+                                            <th>{tr(TextKey::StopScheduling)}</th>
                                             <th/>
                                         </tr>
                                     </thead>
@@ -294,7 +295,7 @@ fn BlocksIsland() -> impl IntoView {
                                                                     del_group_open.set(true);
                                                                 }
                                                             >
-                                                                "Delete Group"
+                                                                {tr(TextKey::DeleteBlockGroup)}
                                                             </button>
                                                         </div>
                                                     </td>
@@ -303,7 +304,7 @@ fn BlocksIsland() -> impl IntoView {
                                                     let id = b.id;
                                                     let name = b.name.clone();
                                                     let dur = format_duration_label(b.minutes);
-                                                    let stop = crate::admin::server_fns::blocks::stop_scheduling_label(b.stop_scheduling);
+                                                    let stop = stop_scheduling_label_i18n(b.stop_scheduling);
                                                     let b_for_del = b.clone();
                                                     let b_for_copy = b.clone();
                                                     view! {
@@ -316,7 +317,7 @@ fn BlocksIsland() -> impl IntoView {
                                                             <td>
                                                                 <div class=style::row_actions>
                                                                     <a class=style::btn_edit href=format!("/blocks/{id}")>
-                                                                        "Edit"
+                                                                        {tr(TextKey::Edit)}
                                                                     </a>
                                                                     <button
                                                                         class=style::btn_edit
@@ -327,7 +328,7 @@ fn BlocksIsland() -> impl IntoView {
                                                                             copy_open.set(true);
                                                                         }
                                                                     >
-                                                                        "Copy"
+                                                                        {tr(TextKey::Copy)}
                                                                     </button>
                                                                     <button
                                                                         class=style::btn_delete
@@ -336,7 +337,7 @@ fn BlocksIsland() -> impl IntoView {
                                                                             del_block_open.set(true);
                                                                         }
                                                                     >
-                                                                        "Delete"
+                                                                        {tr(TextKey::Delete)}
                                                                     </button>
                                                                 </div>
                                                             </td>
@@ -392,9 +393,9 @@ fn BlocksIsland() -> impl IntoView {
                 class=style::modal_panel
                 style:display=move || if copy_open.get() { "" } else { "none" }
             >
-                <h2 class=style::section_title>"Copy Block"</h2>
+                <h2 class=style::section_title>{tr(TextKey::CopyBlock)}</h2>
                 <label class=style::add_field>
-                    <span class=style::add_label>"Block Group"</span>
+                    <span class=style::add_label>{tr(TextKey::BlockGroup)}</span>
                     <Suspense>
                         {move || groups.get().map(|grps| {
                             view! {
@@ -418,7 +419,7 @@ fn BlocksIsland() -> impl IntoView {
                     </Suspense>
                 </label>
                 <label class=style::add_field>
-                    <span class=style::add_label>"Block Name"</span>
+                    <span class=style::add_label>{tr(TextKey::BlockName)}</span>
                     <input
                         class=style::add_input
                         prop:value=move || copy_name.get()
@@ -426,7 +427,7 @@ fn BlocksIsland() -> impl IntoView {
                     />
                 </label>
                 <div class=style::modal_actions>
-                    <button class=style::btn_edit on:click=move |_| copy_open.set(false)>"Cancel"</button>
+                    <button class=style::btn_edit on:click=move |_| copy_open.set(false)>{tr(TextKey::Cancel)}</button>
                     <button
                         class=style::btn_add
                         disabled=move || {
@@ -444,10 +445,20 @@ fn BlocksIsland() -> impl IntoView {
                             }
                         }
                     >
-                        "Copy Block"
+                        {tr(TextKey::CopyBlock)}
                     </button>
                 </div>
             </div>
         </div>
+    }
+}
+
+fn stop_scheduling_label_i18n(value: i32) -> &'static str {
+    use crate::admin::server_fns::blocks::stop_scheduling;
+
+    match value {
+        stop_scheduling::BEFORE_DURATION_END => tr(TextKey::BeforeDurationEnd),
+        stop_scheduling::AFTER_DURATION_END => tr(TextKey::AfterDurationEnd),
+        _ => tr(TextKey::Unavailable),
     }
 }

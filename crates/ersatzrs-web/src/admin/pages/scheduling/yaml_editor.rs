@@ -1,4 +1,4 @@
-//! YAML sequential playout editor — ports `Pages/ScriptedPlayoutEditor.razor`.
+//! YAML sequential playout editor — ports `Pages/SequentialPlayoutEditor.razor`.
 //!
 //! Divergence: `ErsatzTV` stores a *file path* in `ScheduleFile`. `ErsatzRS`
 //! stores the raw YAML *content* directly; this is the intended Phase 6.6
@@ -14,6 +14,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
+use crate::admin::i18n::{save_failed, tr, TextKey};
 use crate::admin::server_fns::playouts::{
     erase_playout_items_and_history, get_sequential_playout, save_sequential_playout,
     validate_yaml_playout, SequentialPlayoutForm,
@@ -53,12 +54,12 @@ fn YamlEditorIsland(playout_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 playout_data.get().map(|maybe| match maybe {
                     Some(form) => view! { <YamlEditorForm initial_form=form/> }.into_any(),
                     None => view! {
-                        <p class=style::empty>"Playout not found."</p>
+                        <p class=style::empty>{tr(TextKey::PlayoutNotFound)}</p>
                     }
                         .into_any(),
                 })
@@ -108,7 +109,7 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
                 Ok(()) => {
                     navigate("/playouts", NavigateOptions::default());
                 }
-                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(save_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -118,10 +119,16 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
         if let Some(res) = erase_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Erased playout items and history.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::ErasedPlayoutItemsAndHistory),
+                        ToastSeverity::Success,
+                    );
                     pending_erase.set(false);
                 }
-                Err(e) => toast.push(format!("Erase failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::EraseFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -156,7 +163,7 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
             // ── Sticky action bar ──────────────────────────────────────
             <div class=style::action_bar>
                 <span class=style::action_bar_title>
-                    {channel_label.clone()} " \u{2014} Sequential Schedule"
+                    {channel_label.clone()} " \u{2014} " {tr(TextKey::SequentialSchedule)}
                 </span>
                 <button
                     class=style::btn_primary
@@ -166,13 +173,13 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
                         save_action.dispatch((playout_id, content));
                     }
                 >
-                    "Save"
+                    {tr(TextKey::SaveSequentialSchedule)}
                 </button>
                 <button
                     class=style::btn_danger
                     on:click=move |_| pending_erase.set(true)
                 >
-                    "Erase Items \u{26} History"
+                    {tr(TextKey::EraseItemsAndHistory)}
                 </button>
             </div>
 
@@ -199,17 +206,17 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
             // ── Erase confirm dialog ───────────────────────────────────
             <Modal
                 open=pending_erase
-                title="Erase Items and History".to_string()
+                title=tr(TextKey::EraseItemsAndHistory).to_string()
                 on_close=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         erase_action.dispatch(playout_id);
                     }
                 })
-                confirm_label="Erase"
+                confirm_label=Some(tr(TextKey::EraseItemsAndHistory))
                 destructive=true
             >
                 <p>
-                    "This will delete all playout items and history for this sequential playout. Continue?"
+                    {tr(TextKey::ErasePlayoutItemsAndHistoryConfirm)}
                 </p>
             </Modal>
         </div>

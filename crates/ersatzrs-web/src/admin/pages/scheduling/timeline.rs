@@ -5,6 +5,7 @@
 use chrono::{Local, TimeZone, Timelike};
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::playouts::{list_playout_items, PlayoutTimelineItem};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/timeline.module.css");
@@ -32,15 +33,15 @@ fn TimelineInfo(selected_item: RwSignal<Option<PlayoutTimelineItem>>) -> impl In
                 class=style::info_empty
                 style:display=move || if selected_item.get().is_none() { "" } else { "none" }
             >
-                "Click a playout item to inspect its title, times, and scheduling context."
+                {tr(TextKey::ClickPlayoutItemHelp)}
             </p>
             <div style:display=move || if selected_item.get().is_some() { "" } else { "none" }>
                 <div class=style::info_row>
-                    <span class=style::info_label>"Title"</span>
+                    <span class=style::info_label>{tr(TextKey::Title)}</span>
                     <span class=style::info_value>
                         {move || selected_item.get().map(|item| {
                             if item.title.trim().is_empty() {
-                                "Untitled item".to_string()
+                                tr(TextKey::UntitledItem).to_string()
                             } else {
                                 item.title.clone()
                             }
@@ -48,25 +49,25 @@ fn TimelineInfo(selected_item: RwSignal<Option<PlayoutTimelineItem>>) -> impl In
                     </span>
                 </div>
                 <div class=style::info_row>
-                    <span class=style::info_label>"Start"</span>
+                    <span class=style::info_label>{tr(TextKey::Start)}</span>
                     <span class=style::info_value>
                         {move || selected_item.get().map(|item| format_local_datetime(item.start_ms)).unwrap_or_default()}
                     </span>
                 </div>
                 <div class=style::info_row>
-                    <span class=style::info_label>"Finish"</span>
+                    <span class=style::info_label>{tr(TextKey::Finish)}</span>
                     <span class=style::info_value>
                         {move || selected_item.get().map(|item| format_local_datetime(item.finish_ms)).unwrap_or_default()}
                     </span>
                 </div>
                 <div class=style::info_row>
-                    <span class=style::info_label>"Scheduling Context"</span>
+                    <span class=style::info_label>{tr(TextKey::SchedulingContext)}</span>
                     <span class=style::info_context>
                         {move || selected_item.get().map(|item| {
                             item.scheduling_context
                                 .clone()
                                 .filter(|value| !value.trim().is_empty())
-                                .unwrap_or_else(|| "No scheduling context".to_string())
+                                .unwrap_or_else(|| tr(TextKey::NoSchedulingContext).to_string())
                         }).unwrap_or_default()}
                     </span>
                 </div>
@@ -106,22 +107,22 @@ pub fn PlayoutTimelineIsland(playout_id: i64) -> impl IntoView {
         <div class=style::timeline>
             <div class=style::toolbar>
                 <div class=style::window_summary>
-                    <span class=style::window_label>"Window"</span>
+                    <span class=style::window_label>{tr(TextKey::Window)}</span>
                     <strong class=style::window_value>
                         {move || format_window_label(window_start.get())}
                     </strong>
                 </div>
                 <div class=style::nav_buttons>
                     <button class=style::nav_button on:click=prev_window>
-                        "Prev 24h"
+                        {tr(TextKey::Previous24Hours)}
                     </button>
                     <button class=style::nav_button on:click=next_window>
-                        "Next 24h"
+                        {tr(TextKey::Next24Hours)}
                     </button>
                 </div>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading timeline…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     items.get().map(|entries| {
                         let bars = timeline_bars(&entries, window_start.get());
@@ -150,7 +151,7 @@ pub fn PlayoutTimelineIsland(playout_id: i64) -> impl IntoView {
                                             class=style::empty_label
                                             style:display=if bars.is_empty() { "" } else { "none" }
                                         >
-                                            "No playout items in this 24-hour window"
+                                            {tr(TextKey::NoPlayoutItemsInWindow)}
                                         </text>
                                         // Bar items — only rendered when non-empty.
                                         {bars.into_iter().map(|bar| {
@@ -160,7 +161,7 @@ pub fn PlayoutTimelineIsland(playout_id: i64) -> impl IntoView {
                                                 "var(--color-muted)"
                                             };
                                             let label = if bar.item.title.trim().is_empty() {
-                                                "Untitled item".to_string()
+                                                tr(TextKey::UntitledItem).to_string()
                                             } else {
                                                 bar.item.title.clone()
                                             };

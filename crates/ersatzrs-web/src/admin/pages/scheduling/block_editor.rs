@@ -10,10 +10,11 @@ use std::fmt::Write;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{save_failed, tr, TextKey};
 use crate::admin::server_fns::blocks::{
     collection_type, get_block, get_block_items, load_block_editor_options, playback_order,
-    playback_order_label, preview_block_playout, save_block_with_items, stop_scheduling,
-    BlockEditorOptions, BlockForm, BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
+    preview_block_playout, save_block_with_items, stop_scheduling, BlockEditorOptions, BlockForm,
+    BlockItemForm, BlockWithItemsForm, PlayoutPreviewRow,
 };
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -52,7 +53,7 @@ fn BlockEditorIsland(block_id: i64) -> impl IntoView {
         );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 data.get().map(|(maybe_block, items, options)| match maybe_block {
                     Some(block) => view! {
@@ -63,7 +64,7 @@ fn BlockEditorIsland(block_id: i64) -> impl IntoView {
                         />
                     }.into_any(),
                     None => view! {
-                        <p class=style::empty>"Block not found."</p>
+                        <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
                     }.into_any(),
                 })
             }}
@@ -108,13 +109,13 @@ fn BlockEditorForm(
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Block saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::Saved), ToastSeverity::Success);
                     #[cfg(target_arch = "wasm32")]
                     {
                         let _ = window().location().set_href("/blocks");
                     }
                 }
-                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(save_failed(&e), ToastSeverity::Error),
             }
         }
     });
@@ -220,33 +221,33 @@ fn BlockEditorForm(
                     disabled=move || save_action.pending().get()
                     on:click=move |_| on_save(())
                 >
-                    "Save Block"
+                    {tr(TextKey::SaveBlock)}
                 </button>
                 <button
                     class=style::btn_secondary
                     on:click=move |_| add_item(())
                 >
-                    "+ Add Item"
+                    {format!("+ {}", tr(TextKey::AddBlockItem))}
                 </button>
                 <button
                     class=style::btn_preview
                     on:click=move |_| on_preview(())
                 >
-                    "Preview Playout"
+                    {tr(TextKey::PreviewBlockPlayout)}
                 </button>
             </div>
 
             <div class=style::content>
                 // ── Block metadata ──────────────────────────────────────
                 <div>
-                    <h2 class=style::section_title>"Block"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Block)}</h2>
                     <div class=style::form_grid>
                         <div class=style::field>
-                            <label class=style::label>"Block Group"</label>
+                            <label class=style::label>{tr(TextKey::BlockGroup)}</label>
                             <input class=style::input disabled=true prop:value=group_name.clone()/>
                         </div>
                         <div class=style::field>
-                            <label class=style::label>"Block Name"</label>
+                            <label class=style::label>{tr(TextKey::BlockName)}</label>
                             <input
                                 class=style::input
                                 prop:value=move || name.get()
@@ -254,7 +255,7 @@ fn BlockEditorForm(
                             />
                         </div>
                         <div class=style::field>
-                            <label class=style::label>"Duration"</label>
+                            <label class=style::label>{tr(TextKey::Duration)}</label>
                             <div class=style::duration_row>
                                 <input
                                     class=style::duration_input
@@ -284,11 +285,11 @@ fn BlockEditorForm(
                                         })
                                         .collect_view()}
                                 </select>
-                                <span class=style::duration_unit>"min"</span>
+                                <span class=style::duration_unit>{tr(TextKey::Minutes)}</span>
                             </div>
                         </div>
                         <div class=style::field>
-                            <label class=style::label>"Stop Scheduling"</label>
+                            <label class=style::label>{tr(TextKey::StopScheduling)}</label>
                             <select
                                 class=style::select
                                 prop:value=move || stop_sched.get().to_string()
@@ -299,10 +300,10 @@ fn BlockEditorForm(
                                 }
                             >
                                 <option value=stop_scheduling::AFTER_DURATION_END.to_string()>
-                                    "After Duration End"
+                                    {tr(TextKey::AfterDurationEnd)}
                                 </option>
                                 <option value=stop_scheduling::BEFORE_DURATION_END.to_string()>
-                                    "Before Duration End"
+                                    {tr(TextKey::BeforeDurationEnd)}
                                 </option>
                             </select>
                         </div>
@@ -311,15 +312,15 @@ fn BlockEditorForm(
 
                 // ── Block items table ───────────────────────────────────
                 <div>
-                    <h2 class=style::section_title>"Block Items"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::BlockItems)}</h2>
                     <div class=style::items_table_wrap>
                         <table class=style::items_table>
                             <thead>
                                 <tr>
-                                    <th>"Collection"</th>
-                                    <th>"Playback Order"</th>
-                                    <th>"EPG"</th>
-                                    <th>"No WM"</th>
+                                    <th>{tr(TextKey::Collection)}</th>
+                                    <th>{tr(TextKey::PlaybackOrder)}</th>
+                                    <th>{tr(TextKey::ShowInEpg)}</th>
+                                    <th>{tr(TextKey::DisableWatermarks)}</th>
                                     <th/>
                                 </tr>
                             </thead>
@@ -331,7 +332,7 @@ fn BlockEditorForm(
                                         .enumerate()
                                         .map(|(idx, item)| {
                                             let is_selected = selected_idx.get() == Some(idx);
-                                            let order_lbl = playback_order_label(
+                                            let order_lbl = playback_order_label_i18n(
                                                 item.playback_order,
                                                 item.collection_type,
                                             );
@@ -379,7 +380,7 @@ fn BlockEditorForm(
                                                                 class=style::icon_btn
                                                                 disabled=move || idx == 0
                                                                 on:click=move |_| move_up(idx)
-                                                                title="Move up"
+                                                                title=tr(TextKey::MoveUp)
                                                             >
                                                                 "↑"
                                                             </button>
@@ -402,14 +403,14 @@ fn BlockEditorForm(
                                                                         }
                                                                     });
                                                                 }
-                                                                title="Move down"
+                                                                title=tr(TextKey::MoveDown)
                                                             >
                                                                 "↓"
                                                             </button>
                                                             <button
                                                                 class=format!("{} {}", style::icon_btn, style::icon_btn_delete)
                                                                 on:click=move |_| remove_item(idx)
-                                                                title="Remove"
+                                                                title=tr(TextKey::Remove)
                                                             >
                                                                 "✕"
                                                             </button>
@@ -453,14 +454,14 @@ fn BlockEditorForm(
                     class=style::modal_close
                     on:click=move |_| preview_open.set(false)
                 >
-                    "\u{2715} Close"
+                    {format!("x {}", tr(TextKey::Close))}
                 </button>
-                <h2 class=style::modal_title>"Preview Block Playout"</h2>
+                <h2 class=style::modal_title>{tr(TextKey::PreviewBlockPlayout)}</h2>
                 <p
                     class=style::empty
                     style:display=move || if preview_pending.get() { "" } else { "none" }
                 >
-                    "Computing preview\u{2026}"
+                    {tr(TextKey::ComputingPreview)}
                 </p>
                 <p
                     class=style::empty
@@ -468,7 +469,7 @@ fn BlockEditorForm(
                         if !preview_pending.get() && preview_rows.get().is_empty() { "" } else { "none" }
                     }
                 >
-                    "No items to preview."
+                    {tr(TextKey::NoItemsToPreview)}
                 </p>
                 <table
                     class=style::preview_table
@@ -478,10 +479,10 @@ fn BlockEditorForm(
                 >
                     <thead>
                         <tr>
-                            <th>"Start"</th>
-                            <th>"Finish"</th>
-                            <th>"Media Item"</th>
-                            <th>"Duration"</th>
+                            <th>{tr(TextKey::Start)}</th>
+                            <th>{tr(TextKey::Finish)}</th>
+                            <th>{tr(TextKey::MediaItem)}</th>
+                            <th>{tr(TextKey::Duration)}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -500,6 +501,21 @@ fn BlockEditorForm(
     }
 }
 
+fn playback_order_label_i18n(order: i32, collection_type: i32) -> &'static str {
+    use crate::admin::server_fns::blocks::{collection_type as ct, playback_order as po};
+
+    match order {
+        po::CHRONOLOGICAL => tr(TextKey::Chronological),
+        po::RANDOM => tr(TextKey::Random),
+        po::SHUFFLE => tr(TextKey::Shuffle),
+        po::SHUFFLE_IN_ORDER => tr(TextKey::ShuffleInOrder),
+        po::SEASON_EPISODE => tr(TextKey::SeasonEpisode),
+        po::RANDOM_ROTATION => tr(TextKey::RandomRotation),
+        _ if collection_type == ct::SEARCH_QUERY => tr(TextKey::SearchQuery),
+        _ => tr(TextKey::Unavailable),
+    }
+}
+
 fn block_editor_fallback_html(
     block: &BlockForm,
     items: &[BlockItemForm],
@@ -511,8 +527,9 @@ fn block_editor_fallback_html(
     if sorted_items.is_empty() {
         let _ = write!(
             rows,
-            r#"<tr><td colspan="5" class="{}">No block items.</td></tr>"#,
-            style::empty
+            r#"<tr><td colspan="5" class="{}">{}</td></tr>"#,
+            style::empty,
+            escape_html(tr(TextKey::NoBlockItems))
         );
     } else {
         for (index, item) in sorted_items.iter().enumerate() {
@@ -521,13 +538,16 @@ fn block_editor_fallback_html(
     }
 
     format!(
-        r#"<div class="{action_bar}"><span class="{action_title}">{group} / {name}</span><button type="submit" form="block-items-fallback-form" class="{btn_primary}" name="action" value="save">Save Block</button><button type="submit" form="block-items-fallback-form" class="{btn_secondary}" name="action" value="add">Add Block Item</button><a href="/blocks" class="{btn_secondary}">Back</a></div><section class="{content}"><form id="block-items-fallback-form" method="post" action="/api/blocks/items/save" class="{fallback_form}"><input type="hidden" name="block_id" value="{id}"><input type="hidden" name="group_id" value="{group_id}"><h2 class="{section_title}">Block</h2><label class="{field}"><span class="{label}">Block Group Name</span><input class="{input}" value="{group}" disabled></label><label class="{field}"><span class="{label}">Block Name</span><input class="{input}" name="name" value="{name}"></label><label class="{field}"><span class="{label}">Duration</span><span class="{duration_row}"><input class="{duration_input}" type="number" name="duration_hours" value="{hours}"><select class="{select}" name="duration_minutes">{minute_options}</select></span></label><label class="{field}"><span class="{label}">Stop scheduling block items</span>{stop_select}</label><h2 class="{section_title}">Block Items</h2><div class="{items_table_wrap}"><table class="{items_table}"><thead><tr><th>Collection</th><th>Target</th><th>Playback</th><th>Flags</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">Add Block Item</h2><label class="{field}"><span class="{label}">Collection</span>{new_collection}</label></form></section>"#,
+        r#"<div class="{action_bar}"><span class="{action_title}">{group} / {name}</span><button type="submit" form="block-items-fallback-form" class="{btn_primary}" name="action" value="save">{save_block}</button><button type="submit" form="block-items-fallback-form" class="{btn_secondary}" name="action" value="add">{add_block_item}</button><a href="/blocks" class="{btn_secondary}">{back}</a></div><section class="{content}"><form id="block-items-fallback-form" method="post" action="/api/blocks/items/save" class="{fallback_form}"><input type="hidden" name="block_id" value="{id}"><input type="hidden" name="group_id" value="{group_id}"><h2 class="{section_title}">{block_label}</h2><label class="{field}"><span class="{label}">{block_group_name}</span><input class="{input}" value="{group}" disabled></label><label class="{field}"><span class="{label}">{block_name}</span><input class="{input}" name="name" value="{name}"></label><label class="{field}"><span class="{label}">{duration}</span><span class="{duration_row}"><input class="{duration_input}" type="number" name="duration_hours" value="{hours}"><select class="{select}" name="duration_minutes">{minute_options}</select></span></label><label class="{field}"><span class="{label}">{stop_scheduling_block_items}</span>{stop_select}</label><h2 class="{section_title}">{block_items}</h2><div class="{items_table_wrap}"><table class="{items_table}"><thead><tr><th>{collection}</th><th>{target}</th><th>{playback}</th><th>{flags}</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><h2 class="{section_title}">{add_block_item}</h2><label class="{field}"><span class="{label}">{collection}</span>{new_collection}</label></form></section>"#,
         action_bar = style::action_bar,
         action_title = style::action_bar_title,
         group = escape_html(&block.group_name),
         name = escape_html(&block.name),
         btn_primary = style::btn_primary,
         btn_secondary = style::btn_secondary,
+        save_block = escape_html(tr(TextKey::SaveBlock)),
+        add_block_item = escape_html(tr(TextKey::AddBlockItem)),
+        back = escape_html(tr(TextKey::Back)),
         content = style::content,
         fallback_form = style::fallback_form,
         id = block.id,
@@ -536,6 +556,11 @@ fn block_editor_fallback_html(
         field = style::field,
         label = style::label,
         input = style::input,
+        block_label = escape_html(tr(TextKey::Block)),
+        block_group_name = escape_html(tr(TextKey::BlockGroupName)),
+        block_name = escape_html(tr(TextKey::BlockName)),
+        duration = escape_html(tr(TextKey::Duration)),
+        stop_scheduling_block_items = escape_html(tr(TextKey::StopSchedulingBlockItems)),
         hours = block.minutes / 60,
         duration_row = style::duration_row,
         duration_input = style::duration_input,
@@ -545,12 +570,23 @@ fn block_editor_fallback_html(
             "stop_scheduling",
             block.stop_scheduling,
             &[
-                (stop_scheduling::BEFORE_DURATION_END, "Before Duration End"),
-                (stop_scheduling::AFTER_DURATION_END, "After Duration End"),
+                (
+                    stop_scheduling::BEFORE_DURATION_END,
+                    tr(TextKey::BeforeDurationEnd)
+                ),
+                (
+                    stop_scheduling::AFTER_DURATION_END,
+                    tr(TextKey::AfterDurationEnd)
+                ),
             ],
         ),
+        block_items = escape_html(tr(TextKey::BlockItems)),
         items_table_wrap = style::items_table_wrap,
         items_table = style::items_table,
+        collection = escape_html(tr(TextKey::Collection)),
+        target = escape_html(tr(TextKey::Target)),
+        playback = escape_html(tr(TextKey::Playback)),
+        flags = escape_html(tr(TextKey::Flags)),
         rows = rows,
         new_collection = option_select_html("new_collection_id", None, &options.collections),
     )
@@ -562,19 +598,31 @@ fn block_item_fallback_row_html(
     options: &BlockEditorOptions,
 ) -> String {
     format!(
-        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="Search Title" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="Search Query" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>Show In EPG</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>Disable Watermarks</label><input class="{input}" name="item_watermark_ids" placeholder="Watermark IDs" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="Graphics IDs" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">Copy</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>Up</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">Down</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">Delete</button></div></td></tr>"#,
+        r#"<tr><td><input type="hidden" name="item_index" value="{item_index}"><input type="hidden" name="item_id" value="{id}">{collection_type}</td><td>{collection}{multi_collection}{smart_collection}{media_item}<input class="{input}" name="item_search_title" placeholder="{search_title_label}" value="{search_title}"><input class="{input}" name="item_search_query" placeholder="{search_query_label}" value="{search_query}"><input type="hidden" name="item_collection_name" value="{collection_name}"></td><td>{playback}</td><td><label class="{check}"><input type="checkbox" name="item_include_in_program_guide_index" value="{item_index}" {epg_checked}>{show_in_epg}</label><label class="{check}"><input type="checkbox" name="item_disable_watermarks_index" value="{item_index}" {watermark_checked}>{disable_watermarks}</label><input class="{input}" name="item_watermark_ids" placeholder="{watermark_ids_label}" value="{watermark_ids}"><input class="{input}" name="item_graphics_element_ids" placeholder="{graphics_ids_label}" value="{graphics_ids}"></td><td><div class="{row_actions}"><button class="{icon_btn}" type="submit" name="action" value="copy:{index}">{copy}</button><button class="{icon_btn}" type="submit" name="action" value="move-up:{index}" {move_up_disabled}>{up}</button><button class="{icon_btn}" type="submit" name="action" value="move-down:{index}">{down}</button><button class="{icon_btn}" type="submit" name="action" value="delete:{index}">{delete}</button></div></td></tr>"#,
         item_index = item.index,
         id = item.id,
         collection_type = select_html(
             "item_collection_type",
             item.collection_type,
             &[
-                (collection_type::COLLECTION, "Collection"),
-                (collection_type::TELEVISION_SHOW, "Television Show"),
-                (collection_type::TELEVISION_SEASON, "Television Season"),
-                (collection_type::MULTI_COLLECTION, "Multi Collection"),
-                (collection_type::SMART_COLLECTION, "Smart Collection"),
-                (collection_type::SEARCH_QUERY, "Search Query"),
+                (collection_type::COLLECTION, tr(TextKey::Collection)),
+                (
+                    collection_type::TELEVISION_SHOW,
+                    tr(TextKey::TelevisionShow)
+                ),
+                (
+                    collection_type::TELEVISION_SEASON,
+                    tr(TextKey::TelevisionSeason)
+                ),
+                (
+                    collection_type::MULTI_COLLECTION,
+                    tr(TextKey::MultiCollection)
+                ),
+                (
+                    collection_type::SMART_COLLECTION,
+                    tr(TextKey::SmartCollection)
+                ),
+                (collection_type::SEARCH_QUERY, tr(TextKey::SearchQuery)),
             ],
         ),
         collection = option_select_html(
@@ -596,20 +644,27 @@ fn block_item_fallback_row_html(
         input = style::input,
         search_title = escape_html(&item.search_title.clone().unwrap_or_default()),
         search_query = escape_html(&item.search_query.clone().unwrap_or_default()),
+        search_title_label = escape_html(tr(TextKey::SearchTitle)),
+        search_query_label = escape_html(tr(TextKey::SearchQuery)),
         collection_name = escape_html(&item.collection_name),
         playback = select_html(
             "item_playback_order",
             item.playback_order,
             &[
-                (playback_order::CHRONOLOGICAL, "Chronological"),
-                (playback_order::RANDOM, "Random"),
-                (playback_order::SHUFFLE, "Shuffle"),
-                (playback_order::SHUFFLE_IN_ORDER, "Shuffle In Order"),
-                (playback_order::SEASON_EPISODE, "Season, Episode"),
-                (playback_order::RANDOM_ROTATION, "Random Rotation"),
+                (playback_order::CHRONOLOGICAL, tr(TextKey::Chronological)),
+                (playback_order::RANDOM, tr(TextKey::Random)),
+                (playback_order::SHUFFLE, tr(TextKey::Shuffle)),
+                (
+                    playback_order::SHUFFLE_IN_ORDER,
+                    tr(TextKey::ShuffleInOrder)
+                ),
+                (playback_order::SEASON_EPISODE, tr(TextKey::SeasonEpisode)),
+                (playback_order::RANDOM_ROTATION, tr(TextKey::RandomRotation)),
             ],
         ),
         check = style::check,
+        show_in_epg = escape_html(tr(TextKey::ShowInEpg)),
+        disable_watermarks = escape_html(tr(TextKey::DisableWatermarks)),
         epg_checked = if item.include_in_program_guide {
             "checked"
         } else {
@@ -622,9 +677,15 @@ fn block_item_fallback_row_html(
         },
         watermark_ids = id_csv(&item.watermark_ids),
         graphics_ids = id_csv(&item.graphics_element_ids),
+        watermark_ids_label = escape_html(tr(TextKey::WatermarkIds)),
+        graphics_ids_label = escape_html(tr(TextKey::GraphicsIds)),
         row_actions = style::row_actions,
         icon_btn = style::icon_btn,
         index = index,
+        copy = escape_html(tr(TextKey::Copy)),
+        up = escape_html(tr(TextKey::MoveUp)),
+        down = escape_html(tr(TextKey::MoveDown)),
+        delete = escape_html(tr(TextKey::Delete)),
         move_up_disabled = if index == 0 { "disabled" } else { "" },
     )
 }
@@ -868,27 +929,30 @@ fn ItemEditor(
         let ct = col_type.get();
         match ct {
             t if t == collection_type::MULTI_COLLECTION => vec![
-                (playback_order::SHUFFLE, "Shuffle"),
-                (playback_order::SHUFFLE_IN_ORDER, "Shuffle In Order"),
+                (playback_order::SHUFFLE, tr(TextKey::Shuffle)),
+                (
+                    playback_order::SHUFFLE_IN_ORDER,
+                    tr(TextKey::ShuffleInOrder),
+                ),
             ],
             t if t == collection_type::TELEVISION_SHOW => vec![
-                (playback_order::SEASON_EPISODE, "Season, Episode"),
-                (playback_order::CHRONOLOGICAL, "Chronological"),
-                (playback_order::SHUFFLE, "Shuffle"),
-                (playback_order::RANDOM, "Random"),
+                (playback_order::SEASON_EPISODE, tr(TextKey::SeasonEpisode)),
+                (playback_order::CHRONOLOGICAL, tr(TextKey::Chronological)),
+                (playback_order::SHUFFLE, tr(TextKey::Shuffle)),
+                (playback_order::RANDOM, tr(TextKey::Random)),
             ],
             t if t == collection_type::COLLECTION || t == collection_type::SMART_COLLECTION => {
                 vec![
-                    (playback_order::CHRONOLOGICAL, "Chronological"),
-                    (playback_order::SHUFFLE, "Shuffle"),
-                    (playback_order::RANDOM, "Random"),
-                    (playback_order::RANDOM_ROTATION, "Random Rotation"),
+                    (playback_order::CHRONOLOGICAL, tr(TextKey::Chronological)),
+                    (playback_order::SHUFFLE, tr(TextKey::Shuffle)),
+                    (playback_order::RANDOM, tr(TextKey::Random)),
+                    (playback_order::RANDOM_ROTATION, tr(TextKey::RandomRotation)),
                 ]
             }
             _ => vec![
-                (playback_order::CHRONOLOGICAL, "Chronological"),
-                (playback_order::SHUFFLE, "Shuffle"),
-                (playback_order::RANDOM, "Random"),
+                (playback_order::CHRONOLOGICAL, tr(TextKey::Chronological)),
+                (playback_order::SHUFFLE, tr(TextKey::Shuffle)),
+                (playback_order::RANDOM, tr(TextKey::Random)),
             ],
         }
     };
@@ -905,11 +969,11 @@ fn ItemEditor(
     view! {
         <div class=style::item_editor>
             <h3 style="font-size:0.875rem;font-weight:600;color:var(--color-gray-200);margin:0">
-                "Block Item"
+                {tr(TextKey::BlockItem)}
             </h3>
 
             <div class=style::field>
-                <label class=style::label>"Collection Type"</label>
+                <label class=style::label>{tr(TextKey::CollectionType)}</label>
                 <select
                     class=style::select
                     prop:value=move || col_type.get().to_string()
@@ -919,12 +983,12 @@ fn ItemEditor(
                         }
                     }
                 >
-                    <option value=collection_type::COLLECTION.to_string()>"Collection"</option>
-                    <option value=collection_type::TELEVISION_SHOW.to_string()>"Television Show"</option>
-                    <option value=collection_type::TELEVISION_SEASON.to_string()>"Television Season"</option>
-                    <option value=collection_type::MULTI_COLLECTION.to_string()>"Multi Collection"</option>
-                    <option value=collection_type::SMART_COLLECTION.to_string()>"Smart Collection"</option>
-                    <option value=collection_type::SEARCH_QUERY.to_string()>"Search Query"</option>
+                    <option value=collection_type::COLLECTION.to_string()>{tr(TextKey::Collection)}</option>
+                    <option value=collection_type::TELEVISION_SHOW.to_string()>{tr(TextKey::TelevisionShow)}</option>
+                    <option value=collection_type::TELEVISION_SEASON.to_string()>{tr(TextKey::TelevisionSeason)}</option>
+                    <option value=collection_type::MULTI_COLLECTION.to_string()>{tr(TextKey::MultiCollection)}</option>
+                    <option value=collection_type::SMART_COLLECTION.to_string()>{tr(TextKey::SmartCollection)}</option>
+                    <option value=collection_type::SEARCH_QUERY.to_string()>{tr(TextKey::SearchQuery)}</option>
                 </select>
             </div>
 
@@ -933,12 +997,12 @@ fn ItemEditor(
                 class=style::field
                 style:display=move || if needs_autocomplete() { "" } else { "none" }
             >
-                <label class=style::label>"Collection"</label>
+                <label class=style::label>{tr(TextKey::Collection)}</label>
                 <div class=style::autocomplete>
                     <input
                         class=style::autocomplete_input
                         type="text"
-                        placeholder="Type to search…"
+                        placeholder=tr(TextKey::TypeToSearch)
                         prop:value=move || col_query.get()
                         disabled=move || !needs_autocomplete()
                         on:input=move |e| col_query.set(event_target_value(&e))
@@ -986,10 +1050,10 @@ fn ItemEditor(
                     if col_type.get() == collection_type::SEARCH_QUERY { "" } else { "none" }
                 }
             >
-                <label class=style::label>"Search Title (display)"</label>
+                <label class=style::label>{tr(TextKey::SearchTitleDisplay)}</label>
                 <input
                     class=style::input
-                    placeholder="Optional display title…"
+                    placeholder=tr(TextKey::OptionalDisplayTitle)
                     disabled=move || col_type.get() != collection_type::SEARCH_QUERY
                     prop:value=move || search_title.get()
                     on:input=move |e| search_title.set(event_target_value(&e))
@@ -1001,7 +1065,7 @@ fn ItemEditor(
                     if col_type.get() == collection_type::SEARCH_QUERY { "" } else { "none" }
                 }
             >
-                <label class=style::label>"Search Query"</label>
+                <label class=style::label>{tr(TextKey::SearchQuery)}</label>
                 <input
                     class=style::input
                     placeholder="e.g. genre:action"
@@ -1012,7 +1076,7 @@ fn ItemEditor(
             </div>
 
             <div class=style::field>
-                <label class=style::label>"Playback Order"</label>
+                <label class=style::label>{tr(TextKey::PlaybackOrder)}</label>
                 <select
                     class=style::select
                     prop:value=move || pb_order.get().to_string()
@@ -1027,10 +1091,10 @@ fn ItemEditor(
                     }).collect_view()}
                 </select>
             </div>
-            {multi_select_i64("Watermarks", &item.watermark_ids, options.watermarks.clone(), move |values| {
+            {multi_select_i64(tr(TextKey::Watermarks), &item.watermark_ids, options.watermarks.clone(), move |values| {
                 update_item(items, idx, |item| item.watermark_ids = values);
             })}
-            {multi_select_i64("Graphics Elements", &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
+            {multi_select_i64(tr(TextKey::GraphicsElements), &item.graphics_element_ids, options.graphics_elements.clone(), move |values| {
                 update_item(items, idx, |item| item.graphics_element_ids = values);
             })}
         </div>

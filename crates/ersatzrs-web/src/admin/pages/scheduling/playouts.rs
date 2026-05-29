@@ -5,6 +5,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::scheduling::timeline::PlayoutTimelineIsland;
 use crate::admin::server_fns::playouts::{list_playouts, PlayoutListRow};
 
@@ -23,14 +24,14 @@ pub fn PlayoutsPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <h1 class=style::page_title>"Playouts"</h1>
+            <h1 class=style::page_title>{tr(TextKey::Playouts)}</h1>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     rows.get().map(|data| {
                         if data.is_empty() {
                             return view! {
-                                <p class=style::empty>"No playouts found."</p>
+                                <p class=style::empty>{tr(TextKey::NoPlayoutsFound)}</p>
                             }
                             .into_any();
                         }
@@ -40,10 +41,10 @@ pub fn PlayoutsPage() -> impl IntoView {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Channel"</th>
-                                            <th>"Schedule Kind"</th>
-                                            <th>"Schedule Name"</th>
-                                            <th>"Actions"</th>
+                                            <th>{tr(TextKey::Channel)}</th>
+                                            <th>{tr(TextKey::ScheduleKind)}</th>
+                                            <th>{tr(TextKey::DefaultSchedule)}</th>
+                                            <th>{tr(TextKey::Actions)}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -99,7 +100,7 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                                         selected_id.set(Some(id));
                                                                     }
                                                                 >
-                                                                    {move || if is_selected.get() { "Selected" } else { "Timeline" }}
+                                                                    {move || if is_selected.get() { tr(TextKey::Selected) } else { tr(TextKey::Timeline) }}
                                                                 </button>
                                                                 {if is_sequential {
                                                                     view! {
@@ -109,7 +110,7 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                                                 "/playouts/sequential/{id}",
                                                                             )
                                                                         >
-                                                                            "Edit"
+                                                                            {tr(TextKey::Edit)}
                                                                         </a>
                                                                     }
                                                                         .into_any()
@@ -137,9 +138,9 @@ pub fn PlayoutsPage() -> impl IntoView {
                         view! {
                             <section class=style::timeline_section>
                                 <div class=style::timeline_header>
-                                    <h2 class=style::timeline_title>"Playout Timeline"</h2>
+                                    <h2 class=style::timeline_title>{tr(TextKey::PlayoutTimeline)}</h2>
                                     <p class=style::timeline_copy>
-                                        "Read-only 24-hour view of scheduled playout items."
+                                        {tr(TextKey::ReadOnlyTwentyFourHourPlayoutView)}
                                     </p>
                                 </div>
                                 <PlayoutTimelineIsland playout_id/>

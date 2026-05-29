@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{delete_failed, tr, TextKey};
 use crate::admin::server_fns::templates::{
     copy_template, create_template, create_template_group, delete_template, delete_template_group,
     format_short_time, get_template, get_template_items, list_template_block_groups,
@@ -72,9 +73,12 @@ fn TemplatesIsland() -> impl IntoView {
                     new_template_group_id.set(id);
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Template group created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::TemplateGroupCreated), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -86,9 +90,12 @@ fn TemplatesIsland() -> impl IntoView {
                     new_template_name.set(String::new());
                     templates.refetch();
                     groups.refetch();
-                    toast.push("Template created.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::TemplateCreated), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -101,7 +108,7 @@ fn TemplatesIsland() -> impl IntoView {
                     copy_target.set(None);
                     templates.refetch();
                     groups.refetch();
-                    toast.push("Template copied.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::TemplateCopied), ToastSeverity::Success);
                     #[cfg(target_arch = "wasm32")]
                     {
                         let _ = window().location().set_href(&format!("/templates/{id}"));
@@ -111,7 +118,10 @@ fn TemplatesIsland() -> impl IntoView {
                         let _ = id;
                     }
                 }
-                Err(error) => toast.push(format!("Copy failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::CopyFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -122,9 +132,9 @@ fn TemplatesIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Template group deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::TemplateGroupDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(&error), ToastSeverity::Error),
             }
         }
     });
@@ -135,9 +145,9 @@ fn TemplatesIsland() -> impl IntoView {
                 Ok(()) => {
                     groups.refetch();
                     templates.refetch();
-                    toast.push("Template deleted.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::TemplateDeleted), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(&error), ToastSeverity::Error),
             }
         }
     });
@@ -146,10 +156,10 @@ fn TemplatesIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::content>
                 <section class=style::section>
-                    <h1 class=style::page_title>"Template Groups"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::TemplateGroups)}</h1>
                     <div class=style::divider></div>
                     <form method="post" action="/api/templates/groups/create" class=style::form_grid>
-                        <label class=style::label for="template-group-name">"Template Group Name"</label>
+                        <label class=style::label for="template-group-name">{tr(TextKey::TemplateGroupName)}</label>
                         <input
                             id="template-group-name"
                             class=style::input
@@ -170,16 +180,16 @@ fn TemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Template Group"
+                            {tr(TextKey::AddTemplateGroup)}
                         </button>
                     </form>
                 </section>
 
                 <section class=style::section>
-                    <h2 class=style::section_title>"Templates"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Templates)}</h2>
                     <div class=style::divider></div>
                     <form method="post" action="/api/templates/create" class=style::form_grid>
-                        <label class=style::label for="template-group">"Template Group"</label>
+                        <label class=style::label for="template-group">{tr(TextKey::TemplateGroup)}</label>
                         <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                             {move || groups.get().map(|rows| view! {
                                 <select
@@ -201,7 +211,7 @@ fn TemplatesIsland() -> impl IntoView {
                             })}
                         </Suspense>
 
-                        <label class=style::label for="template-name">"Template Name"</label>
+                        <label class=style::label for="template-name">{tr(TextKey::TemplateName)}</label>
                         <input
                             id="template-name"
                             class=style::input
@@ -226,7 +236,7 @@ fn TemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Add Template"
+                            {tr(TextKey::AddTemplate)}
                         </button>
                     </form>
                 </section>
@@ -235,13 +245,13 @@ fn TemplatesIsland() -> impl IntoView {
                     <span class=style::filter_icon aria-hidden="true"></span>
                     <input
                         type="search"
-                        placeholder="Search for templates"
+                        placeholder=tr(TextKey::SearchForTemplates)
                         prop:value=move || search.get()
                         on:input=move |event| search.set(event_target_value(&event))
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || templates.get().map(|rows| view! {
                         <TemplateTable
                             rows=rows
@@ -267,15 +277,15 @@ fn TemplatesIsland() -> impl IntoView {
                 class=style::modal_panel
                 style:display=move || if copy_open.get() { "" } else { "none" }
             >
-                <h2 class=style::modal_title>"Copy Template"</h2>
-                <p class=style::label>"Select a group for the new template"</p>
+                <h2 class=style::modal_title>{tr(TextKey::CopyTemplate)}</h2>
+                <p class=style::label>{tr(TextKey::SelectGroupForNewTemplate)}</p>
                 <form method="post" action="/api/templates/copy" class=style::form_grid>
                     <input
                         type="hidden"
                         name="id"
                         value=move || copy_target.get().map(|row| row.id.to_string()).unwrap_or_default()
                     />
-                    <label class=style::label for="copy-template-group">"New Template Group"</label>
+                    <label class=style::label for="copy-template-group">{tr(TextKey::NewTemplateGroup)}</label>
                     <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                         {move || groups.get().map(|rows| view! {
                             <select
@@ -296,7 +306,7 @@ fn TemplatesIsland() -> impl IntoView {
                             </select>
                         })}
                     </Suspense>
-                    <label class=style::label for="copy-template-name">"New Template Name"</label>
+                    <label class=style::label for="copy-template-name">{tr(TextKey::NewTemplateName)}</label>
                     <input
                         id="copy-template-name"
                         class=style::input
@@ -307,7 +317,7 @@ fn TemplatesIsland() -> impl IntoView {
                     <div></div>
                     <div class=style::modal_actions>
                         <button type="button" class=style::btn_default on:click=move |_| copy_open.set(false)>
-                            "Cancel"
+                            {tr(TextKey::Cancel)}
                         </button>
                         <button
                             type="submit"
@@ -328,7 +338,7 @@ fn TemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            "Copy Template"
+                            {tr(TextKey::CopyTemplate)}
                         </button>
                     </div>
                 </form>
@@ -391,7 +401,7 @@ fn TemplateTable(
     delete_template_target: RwSignal<Option<(i64, String)>>,
 ) -> impl IntoView {
     if rows.is_empty() {
-        return view! { <p class=style::empty>"No templates found."</p> }.into_any();
+        return view! { <p class=style::empty>{tr(TextKey::NoTemplatesFound)}</p> }.into_any();
     }
 
     let mut grouped: BTreeMap<(String, i64), Vec<TemplateRow>> = BTreeMap::new();
@@ -407,7 +417,7 @@ fn TemplateTable(
             <table>
                 <thead>
                     <tr>
-                        <th>"Name"</th>
+                        <th>{tr(TextKey::Name)}</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -423,7 +433,7 @@ fn TemplateTable(
                                             <input type="hidden" name="id" value=group_id.to_string()/>
                                             <button
                                                 type="submit"
-                                                title="Delete Template Group"
+                                                title=tr(TextKey::DeleteTemplateGroup)
                                                 class=format!("{} {}", style::icon_button, style::danger)
                                                 on:click=move |event| {
                                                     event.prevent_default();
@@ -468,7 +478,7 @@ fn TemplateTable(
                                                     view! {
                                                         <a
                                                             class=style::icon_button
-                                                            title="Edit Template"
+                                                            title=tr(TextKey::EditTemplate)
                                                             href=href.clone()
                                                             on:click=move |event| navigate_by_browser(event, &href)
                                                         >
@@ -477,7 +487,7 @@ fn TemplateTable(
                                                         <button
                                                             type="button"
                                                             class=style::icon_button
-                                                            title="Copy Template"
+                                                            title=tr(TextKey::CopyTemplate)
                                                             on:click=move |_| {
                                                                 copy_group_id.set(copy_row.group_id);
                                                                 copy_name.set(format!("{copy_name_value} Copy"));
@@ -492,7 +502,7 @@ fn TemplateTable(
                                                             <button
                                                                 type="submit"
                                                                 class=format!("{} {}", style::icon_button, style::danger)
-                                                                title="Delete Template"
+                                                                title=tr(TextKey::DeleteTemplate)
                                                                 on:click=move |event| {
                                                                     event.prevent_default();
                                                                     delete_template_target
@@ -551,7 +561,7 @@ fn TemplateEditorIsland(template_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || data.get().map(|(template, items, groups)| {
                 match template {
                     Some(template) => view! {
@@ -577,8 +587,9 @@ fn TemplateNotFoundRedirect() -> impl IntoView {
 
     view! {
         <p class=style::empty>
-            "Template not found. "
-            <a href="/templates">"Back to templates"</a>
+            {tr(TextKey::TemplateNotFound)}
+            " "
+            <a href="/templates">{tr(TextKey::BackToTemplates)}</a>
         </p>
     }
 }
@@ -633,10 +644,7 @@ fn TemplateEditorForm(
                 }
                 start += 5;
             }
-            toast.push(
-                "Block will not fit at or after the selected start time.",
-                ToastSeverity::Error,
-            );
+            toast.push(tr(TextKey::BlockWillNotFit), ToastSeverity::Error);
         }
     };
 
@@ -651,7 +659,7 @@ fn TemplateEditorForm(
                         value="save"
                         class=style::btn_primary
                     >
-                        "Save Template"
+                        {tr(TextKey::SaveTemplate)}
                     </button>
                     <span class=style::action_title>
                         {group_name.clone()} " / " {move || name.get()}
@@ -661,7 +669,7 @@ fn TemplateEditorForm(
                         href="/templates"
                         on:click=move |event| navigate_by_browser(event, "/templates")
                     >
-                        "Back"
+                        {tr(TextKey::Back)}
                     </a>
                 </div>
             </div>
@@ -670,18 +678,18 @@ fn TemplateEditorForm(
                     <form method="post" action="/api/templates/items/save">
                         <input type="hidden" name="template_id" value=template_id.to_string()/>
                         <input type="hidden" name="group_id" value=group_id.to_string()/>
-                        <button type="submit" name="action" value="save">"Save Template"</button>
+                        <button type="submit" name="action" value="save">{tr(TextKey::SaveTemplate)}</button>
                     </form>
                 </noscript>
                 <form id="template-editor-form" method="post" action="/api/templates/items/save">
                     <input type="hidden" name="template_id" value=template_id.to_string()/>
                     <input type="hidden" name="group_id" value=group_id.to_string()/>
-                    <h1 class=style::section_title>"General"</h1>
+                    <h1 class=style::section_title>{tr(TextKey::General)}</h1>
                     <div class=style::divider></div>
                     <div class=style::form_grid>
-                        <label class=style::label>"Template Group Name"</label>
+                        <label class=style::label>{tr(TextKey::TemplateGroupName)}</label>
                         <input class=style::input disabled=true prop:value=group_name.clone()/>
-                        <label class=style::label for="template-editor-name">"Template Name"</label>
+                        <label class=style::label for="template-editor-name">{tr(TextKey::TemplateName)}</label>
                         <input
                             id="template-editor-name"
                             class=style::input
@@ -691,10 +699,10 @@ fn TemplateEditorForm(
                         />
                     </div>
 
-                    <h2 class=style::section_title>"Add Content"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::AddContent)}</h2>
                     <div class=style::divider></div>
                     <div class=style::form_grid>
-                        <label class=style::label for="template-block-group">"Block Group"</label>
+                        <label class=style::label for="template-block-group">{tr(TextKey::BlockGroup)}</label>
                         <select
                             id="template-block-group"
                             class=style::select
@@ -712,7 +720,7 @@ fn TemplateEditorForm(
                             }).collect_view()}
                         </select>
 
-                        <label class=style::label for="template-block">"Block"</label>
+                        <label class=style::label for="template-block">{tr(TextKey::Block)}</label>
                         <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
                             {move || blocks.get().map(|block_rows| view! {
                                 <select
@@ -742,7 +750,7 @@ fn TemplateEditorForm(
                             })}
                         </Suspense>
 
-                        <label class=style::label for="template-start">"Start Time On Or After"</label>
+                        <label class=style::label for="template-start">{tr(TextKey::StartTimeOnOrAfter)}</label>
                         <select
                             id="template-start"
                             class=style::select
@@ -764,14 +772,14 @@ fn TemplateEditorForm(
                             disabled=move || selected_block.get().is_none()
                             on:click=move |_| add_block()
                         >
-                            "Add Block To Template"
+                            {tr(TextKey::AddBlockToTemplate)}
                         </button>
                     </div>
 
-                    <h2 class=style::section_title>"Remove Content"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::RemoveContent)}</h2>
                     <div class=style::divider></div>
                     <div class=style::form_grid>
-                        <label class=style::label for="template-remove">"Block To Remove"</label>
+                        <label class=style::label for="template-remove">{tr(TextKey::BlockToRemove)}</label>
                         <select
                             id="template-remove"
                             class=style::select
@@ -780,7 +788,7 @@ fn TemplateEditorForm(
                                 block_to_remove.set(value.parse::<usize>().ok());
                             }
                         >
-                            <option value="">"(none)"</option>
+                            <option value="">{tr(TextKey::NoneOption)}</option>
                             {move || items.get().into_iter().enumerate().map(|(index, item)| {
                                 let label = format!("{} - {}", format_short_time(item.start_minutes), item.block_name);
                                 view! { <option value=index.to_string()>{label}</option> }
@@ -802,11 +810,11 @@ fn TemplateEditorForm(
                                 }
                             }
                         >
-                            "Remove Block From Template"
+                            {tr(TextKey::RemoveBlockFromTemplate)}
                         </button>
                     </div>
 
-                    <h2 class=style::section_title>"Content"</h2>
+                    <h2 class=style::section_title>{tr(TextKey::Content)}</h2>
                     <div class=style::divider></div>
                     {move || hidden_item_inputs(items.get())}
                     <div class=style::timeline_wrap>
@@ -853,7 +861,7 @@ fn TemplateEditorForm(
                                             || intersects_any(&current, new_start, new_end, Some(index))
                                         {
                                             toast.push(
-                                                "Block cannot be moved there because it would overlap or cross midnight.",
+                                                tr(TextKey::BlockCannotBeMoved),
                                                 ToastSeverity::Error,
                                             );
                                             return;
@@ -895,7 +903,7 @@ fn TemplateEditorForm(
                             </div>
                         </div>
                     </div>
-                    <button type="submit" name="action" value="save" class=style::hidden>"Save Template"</button>
+                    <button type="submit" name="action" value="save" class=style::hidden>{tr(TextKey::SaveTemplate)}</button>
                 </form>
             </div>
         </div>
