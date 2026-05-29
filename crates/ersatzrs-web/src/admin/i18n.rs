@@ -188,6 +188,7 @@ pub enum TextKey {
     DefaultMpegTsScript,
     DefaultMpegTsScriptHelp,
     Decorations,
+    Debug,
     Delete,
     DeleteAll,
     DeleteBlock,
@@ -219,6 +220,7 @@ pub enum TextKey {
     Ffmpeg,
     FileNotFound,
     Finish,
+    Fatal,
     FfmpegPath,
     FfmpegPathHelp,
     FfmpegProfiles,
@@ -239,6 +241,7 @@ pub enum TextKey {
     HdHomeRun,
     HealthChecks,
     Height,
+    Information,
     HlsDirectOutputFormat,
     HlsSegmenterIdleTimeout,
     HlsSegmenterIdleTimeoutHelp,
@@ -1078,6 +1081,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::DefaultMpegTsScript,
     TextKey::DefaultMpegTsScriptHelp,
     TextKey::Decorations,
+    TextKey::Debug,
     TextKey::Delete,
     TextKey::DeleteAll,
     TextKey::DeleteBlock,
@@ -1109,6 +1113,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Ffmpeg,
     TextKey::FileNotFound,
     TextKey::Finish,
+    TextKey::Fatal,
     TextKey::FfmpegPath,
     TextKey::FfmpegPathHelp,
     TextKey::FfmpegProfiles,
@@ -1128,6 +1133,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::HdHomeRun,
     TextKey::HealthChecks,
     TextKey::Height,
+    TextKey::Information,
     TextKey::HlsDirectOutputFormat,
     TextKey::HlsSegmenterIdleTimeout,
     TextKey::HlsSegmenterIdleTimeoutHelp,
@@ -1904,6 +1910,23 @@ pub fn schedule_item_fallback_label(id: i64) -> String {
     languages_for(use_i18n()).schedule_item_fallback_label(id)
 }
 
+pub fn log_level_label(level: &str) -> String {
+    log_level_text(use_i18n(), level)
+}
+
+pub fn log_level_text(language: UiLanguage, level: &str) -> String {
+    let key = match level {
+        "Debug" => TextKey::Debug,
+        "Information" => TextKey::Information,
+        "Warning" => TextKey::Warning,
+        "Error" => TextKey::Error,
+        "Fatal" => TextKey::Fatal,
+        _ => return level.to_owned(),
+    };
+
+    text(language, key).to_owned()
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2131,5 +2154,20 @@ mod tests {
             languages_for(UiLanguage::Dutch).schedule_item_fallback_label(7),
             "Schema-item #7"
         );
+    }
+
+    #[test]
+    fn log_level_labels_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            log_level_text(UiLanguage::English, "Information"),
+            "Information"
+        );
+        assert_eq!(log_level_text(UiLanguage::Polish, "Warning"), "Ostrzeżenie");
+        assert_eq!(
+            log_level_text(UiLanguage::PortugueseBrazil, "Debug"),
+            "Depuração"
+        );
+        assert_eq!(log_level_text(UiLanguage::Dutch, "Fatal"), "Fataal");
+        assert_eq!(log_level_text(UiLanguage::Dutch, "TRACE"), "TRACE");
     }
 }

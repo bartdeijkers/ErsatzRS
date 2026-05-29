@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{range_of, rows_per_page, tr, TextKey};
+use crate::admin::i18n::{log_level_label, range_of, rows_per_page, tr, TextKey};
 use crate::admin::server_fns::logs::{load_recent_log_entries, AdminLogEntry, AdminLogSnapshot};
 
 #[component]
@@ -130,7 +130,7 @@ fn render_row(entry: AdminLogEntry) -> impl IntoView {
                 {entry.timestamp}
             </td>
             <td style="padding:0.625rem 1rem;border-top:1px solid var(--color-table-line);white-space:nowrap">
-                {entry.level}
+                {log_level_label(&entry.level)}
             </td>
             <td style="padding:0.625rem 1rem;border-top:1px solid var(--color-table-line)">
                 {entry.message}

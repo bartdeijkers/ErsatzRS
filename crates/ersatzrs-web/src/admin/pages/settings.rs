@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{supported_ui_language_options, tr, TextKey};
+use crate::admin::i18n::{log_level_text, supported_ui_language_options, tr, use_i18n, TextKey};
 use crate::admin::server_fns::settings::{
     load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
     load_scanner_settings, load_ui_settings, load_xmltv_settings, FfmpegSettingsPageData,
@@ -440,11 +440,12 @@ fn CheckboxField(
 }
 
 fn log_level_options() -> Vec<SelectOption> {
+    let language = use_i18n();
     ["Debug", "Information", "Warning", "Error"]
         .into_iter()
         .map(|level| SelectOption {
             value: level.to_owned(),
-            label: level.to_owned(),
+            label: log_level_text(language, level),
         })
         .collect()
 }
