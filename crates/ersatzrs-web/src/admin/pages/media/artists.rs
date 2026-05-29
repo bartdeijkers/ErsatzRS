@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::AddToCollectionModal;
 use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
@@ -56,18 +57,18 @@ fn ArtistDetailIsland(id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
             {move || {
                 match data.get() {
                     Some(Some(artist)) => view! { <ArtistDetailView artist/> }.into_any(),
                     Some(None) => view! {
                         <div class=detail_style::not_found>
-                            <h1>"Artist not found"</h1>
-                            <a href="/media/music/artists">"Back to artists"</a>
+                            <h1>{tr(TextKey::ArtistNotFound)}</h1>
+                            <a href="/media/music/artists">{tr(TextKey::BackToArtists)}</a>
                         </div>
                     }
                     .into_any(),
-                    None => view! { <p class=detail_style::loading>"Loading…"</p> }.into_any(),
+                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
                 }
             }}
         </Suspense>
@@ -137,7 +138,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
         <div class=detail_style::page>
             <div class=detail_style::fanart_container>
                 <div class=detail_style::fanart_tint/>
-                <img class=detail_style::fanart src=fanart_src alt="fan art" style=fanart_style/>
+                <img class=detail_style::fanart src=fanart_src alt=tr(TextKey::FanArt) style=fanart_style/>
             </div>
 
             <div class=detail_style::content>
@@ -161,25 +162,25 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                                     collection_open.set(true);
                                 }
                             >
-                                "Add To Collection"
+                                {tr(TextKey::AddToCollection)}
                             </button>
                             <button
                                 type="button"
                                 class=style::action_btn
                                 on:click=move |_| schedule_open.set(true)
                             >
-                                "Add To Schedule"
+                                {tr(TextKey::AddToSchedule)}
                             </button>
-                            <a class=detail_style::btn_back href="/media/music/artists">"Back"</a>
+                            <a class=detail_style::btn_back href="/media/music/artists">{tr(TextKey::Back)}</a>
                         </div>
                     </div>
                 </div>
 
                 <dl class=detail_style::facts>
-                    {linked_fact_row("Languages", "language", &languages)}
-                    {linked_fact_row("Genres", "genre", &genres)}
-                    {linked_fact_row("Styles", "style", &styles)}
-                    {linked_fact_row("Moods", "mood", &moods)}
+                    {linked_fact_row(TextKey::Languages, "language", &languages)}
+                    {linked_fact_row(TextKey::Genres, "genre", &genres)}
+                    {linked_fact_row(TextKey::Styles, "style", &styles)}
+                    {linked_fact_row(TextKey::Moods, "mood", &moods)}
                 </dl>
 
                 <section class=style::music_video_section style=music_video_style>
@@ -210,7 +211,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                 open=schedule_open
                 media_item_id=id
                 collection_type=3
-                success_label="Added artist to schedule"
+                success_label=tr(TextKey::AddedArtistToSchedule)
                 redirect_after_add=true
             />
         </div>
@@ -251,9 +252,9 @@ fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) ->
         "display:none"
     };
     let warning_label = if video.media_item_state == 1 {
-        "File Not Found: "
+        tr(TextKey::FileNotFound)
     } else if video.media_item_state == 2 {
-        "Unavailable: "
+        tr(TextKey::Unavailable)
     } else {
         ""
     };
@@ -276,7 +277,7 @@ fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) ->
                 <div class=style::music_video_body>
                     <h2 class=style::music_video_title>{title}</h2>
                     <p class=style::fact_inline style=album_style>
-                        "Album: "
+                        {tr(TextKey::Album)} ": "
                         <a href=album_href>{album}</a>
                     </p>
                     <p class=style::music_video_plot style=plot_style>{plot}</p>
@@ -286,21 +287,21 @@ fn MusicVideoRow(video: ArtistMusicVideoRow, on_add_collection: Callback<()>) ->
                             class=style::action_btn
                             on:click=move |_| on_add_collection.run(())
                         >
-                            "Add To Collection"
+                            {tr(TextKey::AddToCollection)}
                         </button>
                     </div>
                 </div>
             </div>
             <div class=style::warning_line style=warning_style>
                 <span class=style::warning_icon>"!"</span>
-                <span>{warning_label}</span>
+                <span>{warning_label} ": "</span>
                 <code>{warning_path}</code>
             </div>
         </article>
     }
 }
 
-fn linked_fact_row(label: &'static str, field: &'static str, values: &[String]) -> Option<AnyView> {
+fn linked_fact_row(label_key: TextKey, field: &'static str, values: &[String]) -> Option<AnyView> {
     if values.is_empty() {
         return None;
     }
@@ -308,7 +309,7 @@ fn linked_fact_row(label: &'static str, field: &'static str, values: &[String]) 
     Some(
         view! {
             <div>
-                <dt>{label}</dt>
+                <dt>{tr(label_key)}</dt>
                 <dd>
                     {values.iter().enumerate().map(|(index, value)| {
                         view! {
