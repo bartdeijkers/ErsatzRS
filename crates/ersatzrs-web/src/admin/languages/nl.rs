@@ -2,11 +2,11 @@
 
 use crate::admin::i18n::{LanguageStrings, TextKey};
 
-pub struct DutchNetherlandsStrings;
+pub struct DutchStrings;
 
-pub static STRINGS: DutchNetherlandsStrings = DutchNetherlandsStrings;
+pub static STRINGS: DutchStrings = DutchStrings;
 
-impl LanguageStrings for DutchNetherlandsStrings {
+impl LanguageStrings for DutchStrings {
     fn text(&self, key: TextKey) -> &'static str {
         text(key)
     }

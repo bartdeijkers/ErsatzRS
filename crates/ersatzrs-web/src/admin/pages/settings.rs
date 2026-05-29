@@ -460,6 +460,6 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl-nl"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
     }
 }

@@ -1,4 +1,4 @@
-# ADR 0012: Admin UI nl-NL Localization
+# ADR 0012: Admin UI nl Localization
 
 ## Status
 
@@ -19,15 +19,15 @@ storage key, request/session behavior, and settings route.
 
 ## Decision
 
-Support `nl-NL` in ErsatzRS as an intentional admin UI localization extension.
-This is the variety of the Dutch language spoken in the Netherlands.
-Persist it as the normalized culture code `nl-nl` in `pages.language`, list it
-on `/settings/ui` as `Nederlands (Nederland)`, and render the admin UI from the
+Support `nl` in ErsatzRS as an intentional admin UI localization extension.
+This is standard Dutch for the admin UI.
+Persist it as the normalized culture code `nl` in `pages.language`, list it
+on `/settings/ui` as `Nederlands`, and render the admin UI from the
 same translation lookup path used by the ErsatzTV-supported cultures.
 
 Keep `en-us` as the default and normalization fallback. Continue to support
 ErsatzTV's `pl` and `pt-br` values verbatim. Normalize `nl`, `nl-NL`, and
-`nl_NL` input to `nl-nl`.
+`nl_NL` input to `nl`.
 
 In the future we may also support Flemish Dutch as `nl-be`, but that is out of
 scope for now.
@@ -40,7 +40,7 @@ page refresh behavior, and translated rendering, not strict equality of the
 supported-culture list.
 
 Any future import/export or compatibility work that validates `pages.language`
-must allow `nl-nl` in ErsatzRS databases while still falling back safely for
+must allow `nl` in ErsatzRS databases while still falling back safely for
 unknown values. New admin UI text must include Dutch translations before the
 i18n slice can be considered complete.
 

@@ -1260,6 +1260,6 @@ mod tests {
         assert_eq!(normalize_ui_language("en-us"), "en-us");
         assert_eq!(normalize_ui_language("pl"), "pl");
         assert_eq!(normalize_ui_language("pt-br"), "pt-br");
-        assert_eq!(normalize_ui_language("nl-NL"), "nl-nl");
+        assert_eq!(normalize_ui_language("nl-NL"), "nl");
     }
 }

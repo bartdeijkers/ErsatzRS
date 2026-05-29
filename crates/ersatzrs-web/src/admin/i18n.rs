@@ -7,7 +7,7 @@ pub enum UiLanguage {
     English,
     Polish,
     PortugueseBrazil,
-    DutchNetherlands,
+    Dutch,
 }
 
 impl UiLanguage {
@@ -16,7 +16,7 @@ impl UiLanguage {
             Self::English => "en-us",
             Self::Polish => "pl",
             Self::PortugueseBrazil => "pt-br",
-            Self::DutchNetherlands => "nl-nl",
+            Self::Dutch => "nl",
         }
     }
 
@@ -25,7 +25,7 @@ impl UiLanguage {
             Self::English => "English",
             Self::Polish => "Polski",
             Self::PortugueseBrazil => "Português (Brasil)",
-            Self::DutchNetherlands => "Nederlands (Nederland)",
+            Self::Dutch => "Nederlands",
         }
     }
 
@@ -33,7 +33,7 @@ impl UiLanguage {
         match value.trim().to_ascii_lowercase().as_str() {
             "pl" => Self::Polish,
             "pt-br" | "pt_br" => Self::PortugueseBrazil,
-            "nl" | "nl-nl" | "nl_nl" => Self::DutchNetherlands,
+            "nl" | "nl-nl" | "nl_nl" => Self::Dutch,
             _ => Self::English,
         }
     }
@@ -48,7 +48,7 @@ pub fn supported_ui_language_options() -> Vec<SelectOption> {
         UiLanguage::English,
         UiLanguage::Polish,
         UiLanguage::PortugueseBrazil,
-        UiLanguage::DutchNetherlands,
+        UiLanguage::Dutch,
     ]
     .into_iter()
     .map(|language| SelectOption {
@@ -1763,7 +1763,7 @@ fn languages_for(language: UiLanguage) -> &'static dyn LanguageStrings {
         UiLanguage::English => &crate::admin::languages::en_us::STRINGS,
         UiLanguage::Polish => &crate::admin::languages::pl::STRINGS,
         UiLanguage::PortugueseBrazil => &crate::admin::languages::pt_br::STRINGS,
-        UiLanguage::DutchNetherlands => &crate::admin::languages::nl_nl::STRINGS,
+        UiLanguage::Dutch => &crate::admin::languages::nl::STRINGS,
     }
 }
 
@@ -1850,7 +1850,7 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl-nl"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
     }
 
     #[test]
@@ -1859,7 +1859,7 @@ mod tests {
             UiLanguage::English,
             UiLanguage::Polish,
             UiLanguage::PortugueseBrazil,
-            UiLanguage::DutchNetherlands,
+            UiLanguage::Dutch,
         ];
         for language in languages {
             for key in ALL_TEXT_KEYS {
