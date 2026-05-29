@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::movies::search_link;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, BrowserKindConfig, MediaInfoModal, MultiSelectBrowserPage,
@@ -44,18 +45,18 @@ pub fn OtherVideoPage() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
             {move || {
                 match data.get() {
                     Some(Some(other_video)) => view! { <OtherVideoDetailView other_video/> }.into_any(),
                     Some(None) => view! {
                         <div class=detail_style::not_found>
-                            <h1>"Other video not found"</h1>
-                            <a href="/media/other/videos">"Back to other videos"</a>
+                            <h1>{tr(TextKey::OtherVideoNotFound)}</h1>
+                            <a href="/media/other/videos">{tr(TextKey::BackToOtherVideos)}</a>
                         </div>
                     }
                     .into_any(),
-                    None => view! { <p class=detail_style::loading>"Loading…"</p> }.into_any(),
+                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
                 }
             }}
         </Suspense>
@@ -128,8 +129,8 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
         "display:none"
     };
     let warning_label = match poster_state {
-        MediaItemState::FileNotFound => "File Not Found: ",
-        MediaItemState::Unavailable => "Unavailable: ",
+        MediaItemState::FileNotFound => tr(TextKey::FileNotFound),
+        MediaItemState::Unavailable => tr(TextKey::Unavailable),
         MediaItemState::Normal | MediaItemState::RemoteOnly => "",
     };
     let warning_path = match poster_state {
@@ -157,7 +158,7 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
         <div class=detail_style::page>
             <div class=detail_style::fanart_container>
                 <div class=detail_style::fanart_tint/>
-                <img class=detail_style::fanart src=fanart_src alt="fan art" style=fanart_style/>
+                <img class=detail_style::fanart src=fanart_src alt=tr(TextKey::FanArt) style=fanart_style/>
             </div>
 
             <div class=detail_style::content>
@@ -166,14 +167,14 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
                         <img class=detail_style::poster src=artwork_src alt=title_for_artwork/>
                         <div
                             class=format!("{} {}", detail_style::state_badge, detail_style::state_badge_error)
-                            aria-label="File not found"
+                            aria-label=tr(TextKey::FileNotFound)
                             style=file_not_found_style
                         >
                             <span style=icon_style(IconName::Warning, "1.4rem") aria-hidden="true"></span>
                         </div>
                         <div
                             class=format!("{} {}", detail_style::state_badge, detail_style::state_badge_warning)
-                            aria-label="Unavailable"
+                            aria-label=tr(TextKey::Unavailable)
                             style=unavailable_style
                         >
                             <span style=icon_style(IconName::Warning, "1.4rem") aria-hidden="true"></span>
@@ -191,21 +192,21 @@ fn OtherVideoDetailView(other_video: OtherVideoDetailRow) -> impl IntoView {
                 <OtherVideoActions id title=title.clone()/>
                 <div class=detail_style::warning style=warning_style>
                     <span style=icon_style(IconName::Warning, "1.2rem") aria-hidden="true"></span>
-                    <span>{warning_label}</span>
+                    <span>{warning_label}": "</span>
                     <code>{warning_path}</code>
                 </div>
                 <dl class=detail_style::facts>
-                    {linked_fact_row("Content Ratings", "content_rating", &content_ratings, false)}
-                    {linked_fact_row("Languages", "language", &languages, true)}
-                    {linked_fact_row("Studios", "studio", &studios, true)}
-                    {linked_fact_row("Directors", "director", &directors, true)}
-                    {linked_fact_row("Writers", "writer", &writers, true)}
-                    {linked_fact_row("Genres", "genre", &genres, true)}
-                    {linked_fact_row("Tags", "tag", &tags, true)}
+                    {linked_fact_row(TextKey::ContentRatings, "content_rating", &content_ratings, false)}
+                    {linked_fact_row(TextKey::Languages, "language", &languages, true)}
+                    {linked_fact_row(TextKey::Studios, "studio", &studios, true)}
+                    {linked_fact_row(TextKey::Directors, "director", &directors, true)}
+                    {linked_fact_row(TextKey::Writers, "writer", &writers, true)}
+                    {linked_fact_row(TextKey::Genres, "genre", &genres, true)}
+                    {linked_fact_row(TextKey::Tags, "tag", &tags, true)}
                 </dl>
 
                 <section class=detail_style::actors_section style=actors_style>
-                    <h2 class=detail_style::section_title>"Actors"</h2>
+                    <h2 class=detail_style::section_title>{tr(TextKey::Actors)}</h2>
                     <div class=detail_style::actor_grid>
                         {actors.into_iter().map(|actor| {
                             let href = search_link("actor", &actor.name, true);
@@ -242,7 +243,9 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
         if let Some(result) = media_info_action.value().get() {
             match result {
                 Ok(json) => media_info_body.set(json),
-                Err(error) => media_info_body.set(format!("Unable to load media info: {error}")),
+                Err(error) => {
+                    media_info_body.set(format!("{}: {error}", tr(TextKey::UnableToLoadMediaInfo)));
+                }
             }
         }
     });
@@ -260,25 +263,25 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
                     collection_open.set(true);
                 }
             >
-                <span>"Add To Collection"</span>
+                <span>{tr(TextKey::AddToCollection)}</span>
             </button>
             <button
                 type="button"
                 class=detail_style::btn_secondary
                 on:click=move |_| {
                     media_info_title.set(title.clone());
-                    media_info_body.set("Loading media info…".to_string());
+                    media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
                     media_info_open.set(true);
                     media_info_action.dispatch(());
                 }
             >
-                <span>"Show Media Info"</span>
+                <span>{tr(TextKey::ShowMediaInfo)}</span>
             </button>
             <a class=detail_style::btn_secondary href=troubleshoot_href>
-                <span>"Troubleshoot Playback"</span>
+                <span>{tr(TextKey::TroubleshootPlayback)}</span>
             </a>
             <a class=detail_style::btn_back href="/media/other/videos">
-                <span>"Back"</span>
+                <span>{tr(TextKey::Back)}</span>
             </a>
             <AddToCollectionModal
                 open=collection_open
@@ -295,7 +298,7 @@ fn OtherVideoActions(id: i64, title: String) -> impl IntoView {
 }
 
 fn linked_fact_row(
-    label: &'static str,
+    label: TextKey,
     search_field: &'static str,
     values: &[String],
     lowercase_query: bool,
@@ -308,7 +311,7 @@ fn linked_fact_row(
 
     view! {
         <div class=detail_style::fact_row style=row_style>
-            <dt>{label}</dt>
+            <dt>{tr(label)}</dt>
             <dd>
                 {values.iter()
                     .filter(|s| !s.trim().is_empty())
