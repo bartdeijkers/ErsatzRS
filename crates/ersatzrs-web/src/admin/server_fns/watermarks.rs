@@ -7,7 +7,9 @@ pub struct WatermarkListRow {
     pub id: i64,
     pub name: String,
     pub mode: String,
+    pub mode_id: i32,
     pub location: String,
+    pub location_id: i32,
     pub image_path: Option<String>,
     pub image_source: i32,
 }
@@ -125,14 +127,20 @@ pub async fn list_watermark_rows(
 
     Ok(rows
         .iter()
-        .map(|r| WatermarkListRow {
-            id: r.try_get("Id").unwrap_or(0),
-            name: r.try_get("Name").unwrap_or_default(),
-            mode: mode_label(r.try_get("Mode").unwrap_or(0)).to_string(),
-            location: location_label(r.try_get("Location").unwrap_or(0)).to_string(),
-            image_path: r.try_get("Image").ok(),
-            image_source: i32::try_from(r.try_get::<i64, _>("ImageSource").unwrap_or(0))
-                .unwrap_or(0),
+        .map(|r| {
+            let mode_id = r.try_get::<i64, _>("Mode").unwrap_or(0);
+            let location_id = r.try_get::<i64, _>("Location").unwrap_or(0);
+            WatermarkListRow {
+                id: r.try_get("Id").unwrap_or(0),
+                name: r.try_get("Name").unwrap_or_default(),
+                mode: mode_label(mode_id).to_string(),
+                mode_id: i32::try_from(mode_id).unwrap_or(0),
+                location: location_label(location_id).to_string(),
+                location_id: i32::try_from(location_id).unwrap_or(0),
+                image_path: r.try_get("Image").ok(),
+                image_source: i32::try_from(r.try_get::<i64, _>("ImageSource").unwrap_or(0))
+                    .unwrap_or(0),
+            }
         })
         .collect())
 }

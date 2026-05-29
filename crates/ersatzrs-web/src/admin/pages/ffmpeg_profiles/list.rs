@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::ffmpeg_profiles::{
     count_ffmpeg_profiles, delete_ffmpeg_profile, list_ffmpeg_profile_rows, FfmpegProfileListRow,
 };
@@ -50,19 +51,19 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
     });
 
     let columns: Vec<Column<FfmpegProfileListRow>> = vec![
-        Column::new("Name", |p: &FfmpegProfileListRow| {
+        Column::new(tr(TextKey::Name), |p: &FfmpegProfileListRow| {
             let n = p.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Resolution", |p: &FfmpegProfileListRow| {
+        Column::new(tr(TextKey::Resolution), |p: &FfmpegProfileListRow| {
             let r = p.resolution.clone();
             view! { <span class=style::cell_muted>{r}</span> }.into_any()
         }),
-        Column::new("Video Format", |p: &FfmpegProfileListRow| {
+        Column::new(tr(TextKey::VideoFormat), |p: &FfmpegProfileListRow| {
             let v = p.video_format.clone();
             view! { <span class=style::cell_muted>{v}</span> }.into_any()
         }),
-        Column::new("Audio Format", |p: &FfmpegProfileListRow| {
+        Column::new(tr(TextKey::AudioFormat), |p: &FfmpegProfileListRow| {
             let a = p.audio_format.clone();
             view! { <span class=style::cell_muted>{a}</span> }.into_any()
         }),
@@ -73,7 +74,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
         let p_clone = p.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>"Edit"</a>
+                <a href=format!("/ffmpeg/{id}") class=style::row_btn_edit>{tr(TextKey::Edit)}</a>
                 <button
                     class=style::row_btn_delete
                     on:click=move |_| {
@@ -81,7 +82,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
                         delete_open.set(true);
                     }
                 >
-                    "Delete"
+                    {tr(TextKey::Delete)}
                 </button>
             </div>
         }
@@ -98,9 +99,9 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
     view! {
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"FFmpeg Profiles"</h1>
+                <h1 class=style::page_title>{tr(TextKey::FfmpegProfiles)}</h1>
                 <div class=style::toolbar_actions>
-                    <a href="/ffmpeg/add" class=style::btn_add>"Add Profile"</a>
+                    <a href="/ffmpeg/add" class=style::btn_add>{tr(TextKey::AddProfile)}</a>
                 </div>
             </div>
 

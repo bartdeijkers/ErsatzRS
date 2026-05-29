@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{item_count, range_of, rows_per_page, tr, TextKey};
+
 stylance::import_crate_style!(style, "src/admin/ui/primitives/table.module.css");
 
 /// A column definition for `PagedTable`.
@@ -138,7 +140,7 @@ where
                     <tbody>
                         <Suspense fallback=|| view! {
                             <tr><td colspan="99" class=style::td_empty>
-                                "Loading..."
+                                {tr(TextKey::Loading)}
                             </td></tr>
                         }>
                             {move || {
@@ -147,7 +149,7 @@ where
                                         view! {
                                             <tr>
                                                 <td colspan="99" class=style::td_empty>
-                                                    "No items."
+                                                    {tr(TextKey::NoItems)}
                                                 </td>
                                             </tr>
                                         }.into_any()
@@ -183,10 +185,10 @@ where
             </div>
             <Suspense fallback=|| view! {
                 <div class=style::pagination>
-                    <span>"Loading..."</span>
+                    <span>{tr(TextKey::Loading)}</span>
                     <div class=style::page_btns>
-                        <button class=style::page_btn disabled=true>"‹ Prev"</button>
-                        <button class=style::page_btn disabled=true>"Next ›"</button>
+                        <button class=style::page_btn disabled=true>"‹"</button>
+                        <button class=style::page_btn disabled=true>"›"</button>
                     </div>
                 </div>
             }>
@@ -197,7 +199,7 @@ where
                                 <span>
                                     {move || {
                                         let p = params.get();
-                                        format!("Rows per page: {}", p.page_size)
+                                        rows_per_page(p.page_size)
                                     }}
                                 </span>
                                 <span>
@@ -207,9 +209,9 @@ where
                                         let end = ((p.page + 1) * p.page_size)
                                             .min(u32::try_from(total_items).unwrap_or(u32::MAX));
                                         if total_items == 0 {
-                                            "0 items".to_string()
+                                            item_count(0)
                                         } else {
-                                            format!("{start}–{end} of {total_items}")
+                                            range_of(start, end, total_items)
                                         }
                                     }}
                                 </span>
@@ -218,7 +220,7 @@ where
                                         class=style::page_btn
                                         disabled=move || params.get().page == 0
                                         on:click=go_prev
-                                        title="Previous page"
+                                        title=tr(TextKey::PreviousPage)
                                     >"‹"</button>
                                     <button
                                         class=style::page_btn
@@ -228,7 +230,7 @@ where
                                                 || u64::from((p.page + 1) * p.page_size) >= total_items
                                         }
                                         on:click=go_next
-                                        title="Next page"
+                                        title=tr(TextKey::NextPage)
                                     >"›"</button>
                                 </div>
                             </div>

@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::channels::{
     count_channels, delete_channel, list_channel_rows, ChannelListRow,
 };
@@ -52,7 +53,7 @@ fn ChannelsListIsland() -> impl IntoView {
     });
 
     let columns: Vec<Column<ChannelListRow>> = vec![
-        Column::new("Number", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::Number), |ch: &ChannelListRow| {
             let n = ch.number.clone();
             let enabled = ch.is_enabled;
             let show_in_epg = ch.show_in_epg;
@@ -64,9 +65,9 @@ fn ChannelsListIsland() -> impl IntoView {
                 n
             };
             let title = if !enabled {
-                "Channel disabled"
+                tr(TextKey::ChannelDisabled)
             } else if !show_in_epg {
-                "Channel hidden from EPG"
+                tr(TextKey::ChannelHiddenFromEpg)
             } else {
                 ""
             };
@@ -80,31 +81,31 @@ fn ChannelsListIsland() -> impl IntoView {
             }
             .into_any()
         }),
-        Column::new("Logo", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::Logo), |ch: &ChannelListRow| {
             let url = ch.logo_url.clone();
             let name = ch.name.clone();
             view! {
                 <img
                     src=url
                     class=style::logo_img
-                    alt=format!("{name} logo")
+                    alt=format!("{name} {}", tr(TextKey::Logo))
                 />
             }
             .into_any()
         }),
-        Column::new("Name", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::Name), |ch: &ChannelListRow| {
             let n = ch.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Language", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::Language), |ch: &ChannelListRow| {
             let language = ch.preferred_audio_language.clone();
             view! { <span>{language}</span> }.into_any()
         }),
-        Column::new("Mode", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::Mode), |ch: &ChannelListRow| {
             let m = ch.streaming_mode_label.clone();
             view! { <span>{m}</span> }.into_any()
         }),
-        Column::new("FFmpeg Profile", |ch: &ChannelListRow| {
+        Column::new(tr(TextKey::FfmpegProfile), |ch: &ChannelListRow| {
             let p = ch.ffmpeg_profile_name.clone();
             view! { <span>{p}</span> }.into_any()
         }),
@@ -120,25 +121,25 @@ fn ChannelsListIsland() -> impl IntoView {
                     href=format!("/iptv/channel/{number}.m3u8")
                     target="_blank"
                     class=style::row_btn_preview
-                    title="Preview channel"
-                    aria-label="Preview channel"
+                    title=tr(TextKey::PreviewChannel)
+                    aria-label=tr(TextKey::PreviewChannel)
                 ></a>
                 <a
                     href=format!("/channels/{id}")
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
-                    title="Edit channel"
-                    aria-label="Edit channel"
+                    title=tr(TextKey::EditChannel)
+                    aria-label=tr(TextKey::EditChannel)
                 ></a>
                 <span
                     class=format!("{} {} {}", style::row_btn_icon, style::row_btn_search, style::row_btn_disabled)
-                    title="Troubleshoot channel"
-                    aria-label="Troubleshoot channel"
+                    title=tr(TextKey::TroubleshootChannel)
+                    aria-label=tr(TextKey::TroubleshootChannel)
                     aria-disabled="true"
                 ></span>
                 <button
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
-                    title="Delete channel"
-                    aria-label="Delete channel"
+                    title=tr(TextKey::DeleteChannel)
+                    aria-label=tr(TextKey::DeleteChannel)
                     on:click=move |_| {
                         delete_target.set(Some(ch_clone.clone()));
                         delete_open.set(true);
@@ -153,15 +154,15 @@ fn ChannelsListIsland() -> impl IntoView {
         <div class=style::page>
             <div class=style::action_bar>
                 <a href="/channels/add" class=style::btn_add>
-                    "Add Channel"
+                    {tr(TextKey::AddChannel)}
                 </a>
                 <a href="/channels/numbers" class=style::btn_numbers>
-                    "Edit Numbers"
+                    {tr(TextKey::EditNumbers)}
                 </a>
             </div>
 
             <section class=style::content>
-                <h1 class=style::page_title>"Channels"</h1>
+                <h1 class=style::page_title>{tr(TextKey::Channels)}</h1>
                 <div class=style::divider/>
 
                 <div class=style::table_panel>
@@ -176,7 +177,7 @@ fn ChannelsListIsland() -> impl IntoView {
                             <span class=style::switch_track>
                                 <span class=style::switch_thumb/>
                             </span>
-                            <span>"Show Disabled"</span>
+                            <span>{tr(TextKey::ShowDisabled)}</span>
                         </label>
                     </div>
 

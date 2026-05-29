@@ -2,6 +2,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::media_sources::{
     delete_local_library, get_local_library_form, list_local_libraries, LocalLibraryForm,
     LocalLibraryRow,
@@ -42,15 +43,15 @@ fn LocalLibrariesIsland() -> impl IntoView {
     });
 
     let columns: Vec<Column<LocalLibraryRow>> = vec![
-        Column::new("Name", |r: &LocalLibraryRow| {
+        Column::new(tr(TextKey::Name), |r: &LocalLibraryRow| {
             let n = r.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Media Kind", |r: &LocalLibraryRow| {
+        Column::new(tr(TextKey::MediaKind), |r: &LocalLibraryRow| {
             let label = crate::admin::server_fns::media_sources::media_kind_label(r.media_kind);
             view! { <span class=style::cell_muted>{label}</span> }.into_any()
         }),
-        Column::new("Paths", |r: &LocalLibraryRow| {
+        Column::new(tr(TextKey::Paths), |r: &LocalLibraryRow| {
             let n = r.path_count;
             view! { <span class=style::cell_muted>{n}</span> }.into_any()
         }),
@@ -61,7 +62,7 @@ fn LocalLibrariesIsland() -> impl IntoView {
         let r_clone = r.clone();
         view! {
             <div class=style::row_actions>
-                <a href=format!("/media/sources/local/{id}/edit") class=style::row_btn>"Edit"</a>
+                <a href=format!("/media/sources/local/{id}/edit") class=style::row_btn>{tr(TextKey::Edit)}</a>
                 <button
                     class=style::row_btn_del
                     on:click=move |_| {
@@ -69,7 +70,7 @@ fn LocalLibrariesIsland() -> impl IntoView {
                         delete_open.set(true);
                     }
                 >
-                    "Delete"
+                    {tr(TextKey::Delete)}
                 </button>
             </div>
         }
@@ -80,9 +81,9 @@ fn LocalLibrariesIsland() -> impl IntoView {
         <Suspense fallback=|| ()>
         <div class=style::page>
             <div class=style::toolbar>
-                <h1 class=style::page_title>"Local Libraries"</h1>
+                <h1 class=style::page_title>{tr(TextKey::LocalLibraries)}</h1>
                 <div class=style::toolbar_actions>
-                    <a href="/media/sources/local/add" class=style::btn_primary>"+ Add Library"</a>
+                    <a href="/media/sources/local/add" class=style::btn_primary>{format!("+ {}", tr(TextKey::AddLibrary))}</a>
                 </div>
             </div>
 
@@ -129,7 +130,7 @@ pub fn LocalLibraryEditorPage() -> impl IntoView {
     });
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::cell_muted>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
             {move || initial.get().map(|initial_form| view! {
                 <LocalLibraryEditorForm initial_form=initial_form/>
             })}
@@ -141,13 +142,13 @@ pub fn LocalLibraryEditorPage() -> impl IntoView {
 fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
     let lib_id = initial_form.id;
     let media_kind_opts: Vec<(i32, String)> = vec![
-        (1, "Movies".into()),
-        (2, "Shows".into()),
-        (3, "Music Videos".into()),
-        (4, "Other Videos".into()),
-        (5, "Songs".into()),
-        (6, "Images".into()),
-        (7, "Remote Streams".into()),
+        (1, tr(TextKey::Movies).into()),
+        (2, tr(TextKey::TvShows).into()),
+        (3, tr(TextKey::MusicVideos).into()),
+        (4, tr(TextKey::OtherVideos).into()),
+        (5, tr(TextKey::Songs).into()),
+        (6, tr(TextKey::Images).into()),
+        (7, tr(TextKey::RemoteStreams).into()),
     ];
     let paths_text = initial_form
         .paths
@@ -163,21 +164,21 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
 
                 <div class=style::toolbar>
                     <div>
-                        <a href="/media/sources/local" class=style::back_link>"← Local Libraries"</a>
+                        <a href="/media/sources/local" class=style::back_link>{format!("← {}", tr(TextKey::LocalLibraries))}</a>
                         <h1 class=style::page_title>
-                            {if lib_id != 0 { "Edit Library" } else { "Add Library" }}
+                            {if lib_id != 0 { tr(TextKey::EditLibrary) } else { tr(TextKey::AddLibrary) }}
                         </h1>
                     </div>
                     <div class=style::toolbar_actions>
                         <button class=style::btn_primary type="submit">
-                            {if lib_id != 0 { "Save" } else { "Add" }}
+                            {if lib_id != 0 { tr(TextKey::Save) } else { tr(TextKey::Add) }}
                         </button>
                     </div>
                 </div>
 
                 <div class=style::editor_form>
                     <div class=style::form_row>
-                        <label class=style::form_label for="local-library-name">"Name"</label>
+                        <label class=style::form_label for="local-library-name">{tr(TextKey::Name)}</label>
                         <input
                             id="local-library-name"
                             class=style::form_input
@@ -188,7 +189,7 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                     </div>
 
                     <div class=style::form_row>
-                        <label class=style::form_label for="local-library-kind">"Media Kind"</label>
+                        <label class=style::form_label for="local-library-kind">{tr(TextKey::MediaKind)}</label>
                         <select
                             id="local-library-kind"
                             class=style::form_select
@@ -213,7 +214,7 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                     </div>
 
                     <div class=style::form_section>
-                        <label class=style::form_label for="local-library-paths">"Library Paths"</label>
+                        <label class=style::form_label for="local-library-paths">{tr(TextKey::LibraryPaths)}</label>
                         <textarea
                             id="local-library-paths"
                             class=style::form_input
@@ -221,7 +222,7 @@ fn LocalLibraryEditorForm(initial_form: LocalLibraryForm) -> impl IntoView {
                             rows="5"
                             placeholder="/mnt/media/movies"
                         >{paths_text}</textarea>
-                        <p class=style::cell_muted>"Enter one path per line."</p>
+                        <p class=style::cell_muted>{tr(TextKey::EnterOnePathPerLine)}</p>
                     </div>
                 </div>
             </form>

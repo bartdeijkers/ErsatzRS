@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     save_smart_collection, CollectionForm, CollectionOption,
 };
@@ -53,7 +54,7 @@ pub fn SaveAsSmartCollectionDialog(
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(id) => {
-                    toast.push("Smart collection saved.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::SmartCollectionSaved), ToastSeverity::Success);
                     if let Some(callback) = on_saved.as_ref() {
                         callback.run(id);
                     }
@@ -65,7 +66,7 @@ pub fn SaveAsSmartCollectionDialog(
                     query_error.set(None);
                 }
                 Err(error) => {
-                    toast.push(format!("Save failed: {error}"), ToastSeverity::Error);
+                    toast.push(save_failed(error), ToastSeverity::Error);
                     open.set(true);
                 }
             }
@@ -75,7 +76,7 @@ pub fn SaveAsSmartCollectionDialog(
     view! {
         <Modal
             open=open
-            title="Save As Smart Collection".to_string()
+            title=tr(TextKey::SaveAsSmartCollection).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if !confirmed {
                     name_error.set(None);
@@ -85,7 +86,7 @@ pub fn SaveAsSmartCollectionDialog(
 
                 let current_query = query.get_untracked().trim().to_string();
                 if current_query.is_empty() {
-                    query_error.set(Some("Search query is required".to_string()));
+                    query_error.set(Some(tr(TextKey::SearchQueryRequired).to_string()));
                     open.set(true);
                     return;
                 }
@@ -100,7 +101,7 @@ pub fn SaveAsSmartCollectionDialog(
                 };
 
                 if selected_name.is_empty() {
-                    name_error.set(Some("Name is required".to_string()));
+                    name_error.set(Some(tr(TextKey::NameRequired).to_string()));
                     open.set(true);
                     return;
                 }
@@ -113,12 +114,12 @@ pub fn SaveAsSmartCollectionDialog(
                     query: current_query,
                 });
             })
-            confirm_label="Save"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::Save))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
             <div class=style::form>
                 <div class=style::field>
-                    <label class=style::label>"Smart Collection"</label>
+                    <label class=style::label>{tr(TextKey::SmartCollection)}</label>
                     <select
                         class=format!("{} {}", style::input, style::select)
                         prop:value=move || selected_id.get().to_string()
@@ -136,7 +137,7 @@ pub fn SaveAsSmartCollectionDialog(
                             }
                         }
                     >
-                        <option value=NEW_SMART_COLLECTION_ID.to_string()>"(New Collection)"</option>
+                        <option value=NEW_SMART_COLLECTION_ID.to_string()>{tr(TextKey::NewCollection)}</option>
                         {move || {
                             options.get().into_iter().map(|option| view! {
                                 <option value=option.id.to_string()>{option.name}</option>
@@ -146,7 +147,7 @@ pub fn SaveAsSmartCollectionDialog(
                 </div>
 
                 <div class=style::field>
-                    <label class=style::label>"Name"</label>
+                    <label class=style::label>{tr(TextKey::Name)}</label>
                     <input
                         type="text"
                         class=style::input

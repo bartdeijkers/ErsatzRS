@@ -2,6 +2,10 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{
+    no_media_source_configured, provider_connection_title, provider_libraries_title,
+    provider_path_label, provider_path_replacements_title, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_sources::{
     delete_jellyfin_source, get_jellyfin_connection, list_jellyfin_libraries, list_jellyfin_paths,
     list_jellyfin_sources, save_jellyfin_connection, save_jellyfin_library_prefs,
@@ -47,20 +51,18 @@ pub fn JellyfinSourcesPage() -> impl IntoView {
                 <h1 class=style::page_title>"Jellyfin"</h1>
                 <div class=style::toolbar_actions>
                     <a href="/media/sources/jellyfin/edit" class=style::btn_primary>
-                        "Configure Connection"
+                        {tr(TextKey::ConfigureConnection)}
                     </a>
                 </div>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let list = rows.get().unwrap_or_default();
                     if list.is_empty() {
                         view! {
                             <p class=style::cell_muted>
-                                "No Jellyfin source configured. Click "
-                                <strong>"Configure Connection"</strong>
-                                " to add one."
+                                {no_media_source_configured("Jellyfin")}
                             </p>
                         }.into_any()
                     } else {
@@ -68,8 +70,8 @@ pub fn JellyfinSourcesPage() -> impl IntoView {
                             <table style="width:100%;border-collapse:collapse">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Name"</th>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Address"</th>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
                                         <th/>
                                     </tr>
                                 </thead>
@@ -83,16 +85,16 @@ pub fn JellyfinSourcesPage() -> impl IntoView {
                                                 <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
                                                 <td style="padding:0.5rem;text-align:right">
                                                     <div class=style::row_actions>
-                                                        <a href=format!("/media/sources/jellyfin/{id}/libraries") class=style::row_btn>"Libraries"</a>
-                                                        <a href=format!("/media/sources/jellyfin/{id}/paths") class=style::row_btn>"Paths"</a>
-                                                        <a href="/media/sources/jellyfin/edit" class=style::row_btn>"Edit"</a>
+                                                        <a href=format!("/media/sources/jellyfin/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                        <a href=format!("/media/sources/jellyfin/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                                        <a href="/media/sources/jellyfin/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
                                                         <button
                                                             class=style::row_btn_del
                                                             on:click=move |_| {
                                                                 delete_target.set(Some(r_clone.clone()));
                                                                 delete_open.set(true);
                                                             }
-                                                        >"Delete"</button>
+                                                        >{tr(TextKey::Delete)}</button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -138,7 +140,7 @@ fn JellyfinConnectionEditorIsland() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
             {move || {
                 initial.get().map(|form| view! {
                     <JellyfinConnectionEditorForm initial_form=form/>
@@ -168,7 +170,7 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
         }
         Some(Err(e)) => {
             saving.set(false);
-            err.set(Some(format!("Save failed: {e}")));
+            err.set(Some(save_failed(e)));
         }
         None => {}
     });
@@ -177,11 +179,11 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
         let a = address.get_untracked().trim().to_string();
         let k = api_key.get_untracked().trim().to_string();
         if a.is_empty() {
-            err.set(Some("Address is required.".into()));
+            err.set(Some(tr(TextKey::AddressRequired).to_owned()));
             return;
         }
         if k.is_empty() {
-            err.set(Some("API key is required.".into()));
+            err.set(Some(tr(TextKey::ApiKeyRequired).to_owned()));
             return;
         }
         err.set(None);
@@ -198,7 +200,7 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/jellyfin" class=style::back_link>"← Jellyfin"</a>
-                    <h1 class=style::page_title>"Jellyfin Connection"</h1>
+                    <h1 class=style::page_title>{provider_connection_title("Jellyfin")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -206,14 +208,14 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
                         on:click=on_save
                         disabled=move || saving.get()
                     >
-                        {move || if saving.get() { "Saving…" } else { "Save" }}
+                        {move || if saving.get() { tr(TextKey::Saving) } else { tr(TextKey::Save) }}
                     </button>
                 </div>
             </div>
 
             <div class=style::editor_form>
                 <div class=style::form_row>
-                    <label class=style::form_label>"Server Address"</label>
+                    <label class=style::form_label>{tr(TextKey::Address)}</label>
                     <input
                         class=style::form_input
                         type="url"
@@ -223,7 +225,7 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
                     />
                 </div>
                 <div class=style::form_row>
-                    <label class=style::form_label>"API Key"</label>
+                    <label class=style::form_label>{tr(TextKey::ApiKey)}</label>
                     <input
                         class=style::form_input
                         type="password"
@@ -271,7 +273,7 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -280,7 +282,7 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/jellyfin" class=style::back_link>"← Jellyfin"</a>
-                    <h1 class=style::page_title>"Jellyfin Libraries"</h1>
+                    <h1 class=style::page_title>{provider_libraries_title("Jellyfin")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -289,20 +291,20 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch(prefs.get_untracked());
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let list = prefs.get();
                     view! {
                         <table style="width:100%;border-collapse:collapse">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Library"</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Kind"</th>
-                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">"Sync"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Library)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Kind)}</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Sync)}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -336,7 +338,7 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
             </Suspense>
 
             {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
         </div>
     }
 }
@@ -372,7 +374,7 @@ pub fn JellyfinPathsPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -398,7 +400,7 @@ pub fn JellyfinPathsPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/jellyfin" class=style::back_link>"← Jellyfin"</a>
-                    <h1 class=style::page_title>"Jellyfin Path Replacements"</h1>
+                    <h1 class=style::page_title>{provider_path_replacements_title("Jellyfin")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -407,7 +409,7 @@ pub fn JellyfinPathsPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch((source_id(), paths.get_untracked()));
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
@@ -416,11 +418,11 @@ pub fn JellyfinPathsPage() -> impl IntoView {
                 new_remote=new_remote
                 new_local=new_local
                 on_add=on_add
-                remote_label="Jellyfin Path"
+                remote_label=provider_path_label("Jellyfin")
             />
 
             {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
         </div>
     }
 }
@@ -433,7 +435,7 @@ pub fn PathsEditor(
     new_remote: RwSignal<String>,
     new_local: RwSignal<String>,
     on_add: impl Fn(leptos::ev::MouseEvent) + 'static + Clone,
-    remote_label: &'static str,
+    remote_label: String,
 ) -> impl IntoView {
     view! {
         <div class=style::editor_form>
@@ -449,7 +451,7 @@ pub fn PathsEditor(
                     />
                 </div>
                 <div class=style::form_row style="flex:1">
-                    <label class=style::form_label>"Local Path"</label>
+                    <label class=style::form_label>{tr(TextKey::LocalPath)}</label>
                     <input
                         class=style::form_input
                         type="text"
@@ -458,20 +460,20 @@ pub fn PathsEditor(
                         on:input=move |e| new_local.set(event_target_value(&e))
                     />
                 </div>
-                <button class=style::btn_secondary on:click=on_add>"Add"</button>
+                <button class=style::btn_secondary on:click=on_add>{tr(TextKey::Add)}</button>
             </div>
 
             {move || {
                 let list = paths.get();
                 if list.is_empty() {
-                    view! { <p class=style::cell_muted>"No path replacements."</p> }.into_any()
+                    view! { <p class=style::cell_muted>{tr(TextKey::NoPathReplacements)}</p> }.into_any()
                 } else {
                     view! {
                         <table style="width:100%;border-collapse:collapse">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Remote"</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Local"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Remote)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Local)}</th>
                                     <th/>
                                 </tr>
                             </thead>
@@ -487,7 +489,7 @@ pub fn PathsEditor(
                                                     on:click=move |_| {
                                                         paths.update(|list| { list.remove(i); });
                                                     }
-                                                >"Remove"</button>
+                                                >{tr(TextKey::Remove)}</button>
                                             </td>
                                         </tr>
                                     }

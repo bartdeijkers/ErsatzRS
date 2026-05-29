@@ -24,6 +24,10 @@ use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query_map;
 
+use crate::admin::i18n::{
+    add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
+    added_items_to_playlist, search_count, selected_items_count, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist_mixed, CollectionOption,
     PlaylistGroupOption, PlaylistOption,
@@ -54,7 +58,7 @@ mod shell {
 struct SectionMeta {
     kind: SearchCardKind,
     anchor: &'static str,
-    label: &'static str,
+    label: TextKey,
     list_path: &'static str,
 }
 
@@ -62,61 +66,61 @@ const SECTIONS: [SectionMeta; 10] = [
     SectionMeta {
         kind: SearchCardKind::Movie,
         anchor: "movies",
-        label: "Movies",
+        label: TextKey::Movies,
         list_path: "/media/movies",
     },
     SectionMeta {
         kind: SearchCardKind::Show,
         anchor: "shows",
-        label: "Shows",
+        label: TextKey::TvShows,
         list_path: "/media/tv/shows",
     },
     SectionMeta {
         kind: SearchCardKind::Season,
         anchor: "seasons",
-        label: "Seasons",
+        label: TextKey::Seasons,
         list_path: "/media/tv/seasons",
     },
     SectionMeta {
         kind: SearchCardKind::Episode,
         anchor: "episodes",
-        label: "Episodes",
+        label: TextKey::Episodes,
         list_path: "/media/tv/episodes",
     },
     SectionMeta {
         kind: SearchCardKind::Artist,
         anchor: "artists",
-        label: "Artists",
+        label: TextKey::Artists,
         list_path: "/media/music/artists",
     },
     SectionMeta {
         kind: SearchCardKind::MusicVideo,
         anchor: "music_videos",
-        label: "Music Videos",
+        label: TextKey::MusicVideos,
         list_path: "/media/music/videos",
     },
     SectionMeta {
         kind: SearchCardKind::OtherVideo,
         anchor: "other_videos",
-        label: "Other Videos",
+        label: TextKey::OtherVideos,
         list_path: "/media/other/videos",
     },
     SectionMeta {
         kind: SearchCardKind::Song,
         anchor: "songs",
-        label: "Songs",
+        label: TextKey::Songs,
         list_path: "/media/music/songs",
     },
     SectionMeta {
         kind: SearchCardKind::Image,
         anchor: "images",
-        label: "Images",
+        label: TextKey::Images,
         list_path: "/media/images",
     },
     SectionMeta {
         kind: SearchCardKind::RemoteStream,
         anchor: "remote_streams",
-        label: "Remote Streams",
+        label: TextKey::RemoteStreams,
         list_path: "/media/remote/streams",
     },
 ];
@@ -167,15 +171,15 @@ pub fn SearchPage() -> impl IntoView {
     view! {
         <div class=shell::page>
             <form method="get" action="/search" class=shell::toolbar>
-                <h1 class=shell::page_title>"Search"</h1>
+                <h1 class=shell::page_title>{tr(TextKey::Search)}</h1>
                 <input
                     class=shell::search
                     type="search"
                     name="query"
-                    placeholder="Search…"
+                    placeholder=tr(TextKey::Search)
                     value=input_value
                 />
-                <button type="submit" class=shell::btn_add>"Search"</button>
+                <button type="submit" class=shell::btn_add>{tr(TextKey::Search)}</button>
             </form>
 
             <SearchIsland query=initial_query/>
@@ -196,12 +200,12 @@ fn SearchIsland(query: String) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 data.get().map(|(query, results)| {
                     if query.trim().is_empty() {
                         return view! {
-                            <p class=style::empty>"Enter a search query."</p>
+                            <p class=style::empty>{tr(TextKey::EnterSearchQuery)}</p>
                         }
                         .into_any();
                     }
@@ -210,7 +214,7 @@ fn SearchIsland(query: String) -> impl IntoView {
                         .any(|m| !section_for(&results, m.kind).cards.is_empty());
                     if !any {
                         return view! {
-                            <p class=style::empty>"No media matched."</p>
+                            <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
                         }
                         .into_any();
                     }
@@ -335,14 +339,14 @@ fn SearchResultsView(query: String, results: SearchResults) -> impl IntoView {
                             <section class=style::section>
                                 <div class=style::section_head>
                                     <h2 id=meta.anchor class=style::section_title>
-                                        {meta.label}
+                                        {tr(meta.label)}
                                     </h2>
                                     <a
                                         class=style::see_all
                                         href=see_all_href(meta.list_path, &q_for_link)
                                         style:display=move || { if total > 50 { "" } else { "none" } }
                                     >
-                                        "See All >>"
+                                        {tr(TextKey::SeeAll)}
                                     </a>
                                 </div>
                             <div class=style::grid>
@@ -433,7 +437,7 @@ fn SearchToolbar(
                                 class=style::count_link
                                 href=format!("#{}", meta.anchor)
                             >
-                                {format!("{total} {}", meta.label)}
+                                {search_count(total, tr(meta.label))}
                             </a>
                         })
                         .collect_view()}
@@ -441,24 +445,24 @@ fn SearchToolbar(
                 <div class=style::actions>
                     <button
                         class=style::action_btn
-                        title="Add All To Collection"
+                        title=tr(TextKey::AddToCollection)
                         on:click=move |_| on_add_all_collection.run(())
                     >
-                        "Add All"
+                        {tr(TextKey::AddAll)}
                     </button>
                     <button
                         class=style::action_btn
-                        title="Add All To Playlist"
+                        title=tr(TextKey::AddToPlaylist)
                         on:click=move |_| on_add_all_playlist.run(())
                     >
-                        "Add All"
+                        {tr(TextKey::AddAll)}
                     </button>
                     <button
                         class=style::action_btn_secondary
-                        title="Save As Smart Collection"
+                        title=tr(TextKey::SaveAsSmartCollection)
                         on:click=move |_| on_save_as.run(())
                     >
-                        "Save As"
+                        {tr(TextKey::SaveAs)}
                     </button>
                 </div>
             </div>
@@ -466,12 +470,7 @@ fn SearchToolbar(
                 <div class=style::count_links>
                     <span class=style::query_echo>
                         {move || {
-                            let n = select_count.get();
-                            if n == 1 {
-                                "1 Item Selected".to_string()
-                            } else {
-                                format!("{n} Items Selected")
-                            }
+                            selected_items_count(select_count.get())
                         }}
                     </span>
                 </div>
@@ -480,19 +479,19 @@ fn SearchToolbar(
                         class=style::action_btn
                         on:click=move |_| on_sel_collection.run(())
                     >
-                        "Add To Collection"
+                        {tr(TextKey::AddToCollection)}
                     </button>
                     <button
                         class=style::action_btn
                         on:click=move |_| on_sel_playlist.run(())
                     >
-                        "Add To Playlist"
+                        {tr(TextKey::AddToPlaylist)}
                     </button>
                     <button
                         class=style::action_btn_secondary
                         on:click=move |_| on_clear.run(())
                     >
-                        "Clear Selection"
+                        {tr(TextKey::ClearSelection)}
                     </button>
                 </div>
             </div>
@@ -567,15 +566,15 @@ fn SearchCardActionFallback() -> impl IntoView {
         >
             <div class=style::action_modal_panel>
                 <h2 id="search-card-action-title" class=style::action_modal_title>
-                    "Add To Collection"
+                    {tr(TextKey::AddToCollection)}
                 </h2>
                 <div
                     id="search-card-collection-fields"
                     class=style::action_modal_fields
                 >
-                    <label for="search-card-collection-select">"Collection"</label>
+                    <label for="search-card-collection-select">{tr(TextKey::Collection)}</label>
                     <select id="search-card-collection-select"></select>
-                    <label for="search-card-collection-name">"New Collection Name"</label>
+                    <label for="search-card-collection-name">{tr(TextKey::NewCollectionName)}</label>
                     <input
                         id="search-card-collection-name"
                         type="text"
@@ -587,9 +586,9 @@ fn SearchCardActionFallback() -> impl IntoView {
                     class=style::action_modal_fields
                     style="display:none"
                 >
-                    <label for="search-card-playlist-group">"Playlist Group"</label>
+                    <label for="search-card-playlist-group">{tr(TextKey::PlaylistGroup)}</label>
                     <select id="search-card-playlist-group"></select>
-                    <label for="search-card-playlist-select">"Playlist"</label>
+                    <label for="search-card-playlist-select">{tr(TextKey::Playlist)}</label>
                     <select id="search-card-playlist-select"></select>
                 </div>
                 <p id="search-card-action-message" class=style::action_modal_message></p>
@@ -599,26 +598,42 @@ fn SearchCardActionFallback() -> impl IntoView {
                         type="button"
                         class=style::action_btn_secondary
                     >
-                        "Cancel"
+                        {tr(TextKey::Cancel)}
                     </button>
                     <button
                         id="search-card-action-submit"
                         type="button"
                         class=style::action_btn
                     >
-                        "Add To Collection"
+                        {tr(TextKey::AddToCollection)}
                     </button>
                 </div>
             </div>
         </div>
-        <script inner_html=SEARCH_CARD_ACTION_SCRIPT></script>
+        <script inner_html=search_card_action_script()></script>
     }
 }
 
-const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
+fn search_card_action_script() -> String {
+    let labels = serde_json::json!({
+        "addToCollection": tr(TextKey::AddToCollection),
+        "addToPlaylist": tr(TextKey::AddToPlaylist),
+        "requestFailed": tr(TextKey::RequestFailed),
+        "loadingPlaylists": tr(TextKey::LoadingPlaylists),
+        "noPlaylistsInGroup": tr(TextKey::NoPlaylistsInGroup),
+        "loadingCollections": tr(TextKey::LoadingCollections),
+        "loadingPlaylistGroups": tr(TextKey::LoadingPlaylistGroups),
+        "newCollection": tr(TextKey::NewCollection),
+        "addingItem": tr(TextKey::AddingItem),
+        "addingItemToPlaylist": tr(TextKey::AddingItemToPlaylist),
+        "pleaseChoosePlaylist": tr(TextKey::PleaseChoosePlaylist),
+        "addedItemToPlaylist": tr(TextKey::AddedItemToPlaylist),
+    });
+    r#"
 (() => {
   if (window.__ersatzrsSearchCardActions) return;
   window.__ersatzrsSearchCardActions = true;
+  const labels = __ERSATZRS_SEARCH_LABELS__;
 
   const state = { mode: "", mediaItemId: 0 };
   const byId = (id) => document.getElementById(id);
@@ -634,7 +649,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
   const json = async (url, options) => {
     const response = await fetch(url, options);
     if (!response.ok) {
-      let detail = "Request failed";
+      let detail = labels.requestFailed;
       try {
         const body = await response.json();
         detail = body.error || detail;
@@ -666,8 +681,8 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
     show("search-card-playlist-fields", mode === "playlist");
     const title = byId("search-card-action-title");
     const submit = byId("search-card-action-submit");
-    if (title) title.textContent = mode === "collection" ? "Add To Collection" : "Add To Playlist";
-    if (submit) submit.textContent = mode === "collection" ? "Add To Collection" : "Add To Playlist";
+    if (title) title.textContent = mode === "collection" ? labels.addToCollection : labels.addToPlaylist;
+    if (submit) submit.textContent = mode === "collection" ? labels.addToCollection : labels.addToPlaylist;
     const el = modal();
     if (el) el.style.display = "";
   };
@@ -680,13 +695,13 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
 
   byId("search-card-playlist-group")?.addEventListener("change", async () => {
     const groupId = Number(byId("search-card-playlist-group")?.value || 0);
-    message("Loading playlists...");
+    message(labels.loadingPlaylists);
     try {
       const playlists = groupId > 0
         ? await json(`/api/media/actions/playlists?group_id=${groupId}`)
         : [];
       fillSelect("search-card-playlist-select", playlists);
-      message(playlists.length ? "" : "No playlists in this group.");
+      message(playlists.length ? "" : labels.noPlaylistsInGroup);
     } catch (error) {
       message(error.message);
     }
@@ -704,7 +719,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
 
     const mode = button.dataset.searchCardAction;
     openModal(mode, mediaItemId);
-    message(mode === "collection" ? "Loading collections..." : "Loading playlist groups...");
+    message(mode === "collection" ? labels.loadingCollections : labels.loadingPlaylistGroups);
 
     try {
       if (mode === "collection") {
@@ -714,7 +729,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
           name.disabled = false;
         }
         const collections = await json("/api/media/actions/collections");
-        fillSelect("search-card-collection-select", collections, { id: -1, name: "(New Collection)" });
+        fillSelect("search-card-collection-select", collections, { id: -1, name: labels.newCollection });
         message("");
       } else if (mode === "playlist") {
         const groups = await json("/api/media/actions/playlist-groups");
@@ -733,7 +748,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
   });
   byId("search-card-action-submit")?.addEventListener("click", async () => {
     if (!state.mediaItemId) return;
-    message(state.mode === "collection" ? "Adding item..." : "Adding item to playlist...");
+    message(state.mode === "collection" ? labels.addingItem : labels.addingItemToPlaylist);
     try {
       if (state.mode === "collection") {
         const selected = Number(byId("search-card-collection-select")?.value || -1);
@@ -751,7 +766,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
       } else if (state.mode === "playlist") {
         const playlistId = Number(byId("search-card-playlist-select")?.value || 0);
         if (!playlistId) {
-          message("Please choose a playlist.");
+          message(labels.pleaseChoosePlaylist);
           return;
         }
         await json("/api/media/actions/playlists/add", {
@@ -759,7 +774,7 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ media_item_id: state.mediaItemId, playlist_id: playlistId })
         });
-        message("Added item to playlist.");
+        message(labels.addedItemToPlaylist);
         setTimeout(close, 600);
       }
     } catch (error) {
@@ -767,7 +782,9 @@ const SEARCH_CARD_ACTION_SCRIPT: &str = r#"
     }
   });
 })();
-"#;
+"#
+    .replace("__ERSATZRS_SEARCH_LABELS__", &labels.to_string())
+}
 
 // ---------------------------------------------------------------------------
 // Bulk-action dialogs. Both resolve ids from either the current selection
@@ -827,6 +844,8 @@ fn AddToCollectionModal(
     let collection_id: RwSignal<i64> = RwSignal::new(NEW_COLLECTION_ID);
     let new_name: RwSignal<String> = RwSignal::new(String::new());
     let toast = use_toast();
+    let no_items_to_add = tr(TextKey::NoItemsToAdd).to_owned();
+    let collection_name_required = tr(TextKey::CollectionNameRequired).to_owned();
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -846,16 +865,18 @@ fn AddToCollectionModal(
         let all = bulk_all.get_untracked();
         let chosen = collection_id.get_untracked();
         let name = new_name.get_untracked();
+        let no_items_to_add = no_items_to_add.clone();
+        let collection_name_required = collection_name_required.clone();
         async move {
             let ids = resolve_ids(q, sel, all).await?;
             let flat = ids.flatten();
             if flat.is_empty() {
-                return Err(ServerFnError::new("No items to add."));
+                return Err(ServerFnError::new(no_items_to_add));
             }
             let target = if chosen == NEW_COLLECTION_ID {
                 let name = name.trim();
                 if name.is_empty() {
-                    return Err(ServerFnError::new("Collection name is required"));
+                    return Err(ServerFnError::new(collection_name_required));
                 }
                 crate::admin::server_fns::media_browser::create_collection(name.to_string())
                     .await?
@@ -872,19 +893,13 @@ fn AddToCollectionModal(
         if let Some(res) = submit_action.value().get() {
             match res {
                 Ok((requested, _)) => {
-                    toast.push(
-                        format!("Added {requested} items to collection"),
-                        ToastSeverity::Success,
-                    );
+                    toast.push(added_items_to_collection(requested), ToastSeverity::Success);
                     selected.update(HashSet::clear);
                     open.set(false);
                     collection_id.set(NEW_COLLECTION_ID);
                     new_name.set(String::new());
                 }
-                Err(e) => toast.push(
-                    format!("Add to collection failed: {e}"),
-                    ToastSeverity::Error,
-                ),
+                Err(e) => toast.push(add_to_collection_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -892,18 +907,18 @@ fn AddToCollectionModal(
     view! {
         <Modal
             open=open
-            title="Add To Collection".to_string()
+            title=tr(TextKey::AddToCollection).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if confirmed {
                     submit_action.dispatch(());
                 }
             })
-            confirm_label="Add To Collection"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::AddToCollection))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
-            <p>"Select the collection to add the search results to."</p>
+            <p>{tr(TextKey::SelectSearchCollectionHelp)}</p>
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
-                <label>"Collection"</label>
+                <label>{tr(TextKey::Collection)}</label>
                 <select
                     prop:value=move || collection_id.get().to_string()
                     on:change=move |e| {
@@ -912,14 +927,14 @@ fn AddToCollectionModal(
                         }
                     }
                 >
-                    <option value=NEW_COLLECTION_ID.to_string()>"(New Collection)"</option>
+                    <option value=NEW_COLLECTION_ID.to_string()>{tr(TextKey::NewCollection)}</option>
                     {move || {
                         options.get().into_iter().map(|c| view! {
                             <option value=c.id.to_string()>{c.name}</option>
                         }).collect_view()
                     }}
                 </select>
-                <label>"New Collection Name"</label>
+                <label>{tr(TextKey::NewCollectionName)}</label>
                 <input
                     type="text"
                     prop:value=move || new_name.get()
@@ -943,6 +958,8 @@ fn AddToPlaylistModal(
     let groups: RwSignal<Vec<PlaylistGroupOption>> = RwSignal::new(Vec::new());
     let playlists: RwSignal<Vec<PlaylistOption>> = RwSignal::new(Vec::new());
     let toast = use_toast();
+    let no_items_to_add = tr(TextKey::NoItemsToAdd).to_owned();
+    let please_choose_playlist = tr(TextKey::PleaseChoosePlaylist).to_owned();
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
@@ -976,13 +993,15 @@ fn AddToPlaylistModal(
             selected.with_untracked(|s| s.iter().copied().collect());
         let all = bulk_all.get_untracked();
         let pid = playlist_id.get_untracked();
+        let no_items_to_add = no_items_to_add.clone();
+        let please_choose_playlist = please_choose_playlist.clone();
         async move {
             if pid == 0 {
-                return Err(ServerFnError::new("Please choose a playlist"));
+                return Err(ServerFnError::new(please_choose_playlist));
             }
             let ids = resolve_ids(q, sel, all).await?;
             if ids.is_empty() {
-                return Err(ServerFnError::new("No items to add."));
+                return Err(ServerFnError::new(no_items_to_add));
             }
             let count = ids.flatten().len();
             let added = add_media_items_to_playlist_mixed(pid, ids).await?;
@@ -994,15 +1013,12 @@ fn AddToPlaylistModal(
         if let Some(res) = submit_action.value().get() {
             match res {
                 Ok((requested, _)) => {
-                    toast.push(
-                        format!("Added {requested} items to playlist"),
-                        ToastSeverity::Success,
-                    );
+                    toast.push(added_items_to_playlist(requested), ToastSeverity::Success);
                     selected.update(HashSet::clear);
                     open.set(false);
                 }
                 Err(e) => {
-                    toast.push(format!("Add to playlist failed: {e}"), ToastSeverity::Error);
+                    toast.push(add_to_playlist_failed(e), ToastSeverity::Error);
                 }
             }
         }
@@ -1011,18 +1027,18 @@ fn AddToPlaylistModal(
     view! {
         <Modal
             open=open
-            title="Add To Playlist".to_string()
+            title=tr(TextKey::AddToPlaylist).to_string()
             on_close=Callback::new(move |confirmed: bool| {
                 if confirmed {
                     submit_action.dispatch(());
                 }
             })
-            confirm_label="Add To Playlist"
-            cancel_label="Cancel"
+            confirm_label=Some(tr(TextKey::AddToPlaylist))
+            cancel_label=Some(tr(TextKey::Cancel))
         >
-            <p>"Select the playlist to add the search results to."</p>
+            <p>{tr(TextKey::SelectSearchPlaylistHelp)}</p>
             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem">
-                <label>"Playlist Group"</label>
+                <label>{tr(TextKey::PlaylistGroup)}</label>
                 <select
                     prop:value=move || group_id.get().to_string()
                     on:change=move |e| {
@@ -1032,14 +1048,14 @@ fn AddToPlaylistModal(
                         }
                     }
                 >
-                    <option value="0">"(Select a group)"</option>
+                    <option value="0">{tr(TextKey::SelectGroup)}</option>
                     {move || {
                         groups.get().into_iter().map(|g| view! {
                             <option value=g.id.to_string()>{g.name}</option>
                         }).collect_view()
                     }}
                 </select>
-                <label>"Playlist"</label>
+                <label>{tr(TextKey::Playlist)}</label>
                 <select
                     prop:value=move || playlist_id.get().to_string()
                     on:change=move |e| {
@@ -1049,7 +1065,7 @@ fn AddToPlaylistModal(
                     }
                     disabled=move || group_id.get() == 0
                 >
-                    <option value="0">"(Select a playlist)"</option>
+                    <option value="0">{tr(TextKey::SelectPlaylist)}</option>
                     {move || {
                         playlists.get().into_iter().map(|p| view! {
                             <option value=p.id.to_string()>{p.name}</option>

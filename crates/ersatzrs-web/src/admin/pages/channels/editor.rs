@@ -2,6 +2,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::channels::{
     get_channel_editor_data, ChannelEditorData, ChannelMirrorOption, ChannelSelectOption,
 };
@@ -21,10 +22,8 @@ pub fn ChannelEditorPage() -> impl IntoView {
         let raw = params.get("error").unwrap_or_default();
         match raw.as_str() {
             "" => String::new(),
-            "save" => {
-                "Channel could not be saved. Check the form values and try again.".to_string()
-            }
-            "upload" => "Channel logo upload failed. Check the file and try again.".to_string(),
+            "save" => tr(TextKey::ChannelCouldNotBeSaved).to_string(),
+            "upload" => tr(TextKey::ChannelLogoUploadFailed).to_string(),
             message => message.to_string(),
         }
     });
@@ -34,7 +33,7 @@ pub fn ChannelEditorPage() -> impl IntoView {
     });
 
     view! {
-        <Suspense fallback=move || view! { <p>"Loading..."</p> }>
+        <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
             {move || {
                 let form_error = form_error.clone();
                 data.get()
@@ -94,15 +93,15 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let fallback_filler_id = RwSignal::new(initial_form.fallback_filler_id);
 
     let page_title = if channel_id != 0 {
-        "Edit Channel"
+        tr(TextKey::EditChannel)
     } else {
-        "Add Channel"
+        tr(TextKey::AddChannel)
     };
 
     let save_label = if channel_id != 0 {
-        "Save Channel"
+        tr(TextKey::SaveChannel)
     } else {
-        "Add Channel"
+        tr(TextKey::AddChannel)
     };
     let has_form_error = !form_error.is_empty();
 
@@ -163,7 +162,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     view! {
         <div class=style::page>
             <div class=style::breadcrumb>
-                <a href="/channels" class=style::back_link>"Channels"</a>
+                <a href="/channels" class=style::back_link>{tr(TextKey::Channels)}</a>
                 <h1 class=style::page_title inner_html=page_title></h1>
             </div>
 
@@ -177,129 +176,129 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         {form_error}
                     </p>
 
-                    {text_field("Number", "number", number, "")}
-                    {text_field("Name", "name", name, "")}
-                    {text_field("Group", "group", group, "")}
+                    {text_field(tr(TextKey::Number), "number", number, "")}
+                    {text_field(tr(TextKey::Name), "name", name, "")}
+                    {text_field(tr(TextKey::Group), "group", group, "")}
                     {text_field(
-                        "Categories",
+                        tr(TextKey::Categories),
                         "categories",
                         categories,
-                        "Comma-separated list of categories",
+                        tr(TextKey::CategoriesHelp),
                     )}
 
                     {select_i32_field(
-                        "Transcode Mode",
+                        tr(TextKey::TranscodeMode),
                         "transcode_mode",
                         transcode_mode,
-                        Signal::derive(|| vec![(0, "On Demand".to_string())]),
+                        Signal::derive(|| vec![(0, tr(TextKey::OnDemand).to_string())]),
                         Some(Signal::derive(|| true)),
-                        "Controls when the transcoding process is active",
+                        tr(TextKey::TranscodeModeHelp),
                     )}
                     {select_i32_field(
-                        "Idle Behavior",
+                        tr(TextKey::IdleBehavior),
                         "idle_behavior",
                         idle_behavior,
                         Signal::derive(|| vec![
-                            (0, "Stop On Disconnect".to_string()),
-                            (1, "Keep Running".to_string()),
+                            (0, tr(TextKey::StopOnDisconnect).to_string()),
+                            (1, tr(TextKey::KeepRunning).to_string()),
                         ]),
                         None,
-                        "Controls how the transcoding process behaves after all clients have disconnected",
+                        tr(TextKey::IdleBehaviorHelp),
                     )}
 
                     {select_i32_field(
-                        "Playout Source",
+                        tr(TextKey::PlayoutSource),
                         "playout_source",
                         playout_source,
                         Signal::derive(|| vec![
-                            (0, "Generated".to_string()),
-                            (1, "Mirror".to_string()),
+                            (0, tr(TextKey::Generated).to_string()),
+                            (1, tr(TextKey::Mirror).to_string()),
                         ]),
                         Some(Signal::derive(move || playout_source_locked)),
-                        "Controls the source of the channel's content. This cannot be changed when the channel already has a playout.",
+                        tr(TextKey::PlayoutSourceHelp),
                     )}
 
                     <div>
                         {select_i32_field(
-                            "Playout Mode",
+                            tr(TextKey::PlayoutMode),
                             "playout_mode",
                             playout_mode,
                             Signal::derive(|| vec![
-                                (0, "Continuous".to_string()),
-                                (1, "On Demand".to_string()),
+                                (0, tr(TextKey::Continuous).to_string()),
+                                (1, tr(TextKey::OnDemand).to_string()),
                             ]),
                             None,
-                            "Controls the progression of the channel's playout",
+                            tr(TextKey::PlayoutModeHelp),
                         )}
                     </div>
 
                     <div>
                         {select_i64_field(
-                            "Mirror Source Channel",
+                            tr(TextKey::MirrorSourceChannel),
                             "mirror_source_channel_id",
                             mirror_source_channel_id,
                             mirror_options,
-                            "(none)",
+                            tr(TextKey::NoneOption),
                             None,
                         )}
-                        {number_field("Playout Offset", "playout_offset_hours", playout_offset_hours, "hours")}
+                        {number_field(tr(TextKey::PlayoutOffset), "playout_offset_hours", playout_offset_hours, tr(TextKey::Hours))}
                     </div>
 
                     <div class=style::checkboxes>
-                        {checkbox_field("Is Enabled", "is_enabled", is_enabled)}
-                        {checkbox_field("Show In EPG", "show_in_epg", show_in_epg)}
+                        {checkbox_field(tr(TextKey::IsEnabled), "is_enabled", is_enabled)}
+                        {checkbox_field(tr(TextKey::ShowInEpg), "show_in_epg", show_in_epg)}
                     </div>
 
                     {select_i32_field(
-                        "Streaming Mode",
+                        tr(TextKey::StreamingMode),
                         "streaming_mode",
                         streaming_mode,
                         Signal::derive(|| vec![
                             (5, "MPEG-TS".to_string()),
                             (1, "MPEG-TS (Legacy)".to_string()),
-                            (2, "HLS Direct".to_string()),
-                            (4, "HLS Segmenter".to_string()),
+                            (2, tr(TextKey::HlsDirect).to_string()),
+                            (4, tr(TextKey::HlsSegmenter).to_string()),
                         ]),
                         None,
                         "",
                     )}
 
                     {select_i64_field(
-                        "FFmpeg Profile",
+                        tr(TextKey::FfmpegProfile),
                         "ffmpeg_profile_id",
                         ffmpeg_profile_id,
                         profile_items,
-                        "- Select profile -",
+                        tr(TextKey::SelectProfile),
                         Some(is_hls_direct),
                     )}
                     <p class=style::no_profiles hidden=has_profiles>
-                        "No FFmpeg profiles found. Create one first."
+                        {tr(TextKey::NoFfmpegProfiles)}
                     </p>
 
                     {select_string_field(
-                        "Slug Seconds",
+                        tr(TextKey::SlugSeconds),
                         "slug_seconds",
                         slug_seconds,
                         Signal::derive(|| vec![
-                            (String::new(), "(none)".to_string()),
-                            ("0.5".to_string(), "0.5 seconds".to_string()),
-                            ("1".to_string(), "1 second".to_string()),
-                            ("2".to_string(), "2 seconds".to_string()),
-                            ("3".to_string(), "3 seconds".to_string()),
-                            ("5".to_string(), "5 seconds".to_string()),
+                            (String::new(), tr(TextKey::NoneOption).to_string()),
+                            ("0.5".to_string(), format!("0.5 {}", tr(TextKey::Seconds))),
+                            ("1".to_string(), format!("1 {}", tr(TextKey::Second))),
+                            ("2".to_string(), format!("2 {}", tr(TextKey::Seconds))),
+                            ("3".to_string(), format!("3 {}", tr(TextKey::Seconds))),
+                            ("5".to_string(), format!("5 {}", tr(TextKey::Seconds))),
                         ]),
                         "",
                         None,
-                        "Seconds of black video and silent audio to insert between every playout item",
+                        tr(TextKey::SlugSecondsHelp),
                     )}
 
                     {select_i32_field(
-                        "Stream Selector Mode",
+                        tr(TextKey::StreamSelectorMode),
                         "stream_selector_mode",
                         stream_selector_mode,
                         Signal::derive(|| vec![
-                            (0, "Default".to_string()),
-                            (1, "Custom".to_string()),
+                            (0, tr(TextKey::DefaultOption).to_string()),
+                            (1, tr(TextKey::Custom).to_string()),
                         ]),
                         None,
                         "",
@@ -307,33 +306,33 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
 
                     <div>
                         {select_string_field(
-                            "Preferred Audio Language",
+                            tr(TextKey::PreferredAudioLanguage),
                             "preferred_audio_language_code",
                             preferred_audio_language_code,
                             language_items,
-                            "(none)",
+                            tr(TextKey::NoneOption),
                             None,
                             "",
                         )}
-                        {text_field("Preferred Audio Title", "preferred_audio_title", preferred_audio_title, "")}
+                        {text_field(tr(TextKey::PreferredAudioTitle), "preferred_audio_title", preferred_audio_title, "")}
                         {select_string_field(
-                            "Preferred Subtitle Language",
+                            tr(TextKey::PreferredSubtitleLanguage),
                             "preferred_subtitle_language_code",
                             preferred_subtitle_language_code,
                             language_items,
-                            "(none)",
+                            tr(TextKey::NoneOption),
                             None,
                             "",
                         )}
                         {select_i32_field(
-                            "Subtitle Mode",
+                            tr(TextKey::SubtitleMode),
                             "subtitle_mode",
                             subtitle_mode,
                             Signal::derive(|| vec![
-                                (0, "None".to_string()),
-                                (1, "Forced".to_string()),
-                                (2, "Default".to_string()),
-                                (3, "Any".to_string()),
+                                (0, tr(TextKey::NoneOption).to_string()),
+                                (1, tr(TextKey::Forced).to_string()),
+                                (2, tr(TextKey::DefaultOption).to_string()),
+                                (3, tr(TextKey::Any).to_string()),
                             ]),
                             None,
                             "",
@@ -342,50 +341,50 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
 
                     <div>
                         {select_string_field(
-                            "Stream Selector",
+                            tr(TextKey::StreamSelector),
                             "stream_selector",
                             stream_selector,
                             stream_selector_items,
-                            "(none)",
+                            tr(TextKey::NoneOption),
                             None,
                             "",
                         )}
                     </div>
 
                     {select_i32_field(
-                        "Music Video Credits Mode",
+                        tr(TextKey::MusicVideoCreditsMode),
                         "music_video_credits_mode",
                         music_video_credits_mode,
                         Signal::derive(|| vec![
-                            (0, "None".to_string()),
-                            (1, "Generate Subtitles".to_string()),
+                            (0, tr(TextKey::NoneOption).to_string()),
+                            (1, tr(TextKey::GenerateSubtitles).to_string()),
                         ]),
                         None,
                         "",
                     )}
                     {select_string_field(
-                        "Music Video Credits Template",
+                        tr(TextKey::MusicVideoCreditsTemplate),
                         "music_video_credits_template",
                         music_video_credits_template,
                         music_video_template_items,
-                        "(none)",
+                        tr(TextKey::NoneOption),
                         None,
                         "",
                     )}
                     {select_i32_field(
-                        "Song Video Mode",
+                        tr(TextKey::SongVideoMode),
                         "song_video_mode",
                         song_video_mode,
                         Signal::derive(|| vec![
-                            (0, "Default".to_string()),
-                            (1, "With Progress".to_string()),
+                            (0, tr(TextKey::DefaultOption).to_string()),
+                            (1, tr(TextKey::WithProgress).to_string()),
                         ]),
                         None,
                         "",
                     )}
 
                     <div class=style::field>
-                        <label class=style::label for="channel-logo-file">"Upload Logo"</label>
+                        <label class=style::label for="channel-logo-file">{tr(TextKey::UploadLogo)}</label>
                         <input
                             id="channel-logo-file"
                             name="logo_file"
@@ -394,42 +393,42 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                             class=style::input
                         />
                         <span class=style::helper>
-                            "Choose a local image to replace the stored channel logo on save"
+                            {tr(TextKey::UploadLogoHelp)}
                         </span>
                         <span class=style::error></span>
                     </div>
 
-                    {text_field("External Logo URL", "external_logo_url", external_logo_url, "")}
+                    {text_field(tr(TextKey::ExternalLogoUrl), "external_logo_url", external_logo_url, "")}
 
                     <div class=style::field>
-                        <label class=style::label>"Logo Preview"</label>
+                        <label class=style::label>{tr(TextKey::ChannelLogoPreview)}</label>
                         <img
                             class=style::logo_preview
                             src=move || logo_preview.get()
-                            alt="Channel logo preview"
+                            alt=tr(TextKey::ChannelLogoPreview)
                             style:display=move || if logo_preview.get().trim().is_empty() { "none" } else { "" }
                         />
                     </div>
 
                     <div class=style::checkboxes>
-                        {checkbox_field("Remove Stored Logo", "remove_logo", RwSignal::new(false))}
+                        {checkbox_field(tr(TextKey::RemoveStoredLogo), "remove_logo", RwSignal::new(false))}
                     </div>
 
                     {select_i64_field(
-                        "Watermark",
+                        tr(TextKey::Watermark),
                         "watermark_id",
                         watermark_id,
                         watermark_items,
-                        "(none)",
+                        tr(TextKey::NoneOption),
                         Some(is_hls_direct),
                     )}
 
                     {select_i64_field(
-                        "Fallback Filler",
+                        tr(TextKey::FallbackFiller),
                         "fallback_filler_id",
                         fallback_filler_id,
                         filler_items,
-                        "(none)",
+                        tr(TextKey::NoneOption),
                         None,
                     )}
                 </div>
@@ -441,7 +440,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                     >
                         {save_label}
                     </button>
-                    <a href="/channels" class=style::cancel_link>"Cancel"</a>
+                    <a href="/channels" class=style::cancel_link>{tr(TextKey::Cancel)}</a>
                 </div>
             </form>
         </div>
@@ -457,7 +456,7 @@ fn mirror_channel_options(options: &[ChannelMirrorOption], channel_id: i64) -> V
 }
 
 fn language_options(options: &[ChannelSelectOption]) -> Vec<(String, String)> {
-    let mut result = vec![(String::new(), "(none)".to_string())];
+    let mut result = vec![(String::new(), tr(TextKey::NoneOption).to_string())];
     result.extend(
         options
             .iter()

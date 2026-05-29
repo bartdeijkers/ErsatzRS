@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{health_summary, tr, TextKey};
 use crate::admin::server_fns::layout::{load_health_snapshot, AdminHealthRow, AdminHealthSnapshot};
 
 #[component]
@@ -12,12 +13,12 @@ pub fn HealthPage() -> impl IntoView {
     view! {
         <div style="max-width:64rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
             <h1 style="font-size:1.5rem;font-weight:700;color:var(--color-gray-100);margin:0">
-                "Health Checks"
+                {tr(TextKey::HealthChecks)}
             </h1>
             <p style="font-size:0.875rem;color:var(--color-muted);margin:0">
-                "Latest persisted parity health run from the maintenance scheduler."
+                {tr(TextKey::HealthPersistedRunHelp)}
             </p>
-            <Suspense fallback=move || view! { <p>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
                 {move || snapshot.get().map(render_snapshot)}
             </Suspense>
         </div>
@@ -28,19 +29,13 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
     if snapshot.rows.is_empty() {
         return view! {
             <p style="font-size:0.875rem;color:var(--color-muted)">
-                "No health run has been persisted yet. The scheduler will populate this view after the next maintenance pass."
+                {tr(TextKey::HealthNoPersistedRun)}
             </p>
         }
         .into_any();
     }
 
-    let summary = format!(
-        "{} error{}, {} warning{}",
-        snapshot.errors,
-        if snapshot.errors == 1 { "" } else { "s" },
-        snapshot.warnings,
-        if snapshot.warnings == 1 { "" } else { "s" },
-    );
+    let summary = health_summary(snapshot.errors, snapshot.warnings);
 
     let rows = std::mem::take(&mut snapshot.rows);
     view! {
@@ -48,8 +43,8 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
         <table style="width:100%;border-collapse:collapse;font-size:0.875rem">
             <thead>
                 <tr style="border-bottom:1px solid var(--color-border);color:var(--color-gray-300);text-align:left">
-                    <th style="padding:0.5rem 0.75rem;font-weight:600">"Check"</th>
-                    <th style="padding:0.5rem 0.75rem;font-weight:600">"Message"</th>
+                    <th style="padding:0.5rem 0.75rem;font-weight:600">{tr(TextKey::Check)}</th>
+                    <th style="padding:0.5rem 0.75rem;font-weight:600">{tr(TextKey::Message)}</th>
                 </tr>
             </thead>
             <tbody>
@@ -62,6 +57,7 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
 
 fn render_row(row: AdminHealthRow) -> AnyView {
     let color = status_color(row.status.as_str());
+    let status = status_label(row.status.as_str());
     let message = if row.message.is_empty() {
         row.brief_message.clone()
     } else {
@@ -74,8 +70,8 @@ fn render_row(row: AdminHealthRow) -> AnyView {
             <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-100)">
                 <div style="align-items:center;display:flex;gap:0.5rem">
                     <span
-                        aria-label=row.status.clone()
-                        title=row.status
+                        aria-label=status
+                        title=status
                         style=format!("background:{color};border-radius:999px;display:inline-block;flex:0 0 auto;height:0.65rem;width:0.65rem")
                     ></span>
                     <span>{row.title}</span>
@@ -94,6 +90,16 @@ fn render_row(row: AdminHealthRow) -> AnyView {
         </tr>
     }
     .into_any()
+}
+
+fn status_label(status: &str) -> &'static str {
+    match status {
+        "Fail" => tr(TextKey::Fail),
+        "Warning" => tr(TextKey::Warning),
+        "Info" => tr(TextKey::Info),
+        "Pass" => tr(TextKey::Pass),
+        _ => tr(TextKey::Unavailable),
+    }
 }
 
 fn status_color(status: &str) -> &'static str {

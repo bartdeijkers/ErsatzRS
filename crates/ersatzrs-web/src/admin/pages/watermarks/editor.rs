@@ -9,6 +9,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
+use crate::admin::i18n::{save_failed, tr, TextKey};
 use crate::admin::server_fns::watermarks::{
     get_watermark_form, preview_watermark_placement, save_watermark, WatermarkForm,
     WatermarkPreviewParams,
@@ -49,7 +50,7 @@ fn WatermarkEditorIsland(watermark_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>"Loading\u{2026}"</p> }>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || {
                 data.get().map(|maybe| match maybe {
                     Some(form) => view! {
@@ -57,7 +58,7 @@ fn WatermarkEditorIsland(watermark_id: i64) -> impl IntoView {
                     }
                     .into_any(),
                     None => view! {
-                        <p class=style::empty>"Watermark not found."</p>
+                        <p class=style::empty>{tr(TextKey::WatermarkNotFound)}</p>
                     }
                     .into_any(),
                 })
@@ -151,7 +152,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(_) => navigate("/watermarks", NavigateOptions::default()),
-                Err(e) => toast.push(format!("Save failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(save_failed(e), ToastSeverity::Error),
             }
         }
     });
@@ -195,48 +196,50 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
     let is_busy = Signal::derive(move || is_saving.get() || is_uploading.get());
     let is_edit = watermark_id != 0;
     let title = if is_edit {
-        "Edit Watermark"
+        tr(TextKey::EditWatermark)
     } else {
-        "Add Watermark"
+        tr(TextKey::AddWatermark)
     };
     let btn_label = if is_edit {
-        "Save Watermark"
+        tr(TextKey::SaveWatermark)
     } else {
-        "Add Watermark"
+        tr(TextKey::AddWatermark)
     };
 
     let mode_items: Vec<(i32, String)> = vec![
-        (0, "None".to_string()),
-        (1, "Permanent".to_string()),
-        (2, "Intermittent".to_string()),
-        (3, "Opacity Expression".to_string()),
+        (0, tr(TextKey::NoneOption).to_string()),
+        (1, tr(TextKey::Permanent).to_string()),
+        (2, tr(TextKey::Intermittent).to_string()),
+        (3, tr(TextKey::OpacityExpression).to_string()),
     ];
-    let image_source_items: Vec<(i32, String)> =
-        vec![(0, "Custom".to_string()), (1, "Channel Logo".to_string())];
+    let image_source_items: Vec<(i32, String)> = vec![
+        (0, tr(TextKey::Custom).to_string()),
+        (1, tr(TextKey::ChannelLogo).to_string()),
+    ];
     let mut location_items = vec![
-        (0i32, "Bottom Right".to_string()),
-        (6i32, "Bottom Middle".to_string()),
-        (1i32, "Bottom Left".to_string()),
-        (7i32, "Left Middle".to_string()),
-        (3i32, "Top Left".to_string()),
-        (4i32, "Top Middle".to_string()),
-        (2i32, "Top Right".to_string()),
-        (5i32, "Right Middle".to_string()),
+        (0i32, tr(TextKey::BottomRight).to_string()),
+        (6i32, tr(TextKey::BottomMiddle).to_string()),
+        (1i32, tr(TextKey::BottomLeft).to_string()),
+        (7i32, tr(TextKey::LeftMiddle).to_string()),
+        (3i32, tr(TextKey::TopLeft).to_string()),
+        (4i32, tr(TextKey::TopMiddle).to_string()),
+        (2i32, tr(TextKey::TopRight).to_string()),
+        (5i32, tr(TextKey::RightMiddle).to_string()),
     ];
     if initial_form.location == 8 {
-        location_items.push((8i32, "Middle Center".to_string()));
+        location_items.push((8i32, tr(TextKey::MiddleCenter).to_string()));
     }
     let size_items = vec![
-        (0i32, "Scaled".to_string()),
-        (1i32, "Actual Size".to_string()),
+        (0i32, tr(TextKey::Scaled).to_string()),
+        (1i32, tr(TextKey::ActualSize).to_string()),
     ];
     let freq_items = vec![
-        (5i32, "5 minutes".to_string()),
-        (10i32, "10 minutes".to_string()),
-        (15i32, "15 minutes".to_string()),
-        (20i32, "20 minutes".to_string()),
-        (30i32, "30 minutes".to_string()),
-        (60i32, "60 minutes".to_string()),
+        (5i32, format!("5 {}", tr(TextKey::Minutes))),
+        (10i32, format!("10 {}", tr(TextKey::Minutes))),
+        (15i32, format!("15 {}", tr(TextKey::Minutes))),
+        (20i32, format!("20 {}", tr(TextKey::Minutes))),
+        (30i32, format!("30 {}", tr(TextKey::Minutes))),
+        (60i32, format!("60 {}", tr(TextKey::Minutes))),
     ];
     let select_class = format!("{} {}", style::input, style::select);
 
@@ -253,7 +256,9 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         >
             <input type="hidden" name="id" value=watermark_id.to_string()/>
             <div class=style::breadcrumb>
-                <a href="/watermarks" class=style::back_link>"← Watermarks"</a>
+                <a href="/watermarks" class=style::back_link>
+                    {format!("← {}", tr(TextKey::Watermarks))}
+                </a>
                 <h1 class=style::page_title>{title}</h1>
             </div>
 
@@ -268,10 +273,10 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Identity"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Identity)}</h2>
                 <div class=style::fields>
                     <div class=style::field>
-                        <label class=style::label>"Name"</label>
+                        <label class=style::label>{tr(TextKey::Name)}</label>
                         <input
                             type="text"
                             name="name"
@@ -282,7 +287,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         />
                     </div>
                     <div class=style::field>
-                        <label class=style::label>"Mode"</label>
+                        <label class=style::label>{tr(TextKey::Mode)}</label>
                         <select
                             name="mode"
                             class=select_class.clone()
@@ -308,7 +313,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Image"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Image)}</h2>
                 <div class=style::fields>
                     <input
                         type="hidden"
@@ -326,7 +331,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || image_source.get().to_string()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Image Source"</label>
+                        <label class=style::label>{tr(TextKey::ImageSource)}</label>
                         <select
                             name="image_source"
                             class=select_class.clone()
@@ -354,7 +359,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         class=style::img_preview_row
                         style:display=move || if image_path.get().is_some() { "" } else { "none" }
                     >
-                        <span class=style::field_label>"Current image"</span>
+                        <span class=style::field_label>{tr(TextKey::CurrentImage)}</span>
                         <img
                             src=move || {
                                 image_path.get()
@@ -362,12 +367,12 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                                     .unwrap_or_default()
                             }
                             class=style::img_preview
-                            alt="watermark preview"
+                            alt=tr(TextKey::WatermarkPreview)
                         />
                     </div>
 
                     <div class=style::upload_row>
-                        <span class=style::field_label>"Upload image"</span>
+                        <span class=style::field_label>{tr(TextKey::UploadImage)}</span>
                         <input
                             type="file"
                             name="image_file"
@@ -392,7 +397,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                                             }
                                             None => {
                                                 toast.push(
-                                                    "Upload failed.".to_string(),
+                                                    tr(TextKey::UploadFailed).to_string(),
                                                     ToastSeverity::Error,
                                                 );
                                             }
@@ -408,7 +413,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Placement"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Placement)}</h2>
                 <div class=style::fields>
                     <input
                         type="hidden"
@@ -416,7 +421,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || location.get().to_string()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Location"</label>
+                        <label class=style::label>{tr(TextKey::Location)}</label>
                         <select
                             name="location"
                             class=select_class.clone()
@@ -441,7 +446,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                     </div>
                     <input type="hidden" name="size" value=move || size.get().to_string()/>
                     <div class=style::field>
-                        <label class=style::label>"Size"</label>
+                        <label class=style::label>{tr(TextKey::Size)}</label>
                         <select
                             name="size"
                             class=select_class.clone()
@@ -470,7 +475,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || width_percent.get()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Width (%)"</label>
+                        <label class=style::label>{tr(TextKey::WidthPercent)}</label>
                         <input
                             type="text"
                             name="width_percent"
@@ -487,7 +492,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || horizontal_margin_percent.get()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Horizontal Margin (%)"</label>
+                        <label class=style::label>{tr(TextKey::HorizontalMarginPercent)}</label>
                         <input
                             type="text"
                             name="horizontal_margin_percent"
@@ -506,7 +511,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || vertical_margin_percent.get()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Vertical Margin (%)"</label>
+                        <label class=style::label>{tr(TextKey::VerticalMarginPercent)}</label>
                         <input
                             type="text"
                             name="vertical_margin_percent"
@@ -535,13 +540,13 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                                 place_within_source_content.set(event_target_checked(&e));
                             }
                         />
-                        <span class=style::checkbox_text>"Place Within Source Content"</span>
+                        <span class=style::checkbox_text>{tr(TextKey::PlaceWithinSourceContent)}</span>
                     </label>
                 </div>
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Intermittent Timing"</h2>
+                <h2 class=style::section_title>{tr(TextKey::IntermittentTiming)}</h2>
                 <div class=style::fields>
                     <input
                         type="hidden"
@@ -549,7 +554,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || frequency_minutes.get().to_string()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Frequency"</label>
+                        <label class=style::label>{tr(TextKey::Frequency)}</label>
                         <select
                             name="frequency_minutes"
                             class=select_class.clone()
@@ -578,7 +583,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || duration_seconds.get().to_string()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Duration (seconds)"</label>
+                        <label class=style::label>{tr(TextKey::DurationSeconds)}</label>
                         <input
                             type="number"
                             name="duration_seconds"
@@ -598,11 +603,11 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Opacity"</h2>
+                <h2 class=style::section_title>{tr(TextKey::Opacity)}</h2>
                 <div class=style::fields>
                     <input type="hidden" name="opacity" value=move || opacity.get().to_string()/>
                     <div class=style::field>
-                        <label class=style::label>"Opacity (1-100)"</label>
+                        <label class=style::label>{tr(TextKey::OpacityOneToHundred)}</label>
                         <input
                             type="number"
                             name="opacity"
@@ -625,7 +630,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         value=move || opacity_expression.get()
                     />
                     <div class=style::field>
-                        <label class=style::label>"Opacity Expression"</label>
+                        <label class=style::label>{tr(TextKey::OpacityExpression)}</label>
                         <input
                             type="text"
                             name="opacity_expression"
@@ -637,7 +642,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                         />
                     </div>
                     <div class=style::field>
-                        <label class=style::label>"Z-Index"</label>
+                        <label class=style::label>{tr(TextKey::ZIndex)}</label>
                         <input
                             type="number"
                             name="z_index"
@@ -656,9 +661,9 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
             </div>
 
             <div class=style::section>
-                <h2 class=style::section_title>"Placement Preview"</h2>
+                <h2 class=style::section_title>{tr(TextKey::PlacementPreview)}</h2>
                 <Suspense fallback=move || {
-                    view! { <p class=style::preview_loading>"Generating preview\u{2026}"</p> }
+                    view! { <p class=style::preview_loading>{tr(TextKey::GeneratingPreview)}</p> }
                 }>
                     <img
                         src=move || {
@@ -676,7 +681,7 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
                                 .is_some_and(|url| !url.is_empty());
                             if has_preview { "" } else { "none" }
                         }
-                        alt="watermark placement preview"
+                        alt=tr(TextKey::WatermarkPlacementPreview)
                     />
                 </Suspense>
             </div>

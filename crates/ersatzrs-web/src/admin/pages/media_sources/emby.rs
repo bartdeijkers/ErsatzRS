@@ -2,6 +2,10 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{
+    no_media_source_configured, provider_connection_title, provider_libraries_title,
+    provider_path_label, provider_path_replacements_title, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_sources::{
     delete_emby_source, get_emby_connection, list_emby_libraries, list_emby_paths,
     list_emby_sources, save_emby_connection, save_emby_library_prefs, save_emby_paths,
@@ -49,20 +53,18 @@ pub fn EmbySourcesPage() -> impl IntoView {
                 <h1 class=style::page_title>"Emby"</h1>
                 <div class=style::toolbar_actions>
                     <a href="/media/sources/emby/edit" class=style::btn_primary>
-                        "Configure Connection"
+                        {tr(TextKey::ConfigureConnection)}
                     </a>
                 </div>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let list = rows.get().unwrap_or_default();
                     if list.is_empty() {
                         view! {
                             <p class=style::cell_muted>
-                                "No Emby source configured. Click "
-                                <strong>"Configure Connection"</strong>
-                                " to add one."
+                                {no_media_source_configured("Emby")}
                             </p>
                         }.into_any()
                     } else {
@@ -70,8 +72,8 @@ pub fn EmbySourcesPage() -> impl IntoView {
                             <table style="width:100%;border-collapse:collapse">
                                 <thead>
                                     <tr>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Name"</th>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Address"</th>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
                                         <th/>
                                     </tr>
                                 </thead>
@@ -85,16 +87,16 @@ pub fn EmbySourcesPage() -> impl IntoView {
                                                 <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
                                                 <td style="padding:0.5rem;text-align:right">
                                                     <div class=style::row_actions>
-                                                        <a href=format!("/media/sources/emby/{id}/libraries") class=style::row_btn>"Libraries"</a>
-                                                        <a href=format!("/media/sources/emby/{id}/paths") class=style::row_btn>"Paths"</a>
-                                                        <a href="/media/sources/emby/edit" class=style::row_btn>"Edit"</a>
+                                                        <a href=format!("/media/sources/emby/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                        <a href=format!("/media/sources/emby/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                                        <a href="/media/sources/emby/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
                                                         <button
                                                             class=style::row_btn_del
                                                             on:click=move |_| {
                                                                 delete_target.set(Some(r_clone.clone()));
                                                                 delete_open.set(true);
                                                             }
-                                                        >"Delete"</button>
+                                                        >{tr(TextKey::Delete)}</button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -140,7 +142,7 @@ fn EmbyConnectionEditorIsland() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
             {move || {
                 initial.get().map(|form| view! {
                     <EmbyConnectionEditorForm initial_form=form/>
@@ -170,7 +172,7 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
         }
         Some(Err(e)) => {
             saving.set(false);
-            err.set(Some(format!("Save failed: {e}")));
+            err.set(Some(save_failed(e)));
         }
         None => {}
     });
@@ -178,7 +180,7 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
     let on_save = move |_| {
         let a = address.get_untracked().trim().to_string();
         if a.is_empty() {
-            err.set(Some("Address is required.".into()));
+            err.set(Some(tr(TextKey::AddressRequired).to_owned()));
             return;
         }
         err.set(None);
@@ -195,7 +197,7 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/emby" class=style::back_link>"← Emby"</a>
-                    <h1 class=style::page_title>"Emby Connection"</h1>
+                    <h1 class=style::page_title>{provider_connection_title("Emby")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -203,14 +205,14 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
                         on:click=on_save
                         disabled=move || saving.get()
                     >
-                        {move || if saving.get() { "Saving…" } else { "Save" }}
+                        {move || if saving.get() { tr(TextKey::Saving) } else { tr(TextKey::Save) }}
                     </button>
                 </div>
             </div>
 
             <div class=style::editor_form>
                 <div class=style::form_row>
-                    <label class=style::form_label>"Server Address"</label>
+                    <label class=style::form_label>{tr(TextKey::ServerAddress)}</label>
                     <input
                         class=style::form_input
                         type="url"
@@ -220,7 +222,7 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
                     />
                 </div>
                 <div class=style::form_row>
-                    <label class=style::form_label>"API Key"</label>
+                    <label class=style::form_label>{tr(TextKey::ApiKey)}</label>
                     <input
                         class=style::form_input
                         type="password"
@@ -268,7 +270,7 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -277,7 +279,7 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/emby" class=style::back_link>"← Emby"</a>
-                    <h1 class=style::page_title>"Emby Libraries"</h1>
+                    <h1 class=style::page_title>{provider_libraries_title("Emby")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -286,20 +288,20 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch(prefs.get_untracked());
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let list = prefs.get();
                     view! {
                         <table style="width:100%;border-collapse:collapse">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Library"</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Kind"</th>
-                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">"Sync"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Library)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Kind)}</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Sync)}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -333,7 +335,7 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
             </Suspense>
 
             {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
         </div>
     }
 }
@@ -369,7 +371,7 @@ pub fn EmbyPathsPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -395,7 +397,7 @@ pub fn EmbyPathsPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/emby" class=style::back_link>"← Emby"</a>
-                    <h1 class=style::page_title>"Emby Path Replacements"</h1>
+                    <h1 class=style::page_title>{provider_path_replacements_title("Emby")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -404,7 +406,7 @@ pub fn EmbyPathsPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch((source_id(), paths.get_untracked()));
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
@@ -413,11 +415,11 @@ pub fn EmbyPathsPage() -> impl IntoView {
                 new_remote=new_remote
                 new_local=new_local
                 on_add=on_add
-                remote_label="Emby Path"
+                remote_label=provider_path_label("Emby")
             />
 
             {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>"Saved."</p> })}
+            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
         </div>
     }
 }

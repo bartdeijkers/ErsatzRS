@@ -1,5 +1,7 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
+
 use super::button::{Button, ButtonVariant};
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/dialog.module.css");
@@ -20,8 +22,8 @@ pub fn Modal(
     on_close: Callback<bool>,
     /// Content inside the dialog body.
     children: ChildrenFn,
-    #[prop(default = "Confirm")] confirm_label: &'static str,
-    #[prop(default = "Cancel")] cancel_label: &'static str,
+    #[prop(default = None)] confirm_label: Option<&'static str>,
+    #[prop(default = None)] cancel_label: Option<&'static str>,
     #[prop(default = false)] destructive: bool,
 ) -> impl IntoView {
     let confirm_variant = if destructive {
@@ -61,11 +63,11 @@ pub fn Modal(
                 <div class=style::footer>
                     <Button variant=ButtonVariant::Text
                             on_click=Some(Callback::new(move |()| do_cancel()))>
-                        {cancel_label}
+                        {cancel_label.unwrap_or_else(|| tr(TextKey::Cancel))}
                     </Button>
                     <Button variant=confirm_variant
                             on_click=Some(Callback::new(move |()| do_confirm()))>
-                        {confirm_label}
+                        {confirm_label.unwrap_or_else(|| tr(TextKey::Confirm))}
                     </Button>
                 </div>
             </div>
@@ -87,13 +89,13 @@ pub fn DeleteDialog(
     view! {
         <Modal
             open=open
-            title="Confirm Delete".to_string()
+            title=tr(TextKey::ConfirmDelete).to_string()
             on_close=on_confirm
-            confirm_label="Delete"
+            confirm_label=Some(tr(TextKey::Delete))
             destructive=true
         >
-            <p>"Are you sure you want to delete "<strong>{move || entity_name.get()}</strong>"?"</p>
-            <p class=style::muted_note>"This action cannot be undone."</p>
+            <p>{tr(TextKey::AreYouSureDelete)}" "<strong>{move || entity_name.get()}</strong>"?"</p>
+            <p class=style::muted_note>{tr(TextKey::ThisActionCannotBeUndone)}</p>
         </Modal>
     }
 }

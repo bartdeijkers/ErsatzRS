@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::libraries::{
     list_external_collections, list_libraries, scan_external_collections, scan_library,
     ExternalCollectionRow, LibraryRow,
@@ -48,17 +49,23 @@ fn LibrariesIsland() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(res) = scan_action.value().get() {
             match res {
-                Ok(()) => toast.push("Scan queued", ToastSeverity::Success),
-                Err(e) => toast.push(format!("Scan failed: {e}"), ToastSeverity::Error),
+                Ok(()) => toast.push(tr(TextKey::ScanQueued).to_owned(), ToastSeverity::Success),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::ScanFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
     Effect::new(move |_| {
         if let Some(res) = collections_action.value().get() {
             match res {
-                Ok(()) => toast.push("Collections scan queued", ToastSeverity::Success),
+                Ok(()) => toast.push(
+                    tr(TextKey::CollectionsScanQueued).to_owned(),
+                    ToastSeverity::Success,
+                ),
                 Err(e) => toast.push(
-                    format!("Collections scan failed: {e}"),
+                    format!("{}: {e}", tr(TextKey::CollectionsScanFailed)),
                     ToastSeverity::Error,
                 ),
             }
@@ -111,16 +118,16 @@ fn LibrariesIsland() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <h1 class=style::page_title>"Libraries"</h1>
+            <h1 class=style::page_title>{tr(TextKey::Libraries)}</h1>
             <Suspense fallback=move || {
-                view! { <p class=style::empty>"Loading…"</p> }
+                view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }
             }>
                 {move || {
                     libs.get().map(|rows| {
                         if rows.is_empty() {
                             return view! {
                                 <p class=style::empty>
-                                    "No libraries configured. Add a media source first."
+                                    {tr(TextKey::NoLibrariesConfigured)}
                                 </p>
                             }
                             .into_any();
@@ -131,10 +138,10 @@ fn LibrariesIsland() -> impl IntoView {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Kind"</th>
-                                            <th>"Server"</th>
-                                            <th>"Name"</th>
-                                            <th>"Media Kind"</th>
+                                            <th>{tr(TextKey::Kind)}</th>
+                                            <th>{tr(TextKey::Server)}</th>
+                                            <th>{tr(TextKey::Name)}</th>
+                                            <th>{tr(TextKey::MediaKind)}</th>
                                             <th/>
                                         </tr>
                                     </thead>
@@ -171,8 +178,8 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         <button
                                                                             class=style::icon_btn
                                                                             disabled=move || scanning() || is_locked(id)
-                                                                            title="Deep Scan Library"
-                                                                            aria-label="Deep Scan Library"
+                                                                            title=tr(TextKey::DeepScanLibrary)
+                                                                            aria-label=tr(TextKey::DeepScanLibrary)
                                                                             on:click=move |_| {
                                                                                 scan_action.dispatch((id, kind_deep.clone(), true));
                                                                             }
@@ -191,8 +198,8 @@ fn LibrariesIsland() -> impl IntoView {
                                                                 <button
                                                                     class=style::icon_btn
                                                                     disabled=move || scanning() || is_locked(id)
-                                                                    title="Scan Library"
-                                                                    aria-label="Scan Library"
+                                                                    title=tr(TextKey::ScanLibrary)
+                                                                    aria-label=tr(TextKey::ScanLibrary)
                                                                     on:click=move |_| {
                                                                         scan_action.dispatch((id, kind_scan.clone(), false));
                                                                     }
@@ -205,8 +212,8 @@ fn LibrariesIsland() -> impl IntoView {
                                                                 <a
                                                                     class=style::icon_btn
                                                                     href=search_href
-                                                                    title="Search Library"
-                                                                    aria-label="Search Library"
+                                                                    title=tr(TextKey::SearchMedia)
+                                                                    aria-label=tr(TextKey::SearchMedia)
                                                                 >
                                                                     <span
                                                                         style=icon_style(IconName::Search, "1.125rem")
@@ -234,13 +241,13 @@ fn LibrariesIsland() -> impl IntoView {
                             return view! { <span/> }.into_any();
                         }
                         view! {
-                            <h2 class=style::section_title>"External Collections"</h2>
+                            <h2 class=style::section_title>{tr(TextKey::ExternalCollections)}</h2>
                             <div class=style::table_wrap>
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>"Library Kind"</th>
-                                            <th>"Server"</th>
+                                            <th>{tr(TextKey::LibraryKind)}</th>
+                                            <th>{tr(TextKey::Server)}</th>
                                             <th/>
                                         </tr>
                                     </thead>
@@ -272,8 +279,8 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         scanning_collections()
                                                                             || are_collections_locked(&kind_lock_a, media_source_id)
                                                                     }
-                                                                    title="Deep Scan Collections"
-                                                                    aria-label="Deep Scan Collections"
+                                                                    title=tr(TextKey::DeepScanCollections)
+                                                                    aria-label=tr(TextKey::DeepScanCollections)
                                                                     on:click=move |_| {
                                                                         collections_action
                                                                             .dispatch((media_source_id, kind_deep.clone(), true));
@@ -290,8 +297,8 @@ fn LibrariesIsland() -> impl IntoView {
                                                                         scanning_collections()
                                                                             || are_collections_locked(&kind_lock_b, media_source_id)
                                                                     }
-                                                                    title="Scan Collections"
-                                                                    aria-label="Scan Collections"
+                                                                    title=tr(TextKey::ScanCollections)
+                                                                    aria-label=tr(TextKey::ScanCollections)
                                                                     on:click=move |_| {
                                                                         collections_action
                                                                             .dispatch((media_source_id, kind_scan.clone(), false));
@@ -362,7 +369,7 @@ fn ScanIndicator(visible: Signal<bool>, fraction: Signal<Option<f32>>) -> impl I
     };
 
     view! {
-        <span class=style::ring style:display=display title="Scanning…" aria-label="Scanning">
+        <span class=style::ring style:display=display title=tr(TextKey::Scanning) aria-label=tr(TextKey::Scanning)>
             <svg viewBox="0 0 20 20" class=style::ring_svg aria-hidden="true">
                 <circle cx="10" cy="10" r="8" class=style::ring_track/>
                 <circle

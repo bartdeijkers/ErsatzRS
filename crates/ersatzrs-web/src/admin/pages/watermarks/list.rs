@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::watermarks::{
     copy_watermark, count_watermarks, delete_watermark, list_watermark_rows, WatermarkListRow,
 };
@@ -63,45 +64,51 @@ pub fn WatermarksListPage() -> impl IntoView {
         if let Some(res) = copy_action.value().get() {
             match res {
                 Ok(new_id) => {
-                    toast.push("Watermark copied.".to_string(), ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::WatermarkCopied).to_string(),
+                        ToastSeverity::Success,
+                    );
                     copy_open.set(false);
                     navigate(
                         &format!("/watermarks/{new_id}"),
                         leptos_router::NavigateOptions::default(),
                     );
                 }
-                Err(e) => toast.push(format!("Copy failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::CopyFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
 
     let columns: Vec<Column<WatermarkListRow>> = vec![
-        Column::new("Name", |r: &WatermarkListRow| {
+        Column::new(tr(TextKey::Name), |r: &WatermarkListRow| {
             let n = r.name.clone();
             view! { <span>{n}</span> }.into_any()
         }),
-        Column::new("Image", |r: &WatermarkListRow| {
+        Column::new(tr(TextKey::Image), |r: &WatermarkListRow| {
             if let Some(path) = r.image_path.clone() {
                 view! {
                     <img
                         src=format!("/artwork/watermarks/{path}")
                         class=style::thumb
-                        alt="watermark"
+                        alt=tr(TextKey::WatermarkPreview)
                     />
                 }
                 .into_any()
             } else if r.image_source == 1 {
-                view! { <span class=style::cell_muted>"[channel logo]"</span> }.into_any()
+                view! { <span class=style::cell_muted>{tr(TextKey::ChannelLogo)}</span> }.into_any()
             } else {
                 view! { <span/> }.into_any()
             }
         }),
-        Column::new("Mode", |r: &WatermarkListRow| {
-            let m = r.mode.clone();
+        Column::new(tr(TextKey::Mode), |r: &WatermarkListRow| {
+            let m = watermark_mode_label(r.mode_id);
             view! { <span class=style::cell_muted>{m}</span> }.into_any()
         }),
-        Column::new("Location", |r: &WatermarkListRow| {
-            let l = r.location.clone();
+        Column::new(tr(TextKey::Location), |r: &WatermarkListRow| {
+            let l = watermark_location_label(r.location_id);
             view! { <span class=style::cell_muted>{l}</span> }.into_any()
         }),
     ];
@@ -115,23 +122,23 @@ pub fn WatermarksListPage() -> impl IntoView {
                 <a
                     href=format!("/watermarks/{id}")
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
-                    title="Edit watermark"
-                    aria-label="Edit watermark"
+                    title=tr(TextKey::EditWatermark).to_string()
+                    aria-label=tr(TextKey::EditWatermark).to_string()
                 ></a>
                 <button
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_copy)
-                    title="Copy watermark"
-                    aria-label="Copy watermark"
+                    title=tr(TextKey::CopyWatermark).to_string()
+                    aria-label=tr(TextKey::CopyWatermark).to_string()
                     on:click=move |_| {
                         copy_source.set(Some(r_for_copy.clone()));
-                        copy_name.set(format!("Copy of {}", r_for_copy.name));
+                        copy_name.set(format!("{} {}", tr(TextKey::CopyOf), r_for_copy.name));
                         copy_open.set(true);
                     }
                 ></button>
                 <button
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
-                    title="Delete watermark"
-                    aria-label="Delete watermark"
+                    title=tr(TextKey::DeleteWatermark).to_string()
+                    aria-label=tr(TextKey::DeleteWatermark).to_string()
                     on:click=move |_| {
                         delete_target.set(Some(r_for_delete.clone()));
                         delete_open.set(true);
@@ -153,12 +160,12 @@ pub fn WatermarksListPage() -> impl IntoView {
         <div class=style::page>
             <div class=style::action_bar>
                 <a href="/watermarks/add" class=style::btn_add>
-                    "Add Watermark"
+                    {tr(TextKey::AddWatermark)}
                 </a>
             </div>
 
             <section class=style::content>
-                <h1 class=style::page_title>"Watermarks"</h1>
+                <h1 class=style::page_title>{tr(TextKey::Watermarks)}</h1>
                 <div class=style::divider/>
 
                 <PagedTable
@@ -186,7 +193,7 @@ pub fn WatermarksListPage() -> impl IntoView {
 
             <Modal
                 open=copy_open
-                title="Copy Watermark".to_string()
+                title=tr(TextKey::CopyWatermark).to_string()
                 on_close=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         if let Some(src) = copy_source.get_untracked() {
@@ -197,8 +204,33 @@ pub fn WatermarksListPage() -> impl IntoView {
                     }
                 })
             >
-                <TextField label="New Name" value=copy_name/>
+                <TextField label=tr(TextKey::NewName) value=copy_name/>
             </Modal>
         </div>
+    }
+}
+
+fn watermark_mode_label(mode: i32) -> &'static str {
+    match mode {
+        0 => tr(TextKey::NoneOption),
+        1 => tr(TextKey::Permanent),
+        2 => tr(TextKey::Intermittent),
+        3 => tr(TextKey::OpacityExpression),
+        _ => tr(TextKey::Unavailable),
+    }
+}
+
+fn watermark_location_label(location: i32) -> &'static str {
+    match location {
+        0 => tr(TextKey::BottomRight),
+        1 => tr(TextKey::BottomLeft),
+        2 => tr(TextKey::TopRight),
+        3 => tr(TextKey::TopLeft),
+        4 => tr(TextKey::TopMiddle),
+        5 => tr(TextKey::RightMiddle),
+        6 => tr(TextKey::BottomMiddle),
+        7 => tr(TextKey::LeftMiddle),
+        8 => tr(TextKey::MiddleCenter),
+        _ => tr(TextKey::Unavailable),
     }
 }

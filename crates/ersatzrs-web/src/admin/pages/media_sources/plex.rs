@@ -3,6 +3,10 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use leptos_router::NavigateOptions;
 
+use crate::admin::i18n::{
+    provider_libraries_title, provider_path_label, provider_path_replacements_title, save_failed,
+    tr, TextKey,
+};
 use crate::admin::server_fns::media_sources::{
     check_plex_pin, has_plex_token, list_plex_libraries, list_plex_paths, list_plex_sources,
     save_plex_library_prefs, save_plex_paths, sign_out_plex, start_plex_pin_flow, LibraryPrefRow,
@@ -50,7 +54,7 @@ fn PlexSourcesIsland() -> impl IntoView {
                 <h1 class=style::page_title>"Plex"</h1>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     // Evaluate both resources together so the view closure is reactive to both.
                     let sources = rows.get().unwrap_or_default();
@@ -71,7 +75,7 @@ fn PlexSourcesIsland() -> impl IntoView {
                                 disabled=move || show_sign_in
                                 on:click=move |_| sign_out_open.set(true)
                             >
-                                "Sign out of Plex"
+                                {tr(TextKey::SignOutOfPlex)}
                             </button>
                         </div>
 
@@ -80,7 +84,7 @@ fn PlexSourcesIsland() -> impl IntoView {
                             class=style::cell_muted
                             style:display=move || if show_sources { "none" } else { "" }
                         >
-                            "Sign in to Plex to add a media source."
+                            {tr(TextKey::PlexSignInHelp)}
                         </p>
 
                         // Sources table — always rendered; hidden when empty.
@@ -90,8 +94,8 @@ fn PlexSourcesIsland() -> impl IntoView {
                         >
                             <thead>
                                 <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Name"</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Address"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
                                     <th/>
                                 </tr>
                             </thead>
@@ -104,8 +108,8 @@ fn PlexSourcesIsland() -> impl IntoView {
                                             <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
                                             <td style="padding:0.5rem;text-align:right">
                                                 <div class=style::row_actions>
-                                                    <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>"Libraries"</a>
-                                                    <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>"Paths"</a>
+                                                    <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                    <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
                                                 </div>
                                             </td>
                                         </tr>
@@ -192,7 +196,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
             disabled=move || !matches!(state.get(), State::Idle)
             on:click=move |_| { let _ = start_action.dispatch(()); }
         >
-            "Sign in to Plex"
+            {tr(TextKey::SignInToPlex)}
         </button>
 
         // Waiting: authorization link + polling message
@@ -201,7 +205,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
             style:display=move || if matches!(state.get(), State::Waiting { .. }) { "" } else { "none" }
         >
             <p>
-                "Waiting for Plex authorization. "
+                {tr(TextKey::WaitingForPlexAuthorization)} " "
                 <a
                     href=move || match state.get() {
                         State::Waiting { auth_url, .. } => auth_url,
@@ -210,11 +214,10 @@ pub fn PlexSignInIsland() -> impl IntoView {
                     target="_blank"
                     class=style::pin_link
                 >
-                    "Click here to authorize on Plex.tv"
+                    {tr(TextKey::ClickAuthorizePlex)}
                 </a>
-                " (opens in new tab)."
             </p>
-            <p class=style::cell_muted>"Checking every 2 seconds…"</p>
+            <p class=style::cell_muted>{tr(TextKey::CheckingEveryTwoSeconds)}</p>
         </div>
 
         // Done: success message
@@ -222,7 +225,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
             class=style::success_msg
             style:display=move || if matches!(state.get(), State::Done) { "" } else { "none" }
         >
-            "Authorized — redirecting…"
+            {tr(TextKey::AuthorizedRedirecting)}
         </p>
 
         // Error: error message + retry button
@@ -230,7 +233,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
             style:display=move || if matches!(state.get(), State::Error(_)) { "" } else { "none" }
         >
             <p class=style::error_msg>
-                "Error: "
+                {tr(TextKey::Error)} ": "
                 {move || match state.get() {
                     State::Error(msg) => msg,
                     _ => String::new(),
@@ -244,7 +247,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
                     let _ = start_action.dispatch(());
                 }
             >
-                "Retry"
+                {tr(TextKey::Retry)}
             </button>
         </div>
     }
@@ -279,7 +282,7 @@ pub fn PlexLibrariesPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -288,7 +291,7 @@ pub fn PlexLibrariesPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/plex" class=style::back_link>"← Plex"</a>
-                    <h1 class=style::page_title>"Plex Libraries"</h1>
+                    <h1 class=style::page_title>{provider_libraries_title("Plex")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -297,20 +300,20 @@ pub fn PlexLibrariesPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch(prefs.get_untracked());
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>"Loading…"</p> }>
+            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     let list = prefs.get();
                     view! {
                         <table style="width:100%;border-collapse:collapse">
                             <thead>
                                 <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Library"</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">"Kind"</th>
-                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">"Sync"</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Library)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Kind)}</th>
+                                    <th style="text-align:center;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Sync)}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -353,7 +356,7 @@ pub fn PlexLibrariesPage() -> impl IntoView {
                 class=style::success_msg
                 style:display=move || if saved.get() { "" } else { "none" }
             >
-                "Saved."
+                {tr(TextKey::Saved)}
             </p>
         </div>
     }
@@ -390,7 +393,7 @@ pub fn PlexPathsPage() -> impl IntoView {
 
     Effect::new(move |_| match save_action.value().get() {
         Some(Ok(())) => saved.set(true),
-        Some(Err(e)) => err.set(Some(format!("Save failed: {e}"))),
+        Some(Err(e)) => err.set(Some(save_failed(e))),
         None => {}
     });
 
@@ -416,7 +419,7 @@ pub fn PlexPathsPage() -> impl IntoView {
             <div class=style::toolbar>
                 <div>
                     <a href="/media/sources/plex" class=style::back_link>"← Plex"</a>
-                    <h1 class=style::page_title>"Plex Path Replacements"</h1>
+                    <h1 class=style::page_title>{provider_path_replacements_title("Plex")}</h1>
                 </div>
                 <div class=style::toolbar_actions>
                     <button
@@ -425,7 +428,7 @@ pub fn PlexPathsPage() -> impl IntoView {
                             saved.set(false);
                             save_action.dispatch((source_id(), paths.get_untracked()));
                         }
-                    >"Save"</button>
+                    >{tr(TextKey::Save)}</button>
                 </div>
             </div>
 
@@ -434,7 +437,7 @@ pub fn PlexPathsPage() -> impl IntoView {
                 new_remote=new_remote
                 new_local=new_local
                 on_add=on_add
-                remote_label="Plex Path"
+                remote_label=provider_path_label("Plex")
             />
 
             <p
@@ -447,7 +450,7 @@ pub fn PlexPathsPage() -> impl IntoView {
                 class=style::success_msg
                 style:display=move || if saved.get() { "" } else { "none" }
             >
-                "Saved."
+                {tr(TextKey::Saved)}
             </p>
         </div>
     }
