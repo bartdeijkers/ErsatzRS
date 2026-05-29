@@ -34,6 +34,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     get_collection_detail, remove_items_from_collection, save_collection,
     set_collection_use_custom_order, update_collection_custom_order, CollectionDetail,
@@ -64,8 +65,8 @@ pub fn CollectionDetailPage() -> impl IntoView {
     if id == 0 {
         return view! {
             <div class=style::not_found>
-                <h1>"Collection not found"</h1>
-                <a href="/media/collections">"Back to collections"</a>
+                <h1>{tr(TextKey::CollectionNotFound)}</h1>
+                <a href="/media/collections">{tr(TextKey::BackToCollections)}</a>
             </div>
         }
         .into_any();
@@ -92,19 +93,19 @@ fn CollectionDetailIsland(id: i64) -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || match data.get() {
                     Some(Some(detail)) => {
                         view! { <CollectionDetailView id detail refresh=refresh/> }.into_any()
                     }
                     Some(None) => view! {
                         <div class=style::not_found>
-                            <h1>"Collection not found"</h1>
-                            <a href="/media/collections">"Back to collections"</a>
+                            <h1>{tr(TextKey::CollectionNotFound)}</h1>
+                            <a href="/media/collections">{tr(TextKey::BackToCollections)}</a>
                         </div>
                     }
                     .into_any(),
-                    None => view! { <p class=style::empty>"Loading…"</p> }.into_any(),
+                    None => view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
                 }}
             </Suspense>
         </div>
@@ -170,12 +171,15 @@ fn CollectionDetailView(
                     header_name.set(new_name);
                     editing_name.set(false);
                     name_error.set(None);
-                    toast.push("Collection renamed.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::CollectionRenamed), ToastSeverity::Success);
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => {
                     name_error.set(Some(format!("{e}")));
-                    toast.push(format!("Rename failed: {e}"), ToastSeverity::Error);
+                    toast.push(
+                        format!("{}: {e}", tr(TextKey::RenameFailed)),
+                        ToastSeverity::Error,
+                    );
                 }
             }
         }
@@ -190,14 +194,14 @@ fn CollectionDetailView(
         if let Some(res) = toggle_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Playback order updated.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::PlaybackOrderUpdated), ToastSeverity::Success);
                     refresh.update(|n| *n += 1);
                 }
                 Err(e) => {
                     // Revert on failure.
                     use_custom_order.update(|v| *v = !*v);
                     toast.push(
-                        format!("Playback order update failed: {e}"),
+                        format!("{}: {e}", tr(TextKey::PlaybackOrderUpdateFailed)),
                         ToastSeverity::Error,
                     );
                 }
@@ -214,11 +218,14 @@ fn CollectionDetailView(
         if let Some(res) = remove_action.value().get() {
             match res {
                 Ok(()) => {
-                    toast.push("Removed from collection.", ToastSeverity::Success);
+                    toast.push(tr(TextKey::RemovedFromCollection), ToastSeverity::Success);
                     selected.update(HashSet::clear);
                     refresh.update(|n| *n += 1);
                 }
-                Err(e) => toast.push(format!("Remove failed: {e}"), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    format!("{}: {e}", tr(TextKey::RemoveFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -230,7 +237,10 @@ fn CollectionDetailView(
 
     Effect::new(move |_| {
         if let Some(Err(e)) = reorder_action.value().get() {
-            toast.push(format!("Reorder failed: {e}"), ToastSeverity::Error);
+            toast.push(
+                format!("{}: {e}", tr(TextKey::ReorderFailed)),
+                ToastSeverity::Error,
+            );
             refresh.update(|n| *n += 1);
         }
     });
@@ -239,7 +249,7 @@ fn CollectionDetailView(
     let on_save_name = Callback::new(move |()| {
         let trimmed = name.get_untracked().trim().to_string();
         if trimmed.is_empty() {
-            name_error.set(Some("Collection name is required".into()));
+            name_error.set(Some(tr(TextKey::CollectionNameRequired).into()));
             return;
         }
         name_error.set(None);
@@ -362,15 +372,15 @@ fn Header(
     on_toggle: Callback<bool>,
 ) -> impl IntoView {
     let summary_label = if item_count == 1 {
-        "1 Item".to_string()
+        format!("1 {}", tr(TextKey::Item))
     } else if movie_count == item_count && item_count > 0 {
         if item_count == 1 {
-            "1 Movie".to_string()
+            format!("1 {}", tr(TextKey::Movie))
         } else {
-            format!("{movie_count} Movies")
+            format!("{movie_count} {}", tr(TextKey::Movies))
         }
     } else {
-        format!("{item_count} Items")
+        format!("{item_count} {}", tr(TextKey::Items))
     };
 
     let back_href = "/media/collections".to_string();
@@ -405,8 +415,8 @@ fn Header(
             // Pencil / Save / Cancel buttons.
             <button
                 class=style::icon_btn
-                aria-label="Rename"
-                title="Rename"
+                aria-label=tr(TextKey::Rename)
+                title=tr(TextKey::Rename)
                 style:display=move || if editing.get() { "none" } else { "" }
                 on:click=move |_| {
                     name.set(header_name.get_untracked());
@@ -417,8 +427,8 @@ fn Header(
             </button>
             <button
                 class=style::icon_btn
-                aria-label="Save"
-                title="Save"
+                aria-label=tr(TextKey::Save)
+                title=tr(TextKey::Save)
                 style:display=move || if editing.get() { "" } else { "none" }
                 on:click=move |_| on_save.run(())
             >
@@ -426,8 +436,8 @@ fn Header(
             </button>
             <button
                 class=style::icon_btn
-                aria-label="Cancel"
-                title="Cancel"
+                aria-label=tr(TextKey::Cancel)
+                title=tr(TextKey::Cancel)
                 style:display=move || if editing.get() { "" } else { "none" }
                 on:click=move |_| on_cancel.run(())
             >
@@ -456,10 +466,10 @@ fn Header(
                     prop:checked=move || use_custom_order.get()
                     on:change=move |e| on_toggle.run(event_target_checked(&e))
                 />
-                "Use Custom Playback Order"
+                {tr(TextKey::UseCustomPlaybackOrder)}
             </label>
 
-            <a class=style::summary href=back_href>"Back to Collections"</a>
+            <a class=style::summary href=back_href>{tr(TextKey::BackToCollections)}</a>
         </div>
     }
 }
@@ -484,23 +494,26 @@ fn SelectionBar(
             <span class=style::selection_count>
                 {move || {
                     let n = count.get();
-                    if n == 1 { "1 Item Selected".to_string() }
-                    else { format!("{n} Items Selected") }
+                    if n == 1 {
+                        format!("1 {} {}", tr(TextKey::Item), tr(TextKey::Selected))
+                    } else {
+                        format!("{n} {} {}", tr(TextKey::Items), tr(TextKey::Selected))
+                    }
                 }}
             </span>
             <button
                 class=style::danger_btn
                 on:click=move |_| on_remove.run(())
-                aria-label="Remove From Collection"
+                aria-label=tr(TextKey::RemoveFromCollection)
             >
-                "− Remove From Collection"
+                "− " {tr(TextKey::RemoveFromCollection)}
             </button>
             <button
                 class=style::secondary_btn
                 on:click=move |_| on_clear.run(())
-                aria-label="Clear Selection"
+                aria-label=tr(TextKey::ClearSelection)
             >
-                "✓ Clear Selection"
+                "✓ " {tr(TextKey::ClearSelection)}
             </button>
         </div>
     }
@@ -512,17 +525,17 @@ fn SelectionBar(
 // movies-only.
 // ---------------------------------------------------------------------------
 
-const SECTION_ORDER: &[(&str, &str)] = &[
-    ("movie", "Movies"),
-    ("show", "Shows"),
-    ("season", "Seasons"),
-    ("episode", "Episodes"),
-    ("artist", "Artists"),
-    ("music_video", "Music Videos"),
-    ("other_video", "Other Videos"),
-    ("song", "Songs"),
-    ("image", "Images"),
-    ("remote_stream", "Remote Streams"),
+const SECTION_ORDER: &[(&str, TextKey)] = &[
+    ("movie", TextKey::Movies),
+    ("show", TextKey::Shows),
+    ("season", TextKey::Seasons),
+    ("episode", TextKey::Episodes),
+    ("artist", TextKey::Artists),
+    ("music_video", TextKey::MusicVideos),
+    ("other_video", TextKey::OtherVideos),
+    ("song", TextKey::Songs),
+    ("image", TextKey::Images),
+    ("remote_stream", TextKey::RemoteStreams),
 ];
 
 #[component]
@@ -539,7 +552,7 @@ fn CardGrid(
             let snapshot = items.get();
             if snapshot.is_empty() {
                 return view! {
-                    <p class=style::empty>"This collection has no items yet."</p>
+                    <p class=style::empty>{tr(TextKey::ThisCollectionHasNoItemsYet)}</p>
                 }.into_any();
             }
 
@@ -566,7 +579,7 @@ fn CardGrid(
                 let kind_is_movie = *kind == "movie";
                 let show_move_for_section = supports_custom_order && use_custom && kind_is_movie;
                 Some(view! {
-                    <h2 class=style::section_title id=*kind>{*label}</h2>
+                    <h2 class=style::section_title id=*kind>{tr(*label)}</h2>
                     <div class=style::divider/>
                     <div class=style::grid>
                         {section.into_iter().enumerate().map(|(idx, card)| {
@@ -657,10 +670,7 @@ fn SelectableCollectionCard(
                     e.prevent_default();
                     toggle();
                 }
-                aria-label=move || format!(
-                    "Select {}",
-                    if is_selected.get() { "off" } else { "on" }
-                )
+                aria-label=tr(TextKey::Select)
             >
                 <input
                     type="checkbox"
@@ -674,8 +684,8 @@ fn SelectableCollectionCard(
             <div class=style::card_actions>
                 <button
                     class=format!("{} {}", style::card_btn, style::card_btn_danger)
-                    aria-label="Remove from collection"
-                    title="Remove from collection"
+                    aria-label=tr(TextKey::RemoveFromCollection)
+                    title=tr(TextKey::RemoveFromCollection)
                     on:click=move |e| {
                         e.stop_propagation();
                         e.prevent_default();
@@ -693,8 +703,8 @@ fn SelectableCollectionCard(
             >
                 <button
                     class=style::card_btn
-                    aria-label="Move up"
-                    title="Move up"
+                    aria-label=tr(TextKey::MoveUp)
+                    title=tr(TextKey::MoveUp)
                     disabled=!can_move_up
                     on:click=move |e| {
                         e.stop_propagation();
@@ -706,8 +716,8 @@ fn SelectableCollectionCard(
                 </button>
                 <button
                     class=style::card_btn
-                    aria-label="Move down"
-                    title="Move down"
+                    aria-label=tr(TextKey::MoveDown)
+                    title=tr(TextKey::MoveDown)
                     disabled=!can_move_down
                     on:click=move |e| {
                         e.stop_propagation();
