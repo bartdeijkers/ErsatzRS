@@ -226,6 +226,10 @@ impl LanguageStrings for EnglishStrings {
         trakt_error_message(error)
     }
 
+    fn upload_error_message(&self, error: &str) -> String {
+        upload_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1840,6 +1844,25 @@ fn trakt_error_message(error: &str) -> String {
         "Trakt API client is not configured for this operation" => {
             "Trakt API client is not configured for this operation.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn upload_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Cannot create upload directory: ") {
+        return format!("Cannot create upload directory: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Write failed: ") {
+        return format!("Write failed: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Read field: ") {
+        return format!("Read field: {error}");
+    }
+
+    match trimmed {
+        "Upload exceeds maximum allowed size" => "Upload exceeds maximum allowed size.".to_owned(),
+        "No file field" => "No file field found.".to_owned(),
         _ => error.to_owned(),
     }
 }

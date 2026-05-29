@@ -2159,6 +2159,10 @@ pub fn trakt_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).trakt_error_message(error)
 }
 
+pub fn upload_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).upload_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2276,6 +2280,7 @@ pub trait LanguageStrings: Sync {
     fn media_browser_error_message(&self, error: &str) -> String;
     fn media_source_error_message(&self, error: &str) -> String;
     fn trakt_error_message(&self, error: &str) -> String;
+    fn upload_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2789,6 +2794,14 @@ mod tests {
             "Multi-collectie is verplicht."
         );
         assert_eq!(
+            media_browser_error_text(UiLanguage::Dutch, "[ProgramScheduleId] does not exist."),
+            "Schema bestaat niet."
+        );
+        assert_eq!(
+            media_browser_error_text(UiLanguage::Polish, "[MediaItem] does not exist."),
+            "Element multimedialny nie istnieje."
+        );
+        assert_eq!(
             media_browser_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
@@ -2848,6 +2861,33 @@ mod tests {
         assert_eq!(
             trakt_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
+        );
+    }
+
+    #[test]
+    fn upload_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            upload_error_text(UiLanguage::English, "Upload exceeds maximum allowed size"),
+            "Upload exceeds maximum allowed size."
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Polish, "No file field"),
+            "Nie znaleziono pola pliku."
+        );
+        assert_eq!(
+            upload_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Write failed: permission denied"
+            ),
+            "Falha ao gravar: permission denied"
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Dutch, "Read field: connection reset"),
+            "Veld lezen mislukt: connection reset"
+        );
+        assert_eq!(
+            upload_error_text(UiLanguage::Dutch, "custom upload failure"),
+            "custom upload failure"
         );
     }
 }

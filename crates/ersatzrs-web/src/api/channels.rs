@@ -12,7 +12,13 @@ use tokio::fs;
 use uuid::Uuid;
 
 use crate::{
-    admin::server_fns::channels::{save_channel_with_state, ChannelForm},
+    admin::{
+        i18n::{upload_error_text, UiLanguage},
+        server_fns::{
+            channels::{save_channel_with_state, ChannelForm},
+            settings::load_ui_language_for_api,
+        },
+    },
     host::state::AppState,
 };
 
@@ -195,11 +201,15 @@ fn channel_save_error_redirect(id: i64, error: &dyn std::error::Error) -> Redire
     ))
 }
 
-pub async fn upload_channel_logo(mut multipart: Multipart) -> Response {
+pub async fn upload_channel_logo(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Response {
+    let language = load_error_language(&state).await;
     if let Err(error) = fs::create_dir_all(CHANNEL_LOGO_DIR).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Cannot create upload directory: {error}")})),
+            Json(json!({"error": upload_error_text(language, &format!("Cannot create upload directory: {error}"))})),
         )
             .into_response();
     }
@@ -215,7 +225,7 @@ pub async fn upload_channel_logo(mut multipart: Multipart) -> Response {
                 if bytes.len() > super::watermarks::max_upload_bytes() {
                     return (
                         StatusCode::PAYLOAD_TOO_LARGE,
-                        Json(json!({"error": "Upload exceeds maximum allowed size"})),
+                        Json(json!({"error": upload_error_text(language, "Upload exceeds maximum allowed size")})),
                     )
                         .into_response();
                 }
@@ -228,24 +238,32 @@ pub async fn upload_channel_logo(mut multipart: Multipart) -> Response {
                     .into_response(),
                     Err(error) => (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"error": format!("Write failed: {error}")})),
+                        Json(json!({"error": upload_error_text(language, &format!("Write failed: {error}"))})),
                     )
                         .into_response(),
                 }
             }
             Err(error) => (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("Read field: {error}")})),
+                Json(
+                    json!({"error": upload_error_text(language, &format!("Read field: {error}"))}),
+                ),
             )
                 .into_response(),
         }
     } else {
         (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "No file field"})),
+            Json(json!({"error": upload_error_text(language, "No file field")})),
         )
             .into_response()
     }
+}
+
+async fn load_error_language(state: &AppState) -> UiLanguage {
+    load_ui_language_for_api(&state.pool)
+        .await
+        .unwrap_or(UiLanguage::English)
 }
 
 async fn persist_channel_logo(content_type: &str, bytes: &[u8]) -> std::io::Result<String> {

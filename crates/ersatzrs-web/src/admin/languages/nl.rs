@@ -226,6 +226,10 @@ impl LanguageStrings for DutchStrings {
         trakt_error_message(error)
     }
 
+    fn upload_error_message(&self, error: &str) -> String {
+        upload_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -887,6 +891,27 @@ fn trakt_error_message(error: &str) -> String {
         "Trakt API client is not configured for this operation" => {
             "Trakt API-client is niet geconfigureerd voor deze bewerking.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn upload_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Cannot create upload directory: ") {
+        return format!("Uploadmap kan niet worden gemaakt: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Write failed: ") {
+        return format!("Schrijven mislukt: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Read field: ") {
+        return format!("Veld lezen mislukt: {error}");
+    }
+
+    match trimmed {
+        "Upload exceeds maximum allowed size" => {
+            "Upload overschrijdt de maximaal toegestane grootte.".to_owned()
+        }
+        "No file field" => "Geen bestandsveld gevonden.".to_owned(),
         _ => error.to_owned(),
     }
 }

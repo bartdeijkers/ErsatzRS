@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{media_browser_error_message, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::list_program_schedules;
 use crate::admin::server_fns::media_browser::{add_media_item_to_schedule, ScheduleOption};
@@ -69,7 +69,11 @@ pub(crate) fn AddToScheduleModal(
                     }
                 }
                 Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::AddFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::AddFailed),
+                        media_browser_error_message(e)
+                    ),
                     ToastSeverity::Error,
                 ),
             }

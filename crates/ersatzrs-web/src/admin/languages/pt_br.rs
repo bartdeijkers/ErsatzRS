@@ -222,6 +222,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         trakt_error_message(error)
     }
 
+    fn upload_error_message(&self, error: &str) -> String {
+        upload_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -907,6 +911,27 @@ fn trakt_error_message(error: &str) -> String {
         "Trakt API client is not configured for this operation" => {
             "O cliente da API do Trakt não está configurado para esta operação.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn upload_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Cannot create upload directory: ") {
+        return format!("Não foi possível criar o diretório de upload: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Write failed: ") {
+        return format!("Falha ao gravar: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Read field: ") {
+        return format!("Falha ao ler o campo: {error}");
+    }
+
+    match trimmed {
+        "Upload exceeds maximum allowed size" => {
+            "O upload excede o tamanho máximo permitido.".to_owned()
+        }
+        "No file field" => "Nenhum campo de arquivo encontrado.".to_owned(),
         _ => error.to_owned(),
     }
 }

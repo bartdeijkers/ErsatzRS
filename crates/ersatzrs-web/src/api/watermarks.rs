@@ -11,7 +11,13 @@ use tokio::fs;
 use uuid::Uuid;
 
 use crate::{
-    admin::server_fns::watermarks::{save_watermark_with_pool, WatermarkForm},
+    admin::{
+        i18n::{upload_error_text, UiLanguage},
+        server_fns::{
+            settings::load_ui_language_for_api,
+            watermarks::{save_watermark_with_pool, WatermarkForm},
+        },
+    },
     host::state::AppState,
 };
 
@@ -27,11 +33,15 @@ pub fn max_upload_bytes() -> usize {
     mb * 1024 * 1024
 }
 
-pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
+pub async fn upload_watermark_image(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Response {
+    let language = load_error_language(&state).await;
     if let Err(e) = fs::create_dir_all(WATERMARK_DIR).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Cannot create upload directory: {e}")})),
+            Json(json!({"error": upload_error_text(language, &format!("Cannot create upload directory: {e}"))})),
         )
             .into_response();
     }
@@ -47,7 +57,7 @@ pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
                 if bytes.len() > max_upload_bytes() {
                     return (
                         StatusCode::PAYLOAD_TOO_LARGE,
-                        Json(json!({"error": "Upload exceeds maximum allowed size"})),
+                        Json(json!({"error": upload_error_text(language, "Upload exceeds maximum allowed size")})),
                     )
                         .into_response();
                 }
@@ -56,7 +66,7 @@ pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
                     Err(e) => {
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({"error": format!("Write failed: {e}")})),
+                            Json(json!({"error": upload_error_text(language, &format!("Write failed: {e}"))})),
                         )
                             .into_response();
                     }
@@ -70,7 +80,9 @@ pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
             Err(e) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("Read field: {e}")})),
+                    Json(
+                        json!({"error": upload_error_text(language, &format!("Read field: {e}"))}),
+                    ),
                 )
                     .into_response();
             }
@@ -79,9 +91,15 @@ pub async fn upload_watermark_image(mut multipart: Multipart) -> Response {
 
     (
         StatusCode::BAD_REQUEST,
-        Json(json!({"error": "No file field"})),
+        Json(json!({"error": upload_error_text(language, "No file field")})),
     )
         .into_response()
+}
+
+async fn load_error_language(state: &AppState) -> UiLanguage {
+    load_ui_language_for_api(&state.pool)
+        .await
+        .unwrap_or(UiLanguage::English)
 }
 
 pub async fn save_watermark_form(

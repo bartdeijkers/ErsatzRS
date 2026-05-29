@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{
     delete_failed, delete_selected_count, deleted_items_from_database, emptied_trash_count,
-    empty_trash_failed, selected_items_count, tr, TextKey,
+    empty_trash_failed, media_browser_error_message, selected_items_count, tr, TextKey,
 };
 use crate::admin::server_fns::media_browser::{
     delete_media_items, empty_trash, list_trash_items, MediaCardRow, TrashPageData,
@@ -59,7 +59,10 @@ pub fn TrashPage() -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => {
-                    toast.push(delete_failed(error), ToastSeverity::Error);
+                    toast.push(
+                        delete_failed(media_browser_error_message(error)),
+                        ToastSeverity::Error,
+                    );
                 }
             }
             single_delete_open.set(false);
@@ -81,7 +84,10 @@ pub fn TrashPage() -> impl IntoView {
                     data.refetch();
                 }
                 Err(error) => {
-                    toast.push(empty_trash_failed(error), ToastSeverity::Error);
+                    toast.push(
+                        empty_trash_failed(media_browser_error_message(error)),
+                        ToastSeverity::Error,
+                    );
                 }
             }
             empty_trash_open.set(false);

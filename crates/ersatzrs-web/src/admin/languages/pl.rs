@@ -222,6 +222,10 @@ impl LanguageStrings for PolishStrings {
         trakt_error_message(error)
     }
 
+    fn upload_error_message(&self, error: &str) -> String {
+        upload_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -897,6 +901,27 @@ fn trakt_error_message(error: &str) -> String {
         "Trakt API client is not configured for this operation" => {
             "Klient API Trakt nie jest skonfigurowany dla tej operacji.".to_owned()
         }
+        _ => error.to_owned(),
+    }
+}
+
+fn upload_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if let Some(error) = trimmed.strip_prefix("Cannot create upload directory: ") {
+        return format!("Nie można utworzyć katalogu przesyłania: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Write failed: ") {
+        return format!("Zapisywanie nie powiodło się: {error}");
+    }
+    if let Some(error) = trimmed.strip_prefix("Read field: ") {
+        return format!("Odczyt pola nie powiódł się: {error}");
+    }
+
+    match trimmed {
+        "Upload exceeds maximum allowed size" => {
+            "Przesłany plik przekracza maksymalny dozwolony rozmiar.".to_owned()
+        }
+        "No file field" => "Nie znaleziono pola pliku.".to_owned(),
         _ => error.to_owned(),
     }
 }

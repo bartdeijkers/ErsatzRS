@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{save_failed, tr, TextKey};
+use crate::admin::i18n::{media_browser_error_message, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     save_smart_collection, CollectionForm, CollectionOption,
 };
@@ -66,7 +66,10 @@ pub fn SaveAsSmartCollectionDialog(
                     query_error.set(None);
                 }
                 Err(error) => {
-                    toast.push(save_failed(error), ToastSeverity::Error);
+                    toast.push(
+                        save_failed(media_browser_error_message(error)),
+                        ToastSeverity::Error,
+                    );
                     open.set(true);
                 }
             }
