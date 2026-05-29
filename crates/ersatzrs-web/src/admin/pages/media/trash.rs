@@ -7,6 +7,10 @@ use std::collections::HashSet;
 
 use leptos::prelude::*;
 
+use crate::admin::i18n::{
+    delete_failed, delete_selected_count, deleted_items_from_database, emptied_trash_count,
+    empty_trash_failed, selected_items_count, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     delete_media_items, empty_trash, list_trash_items, MediaCardRow, TrashPageData,
 };
@@ -19,7 +23,7 @@ stylance::import_crate_style!(style, "src/admin/pages/media/trash.module.css");
 #[derive(Clone)]
 struct TrashSection {
     key: &'static str,
-    title: &'static str,
+    title_key: TextKey,
     browse_href: &'static str,
     rows: Vec<MediaCardRow>,
 }
@@ -49,18 +53,13 @@ pub fn TrashPage() -> impl IntoView {
         if let Some(result) = delete_action.value().get() {
             match result {
                 Ok(count) => {
-                    let message = if count == 1 {
-                        "Deleted 1 item from the database.".to_string()
-                    } else {
-                        format!("Deleted {count} items from the database.")
-                    };
-                    toast.push(message, ToastSeverity::Success);
+                    toast.push(deleted_items_from_database(count), ToastSeverity::Success);
                     selected_ids.set(HashSet::new());
                     single_delete_target.set(None);
                     data.refetch();
                 }
                 Err(error) => {
-                    toast.push(format!("Delete failed: {error}"), ToastSeverity::Error);
+                    toast.push(delete_failed(error), ToastSeverity::Error);
                 }
             }
             single_delete_open.set(false);
@@ -73,16 +72,16 @@ pub fn TrashPage() -> impl IntoView {
             match result {
                 Ok(count) => {
                     let message = if count == 0 {
-                        "Trash is already empty.".to_string()
+                        tr(TextKey::TrashAlreadyEmpty).to_owned()
                     } else {
-                        format!("Emptied trash: deleted {count} items.")
+                        emptied_trash_count(count)
                     };
                     toast.push(message, ToastSeverity::Success);
                     selected_ids.set(HashSet::new());
                     data.refetch();
                 }
                 Err(error) => {
-                    toast.push(format!("Empty trash failed: {error}"), ToastSeverity::Error);
+                    toast.push(empty_trash_failed(error), ToastSeverity::Error);
                 }
             }
             empty_trash_open.set(false);
@@ -95,9 +94,9 @@ pub fn TrashPage() -> impl IntoView {
         <div class=style::page>
             <div class=style::toolbar>
                 <div>
-                    <h1 class=style::page_title>"Trash"</h1>
+                    <h1 class=style::page_title>{tr(TextKey::Trash)}</h1>
                     <p class=style::subtitle>
-                        "Items whose source files are currently missing from disk or the provider."
+                        {tr(TextKey::TrashSubtitle)}
                     </p>
                 </div>
                 <div class=style::toolbar_actions>
@@ -106,24 +105,24 @@ pub fn TrashPage() -> impl IntoView {
                         disabled=move || selected_count.get() == 0
                         on:click=move |_| bulk_delete_open.set(true)
                     >
-                        {move || format!("Delete Selected ({})", selected_count.get())}
+                        {move || delete_selected_count(selected_count.get())}
                     </button>
                     <button
                         class=style::btn_danger
                         on:click=move |_| empty_trash_open.set(true)
                     >
-                        "Empty Trash"
+                        {tr(TextKey::EmptyTrash)}
                     </button>
                 </div>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading…"</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get().map(|trash| {
                         let sections = build_sections(trash);
                         if sections.is_empty() {
                             return view! {
-                                <p class=style::empty>"Trash is empty."</p>
+                                <p class=style::empty>{tr(TextKey::TrashEmpty)}</p>
                             }
                             .into_any();
                         }
@@ -132,9 +131,10 @@ pub fn TrashPage() -> impl IntoView {
                         view! {
                             <div class=style::section_links>
                                 {nav_sections.into_iter().map(|section| {
+                                    let section_title = tr(section.title_key);
                                     view! {
                                         <a href=format!("#{}", section.key) class=style::section_link>
-                                            {format!("{} ({})", section.title, section.rows.len())}
+                                            {format!("{} ({})", section_title, section.rows.len())}
                                         </a>
                                     }
                                 }).collect_view()}
@@ -142,7 +142,7 @@ pub fn TrashPage() -> impl IntoView {
 
                             {sections.into_iter().map(|section| {
                                 let section_key = section.key;
-                                let section_title = section.title;
+                                let section_title = tr(section.title_key);
                                 let browse_href = section.browse_href;
                                 let rows = section.rows;
                                 view! {
@@ -152,7 +152,7 @@ pub fn TrashPage() -> impl IntoView {
                                                 {format!("{} ({})", section_title, rows.len())}
                                             </h2>
                                             <a href=browse_href class=style::browse_link>
-                                                "Open browser"
+                                                {tr(TextKey::OpenBrowser)}
                                             </a>
                                         </div>
                                         <div class=style::grid>
@@ -188,7 +188,7 @@ pub fn TrashPage() -> impl IntoView {
                                                                         });
                                                                     }
                                                                 />
-                                                                "Select"
+                                                                {tr(TextKey::Select)}
                                                             </label>
                                                             <button
                                                                 class=style::btn_delete_item
@@ -198,7 +198,7 @@ pub fn TrashPage() -> impl IntoView {
                                                                     single_delete_open.set(true);
                                                                 }
                                                             >
-                                                                "Delete"
+                                                                {tr(TextKey::Delete)}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -234,7 +234,7 @@ pub fn TrashPage() -> impl IntoView {
             <DeleteDialog
                 open=bulk_delete_open
                 entity_name=Signal::derive(move || {
-                    format!("{} selected items", selected_count.get())
+                    selected_items_count(selected_count.get())
                 })
                 on_confirm=Callback::new(move |confirmed: bool| {
                     if confirmed {
@@ -248,7 +248,7 @@ pub fn TrashPage() -> impl IntoView {
 
             <Modal
                 open=empty_trash_open
-                title="Empty Trash".to_string()
+                title=tr(TextKey::EmptyTrash).to_owned()
                 on_close=Callback::new(move |confirmed: bool| {
                     if confirmed {
                         empty_action.dispatch(());
@@ -256,12 +256,12 @@ pub fn TrashPage() -> impl IntoView {
                         empty_trash_open.set(false);
                     }
                 })
-                confirm_label="Delete All"
+                confirm_label=Some(tr(TextKey::DeleteAll))
                 destructive=true
             >
-                <p>"Delete every file-not-found item from the database?"</p>
+                <p>{tr(TextKey::TrashEmptyConfirm)}</p>
                 <p class=style::modal_note>
-                    "This permanently removes the currently missing media items and their dependent metadata rows."
+                    {tr(TextKey::TrashEmptyConfirmHelp)}
                 </p>
             </Modal>
         </div>
@@ -274,7 +274,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.movies.is_empty() {
         sections.push(TrashSection {
             key: "movies",
-            title: "Movies",
+            title_key: TextKey::Movies,
             browse_href: "/media/movies",
             rows: data.movies,
         });
@@ -283,7 +283,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.shows.is_empty() {
         sections.push(TrashSection {
             key: "shows",
-            title: "TV Shows",
+            title_key: TextKey::TvShows,
             browse_href: "/media/tv/shows",
             rows: data.shows,
         });
@@ -292,7 +292,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.artists.is_empty() {
         sections.push(TrashSection {
             key: "artists",
-            title: "Artists",
+            title_key: TextKey::Artists,
             browse_href: "/media/music/artists",
             rows: data.artists,
         });
@@ -301,7 +301,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.other_videos.is_empty() {
         sections.push(TrashSection {
             key: "other-videos",
-            title: "Other Videos",
+            title_key: TextKey::OtherVideos,
             browse_href: "/media/other/videos",
             rows: data.other_videos,
         });
@@ -310,7 +310,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.songs.is_empty() {
         sections.push(TrashSection {
             key: "songs",
-            title: "Songs",
+            title_key: TextKey::Songs,
             browse_href: "/media/music/songs",
             rows: data.songs,
         });
@@ -319,7 +319,7 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
     if !data.images.is_empty() {
         sections.push(TrashSection {
             key: "images",
-            title: "Images",
+            title_key: TextKey::Images,
             browse_href: "/media/browser/images",
             rows: data.images,
         });

@@ -5,6 +5,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
+use crate::admin::i18n::{delete_failed, match_status, range_of, save_failed, tr, TextKey};
 use crate::admin::server_fns::trakt::{
     add_trakt_list, delete_trakt_list, get_trakt_list_form, get_trakt_lists_page_size,
     list_trakt_lists, match_trakt_list, update_trakt_list, TraktListForm, TraktListRow,
@@ -72,12 +73,18 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
         if let Some(result) = add_action.value().get() {
             match result {
                 Ok(_) => {
-                    toast.push("Trakt list added.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::TraktListAdded).to_string(),
+                        ToastSeverity::Success,
+                    );
                     add_value.set(String::new());
                     add_open.set(false);
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Add failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::AddFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -86,10 +93,16 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
         if let Some(result) = match_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Trakt list matched.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::TraktListMatched).to_string(),
+                        ToastSeverity::Success,
+                    );
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Match failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    format!("{}: {error}", tr(TextKey::MatchFailed)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -98,10 +111,13 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
         if let Some(result) = delete_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Trakt list deleted.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::TraktListDeleted).to_string(),
+                        ToastSeverity::Success,
+                    );
                     data.refetch();
                 }
-                Err(error) => toast.push(format!("Delete failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
             }
             delete_open.set(false);
             delete_target.set(None);
@@ -113,17 +129,17 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
             <div class=style::action_bar>
                 <button type="button" class=style::btn_add on:click=move |_| add_open.set(true)>
                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>"Add Trakt List"</span>
+                    <span>{tr(TextKey::AddTraktList)}</span>
                 </button>
             </div>
             <section class=style::content>
-                <h1 class=style::page_title>"Trakt Lists"</h1>
+                <h1 class=style::page_title>{tr(TextKey::TraktLists)}</h1>
                 <div class=style::divider/>
                 <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                    "Trakt list action failed."
+                    {tr(TextKey::TraktListActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || {
                         data.get().map(|(rows, total)| {
                             let size = page_size.get().max(1);
@@ -149,9 +165,9 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                         </colgroup>
                                         <thead>
                                             <tr>
-                                                <th>"Id"</th>
-                                                <th>"Name"</th>
-                                                <th>"Match Status"</th>
+                                                <th>{tr(TextKey::Id)}</th>
+                                                <th>{tr(TextKey::Name)}</th>
+                                                <th>{tr(TextKey::MatchStatus)}</th>
                                                 <th/>
                                             </tr>
                                         </thead>
@@ -159,7 +175,7 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                             {if rows.is_empty() {
                                                 view! {
                                                     <tr>
-                                                        <td class=style::empty_cell colspan="4">"No Trakt lists yet."</td>
+                                                        <td class=style::empty_cell colspan="4">{tr(TextKey::NoTraktListsYet)}</td>
                                                     </tr>
                                                 }.into_any()
                                             } else {
@@ -168,7 +184,10 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                                     let slug = row.slug.clone();
                                                     let name = row.name.clone();
                                                     let trakt_id = row.trakt_id;
-                                                    let match_status = format!("{} of {}", row.match_count, row.item_count);
+                                                    let match_status = match_status(
+                                                        u64::try_from(row.match_count).unwrap_or_default(),
+                                                        u64::try_from(row.item_count).unwrap_or_default(),
+                                                    );
                                                     let row_for_delete = row.clone();
                                                     view! {
                                                         <tr>
@@ -180,16 +199,16 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                                                     <a
                                                                         class=style::icon_button
                                                                         href=format!("/media/trakt/lists/{id}")
-                                                                        title="Edit Trakt List Properties"
-                                                                        aria-label="Edit Trakt List Properties"
+                                                                        title=tr(TextKey::EditTraktListProperties)
+                                                                        aria-label=tr(TextKey::EditTraktListProperties)
                                                                     >
                                                                         <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
                                                                     <a
                                                                         class=style::icon_button
                                                                         href=format!("/search?query=trakt_list%3a{trakt_id}")
-                                                                        title="Search Trakt List"
-                                                                        aria-label="Search Trakt List"
+                                                                        title=tr(TextKey::SearchTraktList)
+                                                                        aria-label=tr(TextKey::SearchTraktList)
                                                                     >
                                                                         <span style=icon_style(IconName::Search, "1.25rem") aria-hidden="true"></span>
                                                                     </a>
@@ -198,8 +217,8 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                                                         <button
                                                                             type="submit"
                                                                             class=style::icon_button
-                                                                            title="Match Trakt List Items"
-                                                                            aria-label="Match Trakt List Items"
+                                                                            title=tr(TextKey::MatchTraktListItems)
+                                                                            aria-label=tr(TextKey::MatchTraktListItems)
                                                                             on:click=move |event| {
                                                                                 event.prevent_default();
                                                                                 match_action.dispatch(id);
@@ -213,8 +232,8 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                                                         <button
                                                                             type="submit"
                                                                             class=style::icon_button
-                                                                            title="Delete Trakt List"
-                                                                            aria-label="Delete Trakt List"
+                                                                            title=tr(TextKey::DeleteTraktList)
+                                                                            aria-label=tr(TextKey::DeleteTraktList)
                                                                             on:click=move |event| {
                                                                                 event.prevent_default();
                                                                                 delete_target.set(Some(row_for_delete.clone()));
@@ -234,10 +253,10 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                     </table>
                                 </div>
                                 <div class=style::pager>
-                                    <span>"Rows per page:"</span>
+                                    <span>{format!("{}:", tr(TextKey::RowsPerPage))}</span>
                                     <select
                                         class=style::page_size
-                                        aria-label="Rows per page"
+                                        aria-label=tr(TextKey::RowsPerPage)
                                         prop:value=move || page_size.get().to_string()
                                         on:change=move |event| {
                                             if let Ok(value) = event_target_value(&event).parse::<u32>() {
@@ -252,15 +271,19 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                         <option value="100">"100"</option>
                                     </select>
                                     <span class=style::pager_status>
-                                        {format!("{range_start}-{range_end} of {total}")}
+                                        {range_of(
+                                            u32::try_from(range_start).unwrap_or(u32::MAX),
+                                            u32::try_from(range_end).unwrap_or(u32::MAX),
+                                            total,
+                                        )}
                                     </span>
                                     <div class=style::pager_buttons>
                                         <button
                                             type="button"
                                             class=style::icon_button
                                             disabled=move || page.get() == 0
-                                            title="Previous page"
-                                            aria-label="Previous page"
+                                            title=tr(TextKey::PreviousPage)
+                                            aria-label=tr(TextKey::PreviousPage)
                                             on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
                                         >
                                             <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
@@ -269,8 +292,8 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                             type="button"
                                             class=style::icon_button
                                             disabled=move || { page.get() + 1 >= total_pages }
-                                            title="Next page"
-                                            aria-label="Next page"
+                                            title=tr(TextKey::NextPage)
+                                            aria-label=tr(TextKey::NextPage)
                                             on:click=move |_| {
                                                 page.update(|page| {
                                                     *page = (*page + 1).min(total_pages.saturating_sub(1));
@@ -332,7 +355,7 @@ fn AddTraktListDialog(
             on:click=move |_| open.set(false)
         >
             <div class=style::panel on:click=|event| event.stop_propagation()>
-                <h2 class=style::dialog_title>"Add Trakt List"</h2>
+                <h2 class=style::dialog_title>{tr(TextKey::AddTraktList)}</h2>
                 <form
                     method="post"
                     action="/api/trakt-lists/add"
@@ -345,9 +368,9 @@ fn AddTraktListDialog(
                     }
                 >
                     <div class=style::dialog_body>
-                        <p>"Enter Trakt List URL"</p>
+                        <p>{tr(TextKey::EnterTraktListUrl)}</p>
                         <label class=style::dialog_field>
-                            <span>"Trakt List URL"</span>
+                            <span>{tr(TextKey::TraktListUrl)}</span>
                             <input
                                 type="text"
                                 name="url"
@@ -359,14 +382,14 @@ fn AddTraktListDialog(
                     </div>
                     <div class=style::dialog_footer>
                         <button type="button" class=style::btn_cancel on:click=move |_| open.set(false)>
-                            "Cancel"
+                            {tr(TextKey::Cancel)}
                         </button>
                         <button
                             type="submit"
                             class=style::btn_add
                             disabled=move || value.with(|value| value.trim().is_empty())
                         >
-                            "Add"
+                            {tr(TextKey::Add)}
                         </button>
                     </div>
                 </form>
@@ -420,10 +443,13 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
         if let Some(result) = save_action.value().get() {
             match result {
                 Ok(()) => {
-                    toast.push("Trakt list saved.", ToastSeverity::Success);
+                    toast.push(
+                        tr(TextKey::TraktListSaved).to_string(),
+                        ToastSeverity::Success,
+                    );
                     set_browser_location("/media/trakt/lists");
                 }
-                Err(error) => toast.push(format!("Save failed: {error}"), ToastSeverity::Error),
+                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
             }
         }
     });
@@ -446,11 +472,11 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                     }
                 >
                     <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                    <span>"Save Trakt List"</span>
+                    <span>{tr(TextKey::SaveTraktList)}</span>
                 </button>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>"Loading..."</p> }>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || match initial.get() {
                     Some(Some(form)) => view! {
                         <form
@@ -459,14 +485,14 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                             action="/api/trakt-lists/save"
                             class=style::editor
                         >
-                            <h1 class=style::page_title>"Trakt List"</h1>
+                            <h1 class=style::page_title>{tr(TextKey::TraktList)}</h1>
                             <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                                "Trakt list save failed."
+                                {tr(TextKey::TraktListSaveFailed)}
                             </p>
                             <input type="hidden" name="id" value=form.id.to_string()/>
                             <input type="hidden" name="slug" value=form.slug.clone()/>
                             <div class=style::field_row>
-                                <div class=style::field_label>"Id"</div>
+                                <div class=style::field_label>{tr(TextKey::Id)}</div>
                                 <input
                                     class=style::text_input
                                     type="text"
@@ -476,7 +502,7 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                 />
                             </div>
                             <div class=style::field_row>
-                                <div class=style::field_label>"Automatic Refresh"</div>
+                                <div class=style::field_label>{tr(TextKey::AutomaticRefresh)}</div>
                                 <label class=style::checkbox_row>
                                     <input
                                         type="checkbox"
@@ -488,11 +514,11 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                             auto_refresh.set(event_target_checked(&event));
                                         }
                                     />
-                                    <small>"Update list from trakt.tv once each day"</small>
+                                    <small>{tr(TextKey::UpdateListFromTraktDaily)}</small>
                                 </label>
                             </div>
                             <div class=style::field_row>
-                                <div class=style::field_label>"Generate Playlist"</div>
+                                <div class=style::field_label>{tr(TextKey::GeneratePlaylist)}</div>
                                 <label class=style::checkbox_row>
                                     <input
                                         type="checkbox"
@@ -504,13 +530,13 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                             generate_playlist.set(event_target_checked(&event));
                                         }
                                     />
-                                    <small>"Generate a playlist from the sorted trakt list items"</small>
+                                    <small>{tr(TextKey::GeneratePlaylistFromSortedTraktItems)}</small>
                                 </label>
                             </div>
                         </form>
                     }.into_any(),
-                    Some(None) => view! { <p class=style::empty>"Trakt list not found."</p> }.into_any(),
-                    None => view! { <p class=style::empty>"Loading..."</p> }.into_any(),
+                    Some(None) => view! { <p class=style::empty>{tr(TextKey::TraktListNotFound)}</p> }.into_any(),
+                    None => view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
                 }}
             </Suspense>
         </div>
