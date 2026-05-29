@@ -210,6 +210,10 @@ impl LanguageStrings for DutchStrings {
         media_action_error_message(error)
     }
 
+    fn filler_error_message(&self, error: &str) -> String {
+        filler_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -566,6 +570,41 @@ fn media_action_error_message(error: &str) -> String {
         }
         "Unable to locate media item" => "Kan media-item niet vinden.".to_owned(),
         "Media action failed" => "Media-actie mislukt.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn filler_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("FillerPreset ") && trimmed.ends_with(" does not exist.") {
+        return "Fillerpreset bestaat niet.".to_owned();
+    }
+
+    match trimmed {
+        "Filler preset does not exist" => "Fillerpreset bestaat niet.".to_owned(),
+        "Filler preset name must be unique" => {
+            "Naam van fillerpreset moet uniek zijn.".to_owned()
+        }
+        "Name must not be empty" => "Naam mag niet leeg zijn.".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "Naam mag maximaal 50 tekens zijn.".to_owned()
+        }
+        "Filler kind must not be None" => "Fillertype mag niet leeg zijn.".to_owned(),
+        "Filler mode must not be None" => "Fillermodus mag niet leeg zijn.".to_owned(),
+        "Count must be greater than or equal to 0" => {
+            "Aantal moet groter dan of gelijk aan 0 zijn.".to_owned()
+        }
+        "Duration must not be empty" => "Duur mag niet leeg zijn.".to_owned(),
+        "Pad To Nearest Minute must not be empty" => {
+            "Afronden naar dichtstbijzijnde minuut mag niet leeg zijn.".to_owned()
+        }
+        "Use Chapters As Media Items must not be enabled for fallback filler" => {
+            "Hoofdstukken als media-items gebruiken mag niet zijn ingeschakeld voor fallback-filler.".to_owned()
+        }
+        "Collection must not be empty" => "Collectie mag niet leeg zijn.".to_owned(),
+        "Multi Collection must not be empty" => "Multi-collectie mag niet leeg zijn.".to_owned(),
+        "Smart Collection must not be empty" => "Slimme collectie mag niet leeg zijn.".to_owned(),
+        "Media item must not be empty" => "Media-item mag niet leeg zijn.".to_owned(),
         _ => error.to_owned(),
     }
 }

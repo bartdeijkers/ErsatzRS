@@ -206,6 +206,10 @@ impl LanguageStrings for PolishStrings {
         media_action_error_message(error)
     }
 
+    fn filler_error_message(&self, error: &str) -> String {
+        filler_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }
@@ -570,6 +574,45 @@ fn media_action_error_message(error: &str) -> String {
         }
         "Unable to locate media item" => "Nie można znaleźć elementu multimedialnego.".to_owned(),
         "Media action failed" => "Akcja multimediów nie powiodła się.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn filler_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("FillerPreset ") && trimmed.ends_with(" does not exist.") {
+        return "Preset wypełniacza nie istnieje.".to_owned();
+    }
+
+    match trimmed {
+        "Filler preset does not exist" => "Preset wypełniacza nie istnieje.".to_owned(),
+        "Filler preset name must be unique" => {
+            "Nazwa presetu wypełniacza musi być unikatowa.".to_owned()
+        }
+        "Name must not be empty" => "Nazwa nie może być pusta.".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "Nazwa może mieć najwyżej 50 znaków.".to_owned()
+        }
+        "Filler kind must not be None" => "Rodzaj wypełniacza nie może być pusty.".to_owned(),
+        "Filler mode must not be None" => "Tryb wypełniacza nie może być pusty.".to_owned(),
+        "Count must be greater than or equal to 0" => {
+            "Liczba musi być większa lub równa 0.".to_owned()
+        }
+        "Duration must not be empty" => "Czas trwania nie może być pusty.".to_owned(),
+        "Pad To Nearest Minute must not be empty" => {
+            "Dopełnienie do najbliższej minuty nie może być puste.".to_owned()
+        }
+        "Use Chapters As Media Items must not be enabled for fallback filler" => {
+            "Używanie rozdziałów jako elementów multimedialnych nie może być włączone dla wypełniacza awaryjnego.".to_owned()
+        }
+        "Collection must not be empty" => "Kolekcja nie może być pusta.".to_owned(),
+        "Multi Collection must not be empty" => "Multi-kolekcja nie może być pusta.".to_owned(),
+        "Smart Collection must not be empty" => {
+            "Kolekcja inteligentna nie może być pusta.".to_owned()
+        }
+        "Media item must not be empty" => {
+            "Element multimedialny nie może być pusty.".to_owned()
+        }
         _ => error.to_owned(),
     }
 }

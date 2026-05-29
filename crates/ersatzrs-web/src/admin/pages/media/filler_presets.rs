@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, range_of, save_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, filler_error_message, range_of, save_failed, tr, TextKey};
 use crate::admin::server_fns::filler::{
     delete_filler_preset, get_filler_preset_editor_options, get_filler_preset_form,
     get_filler_presets_page_size, list_filler_presets, save_filler_preset,
@@ -77,7 +77,10 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                     toast.push(tr(TextKey::FillerPresetDeleted), ToastSeverity::Success);
                     data.refetch();
                 }
-                Err(error) => toast.push(delete_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    delete_failed(filler_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
             delete_open.set(false);
         }
@@ -435,7 +438,10 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                     #[cfg(not(target_arch = "wasm32"))]
                     toast.push(tr(TextKey::FillerPresetSaved), ToastSeverity::Success);
                 }
-                Err(error) => toast.push(save_failed(error), ToastSeverity::Error),
+                Err(error) => toast.push(
+                    save_failed(filler_error_message(error)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });

@@ -2123,6 +2123,15 @@ pub fn media_action_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).media_action_error_message(error)
 }
 
+pub fn filler_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).filler_error_message(&message)
+}
+
+pub fn filler_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).filler_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2236,6 +2245,7 @@ pub trait LanguageStrings: Sync {
     fn ffmpeg_profile_error_message(&self, error: &str) -> String;
     fn settings_error_message(&self, error: &str) -> String;
     fn media_action_error_message(&self, error: &str) -> String;
+    fn filler_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2665,6 +2675,33 @@ mod tests {
         );
         assert_eq!(
             media_action_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn filler_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            filler_error_text(UiLanguage::English, "Filler preset name must be unique"),
+            "Filler preset name must be unique"
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Polish, "Duration must not be empty"),
+            "Czas trwania nie może być pusty."
+        );
+        assert_eq!(
+            filler_error_text(
+                UiLanguage::PortugueseBrazil,
+                "Use Chapters As Media Items must not be enabled for fallback filler"
+            ),
+            "Usar capítulos como itens de mídia não pode estar ativado para preenchimento de fallback."
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Dutch, "FillerPreset 42 does not exist."),
+            "Fillerpreset bestaat niet."
+        );
+        assert_eq!(
+            filler_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }

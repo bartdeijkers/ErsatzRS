@@ -210,6 +210,10 @@ impl LanguageStrings for EnglishStrings {
         media_action_error_message(error)
     }
 
+    fn filler_error_message(&self, error: &str) -> String {
+        filler_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1544,6 +1548,37 @@ fn media_action_error_message(error: &str) -> String {
         }
         "Unable to locate media item" => "Unable to locate media item".to_owned(),
         "Media action failed" => "Media action failed".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn filler_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("FillerPreset ") && trimmed.ends_with(" does not exist.") {
+        return "Filler preset does not exist.".to_owned();
+    }
+
+    match trimmed {
+        "Filler preset does not exist" => "Filler preset does not exist.".to_owned(),
+        "Filler preset name must be unique" => "Filler preset name must be unique".to_owned(),
+        "Name must not be empty" => "Name must not be empty".to_owned(),
+        "Name must be 50 characters or fewer" => "Name must be 50 characters or fewer".to_owned(),
+        "Filler kind must not be None" => "Filler kind must not be None".to_owned(),
+        "Filler mode must not be None" => "Filler mode must not be None".to_owned(),
+        "Count must be greater than or equal to 0" => {
+            "Count must be greater than or equal to 0".to_owned()
+        }
+        "Duration must not be empty" => "Duration must not be empty".to_owned(),
+        "Pad To Nearest Minute must not be empty" => {
+            "Pad To Nearest Minute must not be empty".to_owned()
+        }
+        "Use Chapters As Media Items must not be enabled for fallback filler" => {
+            "Use Chapters As Media Items must not be enabled for fallback filler".to_owned()
+        }
+        "Collection must not be empty" => "Collection must not be empty".to_owned(),
+        "Multi Collection must not be empty" => "Multi Collection must not be empty".to_owned(),
+        "Smart Collection must not be empty" => "Smart Collection must not be empty".to_owned(),
+        "Media item must not be empty" => "Media item must not be empty".to_owned(),
         _ => error.to_owned(),
     }
 }

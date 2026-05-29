@@ -206,6 +206,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         media_action_error_message(error)
     }
 
+    fn filler_error_message(&self, error: &str) -> String {
+        filler_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -572,6 +576,49 @@ fn media_action_error_message(error: &str) -> String {
         }
         "Unable to locate media item" => "Não foi possível localizar o item de mídia.".to_owned(),
         "Media action failed" => "Falha na ação de mídia.".to_owned(),
+        _ => error.to_owned(),
+    }
+}
+
+fn filler_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("FillerPreset ") && trimmed.ends_with(" does not exist.") {
+        return "O preset de preenchimento não existe.".to_owned();
+    }
+
+    match trimmed {
+        "Filler preset does not exist" => "O preset de preenchimento não existe.".to_owned(),
+        "Filler preset name must be unique" => {
+            "O nome do preset de preenchimento deve ser único.".to_owned()
+        }
+        "Name must not be empty" => "O nome não pode ficar vazio.".to_owned(),
+        "Name must be 50 characters or fewer" => {
+            "O nome deve ter 50 caracteres ou menos.".to_owned()
+        }
+        "Filler kind must not be None" => {
+            "O tipo de preenchimento não pode ser vazio.".to_owned()
+        }
+        "Filler mode must not be None" => {
+            "O modo de preenchimento não pode ser vazio.".to_owned()
+        }
+        "Count must be greater than or equal to 0" => {
+            "A contagem deve ser maior ou igual a 0.".to_owned()
+        }
+        "Duration must not be empty" => "A duração não pode ficar vazia.".to_owned(),
+        "Pad To Nearest Minute must not be empty" => {
+            "Preencher até o minuto mais próximo não pode ficar vazio.".to_owned()
+        }
+        "Use Chapters As Media Items must not be enabled for fallback filler" => {
+            "Usar capítulos como itens de mídia não pode estar ativado para preenchimento de fallback.".to_owned()
+        }
+        "Collection must not be empty" => "A coleção não pode ficar vazia.".to_owned(),
+        "Multi Collection must not be empty" => {
+            "A multi-coleção não pode ficar vazia.".to_owned()
+        }
+        "Smart Collection must not be empty" => {
+            "A coleção inteligente não pode ficar vazia.".to_owned()
+        }
+        "Media item must not be empty" => "O item de mídia não pode ficar vazio.".to_owned(),
         _ => error.to_owned(),
     }
 }
