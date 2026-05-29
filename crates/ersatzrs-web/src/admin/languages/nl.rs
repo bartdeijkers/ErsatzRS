@@ -202,6 +202,10 @@ impl LanguageStrings for DutchStrings {
         ffmpeg_profile_error_message(error)
     }
 
+    fn settings_error_message(&self, error: &str) -> String {
+        settings_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
@@ -490,6 +494,65 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
     }
 }
 
+fn settings_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+
+    if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
+        return format!(
+            "Aantal XMLTV-dagen om te bouwen ({current}) mag niet groter zijn dan het aantal playout-dagen om te bouwen ({limit})"
+        );
+    }
+    if let Some(name) = trimmed.strip_suffix(" path does not exist") {
+        return format!("{name}-pad bestaat niet");
+    }
+    if let Some(name) = trimmed
+        .strip_prefix("Unable to verify ")
+        .and_then(|value| value.strip_suffix(" version"))
+    {
+        return format!("Kan {name}-versie niet controleren");
+    }
+    if let Some(value) = trimmed.strip_prefix("Invalid option: ") {
+        return format!("Ongeldige optie: {value}");
+    }
+    if trimmed.starts_with("Resolution ") && trimmed.ends_with(" does not exist.") {
+        return "Resolutie bestaat niet.".to_owned();
+    }
+
+    match trimmed {
+        "Tuner count must be greater than zero" => "Aantal tuners moet groter zijn dan nul.".to_owned(),
+        "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
+            "Bibliotheekverversingsinterval moet 0 (niet verversen) of groter dan nul zijn.".to_owned()
+        }
+        "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh" => {
+            "Bibliotheekverversingsinterval moet kleiner zijn dan 1.000.000. Gebruik 0 om automatisch verversen uit te schakelen.".to_owned()
+        }
+        "Playout days to build must be greater than zero" => "Aantal playout-dagen om te bouwen moet groter zijn dan nul.".to_owned(),
+        "Scripted schedule timeout seconds must be at least 10" => {
+            "Time-out voor scripted schema moet minstens 10 seconden zijn.".to_owned()
+        }
+        "XMLTV days to build must be greater than zero" => "Aantal XMLTV-dagen om te bouwen moet groter zijn dan nul.".to_owned(),
+        "Resolution width or height is invalid" => "Resolutiebreedte of -hoogte is ongeldig.".to_owned(),
+        "Resolution width and height must be unique" => "Resolutiebreedte en -hoogte moeten uniek zijn.".to_owned(),
+        "HLS Segmenter idle timeout must be greater than or equal to 30" => {
+            "Inactiviteitstime-out van HLS-segmenter moet groter dan of gelijk aan 30 zijn.".to_owned()
+        }
+        "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
+            "Work-ahead-limiet van HLS-segmenter moet groter dan of gelijk aan 0 zijn.".to_owned()
+        }
+        "HLS Segmenter initial segment count must be greater than or equal to 1" => {
+            "Initieel segmentaantal van HLS-segmenter moet groter dan of gelijk aan 1 zijn.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
+    let rest = error.strip_prefix("XMLTV days to build (")?;
+    let (current, rest) = rest.split_once(") cannot be greater than Playout days to build (")?;
+    let limit = rest.strip_suffix(')')?;
+    Some((current, limit))
+}
+
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::AddCustomResolution => "Aangepaste resolutie toevoegen",
@@ -521,6 +584,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AfterDurationEnd => "Na einde duur",
         TextKey::AutomaticRefresh => "Automatisch vernieuwen",
         TextKey::Back => "Terug",
+        TextKey::BackToSettings => "Terug naar instellingen",
         TextKey::BackToArtists => "Terug naar artiesten",
         TextKey::BackToCollections => "Terug naar collecties",
         TextKey::BackToMovies => "Terug naar films",
@@ -993,6 +1057,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchTraktList => "Trakt-lijst zoeken",
         TextKey::SearchingMinimumLogLevel => "Minimaal logniveau voor zoeken",
         TextKey::Settings => "Instellingen",
+        TextKey::SettingsSaveFailed => "Instellingen opslaan mislukt",
         TextKey::ShowMediaInfo => "Media-info weergeven",
         TextKey::ScriptedScheduleTimeout => "Time-out voor scriptschema",
         TextKey::SkipMissingItems => "Ontbrekende items overslaan",

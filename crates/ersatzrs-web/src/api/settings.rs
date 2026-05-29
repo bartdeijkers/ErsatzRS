@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::Serialize;
 
+use crate::admin::i18n::{settings_error_text, text, TextKey, UiLanguage};
 use crate::admin::server_fns::settings::{
     create_custom_resolution, delete_custom_resolution_with_pool, save_ffmpeg_settings_with_state,
     save_hdhr_settings_with_state, save_logging_settings_with_state,
@@ -56,7 +57,9 @@ pub async fn save_ffmpeg_settings_form(State(state): State<AppState>, body: Byte
     redirect_or_error(
         save_ffmpeg_settings_with_state(&state, form).await,
         "/settings/ffmpeg",
+        &state,
     )
+    .await
 }
 
 pub async fn save_logging_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -72,7 +75,9 @@ pub async fn save_logging_settings_form(State(state): State<AppState>, body: Byt
     redirect_or_error(
         save_logging_settings_with_state(&state, form).await,
         "/settings/logging",
+        &state,
     )
+    .await
 }
 
 pub async fn save_hdhr_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -84,7 +89,9 @@ pub async fn save_hdhr_settings_form(State(state): State<AppState>, body: Bytes)
     redirect_or_error(
         save_hdhr_settings_with_state(&state, form).await,
         "/settings/hdhr",
+        &state,
     )
+    .await
 }
 
 pub async fn save_scanner_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -95,7 +102,9 @@ pub async fn save_scanner_settings_form(State(state): State<AppState>, body: Byt
     redirect_or_error(
         save_scanner_settings_with_pool(&state.pool, form).await,
         "/settings/scanner",
+        &state,
     )
+    .await
 }
 
 pub async fn save_playout_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -108,7 +117,9 @@ pub async fn save_playout_settings_form(State(state): State<AppState>, body: Byt
     redirect_or_error(
         save_playout_settings_with_state(&state, form).await,
         "/settings/playout",
+        &state,
     )
+    .await
 }
 
 pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -120,7 +131,9 @@ pub async fn save_ui_settings_form(State(state): State<AppState>, body: Bytes) -
     redirect_or_error(
         save_ui_settings_with_pool(&state.pool, form).await,
         "/settings/ui",
+        &state,
     )
+    .await
 }
 
 pub async fn save_xmltv_settings_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -133,7 +146,9 @@ pub async fn save_xmltv_settings_form(State(state): State<AppState>, body: Bytes
     redirect_or_error(
         save_xmltv_settings_with_state(&state, form).await,
         "/settings/xmltv",
+        &state,
     )
+    .await
 }
 
 pub async fn add_custom_resolution_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -146,7 +161,9 @@ pub async fn add_custom_resolution_form(State(state): State<AppState>, body: Byt
         )
         .await,
         "/settings/ffmpeg",
+        &state,
     )
+    .await
 }
 
 pub async fn delete_custom_resolution_form(State(state): State<AppState>, body: Bytes) -> Response {
@@ -154,36 +171,55 @@ pub async fn delete_custom_resolution_form(State(state): State<AppState>, body: 
     redirect_or_error(
         delete_custom_resolution_with_pool(&state.pool, parse_i64(&fields, "id")).await,
         "/settings/ffmpeg",
+        &state,
     )
+    .await
 }
 
-fn redirect_or_error(
+async fn redirect_or_error(
     result: Result<(), leptos::server_fn::ServerFnError>,
     success_path: &str,
+    state: &AppState,
 ) -> Response {
     match result {
         Ok(()) => Redirect::to(success_path).into_response(),
-        Err(error) => settings_error_response(success_path, &error.to_string()),
+        Err(error) => {
+            let language = load_error_language(state).await;
+            settings_error_response(success_path, &error.to_string(), language)
+        }
     }
 }
 
-fn settings_error_response(back_path: &str, message: &str) -> Response {
+async fn load_error_language(state: &AppState) -> UiLanguage {
+    crate::admin::server_fns::settings::load_ui_language_for_api(&state.pool)
+        .await
+        .unwrap_or(UiLanguage::English)
+}
+
+fn settings_error_response(back_path: &str, message: &str, language: UiLanguage) -> Response {
+    let title = text(language, TextKey::SettingsSaveFailed);
+    let back = text(language, TextKey::BackToSettings);
+    let message = settings_error_text(language, message);
     (
         StatusCode::BAD_REQUEST,
         Html(format!(
             r#"<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Settings Save Failed</title></head>
+<html lang="{}">
+<head><meta charset="utf-8"><title>{}</title></head>
 <body>
 <main>
-<h1>Settings Save Failed</h1>
+<h1>{}</h1>
 <p role="alert">{}</p>
-<p><a href="{}">Back to settings</a></p>
+<p><a href="{}">{}</a></p>
 </main>
 </body>
 </html>"#,
-            escape_html(message),
+            language.code(),
+            escape_html(title),
+            escape_html(title),
+            escape_html(&message),
             escape_html(back_path),
+            escape_html(back),
         )),
     )
         .into_response()
@@ -276,5 +312,24 @@ mod tests {
     fn settings_error_page_escapes_message_and_back_path() {
         let html = escape_html(r#"<bad attr="x">&'"#);
         assert_eq!(html, "&lt;bad attr=&quot;x&quot;&gt;&amp;&#39;");
+    }
+
+    #[tokio::test]
+    async fn settings_error_page_uses_selected_language() {
+        let response = settings_error_response(
+            "/settings/hdhr",
+            "Tuner count must be greater than zero",
+            UiLanguage::Dutch,
+        );
+        let body = response.into_body();
+        let bytes = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .expect("body should collect");
+        let html = String::from_utf8(bytes.to_vec()).expect("html should be utf8");
+
+        assert!(html.contains(r#"<html lang="nl">"#));
+        assert!(html.contains("Instellingen opslaan mislukt"));
+        assert!(html.contains("Aantal tuners moet groter zijn dan nul."));
+        assert!(html.contains("Terug naar instellingen"));
     }
 }

@@ -202,6 +202,10 @@ impl LanguageStrings for EnglishStrings {
         ffmpeg_profile_error_message(error)
     }
 
+    fn settings_error_message(&self, error: &str) -> String {
+        settings_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -297,6 +301,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AfterDurationEnd => "After Duration End",
         TextKey::AutomaticRefresh => "Automatic Refresh",
         TextKey::Back => "Back",
+        TextKey::BackToSettings => "Back to settings",
         TextKey::BackToArtists => "Back to artists",
         TextKey::BackToCollections => "Back to collections",
         TextKey::BackToMovies => "Back to movies",
@@ -774,6 +779,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchTraktList => "Search Trakt List",
         TextKey::SearchingMinimumLogLevel => "Searching Minimum Log Level",
         TextKey::Settings => "Settings",
+        TextKey::SettingsSaveFailed => "Settings Save Failed",
         TextKey::ShowMediaInfo => "Show Media Info",
         TextKey::ScriptedScheduleTimeout => "Scripted Schedule Timeout",
         TextKey::SkipMissingItems => "Skip Missing Items",
@@ -1454,6 +1460,75 @@ fn ffmpeg_profile_audio_format_label(format: i32) -> String {
         _ => return format!("Unknown ({format})"),
     }
     .to_owned()
+}
+
+fn settings_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+
+    if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
+        return format!(
+            "XMLTV days to build ({current}) cannot be greater than Playout days to build ({limit})"
+        );
+    }
+    if let Some(name) = trimmed.strip_suffix(" path does not exist") {
+        return format!("{name} path does not exist");
+    }
+    if let Some(name) = trimmed
+        .strip_prefix("Unable to verify ")
+        .and_then(|value| value.strip_suffix(" version"))
+    {
+        return format!("Unable to verify {name} version");
+    }
+    if let Some(value) = trimmed.strip_prefix("Invalid option: ") {
+        return format!("Invalid option: {value}");
+    }
+    if trimmed.starts_with("Resolution ") && trimmed.ends_with(" does not exist.") {
+        return "Resolution does not exist.".to_owned();
+    }
+
+    match trimmed {
+        "Tuner count must be greater than zero" => {
+            "Tuner count must be greater than zero".to_owned()
+        }
+        "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
+            "Library refresh interval must be 0 (do not refresh) or greater than zero".to_owned()
+        }
+        "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh" => {
+            "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh".to_owned()
+        }
+        "Playout days to build must be greater than zero" => {
+            "Playout days to build must be greater than zero".to_owned()
+        }
+        "Scripted schedule timeout seconds must be at least 10" => {
+            "Scripted schedule timeout seconds must be at least 10".to_owned()
+        }
+        "XMLTV days to build must be greater than zero" => {
+            "XMLTV days to build must be greater than zero".to_owned()
+        }
+        "Resolution width or height is invalid" => {
+            "Resolution width or height is invalid".to_owned()
+        }
+        "Resolution width and height must be unique" => {
+            "Resolution width and height must be unique".to_owned()
+        }
+        "HLS Segmenter idle timeout must be greater than or equal to 30" => {
+            "HLS Segmenter idle timeout must be greater than or equal to 30".to_owned()
+        }
+        "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
+            "Work-Ahead HLS Segmenter limit must be greater than or equal to 0".to_owned()
+        }
+        "HLS Segmenter initial segment count must be greater than or equal to 1" => {
+            "HLS Segmenter initial segment count must be greater than or equal to 1".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
+    let rest = error.strip_prefix("XMLTV days to build (")?;
+    let (current, rest) = rest.split_once(") cannot be greater than Playout days to build (")?;
+    let limit = rest.strip_suffix(')')?;
+    Some((current, limit))
 }
 
 fn ffmpeg_profile_error_message(error: &str) -> String {

@@ -198,6 +198,10 @@ impl LanguageStrings for PortugueseBrazilStrings {
         ffmpeg_profile_error_message(error)
     }
 
+    fn settings_error_message(&self, error: &str) -> String {
+        settings_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -496,6 +500,65 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
     }
 }
 
+fn settings_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+
+    if let Some((current, limit)) = xmltv_days_error_parts(trimmed) {
+        return format!(
+            "Dias de XMLTV para construir ({current}) não podem ser maiores que dias de playout para construir ({limit})"
+        );
+    }
+    if let Some(name) = trimmed.strip_suffix(" path does not exist") {
+        return format!("O caminho de {name} não existe");
+    }
+    if let Some(name) = trimmed
+        .strip_prefix("Unable to verify ")
+        .and_then(|value| value.strip_suffix(" version"))
+    {
+        return format!("Não foi possível verificar a versão de {name}");
+    }
+    if let Some(value) = trimmed.strip_prefix("Invalid option: ") {
+        return format!("Opção inválida: {value}");
+    }
+    if trimmed.starts_with("Resolution ") && trimmed.ends_with(" does not exist.") {
+        return "A resolução não existe.".to_owned();
+    }
+
+    match trimmed {
+        "Tuner count must be greater than zero" => "A contagem de sintonizadores deve ser maior que zero.".to_owned(),
+        "Library refresh interval must be 0 (do not refresh) or greater than zero" => {
+            "O intervalo de atualização da biblioteca deve ser 0 (não atualizar) ou maior que zero.".to_owned()
+        }
+        "Library refresh interval must be less than 1,000,000. Use 0 to disable automatic refresh" => {
+            "O intervalo de atualização da biblioteca deve ser menor que 1.000.000. Use 0 para desativar a atualização automática.".to_owned()
+        }
+        "Playout days to build must be greater than zero" => "Dias de playout para construir devem ser maiores que zero.".to_owned(),
+        "Scripted schedule timeout seconds must be at least 10" => {
+            "O tempo limite do agendamento por script deve ser de pelo menos 10 segundos.".to_owned()
+        }
+        "XMLTV days to build must be greater than zero" => "Dias de XMLTV para construir devem ser maiores que zero.".to_owned(),
+        "Resolution width or height is invalid" => "A largura ou altura da resolução é inválida.".to_owned(),
+        "Resolution width and height must be unique" => "A largura e a altura da resolução devem ser únicas.".to_owned(),
+        "HLS Segmenter idle timeout must be greater than or equal to 30" => {
+            "O tempo limite ocioso do segmentador HLS deve ser maior ou igual a 30.".to_owned()
+        }
+        "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
+            "O limite work-ahead do segmentador HLS deve ser maior ou igual a 0.".to_owned()
+        }
+        "HLS Segmenter initial segment count must be greater than or equal to 1" => {
+            "A contagem inicial de segmentos do segmentador HLS deve ser maior ou igual a 1.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
+    let rest = error.strip_prefix("XMLTV days to build (")?;
+    let (current, rest) = rest.split_once(") cannot be greater than Playout days to build (")?;
+    let limit = rest.strip_suffix(')')?;
+    Some((current, limit))
+}
+
 pub fn text(key: TextKey) -> &'static str {
     match key {
         TextKey::AddCustomResolution => "Adicionar resolução personalizada",
@@ -527,6 +590,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AfterDurationEnd => "Após o fim da duração",
         TextKey::AutomaticRefresh => "Atualização automática",
         TextKey::Back => "Voltar",
+        TextKey::BackToSettings => "Voltar para as definições",
         TextKey::BackToArtists => "Voltar para artistas",
         TextKey::BackToCollections => "Voltar para coleções",
         TextKey::BackToMovies => "Voltar para filmes",
@@ -1003,6 +1067,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchTraktList => "Pesquisar lista Trakt",
         TextKey::SearchingMinimumLogLevel => "Nível mínimo de log da pesquisa",
         TextKey::Settings => "Definições",
+        TextKey::SettingsSaveFailed => "Falha ao salvar definições",
         TextKey::ShowMediaInfo => "Mostrar informações da mídia",
         TextKey::ScriptedScheduleTimeout => "Tempo limite de agenda por script",
         TextKey::SkipMissingItems => "Ignorar itens ausentes",

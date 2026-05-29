@@ -90,6 +90,7 @@ pub enum TextKey {
     AfterDurationEnd,
     AutomaticRefresh,
     Back,
+    BackToSettings,
     BackToArtists,
     BackToCollections,
     BackToMovies,
@@ -522,6 +523,7 @@ pub enum TextKey {
     SearchTraktList,
     SearchingMinimumLogLevel,
     Settings,
+    SettingsSaveFailed,
     ShowMediaInfo,
     ScriptedScheduleTimeout,
     SkipMissingItems,
@@ -1021,6 +1023,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AfterDurationEnd,
     TextKey::AutomaticRefresh,
     TextKey::Back,
+    TextKey::BackToSettings,
     TextKey::BackToArtists,
     TextKey::BackToCollections,
     TextKey::BackToMovies,
@@ -1452,6 +1455,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SearchTraktList,
     TextKey::SearchingMinimumLogLevel,
     TextKey::Settings,
+    TextKey::SettingsSaveFailed,
     TextKey::ShowMediaInfo,
     TextKey::ScriptedScheduleTimeout,
     TextKey::SkipMissingItems,
@@ -2111,6 +2115,10 @@ pub fn ffmpeg_profile_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).ffmpeg_profile_error_message(error)
 }
 
+pub fn settings_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).settings_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2222,6 +2230,7 @@ pub trait LanguageStrings: Sync {
     fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String;
     fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String;
     fn ffmpeg_profile_error_message(&self, error: &str) -> String;
+    fn settings_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2594,6 +2603,39 @@ mod tests {
         );
         assert_eq!(
             watermark_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
+        );
+    }
+
+    #[test]
+    fn settings_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::English,
+                "HLS Segmenter idle timeout must be greater than or equal to 30"
+            ),
+            "HLS Segmenter idle timeout must be greater than or equal to 30"
+        );
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::Polish,
+                "Library refresh interval must be 0 (do not refresh) or greater than zero"
+            ),
+            "Interwał odświeżania biblioteki musi wynosić 0 (bez odświeżania) albo więcej niż zero."
+        );
+        assert_eq!(
+            settings_error_text(
+                UiLanguage::PortugueseBrazil,
+                "XMLTV days to build (5) cannot be greater than Playout days to build (2)"
+            ),
+            "Dias de XMLTV para construir (5) não podem ser maiores que dias de playout para construir (2)"
+        );
+        assert_eq!(
+            settings_error_text(UiLanguage::Dutch, "ffmpeg path does not exist"),
+            "ffmpeg-pad bestaat niet"
+        );
+        assert_eq!(
+            settings_error_text(UiLanguage::Dutch, "custom database failure"),
             "custom database failure"
         );
     }
