@@ -410,7 +410,7 @@ fn Select(
     view! {
         <select class=style::select name=name>
             {include_none.then(|| view! {
-                <option value="" selected=selected.is_empty()>"(none)"</option>
+                <option value="" selected=selected.is_empty()>{tr(TextKey::NoneOption)}</option>
             })}
             {options.into_iter().map(|option| {
                 let is_selected = option.value == selected;

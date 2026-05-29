@@ -1391,7 +1391,7 @@ where
         <label class=style::field>
             <span>{label}</span>
             <select class=style::select prop:value=selected.unwrap_or_default() on:change=move |event| on_change(event_target_value(&event))>
-                <option value="">"(none)"</option>
+                <option value="">{tr(TextKey::NoneOption)}</option>
                 {options.into_iter().map(|option| view! {
                     <option value=option.code>{option.name}</option>
                 }).collect_view()}
