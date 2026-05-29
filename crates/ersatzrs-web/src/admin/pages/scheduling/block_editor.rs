@@ -1068,7 +1068,7 @@ fn ItemEditor(
                 <label class=style::label>{tr(TextKey::SearchQuery)}</label>
                 <input
                     class=style::input
-                    placeholder="e.g. genre:action"
+                    placeholder=tr(TextKey::BlockSearchQueryPlaceholder)
                     disabled=move || col_type.get() != collection_type::SEARCH_QUERY
                     prop:value=move || search_query_val.get()
                     on:input=move |e| search_query_val.set(event_target_value(&e))

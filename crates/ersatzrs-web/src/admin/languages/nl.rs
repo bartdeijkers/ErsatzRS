@@ -590,6 +590,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchForBlocks => "Blokken zoeken",
         TextKey::SearchForMultiCollections => "Multi-collecties zoeken",
         TextKey::SearchQuery => "Zoekopdracht",
+        TextKey::BlockSearchQueryPlaceholder => "bijv. genre:action",
         TextKey::SearchTitle => "Zoektitel",
         TextKey::SearchTitleDisplay => "Zoektitel (weergave)",
         TextKey::SearchSmartCollection => "Slimme collectie zoeken",

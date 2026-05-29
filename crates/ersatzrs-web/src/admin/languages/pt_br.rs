@@ -592,6 +592,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchForBlocks => "Pesquisar blocos",
         TextKey::SearchForMultiCollections => "Pesquisar multi-coleções",
         TextKey::SearchQuery => "Consulta de pesquisa",
+        TextKey::BlockSearchQueryPlaceholder => "ex.: genre:action",
         TextKey::SearchTitle => "Título da pesquisa",
         TextKey::SearchTitleDisplay => "Título da pesquisa (exibição)",
         TextKey::SearchSmartCollection => "Pesquisar coleção inteligente",

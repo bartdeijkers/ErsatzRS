@@ -588,6 +588,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchForBlocks => "Szukaj bloków",
         TextKey::SearchForMultiCollections => "Szukaj multi-kolekcji",
         TextKey::SearchQuery => "Zapytanie wyszukiwania",
+        TextKey::BlockSearchQueryPlaceholder => "np. genre:action",
         TextKey::SearchTitle => "Tytuł wyszukiwania",
         TextKey::SearchTitleDisplay => "Tytuł wyszukiwania (wyświetlany)",
         TextKey::SearchSmartCollection => "Szukaj inteligentnej kolekcji",
