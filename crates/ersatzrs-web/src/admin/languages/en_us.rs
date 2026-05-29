@@ -83,6 +83,14 @@ impl LanguageStrings for EnglishStrings {
         }
     }
 
+    fn media_item_fallback_label(&self, id: i64) -> String {
+        format!("Media Item #{id}")
+    }
+
+    fn schedule_item_fallback_label(&self, id: i64) -> String {
+        format!("Schedule Item #{id}")
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }

@@ -79,6 +79,14 @@ impl LanguageStrings for PortugueseBrazilStrings {
         }
     }
 
+    fn media_item_fallback_label(&self, id: i64) -> String {
+        format!("Item de mídia #{id}")
+    }
+
+    fn schedule_item_fallback_label(&self, id: i64) -> String {
+        format!("Item de programação #{id}")
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }

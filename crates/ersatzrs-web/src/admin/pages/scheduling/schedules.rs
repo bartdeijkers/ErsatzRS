@@ -5,7 +5,9 @@ use std::fmt::Write as _;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{range_of, tr, TextKey};
+use crate::admin::i18n::{
+    media_item_fallback_label, range_of, schedule_item_fallback_label, tr, TextKey,
+};
 use crate::admin::server_fns::schedules::{
     copy_schedule, delete_schedule, get_schedule_form, get_schedule_items_page,
     get_schedules_page_size, list_schedules, replace_schedule_items, save_schedule,
@@ -330,7 +332,7 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                                                         view! {
                                                             <tr>
                                                                 <td>{start_label(&list_row_from_item(&item))}</td>
-                                                                <td>{item.collection_name.clone()}</td>
+                                                                <td>{collection_name_display(&item)}</td>
                                                                 <td>{playout_label(&list_row_from_item(&item))}</td>
                                                             </tr>
                                                         }
@@ -1021,7 +1023,7 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                                                     view! {
                                                         <tr class=move || if selected.get() == Some(index) { style::selected_row } else { "" } on:click=move |_| selected.set(Some(index))>
                                                             <td>{start_label(&row)}</td>
-                                                            <td>{item.collection_name.clone()}</td>
+                                                            <td>{collection_name_display(&item)}</td>
                                                             <td>{playout_label(&row)}</td>
                                                             <td>
                                                                 <div class=style::actions>
@@ -1745,9 +1747,25 @@ fn item_summary(item: &ScheduleItemForm) -> String {
     format!(
         "{} - {} - {}",
         start_label(&list_row_from_item(item)),
-        item.collection_name,
+        collection_name_display(item),
         playout_label(&list_row_from_item(item))
     )
+}
+
+fn collection_name_display(item: &ScheduleItemForm) -> String {
+    if let Some(media_item_id) = item.media_item_id {
+        let fallback = format!("Media Item #{media_item_id}");
+        if item.collection_name == fallback {
+            return media_item_fallback_label(media_item_id);
+        }
+    }
+
+    let fallback = format!("Schedule Item #{}", item.id);
+    if item.collection_name == fallback {
+        return schedule_item_fallback_label(item.id);
+    }
+
+    item.collection_name.clone()
 }
 
 fn list_row_from_item(item: &ScheduleItemForm) -> ScheduleItemListRow {

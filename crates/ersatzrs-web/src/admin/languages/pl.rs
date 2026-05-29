@@ -79,6 +79,14 @@ impl LanguageStrings for PolishStrings {
         }
     }
 
+    fn media_item_fallback_label(&self, id: i64) -> String {
+        format!("Element multimedialny #{id}")
+    }
+
+    fn schedule_item_fallback_label(&self, id: i64) -> String {
+        format!("Element harmonogramu #{id}")
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Opróżniono kosz: usunięto {count} elementów.")
     }

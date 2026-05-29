@@ -268,7 +268,7 @@ fn BlockEditorForm(
                                         }
                                     }
                                 />
-                                <span class=style::duration_unit>"h"</span>
+                                <span class=style::duration_unit>{tr(TextKey::Hours)}</span>
                                 <select
                                     class=style::select
                                     prop:value=move || duration_minutes.get().to_string()

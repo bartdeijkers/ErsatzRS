@@ -1896,6 +1896,14 @@ pub fn season_display_name(number: i64) -> String {
     languages_for(use_i18n()).season_display_name(number)
 }
 
+pub fn media_item_fallback_label(id: i64) -> String {
+    languages_for(use_i18n()).media_item_fallback_label(id)
+}
+
+pub fn schedule_item_fallback_label(id: i64) -> String {
+    languages_for(use_i18n()).schedule_item_fallback_label(id)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -1993,6 +2001,8 @@ pub trait LanguageStrings: Sync {
     fn delete_selected_count(&self, count: usize) -> String;
     fn deleted_items_from_database(&self, count: u64) -> String;
     fn season_display_name(&self, number: i64) -> String;
+    fn media_item_fallback_label(&self, id: i64) -> String;
+    fn schedule_item_fallback_label(&self, id: i64) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
     fn select_playlist_to_add_selected_items(&self, count: usize) -> String;
@@ -2100,6 +2110,26 @@ mod tests {
         assert_eq!(
             languages_for(UiLanguage::Dutch).season_display_name(2),
             "Seizoen 2"
+        );
+    }
+
+    #[test]
+    fn fallback_item_labels_follow_active_language() {
+        assert_eq!(
+            languages_for(UiLanguage::English).media_item_fallback_label(42),
+            "Media Item #42"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Polish).schedule_item_fallback_label(7),
+            "Element harmonogramu #7"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::PortugueseBrazil).media_item_fallback_label(42),
+            "Item de mídia #42"
+        );
+        assert_eq!(
+            languages_for(UiLanguage::Dutch).schedule_item_fallback_label(7),
+            "Schema-item #7"
         );
     }
 }

@@ -83,6 +83,14 @@ impl LanguageStrings for DutchStrings {
         }
     }
 
+    fn media_item_fallback_label(&self, id: i64) -> String {
+        format!("Media-item #{id}")
+    }
+
+    fn schedule_item_fallback_label(&self, id: i64) -> String {
+        format!("Schema-item #{id}")
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Prullenbak geleegd: {count} items verwijderd.")
     }
