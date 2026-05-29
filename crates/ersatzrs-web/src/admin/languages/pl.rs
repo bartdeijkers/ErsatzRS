@@ -139,6 +139,18 @@ impl LanguageStrings for PolishStrings {
         .to_owned()
     }
 
+    fn playout_schedule_kind_label(&self, kind: i32) -> String {
+        match kind {
+            1 => text(TextKey::ScheduleKindClassic),
+            2 => text(TextKey::ScheduleKindBlock),
+            3 => text(TextKey::ScheduleKindSequential),
+            4 => text(TextKey::ScheduleKindScripted),
+            20 => text(TextKey::ScheduleKindExternalJson),
+            _ => "",
+        }
+        .to_owned()
+    }
+
     fn library_kind_label(&self, kind: &str) -> String {
         match kind {
             "Local" => text(TextKey::Local).to_owned(),
@@ -1380,6 +1392,11 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleActionFailed => "Akcja harmonogramu nie powiodła się.",
         TextKey::ScheduleAsGroup => "Planuj jako grupę",
         TextKey::ScheduleKind => "Typ harmonogramu",
+        TextKey::ScheduleKindBlock => "Blokowy",
+        TextKey::ScheduleKindClassic => "Klasyczny",
+        TextKey::ScheduleKindExternalJson => "JSON (dizqueTV)",
+        TextKey::ScheduleKindScripted => "Skryptowy",
+        TextKey::ScheduleKindSequential => "Sekwencyjny",
         TextKey::SchedulingContext => "Kontekst planowania",
         TextKey::ScheduleItem => "Element harmonogramu",
         TextKey::ScheduleItemActionFailed => "Akcja elementu harmonogramu nie powiodła się.",

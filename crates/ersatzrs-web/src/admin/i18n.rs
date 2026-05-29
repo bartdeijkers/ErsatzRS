@@ -459,6 +459,11 @@ pub enum TextKey {
     ScheduleActionFailed,
     ScheduleAsGroup,
     ScheduleKind,
+    ScheduleKindBlock,
+    ScheduleKindClassic,
+    ScheduleKindExternalJson,
+    ScheduleKindScripted,
+    ScheduleKindSequential,
     SchedulingContext,
     ScheduleItem,
     ScheduleItemActionFailed,
@@ -1393,6 +1398,11 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ScheduleActionFailed,
     TextKey::ScheduleAsGroup,
     TextKey::ScheduleKind,
+    TextKey::ScheduleKindBlock,
+    TextKey::ScheduleKindClassic,
+    TextKey::ScheduleKindExternalJson,
+    TextKey::ScheduleKindScripted,
+    TextKey::ScheduleKindSequential,
     TextKey::SchedulingContext,
     TextKey::ScheduleItem,
     TextKey::ScheduleItemActionFailed,
@@ -2052,6 +2062,14 @@ pub fn media_kind_text(language: UiLanguage, kind: i64) -> String {
     languages_for(language).media_kind_label(kind)
 }
 
+pub fn playout_schedule_kind_label(kind: i32) -> String {
+    playout_schedule_kind_text(use_i18n(), kind)
+}
+
+pub fn playout_schedule_kind_text(language: UiLanguage, kind: i32) -> String {
+    languages_for(language).playout_schedule_kind_label(kind)
+}
+
 pub fn library_kind_label(kind: &str) -> String {
     library_kind_text(use_i18n(), kind)
 }
@@ -2270,6 +2288,7 @@ pub trait LanguageStrings: Sync {
     fn channel_streaming_mode_label(&self, mode: i32) -> String;
     fn channel_language_label(&self, code: &str) -> String;
     fn media_kind_label(&self, kind: i64) -> String;
+    fn playout_schedule_kind_label(&self, kind: i32) -> String;
     fn library_kind_label(&self, kind: &str) -> String;
     fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String;
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String;
@@ -2469,6 +2488,25 @@ mod tests {
         assert_eq!(media_kind_text(UiLanguage::Dutch, 99), "Onbekend");
         assert_eq!(library_kind_text(UiLanguage::Dutch, "Local"), "Lokaal");
         assert_eq!(library_kind_text(UiLanguage::Polish, "Plex"), "Plex");
+    }
+
+    #[test]
+    fn playout_schedule_kind_labels_follow_active_language() {
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::English, 3),
+            "Sequential"
+        );
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Polish, 2), "Blokowy");
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::PortugueseBrazil, 4),
+            "Por script"
+        );
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Dutch, 1), "Klassiek");
+        assert_eq!(
+            playout_schedule_kind_text(UiLanguage::Dutch, 20),
+            "JSON (dizqueTV)"
+        );
+        assert_eq!(playout_schedule_kind_text(UiLanguage::Dutch, 99), "");
     }
 
     #[test]

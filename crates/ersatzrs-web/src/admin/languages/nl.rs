@@ -143,6 +143,18 @@ impl LanguageStrings for DutchStrings {
         .to_owned()
     }
 
+    fn playout_schedule_kind_label(&self, kind: i32) -> String {
+        match kind {
+            1 => text(TextKey::ScheduleKindClassic),
+            2 => text(TextKey::ScheduleKindBlock),
+            3 => text(TextKey::ScheduleKindSequential),
+            4 => text(TextKey::ScheduleKindScripted),
+            20 => text(TextKey::ScheduleKindExternalJson),
+            _ => "",
+        }
+        .to_owned()
+    }
+
     fn library_kind_label(&self, kind: &str) -> String {
         match kind {
             "Local" => text(TextKey::Local).to_owned(),
@@ -1368,6 +1380,11 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleActionFailed => "Schema-actie mislukt.",
         TextKey::ScheduleAsGroup => "Als groep plannen",
         TextKey::ScheduleKind => "Schematype",
+        TextKey::ScheduleKindBlock => "Blok",
+        TextKey::ScheduleKindClassic => "Klassiek",
+        TextKey::ScheduleKindExternalJson => "JSON (dizqueTV)",
+        TextKey::ScheduleKindScripted => "Scriptgestuurd",
+        TextKey::ScheduleKindSequential => "Sequentieel",
         TextKey::SchedulingContext => "Planningscontext",
         TextKey::ScheduleItem => "Schema-item",
         TextKey::ScheduleItemActionFailed => "Schema-itemactie mislukt.",

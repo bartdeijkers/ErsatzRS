@@ -143,6 +143,18 @@ impl LanguageStrings for EnglishStrings {
         .to_owned()
     }
 
+    fn playout_schedule_kind_label(&self, kind: i32) -> String {
+        match kind {
+            1 => text(TextKey::ScheduleKindClassic),
+            2 => text(TextKey::ScheduleKindBlock),
+            3 => text(TextKey::ScheduleKindSequential),
+            4 => text(TextKey::ScheduleKindScripted),
+            20 => text(TextKey::ScheduleKindExternalJson),
+            _ => "",
+        }
+        .to_owned()
+    }
+
     fn library_kind_label(&self, kind: &str) -> String {
         match kind {
             "Local" => text(TextKey::Local).to_owned(),
@@ -744,6 +756,11 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleActionFailed => "Schedule action failed.",
         TextKey::ScheduleAsGroup => "Schedule As Group",
         TextKey::ScheduleKind => "Schedule Kind",
+        TextKey::ScheduleKindBlock => "Block",
+        TextKey::ScheduleKindClassic => "Classic",
+        TextKey::ScheduleKindExternalJson => "JSON (dizqueTV)",
+        TextKey::ScheduleKindScripted => "Scripted",
+        TextKey::ScheduleKindSequential => "Sequential",
         TextKey::SchedulingContext => "Scheduling Context",
         TextKey::ScheduleItem => "Schedule Item",
         TextKey::ScheduleItemActionFailed => "Schedule item action failed.",

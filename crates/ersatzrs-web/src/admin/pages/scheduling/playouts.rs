@@ -5,7 +5,7 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{playout_schedule_kind_label, tr, TextKey};
 use crate::admin::pages::scheduling::timeline::PlayoutTimelineIsland;
 use crate::admin::server_fns::playouts::{list_playouts, PlayoutListRow};
 
@@ -61,7 +61,7 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                         row.channel_name,
                                                     )
                                                 };
-                                                let kind_label = row.schedule_kind_label.clone();
+                                                let kind = row.schedule_kind;
                                                 let sched_name = row.schedule_name.clone();
                                                 let is_sequential = row.schedule_kind == SEQUENTIAL;
                                                 let is_selected = Signal::derive(move || {
@@ -77,7 +77,7 @@ pub fn PlayoutsPage() -> impl IntoView {
                                                     }>
                                                         <td>{channel}</td>
                                                         <td class=style::cell_muted>
-                                                            {kind_label}
+                                                            {playout_schedule_kind_label(kind)}
                                                         </td>
                                                         <td class=style::cell_muted>
                                                             {sched_name}
