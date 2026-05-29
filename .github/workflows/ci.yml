@@ -51,7 +51,7 @@ jobs:
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test (all features)
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --lib --bins --tests
 
   deny:
     name: Cargo deny
