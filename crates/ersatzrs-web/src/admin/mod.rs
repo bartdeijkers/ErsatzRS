@@ -1,5 +1,7 @@
 pub mod app;
 pub mod home;
+pub mod i18n;
+pub mod languages;
 pub mod layout;
 pub mod pages;
 pub mod routes;

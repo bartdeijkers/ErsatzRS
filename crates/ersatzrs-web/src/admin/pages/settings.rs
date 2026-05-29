@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{supported_ui_language_options, tr, TextKey};
 use crate::admin::server_fns::settings::{
     load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
     load_scanner_settings, load_ui_settings, load_xmltv_settings, FfmpegSettingsPageData,
@@ -105,25 +106,25 @@ pub fn XmltvSettingsPage() -> impl IntoView {
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let form = data.form;
     view! {
-        <SettingsForm title="FFmpeg" action="/api/settings/ffmpeg/save">
-            <Field label="FFmpeg Path">
+        <SettingsForm title=tr(TextKey::Ffmpeg) action="/api/settings/ffmpeg/save">
+            <Field label=tr(TextKey::FfmpegPath)>
                 <input class=style::input name="ffmpeg_path" required value=form.ffmpeg_path/>
-                <p class=style::help>"The full path to the ffmpeg executable file"</p>
+                <p class=style::help>{tr(TextKey::FfmpegPathHelp)}</p>
             </Field>
-            <Field label="FFprobe Path">
+            <Field label=tr(TextKey::FfprobePath)>
                 <input class=style::input name="ffprobe_path" required value=form.ffprobe_path/>
-                <p class=style::help>"The full path to the ffprobe executable file"</p>
+                <p class=style::help>{tr(TextKey::FfprobePathHelp)}</p>
             </Field>
-            <Field label="Default FFmpeg Profile">
+            <Field label=tr(TextKey::DefaultFfmpegProfile)>
                 <Select
                     name="default_ffmpeg_profile_id"
                     selected=form.default_ffmpeg_profile_id.to_string()
                     options=data.ffmpeg_profiles
                     include_none=false
                 />
-                <p class=style::help>"The FFmpeg Profile to use when creating new channels"</p>
+                <p class=style::help>{tr(TextKey::DefaultFfmpegProfileHelp)}</p>
             </Field>
-            <Field label="Preferred Audio Language">
+            <Field label=tr(TextKey::PreferredAudioLanguage)>
                 <Select
                     name="preferred_audio_language_code"
                     selected=form.preferred_audio_language_code
@@ -132,30 +133,30 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 />
             </Field>
             <CheckboxField
-                label="Use Embedded Subtitles"
+                label=tr(TextKey::UseEmbeddedSubtitles)
                 name="use_embedded_subtitles"
                 checked=form.use_embedded_subtitles
                 caption=None
             />
             <CheckboxField
-                label="Extract Embedded (Text) Subtitles"
+                label=tr(TextKey::ExtractEmbeddedSubtitles)
                 name="extract_embedded_subtitles"
                 checked=form.extract_embedded_subtitles
                 caption=None
             />
             <CheckboxField
-                label="Probe For Interlaced Frames"
+                label=tr(TextKey::ProbeForInterlacedFrames)
                 name="probe_for_interlaced_frames"
                 checked=form.probe_for_interlaced_frames
                 caption=None
             />
             <CheckboxField
-                label="Save Troubleshooting Reports To Disk"
+                label=tr(TextKey::SaveTroubleshootingReportsToDisk)
                 name="save_reports"
                 checked=form.save_reports
                 caption=None
             />
-            <Field label="Global Watermark">
+            <Field label=tr(TextKey::GlobalWatermark)>
                 <Select
                     name="global_watermark_id"
                     selected=form.global_watermark_id.map(|v| v.to_string()).unwrap_or_default()
@@ -163,7 +164,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                     include_none=true
                 />
             </Field>
-            <Field label="Global Fallback Filler">
+            <Field label=tr(TextKey::GlobalFallbackFiller)>
                 <Select
                     name="global_fallback_filler_id"
                     selected=form.global_fallback_filler_id.map(|v| v.to_string()).unwrap_or_default()
@@ -171,19 +172,19 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                     include_none=true
                 />
             </Field>
-            <Field label="HLS Segmenter Idle Timeout">
+            <Field label=tr(TextKey::HlsSegmenterIdleTimeout)>
                 <input class=style::input name="hls_segmenter_idle_timeout" type="number" min="30" required value=form.hls_segmenter_idle_timeout/>
-                <p class=style::help>"The number of seconds to continue transcoding a channel while no requests have been received from any client"</p>
+                <p class=style::help>{tr(TextKey::HlsSegmenterIdleTimeoutHelp)}</p>
             </Field>
-            <Field label="Work-Ahead HLS Segmenter Limit">
+            <Field label=tr(TextKey::WorkAheadSegmenterLimit)>
                 <input class=style::input name="work_ahead_segmenter_limit" type="number" min="0" required value=form.work_ahead_segmenter_limit/>
-                <p class=style::help>"The number of segmenters (channels) that will work-ahead (transcode at maximum speed) simultaneously, if multiple channels are being watched"</p>
+                <p class=style::help>{tr(TextKey::WorkAheadSegmenterLimitHelp)}</p>
             </Field>
-            <Field label="HLS Segmenter Initial Segment Count">
+            <Field label=tr(TextKey::HlsSegmenterInitialSegmentCount)>
                 <input class=style::input name="initial_segment_count" type="number" min="1" required value=form.initial_segment_count/>
-                <p class=style::help>"Delays stream start until the specified number of (4-second) segments have been transcoded; a larger number will mean slower initial playback, but potentially less buffering"</p>
+                <p class=style::help>{tr(TextKey::HlsSegmenterInitialSegmentCountHelp)}</p>
             </Field>
-            <Field label="HLS Direct Output Format">
+            <Field label=tr(TextKey::HlsDirectOutputFormat)>
                 <Select
                     name="hls_direct_output_format"
                     selected=form.hls_direct_output_format.to_string()
@@ -195,25 +196,25 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                     include_none=false
                 />
             </Field>
-            <Field label="Default MPEG-TS Script">
+            <Field label=tr(TextKey::DefaultMpegTsScript)>
                 <Select
                     name="default_mpeg_ts_script"
                     selected=form.default_mpeg_ts_script
                     options=data.mpeg_ts_scripts
                     include_none=false
                 />
-                <p class=style::help>"The MPEG-TS script to use when streaming"</p>
+                <p class=style::help>{tr(TextKey::DefaultMpegTsScriptHelp)}</p>
             </Field>
         </SettingsForm>
         <section class=style::content>
-            <h2 class=style::section_title>"Custom Resolutions"</h2>
+            <h2 class=style::section_title>{tr(TextKey::CustomResolutions)}</h2>
             <div class=style::divider></div>
             <form method="post" action="/api/settings/ffmpeg/resolutions/add" class=style::inline_form>
-                <input class=format!("{} {}", style::input, style::inline_input) name="width" type="number" min="1" required placeholder="Width" aria-label="Custom resolution width"/>
-                <input class=format!("{} {}", style::input, style::inline_input) name="height" type="number" min="1" required placeholder="Height" aria-label="Custom resolution height"/>
+                <input class=format!("{} {}", style::input, style::inline_input) name="width" type="number" min="1" required placeholder=tr(TextKey::Width) aria-label=tr(TextKey::CustomResolutionWidth)/>
+                <input class=format!("{} {}", style::input, style::inline_input) name="height" type="number" min="1" required placeholder=tr(TextKey::Height) aria-label=tr(TextKey::CustomResolutionHeight)/>
                 <button class=style::button type="submit">
                     <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                    "Add Custom Resolution"
+                    {tr(TextKey::AddCustomResolution)}
                 </button>
             </form>
             <div class=style::table_wrap>
@@ -226,7 +227,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                                     <td>
                                         <form method="post" action="/api/settings/ffmpeg/resolutions/delete">
                                             <input type="hidden" name="id" value=option.value/>
-                                            <button class=style::icon_button type="submit" aria-label="Delete custom resolution">
+                                            <button class=style::icon_button type="submit" aria-label=tr(TextKey::DeleteCustomResolution)>
                                                 <span style=icon_style(IconName::Delete, "1.1rem") aria-hidden="true"></span>
                                             </button>
                                         </form>
@@ -244,24 +245,24 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
 fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
     let levels = log_level_options();
     view! {
-        <SettingsForm title="Logging" action="/api/settings/logging/save">
-            <SelectField label="Default Minimum Log Level" name="default_minimum_log_level" selected=form.default_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label="Scanning Minimum Log Level" name="scanning_minimum_log_level" selected=form.scanning_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label="Scheduling Minimum Log Level" name="scheduling_minimum_log_level" selected=form.scheduling_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label="Searching Minimum Log Level" name="searching_minimum_log_level" selected=form.searching_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label="Streaming Minimum Log Level" name="streaming_minimum_log_level" selected=form.streaming_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label="Request Logging Minimum Log Level" name="http_minimum_log_level" selected=form.http_minimum_log_level options=levels include_none=false/>
+        <SettingsForm title=tr(TextKey::Logging) action="/api/settings/logging/save">
+            <SelectField label=tr(TextKey::DefaultMinimumLogLevel) name="default_minimum_log_level" selected=form.default_minimum_log_level options=levels.clone() include_none=false/>
+            <SelectField label=tr(TextKey::ScanningMinimumLogLevel) name="scanning_minimum_log_level" selected=form.scanning_minimum_log_level options=levels.clone() include_none=false/>
+            <SelectField label=tr(TextKey::SchedulingMinimumLogLevel) name="scheduling_minimum_log_level" selected=form.scheduling_minimum_log_level options=levels.clone() include_none=false/>
+            <SelectField label=tr(TextKey::SearchingMinimumLogLevel) name="searching_minimum_log_level" selected=form.searching_minimum_log_level options=levels.clone() include_none=false/>
+            <SelectField label=tr(TextKey::StreamingMinimumLogLevel) name="streaming_minimum_log_level" selected=form.streaming_minimum_log_level options=levels.clone() include_none=false/>
+            <SelectField label=tr(TextKey::HttpMinimumLogLevel) name="http_minimum_log_level" selected=form.http_minimum_log_level options=levels include_none=false/>
         </SettingsForm>
     }
 }
 
 fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title="HDHomeRun" action="/api/settings/hdhr/save">
-            <Field label="UUID">
+        <SettingsForm title=tr(TextKey::HdHomeRun) action="/api/settings/hdhr/save">
+            <Field label=tr(TextKey::Uuid)>
                 <input class=style::input name="uuid" disabled value=form.uuid/>
             </Field>
-            <Field label="Tuner Count">
+            <Field label=tr(TextKey::TunerCount)>
                 <input class=style::input name="tuner_count" type="number" min="1" required value=form.tuner_count/>
             </Field>
         </SettingsForm>
@@ -270,8 +271,8 @@ fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
 
 fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title="Scanner" action="/api/settings/scanner/save">
-            <Field label="Library Refresh Interval">
+        <SettingsForm title=tr(TextKey::Scanner) action="/api/settings/scanner/save">
+            <Field label=tr(TextKey::LibraryRefreshInterval)>
                 <input class=style::input name="library_refresh_interval" type="number" min="0" max="999999" required value=form.library_refresh_interval/>
             </Field>
         </SettingsForm>
@@ -280,17 +281,17 @@ fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
 
 fn render_playout(form: PlayoutSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title="Playout" action="/api/settings/playout/save">
-            <Field label="Days To Build">
+        <SettingsForm title=tr(TextKey::Playout) action="/api/settings/playout/save">
+            <Field label=tr(TextKey::DaysToBuild)>
                 <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
             </Field>
             <CheckboxField
-                label="Skip Missing Items"
+                label=tr(TextKey::SkipMissingItems)
                 name="skip_missing_items"
                 checked=form.skip_missing_items
-                caption=Some("Controls whether file-not-found or unavailable items should be included in playouts")
+                caption=Some(tr(TextKey::SkipMissingItemsHelp))
             />
-            <Field label="Scripted Schedule Timeout">
+            <Field label=tr(TextKey::ScriptedScheduleTimeout)>
                 <input class=style::input name="scripted_schedule_timeout_seconds" type="number" min="10" required value=form.scripted_schedule_timeout_seconds/>
             </Field>
         </SettingsForm>
@@ -299,19 +300,19 @@ fn render_playout(form: PlayoutSettingsForm) -> impl IntoView {
 
 fn render_ui(form: UiSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title="UI" action="/api/settings/ui/save">
+        <SettingsForm title=tr(TextKey::Ui) action="/api/settings/ui/save">
             <SelectField
-                label="Theme"
+                label=tr(TextKey::Theme)
                 name="is_dark_mode"
                 selected=if form.is_dark_mode { "true".to_owned() } else { "false".to_owned() }
                 options=vec![
-                    SelectOption { value: "true".to_owned(), label: "Dark".to_owned() },
-                    SelectOption { value: "false".to_owned(), label: "Light".to_owned() },
+                    SelectOption { value: "true".to_owned(), label: tr(TextKey::Dark).to_owned() },
+                    SelectOption { value: "false".to_owned(), label: tr(TextKey::Light).to_owned() },
                 ]
                 include_none=false
             />
             <SelectField
-                label="Language"
+                label=tr(TextKey::Language)
                 name="language"
                 selected=form.language
                 options=supported_ui_language_options()
@@ -323,27 +324,27 @@ fn render_ui(form: UiSettingsForm) -> impl IntoView {
 
 fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
     view! {
-        <SettingsForm title="XMLTV" action="/api/settings/xmltv/save">
-            <Field label="Days To Build">
+        <SettingsForm title=tr(TextKey::Xmltv) action="/api/settings/xmltv/save">
+            <Field label=tr(TextKey::DaysToBuild)>
                 <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
             </Field>
             <SelectField
-                label="XMLTV Time Zone"
+                label=tr(TextKey::XmltvTimeZone)
                 name="time_zone"
                 selected=form.time_zone
                 options=vec![
-                    SelectOption { value: "Local".to_owned(), label: "Local".to_owned() },
+                    SelectOption { value: "Local".to_owned(), label: tr(TextKey::Local).to_owned() },
                     SelectOption { value: "Utc".to_owned(), label: "UTC".to_owned() },
                 ]
                 include_none=false
             />
             <SelectField
-                label="XMLTV Block Behavior"
+                label=tr(TextKey::XmltvBlockBehavior)
                 name="block_behavior"
                 selected=form.block_behavior
                 options=vec![
-                    SelectOption { value: "SplitTimeEvenly".to_owned(), label: "Split Time Evenly".to_owned() },
-                    SelectOption { value: "UseActualTimes".to_owned(), label: "Use Actual Times".to_owned() },
+                    SelectOption { value: "SplitTimeEvenly".to_owned(), label: tr(TextKey::SplitTimeEvenly).to_owned() },
+                    SelectOption { value: "UseActualTimes".to_owned(), label: tr(TextKey::UseActualTimes).to_owned() },
                 ]
                 include_none=false
             />
@@ -359,7 +360,7 @@ fn SettingsForm(title: &'static str, action: &'static str, children: Children) -
                 <div class=style::action_bar>
                     <button class=style::button type="submit">
                         <span style=icon_style(IconName::Save, "1rem") aria-hidden="true"></span>
-                        "Save Settings"
+                        {tr(TextKey::SaveSettings)}
                     </button>
                 </div>
                 <div class=style::content_scroll>
@@ -448,20 +449,6 @@ fn log_level_options() -> Vec<SelectOption> {
         .collect()
 }
 
-pub fn supported_ui_language_options() -> Vec<SelectOption> {
-    [
-        ("en-us", "English"),
-        ("pl", "Polski"),
-        ("pt-br", "Português (Brasil)"),
-    ]
-    .into_iter()
-    .map(|(value, label)| SelectOption {
-        value: value.to_owned(),
-        label: label.to_owned(),
-    })
-    .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,6 +460,6 @@ mod tests {
             .map(|option| option.value)
             .collect();
 
-        assert_eq!(values, vec!["en-us", "pl", "pt-br"]);
+        assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl-nl"]);
     }
 }

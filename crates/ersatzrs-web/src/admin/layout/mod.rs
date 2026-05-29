@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::layout::nav::NavDrawer;
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
@@ -58,7 +59,7 @@ fn load_shell_theme_initial() -> String {
             .unwrap_or(true),
             Err(_) => true,
         };
-        return if is_dark_mode { "dark" } else { "light" }.to_owned();
+        if is_dark_mode { "dark" } else { "light" }.to_owned()
     }
 
     #[cfg(all(not(feature = "ssr"), target_arch = "wasm32"))]
@@ -138,7 +139,7 @@ pub fn NavStateHeadScript() -> impl IntoView {
 fn TopBar() -> impl IntoView {
     view! {
         <header class=style::topbar>
-            <label for="nav-toggle" class=style::hamburger title="Toggle navigation">
+            <label for="nav-toggle" class=style::hamburger title=tr(TextKey::ToggleNavigation)>
                 <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
             </label>
 
@@ -161,15 +162,15 @@ fn TopBar() -> impl IntoView {
                     type="search"
                     name="query"
                     class=style::search_input
-                    placeholder="Search"
-                    aria-label="Search media"
+                    placeholder=tr(TextKey::Search)
+                    aria-label=tr(TextKey::SearchMedia)
                     autocomplete="off"
                 />
             </form>
 
             <nav class=style::topbar_nav>
-                <a href="/iptv/channels.m3u" class=style::topbar_link target="_blank">"M3U"</a>
-                <a href="/iptv/xmltv.xml" class=style::topbar_link target="_blank">"XMLTV"</a>
+                <a href="/iptv/channels.m3u" class=style::topbar_link target="_blank">{tr(TextKey::M3u)}</a>
+                <a href="/iptv/xmltv.xml" class=style::topbar_link target="_blank">{tr(TextKey::Xmltv)}</a>
             </nav>
         </header>
     }

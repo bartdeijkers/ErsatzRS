@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::admin::i18n::{normalize_ui_language, UiLanguage};
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SelectOption {
     pub value: String,
@@ -1035,14 +1037,6 @@ fn validate_one_of(value: &str, allowed: &[&str]) -> Result<(), ServerFnError> {
     }
 }
 
-fn normalize_ui_language(language: &str) -> String {
-    match language.trim().to_ascii_lowercase().as_str() {
-        "pl" => "pl".to_owned(),
-        "pt-br" => "pt-br".to_owned(),
-        _ => "en-us".to_owned(),
-    }
-}
-
 #[cfg(feature = "ssr")]
 fn bool_value(value: bool) -> &'static str {
     if value {
@@ -1138,6 +1132,15 @@ pub(crate) async fn load_bool_for_api(
     default: bool,
 ) -> Result<bool, ServerFnError> {
     load_bool(pool, key, default).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn load_ui_language_for_api(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<UiLanguage, ServerFnError> {
+    load_string(pool, ersatzrs_domain::CONFIG_KEY_PAGES_LANGUAGE, "en-us")
+        .await
+        .map(|language| UiLanguage::from_config(&language))
 }
 
 #[cfg(feature = "ssr")]
@@ -1257,5 +1260,6 @@ mod tests {
         assert_eq!(normalize_ui_language("en-us"), "en-us");
         assert_eq!(normalize_ui_language("pl"), "pl");
         assert_eq!(normalize_ui_language("pt-br"), "pt-br");
+        assert_eq!(normalize_ui_language("nl-NL"), "nl-nl");
     }
 }

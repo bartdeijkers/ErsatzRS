@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
 
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::layout::badges::{HealthBadge, PlayoutWarningBadge};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
@@ -11,62 +12,62 @@ pub(super) fn NavDrawer() -> impl IntoView {
     view! {
         <aside class=style::drawer data-nav-drawer>
             <nav class=style::drawer_nav>
-                <NavLink href="/channels" label="Channels" icon=IconName::Play/>
-                <NavLink href="/ffmpeg" label="FFmpeg Profiles" icon=IconName::Tune/>
-                <NavLink href="/watermarks" label="Watermarks" icon=IconName::Visibility/>
+                <NavLink href="/channels" label=tr(TextKey::Channels) icon=IconName::Play/>
+                <NavLink href="/ffmpeg" label=tr(TextKey::FfmpegProfiles) icon=IconName::Tune/>
+                <NavLink href="/watermarks" label=tr(TextKey::Watermarks) icon=IconName::Visibility/>
 
-                <NavGroup storage_key="media-sources" label="Media Sources">
-                    <NavLink href="/media/sources/local" label="Local" icon=IconName::Download/>
+                <NavGroup storage_key="media-sources" label=tr(TextKey::MediaSources)>
+                    <NavLink href="/media/sources/local" label=tr(TextKey::Local) icon=IconName::Download/>
                     <NavLink href="/media/sources/emby" label="Emby" icon=IconName::Download/>
                     <NavLink href="/media/sources/jellyfin" label="Jellyfin" icon=IconName::Download/>
                     <NavLink href="/media/sources/plex" label="Plex" icon=IconName::Download/>
                 </NavGroup>
 
-                <NavGroup storage_key="media" label="Media">
-                    <NavLink href="/media/libraries" label="Libraries" icon=IconName::Copy/>
-                    <NavLink href="/media/trash" label="Trash" icon=IconName::Delete/>
-                    <NavLink href="/media/tv/shows" label="TV Shows" icon=IconName::Play/>
-                    <NavLink href="/media/movies" label="Movies" icon=IconName::Play/>
-                    <NavLink href="/media/music/artists" label="Music" icon=IconName::Play/>
-                    <NavLink href="/media/other/videos" label="Other Videos" icon=IconName::Play/>
-                    <NavLink href="/media/music/songs" label="Songs" icon=IconName::Play/>
-                    <NavLink href="/media/browser/images" label="Images" icon=IconName::Visibility/>
-                    <NavLink href="/media/remote/streams" label="Remote Streams" icon=IconName::Download/>
+                <NavGroup storage_key="media" label=tr(TextKey::Media)>
+                    <NavLink href="/media/libraries" label=tr(TextKey::Libraries) icon=IconName::Copy/>
+                    <NavLink href="/media/trash" label=tr(TextKey::Trash) icon=IconName::Delete/>
+                    <NavLink href="/media/tv/shows" label=tr(TextKey::TvShows) icon=IconName::Play/>
+                    <NavLink href="/media/movies" label=tr(TextKey::Movies) icon=IconName::Play/>
+                    <NavLink href="/media/music/artists" label=tr(TextKey::Music) icon=IconName::Play/>
+                    <NavLink href="/media/other/videos" label=tr(TextKey::OtherVideos) icon=IconName::Play/>
+                    <NavLink href="/media/music/songs" label=tr(TextKey::Songs) icon=IconName::Play/>
+                    <NavLink href="/media/browser/images" label=tr(TextKey::Images) icon=IconName::Visibility/>
+                    <NavLink href="/media/remote/streams" label=tr(TextKey::RemoteStreams) icon=IconName::Download/>
                 </NavGroup>
 
-                <NavGroup storage_key="lists" label="Lists">
-                    <NavLink href="/media/collections" label="Collections" icon=IconName::Copy/>
-                    <NavLink href="/media/smart-collections" label="Smart Collections" icon=IconName::Search/>
-                    <NavLink href="/media/multi-collections" label="Multi-Collections" icon=IconName::Copy/>
-                    <NavLink href="/media/rerun-collections" label="Rerun Collections" icon=IconName::Refresh/>
-                    <NavLink href="/media/playlists" label="Playlists" icon=IconName::Play/>
-                    <NavLink href="/media/trakt/lists" label="Trakt Lists" icon=IconName::Download/>
-                    <NavLink href="/media/filler/presets" label="Filler Presets" icon=IconName::Settings/>
+                <NavGroup storage_key="lists" label=tr(TextKey::Lists)>
+                    <NavLink href="/media/collections" label=tr(TextKey::Collections) icon=IconName::Copy/>
+                    <NavLink href="/media/smart-collections" label=tr(TextKey::SmartCollections) icon=IconName::Search/>
+                    <NavLink href="/media/multi-collections" label=tr(TextKey::MultiCollections) icon=IconName::Copy/>
+                    <NavLink href="/media/rerun-collections" label=tr(TextKey::RerunCollections) icon=IconName::Refresh/>
+                    <NavLink href="/media/playlists" label=tr(TextKey::Playlists) icon=IconName::Play/>
+                    <NavLink href="/media/trakt/lists" label=tr(TextKey::TraktLists) icon=IconName::Download/>
+                    <NavLink href="/media/filler/presets" label=tr(TextKey::FillerPresets) icon=IconName::Settings/>
                 </NavGroup>
 
                 <SchedulingNavGroup>
-                    <NavLink href="/schedules" label="Schedules" icon=IconName::Settings/>
-                    <NavLink href="/blocks" label="Blocks" icon=IconName::Copy/>
-                    <NavLink href="/templates" label="Templates" icon=IconName::Copy/>
-                    <NavLink href="/decos" label="Decorations" icon=IconName::Edit/>
-                    <NavLink href="/deco-templates" label="Deco Templates" icon=IconName::Copy/>
-                    <NavLink href="/playouts" label="Playouts" icon=IconName::Play/>
+                    <NavLink href="/schedules" label=tr(TextKey::Schedules) icon=IconName::Settings/>
+                    <NavLink href="/blocks" label=tr(TextKey::Blocks) icon=IconName::Copy/>
+                    <NavLink href="/templates" label=tr(TextKey::Templates) icon=IconName::Copy/>
+                    <NavLink href="/decos" label=tr(TextKey::Decorations) icon=IconName::Edit/>
+                    <NavLink href="/deco-templates" label=tr(TextKey::DecoTemplates) icon=IconName::Copy/>
+                    <NavLink href="/playouts" label=tr(TextKey::Playouts) icon=IconName::Play/>
                 </SchedulingNavGroup>
 
-                <NavGroup storage_key="settings" label="Settings">
-                    <NavLink href="/settings/ffmpeg" label="FFmpeg" icon=IconName::Settings/>
-                    <NavLink href="/settings/logging" label="Logging" icon=IconName::Settings/>
-                    <NavLink href="/settings/hdhr" label="HDHomeRun" icon=IconName::Settings/>
-                    <NavLink href="/settings/scanner" label="Scanner" icon=IconName::Settings/>
-                    <NavLink href="/settings/playout" label="Playout" icon=IconName::Settings/>
-                    <NavLink href="/settings/ui" label="UI" icon=IconName::Settings/>
-                    <NavLink href="/settings/xmltv" label="XMLTV" icon=IconName::Settings/>
+                <NavGroup storage_key="settings" label=tr(TextKey::Settings)>
+                    <NavLink href="/settings/ffmpeg" label=tr(TextKey::Ffmpeg) icon=IconName::Settings/>
+                    <NavLink href="/settings/logging" label=tr(TextKey::Logging) icon=IconName::Settings/>
+                    <NavLink href="/settings/hdhr" label=tr(TextKey::HdHomeRun) icon=IconName::Settings/>
+                    <NavLink href="/settings/scanner" label=tr(TextKey::Scanner) icon=IconName::Settings/>
+                    <NavLink href="/settings/playout" label=tr(TextKey::Playout) icon=IconName::Settings/>
+                    <NavLink href="/settings/ui" label=tr(TextKey::Ui) icon=IconName::Settings/>
+                    <NavLink href="/settings/xmltv" label=tr(TextKey::Xmltv) icon=IconName::Settings/>
                 </NavGroup>
 
                 <SupportNavGroup>
-                    <NavLink href="/system/health" label="Health Checks" icon=IconName::Check/>
-                    <NavLink href="/system/logs" label="Logs" icon=IconName::Info/>
-                    <NavLink href="/system/troubleshooting" label="Troubleshooting" icon=IconName::Warning/>
+                    <NavLink href="/system/health" label=tr(TextKey::HealthChecks) icon=IconName::Check/>
+                    <NavLink href="/system/logs" label=tr(TextKey::Logging) icon=IconName::Info/>
+                    <NavLink href="/system/troubleshooting" label=tr(TextKey::Troubleshooting) icon=IconName::Warning/>
                 </SupportNavGroup>
             </nav>
         </aside>
@@ -79,7 +80,7 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
         <details class=style::nav_group data-nav-group="scheduling">
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
-                    <span>"Scheduling"</span>
+                    <span>{tr(TextKey::Scheduling)}</span>
                     <PlayoutWarningBadge/>
                 </div>
                 <span class=style::nav_group_chevron>
@@ -99,7 +100,7 @@ fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
         <details class=style::nav_group open data-nav-group="support">
             <summary class=style::nav_group_header>
                 <div class=style::nav_group_header_left>
-                    <span>"Support"</span>
+                    <span>{tr(TextKey::Support)}</span>
                     <HealthBadge/>
                 </div>
                 <span class=style::nav_group_chevron>

@@ -7,6 +7,7 @@ use leptos_router::{
 };
 
 use crate::admin::home::HomePage;
+use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::channels::{editor::ChannelEditorPage, list::ChannelsListPage};
 use crate::admin::pages::dev::ComponentsPage;
 use crate::admin::pages::ffmpeg_profiles::{
@@ -78,8 +79,8 @@ pub fn AdminRoutes() -> impl IntoView {
             view! {
                 <div class=style::not_found>
                     <p class=style::not_found_code>"404"</p>
-                    <p class=style::not_found_msg>"Page not found."</p>
-                    <a href="/" class=style::not_found_link>"Go home"</a>
+                    <p class=style::not_found_msg>{tr(TextKey::NotFound)}</p>
+                    <a href="/" class=style::not_found_link>{tr(TextKey::GoHome)}</a>
                 </div>
             }
             .into_view()
