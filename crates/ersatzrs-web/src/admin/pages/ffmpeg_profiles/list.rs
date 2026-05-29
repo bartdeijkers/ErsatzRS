@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{
+    ffmpeg_profile_audio_format_label, ffmpeg_profile_video_format_label, tr, TextKey,
+};
 use crate::admin::server_fns::ffmpeg_profiles::{
     count_ffmpeg_profiles, delete_ffmpeg_profile, list_ffmpeg_profile_rows, FfmpegProfileListRow,
 };
@@ -60,11 +62,11 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
             view! { <span class=style::cell_muted>{r}</span> }.into_any()
         }),
         Column::new(tr(TextKey::VideoFormat), |p: &FfmpegProfileListRow| {
-            let v = p.video_format.clone();
+            let v = ffmpeg_profile_video_format_label(p.video_format, p.hardware_acceleration);
             view! { <span class=style::cell_muted>{v}</span> }.into_any()
         }),
         Column::new(tr(TextKey::AudioFormat), |p: &FfmpegProfileListRow| {
-            let a = p.audio_format.clone();
+            let a = ffmpeg_profile_audio_format_label(p.audio_format);
             view! { <span class=style::cell_muted>{a}</span> }.into_any()
         }),
     ];

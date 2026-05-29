@@ -13,8 +13,8 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
-    ffmpeg_loudness_mode_label, ffmpeg_tonemap_algorithm_label, hardware_acceleration_option_text,
-    save_failed, tr, use_i18n, TextKey,
+    ffmpeg_loudness_mode_label, ffmpeg_profile_error_message, ffmpeg_tonemap_algorithm_label,
+    hardware_acceleration_option_text, save_failed, tr, use_i18n, TextKey,
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
@@ -206,7 +206,10 @@ fn FfmpegProfileEditorForm(
         if let Some(res) = save_action.value().get() {
             match res {
                 Ok(_) => set_browser_location("/ffmpeg"),
-                Err(e) => toast.push(save_failed(e), ToastSeverity::Error),
+                Err(e) => toast.push(
+                    save_failed(ffmpeg_profile_error_message(e)),
+                    ToastSeverity::Error,
+                ),
             }
         }
     });
@@ -223,7 +226,11 @@ fn FfmpegProfileEditorForm(
                     set_browser_location(&format!("/ffmpeg/{new_id}"));
                 }
                 Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::CopyFailed)),
+                    format!(
+                        "{}: {}",
+                        tr(TextKey::CopyFailed),
+                        ffmpeg_profile_error_message(e)
+                    ),
                     ToastSeverity::Error,
                 ),
             }

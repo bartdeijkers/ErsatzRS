@@ -7,8 +7,9 @@ pub struct FfmpegProfileListRow {
     pub id: i64,
     pub name: String,
     pub resolution: String,
-    pub video_format: String,
-    pub audio_format: String,
+    pub video_format: i32,
+    pub audio_format: i32,
+    pub hardware_acceleration: i32,
 }
 
 /// Full form data for create / edit — mirrors `FFmpegProfile.New` defaults.
@@ -110,40 +111,6 @@ impl FfmpegProfileForm {
 // Label helpers (C# enum integer → display string)
 // ---------------------------------------------------------------------------
 
-fn hw_label(v: i32) -> &'static str {
-    match v {
-        1 => "QSV",
-        2 => "NVENC",
-        3 => "VAAPI",
-        4 => "VideoToolbox",
-        5 => "AMF",
-        6 => "V4L2M2M",
-        7 => "RKMPP",
-        _ => "None",
-    }
-}
-
-fn vf_label(v: i32) -> &'static str {
-    match v {
-        1 => "H264",
-        2 => "H265 (HEVC)",
-        3 => "MPEG-2",
-        4 => "AV1",
-        99 => "Copy",
-        _ => "None",
-    }
-}
-
-fn af_label(v: i32) -> &'static str {
-    match v {
-        1 => "AAC",
-        2 => "AC3",
-        3 => "AAC (LATM)",
-        99 => "Copy",
-        _ => "None",
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Preset helpers — ports ErsatzTV's `AvailablePresets.ForAccelAndFormat`
 // ---------------------------------------------------------------------------
@@ -198,21 +165,13 @@ pub async fn list_ffmpeg_profile_rows(
 
     Ok(rows
         .iter()
-        .map(|r| {
-            let hw: i32 = r.try_get("HardwareAcceleration").unwrap_or(0);
-            let vf: i32 = r.try_get("VideoFormat").unwrap_or(0);
-            let vf_str = if hw != 0 {
-                format!("{} / {}", vf_label(vf), hw_label(hw))
-            } else {
-                vf_label(vf).to_string()
-            };
-            FfmpegProfileListRow {
-                id: r.try_get("Id").unwrap_or(0),
-                name: r.try_get("Name").unwrap_or_default(),
-                resolution: r.try_get("ResolutionName").unwrap_or_default(),
-                video_format: vf_str,
-                audio_format: af_label(r.try_get("AudioFormat").unwrap_or(0)).to_string(),
-            }
+        .map(|r| FfmpegProfileListRow {
+            id: r.try_get("Id").unwrap_or(0),
+            name: r.try_get("Name").unwrap_or_default(),
+            resolution: r.try_get("ResolutionName").unwrap_or_default(),
+            video_format: r.try_get("VideoFormat").unwrap_or(0),
+            audio_format: r.try_get("AudioFormat").unwrap_or(0),
+            hardware_acceleration: r.try_get("HardwareAcceleration").unwrap_or(0),
         })
         .collect())
 }

@@ -177,6 +177,27 @@ impl LanguageStrings for PortugueseBrazilStrings {
         .to_owned()
     }
 
+    fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String {
+        let label = ffmpeg_profile_video_format_label(format);
+        if hardware_acceleration == 0 {
+            label
+        } else {
+            format!(
+                "{} / {}",
+                label,
+                ffmpeg_profile_hardware_acceleration_label(hardware_acceleration)
+            )
+        }
+    }
+
+    fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String {
+        ffmpeg_profile_audio_format_label(format)
+    }
+
+    fn ffmpeg_profile_error_message(&self, error: &str) -> String {
+        ffmpeg_profile_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Lixo esvaziado: {count} itens excluídos.")
     }
@@ -402,6 +423,74 @@ fn watermark_error_message(error: &str) -> String {
         }
         "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
             "Marca d'água não encontrada.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn ffmpeg_profile_hardware_acceleration_label(value: i32) -> String {
+    match value {
+        1 => "QSV",
+        2 => "NVENC",
+        3 => "VAAPI",
+        4 => "VideoToolbox",
+        5 => "AMF",
+        6 => "V4L2M2M",
+        7 => "RKMPP",
+        _ => return format!("Desconhecido ({value})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_video_format_label(format: i32) -> String {
+    match format {
+        0 => "Nenhum",
+        1 => "H264",
+        2 => "H265 (HEVC)",
+        3 => "MPEG-2",
+        4 => "AV1",
+        99 => text(TextKey::Copy),
+        _ => return format!("Desconhecido ({format})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_audio_format_label(format: i32) -> String {
+    match format {
+        0 => "Nenhum",
+        1 => "AAC",
+        2 => "AC3",
+        3 => "AAC (LATM)",
+        99 => text(TextKey::Copy),
+        _ => return format!("Desconhecido ({format})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("An FFmpeg profile named \"") && trimmed.ends_with("\" already exists.")
+    {
+        if let Some(name) = trimmed
+            .strip_prefix("An FFmpeg profile named \"")
+            .and_then(|value| value.strip_suffix("\" already exists."))
+        {
+            return format!("Já existe um perfil FFmpeg chamado \"{name}\".");
+        }
+    }
+
+    match trimmed {
+        "Profile name is required." => "O nome do perfil é obrigatório.".to_owned(),
+        "Profile name must be 50 characters or fewer." => {
+            "O nome do perfil deve ter 50 caracteres ou menos.".to_owned()
+        }
+        "Thread count must be 0 or greater." => {
+            "A contagem de threads deve ser 0 ou maior.".to_owned()
+        }
+        "Source profile not found." => "Perfil de origem não encontrado.".to_owned(),
+        "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
+            "Nenhuma resolução FFmpeg está disponível; o bootstrap do banco de dados está incompleto"
+                .to_owned()
         }
         _ => error.to_owned(),
     }

@@ -181,6 +181,27 @@ impl LanguageStrings for EnglishStrings {
         .to_owned()
     }
 
+    fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String {
+        let label = ffmpeg_profile_video_format_label(format);
+        if hardware_acceleration == 0 {
+            label
+        } else {
+            format!(
+                "{} / {}",
+                label,
+                ffmpeg_profile_hardware_acceleration_label(hardware_acceleration)
+            )
+        }
+    }
+
+    fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String {
+        ffmpeg_profile_audio_format_label(format)
+    }
+
+    fn ffmpeg_profile_error_message(&self, error: &str) -> String {
+        ffmpeg_profile_error_message(error)
+    }
+
     fn emptied_trash_count(&self, count: u64) -> String {
         format!("Emptied trash: deleted {count} items.")
     }
@@ -1353,6 +1374,66 @@ fn watermark_error_message(error: &str) -> String {
         }
         "Watermark not found" | "Source watermark not found" | "Watermark does not exist." => {
             "Watermark not found.".to_owned()
+        }
+        _ => error.to_owned(),
+    }
+}
+
+fn ffmpeg_profile_hardware_acceleration_label(value: i32) -> String {
+    match value {
+        1 => "QSV",
+        2 => "NVENC",
+        3 => "VAAPI",
+        4 => "VideoToolbox",
+        5 => "AMF",
+        6 => "V4L2M2M",
+        7 => "RKMPP",
+        _ => return format!("Unknown ({value})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_video_format_label(format: i32) -> String {
+    match format {
+        0 => "None",
+        1 => "H264",
+        2 => "H265 (HEVC)",
+        3 => "MPEG-2",
+        4 => "AV1",
+        99 => text(TextKey::Copy),
+        _ => return format!("Unknown ({format})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_audio_format_label(format: i32) -> String {
+    match format {
+        0 => "None",
+        1 => "AAC",
+        2 => "AC3",
+        3 => "AAC (LATM)",
+        99 => text(TextKey::Copy),
+        _ => return format!("Unknown ({format})"),
+    }
+    .to_owned()
+}
+
+fn ffmpeg_profile_error_message(error: &str) -> String {
+    let trimmed = error.trim();
+    if trimmed.starts_with("An FFmpeg profile named \"") && trimmed.ends_with("\" already exists.")
+    {
+        return trimmed.to_owned();
+    }
+
+    match trimmed {
+        "Profile name is required." => "Profile name is required.".to_owned(),
+        "Profile name must be 50 characters or fewer." => {
+            "Profile name must be 50 characters or fewer.".to_owned()
+        }
+        "Thread count must be 0 or greater." => "Thread count must be 0 or greater.".to_owned(),
+        "Source profile not found." => "Source profile not found.".to_owned(),
+        "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
+            "No FFmpeg resolutions are available; database bootstrap is incomplete".to_owned()
         }
         _ => error.to_owned(),
     }

@@ -2006,6 +2006,35 @@ pub fn ffmpeg_loudness_mode_text(language: UiLanguage, mode: i32) -> String {
     languages_for(language).ffmpeg_loudness_mode_label(mode)
 }
 
+pub fn ffmpeg_profile_video_format_label(format: i32, hardware_acceleration: i32) -> String {
+    ffmpeg_profile_video_format_text(use_i18n(), format, hardware_acceleration)
+}
+
+pub fn ffmpeg_profile_video_format_text(
+    language: UiLanguage,
+    format: i32,
+    hardware_acceleration: i32,
+) -> String {
+    languages_for(language).ffmpeg_profile_video_format_label(format, hardware_acceleration)
+}
+
+pub fn ffmpeg_profile_audio_format_label(format: i32) -> String {
+    ffmpeg_profile_audio_format_text(use_i18n(), format)
+}
+
+pub fn ffmpeg_profile_audio_format_text(language: UiLanguage, format: i32) -> String {
+    languages_for(language).ffmpeg_profile_audio_format_label(format)
+}
+
+pub fn ffmpeg_profile_error_message(error: impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    languages_for(use_i18n()).ffmpeg_profile_error_message(&message)
+}
+
+pub fn ffmpeg_profile_error_text(language: UiLanguage, error: &str) -> String {
+    languages_for(language).ffmpeg_profile_error_message(error)
+}
+
 pub fn emptied_trash_count(count: u64) -> String {
     languages_for(use_i18n()).emptied_trash_count(count)
 }
@@ -2114,6 +2143,9 @@ pub trait LanguageStrings: Sync {
     fn library_kind_label(&self, kind: &str) -> String;
     fn ffmpeg_tonemap_algorithm_label(&self, algorithm: i32) -> String;
     fn ffmpeg_loudness_mode_label(&self, mode: i32) -> String;
+    fn ffmpeg_profile_video_format_label(&self, format: i32, hardware_acceleration: i32) -> String;
+    fn ffmpeg_profile_audio_format_label(&self, format: i32) -> String;
+    fn ffmpeg_profile_error_message(&self, error: &str) -> String;
     fn hardware_acceleration_option_label(&self, label: &str, supported: bool) -> String;
     fn emptied_trash_count(&self, count: u64) -> String;
     fn select_collection_to_add_selected_items(&self, count: usize) -> String;
@@ -2348,6 +2380,57 @@ mod tests {
         assert_eq!(
             ffmpeg_loudness_mode_text(UiLanguage::PortugueseBrazil, 1),
             "loudnorm"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_profile_list_labels_follow_active_language() {
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::English, 1, 2),
+            "H264 / NVENC"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::Polish, 99, 0),
+            "Kopiuj"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::PortugueseBrazil, 0, 0),
+            "Nenhum"
+        );
+        assert_eq!(
+            ffmpeg_profile_video_format_text(UiLanguage::Dutch, 42, 0),
+            "Onbekend (42)"
+        );
+        assert_eq!(
+            ffmpeg_profile_audio_format_text(UiLanguage::Dutch, 99),
+            "Kopiëren"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_profile_server_errors_follow_active_language_without_changing_unknown_values() {
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::English, "Profile name is required."),
+            "Profile name is required."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Polish, "Thread count must be 0 or greater."),
+            "Liczba wątków musi wynosić 0 lub więcej."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_text(
+                UiLanguage::PortugueseBrazil,
+                "An FFmpeg profile named \"main\" already exists."
+            ),
+            "Já existe um perfil FFmpeg chamado \"main\"."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Dutch, "Source profile not found."),
+            "Bronprofiel niet gevonden."
+        );
+        assert_eq!(
+            ffmpeg_profile_error_text(UiLanguage::Dutch, "custom database failure"),
+            "custom database failure"
         );
     }
 
