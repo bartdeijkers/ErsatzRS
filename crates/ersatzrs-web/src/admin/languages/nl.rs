@@ -6,6 +6,21 @@ pub struct DutchStrings;
 
 pub static STRINGS: DutchStrings = DutchStrings;
 
+fn episode_display_subtitle(
+    show_title: Option<&str>,
+    season_number: Option<i64>,
+    episode_number: Option<i64>,
+) -> Option<String> {
+    let show = show_title.unwrap_or("").trim();
+    match (season_number, episode_number) {
+        (Some(season), Some(episode)) if !show.is_empty() => {
+            Some(format!("{show} - seizoen {season}, aflevering {episode}"))
+        }
+        (Some(season), Some(episode)) => Some(format!("Seizoen {season}, aflevering {episode}")),
+        _ => (!show.is_empty()).then(|| show.to_owned()),
+    }
+}
+
 impl LanguageStrings for DutchStrings {
     fn text(&self, key: TextKey) -> &'static str {
         text(key)
@@ -81,6 +96,15 @@ impl LanguageStrings for DutchStrings {
         } else {
             format!("Seizoen {number}")
         }
+    }
+
+    fn episode_display_subtitle(
+        &self,
+        show_title: Option<&str>,
+        season_number: Option<i64>,
+        episode_number: Option<i64>,
+    ) -> Option<String> {
+        episode_display_subtitle(show_title, season_number, episode_number)
     }
 
     fn media_item_fallback_label(&self, id: i64) -> String {

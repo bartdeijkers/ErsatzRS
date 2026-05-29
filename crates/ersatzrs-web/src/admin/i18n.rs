@@ -1994,6 +1994,23 @@ pub fn season_display_name(number: i64) -> String {
     languages_for(use_i18n()).season_display_name(number)
 }
 
+pub fn episode_display_subtitle(
+    show_title: Option<&str>,
+    season_number: Option<i64>,
+    episode_number: Option<i64>,
+) -> Option<String> {
+    episode_display_subtitle_text(use_i18n(), show_title, season_number, episode_number)
+}
+
+pub fn episode_display_subtitle_text(
+    language: UiLanguage,
+    show_title: Option<&str>,
+    season_number: Option<i64>,
+    episode_number: Option<i64>,
+) -> Option<String> {
+    languages_for(language).episode_display_subtitle(show_title, season_number, episode_number)
+}
+
 pub fn media_item_fallback_label(id: i64) -> String {
     languages_for(use_i18n()).media_item_fallback_label(id)
 }
@@ -2280,6 +2297,12 @@ pub trait LanguageStrings: Sync {
     fn delete_selected_count(&self, count: usize) -> String;
     fn deleted_items_from_database(&self, count: u64) -> String;
     fn season_display_name(&self, number: i64) -> String;
+    fn episode_display_subtitle(
+        &self,
+        show_title: Option<&str>,
+        season_number: Option<i64>,
+        episode_number: Option<i64>,
+    ) -> Option<String>;
     fn media_item_fallback_label(&self, id: i64) -> String;
     fn schedule_item_fallback_label(&self, id: i64) -> String;
     fn schedule_error_message(&self, error: &str) -> String;
@@ -2410,6 +2433,38 @@ mod tests {
         assert_eq!(
             languages_for(UiLanguage::Dutch).season_display_name(2),
             "Seizoen 2"
+        );
+    }
+
+    #[test]
+    fn episode_display_subtitles_follow_active_language() {
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::English, Some("Show"), Some(2), Some(5))
+                .as_deref(),
+            Some("Show - S2 E5")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Polish, Some("Show"), Some(2), Some(5))
+                .as_deref(),
+            Some("Show - sezon 2, odcinek 5")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::PortugueseBrazil, None, Some(1), Some(3))
+                .as_deref(),
+            Some("Temporada 1, episódio 3")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Dutch, Some("Serie"), Some(1), Some(3))
+                .as_deref(),
+            Some("Serie - seizoen 1, aflevering 3")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::Dutch, Some("Serie"), None, None).as_deref(),
+            Some("Serie")
+        );
+        assert_eq!(
+            episode_display_subtitle_text(UiLanguage::English, None, None, None),
+            None
         );
     }
 

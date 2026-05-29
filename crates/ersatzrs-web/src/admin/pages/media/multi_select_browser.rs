@@ -27,7 +27,7 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, item_count, range_of, season_display_name,
+    added_items_to_playlist, episode_display_subtitle, item_count, range_of, season_display_name,
     select_collection_to_add_selected_items, select_playlist_to_add_selected_items,
     selected_items_count, tr, TextKey,
 };
@@ -493,7 +493,14 @@ fn SelectableCard(
     let title_for_link = title.clone();
     let title_for_collection = title.clone();
     let title_for_info = title.clone();
-    let subtitle = row.subtitle.clone();
+    let subtitle = if config.kind == MediaBrowserKind::Episode {
+        row.subtitle
+            .as_deref()
+            .and_then(localize_episode_subtitle)
+            .or_else(|| row.subtitle.clone())
+    } else {
+        row.subtitle.clone()
+    };
     let artwork = row.artwork_path.clone();
     let href = format!("{}/{}", config.base_path, item_id);
     let placeholder = config.placeholder_icon;
@@ -564,6 +571,16 @@ fn SelectableCard(
             />
         </div>
     }
+}
+
+fn localize_episode_subtitle(subtitle: &str) -> Option<String> {
+    let (show, episode_part) = subtitle.rsplit_once(" - S")?;
+    let (season, episode) = episode_part.split_once(" E")?;
+    episode_display_subtitle(
+        Some(show),
+        season.trim().parse::<i64>().ok(),
+        episode.trim().parse::<i64>().ok(),
+    )
 }
 
 #[component]
@@ -997,5 +1014,23 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
                 view! { <a class=card_style::pager_btn href=next_href>"›"</a> }.into_any()
             }}
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn localizes_episode_subtitle_from_ersatztv_shape() {
+        assert_eq!(
+            localize_episode_subtitle("Show - S2 E5").as_deref(),
+            Some("Show - S2 E5")
+        );
+    }
+
+    #[test]
+    fn ignores_episode_subtitle_without_expected_shape() {
+        assert_eq!(localize_episode_subtitle("Show"), None);
     }
 }

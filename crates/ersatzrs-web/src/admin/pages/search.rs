@@ -26,7 +26,8 @@ use leptos_router::hooks::use_query_map;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, search_count, season_display_name, selected_items_count, tr, TextKey,
+    added_items_to_playlist, episode_display_subtitle, search_count, season_display_name,
+    selected_items_count, tr, TextKey,
 };
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist_mixed, CollectionOption,
@@ -530,6 +531,13 @@ fn SearchResultCard(
         card.season_number
             .map(|number| season_display_name(i64::from(number)))
             .or(card.subtitle)
+    } else if kind == SearchCardKind::Episode {
+        episode_display_subtitle(
+            card.show_title.as_deref(),
+            card.season_number.map(i64::from),
+            card.episode_number.map(i64::from),
+        )
+        .or(card.subtitle)
     } else {
         card.subtitle
     };
