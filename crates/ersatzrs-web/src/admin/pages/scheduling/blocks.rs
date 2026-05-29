@@ -322,7 +322,7 @@ fn BlocksIsland() -> impl IntoView {
                                                                     <button
                                                                         class=style::btn_edit
                                                                         on:click=move |_| {
-                                                                            copy_name.set(format!("{name} Copy"));
+                                                                            copy_name.set(format!("{} {}", name, tr(TextKey::CopyNameSuffix)));
                                                                             copy_group_id.set(b_for_copy.group_id);
                                                                             copy_target.set(Some(b_for_copy.clone()));
                                                                             copy_open.set(true);

@@ -194,7 +194,7 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                                                                     </a>
                                                                     <form method="post" action="/api/schedules/copy">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
-                                                                        <input type="hidden" name="name" value=format!("{hidden_name} Copy")/>
+                                                                        <input type="hidden" name="name" value=format!("{} {}", hidden_name, tr(TextKey::CopyNameSuffix))/>
                                                                         <button
                                                                             type="submit"
                                                                             class=style::icon_button

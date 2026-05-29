@@ -490,7 +490,7 @@ fn TemplateTable(
                                                             title=tr(TextKey::CopyTemplate)
                                                             on:click=move |_| {
                                                                 copy_group_id.set(copy_row.group_id);
-                                                                copy_name.set(format!("{copy_name_value} Copy"));
+                                                                copy_name.set(format!("{} {}", copy_name_value, tr(TextKey::CopyNameSuffix)));
                                                                 copy_target.set(Some(copy_row.clone()));
                                                                 copy_open.set(true);
                                                             }

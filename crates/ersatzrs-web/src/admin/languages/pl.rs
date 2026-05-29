@@ -717,6 +717,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Copy => "Kopiuj",
         TextKey::CopyBlock => "Kopiuj blok",
         TextKey::CopyFailed => "Kopiowanie nie powiodło się",
+        TextKey::CopyNameSuffix => "Kopia",
         TextKey::CopyProfile => "Kopiuj profil",
         TextKey::CopyTemplate => "Kopiuj szablon",
         TextKey::Crop => "Przytnij",

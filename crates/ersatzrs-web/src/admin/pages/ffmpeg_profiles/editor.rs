@@ -359,7 +359,11 @@ fn FfmpegProfileEditorForm(
                     style:display=if profile_id != 0 { "" } else { "none" }
                     disabled=profile_id == 0
                     on:click=move |_| {
-                        copy_name.set(format!("{} (Copy)", name.get_untracked()));
+                        copy_name.set(format!(
+                            "{} ({})",
+                            name.get_untracked(),
+                            tr(TextKey::CopyNameSuffix)
+                        ));
                         copy_open.set(true);
                     }
                 >

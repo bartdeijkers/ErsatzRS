@@ -719,6 +719,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Copy => "Kopiëren",
         TextKey::CopyBlock => "Blok kopiëren",
         TextKey::CopyFailed => "Kopiëren mislukt",
+        TextKey::CopyNameSuffix => "Kopie",
         TextKey::CopyProfile => "Profiel kopiëren",
         TextKey::CopyTemplate => "Sjabloon kopiëren",
         TextKey::Crop => "Bijsnijden",
