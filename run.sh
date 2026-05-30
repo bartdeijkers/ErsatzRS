@@ -17,8 +17,35 @@ export LD_LIBRARY_PATH="$HOME/.local/ffmpeg-8.1/lib${LD_LIBRARY_PATH:+:$LD_LIBRA
 export ErsatzRS_FFMPEG__PATH="$HOME/.local/ffmpeg-8.1/bin/ffmpeg"
 export ErsatzRS_FFPROBE__PATH="$HOME/.local/ffmpeg-8.1/bin/ffprobe"
 
+# Resolve the build target directory the way cargo itself does, so the size
+# guard inspects the real artifact dir (the scratch disk path configured in
+# .cargo/config.toml) instead of a stale local ./target. Precedence matches
+# cargo: CARGO_TARGET_DIR env var, then build.target-dir in .cargo/config.toml,
+# then the default "target".
+resolve_target_dir() {
+  if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    printf '%s\n' "$CARGO_TARGET_DIR"
+    return
+  fi
+
+  local config_target=""
+  if [[ -f .cargo/config.toml ]]; then
+    config_target="$(awk '
+      /^[[:space:]]*\[/ { section = $0; gsub(/[[:space:]]/, "", section); next }
+      section == "[build]" && /^[[:space:]]*target-dir[[:space:]]*=/ {
+        sub(/^[^=]*=[[:space:]]*/, "", $0)
+        gsub(/^["'"'"']|["'"'"'][[:space:]]*$/, "", $0)
+        print; exit
+      }
+    ' .cargo/config.toml)"
+  fi
+
+  printf '%s\n' "${config_target:-target}"
+}
+
 check_target_size() {
-  local target_dir="${CARGO_TARGET_DIR:-target}"
+  local target_dir
+  target_dir="$(resolve_target_dir)"
   local threshold_gib="${ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB:-40}"
   if [[ ! -d "$target_dir" ]] || ! command -v du >/dev/null 2>&1; then
     return
