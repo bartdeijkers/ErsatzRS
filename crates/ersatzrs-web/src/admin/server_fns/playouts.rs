@@ -763,7 +763,18 @@ pub async fn save_playout_alternate_schedules(
 
     let state = expect_context::<AppState>();
     save_playout_alternate_schedules_with_pool(&state.pool, playout_id, &items).await?;
-    enqueue_build(&state, playout_id, PlayoutBuildMode::Refresh);
+
+    // ErsatzTV's `ReplacePlayoutAlternateScheduleItemsHandler` only refreshes
+    // when an existing playout window's effective schedule actually changes,
+    // computed per-day via `AlternateScheduleSelector`. We have not ported that
+    // selector yet, so we conservatively refresh whenever the playout already
+    // has items — a safe superset of ErsatzTV's cases (a refresh is
+    // idempotent). When the playout has no items there is nothing to refresh,
+    // matching ErsatzTV's `maybeLastPlayoutItem` guard. See ParityDebt in
+    // plans/playouts-parity-slice.md.
+    if playout_has_items(&state.pool, playout_id).await? {
+        enqueue_build(&state, playout_id, PlayoutBuildMode::Refresh);
+    }
     Ok(())
 }
 
@@ -993,6 +1004,21 @@ fn enqueue_build(
             "dropping requested playout build; the periodic scheduler will retry later"
         );
     }
+}
+
+/// Whether the playout already has any generated items. Mirrors ErsatzTV's
+/// `maybeLastPlayoutItem` guard: with no items there is nothing to refresh.
+#[cfg(feature = "ssr")]
+async fn playout_has_items(
+    pool: &ersatzrs_infra::db::DbPool,
+    playout_id: i64,
+) -> Result<bool, ServerFnError> {
+    let exists: Option<i64> =
+        sqlx::query_scalar(r#"SELECT 1 FROM "PlayoutItem" WHERE "PlayoutId" = ? LIMIT 1"#)
+            .bind(playout_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(exists.is_some())
 }
 
 #[cfg(feature = "ssr")]

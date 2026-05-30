@@ -177,7 +177,13 @@ and mobile action proof are
 
 ## ParityDebt
 
-- None for `/playouts`.
+- Alternate-schedule save refresh is conservative. ErsatzTV's
+  `ReplacePlayoutAlternateScheduleItemsHandler` only enqueues a `Refresh` when
+  an existing playout window's effective schedule changes for some covered day,
+  computed per-day via `AlternateScheduleSelector.GetScheduleForDate`. That
+  selector is not yet ported, so `save_playout_alternate_schedules` refreshes
+  whenever the playout already has items — a safe, idempotent superset of
+  ErsatzTV's cases. Tighten once the selector lands.
 
 ## Verification
 

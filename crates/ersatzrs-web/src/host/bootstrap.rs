@@ -39,9 +39,11 @@ pub async fn run() {
     let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
     let (playout_build_tx, playout_build_rx) =
         tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
-    // Single shared playout lock registry: the web host clones it into AppState
-    // (so the playouts page can poll lock state) and hands it to the scheduler,
-    // matching ErsatzTV's single-process `IEntityLocker`.
+    // Single playout lock registry shared with the scheduler: the web host
+    // clones it into AppState (so the playouts page can poll which playouts are
+    // building) and hands the same instance to the scheduler (the sole builder).
+    // Library/collection scan locks use the separate web-host `EntityLocker` in
+    // AppState; together they cover ErsatzTV's single `IEntityLocker` surface.
     let playout_locker = ersatzrs_core::locking::EntityLocker::new();
 
     if let Some(version) = startup.schema_status.dirty_version {
