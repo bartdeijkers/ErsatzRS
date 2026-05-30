@@ -1142,29 +1142,49 @@ pub async fn create_playout_with_pool(
         _ => return Err(ServerFnError::new("Unsupported playout kind")),
     }
 
-    sqlx::query(
+    // ErsatzTV seeds with `new Random().Next()` (non-negative 32-bit int).
+    // Generate it in Rust and bind it so the INSERT stays backend-neutral; an
+    // embedded `random()` would be SQLite-only and overflow MySQL's `INT`.
+    let seed = next_seed();
+
+    let result = sqlx::query(
         r#"INSERT INTO "Playout"
            ("ChannelId", "ProgramScheduleId", "ScheduleFile", "ScheduleKind", "Seed")
-           VALUES (?, ?, ?, ?, (SELECT random()))"#,
+           VALUES (?, ?, ?, ?, ?)"#,
     )
     .bind(channel_id)
     .bind(program_schedule_id)
     .bind(schedule_file)
     .bind(kind)
+    .bind(seed)
     .execute(pool)
     .await?;
 
-    let id: i64 = sqlx::query_scalar(
-        r#"SELECT "Id"
-           FROM "Playout"
-           WHERE "ChannelId" = ?
-           ORDER BY "Id" DESC
-           LIMIT 1"#,
-    )
-    .bind(channel_id)
-    .fetch_one(pool)
-    .await?;
-    Ok(id)
+    Ok(ersatzrs_infra::db::last_insert_id(result))
+}
+
+/// A non-negative 32-bit playout seed, mirroring ErsatzTV's `new Random().Next()`.
+///
+/// The scheduling seed only needs per-playout variety, not cryptographic
+/// quality, so we derive it from a high-resolution timestamp rather than
+/// pulling in a `rand` dependency. The value is masked into `0..=i32::MAX`
+/// to fit the `Seed INT` column on every backend.
+#[cfg(feature = "ssr")]
+fn next_seed() -> i32 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    // Hash the timestamp with a process-randomized hasher so concurrent
+    // creates in the same nanosecond bucket still diverge.
+    let mut hasher = RandomState::new().build_hasher();
+    hasher.write_u128(nanos);
+    // Masking with `i32::MAX` guarantees the result fits `0..=i32::MAX`, so the
+    // `try_from` never fails.
+    i32::try_from(hasher.finish() & u64::try_from(i32::MAX).unwrap_or(u64::MAX)).unwrap_or(0)
 }
 
 #[cfg(feature = "ssr")]
@@ -1907,20 +1927,17 @@ fn first_command_token(value: &str) -> String {
             .to_owned();
     }
 
+    // Mirror .NET's `CommandLineParser.SplitCommandLine`, which ErsatzTV uses:
+    // backslashes inside a quoted token are literal, not escape characters, so
+    // a Windows path like `"C:\Program Files\schedule.lua"` keeps its
+    // separators. Reading until the matching close quote is sufficient.
     let quote = first;
-    let mut escaped = false;
     let mut token = String::new();
     for ch in trimmed[quote.len_utf8()..].chars() {
-        if escaped {
-            token.push(ch);
-            escaped = false;
-        } else if ch == '\\' {
-            escaped = true;
-        } else if ch == quote {
+        if ch == quote {
             return token;
-        } else {
-            token.push(ch);
         }
+        token.push(ch);
     }
     token
 }
@@ -2588,6 +2605,26 @@ mod tests {
             first_command_token(r"'/tmp/script file.lua' --flag value"),
             "/tmp/script file.lua"
         );
+        // Backslashes inside a quoted token are literal path separators, not
+        // escapes (parity with .NET `SplitCommandLine`); a Windows path must
+        // survive intact so `std::fs::metadata` can find it.
+        assert_eq!(
+            first_command_token(r#""C:\Program Files\schedule.lua" --slot prime"#),
+            r"C:\Program Files\schedule.lua"
+        );
+        assert_eq!(
+            first_command_token(r"C:\scripts\schedule.lua --slot prime"),
+            r"C:\scripts\schedule.lua"
+        );
+    }
+
+    #[test]
+    fn playout_seed_is_non_negative_and_varies() {
+        // Mirrors ErsatzTV's `Random().Next()` range (`0..=i32::MAX`).
+        assert!(next_seed() >= 0);
+        // Distinct calls should diverge; collisions are astronomically unlikely.
+        let seeds: std::collections::HashSet<i32> = (0..16).map(|_| next_seed()).collect();
+        assert!(seeds.len() > 1, "next_seed produced no variety");
     }
 
     #[tokio::test]
