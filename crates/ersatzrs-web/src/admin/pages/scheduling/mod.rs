@@ -1,8 +1,10 @@
 pub mod block_editor;
 pub mod blocks;
 pub mod decos;
+pub mod playout_editor;
+pub mod playout_kind_editor;
+pub mod playout_nested_editor;
 pub mod playouts;
 pub mod schedules;
 pub mod templates;
-pub mod timeline;
 pub mod yaml_editor;

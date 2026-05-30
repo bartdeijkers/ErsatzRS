@@ -226,7 +226,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/sources/local`   | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/sources/jellyfin`| ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/sources/emby`    | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
-| `/playouts`              | TODO   | Needs URL-driven selection refactor.                                    |
+| `/playouts`              | TODO   | Island list+detail port of `Playouts.razor`. Browser-smoke: Add Playout dropdown, Reset All, search filter, row select → detail table, Show Filler toggle, Reset/Schedule Reset/Delete/Edit JSON dialogs, Troubleshoot context dialog, and a console warning/error check; add a durable Playwright spec when the route gets automated coverage. |
 | `/schedules`             | TODO   | Browser smoke covered list/add/items route geometry, screenshots, no-JS schedule and item form POST fallbacks, and hydrated item editing; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/templates`             | TODO   | Browser smoke covered list geometry, template group/template add/copy/delete confirmations, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/templates/:id`         | TODO   | Browser smoke covered editor geometry, browser-navigation edit link, block add/remove/drag/save, and no-JS item form POST fallback; add a durable Playwright spec when the route gets automated admin UI coverage. |

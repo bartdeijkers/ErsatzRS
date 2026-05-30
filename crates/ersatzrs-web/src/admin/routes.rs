@@ -52,6 +52,13 @@ use crate::admin::pages::scheduling::blocks::BlocksPage;
 use crate::admin::pages::scheduling::decos::{
     DecoEditorPage, DecoTemplateEditorPage, DecoTemplatesPage, DecosPage,
 };
+use crate::admin::pages::scheduling::playout_editor::PlayoutEditorPage;
+use crate::admin::pages::scheduling::playout_kind_editor::{
+    BlockPlayoutEditorPage, ClassicPlayoutEditorPage, ScriptedPlayoutEditorPage,
+};
+use crate::admin::pages::scheduling::playout_nested_editor::{
+    PlayoutAlternateSchedulesEditorPage, PlayoutTemplatesEditorPage,
+};
 use crate::admin::pages::scheduling::playouts::PlayoutsPage;
 use crate::admin::pages::scheduling::schedules::{
     ScheduleEditorPage, ScheduleItemsPage, SchedulesPage,
@@ -132,8 +139,40 @@ pub fn AdminRoutes() -> impl IntoView {
 
             <Route path=StaticSegment("playouts") view=PlayoutsPage/>
             <Route
+                path=(StaticSegment("playouts"), StaticSegment("add"))
+                view=PlayoutEditorPage
+            />
+            <Route
+                path=(StaticSegment("playouts"), StaticSegment("add"), ParamSegment("kind"))
+                view=PlayoutEditorPage
+            />
+            <Route
                 path=(StaticSegment("playouts"), StaticSegment("sequential"), ParamSegment("id"))
                 view=YamlEditorPage
+            />
+            <Route
+                path=(StaticSegment("playouts"), StaticSegment("classic"), ParamSegment("id"))
+                view=ClassicPlayoutEditorPage
+            />
+            <Route
+                path=(StaticSegment("playouts"), StaticSegment("block"), ParamSegment("id"))
+                view=BlockPlayoutEditorPage
+            />
+            <Route
+                path=(StaticSegment("playouts"), StaticSegment("scripted"), ParamSegment("id"))
+                view=ScriptedPlayoutEditorPage
+            />
+            <Route
+                path=(
+                    StaticSegment("playouts"),
+                    ParamSegment("id"),
+                    StaticSegment("alternate-schedules"),
+                )
+                view=PlayoutAlternateSchedulesEditorPage
+            />
+            <Route
+                path=(StaticSegment("playouts"), ParamSegment("id"), StaticSegment("templates"))
+                view=PlayoutTemplatesEditorPage
             />
             <Route path=StaticSegment("blocks") view=BlocksPage/>
             <Route path=StaticSegment("decos") view=DecosPage/>

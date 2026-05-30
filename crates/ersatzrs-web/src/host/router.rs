@@ -153,6 +153,10 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::playlists::save_playlist_form),
         )
         .route(
+            "/api/playouts/create",
+            post(api::playouts::create_playout_form),
+        )
+        .route(
             "/api/rerun-collections/save",
             post(api::rerun_collections::save_rerun_collection_form),
         )

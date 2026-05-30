@@ -6483,6 +6483,7 @@ mod season_detail_tests {
             1,
             IptvAccessTokenVerifier::disabled(),
             playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
         );
 
         let owner = Owner::new();

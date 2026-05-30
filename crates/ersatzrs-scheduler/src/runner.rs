@@ -31,6 +31,11 @@ pub struct SchedulerOptions {
     pub scanner_extra_args: Vec<OsString>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::Receiver<PlayoutBuildRequest>>,
+    /// Shared playout lock registry. When provided, the scheduler reuses this
+    /// `EntityLocker` instead of constructing its own so the web host can poll
+    /// playout lock state for the playouts-page build spinner. Mirrors
+    /// ErsatzTV's single-process `IEntityLocker` singleton.
+    pub locker: Option<EntityLocker>,
 }
 
 /// Run the background scheduler.
@@ -49,6 +54,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         scanner_command,
         scanner_extra_args,
         mut build_requests,
+        locker,
     } = options;
 
     let startup = db::bootstrap_media_server_database().await?;
@@ -58,8 +64,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         extra_args: scanner_extra_args,
     };
     // Single in-process `EntityLocker` shared across maintenance passes,
-    // matching ErsatzTV's `IEntityLocker` singleton.
-    let locker = EntityLocker::new();
+    // matching ErsatzTV's `IEntityLocker` singleton. When the web host supplies
+    // one, reuse it so the admin UI can observe playout lock state.
+    let locker = locker.unwrap_or_default();
 
     if run_once {
         let report = run_maintenance_once(

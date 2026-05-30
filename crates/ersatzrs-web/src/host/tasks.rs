@@ -1,3 +1,4 @@
+use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::trakt::{NoopTraktApiClient, TraktApiClient};
@@ -12,6 +13,7 @@ pub fn spawn_background_tasks(
     tuner_count: Arc<AtomicI32>,
     listen_port: u16,
     playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
+    playout_locker: EntityLocker,
 ) {
     tokio::spawn(crate::transport::hdhr::run_udp_discovery(
         device_uuid,
@@ -19,13 +21,17 @@ pub fn spawn_background_tasks(
         listen_port,
     ));
     tokio::spawn(run_trakt_maintenance(pool));
-    tokio::spawn(run_maintenance_scheduler(playout_build_rx));
+    tokio::spawn(run_maintenance_scheduler(playout_build_rx, playout_locker));
 }
 
-async fn run_maintenance_scheduler(playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>) {
+async fn run_maintenance_scheduler(
+    playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
+    playout_locker: EntityLocker,
+) {
     if let Err(error) = run_scheduler(SchedulerOptions {
         tick: std::time::Duration::from_mins(1),
         build_requests: Some(playout_build_rx),
+        locker: Some(playout_locker),
         ..SchedulerOptions::default()
     })
     .await

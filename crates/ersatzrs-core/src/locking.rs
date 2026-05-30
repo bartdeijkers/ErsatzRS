@@ -75,6 +75,17 @@ impl EntityLocker {
         recover(self.inner.locked_playouts.lock()).contains(&playout_id)
     }
 
+    /// Snapshot of every currently locked playout id. Mirrors how the admin UI
+    /// polls `IEntityLocker` to render the per-row build spinner on the
+    /// playouts page.
+    #[must_use]
+    pub fn locked_playouts(&self) -> Vec<EntityId> {
+        recover(self.inner.locked_playouts.lock())
+            .iter()
+            .copied()
+            .collect()
+    }
+
     /// Try to acquire the lock for a library scan. Mirrors `LockLibrary`.
     #[must_use]
     pub fn lock_library(&self, library_id: EntityId) -> bool {

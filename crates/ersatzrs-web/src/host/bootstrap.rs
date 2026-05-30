@@ -39,6 +39,10 @@ pub async fn run() {
     let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
     let (playout_build_tx, playout_build_rx) =
         tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
+    // Single shared playout lock registry: the web host clones it into AppState
+    // (so the playouts page can poll lock state) and hands it to the scheduler,
+    // matching ErsatzTV's single-process `IEntityLocker`.
+    let playout_locker = ersatzrs_core::locking::EntityLocker::new();
 
     if let Some(version) = startup.schema_status.dirty_version {
         tracing::error!(
@@ -65,6 +69,7 @@ pub async fn run() {
         startup.schema_status,
         ffmpeg_runtime,
         playout_build_tx,
+        playout_locker.clone(),
     )
     .await
     .expect("failed to build application state");
@@ -75,6 +80,7 @@ pub async fn run() {
         app_state.tuner_count.clone(),
         LISTEN_PORT,
         playout_build_rx,
+        playout_locker,
     );
 
     let app = super::router::build_app(app_state);
@@ -218,6 +224,7 @@ async fn build_app_state(
     schema_status: ersatzrs_infra::db::DatabaseSchemaStatus,
     ffmpeg_runtime: ersatzrs_ffmpeg::FfmpegRuntimeReport,
     playout_build_tx: tokio::sync::mpsc::Sender<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    playout_locker: ersatzrs_core::locking::EntityLocker,
 ) -> Result<AppState, sqlx::Error> {
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let iptv_access_token_verifier =
@@ -263,6 +270,7 @@ async fn build_app_state(
         tuner_count,
         iptv_access_token_verifier,
         playout_build_tx,
+        playout_locker,
     ))
 }
 

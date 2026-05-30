@@ -5,7 +5,9 @@ use leptos_router::components::Router;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-use crate::admin::i18n::{provide_i18n_context, UiLanguage};
+use crate::admin::i18n::provide_i18n_context;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::admin::i18n::UiLanguage;
 use crate::admin::layout::AppShell;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::admin::layout::NavStateHeadScript;

@@ -169,6 +169,10 @@ pub struct AppState {
     pub entity_locker: EntityLocker,
     pub scan_progress: ScanProgressMap,
     pub playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
+    /// Shared playout lock registry, also handed to the scheduler. Lets the
+    /// playouts page poll which playouts are currently building. Mirrors
+    /// ErsatzTV's single `IEntityLocker`.
+    pub playout_locker: ersatzrs_core::locking::EntityLocker,
 }
 
 #[derive(Clone)]
@@ -189,6 +193,7 @@ impl AppState {
         tuner_count: i32,
         iptv_access_token_verifier: IptvAccessTokenVerifier,
         playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
+        playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
         let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
@@ -207,6 +212,7 @@ impl AppState {
             entity_locker: EntityLocker::default(),
             scan_progress: ScanProgressMap::default(),
             playout_build_tx,
+            playout_locker,
         }
     }
 
@@ -229,6 +235,7 @@ impl AppState {
             2,
             iptv_access_token_verifier,
             playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
         )
     }
 

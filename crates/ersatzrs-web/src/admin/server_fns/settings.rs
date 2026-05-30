@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ssr")]
 use crate::admin::i18n::{normalize_ui_language, UiLanguage};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
