@@ -1,12 +1,12 @@
-//! Embedded text-subtitle and font extraction for deep show scans and channel
-//! save side effects.
+//! Embedded text-subtitle and font extraction for deep show scans, playout
+//! builds, and channel/settings save side effects.
 //!
-//! Ports `ErsatzTV.Application/Subtitles/Commands/ExtractEmbeddedShowSubtitlesHandler.cs`
-//! and `ExtractEmbeddedSubtitlesHandlerBase.cs`, scoped to TV episodes. ErsatzTV
-//! queues `ExtractEmbeddedShowSubtitles` after a successful deep show scan
-//! (`QueueShowScanByLibraryIdHandler` lines 92-95) and
-//! `ExtractEmbeddedSubtitles(playoutId)` after a channel with subtitle mode
-//! enabled is saved (`UpdateChannelHandler` lines 143-150).
+//! Ports `ErsatzTV.Application/Subtitles/Commands/ExtractEmbeddedShowSubtitlesHandler.cs`,
+//! `ExtractEmbeddedSubtitlesHandler.cs`, and `ExtractEmbeddedSubtitlesHandlerBase.cs`.
+//! ErsatzTV queues `ExtractEmbeddedShowSubtitles` after a successful deep show
+//! scan (`QueueShowScanByLibraryIdHandler` lines 92-95) and
+//! `ExtractEmbeddedSubtitles(playoutId)` after channel/settings/playout changes
+//! can require subtitles.
 //!
 //! Two deliberate divergences from ErsatzTV, both consistent with existing
 //! ErsatzRS patterns:
@@ -19,6 +19,7 @@
 
 use std::path::{Path, PathBuf};
 
+use chrono::{Duration, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::Result;
 use ersatzrs_ffmpeg::ffmpeg_path_from_env;
@@ -30,6 +31,7 @@ use crate::db::Db;
 use crate::ffmpeg_config::{extract_embedded_subtitles, use_embedded_subtitles};
 use crate::file_system_layout::{fonts_cache_folder, subtitle_cache_folder};
 use crate::metadata::subtitle_kind;
+use crate::repositories::common::encode_datetime;
 
 /// Image-subtitle codecs that cannot be extracted as text. Mirrors
 /// `Subtitle.IsImage` (`Subtitle.cs`) and the filters in
@@ -95,6 +97,36 @@ struct SubtitleToExtract {
     codec: String,
     relative_output: PathBuf,
 }
+
+#[derive(Clone, Copy)]
+struct MetadataSubtitleJoin {
+    metadata_table: &'static str,
+    owner_column: &'static str,
+    subtitle_column: &'static str,
+}
+
+const METADATA_SUBTITLE_JOINS: &[MetadataSubtitleJoin] = &[
+    MetadataSubtitleJoin {
+        metadata_table: "EpisodeMetadata",
+        owner_column: "EpisodeId",
+        subtitle_column: "EpisodeMetadataId",
+    },
+    MetadataSubtitleJoin {
+        metadata_table: "MovieMetadata",
+        owner_column: "MovieId",
+        subtitle_column: "MovieMetadataId",
+    },
+    MetadataSubtitleJoin {
+        metadata_table: "MusicVideoMetadata",
+        owner_column: "MusicVideoId",
+        subtitle_column: "MusicVideoMetadataId",
+    },
+    MetadataSubtitleJoin {
+        metadata_table: "OtherVideoMetadata",
+        owner_column: "OtherVideoId",
+        subtitle_column: "OtherVideoMetadataId",
+    },
+];
 
 /// Build the ffmpeg subtitle-extraction argv (port of the `ArgumentsBuilder`
 /// block in `ExtractSubtitles`): `-nostdin -hide_banner -i <input>` then per
@@ -168,22 +200,25 @@ async fn load_path_replacements(pool: &Pool<Db>) -> Result<Vec<PathReplacement>>
     Ok(replacements)
 }
 
-/// Resolve the episode head-version `MediaFile."Path"`, with path-replacements
+/// Resolve the media item's head-version `MediaFile."Path"`, with path-replacements
 /// applied (target platform Unix, matching `stream.rs`).
 async fn resolve_input_path(
     pool: &Pool<Db>,
-    episode_id: i64,
+    media_item_id: i64,
     replacements: &[PathReplacement],
 ) -> Result<Option<String>> {
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "Path"
            FROM "MediaVersion" mv
            JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-           WHERE mv."EpisodeId" = ? AND mf."Path" IS NOT NULL
+           WHERE COALESCE(
+                     mv."EpisodeId", mv."MovieId", mv."MusicVideoId", mv."OtherVideoId"
+                 ) = ?
+             AND mf."Path" IS NOT NULL
            ORDER BY mv."Id" ASC, mf."Id" ASC
            LIMIT 1"#,
     )
-    .bind(episode_id)
+    .bind(media_item_id)
     .fetch_optional(pool)
     .await?;
 
@@ -204,59 +239,118 @@ async fn resolve_input_path(
 /// text-codec filter from `GetMediaItemIdsWithTextSubtitles` (image codecs
 /// excluded directly in SQL).
 async fn episode_ids_with_text_subtitles(pool: &Pool<Db>, show_id: i64) -> Result<Vec<i64>> {
-    let placeholders = IMAGE_CODECS
-        .iter()
-        .map(|_| "?")
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        r#"SELECT DISTINCT E."Id"
+    let rows = sqlx::query(
+        r#"SELECT E."Id" AS "Id"
            FROM "Episode" E
            INNER JOIN "Season" S ON S."Id" = E."SeasonId"
-           INNER JOIN "EpisodeMetadata" EM ON EM."EpisodeId" = E."Id"
-           INNER JOIN "Subtitle" SUB ON SUB."EpisodeMetadataId" = EM."Id"
            WHERE S."ShowId" = ?
-             AND SUB."SubtitleKind" = {embedded}
-             AND (SUB."IsExtracted" = 0 OR SUB."Path" IS NULL)
-             AND ("SUB"."Codec" IS NULL OR "SUB"."Codec" NOT IN ({placeholders}))"#,
-        embedded = subtitle_kind::EMBEDDED,
-    );
-    let mut query = sqlx::query(&sql).bind(show_id);
-    for codec in IMAGE_CODECS {
-        query = query.bind(*codec);
-    }
-    let rows = query.fetch_all(pool).await?;
-    rows.into_iter().map(|row| Ok(row.try_get("Id")?)).collect()
+           ORDER BY E."Id""#,
+    )
+    .bind(show_id)
+    .fetch_all(pool)
+    .await?;
+    let episode_ids: Vec<i64> = rows
+        .into_iter()
+        .map(|row| row.try_get("Id"))
+        .collect::<std::result::Result<_, _>>()?;
+    media_item_ids_with_text_subtitles(pool, &episode_ids).await
 }
 
-async fn playout_episode_ids_with_text_subtitles(
+async fn playout_media_item_ids_with_text_subtitles(
     pool: &Pool<Db>,
     playout_id: i64,
 ) -> Result<Vec<i64>> {
+    let now = Utc::now();
+    let until = now + Duration::hours(1);
+    let rows = sqlx::query(
+        r#"SELECT PI."MediaItemId" AS "MediaItemId", MIN(PI."Start") AS "SortStart"
+           FROM "PlayoutItem" PI
+           INNER JOIN "Playout" P ON P."Id" = PI."PlayoutId"
+           INNER JOIN "Channel" C ON C."Id" = P."ChannelId"
+           WHERE PI."PlayoutId" = ?
+             AND PI."Finish" >= ?
+             AND PI."Start" <= ?
+             AND (
+               C."SubtitleMode" != 0 OR EXISTS (
+                 SELECT 1
+                 FROM "ProgramScheduleItem" PSI
+                 WHERE PSI."ProgramScheduleId" = P."ProgramScheduleId"
+                   AND PSI."SubtitleMode" IS NOT NULL
+                   AND PSI."SubtitleMode" != 0
+               )
+             )
+           GROUP BY PI."MediaItemId"
+           ORDER BY MIN(PI."Start")"#,
+    )
+    .bind(playout_id)
+    .bind(encode_datetime(now))
+    .bind(encode_datetime(until))
+    .fetch_all(pool)
+    .await?;
+    let media_item_ids: Vec<i64> = rows
+        .into_iter()
+        .map(|row| row.try_get("MediaItemId"))
+        .collect::<std::result::Result<_, _>>()?;
+    media_item_ids_with_text_subtitles(pool, &media_item_ids).await
+}
+
+async fn media_item_ids_with_text_subtitles(
+    pool: &Pool<Db>,
+    media_item_ids: &[i64],
+) -> Result<Vec<i64>> {
+    if media_item_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let media_placeholders = media_item_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
     let placeholders = IMAGE_CODECS
         .iter()
         .map(|_| "?")
         .collect::<Vec<_>>()
         .join(", ");
-    let sql = format!(
-        r#"SELECT DISTINCT E."Id" AS "Id"
-           FROM "PlayoutItem" PI
-           INNER JOIN "Episode" E ON E."Id" = PI."MediaItemId"
-           INNER JOIN "EpisodeMetadata" EM ON EM."EpisodeId" = E."Id"
-           INNER JOIN "Subtitle" SUB ON SUB."EpisodeMetadataId" = EM."Id"
-           WHERE PI."PlayoutId" = ?
-             AND SUB."SubtitleKind" = {embedded}
-             AND SUB."Codec" IS NOT NULL
-             AND SUB."Codec" NOT IN ({placeholders})
-           ORDER BY E."Id""#,
-        embedded = subtitle_kind::EMBEDDED,
-    );
-    let mut query = sqlx::query(&sql).bind(playout_id);
-    for codec in IMAGE_CODECS {
-        query = query.bind(*codec);
+    let mut result = Vec::new();
+
+    for join in METADATA_SUBTITLE_JOINS {
+        let sql = format!(
+            r#"SELECT DISTINCT M."{owner_column}" AS "Id"
+               FROM "{metadata_table}" M
+               INNER JOIN "Subtitle" SUB ON SUB."{subtitle_column}" = M."Id"
+               WHERE M."{owner_column}" IN ({media_placeholders})
+                 AND SUB."SubtitleKind" = {embedded}
+                 AND SUB."Codec" IS NOT NULL
+                 AND SUB."Codec" NOT IN ({placeholders})"#,
+            metadata_table = join.metadata_table,
+            owner_column = join.owner_column,
+            subtitle_column = join.subtitle_column,
+            embedded = subtitle_kind::EMBEDDED,
+        );
+        let mut query = sqlx::query(&sql);
+        for id in media_item_ids {
+            query = query.bind(*id);
+        }
+        for codec in IMAGE_CODECS {
+            query = query.bind(*codec);
+        }
+        let rows = query.fetch_all(pool).await?;
+        for row in rows {
+            let id: i64 = row.try_get("Id")?;
+            if !result.contains(&id) {
+                result.push(id);
+            }
+        }
     }
-    let rows = query.fetch_all(pool).await?;
-    rows.into_iter().map(|row| Ok(row.try_get("Id")?)).collect()
+
+    result.sort_by_key(|id| {
+        media_item_ids
+            .iter()
+            .position(|candidate| candidate == id)
+            .unwrap_or(usize::MAX)
+    });
+    Ok(result)
 }
 
 /// Extract embedded text subtitles + font attachments for every episode under
@@ -273,8 +367,8 @@ pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> R
         .await
 }
 
-/// Extract embedded text subtitles + font attachments for every episode in one
-/// playout. This is the ErsatzRS equivalent of ErsatzTV's
+/// Extract embedded text subtitles + font attachments for every eligible media
+/// item in one playout. This is the ErsatzRS equivalent of ErsatzTV's
 /// `ExtractEmbeddedSubtitles(Some(playoutId))` background request.
 ///
 /// # Errors
@@ -282,14 +376,21 @@ pub async fn extract_embedded_show_subtitles(pool: &Pool<Db>, show_id: i64) -> R
 /// Returns an error only when a database query fails; ffmpeg spawn/exit
 /// failures are logged and do not abort the run.
 pub async fn extract_embedded_playout_subtitles(pool: &Pool<Db>, playout_id: i64) -> Result<()> {
-    extract_embedded_episode_subtitles(
+    extract_embedded_media_item_subtitles(
         pool,
-        playout_episode_ids_with_text_subtitles(pool, playout_id).await?,
+        playout_media_item_ids_with_text_subtitles(pool, playout_id).await?,
     )
     .await
 }
 
 async fn extract_embedded_episode_subtitles(pool: &Pool<Db>, episode_ids: Vec<i64>) -> Result<()> {
+    extract_embedded_media_item_subtitles(pool, episode_ids).await
+}
+
+async fn extract_embedded_media_item_subtitles(
+    pool: &Pool<Db>,
+    media_item_ids: Vec<i64>,
+) -> Result<()> {
     // Divergence: ffmpeg path from env, not the FFmpegPath config key.
     let ffmpeg_path = ffmpeg_path_from_env();
 
@@ -298,45 +399,59 @@ async fn extract_embedded_episode_subtitles(pool: &Pool<Db>, episode_ids: Vec<i6
         return Ok(());
     }
 
-    if episode_ids.is_empty() {
+    if media_item_ids.is_empty() {
         return Ok(());
     }
 
     let replacements = load_path_replacements(pool).await?;
-    for episode_id in episode_ids {
-        let Some(input_path) = resolve_input_path(pool, episode_id, &replacements).await? else {
-            tracing::debug!(episode_id, "no media path for episode; skipping extraction");
+    for media_item_id in media_item_ids {
+        let Some(input_path) = resolve_input_path(pool, media_item_id, &replacements).await? else {
+            tracing::debug!(
+                media_item_id,
+                "no media path for media item; skipping extraction"
+            );
             continue;
         };
-        extract_subtitles(pool, episode_id, &input_path, &ffmpeg_path).await?;
-        extract_fonts(pool, episode_id, &input_path, &ffmpeg_path).await?;
+        extract_subtitles(pool, media_item_id, &input_path, &ffmpeg_path).await?;
+        extract_fonts(pool, media_item_id, &input_path, &ffmpeg_path).await?;
     }
 
     Ok(())
 }
 
-/// Extract this episode's embedded text subtitles. Ports `ExtractSubtitles`.
+/// Extract this media item's embedded text subtitles. Ports `ExtractSubtitles`.
 async fn extract_subtitles(
     pool: &Pool<Db>,
-    episode_id: i64,
+    media_item_id: i64,
     input_path: &str,
     ffmpeg_path: &str,
 ) -> Result<()> {
-    // All embedded subtitles for this episode. Image codecs and "already
+    // All embedded subtitles for this media item. Image codecs and "already
     // extracted" rows are filtered in-memory below, mirroring the `.Filter(...)`
     // chain in ErsatzTV's `ExtractSubtitles`.
-    let sql = format!(
-        r#"SELECT SUB."Id" AS "Id", SUB."StreamIndex" AS "StreamIndex",
-                  SUB."Codec" AS "Codec", SUB."IsExtracted" AS "IsExtracted",
-                  SUB."Path" AS "Path"
-           FROM "Subtitle" SUB
-           INNER JOIN "EpisodeMetadata" EM ON EM."Id" = SUB."EpisodeMetadataId"
-           WHERE EM."EpisodeId" = ?
-             AND SUB."SubtitleKind" = {embedded}
-             AND SUB."Codec" IS NOT NULL"#,
-        embedded = subtitle_kind::EMBEDDED,
-    );
-    let rows = sqlx::query(&sql).bind(episode_id).fetch_all(pool).await?;
+    let mut rows = Vec::new();
+    for join in METADATA_SUBTITLE_JOINS {
+        let sql = format!(
+            r#"SELECT SUB."Id" AS "Id", SUB."StreamIndex" AS "StreamIndex",
+                      SUB."Codec" AS "Codec", SUB."IsExtracted" AS "IsExtracted",
+                      SUB."Path" AS "Path"
+               FROM "Subtitle" SUB
+               INNER JOIN "{metadata_table}" M ON M."Id" = SUB."{subtitle_column}"
+               WHERE M."{owner_column}" = ?
+                 AND SUB."SubtitleKind" = {embedded}
+                 AND SUB."Codec" IS NOT NULL"#,
+            metadata_table = join.metadata_table,
+            subtitle_column = join.subtitle_column,
+            owner_column = join.owner_column,
+            embedded = subtitle_kind::EMBEDDED,
+        );
+        rows.extend(
+            sqlx::query(&sql)
+                .bind(media_item_id)
+                .fetch_all(pool)
+                .await?,
+        );
+    }
 
     let mut to_extract = Vec::new();
     for row in rows {
@@ -349,7 +464,8 @@ async fn extract_subtitles(
         if is_image_codec(&codec) {
             continue;
         }
-        let Some(relative_output) = relative_output_path(episode_id, stream_index, &codec) else {
+        let Some(relative_output) = relative_output_path(media_item_id, stream_index, &codec)
+        else {
             continue;
         };
         let full = subtitle_cache_folder().join(&relative_output);
@@ -389,7 +505,7 @@ async fn extract_subtitles(
     let output = match Command::new(ffmpeg_path).args(&args).output().await {
         Ok(output) => output,
         Err(error) => {
-            tracing::error!(%error, episode_id, "failed to spawn ffmpeg for subtitle extraction");
+            tracing::error!(%error, media_item_id, "failed to spawn ffmpeg for subtitle extraction");
             return Ok(());
         }
     };
@@ -403,13 +519,13 @@ async fn extract_subtitles(
                 .await?;
         }
         tracing::debug!(
-            episode_id,
+            media_item_id,
             count = to_extract.len(),
             "successfully extracted subtitles"
         );
     } else {
         tracing::error!(
-            episode_id,
+            media_item_id,
             stderr = %String::from_utf8_lossy(&output.stderr),
             "failed to extract subtitles"
         );
@@ -418,12 +534,12 @@ async fn extract_subtitles(
     Ok(())
 }
 
-/// Extract this episode's font attachments. Ports `ExtractFonts`. ffmpeg exits
+/// Extract this media item's font attachments. Ports `ExtractFonts`. ffmpeg exits
 /// non-zero even on a successful dump, so success is detected by the output
 /// file existing.
 async fn extract_fonts(
     pool: &Pool<Db>,
-    episode_id: i64,
+    media_item_id: i64,
     input_path: &str,
     ffmpeg_path: &str,
 ) -> Result<()> {
@@ -433,10 +549,13 @@ async fn extract_fonts(
         r#"SELECT ms."FileName" AS "FileName", ms."MimeType" AS "MimeType"
            FROM "MediaVersion" mv
            JOIN "MediaStream" ms ON ms."MediaVersionId" = mv."Id"
-           WHERE mv."EpisodeId" = ? AND ms."MediaStreamKind" = 4
+           WHERE COALESCE(
+                     mv."EpisodeId", mv."MovieId", mv."MusicVideoId", mv."OtherVideoId"
+                 ) = ?
+             AND ms."MediaStreamKind" = 4
            ORDER BY mv."Id" ASC, ms."Index" ASC"#,
     )
-    .bind(episode_id)
+    .bind(media_item_id)
     .fetch_all(pool)
     .await?;
 
@@ -472,16 +591,16 @@ async fn extract_fonts(
         let stderr = match result {
             Ok(output) => String::from_utf8_lossy(&output.stderr).into_owned(),
             Err(error) => {
-                tracing::error!(%error, episode_id, "failed to spawn ffmpeg for font extraction");
+                tracing::error!(%error, media_item_id, "failed to spawn ffmpeg for font extraction");
                 continue;
             }
         };
 
         // ffmpeg returns exit code 1 even on a successful dump; check the file.
         if full.exists() {
-            tracing::debug!(episode_id, font = %file_name, "successfully extracted font");
+            tracing::debug!(media_item_id, font = %file_name, "successfully extracted font");
         } else {
-            tracing::error!(episode_id, font = %file_name, %stderr, "failed to extract attached font");
+            tracing::error!(media_item_id, font = %file_name, %stderr, "failed to extract attached font");
         }
     }
 
@@ -491,6 +610,21 @@ async fn extract_fonts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::Executor;
+
+    async fn test_db() -> Pool<Db> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("create sqlite test pool");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
 
     #[test]
     fn image_codec_filter_matches_etv_list() {
@@ -607,5 +741,147 @@ mod tests {
                 "-y".to_owned(),
             ]
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn playout_selection_matches_etv_window_and_media_type_filter() {
+        let pool = test_db().await;
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'local', 1, 1)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, '/media')"#,
+        )
+        .await
+        .unwrap();
+        for id in [10_i64, 20, 30] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 1, 0)"#,
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        pool.execute(r#"INSERT INTO "Movie" ("Id") VALUES (10), (30)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "OtherVideo" ("Id") VALUES (20)"#)
+            .await
+            .unwrap();
+        pool.execute(
+            r#"INSERT INTO "MovieMetadata" ("Id", "MovieId", "DateAdded", "DateUpdated", "MetadataKind")
+               VALUES (100, 10, '2026-05-31 00:00:00', '2026-05-31 00:00:00', 1),
+                      (300, 30, '2026-05-31 00:00:00', '2026-05-31 00:00:00', 1)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "OtherVideoMetadata" ("Id", "OtherVideoId", "DateAdded", "DateUpdated", "MetadataKind")
+               VALUES (200, 20, '2026-05-31 00:00:00', '2026-05-31 00:00:00', 1)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Subtitle" (
+                   "MovieMetadataId", "SubtitleKind", "StreamIndex", "Codec",
+                   "Default", "Forced", "SDH", "IsExtracted", "DateAdded", "DateUpdated"
+               ) VALUES
+                   (100, 0, 2, 'subrip', 0, 0, 0, 0, '2026-05-31 00:00:00', '2026-05-31 00:00:00'),
+                   (300, 0, 2, 'subrip', 0, 0, 0, 0, '2026-05-31 00:00:00', '2026-05-31 00:00:00')"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Subtitle" (
+                   "OtherVideoMetadataId", "SubtitleKind", "StreamIndex", "Codec",
+                   "Default", "Forced", "SDH", "IsExtracted", "DateAdded", "DateUpdated"
+               ) VALUES (200, 0, 2, 'pgssub', 0, 0, 0, 0, '2026-05-31 00:00:00', '2026-05-31 00:00:00')"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "FFmpegProfile" (
+                   "Id", "AudioBitrate", "AudioBufferSize", "AudioChannels",
+                   "AudioFormat", "AudioSampleRate", "BitDepth", "HardwareAcceleration",
+                   "Name", "NormalizeLoudnessMode", "ResolutionId", "ScalingBehavior",
+                   "ThreadCount", "VaapiDriver", "VideoBitrate", "VideoBufferSize",
+                   "VideoFormat"
+               ) VALUES (1, 192, 0, 2, 0, 48000, 8, 0, 'default', 0, 1, 0, 0, 0, 4000, 0, 0)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            r#"INSERT INTO "Channel" (
+                   "Id", "UniqueId", "Number", "SortNumber", "Name", "FFmpegProfileId",
+                   "StreamingMode", "StreamSelectorMode", "SubtitleMode",
+                   "MusicVideoCreditsMode", "SongVideoMode", "PlayoutSource",
+                   "PlayoutMode", "TranscodeMode", "IdleBehavior"
+               ) VALUES (1, '00000000-0000-0000-0000-000000000001', '1', 1.0, 'Channel 1', 1,
+                         0, 0, 2, 0, 0, 0, 0, 0, 0)"#,
+        )
+        .await
+        .unwrap();
+        pool.execute(r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed") VALUES (1, 1, 0, 0)"#)
+            .await
+            .unwrap();
+
+        let now = Utc::now();
+        let inside_start = encode_datetime(now);
+        let inside_finish = encode_datetime(now + Duration::minutes(30));
+        let outside_start = encode_datetime(now + Duration::hours(2));
+        let outside_finish = encode_datetime(now + Duration::hours(3));
+        for (id, media_item_id, start, finish) in [
+            (1_i64, 10_i64, inside_start.as_str(), inside_finish.as_str()),
+            (2, 20, inside_start.as_str(), inside_finish.as_str()),
+            (3, 30, outside_start.as_str(), outside_finish.as_str()),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "PlayoutItem" (
+                       "Id", "PlayoutId", "MediaItemId", "Start", "Finish",
+                       "InPoint", "OutPoint", "DisableWatermarks", "FillerKind", "GuideGroup"
+                   ) VALUES (?, 1, ?, ?, ?, '00:00:00', '00:30:00', 0, 0, 0)"#,
+            )
+            .bind(id)
+            .bind(media_item_id)
+            .bind(start)
+            .bind(finish)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        assert_eq!(
+            playout_media_item_ids_with_text_subtitles(&pool, 1)
+                .await
+                .unwrap(),
+            vec![10]
+        );
+
+        pool.execute(r#"UPDATE "Channel" SET "SubtitleMode" = 0 WHERE "Id" = 1"#)
+            .await
+            .unwrap();
+        assert!(playout_media_item_ids_with_text_subtitles(&pool, 1)
+            .await
+            .unwrap()
+            .is_empty());
     }
 }

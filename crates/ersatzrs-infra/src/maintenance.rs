@@ -481,6 +481,14 @@ async fn build_playout(
             message: None,
         })
         .await?;
+    if let Err(error) = crate::subtitles::extract_embedded_playout_subtitles(pool, playout_id).await
+    {
+        warn!(
+            playout_id,
+            %error,
+            "embedded subtitle extraction failed after playout build"
+        );
+    }
     Ok(())
 }
 

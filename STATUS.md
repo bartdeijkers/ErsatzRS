@@ -423,12 +423,21 @@ Jellyfin/Emby episode scans populate `Subtitle` rows
 (`metadata::update_episode_subtitles`), and a successful deep `scan_show`
 calls `subtitles::extract_embedded_show_subtitles` (text-subtitle + font
 extraction via ffmpeg), gated by `ffmpeg.extract_embedded_subtitles`
-(default off) and `ffmpeg.use_embedded_subtitles` (default on). Remaining
-documented deferrals: Plex `Subtitle`-row population (blocked on porting Plex
-`EpisodeMetadata`; Plex extraction is a no-op until then), the playout-window
-`ExtractEmbeddedSubtitles`, transcode-pipeline consumption of extracted
-subtitles, `Subtitle`-row population for movies/music-videos/other-videos, and
-a global FFmpeg settings UI — all tracked in parity-matrix.
+(default off) and `ffmpeg.use_embedded_subtitles` (default on). Subtitle row
+population now also covers local movies/episodes/music-videos/other-videos
+(embedded streams plus same-basename `.srt`/`.ass`/`.ssa`/`.vtt` sidecars),
+Jellyfin/Emby movies, and Plex movies/episodes. MPEG-TS/HLS playback consumes
+persisted subtitle rows for movies, episodes, music videos, other videos, and
+remote streams. Playout-window `ExtractEmbeddedSubtitles` now runs after
+channel/settings saves and successful playout builds, filters to
+subtitle-enabled playouts and next-hour items, and extracts embedded text
+subtitles/fonts for episode/movie/music-video/other-video rows. Remote-stream
+subtitle row production is not an active ErsatzTV scanner path
+(`RemoteStreamFolderScanner.UpdateSubtitles` is commented and the YAML schema
+has no subtitle fields). A real-media extraction smoke now generates a tiny MKV
+with an embedded SRT subtitle through FFmpeg and verifies
+`extract_embedded_show_subtitles` extracts it to the subtitle cache and marks
+the `Subtitle` row extracted.
 
 ### Admin UI Route Coverage
 
@@ -533,6 +542,13 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-31 | Codex (GPT-5) | Fixed subtitle review P2s: Plex external subtitle keys now persist tokenized server URLs, local sidecar discovery requires exact basenames and strips extensions before language parsing, and sidecar diffs use path identity with stable per-scan indexes. |
+| 2026-05-31 | Codex (GPT-5) | Closed the subtitle parity smoke debt: `extract_show_subtitles` now generates a real embedded-subtitle MKV fixture via FFmpeg, runs extraction, and asserts the `Subtitle` row and cache output. The `/settings/ffmpeg` browser proof uses `plans/references/settings-ffmpeg-subtitle-disabled-2026-05-31.png`. No active subtitle `ParityDebt` remains; remote-stream subtitle rows are upstream-inactive. |
+| 2026-05-31 | Codex (GPT-5) | Continued subtitle FFmpeg settings parity: `/settings/ffmpeg` now renders the Extract Embedded Subtitles checkbox disabled when Use Embedded Subtitles is off, matching ErsatzTV, while the save path keeps the existing extract-off coercion and extraction queue side effect. Later row closes the real-media extraction smoke follow-up. |
+| 2026-05-31 | Codex (GPT-5) | Continued subtitle parity row production: Plex movie and episode sync now creates metadata owner rows, diffs Plex subtitle streams into `Subtitle` rows with sidecar paths for external subtitle keys, and keeps the existing stream replacement path intact. Later row closes the real-media extraction smoke follow-up; remote-stream subtitle rows are upstream-inactive (`RemoteStreamFolderScanner.UpdateSubtitles` is commented and YAML has no subtitle fields). |
+| 2026-05-31 | Codex (GPT-5) | Continued subtitle extraction parity: broadened `extract_embedded_playout_subtitles` from episode-only to ErsatzTV's episode/movie/music-video/other-video extraction surface, applied the subtitle-enabled playout plus next-hour item filter, and invoked the gated extraction pass after successful playout builds in addition to channel/settings saves. Later rows close the Plex metadata-backed subtitle row and settings-page follow-ups. |
+| 2026-05-31 | Codex (GPT-5) | Continued subtitle parity row production: generalized `MetadataRepository.UpdateSubtitles` parity beyond episodes, wired local movies/episodes/music-videos/other-videos to persist embedded and sidecar subtitle rows, wired Jellyfin/Emby movie playback metadata to `Subtitle`, and added focused metadata/provider/scanner regressions. Later rows close the Plex metadata-backed subtitle row, playout-window extraction trigger, and settings-page follow-ups. |
+| 2026-05-31 | Codex (GPT-5) | Continued subtitle parity: ported ErsatzTV subtitle selection into MPEG-TS/HLS playback, wired playout-item subtitle overrides falling back to channel defaults, burned text subtitles via FFmpeg `subtitles=` with font cache, overlaid image subtitles, copied compatible HLS-direct embedded subtitles, and added focused FFmpeg/infra tests. Later rows close the broader row-production, extraction-trigger, settings, and smoke follow-ups. |
 | 2026-05-31 | Codex (GPT-5) | Committed the current dirty tree as focused slices: playback source-video metadata/pixel-format handling, Jellyfin media-source island hydration, and follow-up docs for FFmpeg profile loading, media-source hydration, TSDuck MPEG troubleshooting, and module-split candidates. |
 | 2026-05-30 | Codex (GPT-5) | Closed the remaining `/playouts` nested editor visual parity debt: added ErsatzTV-shaped mobile MoreVert action menus, icon-only Up/Down/Delete row actions, Weekdays/Weekends helpers, localized day/month summaries and selectors, disabled date fields when range filtering is off, and the Block Preview Calendar branch. Browser smoke covered alternate schedules, templates, preview calendar, and mobile action menus with zero current console warnings/errors; the web parity gate passed. No `/playouts` `ParityDebt` remains in `plans/playouts-parity-slice.md`. |
 | 2026-05-30 | Codex (GPT-5) | Continued `/playouts` nested editor parity: routed `/playouts/{id}/alternate-schedules` and `/playouts/{id}/templates`, added localized editor shells, Classic alternate-schedule load/save semantics with final-row default schedule handling and Refresh enqueue, Block playout-template load/save semantics with row replacement and `DateUpdated`, and focused server-fn tests. Browser smoke covered both nested routes at 1280×800 with zero console warnings/errors; temporary SQLite rows were cleaned up. Remaining `/playouts` `ParityDebt`: final nested-editor visual controls (mobile MoreVert, icon row actions, Weekdays/Weekends helpers, localized day/month names, and Block Preview Calendar). Gate: `cargo xtask parity-check web`. |

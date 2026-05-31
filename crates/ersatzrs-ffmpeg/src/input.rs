@@ -114,4 +114,10 @@ impl InputFile {
         self.filter_steps.push(filter.into());
         self
     }
+
+    #[must_use]
+    pub fn with_stream_index(mut self, index: usize) -> Self {
+        self.streams = vec![MediaStream::new(index)];
+        self
+    }
 }

@@ -44,8 +44,17 @@ async fn jellyfin_sync_maps_mock_movie_response_to_media_rows() {
     assert_eq!(count(&pool, "Artwork").await, 2);
     assert_eq!(count(&pool, "MediaVersion").await, 1);
     assert_eq!(count(&pool, "MediaFile").await, 1);
-    assert_eq!(count(&pool, "MediaStream").await, 2);
+    assert_eq!(count(&pool, "MediaStream").await, 4);
     assert_eq!(count(&pool, "MediaChapter").await, 2);
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    let subtitles = subtitle_rows(&pool).await;
+    assert_eq!(
+        subtitles,
+        vec![
+            (2, Some("subrip".to_owned()), 0, 0),
+            (3, Some("pgssub".to_owned()), 0, 0),
+        ]
+    );
     assert_eq!(
         provider_library_item_id(&pool, "JellyfinLibrary", 1).await,
         Some("library-1".to_owned())
@@ -905,6 +914,19 @@ async fn mock_detailed_movie_playback(server: &MockServer) -> Mock<'_> {
                                 "Index": 1,
                                 "IsDefault": true,
                                 "Title": "Stereo"
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "subrip",
+                                "Language": "eng",
+                                "Index": 2,
+                                "IsDefault": true
+                            },
+                            {
+                                "Type": "Subtitle",
+                                "Codec": "pgssub",
+                                "Language": "eng",
+                                "Index": 3
                             }
                         ]
                     }

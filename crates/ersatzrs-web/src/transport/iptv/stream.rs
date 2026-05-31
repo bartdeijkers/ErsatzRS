@@ -8,13 +8,16 @@ use axum::{
 use chrono::{DateTime, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
-use ersatzrs_domain::{EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
+use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, InputFile, OutputFormat, PipelineBuilder, PipelineRequest,
     SoftwarePipelineBuilder, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
-use ersatzrs_infra::playback::load_source_video_stream;
+use ersatzrs_infra::playback::{
+    load_source_video_stream, select_playback_subtitle, subtitle_fonts_dir,
+    subtitle_input_for_stream,
+};
 use sqlx::Row;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
@@ -75,7 +78,34 @@ pub async fn serve_channel_stream(
     };
 
     let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
-    let command = build_stream_command(&resolved, output_format, source_stream);
+    let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
+    let preferred_subtitle_language = active
+        .preferred_subtitle_language_code
+        .as_deref()
+        .or(channel.preferred_subtitle_language_code.as_deref());
+    let subtitle = match select_playback_subtitle(
+        &state.pool,
+        active.media_item_id,
+        preferred_subtitle_language,
+        subtitle_mode,
+        channel.streaming_mode,
+    )
+    .await
+    {
+        Ok(subtitle) => subtitle,
+        Err(error) => {
+            tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select playback subtitle");
+            None
+        }
+    };
+    let command = build_stream_command(
+        &resolved,
+        output_format,
+        source_stream,
+        subtitle.as_ref().and_then(|subtitle| {
+            subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
+        }),
+    );
     match spawn_stream_body(command) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -106,9 +136,12 @@ enum StreamSpawnError {
 #[derive(Debug, Clone)]
 pub(crate) struct ActivePlayoutItem {
     pub(crate) media_path: String,
+    pub(crate) media_item_id: i64,
     pub(crate) media_version_id: i64,
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
+    pub(crate) preferred_subtitle_language_code: Option<String>,
+    pub(crate) subtitle_mode: Option<ChannelSubtitleMode>,
 }
 
 pub(crate) async fn load_active_media_path(
@@ -119,9 +152,12 @@ pub(crate) async fn load_active_media_path(
     let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
                   pi."Start" AS "PlayoutStart",
-                  pi."Finish" AS "PlayoutFinish"
+                  pi."Finish" AS "PlayoutFinish",
+                  pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+                  pi."SubtitleMode" AS "SubtitleMode"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "MediaVersion" mv
@@ -148,9 +184,19 @@ pub(crate) async fn load_active_media_path(
 
     Ok(row.map(|row| ActivePlayoutItem {
         media_path: row.get::<String, _>("MediaPath"),
+        media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
         playout_start: row.get::<String, _>("PlayoutStart"),
         playout_finish: row.get::<String, _>("PlayoutFinish"),
+        preferred_subtitle_language_code: row
+            .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
+            .ok()
+            .flatten(),
+        subtitle_mode: row
+            .try_get::<Option<i64>, _>("SubtitleMode")
+            .ok()
+            .flatten()
+            .and_then(decode_subtitle_mode),
     }))
 }
 
@@ -244,17 +290,32 @@ fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
     source_stream: Option<SourceVideoStream>,
+    subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
+    if let Some(subtitle_input) = subtitle_input {
+        request.inputs.push(subtitle_input);
+        request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
+    }
     request.state.output_format = output_format;
     request.state.report_progress = false;
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     pipeline.command(&request.inputs)
+}
+
+const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
+    match value {
+        0 => Some(ChannelSubtitleMode::None),
+        1 => Some(ChannelSubtitleMode::Forced),
+        2 => Some(ChannelSubtitleMode::Default),
+        3 => Some(ChannelSubtitleMode::Any),
+        _ => None,
+    }
 }
 
 fn spawn_stream_body(command: FfmpegCommand) -> Result<Body, StreamSpawnError> {
@@ -300,7 +361,7 @@ mod tests {
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, None);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, None, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
@@ -309,7 +370,7 @@ mod tests {
 
     #[test]
     fn build_stream_command_can_target_mp4() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, None);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, None, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
@@ -366,8 +427,12 @@ mod tests {
             return;
         }
 
-        let command =
-            build_stream_command(fixture.to_string_lossy().as_ref(), OutputFormat::MpegTs, None);
+        let command = build_stream_command(
+            fixture.to_string_lossy().as_ref(),
+            OutputFormat::MpegTs,
+            None,
+            None,
+        );
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)

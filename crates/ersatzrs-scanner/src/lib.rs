@@ -11,7 +11,8 @@ use ersatzrs_domain::{
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
-    artwork_kind, replace_artwork, replace_people, replace_strings, ArtworkRef, PersonRef,
+    artwork_kind, replace_artwork, replace_people, replace_strings, update_local_file_subtitles,
+    ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
@@ -825,6 +826,14 @@ async fn upsert_local_music_video(
         &artwork,
     )
     .await?;
+    update_local_file_subtitles(
+        &mut tx,
+        SubtitleMetadataOwner::MusicVideo(metadata_id),
+        &probed.streams,
+        path,
+        true,
+    )
+    .await?;
 
     tx.commit().await?;
     Ok(())
@@ -1097,6 +1106,11 @@ async fn upsert_local_file(
     update_media_version(&mut tx, version_id, &probed).await?;
     replace_streams(&mut tx, version_id, &probed.streams).await?;
     replace_chapters(&mut tx, version_id, &probed.chapters).await?;
+    if let Some(owner) =
+        local_file_subtitle_owner(&mut tx, item_id, library_path.media_kind).await?
+    {
+        update_local_file_subtitles(&mut tx, owner, &probed.streams, path, true).await?;
+    }
 
     tx.commit().await?;
     Ok(())
@@ -1308,6 +1322,32 @@ async fn insert_fallback_metadata(
         }
     }
     Ok(())
+}
+
+async fn local_file_subtitle_owner(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    media_kind: LibraryMediaKind,
+) -> Result<Option<SubtitleMetadataOwner>> {
+    let (table, owner_column, owner) = match media_kind {
+        LibraryMediaKind::Movies => (
+            "MovieMetadata",
+            "MovieId",
+            SubtitleMetadataOwner::Movie as fn(i64) -> SubtitleMetadataOwner,
+        ),
+        LibraryMediaKind::OtherVideos => (
+            "OtherVideoMetadata",
+            "OtherVideoId",
+            SubtitleMetadataOwner::OtherVideo as fn(i64) -> SubtitleMetadataOwner,
+        ),
+        _ => return Ok(None),
+    };
+    let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "{owner_column}" = ? LIMIT 1"#);
+    let metadata_id: Option<i64> = sqlx::query_scalar(&sql)
+        .bind(item_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+    Ok(metadata_id.map(owner))
 }
 
 fn media_version_owner_column(media_kind: LibraryMediaKind) -> Result<&'static str> {

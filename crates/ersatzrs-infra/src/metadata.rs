@@ -11,7 +11,11 @@
 //! Both are `&'static str`, never user input, so this is not an injection
 //! surface. All variable values use bound parameters.
 
+use std::fs;
+use std::path::Path;
+
 use chrono::{DateTime, Utc};
+use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{MediaStream, MediaStreamKind};
 use sqlx::{Row, Transaction};
@@ -25,6 +29,37 @@ pub mod subtitle_kind {
     pub const SIDECAR: i32 = 1;
     #[allow(dead_code)]
     pub const GENERATED: i32 = 99;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SubtitleMetadataOwner {
+    Episode(i64),
+    Movie(i64),
+    MusicVideo(i64),
+    OtherVideo(i64),
+    RemoteStream(i64),
+}
+
+impl SubtitleMetadataOwner {
+    fn column(self) -> &'static str {
+        match self {
+            Self::Episode(_) => "EpisodeMetadataId",
+            Self::Movie(_) => "MovieMetadataId",
+            Self::MusicVideo(_) => "MusicVideoMetadataId",
+            Self::OtherVideo(_) => "OtherVideoMetadataId",
+            Self::RemoteStream(_) => "RemoteStreamMetadataId",
+        }
+    }
+
+    fn id(self) -> i64 {
+        match self {
+            Self::Episode(id)
+            | Self::Movie(id)
+            | Self::MusicVideo(id)
+            | Self::OtherVideo(id)
+            | Self::RemoteStream(id) => id,
+        }
+    }
 }
 
 /// `ErsatzTV` `ArtworkKind` enum values
@@ -266,6 +301,7 @@ struct IncomingSubtitle {
     language: Option<String>,
     path: Option<String>,
     subtitle_kind: i32,
+    date_updated: Option<String>,
 }
 
 impl IncomingSubtitle {
@@ -292,6 +328,30 @@ impl IncomingSubtitle {
             language: stream.language.clone(),
             path,
             subtitle_kind,
+            date_updated: None,
+        }
+    }
+
+    fn sidecar(
+        stream_index: i32,
+        codec: String,
+        language: Option<String>,
+        forced: bool,
+        sdh: bool,
+        path: String,
+        date_updated: String,
+    ) -> Self {
+        Self {
+            stream_index,
+            codec: Some(codec),
+            title: None,
+            default: false,
+            forced,
+            sdh,
+            language,
+            path: Some(path),
+            subtitle_kind: subtitle_kind::SIDECAR,
+            date_updated: Some(date_updated),
         }
     }
 }
@@ -314,17 +374,19 @@ struct ExistingSubtitle {
 
 async fn load_existing_subtitles(
     tx: &mut Transaction<'_, Db>,
-    episode_metadata_id: i64,
+    owner: SubtitleMetadataOwner,
 ) -> Result<Vec<ExistingSubtitle>> {
-    let rows = sqlx::query(
+    let sql = format!(
         r#"SELECT "Id", "StreamIndex", "Codec", "Default", "Forced", "SDH",
                   "Language", "IsExtracted", "Path", "SubtitleKind"
            FROM "Subtitle"
-           WHERE "EpisodeMetadataId" = ?"#,
-    )
-    .bind(episode_metadata_id)
-    .fetch_all(&mut **tx)
-    .await?;
+           WHERE "{}" = ?"#,
+        owner.column()
+    );
+    let rows = sqlx::query(&sql)
+        .bind(owner.id())
+        .fetch_all(&mut **tx)
+        .await?;
 
     rows.iter()
         .map(|row| {
@@ -346,31 +408,33 @@ async fn load_existing_subtitles(
 
 async fn insert_subtitle(
     tx: &mut Transaction<'_, Db>,
-    episode_metadata_id: i64,
+    owner: SubtitleMetadataOwner,
     inc: &IncomingSubtitle,
     now: &str,
 ) -> Result<()> {
-    sqlx::query(
+    let sql = format!(
         r#"INSERT INTO "Subtitle" (
-            "EpisodeMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec",
+            "{}", "SubtitleKind", "Title", "StreamIndex", "Codec",
             "Default", "Forced", "SDH", "Language", "IsExtracted", "Path",
             "DateAdded", "DateUpdated"
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"#,
-    )
-    .bind(episode_metadata_id)
-    .bind(inc.subtitle_kind)
-    .bind(&inc.title)
-    .bind(inc.stream_index)
-    .bind(&inc.codec)
-    .bind(inc.default)
-    .bind(inc.forced)
-    .bind(inc.sdh)
-    .bind(&inc.language)
-    .bind(&inc.path)
-    .bind(now)
-    .bind(now)
-    .execute(&mut **tx)
-    .await?;
+        owner.column()
+    );
+    sqlx::query(&sql)
+        .bind(owner.id())
+        .bind(inc.subtitle_kind)
+        .bind(&inc.title)
+        .bind(inc.stream_index)
+        .bind(&inc.codec)
+        .bind(inc.default)
+        .bind(inc.forced)
+        .bind(inc.sdh)
+        .bind(&inc.language)
+        .bind(&inc.path)
+        .bind(now)
+        .bind(inc.date_updated.as_deref().unwrap_or(now))
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -408,7 +472,7 @@ async fn update_subtitle(
     sqlx::query(
         r#"UPDATE "Subtitle"
            SET "Default" = ?, "Forced" = ?, "SDH" = ?, "Language" = ?,
-               "SubtitleKind" = ?, "Codec" = ?, "Title" = ?,
+               "SubtitleKind" = ?, "StreamIndex" = ?, "Codec" = ?, "Title" = ?,
                "IsExtracted" = ?, "Path" = ?, "DateUpdated" = ?
            WHERE "Id" = ?"#,
     )
@@ -417,6 +481,7 @@ async fn update_subtitle(
     .bind(inc.sdh)
     .bind(&inc.language)
     .bind(inc.subtitle_kind)
+    .bind(inc.stream_index)
     .bind(&inc.codec)
     .bind(&inc.title)
     .bind(is_extracted)
@@ -432,9 +497,10 @@ async fn update_subtitle(
 /// lines 626/666-717) scoped to `EpisodeMetadata`.
 ///
 /// Diffs the just-written subtitle/external-subtitle `MediaStream`s for the
-/// episode's media version against existing `Subtitle` rows keyed on
-/// `(EpisodeMetadataId, StreamIndex)`: adds new rows, removes stale ones, and
-/// updates the rest. When the kind, codec, language, or flags
+/// episode's media version against existing `Subtitle` rows keyed by subtitle
+/// kind plus stream index, or by sidecar path when a sidecar path is available:
+/// adds new rows, removes stale ones, and updates the rest. When the kind,
+/// codec, language, or flags
 /// (`Default`/`Forced`/`SDH`) change on a previously extracted row — or the
 /// path changes — `IsExtracted` is reset to 0 so the extractor re-runs.
 ///
@@ -444,6 +510,25 @@ async fn update_subtitle(
 pub async fn update_episode_subtitles(
     tx: &mut Transaction<'_, Db>,
     episode_metadata_id: i64,
+    streams: &[MediaStream],
+) -> Result<()> {
+    update_metadata_subtitles(
+        tx,
+        SubtitleMetadataOwner::Episode(episode_metadata_id),
+        streams,
+    )
+    .await
+}
+
+/// Update subtitle rows for the given metadata owner from provider streams.
+///
+/// # Errors
+///
+/// Returns an error when subtitle rows cannot be loaded, inserted, updated, or
+/// removed.
+pub async fn update_metadata_subtitles(
+    tx: &mut Transaction<'_, Db>,
+    owner: SubtitleMetadataOwner,
     streams: &[MediaStream],
 ) -> Result<()> {
     let incoming: Vec<IncomingSubtitle> = streams
@@ -457,14 +542,45 @@ pub async fn update_episode_subtitles(
         .map(IncomingSubtitle::from_media_stream)
         .collect();
 
-    let existing = load_existing_subtitles(tx, episode_metadata_id).await?;
+    update_subtitle_rows(tx, owner, incoming).await
+}
+
+/// Update embedded and discovered sidecar subtitle rows for a local media item.
+///
+/// # Errors
+///
+/// Returns an error when subtitle rows cannot be loaded, inserted, updated, or
+/// removed.
+pub async fn update_local_file_subtitles(
+    tx: &mut Transaction<'_, Db>,
+    owner: SubtitleMetadataOwner,
+    streams: &[MediaStream],
+    media_item_path: &Path,
+    save_full_path: bool,
+) -> Result<()> {
+    let mut incoming: Vec<IncomingSubtitle> = streams
+        .iter()
+        .filter(|s| s.kind == MediaStreamKind::Subtitle)
+        .map(IncomingSubtitle::from_media_stream)
+        .collect();
+    incoming.extend(locate_external_subtitles(media_item_path, save_full_path));
+
+    update_subtitle_rows(tx, owner, incoming).await
+}
+
+async fn update_subtitle_rows(
+    tx: &mut Transaction<'_, Db>,
+    owner: SubtitleMetadataOwner,
+    incoming: Vec<IncomingSubtitle>,
+) -> Result<()> {
+    let existing = load_existing_subtitles(tx, owner).await?;
     let now = encode_datetime(Utc::now());
 
-    // remove: existing rows whose StreamIndex is not in the incoming set
+    // remove: existing rows whose stable identity is not in the incoming set
     for existing_row in &existing {
         if !incoming
             .iter()
-            .any(|inc| inc.stream_index == existing_row.stream_index)
+            .any(|inc| subtitle_identity_matches(existing_row, inc))
         {
             sqlx::query(r#"DELETE FROM "Subtitle" WHERE "Id" = ?"#)
                 .bind(existing_row.id)
@@ -474,13 +590,147 @@ pub async fn update_episode_subtitles(
     }
 
     for inc in &incoming {
-        match existing.iter().find(|e| e.stream_index == inc.stream_index) {
-            None => insert_subtitle(tx, episode_metadata_id, inc, &now).await?,
+        match existing
+            .iter()
+            .find(|existing_row| subtitle_identity_matches(existing_row, inc))
+        {
+            None => insert_subtitle(tx, owner, inc, &now).await?,
             Some(existing_row) => update_subtitle(tx, existing_row, inc, &now).await?,
         }
     }
 
     Ok(())
+}
+
+fn subtitle_identity_matches(existing: &ExistingSubtitle, incoming: &IncomingSubtitle) -> bool {
+    if existing.subtitle_kind != incoming.subtitle_kind {
+        return false;
+    }
+
+    if incoming.subtitle_kind == subtitle_kind::SIDECAR {
+        match (existing.path.as_deref(), incoming.path.as_deref()) {
+            (Some(existing_path), Some(incoming_path))
+                if !existing_path.is_empty() && !incoming_path.is_empty() =>
+            {
+                return existing_path == incoming_path;
+            }
+            _ => {}
+        }
+    }
+
+    existing.stream_index == incoming.stream_index
+}
+
+fn locate_external_subtitles(
+    media_item_path: &Path,
+    save_full_path: bool,
+) -> Vec<IncomingSubtitle> {
+    let Some(folder) = media_item_path.parent() else {
+        return Vec::new();
+    };
+    let Some(stem) = media_item_path.file_stem().and_then(|value| value.to_str()) else {
+        return Vec::new();
+    };
+
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    let stem_lower = stem.to_ascii_lowercase();
+
+    let mut sidecars: Vec<_> = entries
+        .filter_map(std::result::Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
+
+            let file_name = path.file_name()?.to_str()?;
+            let file_stem = path.file_stem()?.to_str()?;
+            let file_stem_lower = file_stem.to_ascii_lowercase();
+            let suffix = sidecar_suffix(&file_stem_lower, &stem_lower)?;
+            let tokens = sidecar_tokens(suffix);
+
+            let codec = match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+                "ssa" | "ass" => "ass",
+                "srt" => "subrip",
+                "vtt" => "webvtt",
+                _ => return None,
+            }
+            .to_owned();
+
+            let forced = tokens.contains(&"forced");
+            let sdh = tokens.iter().any(|token| *token == "sdh" || *token == "cc");
+            let language = sidecar_language(&tokens);
+
+            let path_value = if save_full_path {
+                path.display().to_string()
+            } else {
+                file_name.to_owned()
+            };
+            let date_updated = fs::metadata(&path)
+                .and_then(|metadata| metadata.modified())
+                .map(DateTime::<Utc>::from)
+                .map_or_else(|_| encode_datetime(Utc::now()), encode_datetime);
+
+            Some((path_value, codec, language, forced, sdh, date_updated))
+        })
+        .collect();
+
+    sidecars.sort_by(|left, right| left.0.cmp(&right.0));
+    sidecars
+        .into_iter()
+        .enumerate()
+        .map(
+            |(index, (path_value, codec, language, forced, sdh, date_updated))| {
+                IncomingSubtitle::sidecar(
+                    i32::try_from(index).unwrap_or(i32::MAX),
+                    codec,
+                    language,
+                    forced,
+                    sdh,
+                    path_value,
+                    date_updated,
+                )
+            },
+        )
+        .collect()
+}
+
+fn sidecar_suffix<'a>(file_stem_lower: &'a str, media_stem_lower: &str) -> Option<&'a str> {
+    if file_stem_lower == media_stem_lower {
+        Some("")
+    } else {
+        file_stem_lower
+            .strip_prefix(media_stem_lower)
+            .and_then(|suffix| suffix.strip_prefix('.'))
+    }
+}
+
+fn sidecar_tokens(suffix: &str) -> Vec<&str> {
+    suffix
+        .split('.')
+        .filter(|token| !token.trim().is_empty())
+        .collect()
+}
+
+fn sidecar_language(tokens: &[&str]) -> Option<String> {
+    tokens
+        .iter()
+        .copied()
+        .find(|token| !matches!(*token, "forced" | "sdh" | "cc"))
+        .map(normalize_sidecar_language)
+}
+
+fn normalize_sidecar_language(language: &str) -> String {
+    let language = language.trim().to_ascii_lowercase();
+    for (primary, _) in language_codes::language_options() {
+        let group = language_codes::all_language_codes([primary.as_str()]);
+        if group.iter().any(|code| code == &language) {
+            return primary;
+        }
+    }
+    language
 }
 
 fn encode_datetime(value: DateTime<Utc>) -> String {

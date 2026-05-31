@@ -38,6 +38,74 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
 }
 
 #[tokio::test]
+async fn plex_movie_sync_writes_metadata_subtitle_rows() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/5/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json_with_subtitles(
+                            "/library/metadata/500",
+                            "/library/parts/50",
+                            "/media/subtitled-movie.mkv",
+                            500
+                        )
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 5, "5", false)
+        .await
+        .unwrap();
+
+    let external_subtitle_url = format!(
+        "{}/library/streams/4?X-Plex-Token=plex-token",
+        server.base_url()
+    );
+    assert_eq!(count(&pool, "MovieMetadata").await, 1);
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        json!([
+            {
+                "codec": "srt",
+                "default": 1,
+                "forced": 0,
+                "language": "eng",
+                "owner": "movie",
+                "path": null,
+                "stream_index": 2,
+                "subtitle_kind": 0
+            },
+            {
+                "codec": "ass",
+                "default": 0,
+                "forced": 1,
+                "language": "jpn",
+                "owner": "movie",
+                "path": external_subtitle_url,
+                "stream_index": 4,
+                "subtitle_kind": 1
+            }
+        ])
+    );
+}
+
+#[tokio::test]
 async fn plex_sync_paginates_movie_library() {
     let server = MockServer::start_async().await;
     let first_page = server
@@ -226,6 +294,111 @@ async fn plex_sync_maps_mock_show_response_to_media_rows() {
         Some("2".to_owned())
     );
     insta::assert_json_snapshot!(plex_show_rows(&pool).await);
+}
+
+#[tokio::test]
+async fn plex_episode_sync_writes_metadata_subtitle_rows() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/6/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        { "key": "/library/metadata/600", "title": "Subtitle Show", "updatedAt": 1 }
+                    ]
+                }
+            }));
+        })
+        .await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/metadata/600/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        {
+                            "key": "/library/metadata/601",
+                            "title": "Season 1",
+                            "index": 1,
+                            "updatedAt": 2
+                        }
+                    ]
+                }
+            }));
+        })
+        .await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/metadata/601/children")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "Metadata": [
+                        media_json_with_subtitles(
+                            "/library/metadata/602",
+                            "/library/parts/60",
+                            "/media/show/subtitled.mkv",
+                            602
+                        )
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_show_library(&pool, &service, &config, 1, 6, "6", false)
+        .await
+        .unwrap();
+
+    let external_subtitle_url = format!(
+        "{}/library/streams/4?X-Plex-Token=plex-token",
+        server.base_url()
+    );
+    assert_eq!(count(&pool, "EpisodeMetadata").await, 1);
+    assert_eq!(count(&pool, "Subtitle").await, 2);
+    assert_eq!(
+        subtitle_rows(&pool).await,
+        json!([
+            {
+                "codec": "srt",
+                "default": 1,
+                "forced": 0,
+                "language": "eng",
+                "owner": "episode",
+                "path": null,
+                "stream_index": 2,
+                "subtitle_kind": 0
+            },
+            {
+                "codec": "ass",
+                "default": 0,
+                "forced": 1,
+                "language": "jpn",
+                "owner": "episode",
+                "path": external_subtitle_url,
+                "stream_index": 4,
+                "subtitle_kind": 1
+            }
+        ])
+    );
 }
 
 #[tokio::test]
@@ -656,6 +829,31 @@ fn media_json(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Val
     })
 }
 
+fn media_json_with_subtitles(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Value {
+    let mut value = media_json(key, part_key, path, id);
+    let streams = value["media"][0]["part"][0]["stream"]
+        .as_array_mut()
+        .expect("media_json stream array");
+    streams.push(json!({
+        "id": 3,
+        "index": 2,
+        "streamType": 3,
+        "codec": "srt",
+        "languageCode": "eng",
+        "default": true,
+        "embeddedInVideo": false
+    }));
+    streams.push(json!({
+        "id": 4,
+        "key": "/library/streams/4",
+        "streamType": 3,
+        "codec": "ass",
+        "languageCode": "jpn",
+        "forced": true
+    }));
+    value
+}
+
 async fn seed_plex_show_scan_config(pool: &SqlitePool, base_url: &str) {
     sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
         .execute(pool)
@@ -829,6 +1027,39 @@ async fn plex_show_rows(pool: &SqlitePool) -> serde_json::Value {
                     "season_number": row.get::<i64, _>("SeasonNumber"),
                     "episode_key": row.get::<String, _>("EpisodeKey"),
                     "path": row.get::<String, _>("Path")
+                })
+            })
+            .collect(),
+    )
+}
+
+async fn subtitle_rows(pool: &SqlitePool) -> serde_json::Value {
+    let rows = sqlx::query(
+        r#"SELECT CASE
+                    WHEN "MovieMetadataId" IS NOT NULL THEN 'movie'
+                    WHEN "EpisodeMetadataId" IS NOT NULL THEN 'episode'
+                    ELSE 'other'
+                  END AS "Owner",
+                  "StreamIndex", "Codec", "SubtitleKind", "Language",
+                  "Default", "Forced", "Path"
+           FROM "Subtitle"
+           ORDER BY "Owner", "StreamIndex""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    serde_json::Value::Array(
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "owner": row.get::<String, _>("Owner"),
+                    "stream_index": row.get::<i64, _>("StreamIndex"),
+                    "codec": row.get::<String, _>("Codec"),
+                    "subtitle_kind": row.get::<i64, _>("SubtitleKind"),
+                    "language": row.get::<Option<String>, _>("Language"),
+                    "default": row.get::<i64, _>("Default"),
+                    "forced": row.get::<i64, _>("Forced"),
+                    "path": row.get::<Option<String>, _>("Path")
                 })
             })
             .collect(),

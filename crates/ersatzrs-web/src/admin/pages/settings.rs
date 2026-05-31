@@ -144,6 +144,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 name="extract_embedded_subtitles"
                 checked=form.extract_embedded_subtitles
                 caption=None
+                disabled=!form.use_embedded_subtitles
             />
             <CheckboxField
                 label=tr(TextKey::ProbeForInterlacedFrames)
@@ -207,6 +208,7 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 <p class=style::help>{tr(TextKey::DefaultMpegTsScriptHelp)}</p>
             </Field>
         </SettingsForm>
+        <script inner_html=embedded_subtitle_dependency_script()></script>
         <section class=style::content>
             <h2 class=style::section_title>{tr(TextKey::CustomResolutions)}</h2>
             <div class=style::divider></div>
@@ -241,6 +243,31 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
             </div>
         </section>
     }
+}
+
+fn embedded_subtitle_dependency_script() -> &'static str {
+    r#"
+(() => {
+  const sync = () => {
+    const form = document.querySelector('form[action="/api/settings/ffmpeg/save"]');
+    if (!form) return;
+
+    const useEmbedded = form.elements.namedItem("use_embedded_subtitles");
+    const extract = form.elements.namedItem("extract_embedded_subtitles");
+    if (!(useEmbedded instanceof HTMLInputElement) || !(extract instanceof HTMLInputElement)) return;
+
+    extract.disabled = !useEmbedded.checked;
+  };
+
+  sync();
+  document.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.name === "use_embedded_subtitles") {
+      sync();
+    }
+  });
+  new MutationObserver(sync).observe(document.body, { childList: true, subtree: true });
+})();
+"#
 }
 
 fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOption> {
@@ -441,11 +468,19 @@ fn CheckboxField(
     name: &'static str,
     checked: bool,
     caption: Option<&'static str>,
+    #[prop(default = false)] disabled: bool,
 ) -> impl IntoView {
     view! {
         <Field label=label>
             <div class=style::checkbox_wrap>
-                <input class=style::checkbox type="checkbox" name=name value="true" checked=checked/>
+                <input
+                    class=style::checkbox
+                    type="checkbox"
+                    name=name
+                    value="true"
+                    checked=checked
+                    disabled=disabled
+                />
                 {caption.map(|text| view! { <span class=style::caption>{text}</span> })}
             </div>
         </Field>
@@ -475,5 +510,38 @@ mod tests {
             .collect();
 
         assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
+    }
+
+    #[test]
+    fn ffmpeg_extract_embedded_subtitles_is_disabled_without_embedded_subtitles() {
+        let mut data = FfmpegSettingsPageData::default();
+        data.form.use_embedded_subtitles = false;
+        data.form.extract_embedded_subtitles = true;
+
+        let html = render_ffmpeg(data).into_view().to_html();
+        let input = input_html(&html, r#"name="extract_embedded_subtitles""#);
+
+        assert!(input.contains("disabled"));
+        assert!(input.contains("checked"));
+    }
+
+    #[test]
+    fn ffmpeg_extract_embedded_subtitles_is_enabled_with_embedded_subtitles() {
+        let mut data = FfmpegSettingsPageData::default();
+        data.form.use_embedded_subtitles = true;
+        data.form.extract_embedded_subtitles = true;
+
+        let html = render_ffmpeg(data).into_view().to_html();
+        let input = input_html(&html, r#"name="extract_embedded_subtitles""#);
+
+        assert!(!input.contains("disabled"));
+        assert!(input.contains("checked"));
+    }
+
+    fn input_html<'a>(html: &'a str, needle: &str) -> &'a str {
+        let name_index = html.find(needle).expect("input should be rendered");
+        let start = html[..name_index].rfind("<input").expect("input start");
+        let end = html[name_index..].find('>').expect("input end") + name_index + 1;
+        &html[start..end]
     }
 }

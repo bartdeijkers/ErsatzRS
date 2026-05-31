@@ -198,6 +198,46 @@ pub fn subtitle_overlay_filter(output_pixel_format: PixelFormat) -> String {
     )
 }
 
+#[must_use]
+pub fn scale_subtitle_image_filter(size: FrameSize) -> String {
+    format!(
+        "scale={}:{}:force_original_aspect_ratio=decrease,pad=w={}:h={}:x=-1:y=-1:color=black@0",
+        size.width, size.height, size.width, size.height
+    )
+}
+
+#[must_use]
+pub fn subtitles_filter(path: &str, fonts_dir: Option<&str>) -> String {
+    let effective_file = escape_subtitles_filter_path(path);
+    match fonts_dir.filter(|value| !value.trim().is_empty()) {
+        Some(fonts_dir) => format!(
+            "subtitles={effective_file}:fontsdir={}",
+            escape_subtitles_filter_path(fonts_dir)
+        ),
+        None => format!("subtitles={effective_file}"),
+    }
+}
+
+#[cfg(windows)]
+fn escape_subtitles_filter_path(path: &str) -> String {
+    let mut effective = path.replace('\\', r"/\");
+    if !effective.starts_with("http://") && !effective.starts_with("https://") {
+        effective = effective.replace(":/", r"\:/");
+    }
+    escape_subtitles_filter_common(&effective)
+}
+
+#[cfg(not(windows))]
+fn escape_subtitles_filter_path(path: &str) -> String {
+    escape_subtitles_filter_common(path)
+}
+
+fn escape_subtitles_filter_common(path: &str) -> String {
+    path.replace('[', r"\[")
+        .replace(']', r"\]")
+        .replace("http://localhost:", r"http\://localhost\:")
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WatermarkOverlay {
     pub location: WatermarkLocation,

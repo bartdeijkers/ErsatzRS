@@ -1708,11 +1708,17 @@ async fn upsert_jellyfin_movie(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("jellyfin://{library_id}")).await?;
     let item_id = ensure_jellyfin_movie_item(&mut tx, library_path_id, item).await?;
-    upsert_movie_metadata(&mut tx, item_id, item).await?;
+    let movie_metadata_id = upsert_movie_metadata(&mut tx, item_id, item).await?;
     let version_id =
         ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item, playback).await?;
     ensure_media_file(&mut tx, version_id, &item.path).await?;
     replace_streams(&mut tx, version_id, &playback.streams).await?;
+    crate::metadata::update_metadata_subtitles(
+        &mut tx,
+        crate::metadata::SubtitleMetadataOwner::Movie(movie_metadata_id),
+        &playback.streams,
+    )
+    .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
     tx.commit().await?;
     Ok(())
@@ -2217,7 +2223,7 @@ async fn upsert_movie_metadata(
     tx: &mut Transaction<'_, crate::db::Db>,
     movie_id: i64,
     item: &JellyfinMediaItem,
-) -> Result<()> {
+) -> Result<i64> {
     let existing_id: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
             .bind(movie_id)
@@ -2272,7 +2278,7 @@ async fn upsert_movie_metadata(
 
     replace_movie_artwork(tx, metadata_id, item).await?;
     replace_movie_guids(tx, metadata_id, &item.provider_guids).await?;
-    Ok(())
+    Ok(metadata_id)
 }
 
 async fn replace_movie_artwork(

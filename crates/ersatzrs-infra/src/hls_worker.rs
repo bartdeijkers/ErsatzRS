@@ -13,12 +13,16 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
+use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, HlsOutput, InputFile, OutputFormat, PipelineBuilder,
     PipelineRequest, SoftwarePipelineBuilder, SourceVideoStream,
 };
 
-use crate::playback::load_source_video_stream;
+use crate::playback::{
+    load_source_video_stream, select_playback_subtitle, subtitle_fonts_dir,
+    subtitle_input_for_stream,
+};
 use sqlx::Row;
 use tokio::process::Command;
 use tokio::sync::Notify;
@@ -91,20 +95,47 @@ impl HlsSessionWorker {
                 }
             }
 
-            let Some((media_path, media_version_id)) =
+            let Some(active) =
                 load_active_hls_item(&pool, self.channel_id, &self.path_replacements).await
             else {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
 
-            let source_stream = load_source_video_stream(&pool, media_version_id).await;
+            let source_stream = load_source_video_stream(&pool, active.media_version_id).await;
+            let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
+            let preferred_subtitle_language = active
+                .preferred_subtitle_language_code
+                .as_deref()
+                .or(active.channel_preferred_subtitle_language_code.as_deref());
+            let subtitle_input = match select_playback_subtitle(
+                &pool,
+                active.media_item_id,
+                preferred_subtitle_language,
+                subtitle_mode,
+                StreamingMode::HttpLiveStreamingSegmenter,
+            )
+            .await
+            {
+                Ok(Some(subtitle)) => subtitle_input_for_stream(
+                    &subtitle,
+                    &active.media_path,
+                    self.output_format,
+                    StreamingMode::HttpLiveStreamingSegmenter,
+                ),
+                Ok(None) => None,
+                Err(error) => {
+                    tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select HLS subtitle");
+                    None
+                }
+            };
             let command = build_hls_command(
-                &media_path,
+                &active.media_path,
                 &self.working_dir,
                 self.output_format,
                 is_first,
                 source_stream,
+                subtitle_input,
             );
             let mut process = Command::new(&command.executable);
             process
@@ -181,11 +212,16 @@ fn build_hls_command(
     output_format: OutputFormat,
     is_first_transcode: bool,
     source_stream: Option<SourceVideoStream>,
+    subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
+    }
+    if let Some(subtitle_input) = subtitle_input {
+        request.inputs.push(subtitle_input);
+        request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
     }
     request.state.output_format = output_format;
     request.state.report_progress = false;
@@ -213,13 +249,19 @@ async fn load_active_hls_item(
     pool: &DbPool,
     channel_id: i64,
     path_replacements: &[PathReplacement],
-) -> Option<(String, i64)> {
+) -> Option<ActiveHlsItem> {
     let now_text = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
-                  mv."Id" AS "MediaVersionId"
+                  pi."MediaItemId" AS "MediaItemId",
+                  mv."Id" AS "MediaVersionId",
+                  pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+                  pi."SubtitleMode" AS "SubtitleMode",
+                  c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
+                  c."SubtitleMode" AS "ChannelSubtitleMode"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
+           JOIN "Channel" c ON c."Id" = p."ChannelId"
            JOIN "MediaVersion" mv
                ON mv."MovieId" = pi."MediaItemId"
                OR mv."EpisodeId" = pi."MediaItemId"
@@ -244,13 +286,55 @@ async fn load_active_hls_item(
     .ok()??;
 
     let media_path = row.get::<String, _>("MediaPath");
-    let media_version_id = row.get::<i64, _>("MediaVersionId");
     let resolved = if path_replacements.is_empty() {
         media_path
     } else {
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
-    Some((resolved, media_version_id))
+    Some(ActiveHlsItem {
+        media_path: resolved,
+        media_item_id: row.get::<i64, _>("MediaItemId"),
+        media_version_id: row.get::<i64, _>("MediaVersionId"),
+        preferred_subtitle_language_code: row
+            .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
+            .ok()
+            .flatten(),
+        subtitle_mode: row
+            .try_get::<Option<i64>, _>("SubtitleMode")
+            .ok()
+            .flatten()
+            .and_then(decode_subtitle_mode),
+        channel_preferred_subtitle_language_code: row
+            .try_get::<Option<String>, _>("ChannelPreferredSubtitleLanguageCode")
+            .ok()
+            .flatten(),
+        channel_subtitle_mode: row
+            .try_get::<i64, _>("ChannelSubtitleMode")
+            .ok()
+            .and_then(decode_subtitle_mode)
+            .unwrap_or(ChannelSubtitleMode::None),
+    })
+}
+
+#[derive(Debug, Clone)]
+struct ActiveHlsItem {
+    media_path: String,
+    media_item_id: i64,
+    media_version_id: i64,
+    preferred_subtitle_language_code: Option<String>,
+    subtitle_mode: Option<ChannelSubtitleMode>,
+    channel_preferred_subtitle_language_code: Option<String>,
+    channel_subtitle_mode: ChannelSubtitleMode,
+}
+
+const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
+    match value {
+        0 => Some(ChannelSubtitleMode::None),
+        1 => Some(ChannelSubtitleMode::Forced),
+        2 => Some(ChannelSubtitleMode::Default),
+        3 => Some(ChannelSubtitleMode::Any),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -590,6 +674,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             None,
+            None,
         );
         insta::assert_snapshot!(command.arguments.join(" "));
     }
@@ -601,6 +686,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::HlsMp4,
             true,
+            None,
             None,
         );
         let arguments = command.arguments.join(" ");

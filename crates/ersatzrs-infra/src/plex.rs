@@ -5,7 +5,7 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{LibraryMediaKind, MediaStream, MediaStreamKind, VideoScanKind};
 use reqwest::{
     header::{HeaderValue, ACCEPT},
-    Client,
+    Client, Url,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -785,7 +785,8 @@ pub async fn sync_plex_movie_library_with_progress(
             {
                 synced += 1;
             } else {
-                upsert_plex_movie(pool, media_source_id, library_id, library_key, item).await?;
+                upsert_plex_movie(pool, config, media_source_id, library_id, library_key, item)
+                    .await?;
                 synced += 1;
             }
             if let Some(sink) = progress {
@@ -968,6 +969,7 @@ async fn sync_one_plex_show(
                         library_key,
                         season_id,
                         episode,
+                        config,
                     )
                     .await?;
                     synced += 1;
@@ -1102,6 +1104,7 @@ pub async fn sync_plex_collection_library_with_progress(
 
 async fn upsert_plex_movie(
     pool: &DbPool,
+    config: &PlexConnectionConfig,
     media_source_id: i64,
     library_id: i64,
     library_key: &str,
@@ -1112,9 +1115,17 @@ async fn upsert_plex_movie(
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_movie_item(&mut tx, library_path_id, item).await?;
+    let movie_metadata_id = upsert_plex_movie_metadata(&mut tx, item_id, item).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::Movie(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
-    replace_streams(&mut tx, version_id, &item.streams).await?;
+    let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
+    replace_streams(&mut tx, version_id, &streams).await?;
+    crate::metadata::update_metadata_subtitles(
+        &mut tx,
+        crate::metadata::SubtitleMetadataOwner::Movie(movie_metadata_id),
+        &streams,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -1159,21 +1170,22 @@ async fn upsert_plex_episode(
     library_key: &str,
     season_id: i64,
     item: &PlexMediaItem,
+    config: &PlexConnectionConfig,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
         ensure_library_path(&mut tx, library_id, &format!("plex://{library_id}")).await?;
     let item_id = ensure_plex_episode_item(&mut tx, library_path_id, season_id, item).await?;
+    let episode_metadata_id = upsert_plex_episode_metadata(&mut tx, item_id, item).await?;
     let version_id = ensure_media_version(&mut tx, VersionOwner::Episode(item_id), item).await?;
     ensure_media_file(&mut tx, version_id, item).await?;
-    replace_streams(&mut tx, version_id, &item.streams).await?;
-    // DEFERRED: no Subtitle-row population here. ErsatzTV's
-    // MediaServerTelevisionLibraryScanner.UpdateSubtitles runs after streams are
-    // written, but the Plex scanner does not yet populate EpisodeMetadata (unlike
-    // Jellyfin/Emby), and Subtitle FKs to EpisodeMetadata. Plex embedded-subtitle
-    // extraction is therefore blocked on porting Plex EpisodeMetadata population.
-    // See docs/reference/parity-matrix.md.
+    let streams = resolve_plex_external_subtitle_paths(&item.streams, config);
+    replace_streams(&mut tx, version_id, &streams).await?;
+    // Port of MediaServerTelevisionLibraryScanner.UpdateSubtitles
+    // (ErsatzTV.Scanner/Core/Metadata/MediaServerTelevisionLibraryScanner.cs:832):
+    // Plex subtitle streams are diffed into Subtitle rows after stream writes.
+    crate::metadata::update_episode_subtitles(&mut tx, episode_metadata_id, &streams).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -1307,6 +1319,9 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
             .map(|value| value.to_ascii_lowercase()),
         language: stream.language_code,
         title: stream.title,
+        file_name: (kind == MediaStreamKind::ExternalSubtitle)
+            .then_some(stream.key)
+            .flatten(),
         default: stream.default,
         forced: stream.forced,
         channels: stream.channels,
@@ -1341,6 +1356,49 @@ fn project_stream(stream: PlexStreamResponse) -> Option<MediaStream> {
         },
         ..MediaStream::default()
     })
+}
+
+fn resolve_plex_external_subtitle_paths(
+    streams: &[MediaStream],
+    config: &PlexConnectionConfig,
+) -> Vec<MediaStream> {
+    streams
+        .iter()
+        .map(|stream| {
+            let mut stream = stream.clone();
+            if stream.kind == MediaStreamKind::ExternalSubtitle {
+                stream.file_name = stream
+                    .file_name
+                    .as_deref()
+                    .and_then(|key| plex_stream_url(config, key));
+            }
+            stream
+        })
+        .collect()
+}
+
+fn plex_stream_url(config: &PlexConnectionConfig, key: &str) -> Option<String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return None;
+    }
+
+    let mut url = if let Ok(url) = Url::parse(key) {
+        url
+    } else {
+        Url::parse(&config.uri).ok()?.join(key).ok()?
+    };
+
+    if !config.token.trim().is_empty()
+        && !url
+            .query_pairs()
+            .any(|(name, _)| name.eq_ignore_ascii_case("X-Plex-Token"))
+    {
+        url.query_pairs_mut()
+            .append_pair("X-Plex-Token", &config.token);
+    }
+
+    Some(url.to_string())
 }
 
 /// Synchronizes the set of Plex libraries for a media source.
@@ -1652,6 +1710,99 @@ async fn ensure_plex_episode_item(
         .execute(&mut **tx)
         .await?;
     Ok(id)
+}
+
+async fn upsert_plex_movie_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    movie_id: i64,
+    item: &PlexMediaItem,
+) -> Result<i64> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
+            .bind(movie_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let date_added = encode_datetime(item.date_added);
+    let date_updated = encode_datetime(item.date_updated);
+
+    if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "MovieMetadata"
+               SET "DateAdded" = ?, "DateUpdated" = ?, "MetadataKind" = 2,
+                   "SortTitle" = ?, "Title" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(&item.title)
+        .bind(&item.title)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(id);
+    }
+
+    let result = sqlx::query(
+        r#"INSERT INTO "MovieMetadata" (
+            "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "SortTitle", "Title"
+        ) VALUES (?, ?, 2, ?, ?, ?)"#,
+    )
+    .bind(&date_added)
+    .bind(&date_updated)
+    .bind(movie_id)
+    .bind(&item.title)
+    .bind(&item.title)
+    .execute(&mut **tx)
+    .await?;
+    Ok(crate::db::last_insert_id(result))
+}
+
+async fn upsert_plex_episode_metadata(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    episode_id: i64,
+    item: &PlexMediaItem,
+) -> Result<i64> {
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "EpisodeMetadata" WHERE "EpisodeId" = ? LIMIT 1"#)
+            .bind(episode_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let date_added = encode_datetime(item.date_added);
+    let date_updated = encode_datetime(item.date_updated);
+
+    if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "EpisodeMetadata"
+               SET "DateAdded" = ?, "DateUpdated" = ?, "EpisodeNumber" = ?,
+                   "MetadataKind" = 2, "SortTitle" = ?, "Title" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(&date_added)
+        .bind(&date_updated)
+        .bind(item.episode_number)
+        .bind(&item.title)
+        .bind(&item.title)
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(id);
+    }
+
+    let result = sqlx::query(
+        r#"INSERT INTO "EpisodeMetadata" (
+            "DateAdded", "DateUpdated", "EpisodeNumber", "EpisodeId",
+            "MetadataKind", "SortTitle", "Title"
+        ) VALUES (?, ?, ?, ?, 2, ?, ?)"#,
+    )
+    .bind(&date_added)
+    .bind(&date_updated)
+    .bind(item.episode_number)
+    .bind(episode_id)
+    .bind(&item.title)
+    .bind(&item.title)
+    .execute(&mut **tx)
+    .await?;
+    Ok(crate::db::last_insert_id(result))
 }
 
 async fn upsert_plex_collection(

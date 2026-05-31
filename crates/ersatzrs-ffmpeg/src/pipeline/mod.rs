@@ -6,11 +6,12 @@ use ersatzrs_domain::{
 use crate::{
     closed_gop, deinterlace_filter, fast_start, frame_rate_filter, hide_banner, loglevel_error,
     mpegts_output, no_autoscale, no_b_frames, no_standard_input, no_stats, pipe_output,
-    progress_to_stdout, select_video_decoder, standard_format_flags, subtitle_overlay_filter,
-    tonemap_filter_for, watermark_opacity_filter, watermark_overlay_filter, CommandGenerator,
-    ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate,
-    FrameSize, FrameState, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
-    PixelFormat, SourceVideoCodec, StreamKind, TonemapAlgorithm, WatermarkOverlay,
+    progress_to_stdout, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
+    subtitle_overlay_filter, subtitles_filter, tonemap_filter_for, watermark_opacity_filter,
+    watermark_overlay_filter, CommandGenerator, ComplexFilter, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
+    HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
+    StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -68,6 +69,7 @@ pub struct PipelineRequest {
     pub runtime_capabilities: Option<FfmpegCapabilityReport>,
     pub watermark: Option<WatermarkOverlay>,
     pub drawvg_filters: Vec<String>,
+    pub subtitle_fonts_dir: Option<String>,
 }
 
 impl PipelineRequest {
@@ -83,6 +85,7 @@ impl PipelineRequest {
             runtime_capabilities: None,
             watermark: None,
             drawvg_filters: Vec::new(),
+            subtitle_fonts_dir: None,
         }
     }
 
@@ -101,6 +104,12 @@ impl PipelineRequest {
     #[must_use]
     pub fn with_runtime_capabilities(mut self, report: FfmpegCapabilityReport) -> Self {
         self.runtime_capabilities = Some(report);
+        self
+    }
+
+    #[must_use]
+    pub fn with_subtitle_fonts_dir(mut self, fonts_dir: impl Into<String>) -> Self {
+        self.subtitle_fonts_dir = Some(fonts_dir.into());
         self
     }
 }
@@ -305,6 +314,7 @@ impl PipelineBuilder for RkmppPipelineBuilder {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_transcode_pipeline(
     mut request: PipelineRequest,
     acceleration: HardwareAccelerationKind,
@@ -374,14 +384,29 @@ fn build_transcode_pipeline(
             ));
     }
 
-    if request
-        .inputs
-        .iter()
-        .any(|input| input.kind == InputKind::Subtitle)
-    {
+    let has_image_subtitle_burn = request.inputs.iter().any(|input| {
+        input.kind == InputKind::Subtitle
+            && input.is_image_based_subtitle
+            && input.subtitle_method == Some(SubtitleMethod::Burn)
+    });
+    if has_image_subtitle_burn {
+        filter_chain
+            .subtitle
+            .push(scale_subtitle_image_filter(request.desired.frame_size));
         filter_chain
             .subtitle_overlay
             .push(subtitle_overlay_filter(request.desired.pixel_format()));
+    }
+
+    for input in request.inputs.iter().filter(|input| {
+        input.kind == InputKind::Subtitle
+            && !input.is_image_based_subtitle
+            && input.subtitle_method == Some(SubtitleMethod::Burn)
+    }) {
+        filter_chain.video.push(subtitles_filter(
+            &input.path,
+            request.subtitle_fonts_dir.as_deref(),
+        ));
     }
 
     filter_chain.graphics_overlay.extend(request.drawvg_filters);
@@ -417,6 +442,9 @@ fn build_transcode_pipeline(
 
     steps.push(PipelineStep::complex_filter(complex.options));
     steps.push(audio_encoder(&request.desired));
+    if let Some(encoder) = subtitle_encoder(&request.inputs) {
+        steps.push(encoder);
+    }
 
     add_output_options(
         &mut steps,
@@ -923,6 +951,29 @@ fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
     }
 
     PipelineStep::encoder(name, StreamKind::Audio, extra)
+}
+
+fn subtitle_encoder(inputs: &[InputFile]) -> Option<PipelineStep> {
+    let method = inputs
+        .iter()
+        .find(|input| {
+            input.kind == InputKind::Subtitle
+                && matches!(
+                    input.subtitle_method,
+                    Some(SubtitleMethod::Copy | SubtitleMethod::Convert)
+                )
+        })?
+        .subtitle_method?;
+    let encoder = match method {
+        SubtitleMethod::Copy => "copy",
+        SubtitleMethod::Convert => "dvdsub",
+        SubtitleMethod::Burn => return None,
+    };
+    Some(PipelineStep::encoder(
+        encoder,
+        StreamKind::Subtitle,
+        Vec::<String>::new(),
+    ))
 }
 
 fn add_output_options(

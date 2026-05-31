@@ -24,8 +24,8 @@ use chrono::Utc;
 use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::FfprobeExtractor;
 use ersatzrs_infra::metadata::{
-    artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings, ArtworkRef,
-    PersonRef,
+    artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
+    update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use sqlx::{Row, Transaction};
 use tracing::warn;
@@ -1177,6 +1177,14 @@ async fn sync_local_episode(
         metadata_id,
         &[artwork_kind::THUMBNAIL],
         &artwork,
+    )
+    .await?;
+    update_local_file_subtitles(
+        &mut tx,
+        SubtitleMetadataOwner::Episode(metadata_id),
+        &probed.streams,
+        video_path,
+        true,
     )
     .await?;
 

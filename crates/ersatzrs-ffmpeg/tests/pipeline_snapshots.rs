@@ -88,6 +88,55 @@ fn software_pipeline_keeps_matching_eight_bit_source_without_pixel_format_option
 }
 
 #[test]
+fn software_pipeline_burns_text_subtitle_with_libass_filter() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p())
+        .with_subtitle_fonts_dir("/cache/streams/fonts");
+    request.inputs.push(InputFile::text_subtitle(
+        "/cache/streams/subtitles/AA/BB/subtitle.srt",
+        ersatzrs_ffmpeg::SubtitleMethod::Burn,
+    ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        args.contains(
+            "subtitles=/cache/streams/subtitles/AA/BB/subtitle.srt:fontsdir=/cache/streams/fonts"
+        ),
+        "expected subtitles filter in command, got: {args}"
+    );
+    assert!(
+        !args.contains("-i /cache/streams/subtitles/AA/BB/subtitle.srt"),
+        "text subtitle burn should not add a separate ffmpeg input, got: {args}"
+    );
+    assert!(
+        !args.contains("-codec:s"),
+        "burned subtitle should not map or encode a subtitle stream, got: {args}"
+    );
+}
+
+#[test]
+fn software_pipeline_overlays_image_subtitle_from_source_stream() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(
+        InputFile::image_subtitle("/media/movie.mkv", ersatzrs_ffmpeg::SubtitleMethod::Burn)
+            .with_stream_index(2),
+    );
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        args.contains("[0:2]scale=1920:1080:force_original_aspect_ratio=decrease"),
+        "expected image subtitle scale path, got: {args}"
+    );
+    assert!(
+        args.contains("[0:0][st]overlay=x=(W-w)/2:y=(H-h)/2:format=0[vst]"),
+        "expected centered subtitle overlay path, got: {args}"
+    );
+}
+
+#[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request = h264_request(desired);
