@@ -30,6 +30,11 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn JellyfinSourcesPage() -> impl IntoView {
+    view! { <JellyfinSourcesIsland/> }
+}
+
+#[island]
+fn JellyfinSourcesIsland() -> impl IntoView {
     let rows: Resource<Vec<RemoteSourceRow>> = Resource::new(
         || (),
         |()| async { list_jellyfin_sources().await.unwrap_or_default() },
@@ -251,9 +256,13 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
 pub fn JellyfinLibrariesPage() -> impl IntoView {
     let params = use_params_map();
     let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+        params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <JellyfinLibrariesIsland source_id=source_id/> }
+}
 
-    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(source_id, |id| async move {
+#[island]
+fn JellyfinLibrariesIsland(source_id: i64) -> impl IntoView {
+    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(move || source_id, |id| async move {
         list_jellyfin_libraries(id).await.unwrap_or_default()
     });
 
@@ -350,11 +359,16 @@ pub fn JellyfinLibrariesPage() -> impl IntoView {
 pub fn JellyfinPathsPage() -> impl IntoView {
     let params = use_params_map();
     let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+        params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <JellyfinPathsIsland source_id=source_id/> }
+}
 
-    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(source_id, |id| async move {
-        list_jellyfin_paths(id).await.unwrap_or_default()
-    });
+#[island]
+fn JellyfinPathsIsland(source_id: i64) -> impl IntoView {
+    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_jellyfin_paths(id).await.unwrap_or_default() },
+    );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -408,7 +422,7 @@ pub fn JellyfinPathsPage() -> impl IntoView {
                         class=style::btn_primary
                         on:click=move |_| {
                             saved.set(false);
-                            save_action.dispatch((source_id(), paths.get_untracked()));
+                            save_action.dispatch((source_id, paths.get_untracked()));
                         }
                     >{tr(TextKey::Save)}</button>
                 </div>
