@@ -11,9 +11,10 @@ use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, InputFile, OutputFormat, PipelineBuilder, PipelineRequest,
-    SoftwarePipelineBuilder,
+    SoftwarePipelineBuilder, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::playback::load_source_video_stream;
 use sqlx::Row;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
@@ -73,7 +74,8 @@ pub async fn serve_channel_stream(
         replace_path(&replacements, &active.media_path, PathPlatform::Unix)
     };
 
-    let command = build_stream_command(&resolved, output_format);
+    let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let command = build_stream_command(&resolved, output_format, source_stream);
     match spawn_stream_body(command) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -104,6 +106,7 @@ enum StreamSpawnError {
 #[derive(Debug, Clone)]
 pub(crate) struct ActivePlayoutItem {
     pub(crate) media_path: String,
+    pub(crate) media_version_id: i64,
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
 }
@@ -116,6 +119,7 @@ pub(crate) async fn load_active_media_path(
     let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  mv."Id" AS "MediaVersionId",
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish"
            FROM "PlayoutItem" pi
@@ -144,6 +148,7 @@ pub(crate) async fn load_active_media_path(
 
     Ok(row.map(|row| ActivePlayoutItem {
         media_path: row.get::<String, _>("MediaPath"),
+        media_version_id: row.get::<i64, _>("MediaVersionId"),
         playout_start: row.get::<String, _>("PlayoutStart"),
         playout_finish: row.get::<String, _>("PlayoutFinish"),
     }))
@@ -235,9 +240,16 @@ pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'stat
     }
 }
 
-fn build_stream_command(path: &str, output_format: OutputFormat) -> FfmpegCommand {
+fn build_stream_command(
+    path: &str,
+    output_format: OutputFormat,
+    source_stream: Option<SourceVideoStream>,
+) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
+    if let Some(source_stream) = source_stream {
+        request = request.with_source_video_stream(source_stream);
+    }
     request.state.output_format = output_format;
     request.state.report_progress = false;
 
@@ -288,7 +300,7 @@ mod tests {
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
@@ -297,7 +309,7 @@ mod tests {
 
     #[test]
     fn build_stream_command_can_target_mp4() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
@@ -355,7 +367,7 @@ mod tests {
         }
 
         let command =
-            build_stream_command(fixture.to_string_lossy().as_ref(), OutputFormat::MpegTs);
+            build_stream_command(fixture.to_string_lossy().as_ref(), OutputFormat::MpegTs, None);
         let mut process = Command::new(&command.executable);
         process
             .args(&command.arguments)

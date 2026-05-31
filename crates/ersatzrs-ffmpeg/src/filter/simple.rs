@@ -37,6 +37,23 @@ impl PixelFormat {
         }
     }
 
+    /// Parse an FFmpeg/ffprobe pixel-format name into the enum, mirroring the
+    /// `ErsatzTV` `PixelFormat` lookup. Returns `None` for formats outside the
+    /// set the pipeline reasons about (callers then leave the current state
+    /// unchanged). `yuvj420p` is folded into `yuv420p` exactly as ErsatzTV's
+    /// `PixelFormatYuvJ420P` does.
+    #[must_use]
+    pub fn from_ffmpeg_name(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "yuv420p" | "yuvj420p" => Some(Self::Yuv420P),
+            "yuv420p10le" | "yuv420p10" => Some(Self::Yuv420P10Le),
+            "nv12" => Some(Self::Nv12),
+            "vaapi" => Some(Self::Vaapi),
+            "cuda" => Some(Self::Cuda),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub const fn overlay_format(self) -> u8 {
         match self {

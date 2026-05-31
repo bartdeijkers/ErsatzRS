@@ -400,6 +400,21 @@ fn build_transcode_pipeline(
     let filter_graph = complex.filter_graph.clone();
 
     steps.push(video_encoder(effective_acceleration, &request.desired));
+
+    // Port of `SoftwarePipelineBuilder.SetPixelFormat`: when the source frame
+    // is in software memory and its pixel format differs from the desired
+    // output format, emit a `-pix_fmt` output option. This is what converts a
+    // 10-bit (`yuv420p10le`) source down to 8-bit `yuv420p` so the libx264
+    // `high` profile (8-bit only) can open the encoder. Gated on a known source
+    // stream so pipelines built without probe metadata are unchanged.
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request.source_video_stream.is_some()
+        && target_state.frame_data_location == crate::FrameDataLocation::Software
+        && target_state.pixel_format != request.desired.pixel_format()
+    {
+        steps.push(pixel_format_output_option(request.desired.pixel_format()));
+    }
+
     steps.push(PipelineStep::complex_filter(complex.options));
     steps.push(audio_encoder(&request.desired));
 
@@ -429,6 +444,17 @@ fn apply_source_video_filters(
         target_state.should_deinterlace =
             source.scan_kind == VideoScanKind::Interlaced && is_transcode;
         target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
+
+        // Track the true source pixel format while the frame lives in software
+        // memory so `SetPixelFormat` can decide whether an output `-pix_fmt`
+        // conversion is required (e.g. 10-bit source into an 8-bit H.264 high
+        // profile). Hardware paths manage their own surface format in
+        // `configure_hardware_acceleration`, so only override for software.
+        if target_state.frame_data_location == crate::FrameDataLocation::Software {
+            if let Some(pixel_format) = source.pixel_format {
+                target_state.pixel_format = pixel_format;
+            }
+        }
     }
 
     if target_state.should_deinterlace && !target_state.deinterlaced {
@@ -604,6 +630,15 @@ fn video_encoder(
     }
 
     PipelineStep::encoder(name, StreamKind::Video, extra)
+}
+
+/// Port of `ErsatzTV`'s `PixelFormatOutputOption` for software encoders:
+/// emit `-pix_fmt <name>` so the encoder receives frames in the desired format.
+fn pixel_format_output_option(pixel_format: PixelFormat) -> PipelineStep {
+    PipelineStep::generic(
+        "pixel_format",
+        ["-pix_fmt".to_owned(), pixel_format.ffmpeg_name().to_owned()],
+    )
 }
 
 const fn software_video_encoder_name(format: FFmpegProfileVideoFormat) -> &'static str {

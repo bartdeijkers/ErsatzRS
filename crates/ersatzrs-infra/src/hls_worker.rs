@@ -15,8 +15,10 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FfmpegCommand, HlsOutput, InputFile, OutputFormat, PipelineBuilder,
-    PipelineRequest, SoftwarePipelineBuilder,
+    PipelineRequest, SoftwarePipelineBuilder, SourceVideoStream,
 };
+
+use crate::playback::load_source_video_stream;
 use sqlx::Row;
 use tokio::process::Command;
 use tokio::sync::Notify;
@@ -89,15 +91,21 @@ impl HlsSessionWorker {
                 }
             }
 
-            let Some(media_path) =
+            let Some((media_path, media_version_id)) =
                 load_active_hls_item(&pool, self.channel_id, &self.path_replacements).await
             else {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
 
-            let command =
-                build_hls_command(&media_path, &self.working_dir, self.output_format, is_first);
+            let source_stream = load_source_video_stream(&pool, media_version_id).await;
+            let command = build_hls_command(
+                &media_path,
+                &self.working_dir,
+                self.output_format,
+                is_first,
+                source_stream,
+            );
             let mut process = Command::new(&command.executable);
             process
                 .args(&command.arguments)
@@ -172,9 +180,13 @@ fn build_hls_command(
     _working_dir: &Path,
     output_format: OutputFormat,
     is_first_transcode: bool,
+    source_stream: Option<SourceVideoStream>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
+    if let Some(source_stream) = source_stream {
+        request = request.with_source_video_stream(source_stream);
+    }
     request.state.output_format = output_format;
     request.state.report_progress = false;
     request.state.hls = Some(HlsOutput {
@@ -201,10 +213,11 @@ async fn load_active_hls_item(
     pool: &DbPool,
     channel_id: i64,
     path_replacements: &[PathReplacement],
-) -> Option<String> {
+) -> Option<(String, i64)> {
     let now_text = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
-        r#"SELECT mf."Path" AS "MediaPath"
+        r#"SELECT mf."Path" AS "MediaPath",
+                  mv."Id" AS "MediaVersionId"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "MediaVersion" mv
@@ -231,15 +244,13 @@ async fn load_active_hls_item(
     .ok()??;
 
     let media_path = row.get::<String, _>("MediaPath");
-    if path_replacements.is_empty() {
-        Some(media_path)
+    let media_version_id = row.get::<i64, _>("MediaVersionId");
+    let resolved = if path_replacements.is_empty() {
+        media_path
     } else {
-        Some(replace_path(
-            path_replacements,
-            &media_path,
-            PathPlatform::Unix,
-        ))
-    }
+        replace_path(path_replacements, &media_path, PathPlatform::Unix)
+    };
+    Some((resolved, media_version_id))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -578,6 +589,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            None,
         );
         insta::assert_snapshot!(command.arguments.join(" "));
     }
@@ -589,6 +601,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::HlsMp4,
             true,
+            None,
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-hls_segment_type fmp4"));

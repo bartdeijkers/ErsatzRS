@@ -44,6 +44,50 @@ fn software_pipeline_single_video_mpegts_snapshot() {
 }
 
 #[test]
+fn software_pipeline_converts_ten_bit_source_to_desired_eight_bit() {
+    // Port of `SoftwarePipelineBuilder.SetPixelFormat`: a 10-bit (Main 10)
+    // HEVC source transcoded to the 8-bit H.264 `high` profile must emit a
+    // `-pix_fmt yuv420p` output option, otherwise libx264 cannot open the
+    // encoder ("high profile doesn't support a bit depth of 10").
+    let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    let request = PipelineRequest::new(
+        InputFile::video("/media/movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        args.contains("-pix_fmt yuv420p"),
+        "expected 10-bit source to be converted to 8-bit, got: {args}"
+    );
+}
+
+#[test]
+fn software_pipeline_keeps_matching_eight_bit_source_without_pixel_format_option() {
+    // When the source already matches the desired 8-bit format, no `-pix_fmt`
+    // option is emitted (matching ErsatzTV's equality check).
+    let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+    source.pixel_format = Some(PixelFormat::Yuv420P);
+    let request = PipelineRequest::new(
+        InputFile::video("/media/movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        !args.contains("-pix_fmt"),
+        "did not expect a pixel-format option for a matching source, got: {args}"
+    );
+}
+
+#[test]
 fn software_pipeline_hls_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request = h264_request(desired);
