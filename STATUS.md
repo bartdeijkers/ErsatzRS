@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-30 (`/playouts` editor parity slice)
+Last updated: 2026-05-31 (commit handoff)
 
 ## Current Phase
 
@@ -533,6 +533,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-05-31 | Codex (GPT-5) | Committed the current dirty tree as focused slices: playback source-video metadata/pixel-format handling, Jellyfin media-source island hydration, and follow-up docs for FFmpeg profile loading, media-source hydration, TSDuck MPEG troubleshooting, and module-split candidates. |
 | 2026-05-30 | Codex (GPT-5) | Closed the remaining `/playouts` nested editor visual parity debt: added ErsatzTV-shaped mobile MoreVert action menus, icon-only Up/Down/Delete row actions, Weekdays/Weekends helpers, localized day/month summaries and selectors, disabled date fields when range filtering is off, and the Block Preview Calendar branch. Browser smoke covered alternate schedules, templates, preview calendar, and mobile action menus with zero current console warnings/errors; the web parity gate passed. No `/playouts` `ParityDebt` remains in `plans/playouts-parity-slice.md`. |
 | 2026-05-30 | Codex (GPT-5) | Continued `/playouts` nested editor parity: routed `/playouts/{id}/alternate-schedules` and `/playouts/{id}/templates`, added localized editor shells, Classic alternate-schedule load/save semantics with final-row default schedule handling and Refresh enqueue, Block playout-template load/save semantics with row replacement and `DateUpdated`, and focused server-fn tests. Browser smoke covered both nested routes at 1280×800 with zero console warnings/errors; temporary SQLite rows were cleaned up. Remaining `/playouts` `ParityDebt`: final nested-editor visual controls (mobile MoreVert, icon row actions, Weekdays/Weekends helpers, localized day/month names, and Block Preview Calendar). Gate: `cargo xtask parity-check web`. |
 | 2026-05-30 | Codex (GPT-5) | Ported the `/playouts/add[/{Kind}]` flow from ErsatzTV `PlayoutEditor.razor`: added routed SSR/hydrated form pages, localized add-form labels across all admin cultures, no-JS `/api/playouts/create` fallback, shared create validation/insert logic for Classic/Block/Sequential/Scripted/ExternalJson, initial reset-build enqueue, and focused server-fn tests. Classic/Block/Scripted edit pages remain `ParityDebt`. |
