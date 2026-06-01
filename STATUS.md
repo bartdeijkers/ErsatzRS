@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-06-01 (movie scanner sidecar metadata parity)
+Last updated: 2026-06-01 (FFmpeg profile playback loading parity)
 
 ## Current Phase
 
@@ -542,6 +542,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-06-01 | Codex (GPT-5) | Wired MPEG-TS/HLS playback through persisted FFmpeg profiles and resolutions: stream commands now load source sizing/frame-rate metadata, map profile codecs/bitrates/loudness/tonemap/scaling/thread settings into `DesiredVideoState`, select hardware builders with runtime capability fallback, preserve HLS-direct copy behavior, and cover crop/VAAPI padding review fixes plus real FFmpeg/ffprobe HLS segment smoke proof. |
 | 2026-06-01 | Codex (GPT-5) | Implemented movie scanner sidecar metadata parity: local movie scans now parse movie NFOs, attach poster/fanart artwork, persist genres/tags/studios/actors/directors/writers/GUIDs with stable `MovieMetadata.Id`, keep fallback metadata kind at 0, and cover fallback/malformed/idempotent scan cases. |
 | 2026-06-01 | Codex (GPT-5) | Fixed the `/watermarks` list hydration anomaly: moved list actions into a `WatermarksListIsland`, replaced watermark editor/list router-context redirects with browser-location redirects, verified hydrated delete cancel/confirm, copy dispatch/redirect, pager state, and a clean final `/watermarks` console after rebuilt `./run.sh serve`. |
 | 2026-05-31 | Codex (GPT-5) | Closed the `/channels/:id` preferred subtitle language option gap: the channel editor now populates the shared preferred audio/subtitle language select from `MediaStream.Language`, `Subtitle.Language`, and `Channel.PreferredAudioLanguageCode` with ISO alias/name expansion, matching ErsatzTV's `GetAllLanguageCodes` path instead of relying on the usually-empty `LanguageCode` table. Focused channel repository coverage proves the subtitle select has real media-derived options beyond `(none)`. |
