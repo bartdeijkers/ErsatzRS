@@ -6,8 +6,7 @@
 //!   - drawvg preview refreshes (debounced 400 ms) whenever placement params change.
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{save_failed, tr, watermark_error_message, TextKey};
 use crate::admin::server_fns::watermarks::{
@@ -17,6 +16,16 @@ use crate::admin::server_fns::watermarks::{
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/watermarks/editor.module.css");
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ---------------------------------------------------------------------------
 // SSR wrapper
@@ -145,13 +154,12 @@ fn WatermarkEditorForm(initial_form: WatermarkForm) -> impl IntoView {
         async move { save_watermark(form).await }
     });
 
-    let navigate = use_navigate();
     let toast = use_toast();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
-                Ok(_) => navigate("/watermarks", NavigateOptions::default()),
+                Ok(_) => set_browser_location("/watermarks"),
                 Err(e) => toast.push(
                     save_failed(watermark_error_message(e)),
                     ToastSeverity::Error,

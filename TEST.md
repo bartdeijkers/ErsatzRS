@@ -234,7 +234,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered; copy modal, copy redirect, and 3840x1918 visual comparison covered in `plans/blocks-parity-slice.md`. |
 | `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`; hydrated add-item/preview/save plus no-JS item fallback verified in `plans/blocks-parity-slice.md`. |
 | `/playouts/sequential/:id`| ✅    | Stable DOM shape, validation error banner always rendered.              |
-| `/watermarks`            | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
+| `/watermarks`            | ✅     | List body is an island; hydrated copy/delete, pager state, and clean final console verified. |
 | `/watermarks/:id`        | ✅     | Stable DOM shape, all conditional sections via `style:display`.         |
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/collections/:id` | TODO   | Detail page port: poster grid, hover-checkbox multi-select, per-card trashcan, inline rename pencil, "Use Custom Playback Order" toggle with Move Up/Down (drag-and-drop deferred). Island owns blocking resource; sections rendered conditionally over stable signal state. |

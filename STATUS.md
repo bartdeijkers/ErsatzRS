@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-31 (commit handoff)
+Last updated: 2026-06-01 (watermarks list hydration fix)
 
 ## Current Phase
 
@@ -503,7 +503,7 @@ yet.
 | `BlocksPage`                  | ⏳     | Group add/delete buttons.                                      |
 | `TemplatesPage`               | TODO   | Hydrated list actions, delete confirmations, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
 | `TemplateEditorPage`          | TODO   | Hydrated add/remove/drag, browser-navigation edit link, save POST fallback, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened. |
-| `WatermarksListPage`          | ⏳     | DeleteDialog action.                                           |
+| `WatermarksListPage`          | ✅     | List island; hydrated copy/delete smoke clean.                  |
 | `TraktListsPage`              | TODO   | Browser smoke covered Add dialog, Search/Match/Delete row actions, pager geometry, and console check; add durable E2E spec when automated admin coverage is broadened. |
 | `TraktListEditorPage`         | TODO   | Browser smoke covered editor layout, checkbox state, save POST fallback form, and console check; add durable E2E spec when automated admin coverage is broadened. |
 | `FillerPresetsPage`           | ⏳     | List/editor islands with POST fallback save/delete paths.       |
@@ -542,6 +542,7 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-06-01 | Codex (GPT-5) | Fixed the `/watermarks` list hydration anomaly: moved list actions into a `WatermarksListIsland`, replaced watermark editor/list router-context redirects with browser-location redirects, verified hydrated delete cancel/confirm, copy dispatch/redirect, pager state, and a clean final `/watermarks` console after rebuilt `./run.sh serve`. |
 | 2026-05-31 | Codex (GPT-5) | Closed the `/channels/:id` preferred subtitle language option gap: the channel editor now populates the shared preferred audio/subtitle language select from `MediaStream.Language`, `Subtitle.Language`, and `Channel.PreferredAudioLanguageCode` with ISO alias/name expansion, matching ErsatzTV's `GetAllLanguageCodes` path instead of relying on the usually-empty `LanguageCode` table. Focused channel repository coverage proves the subtitle select has real media-derived options beyond `(none)`. |
 | 2026-05-31 | Codex (GPT-5) | Fixed subtitle review P2s: Plex external subtitle keys now persist tokenized server URLs, local sidecar discovery requires exact basenames and strips extensions before language parsing, and sidecar diffs use path identity with stable per-scan indexes. |
 | 2026-05-31 | Codex (GPT-5) | Closed the subtitle parity smoke debt: `extract_show_subtitles` now generates a real embedded-subtitle MKV fixture via FFmpeg, runs extraction, and asserts the `Subtitle` row and cache output. The `/settings/ffmpeg` browser proof uses `plans/references/settings-ffmpeg-subtitle-disabled-2026-05-31.png`. No active subtitle `ParityDebt` remains; remote-stream subtitle rows are upstream-inactive. |

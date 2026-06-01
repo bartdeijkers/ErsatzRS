@@ -2,6 +2,10 @@
 
 ## Summary
 
+Status: fixed on 2026-06-01. `WatermarksListPage` is now a thin wrapper around
+`WatermarksListIsland`, and the hydrated delete/copy flows were browser-smoked
+after rebuilding with `./run.sh serve`.
+
 `crates/ersatzrs-web/src/admin/pages/watermarks/list.rs` declares
 `WatermarksListPage` as a plain `#[component]` that *directly* contains
 interactive handlers (`Action`s, `on:click` delete/copy, reactive `RwSignal`s,
@@ -81,11 +85,17 @@ Apply the canonical wrapper→island refactor, mirroring `channels/list.rs`:
 
 ## Verification
 
-- `cargo xtask parity-check web`
-- Playwright MCP smoke on `/watermarks`: row Delete (cancel + confirm), row Copy
-  (rename + redirect), pager, and a console warning/error check.
-- Flip the TEST.md `/watermarks` row note to record that the **list** page is
-  now a proper island and that hydrated delete/copy are verified.
+- [x] Before-edit Playwright probe: `/watermarks` rendered one row, but Delete
+      and Copy clicks opened no dialog; console warning/error count was 0.
+- [x] `cargo xtask hydration-lint -p ersatzrs-web`
+- [x] `cargo xtask parity-check web`
+- [x] Playwright MCP smoke after rebuilt `./run.sh serve`: row Delete opened
+      the confirm dialog, cancel closed it, copy opened the rename modal,
+      `copy_watermark` posted and redirected to the copied id, temporary copied
+      rows were removed through Delete confirm, pager state rendered, and the
+      final `/watermarks` console warning/error count was 0.
+- [x] TEST.md `/watermarks` row records that the **list** page is now a proper
+      island and that hydrated delete/copy were verified.
 
 ## Scope / risk
 

@@ -78,6 +78,7 @@ impl HlsSessionWorker {
         });
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn run(
         self: Arc<Self>,
         pool: DbPool,

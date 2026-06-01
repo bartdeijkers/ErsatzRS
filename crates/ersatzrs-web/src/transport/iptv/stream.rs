@@ -314,9 +314,7 @@ fn build_stream_command(
 }
 
 pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
-    parse_sqlite_utc_timestamp(playout_start)
-        .map(|start| (now - start).num_seconds().max(0))
-        .unwrap_or(0)
+    parse_sqlite_utc_timestamp(playout_start).map_or(0, |start| (now - start).num_seconds().max(0))
 }
 
 fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {

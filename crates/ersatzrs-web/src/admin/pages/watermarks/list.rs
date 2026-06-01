@@ -16,8 +16,23 @@ stylance::import_crate_style!(style, "src/admin/pages/watermarks/list.module.css
 
 const PAGE_SIZE: u32 = 25;
 
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
+
 #[component]
 pub fn WatermarksListPage() -> impl IntoView {
+    view! { <WatermarksListIsland/> }
+}
+
+#[island]
+fn WatermarksListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
     let rows_resource: Resource<Vec<WatermarkListRow>> = Resource::new(
@@ -58,7 +73,6 @@ pub fn WatermarksListPage() -> impl IntoView {
     let copy_open = RwSignal::new(false);
     let copy_name = RwSignal::new(String::new());
     let toast = use_toast();
-    let navigate = leptos_router::hooks::use_navigate();
 
     Effect::new(move |_| {
         if let Some(res) = copy_action.value().get() {
@@ -69,10 +83,7 @@ pub fn WatermarksListPage() -> impl IntoView {
                         ToastSeverity::Success,
                     );
                     copy_open.set(false);
-                    navigate(
-                        &format!("/watermarks/{new_id}"),
-                        leptos_router::NavigateOptions::default(),
-                    );
+                    set_browser_location(&format!("/watermarks/{new_id}"));
                 }
                 Err(e) => toast.push(
                     format!(
