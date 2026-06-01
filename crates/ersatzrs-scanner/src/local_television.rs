@@ -19,10 +19,11 @@
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use chrono::Utc;
 use ersatzrs_infra::db::{Db, DbPool};
-use ersatzrs_infra::ffprobe::FfprobeExtractor;
+use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
     artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
     update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
@@ -40,6 +41,7 @@ use crate::{
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+const SQLITE_LOCK_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000, 8_000];
 
 const METADATA_KIND_FALLBACK: i32 = 0;
 const METADATA_KIND_SIDECAR: i32 = 1;
@@ -55,6 +57,20 @@ struct SeasonWork {
 struct ShowWork {
     folder: PathBuf,
     seasons: Vec<SeasonWork>,
+}
+
+struct LocalEpisodeScan {
+    probed: FfprobeMediaVersion,
+    path_text: String,
+    hash: String,
+    title: String,
+    fallback_title: String,
+    sort_title: String,
+    episode_number: i32,
+    year: Option<i32>,
+    release_date: Option<String>,
+    metadata_kind: i32,
+    nfo: Option<EpisodeNfo>,
 }
 
 /// Walk the library root and enumerate all show/season/episode work units.
@@ -982,6 +998,51 @@ async fn sync_local_episode(
     video_path: &Path,
     extractor: &FfprobeExtractor,
 ) -> Result<()> {
+    let scan = probe_local_episode(video_path, extractor).await?;
+
+    for (attempt, delay_ms) in SQLITE_LOCK_RETRY_DELAYS_MS.iter().copied().enumerate() {
+        match sync_local_episode_once(
+            pool,
+            library_path,
+            season_id,
+            season_number,
+            library_folder_id,
+            video_path,
+            &scan,
+        )
+        .await
+        {
+            Ok(()) => return Ok(()),
+            Err(err) if is_sqlite_lock_error(&err) => {
+                warn!(
+                    path = %video_path.display(),
+                    attempt = attempt + 1,
+                    retry_delay_ms = delay_ms,
+                    error = %err,
+                    "database locked while upserting episode; retrying"
+                );
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    sync_local_episode_once(
+        pool,
+        library_path,
+        season_id,
+        season_number,
+        library_folder_id,
+        video_path,
+        &scan,
+    )
+    .await
+}
+
+async fn probe_local_episode(
+    video_path: &Path,
+    extractor: &FfprobeExtractor,
+) -> Result<LocalEpisodeScan> {
     let probed = extractor.extract(video_path).await?;
     let nfo_path = locate_episode_nfo(video_path);
     let nfo = nfo_path
@@ -1031,10 +1092,35 @@ async fn sync_local_episode(
                 .and_then(|dt| dt.naive_utc().date().format("%Y").to_string().parse().ok())
         })
     });
-
-    let mut tx = pool.begin().await?;
     let path_text = video_path.display().to_string();
     let hash = path_hash(&path_text);
+
+    Ok(LocalEpisodeScan {
+        probed,
+        path_text,
+        hash,
+        title,
+        fallback_title,
+        sort_title,
+        episode_number,
+        year,
+        release_date,
+        metadata_kind,
+        nfo,
+    })
+}
+
+#[allow(clippy::too_many_lines)]
+async fn sync_local_episode_once(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+    season_id: i64,
+    season_number: i32,
+    library_folder_id: i64,
+    video_path: &Path,
+    scan: &LocalEpisodeScan,
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
     let now = encode_datetime(Utc::now());
 
     let existing = sqlx::query(
@@ -1044,7 +1130,7 @@ async fn sync_local_episode(
            JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
            WHERE "mf"."PathHash" = ?"#,
     )
-    .bind(&hash)
+    .bind(&scan.hash)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -1076,41 +1162,42 @@ async fn sync_local_episode(
             .execute(&mut *tx)
             .await?;
         let version_id =
-            insert_media_version_with_owner(&mut tx, media_item_id, &probed, "EpisodeId").await?;
+            insert_media_version_with_owner(&mut tx, media_item_id, &scan.probed, "EpisodeId")
+                .await?;
         sqlx::query(
             r#"INSERT INTO "MediaFile" ("LibraryFolderId", "MediaVersionId", "Path", "PathHash")
                VALUES (?, ?, ?, ?)"#,
         )
         .bind(library_folder_id)
         .bind(version_id)
-        .bind(&path_text)
-        .bind(&hash)
+        .bind(&scan.path_text)
+        .bind(&scan.hash)
         .execute(&mut *tx)
         .await?;
         (media_item_id, version_id)
     };
 
-    update_media_version(&mut tx, version_id, &probed).await?;
-    replace_streams(&mut tx, version_id, &probed.streams).await?;
-    replace_chapters(&mut tx, version_id, &probed.chapters).await?;
+    update_media_version(&mut tx, version_id, &scan.probed).await?;
+    replace_streams(&mut tx, version_id, &scan.probed.streams).await?;
+    replace_chapters(&mut tx, version_id, &scan.probed.chapters).await?;
 
     let metadata_id = upsert_episode_metadata(
         &mut tx,
         episode_id,
         season_number,
-        &title,
-        &fallback_title,
-        &sort_title,
-        episode_number,
-        year,
-        release_date.as_deref(),
-        metadata_kind,
-        nfo.as_ref(),
+        &scan.title,
+        &scan.fallback_title,
+        &scan.sort_title,
+        scan.episode_number,
+        scan.year,
+        scan.release_date.as_deref(),
+        scan.metadata_kind,
+        scan.nfo.as_ref(),
         &now,
     )
     .await?;
 
-    if let Some(parsed) = nfo.as_ref() {
+    if let Some(parsed) = scan.nfo.as_ref() {
         replace_strings(
             &mut tx,
             "Genre",
@@ -1182,7 +1269,7 @@ async fn sync_local_episode(
     update_local_file_subtitles(
         &mut tx,
         SubtitleMetadataOwner::Episode(metadata_id),
-        &probed.streams,
+        &scan.probed.streams,
         video_path,
         true,
     )
@@ -1190,6 +1277,31 @@ async fn sync_local_episode(
 
     tx.commit().await?;
     Ok(())
+}
+
+fn is_sqlite_lock_error(err: &ScannerError) -> bool {
+    let ScannerError::Sqlx(sqlx::Error::Database(database_error)) = err else {
+        return false;
+    };
+
+    if database_error
+        .code()
+        .as_deref()
+        .is_some_and(is_sqlite_lock_code)
+    {
+        return true;
+    }
+
+    database_error
+        .message()
+        .to_ascii_lowercase()
+        .contains("database is locked")
+}
+
+fn is_sqlite_lock_code(code: &str) -> bool {
+    matches!(code, "5" | "6")
+        || code.eq_ignore_ascii_case("SQLITE_BUSY")
+        || code.eq_ignore_ascii_case("SQLITE_LOCKED")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1314,5 +1426,15 @@ mod tests {
         );
         assert_eq!(parse_year_from_folder_name("Show.2020.4K"), Some(2020));
         assert_eq!(parse_year_from_folder_name("NoYearShow"), None);
+    }
+
+    #[test]
+    fn recognizes_sqlite_lock_codes() {
+        assert!(is_sqlite_lock_code("5"));
+        assert!(is_sqlite_lock_code("6"));
+        assert!(is_sqlite_lock_code("SQLITE_BUSY"));
+        assert!(is_sqlite_lock_code("sqlite_locked"));
+        assert!(!is_sqlite_lock_code("19"));
+        assert!(!is_sqlite_lock_code("SQLITE_CONSTRAINT"));
     }
 }

@@ -355,15 +355,24 @@ pub fn sort_title(title: &str) -> String {
         return title.to_owned();
     }
 
-    if title.len() >= 4 && title[..4].eq_ignore_ascii_case("the ") {
+    if title
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("the "))
+    {
         return title[4..].to_owned();
     }
 
-    if title.len() >= 2 && title[..2].eq_ignore_ascii_case("a ") {
+    if title
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("a "))
+    {
         return title[2..].to_owned();
     }
 
-    if title.len() >= 3 && title[..3].eq_ignore_ascii_case("an ") {
+    if title
+        .get(..3)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("an "))
+    {
         return title[3..].to_owned();
     }
 
@@ -806,5 +815,11 @@ mod tests {
         assert_eq!(sort_title(""), "");
         assert_eq!(sort_title("\t"), "\t");
         assert_eq!(sort_title("\u{00c6}on Flux"), "Eon Flux");
+    }
+
+    #[test]
+    fn sort_title_does_not_slice_inside_unicode_scalars() {
+        assert_eq!(sort_title("L\u{00e8}ve-toi"), "L\u{00e8}ve-toi");
+        assert_eq!(sort_title("\u{00e9}on Flux"), "\u{00e9}on Flux");
     }
 }
