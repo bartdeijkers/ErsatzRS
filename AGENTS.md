@@ -61,6 +61,10 @@ When adding code, follow the workspace layout in
 
 ## Commands
 
+always respect the build target-dir defined in `/config.toml` or `/.cargo/config.toml`.
+this could mean elevated rights are needed. ask/apply elevated rights, since the path
+is added on purpose. Never use a different cargo build path.
+
 ```bash
 # Build
 cargo build --workspace
