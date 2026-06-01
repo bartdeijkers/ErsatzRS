@@ -280,6 +280,7 @@ impl HlsSessionHandle for HlsSessionWorker {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_hls_command(
     media_path: &str,
     _working_dir: &Path,

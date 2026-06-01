@@ -122,6 +122,12 @@ pub async fn load_source_video_stream(
     Some(stream)
 }
 
+/// Load the persisted `FFmpeg` profile and resolution assigned to a channel.
+///
+/// # Errors
+///
+/// Returns an error when the profile or resolution row cannot be queried or
+/// decoded from the database.
 pub async fn load_channel_playback_profile(
     pool: &DbPool,
     channel_id: i64,
@@ -175,6 +181,11 @@ pub async fn load_channel_playback_profile(
     row.as_ref().map(map_playback_profile).transpose()
 }
 
+/// Resolve the channel-level target frame rate used for profile normalization.
+///
+/// # Errors
+///
+/// Returns an error when scheduled playout media versions cannot be queried.
 pub async fn load_channel_target_frame_rate(
     pool: &DbPool,
     channel_id: i64,

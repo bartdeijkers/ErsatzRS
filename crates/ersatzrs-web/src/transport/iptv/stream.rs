@@ -28,6 +28,7 @@ pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> R
     serve_channel_stream(state, channel_number, OutputFormat::MpegTs).await
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn serve_channel_stream(
     state: &AppState,
     channel_number: &str,
@@ -314,6 +315,7 @@ pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'stat
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
