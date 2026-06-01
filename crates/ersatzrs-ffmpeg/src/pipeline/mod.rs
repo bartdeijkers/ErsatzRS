@@ -213,9 +213,18 @@ fn square_pixel_frame_size(
     };
 
     Some(even_frame_size(
-        (width * percent).floor() as u32,
-        (height * percent).floor() as u32,
+        scaled_dimension(width, percent),
+        scaled_dimension(height, percent),
     ))
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn scaled_dimension(value: f64, percent: f64) -> u32 {
+    let scaled = (value * percent).floor();
+    if !scaled.is_finite() || scaled <= 0.0 {
+        return 0;
+    }
+    scaled.min(f64::from(u32::MAX)) as u32
 }
 
 impl SourceVideoStream {
