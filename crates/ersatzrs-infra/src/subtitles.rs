@@ -610,9 +610,12 @@ async fn extract_fonts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "mysql"))]
     use sqlx::sqlite::SqlitePoolOptions;
+    #[cfg(not(feature = "mysql"))]
     use sqlx::Executor;
 
+    #[cfg(not(feature = "mysql"))]
     async fn test_db() -> Pool<Db> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -744,6 +747,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_lines)]
     async fn playout_selection_matches_etv_window_and_media_type_filter() {
         let pool = test_db().await;

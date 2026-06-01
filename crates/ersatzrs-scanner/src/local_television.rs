@@ -40,7 +40,7 @@ use crate::{
 };
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];
-const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
+pub(crate) const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "tbn", "webp"];
 const SQLITE_LOCK_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000, 8_000];
 
 const METADATA_KIND_FALLBACK: i32 = 0;
@@ -289,10 +289,10 @@ fn scan_digits(input: &str, start: usize) -> usize {
 /// Locate an artwork file in a folder by base-name candidates and supported
 /// image extensions. The first match in `(name, ext)` order wins, mirroring
 /// `TelevisionFolderScanner.LocateArtworkForShow`.
-fn locate_artwork(folder: &Path, names: &[&str]) -> Option<PathBuf> {
+pub(crate) fn locate_artwork<S: AsRef<str>>(folder: &Path, names: &[S]) -> Option<PathBuf> {
     for name in names {
         for ext in IMAGE_EXTENSIONS {
-            let candidate = folder.join(format!("{name}.{ext}"));
+            let candidate = folder.join(format!("{}.{ext}", name.as_ref()));
             if candidate.is_file() {
                 return Some(candidate);
             }
@@ -334,7 +334,7 @@ fn locate_episode_nfo(video_path: &Path) -> Option<PathBuf> {
     candidate.is_file().then_some(candidate)
 }
 
-fn artwork_ref(path: &Path, kind: i32) -> ArtworkRef {
+pub(crate) fn artwork_ref(path: &Path, kind: i32) -> ArtworkRef {
     ArtworkRef {
         kind,
         path: path.display().to_string(),
@@ -342,11 +342,11 @@ fn artwork_ref(path: &Path, kind: i32) -> ArtworkRef {
     }
 }
 
-fn guids_from_nfo(guids: &[NfoGuid]) -> Vec<String> {
+pub(crate) fn guids_from_nfo(guids: &[NfoGuid]) -> Vec<String> {
     guids.iter().filter_map(NfoGuid::as_metadata_guid).collect()
 }
 
-fn actors_from_nfo(actors: &[NfoActor]) -> Vec<PersonRef> {
+pub(crate) fn actors_from_nfo(actors: &[NfoActor]) -> Vec<PersonRef> {
     actors
         .iter()
         .filter_map(|actor| {
@@ -359,7 +359,7 @@ fn actors_from_nfo(actors: &[NfoActor]) -> Vec<PersonRef> {
         .collect()
 }
 
-fn directors_from(values: &[String]) -> Vec<PersonRef> {
+pub(crate) fn directors_from(values: &[String]) -> Vec<PersonRef> {
     values.iter().cloned().map(PersonRef::new).collect()
 }
 

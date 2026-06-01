@@ -11,8 +11,8 @@ use ersatzrs_domain::{
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
-    artwork_kind, replace_artwork, replace_people, replace_strings, update_local_file_subtitles,
-    ArtworkRef, PersonRef, SubtitleMetadataOwner,
+    artwork_kind, replace_artwork, replace_guids, replace_people, replace_strings,
+    update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
@@ -23,6 +23,9 @@ mod folder_etag;
 mod library_folder;
 pub mod local_television;
 pub mod nfo;
+
+const METADATA_KIND_FALLBACK: i32 = 0;
+const METADATA_KIND_SIDECAR: i32 = 1;
 
 #[derive(Debug, Error)]
 pub enum ScannerError {
@@ -1111,6 +1114,9 @@ async fn upsert_local_file(
     {
         update_local_file_subtitles(&mut tx, owner, &probed.streams, path, true).await?;
     }
+    if library_path.media_kind == LibraryMediaKind::Movies {
+        enrich_movie_metadata(&mut tx, item_id, library_path, path).await?;
+    }
 
     tx.commit().await?;
     Ok(())
@@ -1255,7 +1261,7 @@ async fn insert_fallback_metadata(
                 r#"INSERT INTO "MovieMetadata" (
                     "MovieId", "DateAdded", "DateUpdated", "MetadataKind",
                     "Title", "SortTitle", "OriginalTitle"
-                ) VALUES (?, ?, ?, 1, ?, ?, ?)"#,
+                ) VALUES (?, ?, ?, 0, ?, ?, ?)"#,
             )
             .bind(item_id)
             .bind(&now)
@@ -1322,6 +1328,227 @@ async fn insert_fallback_metadata(
         }
     }
     Ok(())
+}
+
+fn original_title_for_path(library_path: &LocalLibraryPath, path: &Path) -> Option<String> {
+    path.strip_prefix(&library_path.path)
+        .ok()
+        .and_then(|path| path.to_str())
+        .map(str::to_owned)
+}
+
+fn locate_movie_nfo(video_path: &Path) -> Option<PathBuf> {
+    let file_nfo = video_path.with_extension("nfo");
+    if file_nfo.is_file() {
+        return Some(file_nfo);
+    }
+
+    let movie_nfo = video_path.parent()?.join("movie.nfo");
+    movie_nfo.is_file().then_some(movie_nfo)
+}
+
+fn locate_movie_artwork(video_path: &Path, kind: i32) -> Option<PathBuf> {
+    let folder = video_path.parent()?;
+    let stem = video_path.file_stem().and_then(|stem| stem.to_str());
+    let candidates = match (kind, stem) {
+        (artwork_kind::POSTER, Some(stem)) => {
+            vec![
+                "poster".to_owned(),
+                format!("{stem}-poster"),
+                "folder".to_owned(),
+            ]
+        }
+        (artwork_kind::POSTER, None) => vec!["poster".to_owned(), "folder".to_owned()],
+        (artwork_kind::FAN_ART, Some(stem)) => {
+            vec![
+                "fanart".to_owned(),
+                format!("{stem}-fanart"),
+                "backdrop".to_owned(),
+            ]
+        }
+        (artwork_kind::FAN_ART, None) => vec!["fanart".to_owned(), "backdrop".to_owned()],
+        _ => return None,
+    };
+    local_television::locate_artwork(folder, &candidates)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn enrich_movie_metadata(
+    tx: &mut Transaction<'_, Db>,
+    movie_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+) -> Result<i64> {
+    let nfo_path = locate_movie_nfo(path);
+    let movie_nfo = nfo_path
+        .as_ref()
+        .and_then(|path| match nfo::parse_movie_nfo(path) {
+            Ok(parsed) => Some(parsed),
+            Err(err) => {
+                warn!(
+                    path = %path.display(),
+                    error = %err,
+                    "failed to parse movie.nfo; falling back"
+                );
+                None
+            }
+        });
+
+    let fallback_title = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    let title = movie_nfo
+        .as_ref()
+        .and_then(|nfo| nfo.title.clone())
+        .unwrap_or(fallback_title);
+    let sort_title = movie_nfo
+        .as_ref()
+        .and_then(|nfo| nfo.sort_title.clone())
+        .unwrap_or_else(|| nfo::sort_title(&title));
+    let original_title = original_title_for_path(library_path, path);
+    let metadata_kind = if movie_nfo.is_some() {
+        METADATA_KIND_SIDECAR
+    } else {
+        METADATA_KIND_FALLBACK
+    };
+    let release_date = movie_nfo
+        .as_ref()
+        .and_then(|nfo| nfo.premiered.map(encode_datetime));
+    let now = encode_datetime(Utc::now());
+
+    let existing_id: Option<i64> =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "MovieMetadata" WHERE "MovieId" = ? LIMIT 1"#)
+            .bind(movie_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+
+    let metadata_id = if let Some(id) = existing_id {
+        sqlx::query(
+            r#"UPDATE "MovieMetadata"
+               SET "DateUpdated" = ?, "MetadataKind" = ?, "Title" = ?,
+                   "SortTitle" = ?, "OriginalTitle" = ?, "Year" = ?,
+                   "ReleaseDate" = ?, "ContentRating" = ?, "Plot" = ?,
+                   "Outline" = ?, "Tagline" = NULL
+               WHERE "Id" = ?"#,
+        )
+        .bind(&now)
+        .bind(metadata_kind)
+        .bind(&title)
+        .bind(&sort_title)
+        .bind(&original_title)
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.year))
+        .bind(&release_date)
+        .bind(
+            movie_nfo
+                .as_ref()
+                .and_then(|nfo| nfo.content_rating.clone()),
+        )
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.plot.clone()))
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.outline.clone()))
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+        id
+    } else {
+        let result = sqlx::query(
+            r#"INSERT INTO "MovieMetadata" (
+                "MovieId", "DateAdded", "DateUpdated", "MetadataKind",
+                "Title", "SortTitle", "OriginalTitle", "Year", "ReleaseDate",
+                "ContentRating", "Plot", "Outline", "Tagline"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)"#,
+        )
+        .bind(movie_id)
+        .bind(&now)
+        .bind(&now)
+        .bind(metadata_kind)
+        .bind(&title)
+        .bind(&sort_title)
+        .bind(&original_title)
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.year))
+        .bind(&release_date)
+        .bind(
+            movie_nfo
+                .as_ref()
+                .and_then(|nfo| nfo.content_rating.clone()),
+        )
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.plot.clone()))
+        .bind(movie_nfo.as_ref().and_then(|nfo| nfo.outline.clone()))
+        .execute(&mut **tx)
+        .await?;
+        ersatzrs_infra::db::last_insert_id(result)
+    };
+
+    if let Some(parsed) = movie_nfo.as_ref() {
+        replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &parsed.genres).await?;
+        replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &parsed.tags).await?;
+        replace_strings(
+            tx,
+            "Studio",
+            "MovieMetadataId",
+            metadata_id,
+            &parsed.studios,
+        )
+        .await?;
+        replace_people(
+            tx,
+            "Actor",
+            "MovieMetadataId",
+            metadata_id,
+            &local_television::actors_from_nfo(&parsed.actors),
+        )
+        .await?;
+        replace_people(
+            tx,
+            "Director",
+            "MovieMetadataId",
+            metadata_id,
+            &local_television::directors_from(&parsed.directors),
+        )
+        .await?;
+        replace_people(
+            tx,
+            "Writer",
+            "MovieMetadataId",
+            metadata_id,
+            &local_television::directors_from(&parsed.writers),
+        )
+        .await?;
+        replace_guids(
+            tx,
+            "MovieMetadataId",
+            metadata_id,
+            &local_television::guids_from_nfo(&parsed.guids),
+        )
+        .await?;
+    } else {
+        replace_strings(tx, "Genre", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_strings(tx, "Tag", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_strings(tx, "Studio", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_people(tx, "Actor", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_people(tx, "Director", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_people(tx, "Writer", "MovieMetadataId", metadata_id, &[]).await?;
+        replace_guids(tx, "MovieMetadataId", metadata_id, &[]).await?;
+    }
+
+    let mut artwork = Vec::new();
+    if let Some(path) = locate_movie_artwork(path, artwork_kind::POSTER) {
+        artwork.push(local_television::artwork_ref(&path, artwork_kind::POSTER));
+    }
+    if let Some(path) = locate_movie_artwork(path, artwork_kind::FAN_ART) {
+        artwork.push(local_television::artwork_ref(&path, artwork_kind::FAN_ART));
+    }
+    replace_artwork(
+        tx,
+        "MovieMetadataId",
+        metadata_id,
+        &[artwork_kind::POSTER, artwork_kind::FAN_ART],
+        &artwork,
+    )
+    .await?;
+
+    Ok(metadata_id)
 }
 
 async fn local_file_subtitle_owner(
@@ -1606,5 +1833,285 @@ mod tests {
             Path::new("/media/song.flac"),
             LibraryMediaKind::Movies
         ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    mod movie_enrichment {
+        use super::super::{
+            enrich_movie_metadata, insert_media_item, original_title_for_path,
+            METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
+        };
+        use crate::LocalLibraryPath;
+        use ersatzrs_domain::LibraryMediaKind;
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::{Executor, Row, SqlitePool};
+        use std::path::Path;
+        use tempfile::TempDir;
+
+        #[tokio::test]
+        async fn enriches_movie_sidecar_artwork_and_child_rows_idempotently() {
+            let temp = TempDir::new().expect("temp dir");
+            let movie_path = temp.path().join("Film (2020).mkv");
+            std::fs::write(&movie_path, b"not probed").expect("movie file");
+            std::fs::write(
+                temp.path().join("Film (2020).nfo"),
+                r#"<movie>
+                    <title>The Film</title>
+                    <sorttitle>Film</sorttitle>
+                    <outline>Short summary.</outline>
+                    <plot>Detailed plot.</plot>
+                    <year>2020</year>
+                    <mpaa>PG-13</mpaa>
+                    <premiered>2020-02-03</premiered>
+                    <genre>Drama</genre>
+                    <tag>Festival</tag>
+                    <studio>Studio One</studio>
+                    <actor><name>Ada Actor</name><role>Lead</role><order>1</order></actor>
+                    <director>Dana Director</director>
+                    <credits>Will Writer</credits>
+                    <uniqueid type="imdb" default="true">tt1234567</uniqueid>
+                </movie>"#,
+            )
+            .expect("nfo file");
+            std::fs::write(temp.path().join("poster.jpg"), b"poster").expect("poster");
+            std::fs::write(temp.path().join("fanart.jpg"), b"fanart").expect("fanart");
+
+            let pool = test_db().await;
+            let library_path = seed_movie_library(&pool, temp.path()).await;
+            let movie_id = seed_movie(&pool, library_path.id).await;
+
+            let first_metadata_id = enrich_once(&pool, movie_id, &library_path, &movie_path).await;
+            let second_metadata_id = enrich_once(&pool, movie_id, &library_path, &movie_path).await;
+
+            assert_eq!(first_metadata_id, second_metadata_id);
+
+            let row = sqlx::query(
+                r#"SELECT "MetadataKind", "Title", "SortTitle", "OriginalTitle", "Year",
+                          "ReleaseDate", "ContentRating", "Plot", "Outline"
+                   FROM "MovieMetadata" WHERE "Id" = ?"#,
+            )
+            .bind(first_metadata_id)
+            .fetch_one(&pool)
+            .await
+            .expect("metadata row");
+
+            assert_eq!(row.get::<i32, _>("MetadataKind"), METADATA_KIND_SIDECAR);
+            assert_eq!(
+                row.get::<Option<String>, _>("Title").as_deref(),
+                Some("The Film")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("SortTitle").as_deref(),
+                Some("Film")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("OriginalTitle").as_deref(),
+                Some("Film (2020).mkv")
+            );
+            assert_eq!(row.get::<Option<i32>, _>("Year"), Some(2020));
+            assert_eq!(
+                row.get::<Option<String>, _>("ReleaseDate").as_deref(),
+                Some("2020-02-03 00:00:00")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("ContentRating").as_deref(),
+                Some("PG-13")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("Plot").as_deref(),
+                Some("Detailed plot.")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("Outline").as_deref(),
+                Some("Short summary.")
+            );
+
+            assert_eq!(
+                count_for_metadata(&pool, "Artwork", first_metadata_id).await,
+                2
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "Genre", first_metadata_id).await,
+                1
+            );
+            assert_eq!(count_for_metadata(&pool, "Tag", first_metadata_id).await, 1);
+            assert_eq!(
+                count_for_metadata(&pool, "Studio", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "Actor", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "Director", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "Writer", first_metadata_id).await,
+                1
+            );
+            assert_eq!(
+                count_for_metadata(&pool, "MetadataGuid", first_metadata_id).await,
+                1
+            );
+            assert_eq!(count_table(&pool, "MovieMetadata").await, 1);
+        }
+
+        #[tokio::test]
+        async fn fallback_movie_keeps_metadata_kind_zero_and_attaches_artwork() {
+            let temp = TempDir::new().expect("temp dir");
+            let movie_path = temp.path().join("Plain Film.mkv");
+            std::fs::write(&movie_path, b"not probed").expect("movie file");
+            std::fs::write(temp.path().join("poster.jpg"), b"poster").expect("poster");
+            std::fs::write(temp.path().join("fanart.jpg"), b"fanart").expect("fanart");
+
+            let pool = test_db().await;
+            let library_path = seed_movie_library(&pool, temp.path()).await;
+            let movie_id = seed_movie(&pool, library_path.id).await;
+
+            let metadata_id = enrich_once(&pool, movie_id, &library_path, &movie_path).await;
+
+            let row = sqlx::query(
+                r#"SELECT "MetadataKind", "Title", "Plot"
+                   FROM "MovieMetadata" WHERE "Id" = ?"#,
+            )
+            .bind(metadata_id)
+            .fetch_one(&pool)
+            .await
+            .expect("metadata row");
+            assert_eq!(row.get::<i32, _>("MetadataKind"), METADATA_KIND_FALLBACK);
+            assert_eq!(
+                row.get::<Option<String>, _>("Title").as_deref(),
+                Some("Plain Film")
+            );
+            assert!(row.get::<Option<String>, _>("Plot").is_none());
+            assert_eq!(count_for_metadata(&pool, "Artwork", metadata_id).await, 2);
+        }
+
+        #[tokio::test]
+        async fn malformed_movie_nfo_falls_back_without_failing_scan_transaction() {
+            let temp = TempDir::new().expect("temp dir");
+            let movie_path = temp.path().join("Broken Film.mkv");
+            std::fs::write(&movie_path, b"not probed").expect("movie file");
+            std::fs::write(temp.path().join("Broken Film.nfo"), b"<movie><title>Broken")
+                .expect("nfo file");
+
+            let pool = test_db().await;
+            let library_path = seed_movie_library(&pool, temp.path()).await;
+            let movie_id = seed_movie(&pool, library_path.id).await;
+
+            let metadata_id = enrich_once(&pool, movie_id, &library_path, &movie_path).await;
+
+            let row = sqlx::query(
+                r#"SELECT "MetadataKind", "Title" FROM "MovieMetadata" WHERE "Id" = ?"#,
+            )
+            .bind(metadata_id)
+            .fetch_one(&pool)
+            .await
+            .expect("metadata row");
+            assert_eq!(row.get::<i32, _>("MetadataKind"), METADATA_KIND_FALLBACK);
+            assert_eq!(
+                row.get::<Option<String>, _>("Title").as_deref(),
+                Some("Broken Film")
+            );
+        }
+
+        async fn test_db() -> SqlitePool {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("connect sqlite");
+            pool.execute("PRAGMA foreign_keys = ON")
+                .await
+                .expect("foreign keys");
+            sqlx::migrate!("../../migrations")
+                .run(&pool)
+                .await
+                .expect("migrate");
+            pool
+        }
+
+        async fn seed_movie_library(pool: &SqlitePool, path: &Path) -> LocalLibraryPath {
+            pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+                .await
+                .expect("media source");
+            pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+                .await
+                .expect("local source");
+            sqlx::query(
+                r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+                   VALUES (1, 'Movies', 1, 1)"#,
+            )
+            .execute(pool)
+            .await
+            .expect("library");
+            pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+                .await
+                .expect("local library");
+            sqlx::query(
+                r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#,
+            )
+            .bind(path.display().to_string())
+            .execute(pool)
+            .await
+            .expect("library path");
+
+            LocalLibraryPath {
+                id: 1,
+                path: path.display().to_string(),
+                media_kind: LibraryMediaKind::Movies,
+            }
+        }
+
+        async fn seed_movie(pool: &SqlitePool, library_path_id: i64) -> i64 {
+            let mut tx = pool.begin().await.expect("begin");
+            let movie_id = insert_media_item(&mut tx, library_path_id)
+                .await
+                .expect("media item");
+            sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (?)"#)
+                .bind(movie_id)
+                .execute(&mut *tx)
+                .await
+                .expect("movie");
+            tx.commit().await.expect("commit");
+            movie_id
+        }
+
+        async fn enrich_once(
+            pool: &SqlitePool,
+            movie_id: i64,
+            library_path: &LocalLibraryPath,
+            movie_path: &Path,
+        ) -> i64 {
+            assert_eq!(
+                original_title_for_path(library_path, movie_path).as_deref(),
+                movie_path.file_name().and_then(|name| name.to_str())
+            );
+            let mut tx = pool.begin().await.expect("begin");
+            let metadata_id = enrich_movie_metadata(&mut tx, movie_id, library_path, movie_path)
+                .await
+                .expect("enrich metadata");
+            tx.commit().await.expect("commit");
+            metadata_id
+        }
+
+        async fn count_for_metadata(pool: &SqlitePool, table: &str, metadata_id: i64) -> i64 {
+            let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "MovieMetadataId" = ?"#);
+            sqlx::query_scalar(&sql)
+                .bind(metadata_id)
+                .fetch_one(pool)
+                .await
+                .expect("count")
+        }
+
+        async fn count_table(pool: &SqlitePool, table: &str) -> i64 {
+            let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
+            sqlx::query_scalar(&sql)
+                .fetch_one(pool)
+                .await
+                .expect("count")
+        }
     }
 }

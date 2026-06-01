@@ -106,6 +106,39 @@ pub struct TvShowNfo {
     pub guids: Vec<NfoGuid>,
 }
 
+/// Parsed `<movie>` sidecar metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MovieNfo {
+    /// Movie title.
+    pub title: Option<String>,
+    /// Explicit sort title, if supplied by the sidecar.
+    pub sort_title: Option<String>,
+    /// Short outline.
+    pub outline: Option<String>,
+    /// Full plot.
+    pub plot: Option<String>,
+    /// Release year.
+    pub year: Option<i32>,
+    /// MPAA/content rating.
+    pub content_rating: Option<String>,
+    /// Premiered date.
+    pub premiered: Option<DateTime<Utc>>,
+    /// Genre rows.
+    pub genres: Vec<String>,
+    /// Tag rows.
+    pub tags: Vec<String>,
+    /// Studio rows.
+    pub studios: Vec<String>,
+    /// Actor rows.
+    pub actors: Vec<NfoActor>,
+    /// Writer names from `<credits>`.
+    pub writers: Vec<String>,
+    /// Director names.
+    pub directors: Vec<String>,
+    /// Provider GUID rows.
+    pub guids: Vec<NfoGuid>,
+}
+
 /// Parsed season sidecar metadata.
 ///
 /// `ErsatzTV` does not currently have a dedicated season NFO reader, but the
@@ -228,6 +261,26 @@ pub fn parse_tvshow_nfo(path: impl AsRef<Path>) -> Result<TvShowNfo> {
 /// fails.
 pub fn parse_tvshow_nfo_str(input: &str) -> Result<TvShowNfo> {
     parse_str::<RawTvShowNfo, _>(input, "tvshow", TvShowNfo::from)
+}
+
+/// Parse a movie NFO file.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be read, the expected root is absent,
+/// or XML deserialization fails.
+pub fn parse_movie_nfo(path: impl AsRef<Path>) -> Result<MovieNfo> {
+    parse_file::<RawMovieNfo, _>(path, "movie", MovieNfo::from)
+}
+
+/// Parse a movie NFO XML string.
+///
+/// # Errors
+///
+/// Returns an error when the expected root is absent or XML deserialization
+/// fails.
+pub fn parse_movie_nfo_str(input: &str) -> Result<MovieNfo> {
+    parse_str::<RawMovieNfo, _>(input, "movie", MovieNfo::from)
 }
 
 /// Parse a season NFO file.
@@ -585,6 +638,54 @@ impl From<RawTvShowNfo> for TvShowNfo {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
+struct RawMovieNfo {
+    title: Option<String>,
+    sorttitle: Option<String>,
+    outline: Option<String>,
+    plot: Option<String>,
+    year: Option<String>,
+    #[serde(rename = "mpaa")]
+    content_rating: Option<String>,
+    premiered: Option<String>,
+    #[serde(rename = "genre")]
+    genres: Vec<String>,
+    #[serde(rename = "tag")]
+    tags: Vec<String>,
+    #[serde(rename = "studio")]
+    studios: Vec<String>,
+    #[serde(rename = "actor")]
+    actors: Vec<RawActorNfo>,
+    #[serde(rename = "credits")]
+    writers: Vec<String>,
+    #[serde(rename = "director")]
+    directors: Vec<String>,
+    #[serde(rename = "uniqueid")]
+    guids: Vec<RawUniqueIdNfo>,
+}
+
+impl From<RawMovieNfo> for MovieNfo {
+    fn from(value: RawMovieNfo) -> Self {
+        Self {
+            title: value.title,
+            sort_title: value.sorttitle,
+            outline: value.outline,
+            plot: value.plot,
+            year: parse_i32(value.year),
+            content_rating: value.content_rating,
+            premiered: parse_datetime(value.premiered),
+            genres: value.genres,
+            tags: value.tags,
+            studios: value.studios,
+            actors: value.actors.into_iter().map(NfoActor::from).collect(),
+            writers: value.writers,
+            directors: value.directors,
+            guids: value.guids.into_iter().map(NfoGuid::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 struct RawSeasonNfo {
     title: Option<String>,
     sorttitle: Option<String>,
@@ -760,6 +861,42 @@ mod tests {
         assert_eq!(
             parsed.guids[0].as_metadata_guid().as_deref(),
             Some("imdb://tt3230854")
+        );
+    }
+
+    #[test]
+    fn parses_movie_nfo() {
+        let parsed = parse_movie_nfo_str(
+            r#"<movie>
+                <title>The Matrix</title>
+                <sorttitle>Matrix</sorttitle>
+                <outline>Reality is not what it seems.</outline>
+                <plot>A hacker discovers the truth.</plot>
+                <year>1999</year>
+                <mpaa>R</mpaa>
+                <premiered>1999-03-31</premiered>
+                <genre>Science Fiction</genre>
+                <tag>cyberpunk</tag>
+                <studio>Warner Bros.</studio>
+                <actor><name>Keanu Reeves</name><role>Neo</role><order>1</order></actor>
+                <credits>Lana Wachowski</credits>
+                <director>Lilly Wachowski</director>
+                <uniqueid type="imdb" default="true">tt0133093</uniqueid>
+            </movie>"#,
+        )
+        .expect("movie nfo should parse");
+
+        assert_eq!(parsed.title.as_deref(), Some("The Matrix"));
+        assert_eq!(parsed.sort_title.as_deref(), Some("Matrix"));
+        assert_eq!(parsed.year, Some(1999));
+        assert_eq!(parsed.content_rating.as_deref(), Some("R"));
+        assert_eq!(parsed.genres, ["Science Fiction"]);
+        assert_eq!(parsed.actors[0].role.as_deref(), Some("Neo"));
+        assert_eq!(parsed.writers, ["Lana Wachowski"]);
+        assert_eq!(parsed.directors, ["Lilly Wachowski"]);
+        assert_eq!(
+            parsed.guids[0].as_metadata_guid().as_deref(),
+            Some("imdb://tt0133093")
         );
     }
 
