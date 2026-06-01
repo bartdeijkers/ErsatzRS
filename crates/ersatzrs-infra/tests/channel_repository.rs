@@ -135,6 +135,64 @@ async fn channel_editor_save_round_trips_full_form_and_logo_artwork() {
 }
 
 #[tokio::test]
+async fn channel_editor_language_options_match_ersatztv_media_codes() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let mut channel = editor_form("43", "Language Seed");
+    channel.preferred_audio_language_code = Some("zzx".to_owned());
+    let result = repos.channel.save_editor_form(channel).await.unwrap();
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+
+    pool.execute(
+        r#"INSERT INTO "MediaVersion" (
+            "Id", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind"
+           ) VALUES (900, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', '00:01:00', 720, 1280, 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaStream" (
+            "Id", "Index", "MediaStreamKind", "Language", "Channels",
+            "Default", "Forced", "MediaVersionId"
+           ) VALUES (901, 0, 2, 'eng', 2, 1, 0, 900)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Subtitle" (
+            "Id", "DateAdded", "DateUpdated", "Default", "Forced",
+            "Language", "StreamIndex", "SubtitleKind"
+           ) VALUES (902, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 0, 'spa', 2, 0)"#,
+    )
+    .await
+    .unwrap();
+
+    let state = repos
+        .channel
+        .get_editor_state(Some(result.id))
+        .await
+        .unwrap()
+        .unwrap();
+    let language_options = state
+        .options
+        .language_codes
+        .iter()
+        .map(|option| {
+            (
+                option.value.as_deref().unwrap_or_default(),
+                option.label.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    assert!(language_options.contains(&("eng", "English")));
+    assert!(language_options.contains(&("spa", "Spanish")));
+    assert!(language_options.contains(&("zzx", "zzx")));
+}
+
+#[tokio::test]
 async fn channel_editor_save_validates_parity_rules() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

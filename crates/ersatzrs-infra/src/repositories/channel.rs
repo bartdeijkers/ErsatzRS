@@ -8,7 +8,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 use uuid::Uuid;
 
 use super::common::{
@@ -412,20 +412,47 @@ async fn load_mirror_channels(pool: &Pool<crate::db::Db>) -> Result<Vec<ChannelM
 
 async fn load_language_codes(pool: &Pool<crate::db::Db>) -> Result<Vec<ChannelSelectOption>> {
     let rows = sqlx::query(
-        r#"SELECT "Id", "ThreeCode1", "EnglishName" FROM "LanguageCode" ORDER BY "EnglishName", "ThreeCode1""#,
+        r#"SELECT "LanguageCode"
+           FROM (
+               SELECT "Language" AS "LanguageCode" FROM "MediaStream" WHERE "Language" IS NOT NULL
+               UNION ALL
+               SELECT "Language" AS "LanguageCode" FROM "Subtitle" WHERE "Language" IS NOT NULL
+               UNION ALL
+               SELECT "PreferredAudioLanguageCode" AS "LanguageCode"
+               FROM "Channel" WHERE "PreferredAudioLanguageCode" IS NOT NULL
+           ) codes
+           GROUP BY "LanguageCode"
+           ORDER BY COUNT("LanguageCode") DESC, "LanguageCode""#,
     )
     .fetch_all(pool)
     .await?;
 
-    rows.iter()
-        .map(|row| {
-            Ok(ChannelSelectOption {
-                id: row.try_get("Id")?,
-                value: Some(row.try_get("ThreeCode1")?),
-                label: row.try_get("EnglishName")?,
-            })
-        })
-        .collect()
+    let mut seen = HashSet::new();
+    let mut options = Vec::new();
+    for row in rows {
+        let media_code = row.try_get::<String, _>("LanguageCode")?.trim().to_string();
+        if media_code.is_empty() {
+            continue;
+        }
+
+        let expanded = ersatzrs_core::language_codes::all_language_codes([media_code.as_str()]);
+        let resolved = expanded
+            .into_iter()
+            .filter(|code| code.len() == 3)
+            .find_map(|code| {
+                ersatzrs_core::language_codes::english_name(&code).map(|name| (code, name))
+            });
+        let (code, label) = resolved.unwrap_or_else(|| (media_code.clone(), media_code));
+        if seen.insert(code.clone()) {
+            options.push(ChannelSelectOption {
+                id: i64::try_from(options.len()).unwrap_or_default(),
+                value: Some(code),
+                label,
+            });
+        }
+    }
+
+    Ok(options)
 }
 
 async fn load_default_ffmpeg_profile_id(pool: &Pool<crate::db::Db>) -> Result<EntityId> {
