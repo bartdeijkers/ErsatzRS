@@ -1173,7 +1173,7 @@ pub async fn create_playout_with_pool(
     // embedded `random()` would be SQLite-only and overflow MySQL's `INT`.
     let seed = next_seed();
 
-    let result = sqlx::query(
+    sqlx::query(
         r#"INSERT INTO "Playout"
            ("ChannelId", "ProgramScheduleId", "ScheduleFile", "ScheduleKind", "Seed")
            VALUES (?, ?, ?, ?, ?)"#,
@@ -1186,7 +1186,15 @@ pub async fn create_playout_with_pool(
     .execute(pool)
     .await?;
 
-    Ok(ersatzrs_infra::db::last_insert_id(result))
+    Ok(sqlx::query_scalar(
+        r#"SELECT "Id"
+           FROM "Playout"
+           WHERE "ChannelId" = ?
+           ORDER BY "Id" DESC"#,
+    )
+    .bind(channel_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 /// A non-negative 32-bit playout seed, mirroring ErsatzTV's `new Random().Next()`.
