@@ -26,6 +26,11 @@ pub struct EntityLocker {
     keys: Arc<Mutex<HashSet<String>>>,
 }
 
+pub struct LibraryLockGuard {
+    locker: EntityLocker,
+    library_id: i64,
+}
+
 /// In-process map of `library_id -> fractional progress in [0.0, 1.0]`.
 /// Mirrors ETV's `IScannerProxyService.GetProgress` + the `LibraryScanProgress`
 /// Courier notification, but polled rather than push-based.
@@ -114,6 +119,13 @@ impl EntityLocker {
         self.lock_key(library_key(library_id))
     }
 
+    pub fn try_lock_library(&self, library_id: i64) -> Option<LibraryLockGuard> {
+        self.lock_library(library_id).then(|| LibraryLockGuard {
+            locker: self.clone(),
+            library_id,
+        })
+    }
+
     pub fn unlock_library(&self, library_id: i64) {
         self.unlock_key(&library_key(library_id));
     }
@@ -132,6 +144,12 @@ impl EntityLocker {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+impl Drop for LibraryLockGuard {
+    fn drop(&mut self) {
+        self.locker.unlock_library(self.library_id);
     }
 }
 
@@ -268,7 +286,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, IptvAccessTokenVerifier, ScanProgressMap, SystemStartup};
+    use super::{AppState, EntityLocker, IptvAccessTokenVerifier, ScanProgressMap, SystemStartup};
     use ersatzrs_domain::ScanProgressSink;
     use ersatzrs_infra::db::DatabaseSchemaStatus;
 
@@ -311,6 +329,19 @@ mod tests {
         sink.report(0.5);
         sink.report(0.9);
         assert_eq!(map.snapshot().get(&42).copied(), Some(0.9));
+    }
+
+    #[test]
+    fn library_lock_guard_releases_lock_on_drop() {
+        let locker = EntityLocker::default();
+        let guard = locker.try_lock_library(42).expect("lock should be free");
+
+        assert!(locker.try_lock_library(42).is_none());
+        assert_eq!(locker.locked_libraries(), [42]);
+
+        drop(guard);
+
+        assert!(locker.try_lock_library(42).is_some());
     }
 
     #[tokio::test]

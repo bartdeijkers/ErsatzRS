@@ -1,6 +1,23 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::host::state::{LibraryLockGuard, ScanProgressMap};
+
+#[cfg(not(target_arch = "wasm32"))]
+struct ScanCleanup {
+    _lock_guard: LibraryLockGuard,
+    progress_map: ScanProgressMap,
+    library_id: i64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for ScanCleanup {
+    fn drop(&mut self) {
+        self.progress_map.clear(self.library_id);
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LibraryRow {
     pub id: i64,
@@ -103,12 +120,17 @@ pub async fn scan_library(
 
     tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
 
-    if !locker.lock_library(library_id) {
+    let Some(lock_guard) = locker.try_lock_library(library_id) else {
         tracing::info!(library_id, "scan_library: already locked, no-op");
         return Ok(());
-    }
+    };
 
     tokio::task::spawn(async move {
+        let cleanup = ScanCleanup {
+            _lock_guard: lock_guard,
+            progress_map: progress_map.clone(),
+            library_id,
+        };
         let started = std::time::Instant::now();
         tracing::info!(library_id, kind = %kind, "library scan started");
         let sink = progress_map.sink_for(library_id);
@@ -164,8 +186,7 @@ pub async fn scan_library(
                 tracing::warn!(kind = other, "unknown library kind in scan_library");
             }
         }
-        locker.unlock_library(library_id);
-        progress_map.clear(library_id);
+        drop(cleanup);
         tracing::info!(
             library_id,
             elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
@@ -209,12 +230,17 @@ pub async fn scan_show(
         "scan_show invoked"
     );
 
-    if !locker.lock_library(library_id) {
+    let Some(lock_guard) = locker.try_lock_library(library_id) else {
         tracing::info!(library_id, show_id, "scan_show: already locked, no-op");
         return Ok(());
-    }
+    };
 
     tokio::task::spawn(async move {
+        let cleanup = ScanCleanup {
+            _lock_guard: lock_guard,
+            progress_map: progress_map.clone(),
+            library_id,
+        };
         let started = std::time::Instant::now();
         tracing::info!(library_id, show_id, kind = %kind, "show scan started");
         let sink = progress_map.sink_for(library_id);
@@ -280,8 +306,7 @@ pub async fn scan_show(
             }
         }
 
-        locker.unlock_library(library_id);
-        progress_map.clear(library_id);
+        drop(cleanup);
         tracing::info!(
             library_id,
             show_id,

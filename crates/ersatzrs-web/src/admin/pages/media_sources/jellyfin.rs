@@ -255,16 +255,16 @@ fn JellyfinConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
 #[component]
 pub fn JellyfinLibrariesPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     view! { <JellyfinLibrariesIsland source_id=source_id/> }
 }
 
 #[island]
 fn JellyfinLibrariesIsland(source_id: i64) -> impl IntoView {
-    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(move || source_id, |id| async move {
-        list_jellyfin_libraries(id).await.unwrap_or_default()
-    });
+    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_jellyfin_libraries(id).await.unwrap_or_default() },
+    );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -358,8 +358,7 @@ fn JellyfinLibrariesIsland(source_id: i64) -> impl IntoView {
 #[component]
 pub fn JellyfinPathsPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     view! { <JellyfinPathsIsland source_id=source_id/> }
 }
 
