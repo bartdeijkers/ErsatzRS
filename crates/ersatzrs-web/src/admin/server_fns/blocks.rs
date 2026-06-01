@@ -827,7 +827,7 @@ async fn query_items_for_preview(
                        WHERE ci."CollectionId" = ?
                    ) ORDER BY {order_clause}"#,
             );
-            sqlx::query(&sql)
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
                 .bind(cid)
                 .bind(cid)
                 .fetch_all(pool)
@@ -861,7 +861,7 @@ async fn query_items_for_preview(
                    WHERE se."ShowId" = ?
                    ORDER BY {order_clause}"#,
             );
-            sqlx::query(&sql)
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
                 .bind(show_id)
                 .fetch_all(pool)
                 .await
@@ -888,7 +888,7 @@ async fn query_items_for_preview(
                          LEFT JOIN "MediaVersion" mv ON mv."EpisodeId" = e."Id"
                          WHERE e."SeasonId" = ?
                          ORDER BY em."EpisodeNumber""#;
-            sqlx::query(sql)
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
                 .bind(season_id)
                 .fetch_all(pool)
                 .await
@@ -1163,7 +1163,9 @@ async fn load_block_options(
 ) -> Result<Vec<BlockEditorOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .map(|row| BlockEditorOption {
@@ -1185,7 +1187,7 @@ async fn copy_block_item_join_rows(
         r#"INSERT INTO {table} ("BlockItemId", {target_column})
            SELECT ?, {target_column} FROM {table} WHERE "BlockItemId" = ?"#
     );
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(new_item_id)
         .bind(old_item_id)
         .execute(&mut **tx)

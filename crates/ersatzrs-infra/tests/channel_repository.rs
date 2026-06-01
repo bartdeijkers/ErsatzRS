@@ -275,13 +275,12 @@ async fn channel_editor_save_replaces_logo_and_preserves_generated_source_with_p
         .unwrap()
         .id;
 
-    pool.execute(
-        format!(
-            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
-               VALUES (600, {target_id}, 0, 1)"#
-        )
-        .as_str(),
+    sqlx::query(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (600, ?, 0, 1)"#,
     )
+    .bind(target_id)
+    .execute(&pool)
     .await
     .unwrap();
 

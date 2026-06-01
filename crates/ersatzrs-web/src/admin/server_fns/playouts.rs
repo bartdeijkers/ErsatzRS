@@ -257,17 +257,17 @@ pub async fn list_playouts(
            LEFT JOIN "PlayoutBuildStatus" pbs ON pbs."PlayoutId" = p."Id""#;
 
     let rows = if trimmed.is_empty() {
-        sqlx::query(&format!(
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
             r#"{base} ORDER BY c."SortNumber", p."Id" LIMIT ? OFFSET ?"#
-        ))
+        )))
         .bind(limit)
         .bind(offset)
         .fetch_all(&state.pool)
         .await?
     } else {
-        sqlx::query(&format!(
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
             r#"{base} WHERE c."Name" LIKE ? ORDER BY c."SortNumber", p."Id" LIMIT ? OFFSET ?"#
-        ))
+        )))
         .bind(format!("%{trimmed}%"))
         .bind(limit)
         .bind(offset)
@@ -368,7 +368,7 @@ pub async fn list_playout_detail_items(
            LIMIT ? OFFSET ?"#
     );
 
-    let window = sqlx::query(&window_sql)
+    let window = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&window_sql))
         .bind(playout_id)
         .bind(&now)
         .bind(playout_id)
@@ -449,7 +449,7 @@ pub async fn count_playout_detail_items(
                WHERE "PlayoutId" = ? AND "Finish" >= ?)"#
     );
 
-    let count: i64 = sqlx::query_scalar(&sql)
+    let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(playout_id)
         .bind(&now)
         .bind(playout_id)
@@ -964,10 +964,12 @@ pub async fn erase_playout_items_and_history(id: i64) -> Result<(), ServerFnErro
         "PlayoutGap",
         "PlayoutBuildStatus",
     ] {
-        sqlx::query(&format!(r#"DELETE FROM "{table}" WHERE "PlayoutId" = ?"#))
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"DELETE FROM "{table}" WHERE "PlayoutId" = ?"#
+        )))
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     }
 
     tx.commit().await?;
@@ -1654,9 +1656,9 @@ async fn load_nested_options(
 ) -> Result<Vec<PlayoutNestedOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
         r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "{table}" ORDER BY "Name", "Id""#
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     Ok(rows
@@ -1676,11 +1678,11 @@ async fn load_nested_child_options(
 ) -> Result<Vec<PlayoutNestedChildOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(format!(
         r#"SELECT "Id", "{group_column}", COALESCE("Name", '') AS "Name"
            FROM "{table}"
            ORDER BY "{group_column}", "Name", "Id""#
-    ))
+    )))
     .fetch_all(pool)
     .await?;
     Ok(rows
@@ -1794,11 +1796,12 @@ async fn validate_ids(
     unique.sort_unstable();
     unique.dedup();
     for id in unique {
-        let exists: i64 =
-            sqlx::query_scalar(&format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "Id" = ?"#))
-                .bind(id)
-                .fetch_one(pool)
-                .await?;
+        let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT COUNT(*) FROM "{table}" WHERE "Id" = ?"#
+        )))
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
         if exists == 0 {
             return Err(ServerFnError::new(message));
         }
@@ -2107,7 +2110,7 @@ async fn load_item_titles(
            WHERE pi."Id" IN ({placeholders})"#
     );
 
-    let mut q = sqlx::query(&sql);
+    let mut q = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql));
     for id in item_ids {
         q = q.bind(id);
     }
@@ -2502,12 +2505,14 @@ async fn resolve_collection_name(
         _ => return None,
     };
     let id = id?;
-    sqlx::query_scalar(&format!(r#"SELECT "Name" FROM "{table}" WHERE "Id" = ?"#))
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
+    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+        r#"SELECT "Name" FROM "{table}" WHERE "Id" = ?"#
+    )))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
 }
 
 #[cfg(feature = "ssr")]
@@ -3054,7 +3059,10 @@ mod tests {
             r#"CREATE TABLE "ImageMetadata" ("ImageId" INTEGER, "Title" TEXT)"#,
             r#"CREATE TABLE "RemoteStreamMetadata" ("RemoteStreamId" INTEGER, "Title" TEXT)"#,
         ] {
-            sqlx::query(sql).execute(pool).await.expect("create table");
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                .execute(pool)
+                .await
+                .expect("create table");
         }
     }
 
@@ -3084,7 +3092,10 @@ mod tests {
                 "ProgramScheduleId" INTEGER NOT NULL
             )"#,
         ] {
-            sqlx::query(sql).execute(pool).await.expect("create table");
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                .execute(pool)
+                .await
+                .expect("create table");
         }
     }
 
@@ -3175,7 +3186,10 @@ mod tests {
                 "StartYear" INTEGER NULL
             )"#,
         ] {
-            sqlx::query(sql).execute(pool).await.expect("create table");
+            sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+                .execute(pool)
+                .await
+                .expect("create table");
         }
     }
 

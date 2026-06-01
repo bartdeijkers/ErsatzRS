@@ -254,7 +254,7 @@ async fn load_provider_library_key(
     library_id: i64,
 ) -> anyhow::Result<String> {
     let sql = format!(r#"SELECT "{column}" AS "Value" FROM "{table}" WHERE "Id" = ?"#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(library_id)
         .fetch_optional(pool)
         .await?
@@ -386,7 +386,7 @@ async fn load_connection_address(
            ORDER BY "Id"
            LIMIT 1"#
     );
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(media_source_id)
         .fetch_optional(pool)
         .await?

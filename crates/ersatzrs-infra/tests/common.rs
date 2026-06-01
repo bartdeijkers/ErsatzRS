@@ -87,48 +87,47 @@ pub async fn seed_profile_and_channel(repos: &Repositories, channel_id: i64) {
 }
 
 pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64, path_id: i64) {
-    pool.execute(
-        format!(r#"INSERT OR REPLACE INTO "MediaSource" ("Id") VALUES ({source_id})"#).as_str(),
+    sqlx::query(r#"INSERT OR REPLACE INTO "MediaSource" ("Id") VALUES (?)"#)
+        .bind(source_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT OR REPLACE INTO "LocalMediaSource" ("Id") VALUES (?)"#)
+        .bind(source_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT OR REPLACE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+             VALUES (?, 'local', 'Movies', ?)"#,
     )
+    .bind(library_id)
+    .bind(source_id)
+    .execute(pool)
     .await
     .unwrap();
-    pool.execute(
-        format!(r#"INSERT OR REPLACE INTO "LocalMediaSource" ("Id") VALUES ({source_id})"#)
-            .as_str(),
+    sqlx::query(r#"INSERT OR REPLACE INTO "LocalLibrary" ("Id") VALUES (?)"#)
+        .bind(library_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT OR REPLACE INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (?, ?, '/media')"#,
     )
-    .await
-    .unwrap();
-    pool.execute(
-        format!(
-            r#"INSERT OR REPLACE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
-             VALUES ({library_id}, 'local', 'Movies', {source_id})"#
-        )
-        .as_str(),
-    )
-    .await
-    .unwrap();
-    pool.execute(
-        format!(r#"INSERT OR REPLACE INTO "LocalLibrary" ("Id") VALUES ({library_id})"#).as_str(),
-    )
-    .await
-    .unwrap();
-    pool.execute(
-        format!(
-            r#"INSERT OR REPLACE INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES ({path_id}, {library_id}, '/media')"#
-        )
-        .as_str(),
-    )
+    .bind(path_id)
+    .bind(library_id)
+    .execute(pool)
     .await
     .unwrap();
 }
 
 pub async fn seed_media_item(pool: &SqlitePool, item_id: i64, path_id: i64) {
-    pool.execute(
-        format!(
-            r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES ({item_id}, {path_id}, 'Normal')"#
-        )
-        .as_str(),
+    sqlx::query(
+        r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, 'Normal')"#,
     )
+    .bind(item_id)
+    .bind(path_id)
+    .execute(pool)
     .await
     .unwrap();
 }

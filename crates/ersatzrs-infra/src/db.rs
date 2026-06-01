@@ -55,6 +55,10 @@ pub type DbQueryResult = sqlx::any::AnyQueryResult;
 #[cfg(not(feature = "mysql"))]
 pub type DbQueryResult = SqliteQueryResult;
 
+pub fn assert_sql_safe(sql: impl AsRef<str>) -> sqlx::AssertSqlSafe<String> {
+    sqlx::AssertSqlSafe(sql.as_ref().to_owned())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseBackend {
     Sqlite,
@@ -65,6 +69,7 @@ pub enum DatabaseBackend {
 pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
 pub const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
 pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
+#[cfg(not(feature = "mysql"))]
 const SQLITE_BUSY_TIMEOUT_MS: u64 = 30_000;
 
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
@@ -294,8 +299,7 @@ async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
             Box::pin(async move {
                 connection.execute("PRAGMA foreign_keys = ON").await?;
                 connection.execute("PRAGMA journal_mode = WAL").await?;
-                let busy_timeout = format!("PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}");
-                connection.execute(busy_timeout.as_str()).await?;
+                connection.execute("PRAGMA busy_timeout = 30000").await?;
                 Ok(())
             })
         })

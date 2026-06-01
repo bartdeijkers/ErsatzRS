@@ -249,7 +249,10 @@ async fn load_ids_in_tx(
     sql: &str,
     id: EntityId,
 ) -> Result<Vec<EntityId>> {
-    let rows = sqlx::query(sql).bind(id).fetch_all(&mut **tx).await?;
+    let rows = sqlx::query(crate::db::assert_sql_safe(sql))
+        .bind(id)
+        .fetch_all(&mut **tx)
+        .await?;
     rows.iter()
         .map(|row| row.try_get("Id").map_err(Into::into))
         .collect()

@@ -1690,7 +1690,10 @@ async fn load_strings(
     // in this module; not user input. Identifiers are inlined because the
     // sqlx query cache uses the rendered SQL as the key.
     let sql = format!(r#"SELECT "Name" FROM {table} WHERE "{column}" = ? ORDER BY "Name""#);
-    let rows = sqlx::query(&sql).bind(metadata_id).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
+        .bind(metadata_id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .filter_map(|r| r.try_get::<Option<String>, _>("Name").ok().flatten())
@@ -4435,7 +4438,10 @@ async fn validate_optional_reference(
         return Ok(());
     };
     let sql = format!("SELECT COUNT(*) FROM {table_name} WHERE \"Id\" = ?");
-    let exists: i64 = sqlx::query_scalar(&sql).bind(id).fetch_one(pool).await?;
+    let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
     if exists == 0 {
         return Err(ServerFnError::new(format!(
             "Referenced item {id} does not exist."
@@ -4451,7 +4457,9 @@ async fn load_rerun_options(
 ) -> Result<Vec<RerunCollectionSelectOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .map(|row| RerunCollectionSelectOption {
@@ -5563,7 +5571,9 @@ async fn load_named_options(
 ) -> Result<Vec<PlaylistItemOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .into_iter()
         .map(|row| PlaylistItemOption {
@@ -6101,7 +6111,7 @@ pub async fn media_page_map(
            ORDER BY m."SortTitle", m."Title""#
     );
 
-    let rows = sqlx::query(&sql)
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(search.trim())
         .bind(&like)
         .fetch_all(&state.pool)

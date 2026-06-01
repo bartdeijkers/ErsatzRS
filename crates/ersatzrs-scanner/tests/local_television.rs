@@ -444,7 +444,7 @@ async fn seed_local_library(pool: &SqlitePool, path: &Path, media_kind: i32) {
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}""#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_one(pool)
         .await
         .unwrap()
@@ -455,7 +455,7 @@ async fn count_where(pool: &SqlitePool, table: &str, fk_column_quoted: &str) -> 
     let sql = format!(
         r#"SELECT COUNT(*) AS "Count" FROM "{table}" WHERE {fk_column_quoted} IS NOT NULL"#
     );
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_one(pool)
         .await
         .unwrap()

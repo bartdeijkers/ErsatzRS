@@ -981,7 +981,7 @@ fn movie_page_json(total_record_count: i32, item_id: &str, path: &str) -> serde_
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}""#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_one(pool)
         .await
         .unwrap()
@@ -999,7 +999,7 @@ async fn movie_metadata_title(pool: &SqlitePool, movie_id: i64) -> String {
 
 async fn provider_library_item_id(pool: &SqlitePool, table: &str, id: i64) -> Option<String> {
     let sql = format!(r#"SELECT "ItemId" AS "Value" FROM "{table}" WHERE "Id" = ?"#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(id)
         .fetch_one(pool)
         .await

@@ -561,13 +561,13 @@ pub async fn replace_ids(
     parent_id: i64,
     ids: &[i64],
 ) -> Result<()> {
-    sqlx::query(delete_sql)
+    sqlx::query(crate::db::assert_sql_safe(delete_sql))
         .bind(parent_id)
         .execute(&mut **tx)
         .await?;
 
     for id in ids {
-        sqlx::query(insert_sql)
+        sqlx::query(crate::db::assert_sql_safe(insert_sql))
             .bind(parent_id)
             .bind(id)
             .execute(&mut **tx)
@@ -578,7 +578,7 @@ pub async fn replace_ids(
 }
 
 pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> Result<Vec<i64>> {
-    sqlx::query_scalar::<_, i64>(sql)
+    sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(sql))
         .bind(parent_id)
         .fetch_all(pool)
         .await

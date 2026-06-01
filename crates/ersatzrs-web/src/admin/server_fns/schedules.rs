@@ -928,7 +928,9 @@ async fn load_simple_options(
 ) -> Result<Vec<ScheduleItemOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .map(|row| ScheduleItemOption {

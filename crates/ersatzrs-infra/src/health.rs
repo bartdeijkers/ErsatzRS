@@ -843,7 +843,7 @@ async fn source_name(
         "emby" => r#"SELECT "ServerName" AS "Name" FROM "EmbyMediaSource" WHERE "Id" = ?"#,
         _ => return Ok(None),
     };
-    let row = sqlx::query(sql)
+    let row = sqlx::query(crate::db::assert_sql_safe(sql))
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -950,7 +950,7 @@ async fn missing_metadata_result(
                WHERE metadata."{item_table}Id" = item."Id"
            )"#
     );
-    let count = sqlx::query_scalar::<_, i64>(&count_sql)
+    let count = sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(&count_sql))
         .fetch_one(pool)
         .await
         .map_err(sqlx_error)?;
@@ -975,7 +975,7 @@ async fn missing_metadata_result(
            ORDER BY mf."Path", mf."Id"
            LIMIT 500"#
     );
-    let rows = sqlx::query(&paths_sql)
+    let rows = sqlx::query(crate::db::assert_sql_safe(&paths_sql))
         .fetch_all(pool)
         .await
         .map_err(sqlx_error)?;
@@ -1510,7 +1510,8 @@ mod tests {
                 '{device}', 0, 2000, 4000, 1
                )"#,
         );
-        pool.execute(profile_sql.as_str())
+        sqlx::query(crate::db::assert_sql_safe(profile_sql))
+            .execute(pool)
             .await
             .expect("seed vaapi profile");
         pool.execute(

@@ -1183,7 +1183,7 @@ impl SqliteSchedulingContentRepository {
         };
         let sql =
             format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Name""#);
-        sqlx::query_scalar::<_, String>(&sql)
+        sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
@@ -1228,7 +1228,7 @@ impl SqliteSchedulingContentRepository {
         };
         let sql =
             format!(r#"SELECT "Name" FROM "Actor" WHERE "{fk_column}" = ? ORDER BY "Order", "Id""#);
-        sqlx::query_scalar::<_, String>(&sql)
+        sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
@@ -1249,7 +1249,7 @@ impl SqliteSchedulingContentRepository {
             _ => return Ok(Vec::new()),
         };
         let sql = format!(r#"SELECT "Name" FROM "{table}" WHERE "{fk_column}" = ? ORDER BY "Id""#);
-        sqlx::query_scalar::<_, String>(&sql)
+        sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await
@@ -1273,7 +1273,7 @@ impl SqliteSchedulingContentRepository {
              WHERE "{version_fk}" = ?
              ORDER BY "Id""#
         );
-        let version_rows = sqlx::query(&version_sql)
+        let version_rows = sqlx::query(crate::db::assert_sql_safe(&version_sql))
             .bind(item_id)
             .fetch_all(&self.0)
             .await?;
@@ -1343,7 +1343,7 @@ impl SqliteSchedulingContentRepository {
                  WHERE "{subtitle_fk}" = ?
                  ORDER BY "StreamIndex", "Id""#
             );
-            let rows = sqlx::query(&subtitle_sql)
+            let rows = sqlx::query(crate::db::assert_sql_safe(&subtitle_sql))
                 .bind(metadata_id)
                 .fetch_all(&self.0)
                 .await?;
@@ -1434,7 +1434,7 @@ impl SqliteSchedulingContentRepository {
         };
         let sql =
             format!(r#"SELECT "Guid" FROM "MetadataGuid" WHERE "{fk_column}" = ? ORDER BY "Guid""#);
-        let guids = sqlx::query_scalar::<_, String>(&sql)
+        let guids = sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
             .bind(metadata_id)
             .fetch_all(&self.0)
             .await?;
@@ -2528,7 +2528,7 @@ fn parse_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>> {
 
 async fn exists_by_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> Result<bool> {
     let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "Id" = ?)"#);
-    sqlx::query_scalar::<_, bool>(&sql)
+    sqlx::query_scalar::<_, bool>(crate::db::assert_sql_safe(&sql))
         .bind(id)
         .fetch_one(pool)
         .await

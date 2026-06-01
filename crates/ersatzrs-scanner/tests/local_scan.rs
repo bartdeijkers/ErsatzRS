@@ -237,7 +237,7 @@ async fn movie_metadata_id(pool: &SqlitePool, title: &str) -> i64 {
 
 async fn count_for_metadata(pool: &SqlitePool, table: &str, metadata_id: i64) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}" WHERE "MovieMetadataId" = ?"#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(metadata_id)
         .fetch_one(pool)
         .await
@@ -247,7 +247,7 @@ async fn count_for_metadata(pool: &SqlitePool, table: &str, metadata_id: i64) ->
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}""#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_one(pool)
         .await
         .unwrap()

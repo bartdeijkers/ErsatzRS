@@ -1158,7 +1158,7 @@ pub(crate) async fn insert_media_version_with_owner(
             "VideoScanKind", "Width", "InterlacedRatio"
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
     );
-    let result = sqlx::query(&sql)
+    let result = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(encode_datetime(version.date_added))
         .bind(encode_datetime(now))
         .bind(&version.display_aspect_ratio)
@@ -1193,7 +1193,10 @@ async fn insert_media_subtype(
         }
     };
     let sql = format!(r#"INSERT INTO "{table}" ("Id") VALUES (?)"#);
-    sqlx::query(&sql).bind(item_id).execute(&mut **tx).await?;
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -1226,7 +1229,7 @@ async fn fallback_metadata_exists(
         | LibraryMediaKind::Shows => return Ok(true),
     };
     let sql = format!(r#"SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "{column}" = ?)"#);
-    let exists: i64 = sqlx::query_scalar(&sql)
+    let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(item_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -1570,7 +1573,7 @@ async fn local_file_subtitle_owner(
         _ => return Ok(None),
     };
     let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "{owner_column}" = ? LIMIT 1"#);
-    let metadata_id: Option<i64> = sqlx::query_scalar(&sql)
+    let metadata_id: Option<i64> = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(item_id)
         .fetch_optional(&mut **tx)
         .await?;
@@ -1843,6 +1846,7 @@ mod tests {
         };
         use crate::LocalLibraryPath;
         use ersatzrs_domain::LibraryMediaKind;
+        use ersatzrs_infra::db::assert_sql_safe;
         use sqlx::sqlite::SqlitePoolOptions;
         use sqlx::{Executor, Row, SqlitePool};
         use std::path::Path;
@@ -2099,7 +2103,7 @@ mod tests {
 
         async fn count_for_metadata(pool: &SqlitePool, table: &str, metadata_id: i64) -> i64 {
             let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "MovieMetadataId" = ?"#);
-            sqlx::query_scalar(&sql)
+            sqlx::query_scalar(assert_sql_safe(sql))
                 .bind(metadata_id)
                 .fetch_one(pool)
                 .await
@@ -2108,7 +2112,7 @@ mod tests {
 
         async fn count_table(pool: &SqlitePool, table: &str) -> i64 {
             let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
-            sqlx::query_scalar(&sql)
+            sqlx::query_scalar(assert_sql_safe(sql))
                 .fetch_one(pool)
                 .await
                 .expect("count")

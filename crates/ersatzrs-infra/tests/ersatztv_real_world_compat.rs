@@ -368,7 +368,7 @@ async fn assert_scheduling_sources_resolve(pool: &SqlitePool, repos: &Repositori
 
 async fn ids(pool: &SqlitePool, table: &str) -> Vec<i64> {
     let sql = format!(r#"SELECT "Id" FROM "{table}" ORDER BY "Id""#);
-    sqlx::query_scalar(&sql)
+    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load ids from {table}: {error}"))
@@ -376,7 +376,7 @@ async fn ids(pool: &SqlitePool, table: &str) -> Vec<i64> {
 
 async fn child_count(pool: &SqlitePool, table: &str, foreign_key: &str, id: i64) -> usize {
     let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "{foreign_key}" = ?"#);
-    let count: i64 = sqlx::query_scalar(&sql)
+    let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(id)
         .fetch_one(pool)
         .await
@@ -386,7 +386,7 @@ async fn child_count(pool: &SqlitePool, table: &str, foreign_key: &str, id: i64)
 
 async fn foreign_ids(pool: &SqlitePool, table: &str, column: &str) -> Vec<i64> {
     let sql = format!(r#"SELECT "{column}" FROM "{table}" ORDER BY "Id""#);
-    sqlx::query_scalar(&sql)
+    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load foreign ids from {table}.{column}: {error}"))
@@ -394,7 +394,7 @@ async fn foreign_ids(pool: &SqlitePool, table: &str, column: &str) -> Vec<i64> {
 
 async fn keys(pool: &SqlitePool, table: &str) -> Vec<String> {
     let sql = format!(r#"SELECT "Key" FROM "{table}" ORDER BY "Key""#);
-    sqlx::query_scalar(&sql)
+    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load keys from {table}: {error}"))
@@ -402,7 +402,7 @@ async fn keys(pool: &SqlitePool, table: &str) -> Vec<String> {
 
 async fn names(pool: &SqlitePool, table: &str) -> Vec<String> {
     let sql = format!(r#"SELECT "Name" FROM "{table}" ORDER BY "Id""#);
-    sqlx::query_scalar(&sql)
+    sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_all(pool)
         .await
         .unwrap_or_else(|error| panic!("load names from {table}: {error}"))
