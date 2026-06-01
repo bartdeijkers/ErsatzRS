@@ -75,9 +75,7 @@ async fn ensure_segmenter_worker_running(
         return;
     }
 
-    let working_dir = std::env::temp_dir()
-        .join("ersatzrs-hls")
-        .join(channel_number);
+    let working_dir = hls_working_dir(channel_number);
     let worker = HlsSessionWorker::new(
         channel_number.to_string(),
         channel_id,
@@ -94,6 +92,12 @@ async fn ensure_segmenter_worker_running(
     } else if let Some(existing_worker) = state.hls_sessions.try_get(channel_number).await {
         existing_worker.touch();
     }
+}
+
+fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join("ersatzrs-hls")
+        .join(channel_number)
 }
 
 async fn serve_hls_direct_playlist(
@@ -475,5 +479,13 @@ mod tests {
         assert_eq!(parse_hls_direct_file("99.mp4"), "99");
         assert_eq!(parse_hls_direct_file("99.mkv"), "99");
         assert_eq!(parse_hls_direct_file("99"), "99");
+    }
+
+    #[test]
+    fn hls_working_dir_uses_channel_scoped_temp_folder() {
+        assert_eq!(
+            hls_working_dir("1"),
+            std::env::temp_dir().join("ersatzrs-hls").join("1")
+        );
     }
 }

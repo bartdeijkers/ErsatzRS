@@ -2,6 +2,8 @@ use directories::BaseDirs;
 use sqlx::migrate::Migrator;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+#[cfg(not(feature = "mysql"))]
+use std::time::Duration;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -63,6 +65,7 @@ pub enum DatabaseBackend {
 pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
 pub const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
 pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 30_000;
 
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 aac";
@@ -272,6 +275,7 @@ async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
         .create_if_missing(true)
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
         .disable_statement_logging();
 
     SqlitePoolOptions::new().connect_with(options).await
@@ -290,6 +294,8 @@ async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
             Box::pin(async move {
                 connection.execute("PRAGMA foreign_keys = ON").await?;
                 connection.execute("PRAGMA journal_mode = WAL").await?;
+                let busy_timeout = format!("PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}");
+                connection.execute(busy_timeout.as_str()).await?;
                 Ok(())
             })
         })

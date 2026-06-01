@@ -5,7 +5,7 @@ use axum::{
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
@@ -101,6 +101,7 @@ pub async fn serve_channel_stream(
     let command = build_stream_command(
         &resolved,
         output_format,
+        playout_start_seconds(now, &active.playout_start),
         source_stream,
         subtitle.as_ref().and_then(|subtitle| {
             subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
@@ -289,6 +290,7 @@ pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'stat
 fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
+    start_seconds: i64,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
@@ -302,10 +304,28 @@ fn build_stream_command(
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
     }
     request.state.output_format = output_format;
+    if start_seconds > 0 {
+        request.state.start_seconds = Some(start_seconds);
+    }
     request.state.report_progress = false;
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     pipeline.command(&request.inputs)
+}
+
+pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
+    parse_sqlite_utc_timestamp(playout_start)
+        .map(|start| (now - start).num_seconds().max(0))
+        .unwrap_or(0)
+}
+
+fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
+    for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
+            return Some(DateTime::<Utc>::from_naive_utc_and_offset(parsed, Utc));
+        }
+    }
+    None
 }
 
 const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
@@ -361,7 +381,7 @@ mod tests {
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, None, None);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, 0, None, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
@@ -370,10 +390,28 @@ mod tests {
 
     #[test]
     fn build_stream_command_can_target_mp4() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, None, None);
+        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, 0, None, None);
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
+    }
+
+    #[test]
+    fn build_stream_command_seeks_to_playout_offset() {
+        let command =
+            build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, 900, None, None);
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("-ss 900 -i /media/movie.mkv"));
+    }
+
+    #[test]
+    fn playout_start_seconds_matches_mid_item_offset() {
+        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00Z")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+        assert_eq!(playout_start_seconds(now, "2026-05-31 21:30:00"), 900);
+        assert_eq!(playout_start_seconds(now, "2026-05-31 21:45:00"), 0);
+        assert_eq!(playout_start_seconds(now, "not a timestamp"), 0);
     }
 
     #[test]
@@ -430,6 +468,7 @@ mod tests {
         let command = build_stream_command(
             fixture.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
+            0,
             None,
             None,
         );

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Write as _;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
@@ -10,7 +11,7 @@ use std::time::Duration;
 
 use crate::db::DbPool;
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
@@ -26,10 +27,12 @@ use crate::playback::{
 use sqlx::Row;
 use tokio::process::Command;
 use tokio::sync::Notify;
+use tokio::time::MissedTickBehavior;
 
 const PLAYLIST_MAX_SEGMENTS: usize = 10;
 const PLAYLIST_DELETE_INTERVAL_MS: i64 = 30_000;
 const PLAYLIST_FILTER_BEFORE_SECONDS: i64 = 30;
+const SEGMENT_CLEANUP_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
 pub struct HlsSessionWorker {
@@ -81,10 +84,16 @@ impl HlsSessionWorker {
         registry: Arc<dyn HlsSessionRegistry>,
         idle_timeout: Option<Duration>,
     ) {
-        let _ = tokio::fs::create_dir_all(&self.working_dir).await;
+        if let Err(error) = prepare_working_dir(&self.working_dir).await {
+            tracing::warn!(%error, working_dir = %self.working_dir.display(), "failed to prepare hls working directory");
+            registry.remove(&self.channel_number).await;
+            return;
+        }
         self.touch();
 
         let mut is_first = true;
+        let mut cleanup_interval = tokio::time::interval(SEGMENT_CLEANUP_INTERVAL);
+        cleanup_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             if let Some(timeout) = idle_timeout {
                 let timeout_ms = i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
@@ -95,8 +104,9 @@ impl HlsSessionWorker {
                 }
             }
 
+            let now = Utc::now();
             let Some(active) =
-                load_active_hls_item(&pool, self.channel_id, &self.path_replacements).await
+                load_active_hls_item(&pool, self.channel_id, &self.path_replacements, now).await
             else {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
@@ -134,6 +144,7 @@ impl HlsSessionWorker {
                 &self.working_dir,
                 self.output_format,
                 is_first,
+                active.start_seconds,
                 source_stream,
                 subtitle_input,
             );
@@ -154,38 +165,40 @@ impl HlsSessionWorker {
                 break;
             };
 
-            tokio::select! {
-                result = child.wait() => {
-                    match result {
-                        Ok(status) if status.success() => {}
-                        Ok(_) | Err(_) => break,
+            let mut should_continue = true;
+            loop {
+                tokio::select! {
+                    result = child.wait() => {
+                        match result {
+                            Ok(status) if status.success() => {}
+                            Ok(_) | Err(_) => {
+                                should_continue = false;
+                            }
+                        }
+                        break;
+                    }
+                    () = self.cancel.notified() => {
+                        let _ = child.start_kill();
+                        should_continue = false;
+                        break;
+                    }
+                    _ = cleanup_interval.tick() => {
+                        let _ = self.trim_playlist_inner().await;
                     }
                 }
-                () = self.cancel.notified() => {
-                    break;
-                }
+            }
+            if !should_continue {
+                break;
             }
 
             is_first = false;
         }
 
-        let _ = tokio::fs::remove_dir_all(&self.working_dir).await;
+        let _ = cleanup_working_dir(&self.working_dir).await;
         registry.remove(&self.channel_number).await;
     }
-}
 
-#[async_trait]
-impl HlsSessionHandle for HlsSessionWorker {
-    fn channel_number(&self) -> &str {
-        &self.channel_number
-    }
-
-    fn touch(&self) {
-        self.last_access_ms
-            .store(Utc::now().timestamp_millis(), Ordering::Relaxed);
-    }
-
-    async fn trim_playlist(&self) -> Option<String> {
+    async fn trim_playlist_inner(&self) -> Option<TrimmedPlaylist> {
         let playlist_path = self.working_dir.join("live.m3u8");
         let playlist = tokio::fs::read_to_string(playlist_path).await.ok()?;
         let filter_before = Utc::now() - chrono::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS);
@@ -202,7 +215,25 @@ impl HlsSessionHandle for HlsSessionWorker {
             self.last_delete_ms.store(now_ms, Ordering::Relaxed);
         }
 
-        Some(trimmed.playlist)
+        Some(trimmed)
+    }
+}
+
+#[async_trait]
+impl HlsSessionHandle for HlsSessionWorker {
+    fn channel_number(&self) -> &str {
+        &self.channel_number
+    }
+
+    fn touch(&self) {
+        self.last_access_ms
+            .store(Utc::now().timestamp_millis(), Ordering::Relaxed);
+    }
+
+    async fn trim_playlist(&self) -> Option<String> {
+        self.trim_playlist_inner()
+            .await
+            .map(|trimmed| trimmed.playlist)
     }
 }
 
@@ -211,6 +242,7 @@ fn build_hls_command(
     _working_dir: &Path,
     output_format: OutputFormat,
     is_first_transcode: bool,
+    start_seconds: i64,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
@@ -224,6 +256,9 @@ fn build_hls_command(
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
     }
     request.state.output_format = output_format;
+    if start_seconds > 0 {
+        request.state.start_seconds = Some(start_seconds);
+    }
     request.state.report_progress = false;
     request.state.hls = Some(HlsOutput {
         segment_template: match output_format {
@@ -249,12 +284,14 @@ async fn load_active_hls_item(
     pool: &DbPool,
     channel_id: i64,
     path_replacements: &[PathReplacement],
+    now: DateTime<Utc>,
 ) -> Option<ActiveHlsItem> {
-    let now_text = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
+                  pi."Start" AS "PlayoutStart",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode",
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
@@ -291,10 +328,12 @@ async fn load_active_hls_item(
     } else {
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
+    let playout_start = parse_sqlite_utc_timestamp(&row.get::<String, _>("PlayoutStart"))?;
     Some(ActiveHlsItem {
         media_path: resolved,
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
+        start_seconds: playout_start_seconds(now, playout_start),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -321,6 +360,7 @@ struct ActiveHlsItem {
     media_path: String,
     media_item_id: i64,
     media_version_id: i64,
+    start_seconds: i64,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
     channel_preferred_subtitle_language_code: Option<String>,
@@ -335,6 +375,19 @@ const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
         3 => Some(ChannelSubtitleMode::Any),
         _ => None,
     }
+}
+
+fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
+    for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
+            return Some(DateTime::<Utc>::from_naive_utc_and_offset(parsed, Utc));
+        }
+    }
+    None
+}
+
+fn playout_start_seconds(now: DateTime<Utc>, playout_start: DateTime<Utc>) -> i64 {
+    (now - playout_start).num_seconds().max(0)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -661,6 +714,29 @@ async fn delete_old_segments(
     Ok(())
 }
 
+async fn prepare_working_dir(working_dir: &Path) -> io::Result<()> {
+    match tokio::fs::symlink_metadata(working_dir).await {
+        Ok(metadata) if metadata.is_dir() => {
+            tokio::fs::remove_dir_all(working_dir).await?;
+        }
+        Ok(_) => {
+            tokio::fs::remove_file(working_dir).await?;
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+
+    tokio::fs::create_dir_all(working_dir).await
+}
+
+async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
+    match tokio::fs::remove_dir_all(working_dir).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -673,6 +749,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            0,
             None,
             None,
         );
@@ -686,6 +763,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::HlsMp4,
             true,
+            0,
             None,
             None,
         );
@@ -693,6 +771,37 @@ mod tests {
         assert!(arguments.contains("-hls_segment_type fmp4"));
         assert!(arguments.contains("-hls_fmp4_init_filename init.mp4"));
         assert!(arguments.contains("-hls_segment_filename seg%05d.m4s"));
+    }
+
+    #[test]
+    fn build_hls_command_seeks_to_playout_offset() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            900,
+            None,
+            None,
+        );
+
+        assert!(command
+            .arguments
+            .join(" ")
+            .contains("-ss 900 -i /media/test.mkv"));
+    }
+
+    #[test]
+    fn playout_start_seconds_matches_mid_item_offset() {
+        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00.000+00:00")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+        let start = DateTime::parse_from_rfc3339("2026-05-31T21:30:00.000+00:00")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+
+        assert_eq!(playout_start_seconds(now, start), 900);
+        assert_eq!(playout_start_seconds(start, now), 0);
     }
 
     #[test]
@@ -733,6 +842,42 @@ mod tests {
     }
 
     #[test]
+    fn trim_playlist_contents_caps_playlist_window() {
+        let mut playlist = concat!(
+            "#EXTM3U\n",
+            "#EXT-X-VERSION:7\n",
+            "#EXT-X-TARGETDURATION:4\n",
+            "#EXT-X-MEDIA-SEQUENCE:1\n",
+            "#EXT-X-INDEPENDENT-SEGMENTS\n"
+        )
+        .to_string();
+        for sequence in 1..=12 {
+            let _ = writeln!(playlist, "#EXTINF:4.000000,");
+            let _ = writeln!(
+                playlist,
+                "#EXT-X-PROGRAM-DATE-TIME:2026-04-20T20:{sequence:02}:00.000+00:00"
+            );
+            let _ = writeln!(playlist, "seg{sequence:05}.ts");
+        }
+
+        let trimmed = trim_playlist_contents(
+            OutputFormat::Hls,
+            &playlist,
+            DateTime::parse_from_rfc3339("2026-04-20T20:13:00.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
+            Some(10),
+        )
+        .expect("trimmed playlist");
+
+        assert!(!trimmed.playlist.contains("seg00001.ts"));
+        assert!(!trimmed.playlist.contains("seg00002.ts"));
+        assert!(trimmed.playlist.contains("seg00003.ts"));
+        assert!(trimmed.playlist.contains("seg00012.ts"));
+        assert_eq!(trimmed.referenced_files.len(), 10);
+    }
+
+    #[test]
     fn trim_playlist_contents_preserves_map_for_fmp4() {
         let playlist = concat!(
             "#EXTM3U\n",
@@ -762,6 +907,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prepare_working_dir_removes_stale_contents() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(working_dir.join("seg00001.ts"), b"stale")
+            .await
+            .expect("write stale segment");
+
+        prepare_working_dir(&working_dir)
+            .await
+            .expect("prepare working dir");
+
+        assert!(working_dir.exists());
+        assert!(!working_dir.join("seg00001.ts").exists());
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
+    #[tokio::test]
+    async fn cleanup_working_dir_removes_directory() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(working_dir.join("seg00001.ts"), b"segment")
+            .await
+            .expect("write segment");
+
+        cleanup_working_dir(&working_dir)
+            .await
+            .expect("cleanup working dir");
+
+        assert!(!working_dir.exists());
+    }
+
+    #[tokio::test]
     async fn delete_old_segments_removes_unreferenced_files() {
         let working_dir =
             std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
@@ -788,6 +972,42 @@ mod tests {
         assert!(!working_dir.join("seg00001.ts").exists());
         assert!(working_dir.join("seg00002.ts").exists());
         assert!(working_dir.join("live.m3u8").exists());
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
+    #[tokio::test]
+    async fn delete_old_segments_removes_stale_fmp4_init() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(working_dir.join("init-old.mp4"), b"old")
+            .await
+            .expect("write old init");
+        tokio::fs::write(working_dir.join("init.mp4"), b"keep")
+            .await
+            .expect("write retained init");
+        tokio::fs::write(working_dir.join("seg00001.m4s"), b"old")
+            .await
+            .expect("write old segment");
+        tokio::fs::write(working_dir.join("seg00002.m4s"), b"keep")
+            .await
+            .expect("write retained segment");
+
+        let mut referenced_files = HashSet::new();
+        referenced_files.insert("init.mp4".to_string());
+        referenced_files.insert("seg00002.m4s".to_string());
+
+        delete_old_segments(&working_dir, &referenced_files)
+            .await
+            .expect("delete old segments");
+
+        assert!(!working_dir.join("init-old.mp4").exists());
+        assert!(working_dir.join("init.mp4").exists());
+        assert!(!working_dir.join("seg00001.m4s").exists());
+        assert!(working_dir.join("seg00002.m4s").exists());
 
         let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }
