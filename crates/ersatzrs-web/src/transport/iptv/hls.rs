@@ -76,12 +76,14 @@ async fn ensure_segmenter_worker_running(
     }
 
     let working_dir = hls_working_dir(channel_number);
+    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let worker = HlsSessionWorker::new(
         channel_number.to_string(),
         channel_id,
         working_dir,
         output_format,
         path_replacements,
+        runtime_capabilities,
     );
     if state.hls_sessions.try_insert(worker.clone()).await {
         worker.start(

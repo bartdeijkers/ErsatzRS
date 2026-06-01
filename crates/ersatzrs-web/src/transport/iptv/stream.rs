@@ -10,13 +10,13 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
 use ersatzrs_ffmpeg::{
-    DesiredVideoState, FfmpegCommand, InputFile, OutputFormat, PipelineBuilder, PipelineRequest,
-    SoftwarePipelineBuilder, SourceVideoStream,
+    build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
+    FrameRate, InputFile, OutputFormat, PipelineRequest, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::playback::{
-    load_source_video_stream, select_playback_subtitle, subtitle_fonts_dir,
-    subtitle_input_for_stream,
+    load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
+    select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
 };
 use sqlx::Row;
 use tokio::process::Command;
@@ -78,6 +78,29 @@ pub async fn serve_channel_stream(
     };
 
     let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
+        Ok(Some(profile)) => profile,
+        Ok(None) => {
+            tracing::error!(channel_number = %channel.number, "channel has no playback ffmpeg profile");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number = %channel.number, "failed to load playback ffmpeg profile");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let target_frame_rate = if playback_profile.profile.normalize_framerate {
+        match load_channel_target_frame_rate(&state.pool, channel.id).await {
+            Ok(frame_rate) => frame_rate,
+            Err(error) => {
+                tracing::warn!(%error, channel_number = %channel.number, "failed to load channel target frame rate");
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
     let preferred_subtitle_language = active
         .preferred_subtitle_language_code
@@ -102,6 +125,10 @@ pub async fn serve_channel_stream(
         &resolved,
         output_format,
         playout_start_seconds(now, &active.playout_start),
+        &playback_profile,
+        target_frame_rate,
+        channel.streaming_mode,
+        runtime_capabilities,
         source_stream,
         subtitle.as_ref().and_then(|subtitle| {
             subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
@@ -291,11 +318,23 @@ fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
     start_seconds: i64,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    streaming_mode: ersatzrs_domain::StreamingMode,
+    runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
-    let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
+    let desired = DesiredVideoState::from_profile(
+        &playback_profile.profile,
+        &playback_profile.resolution,
+        source_stream.as_ref(),
+        target_frame_rate,
+        streaming_mode,
+    );
+    let mut request =
+        PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
@@ -308,8 +347,19 @@ fn build_stream_command(
         request.state.start_seconds = Some(start_seconds);
     }
     request.state.report_progress = false;
+    if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
+        if thread_count > 0 {
+            request.state.thread_count = Some(thread_count);
+        }
+    }
 
-    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let acceleration = if streaming_mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect
+    {
+        ersatzrs_domain::HardwareAccelerationKind::None
+    } else {
+        playback_profile.profile.hardware_acceleration
+    };
+    let pipeline = build_pipeline_for_acceleration(acceleration, request.clone());
     pipeline.command(&request.inputs)
 }
 
@@ -367,6 +417,11 @@ fn spawn_stream_body(command: FfmpegCommand) -> Result<Body, StreamSpawnError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_domain::{
+        FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
+        StreamingMode,
+    };
+    use ersatzrs_ffmpeg::FfmpegCapabilityReport;
     use std::path::PathBuf;
     use std::time::Duration;
 
@@ -379,7 +434,18 @@ mod tests {
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, 0, None, None);
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            0,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+        );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
@@ -388,7 +454,18 @@ mod tests {
 
     #[test]
     fn build_stream_command_can_target_mp4() {
-        let command = build_stream_command("/media/movie.mkv", OutputFormat::Mp4, 0, None, None);
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::Mp4,
+            0,
+            &profile,
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+        );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
@@ -396,8 +473,18 @@ mod tests {
 
     #[test]
     fn build_stream_command_seeks_to_playout_offset() {
-        let command =
-            build_stream_command("/media/movie.mkv", OutputFormat::MpegTs, 900, None, None);
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            900,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+        );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-ss 900 -i /media/movie.mkv"));
     }
@@ -467,6 +554,10 @@ mod tests {
             fixture.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
             0,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
             None,
             None,
         );
@@ -488,5 +579,28 @@ mod tests {
 
         child.kill().await.ok();
         let _ = child.wait().await;
+    }
+
+    fn playback_profile() -> PlaybackProfile {
+        PlaybackProfile {
+            profile: FFmpegProfile {
+                video_format: FFmpegProfileVideoFormat::H264,
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                video_profile: Some("high".to_owned()),
+                video_preset: Some("veryfast".to_owned()),
+                video_bitrate: 8_000,
+                video_buffer_size: 16_000,
+                audio_bitrate: 192,
+                audio_buffer_size: 384,
+                audio_channels: 2,
+                audio_sample_rate: 48,
+                ..FFmpegProfile::default()
+            },
+            resolution: Resolution {
+                width: 1920,
+                height: 1080,
+                ..Resolution::default()
+            },
+        }
     }
 }

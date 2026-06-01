@@ -1,14 +1,16 @@
 use ersatzrs_domain::{
-    FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileVideoFormat,
-    HardwareAccelerationKind, VideoScanKind,
+    FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
+    FFmpegProfileVideoFormat, FilterMode, HardwareAccelerationKind, NormalizeLoudnessMode,
+    Resolution, ScalingBehavior, StreamingMode, VideoScanKind,
 };
 
 use crate::{
-    closed_gop, deinterlace_filter, fast_start, frame_rate_filter, hide_banner, loglevel_error,
-    mpegts_output, no_autoscale, no_b_frames, no_standard_input, no_stats, pipe_output,
+    closed_gop, crop_filter, deinterlace_filter, fast_start, frame_rate_filter,
+    hardware_upload_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
+    no_standard_input, no_stats, normalize_loudness_filter, pad_filter, pipe_output,
     progress_to_stdout, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
     subtitle_overlay_filter, subtitles_filter, tonemap_filter_for, watermark_opacity_filter,
-    watermark_overlay_filter, CommandGenerator, ComplexFilter, FfmpegCapability,
+    watermark_overlay_filter, AudioFilter, CommandGenerator, ComplexFilter, FfmpegCapability,
     FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
     HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
     StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
@@ -123,6 +125,9 @@ pub struct SourceVideoStream {
     pub color_params: SourceColorParams,
     pub scan_kind: VideoScanKind,
     pub frame_rate: Option<FrameRate>,
+    pub frame_size: Option<FrameSize>,
+    pub sample_aspect_ratio: Option<String>,
+    pub display_aspect_ratio: Option<String>,
 }
 
 impl SourceVideoStream {
@@ -138,8 +143,117 @@ impl SourceVideoStream {
             },
             scan_kind: VideoScanKind::Unknown,
             frame_rate: None,
+            frame_size: None,
+            sample_aspect_ratio: None,
+            display_aspect_ratio: None,
         }
     }
+
+    #[must_use]
+    pub fn is_anamorphic(&self) -> bool {
+        let Some(size) = self.frame_size else {
+            return false;
+        };
+        let sample_aspect_ratio = self.sample_aspect_ratio.as_deref().unwrap_or_default();
+        if sample_aspect_ratio == "1:1" {
+            return false;
+        }
+        if !sample_aspect_ratio.is_empty()
+            && sample_aspect_ratio != "0:0"
+            && sample_aspect_ratio != "0:1"
+        {
+            return true;
+        }
+        let display_aspect_ratio = self.display_aspect_ratio.as_deref().unwrap_or_default();
+        if display_aspect_ratio.is_empty() || display_aspect_ratio == "0:1" {
+            return false;
+        }
+        display_aspect_ratio != format!("{}:{}", size.width, size.height)
+    }
+
+    #[must_use]
+    pub fn square_pixel_frame_size(&self, resolution: FrameSize) -> Option<FrameSize> {
+        square_pixel_frame_size(self, resolution, SquarePixelScale::Fit)
+    }
+
+    #[must_use]
+    pub fn square_pixel_frame_size_for_crop(&self, resolution: FrameSize) -> Option<FrameSize> {
+        square_pixel_frame_size(self, resolution, SquarePixelScale::Fill)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SquarePixelScale {
+    Fit,
+    Fill,
+}
+
+fn square_pixel_frame_size(
+    source: &SourceVideoStream,
+    resolution: FrameSize,
+    scale: SquarePixelScale,
+) -> Option<FrameSize> {
+    let source_size = source.frame_size?;
+    let mut width = f64::from(source_size.width);
+    let height = f64::from(source_size.height);
+
+    if source.is_anamorphic() {
+        width = (width * source.sample_aspect_ratio_factor()?).floor();
+    }
+
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+
+    let width_percent = f64::from(resolution.width) / width;
+    let height_percent = f64::from(resolution.height) / height;
+    let percent = match scale {
+        SquarePixelScale::Fit => width_percent.min(height_percent),
+        SquarePixelScale::Fill => width_percent.max(height_percent),
+    };
+
+    Some(even_frame_size(
+        (width * percent).floor() as u32,
+        (height * percent).floor() as u32,
+    ))
+}
+
+impl SourceVideoStream {
+    fn sample_aspect_ratio_factor(&self) -> Option<f64> {
+        let sample_aspect_ratio = self.sample_aspect_ratio.as_deref().unwrap_or_default();
+        if sample_aspect_ratio.is_empty() || sample_aspect_ratio == "0:0" {
+            return self.display_aspect_ratio_factor();
+        }
+        parse_aspect_ratio(sample_aspect_ratio)
+    }
+
+    fn display_aspect_ratio_factor(&self) -> Option<f64> {
+        let display_aspect_ratio = self.display_aspect_ratio.as_deref().unwrap_or_default();
+        if display_aspect_ratio.is_empty() || display_aspect_ratio == "0:1" {
+            return Some(1.0);
+        }
+        let dar = parse_aspect_ratio(display_aspect_ratio)?;
+        let size = self.frame_size?;
+        let source_ratio = f64::from(size.width) / f64::from(size.height);
+        Some(dar / source_ratio)
+    }
+}
+
+fn parse_aspect_ratio(value: &str) -> Option<f64> {
+    let trimmed = value.trim();
+    if let Some((left, right)) = trimmed.split_once(':') {
+        let numerator = left.parse::<f64>().ok()?;
+        let denominator = right.parse::<f64>().ok()?;
+        if denominator == 0.0 {
+            return None;
+        }
+        return Some(numerator / denominator);
+    }
+    trimmed.parse::<f64>().ok()
+}
+
+const fn even_frame_size(width: u32, height: u32) -> FrameSize {
+    FrameSize::new(width + (width % 2), height + (height % 2))
 }
 
 /// Source audio stream metadata reserved for audio decoder dispatch.
@@ -178,20 +292,28 @@ pub struct SourceColorParams {
     pub is_bt2020_ten: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DesiredVideoState {
+    pub scaled_size: FrameSize,
     pub frame_size: FrameSize,
+    pub cropped_size: Option<FrameSize>,
+    pub pad_mode: FilterMode,
     pub frame_rate: Option<FrameRate>,
     pub video_format: FFmpegProfileVideoFormat,
     pub audio_format: FFmpegProfileAudioFormat,
     pub bit_depth: FFmpegProfileBitDepth,
+    pub tonemap_algorithm: FFmpegProfileTonemapAlgorithm,
     pub video_profile: Option<String>,
     pub video_preset: Option<String>,
     pub video_bitrate: Option<u32>,
     pub video_buffer_size: Option<u32>,
     pub audio_bitrate: Option<u32>,
+    pub audio_buffer_size: Option<u32>,
     pub audio_channels: Option<u32>,
     pub audio_sample_rate: Option<u32>,
+    pub normalize_loudness_mode: NormalizeLoudnessMode,
+    pub target_loudness: Option<f64>,
+    pub normalize_colors: bool,
     pub allow_b_frames: bool,
 }
 
@@ -199,19 +321,102 @@ impl DesiredVideoState {
     #[must_use]
     pub fn h264_1080p() -> Self {
         Self {
+            scaled_size: FrameSize::new(1920, 1080),
             frame_size: FrameSize::new(1920, 1080),
+            cropped_size: None,
+            pad_mode: FilterMode::Software,
             frame_rate: Some(FrameRate::DEFAULT),
             video_format: FFmpegProfileVideoFormat::H264,
             audio_format: FFmpegProfileAudioFormat::Aac,
             bit_depth: FFmpegProfileBitDepth::EightBit,
+            tonemap_algorithm: FFmpegProfileTonemapAlgorithm::Hable,
             video_profile: Some("high".to_owned()),
             video_preset: Some("veryfast".to_owned()),
             video_bitrate: Some(8_000),
             video_buffer_size: Some(16_000),
             audio_bitrate: Some(192),
+            audio_buffer_size: Some(384),
             audio_channels: Some(2),
             audio_sample_rate: Some(48_000),
+            normalize_loudness_mode: NormalizeLoudnessMode::Off,
+            target_loudness: None,
+            normalize_colors: false,
             allow_b_frames: false,
+        }
+    }
+
+    #[must_use]
+    pub fn from_profile(
+        profile: &FFmpegProfile,
+        resolution: &Resolution,
+        source: Option<&SourceVideoStream>,
+        target_frame_rate: Option<FrameRate>,
+        streaming_mode: StreamingMode,
+    ) -> Self {
+        if streaming_mode == StreamingMode::HttpLiveStreamingDirect {
+            return Self::copy_from_profile(profile, resolution);
+        }
+
+        let frame_size = resolution_frame_size(resolution);
+        let (scaled_size, cropped_size) = desired_sizes(profile, frame_size, source);
+        let frame_rate = profile
+            .normalize_framerate
+            .then_some(target_frame_rate)
+            .flatten();
+        let audio_sample_rate = positive_u32(profile.audio_sample_rate)
+            .map(|sample_rate_khz| sample_rate_khz.saturating_mul(1_000));
+        let normalize_loudness_mode = profile.normalize_loudness_mode;
+        Self {
+            scaled_size,
+            frame_size,
+            cropped_size,
+            pad_mode: profile.pad_mode,
+            frame_rate,
+            video_format: profile.video_format,
+            audio_format: profile.audio_format,
+            bit_depth: effective_bit_depth(profile),
+            tonemap_algorithm: profile.tonemap_algorithm,
+            video_profile: non_empty_string(profile.video_profile.as_deref()),
+            video_preset: non_empty_string(profile.video_preset.as_deref()),
+            video_bitrate: positive_u32(profile.video_bitrate),
+            video_buffer_size: positive_u32(profile.video_buffer_size),
+            audio_bitrate: positive_u32(profile.audio_bitrate),
+            audio_buffer_size: positive_u32(profile.audio_buffer_size),
+            audio_channels: positive_u32(profile.audio_channels),
+            audio_sample_rate,
+            normalize_loudness_mode,
+            target_loudness: (normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm)
+                .then_some(profile.target_loudness)
+                .flatten(),
+            normalize_colors: profile.normalize_colors,
+            allow_b_frames: profile.allow_b_frames,
+        }
+    }
+
+    fn copy_from_profile(profile: &FFmpegProfile, resolution: &Resolution) -> Self {
+        let frame_size = resolution_frame_size(resolution);
+        Self {
+            scaled_size: frame_size,
+            frame_size,
+            cropped_size: None,
+            pad_mode: profile.pad_mode,
+            frame_rate: None,
+            video_format: FFmpegProfileVideoFormat::Copy,
+            audio_format: FFmpegProfileAudioFormat::Copy,
+            bit_depth: effective_bit_depth(profile),
+            tonemap_algorithm: profile.tonemap_algorithm,
+            video_profile: None,
+            video_preset: None,
+            video_bitrate: None,
+            video_buffer_size: None,
+            audio_bitrate: None,
+            audio_buffer_size: None,
+            audio_channels: None,
+            audio_sample_rate: None,
+            normalize_loudness_mode: NormalizeLoudnessMode::Off,
+            target_loudness: None,
+            normalize_colors: profile.normalize_colors,
+            allow_b_frames: true,
         }
     }
 
@@ -222,6 +427,63 @@ impl DesiredVideoState {
             FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
         }
     }
+}
+
+fn desired_sizes(
+    profile: &FFmpegProfile,
+    frame_size: FrameSize,
+    source: Option<&SourceVideoStream>,
+) -> (FrameSize, Option<FrameSize>) {
+    let Some(source) = source else {
+        return (frame_size, None);
+    };
+    if source.frame_size.is_none() {
+        return (frame_size, None);
+    }
+
+    if profile.scaling_behavior == ScalingBehavior::Stretch {
+        return (frame_size, None);
+    }
+
+    if profile.scaling_behavior == ScalingBehavior::Crop {
+        let scaled = source
+            .square_pixel_frame_size_for_crop(frame_size)
+            .unwrap_or(frame_size);
+        return (scaled, Some(frame_size));
+    }
+
+    let scaled = source
+        .square_pixel_frame_size(frame_size)
+        .unwrap_or(frame_size);
+    (scaled, None)
+}
+
+fn resolution_frame_size(resolution: &Resolution) -> FrameSize {
+    FrameSize::new(
+        positive_u32(resolution.width).unwrap_or(1920),
+        positive_u32(resolution.height).unwrap_or(1080),
+    )
+}
+
+fn effective_bit_depth(profile: &FFmpegProfile) -> FFmpegProfileBitDepth {
+    if profile.bit_depth == FFmpegProfileBitDepth::TenBit
+        && profile.video_format != FFmpegProfileVideoFormat::Mpeg2Video
+    {
+        FFmpegProfileBitDepth::TenBit
+    } else {
+        FFmpegProfileBitDepth::EightBit
+    }
+}
+
+fn positive_u32(value: i32) -> Option<u32> {
+    u32::try_from(value).ok().filter(|value| *value > 0)
+}
+
+fn non_empty_string(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -311,6 +573,23 @@ pub struct RkmppPipelineBuilder;
 impl PipelineBuilder for RkmppPipelineBuilder {
     fn build(&self, request: PipelineRequest) -> FFmpegPipeline {
         build_transcode_pipeline(request, HardwareAccelerationKind::Rkmpp)
+    }
+}
+
+#[must_use]
+pub fn build_pipeline_for_acceleration(
+    acceleration: HardwareAccelerationKind,
+    request: PipelineRequest,
+) -> FFmpegPipeline {
+    match acceleration {
+        HardwareAccelerationKind::None => SoftwarePipelineBuilder.build(request),
+        HardwareAccelerationKind::Nvenc => NvencPipelineBuilder.build(request),
+        HardwareAccelerationKind::Vaapi => VaapiPipelineBuilder.build(request),
+        HardwareAccelerationKind::Qsv => QsvPipelineBuilder.build(request),
+        HardwareAccelerationKind::VideoToolbox => VideoToolboxPipelineBuilder.build(request),
+        HardwareAccelerationKind::Amf => AmfPipelineBuilder.build(request),
+        HardwareAccelerationKind::V4l2m2m => V4l2m2mPipelineBuilder.build(request),
+        HardwareAccelerationKind::Rkmpp => RkmppPipelineBuilder.build(request),
     }
 }
 
@@ -409,6 +688,20 @@ fn build_transcode_pipeline(
         ));
     }
 
+    if request.desired.audio_format != FFmpegProfileAudioFormat::Copy {
+        filter_chain.audio.push(normalize_loudness_filter(
+            match request.desired.normalize_loudness_mode {
+                NormalizeLoudnessMode::LoudNorm => AudioFilter::LoudNorm,
+                NormalizeLoudnessMode::Off => AudioFilter::None,
+            },
+            request.desired.target_loudness,
+            request
+                .desired
+                .audio_sample_rate
+                .map(|sample_rate_hz| sample_rate_hz / 1_000),
+        ));
+    }
+
     filter_chain.graphics_overlay.extend(request.drawvg_filters);
     if !filter_chain.graphics_overlay.is_empty() {
         request.inputs.push(
@@ -434,7 +727,6 @@ fn build_transcode_pipeline(
     // stream so pipelines built without probe metadata are unchanged.
     if request.desired.video_format != FFmpegProfileVideoFormat::Copy
         && request.source_video_stream.is_some()
-        && target_state.frame_data_location == crate::FrameDataLocation::Software
         && target_state.pixel_format != request.desired.pixel_format()
     {
         steps.push(pixel_format_output_option(request.desired.pixel_format()));
@@ -500,20 +792,58 @@ fn apply_source_video_filters(
             acceleration,
             target_state,
             request.desired.pixel_format(),
-            TonemapAlgorithm::default(),
+            tonemap_algorithm(request.desired.tonemap_algorithm),
         ));
         target_state.is_hdr = false;
         target_state.pixel_format = request.desired.pixel_format();
         target_state.frame_data_location = tonemap_output_location(acceleration);
     }
 
-    filter_chain.video.push(video_scale_filter(
+    if !is_transcode {
+        return;
+    }
+
+    if let Some(cropped_size) = request.desired.cropped_size {
+        target_state.cropped_size = Some(cropped_size);
+    }
+
+    let scale = video_scale_filter(
         acceleration,
         target_state,
-        request.desired.frame_size,
+        request.desired.scaled_size,
         request.desired.frame_size,
         request.desired.bit_depth,
-    ));
+    );
+    if !scale.trim().is_empty() {
+        filter_chain.video.push(scale);
+        target_state.scaled_size = request.desired.scaled_size;
+        target_state.padded_size = request.desired.scaled_size;
+    }
+
+    if request.desired.cropped_size.is_none()
+        && target_state.padded_size != request.desired.frame_size
+    {
+        filter_chain
+            .video
+            .push(pad_filter(target_state, request.desired.frame_size));
+        target_state.padded_size = request.desired.frame_size;
+        target_state.scaled_size = request.desired.frame_size;
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.pixel_format = request.desired.pixel_format();
+        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    }
+
+    if let Some(cropped_size) = request.desired.cropped_size {
+        filter_chain
+            .video
+            .push(crop_filter(target_state, cropped_size));
+        target_state.cropped_size = None;
+        target_state.scaled_size = cropped_size;
+        target_state.padded_size = cropped_size;
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.pixel_format = request.desired.pixel_format();
+        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+    }
 
     if let Some(desired_rate) = request.desired.frame_rate {
         let needs_fps_filter = request
@@ -526,6 +856,36 @@ fn apply_source_video_filters(
                 .video
                 .push(frame_rate_filter(target_state, desired_rate));
         }
+    }
+}
+
+fn upload_software_frames_for_hardware_encoder(
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if acceleration != HardwareAccelerationKind::Vaapi
+        || target_state.frame_data_location != crate::FrameDataLocation::Software
+    {
+        return;
+    }
+
+    filter_chain.video.push(hardware_upload_filter(
+        acceleration,
+        QSV_EXTRA_HARDWARE_FRAMES,
+    ));
+    target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+    target_state.pixel_format = PixelFormat::Vaapi;
+}
+
+const fn tonemap_algorithm(algorithm: FFmpegProfileTonemapAlgorithm) -> TonemapAlgorithm {
+    match algorithm {
+        FFmpegProfileTonemapAlgorithm::Linear => TonemapAlgorithm::Linear,
+        FFmpegProfileTonemapAlgorithm::Clip => TonemapAlgorithm::Clip,
+        FFmpegProfileTonemapAlgorithm::Gamma => TonemapAlgorithm::Gamma,
+        FFmpegProfileTonemapAlgorithm::Reinhard => TonemapAlgorithm::Reinhard,
+        FFmpegProfileTonemapAlgorithm::Mobius => TonemapAlgorithm::Mobius,
+        FFmpegProfileTonemapAlgorithm::Hable => TonemapAlgorithm::Hable,
     }
 }
 
@@ -724,7 +1084,16 @@ fn configure_hardware_acceleration(
     steps: &mut Vec<PipelineStep>,
     acceleration: HardwareAccelerationKind,
 ) -> FrameState {
-    let mut state = FrameState::new(request.desired.frame_size);
+    let mut state = FrameState::new(
+        request
+            .source_video_stream
+            .as_ref()
+            .and_then(|stream| stream.frame_size)
+            .unwrap_or(request.desired.frame_size),
+    );
+    if let Some(source) = &request.source_video_stream {
+        state.is_anamorphic = source.is_anamorphic();
+    }
 
     match acceleration {
         HardwareAccelerationKind::None

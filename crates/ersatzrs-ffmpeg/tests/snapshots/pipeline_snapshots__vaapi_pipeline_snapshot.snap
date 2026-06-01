@@ -1,5 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 317
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device vaapi -hwaccel vaapi -hwaccel_output_format vaapi -i /media/movie.mkv -i /media/movie.mkv -filter_complex [0:0]scale_vaapi=format=nv12[v] -map [v] -map 1:1 -movflags +faststart -flags +cgop -bf 0 -noautoscale -codec:v h264_vaapi -profile:v high -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device vaapi -hwaccel vaapi -hwaccel_output_format vaapi -i /media/movie.mkv -i /media/movie.mkv -filter_complex [0:0]scale_vaapi=format=nv12[v] -map [v] -map 1:1 -movflags +faststart -flags +cgop -bf 0 -noautoscale -codec:v h264_vaapi -profile:v high -pix_fmt yuv420p -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

@@ -9,6 +9,7 @@ pub enum TonemapAlgorithm {
     Mobius,
     Reinhard,
     Linear,
+    Gamma,
     Clip,
     Bt2390,
 }
@@ -21,6 +22,7 @@ impl TonemapAlgorithm {
             Self::Mobius => "mobius",
             Self::Reinhard => "reinhard",
             Self::Linear => "linear",
+            Self::Gamma => "gamma",
             Self::Clip => "clip",
             Self::Bt2390 => "bt2390",
         }

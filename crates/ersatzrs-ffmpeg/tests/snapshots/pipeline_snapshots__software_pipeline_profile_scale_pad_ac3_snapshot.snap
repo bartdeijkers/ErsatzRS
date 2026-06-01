@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 226
+expression: "command.arguments.join(\" \")"
+---
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -i /media/movie.mkv -filter_complex [0:0]pad=1920:1080:-1:-1:color=black[v];[0:1]loudnorm=I=-23:TP=-1.5:LRA=11,aresample=48000[a] -map [v] -map [a] -movflags +faststart -flags +cgop -bf 0 -codec:v libx265 -profile:v main10 -preset:v slow -codec:a ac3 -ac 6 -ar 48000 -b:a 384k -b:v 4000k -bufsize:v 8000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

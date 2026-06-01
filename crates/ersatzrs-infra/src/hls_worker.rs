@@ -16,13 +16,13 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
-    DesiredVideoState, FfmpegCommand, HlsOutput, InputFile, OutputFormat, PipelineBuilder,
-    PipelineRequest, SoftwarePipelineBuilder, SourceVideoStream,
+    build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
+    FrameRate, HlsOutput, InputFile, OutputFormat, PipelineRequest, SourceVideoStream,
 };
 
 use crate::playback::{
-    load_source_video_stream, select_playback_subtitle, subtitle_fonts_dir,
-    subtitle_input_for_stream,
+    load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
+    select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
 };
 use sqlx::Row;
 use tokio::process::Command;
@@ -41,6 +41,7 @@ pub struct HlsSessionWorker {
     working_dir: PathBuf,
     output_format: OutputFormat,
     path_replacements: Vec<PathReplacement>,
+    runtime_capabilities: FfmpegCapabilityReport,
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
     cancel: Arc<Notify>,
@@ -54,6 +55,7 @@ impl HlsSessionWorker {
         working_dir: PathBuf,
         output_format: OutputFormat,
         path_replacements: Vec<PathReplacement>,
+        runtime_capabilities: FfmpegCapabilityReport,
     ) -> Arc<Self> {
         Arc::new(Self {
             channel_number,
@@ -61,6 +63,7 @@ impl HlsSessionWorker {
             working_dir,
             output_format,
             path_replacements,
+            runtime_capabilities,
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             cancel: Arc::new(Notify::new()),
@@ -114,6 +117,42 @@ impl HlsSessionWorker {
             };
 
             let source_stream = load_source_video_stream(&pool, active.media_version_id).await;
+            let playback_profile = match load_channel_playback_profile(&pool, self.channel_id).await
+            {
+                Ok(Some(profile)) => profile,
+                Ok(None) => {
+                    tracing::warn!(
+                        channel_number = %self.channel_number,
+                        "channel has no playback ffmpeg profile; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        "failed to load playback ffmpeg profile; delaying hls worker"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            let target_frame_rate = if playback_profile.profile.normalize_framerate {
+                match load_channel_target_frame_rate(&pool, self.channel_id).await {
+                    Ok(frame_rate) => frame_rate,
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            channel_number = %self.channel_number,
+                            "failed to load channel target frame rate"
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
             let preferred_subtitle_language = active
                 .preferred_subtitle_language_code
@@ -146,6 +185,9 @@ impl HlsSessionWorker {
                 self.output_format,
                 is_first,
                 active.start_seconds,
+                &playback_profile,
+                target_frame_rate,
+                self.runtime_capabilities.clone(),
                 source_stream,
                 subtitle_input,
             );
@@ -244,11 +286,22 @@ fn build_hls_command(
     output_format: OutputFormat,
     is_first_transcode: bool,
     start_seconds: i64,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
-    let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
+    let desired = DesiredVideoState::from_profile(
+        &playback_profile.profile,
+        &playback_profile.resolution,
+        source_stream.as_ref(),
+        target_frame_rate,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    let mut request =
+        PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
@@ -261,6 +314,11 @@ fn build_hls_command(
         request.state.start_seconds = Some(start_seconds);
     }
     request.state.report_progress = false;
+    if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
+        if thread_count > 0 {
+            request.state.thread_count = Some(thread_count);
+        }
+    }
     request.state.hls = Some(HlsOutput {
         segment_template: match output_format {
             OutputFormat::HlsMp4 => "seg%05d.m4s".to_string(),
@@ -276,9 +334,11 @@ fn build_hls_command(
         troubleshooting: false,
     });
 
-    SoftwarePipelineBuilder
-        .build(request.clone())
-        .command(&request.inputs)
+    build_pipeline_for_acceleration(
+        playback_profile.profile.hardware_acceleration,
+        request.clone(),
+    )
+    .command(&request.inputs)
 }
 
 async fn load_active_hls_item(
@@ -741,6 +801,11 @@ async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_domain::{
+        FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
+    };
+    use std::process::Stdio;
+    use tokio::time::timeout;
     use uuid::Uuid;
 
     #[test]
@@ -751,6 +816,9 @@ mod tests {
             OutputFormat::Hls,
             true,
             0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
             None,
             None,
         );
@@ -765,6 +833,9 @@ mod tests {
             OutputFormat::HlsMp4,
             true,
             0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
             None,
             None,
         );
@@ -782,6 +853,9 @@ mod tests {
             OutputFormat::Hls,
             true,
             900,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
             None,
             None,
         );
@@ -876,6 +950,143 @@ mod tests {
         assert!(trimmed.playlist.contains("seg00003.ts"));
         assert!(trimmed.playlist.contains("seg00012.ts"));
         assert_eq!(trimmed.referenced_files.len(), 10);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg, ffprobe, and the Big Buck Bunny fixture under testdata/"]
+    async fn hls_segmenter_output_is_ffprobe_readable() {
+        let Some(fixture) = testdata_fixture() else {
+            eprintln!("skipping: no Big Buck Bunny fixture found in testdata/");
+            return;
+        };
+        if Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_err()
+        {
+            eprintln!("skipping: ffmpeg not on PATH");
+            return;
+        }
+        if Command::new(ersatzrs_ffmpeg::ffprobe_path_from_env())
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_err()
+        {
+            eprintln!("skipping: ffprobe not on PATH");
+            return;
+        }
+
+        let working_dir = tempfile::tempdir().expect("create hls temp dir");
+        let command = build_hls_command(
+            fixture.to_string_lossy().as_ref(),
+            working_dir.path(),
+            OutputFormat::Hls,
+            true,
+            0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
+            Some(source_1080p()),
+            None,
+        );
+
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        let mut child = process.spawn().expect("spawn ffmpeg hls segmenter");
+        let segment = working_dir.path().join("seg00000.ts");
+
+        timeout(Duration::from_secs(30), async {
+            loop {
+                if let Ok(metadata) = tokio::fs::metadata(&segment).await {
+                    if metadata.len() > 0 {
+                        break;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for first HLS segment");
+
+        child.kill().await.ok();
+        let _ = child.wait().await;
+
+        let output = Command::new(ersatzrs_ffmpeg::ffprobe_path_from_env())
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+            ])
+            .arg(&segment)
+            .output()
+            .await
+            .expect("run ffprobe");
+        assert!(
+            output.status.success(),
+            "ffprobe failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let streams = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            streams.lines().any(|line| line == "video"),
+            "expected a readable video stream, got: {streams}"
+        );
+    }
+
+    fn playback_profile() -> PlaybackProfile {
+        PlaybackProfile {
+            profile: FFmpegProfile {
+                video_format: FFmpegProfileVideoFormat::H264,
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                video_profile: Some("high".to_owned()),
+                video_preset: Some("veryfast".to_owned()),
+                video_bitrate: 8_000,
+                video_buffer_size: 16_000,
+                audio_bitrate: 192,
+                audio_buffer_size: 384,
+                audio_channels: 2,
+                audio_sample_rate: 48,
+                ..FFmpegProfile::default()
+            },
+            resolution: Resolution {
+                width: 1920,
+                height: 1080,
+                ..Resolution::default()
+            },
+        }
+    }
+
+    fn source_1080p() -> SourceVideoStream {
+        let mut source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264);
+        source.frame_size = Some(ersatzrs_ffmpeg::FrameSize::new(1920, 1080));
+        source.sample_aspect_ratio = Some("1:1".to_owned());
+        source.display_aspect_ratio = Some("1920:1080".to_owned());
+        source
+    }
+
+    fn testdata_fixture() -> Option<PathBuf> {
+        [
+            "testdata/bbb_sunflower_1080p_30fps_normal.mp4",
+            "testdata/bbb_sunflower_1080p_60fps_normal.mp4",
+            "testdata/bbb_sunflower_2160p_30fps_normal.mp4",
+            "testdata/bbb_sunflower_2160p_60fps_normal.mp4",
+        ]
+        .into_iter()
+        .map(PathBuf::from)
+        .find(|path| path.is_file())
     }
 
     #[test]
