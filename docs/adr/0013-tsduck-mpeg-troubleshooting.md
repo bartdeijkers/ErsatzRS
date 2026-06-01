@@ -75,7 +75,10 @@ can contain user media.
 
 The deployment remains simple for users who do not need deep TS diagnostics.
 Packaging TSDuck into release images can be evaluated later, after reviewing
-license, size, and multi-architecture build cost.
+license, size, and multi-architecture build cost. TSDuck must be installed
+separately by contributors who need it; install steps live in
+[`plans/mpeg-troubleshooting-tsduck.md`](../../plans/mpeg-troubleshooting-tsduck.md).
+The maintainer's dev box (WSL Ubuntu 24.04) runs TSDuck 3.44-4676.
 
 The TSDuck runner adds process-management and parser code, but keeps the
 complex MPEG-TS inspection logic in a mature external toolkit instead of

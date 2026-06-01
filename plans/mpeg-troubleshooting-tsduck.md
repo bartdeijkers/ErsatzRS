@@ -19,6 +19,39 @@ port. A local source search in `$ERSATZTV_SRC` found no `TSDuck`, `tsduck`,
 `tsp`, `tsanalyze`, `tsbitrate`, `pcrverify`, `tsfixcc`, or `tsfclean`
 usage.
 
+## Installing TSDuck
+
+TSDuck is a developer/operator-side tool only; it is not bundled with ErsatzRS
+(see [ADR 0013](../docs/adr/0013-tsduck-mpeg-troubleshooting.md)). It is not in
+the Ubuntu apt repositories, so install the upstream `.deb` directly. For other
+platforms, download the matching artifact from the
+[releases page](https://github.com/tsduck/tsduck/releases/latest).
+
+### WSL / Ubuntu 24.04 (amd64)
+
+```bash
+# Resolve the latest ubuntu24 amd64 deb URL from the GitHub releases API
+URL=$(curl -sL https://api.github.com/repos/tsduck/tsduck/releases/latest \
+  | grep -oE '"browser_download_url": *"[^"]+\.deb"' \
+  | sed 's/.*"\(http[^"]*\)"/\1/' \
+  | grep -E 'tsduck_.*ubuntu24_amd64\.deb')
+
+curl -fL -o /tmp/tsduck_amd64.deb "$URL"
+
+# Use apt-get install (not dpkg -i) so runtime deps resolve: libcurl, libsrt, ...
+sudo apt-get install -y /tmp/tsduck_amd64.deb
+```
+
+### Verify
+
+```bash
+tsp --version        # e.g. "version 3.44-4676"
+tsanalyze --version
+```
+
+The diagnostic service detects `tsp --version` at runtime; a missing TSDuck
+yields `NotAvailable` and never fails startup or `/healthz`.
+
 ## Source map
 
 - ErsatzRS stream surfaces:
@@ -149,7 +182,8 @@ usage.
 
 - TSDuck remains optional for v1 and is not bundled into Docker images until a
   separate packaging review accepts the image-size, license, and multi-arch
-  costs.
+  costs. The maintainer's dev box (WSL Ubuntu 24.04) runs TSDuck 3.44-4676 at
+  `/usr/bin/tsp`; see "Installing TSDuck" above for the install steps.
 - The first useful diagnostic target is channel MPEG-TS output. Other
   containers and deeper HLS playlist analysis can be separate follow-up slices.
 - Raw stream samples may contain user media and must be treated as sensitive.
