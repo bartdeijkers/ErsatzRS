@@ -24,6 +24,7 @@ use crate::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
     select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
 };
+use crate::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
 use tokio::process::Command;
 use tokio::sync::Notify;
@@ -179,6 +180,8 @@ impl HlsSessionWorker {
                     None
                 }
             };
+            let subtitle_input =
+                rebase_burned_text_subtitle_input(subtitle_input, active.start_seconds).await;
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,

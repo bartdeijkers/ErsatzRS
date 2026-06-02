@@ -34,6 +34,13 @@ pub fn subtitle_cache_folder() -> PathBuf {
     streams_cache_folder().join("subtitles")
 }
 
+/// `<AppDataFolder>/cache/streams/subtitles/seek` — playback-time re-based
+/// subtitle files for non-zero seeks.
+#[must_use]
+pub fn subtitle_seek_cache_folder() -> PathBuf {
+    subtitle_cache_folder().join("seek")
+}
+
 /// `<AppDataFolder>/cache/streams/fonts` — extracted font attachments.
 /// Mirrors `FileSystemLayout.FontsCacheFolder`.
 #[must_use]
@@ -51,6 +58,21 @@ mod tests {
         assert!(
             path.ends_with(Path::new("cache").join("streams").join("subtitles")),
             "unexpected subtitle cache path: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn subtitle_seek_cache_folder_extends_subtitle_cache() {
+        let path = subtitle_seek_cache_folder();
+        assert!(
+            path.ends_with(
+                Path::new("cache")
+                    .join("streams")
+                    .join("subtitles")
+                    .join("seek")
+            ),
+            "unexpected subtitle seek cache path: {}",
             path.display()
         );
     }

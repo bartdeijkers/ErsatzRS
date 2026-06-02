@@ -18,6 +18,7 @@ use ersatzrs_infra::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
     select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
 };
+use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
@@ -122,18 +123,21 @@ pub async fn serve_channel_stream(
             None
         }
     };
+    let start_seconds = playout_start_seconds(now, &active.playout_start);
+    let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
+        subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
+    });
+    let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
     let command = build_stream_command(
         &resolved,
         output_format,
-        playout_start_seconds(now, &active.playout_start),
+        start_seconds,
         &playback_profile,
         target_frame_rate,
         channel.streaming_mode,
         runtime_capabilities,
         source_stream,
-        subtitle.as_ref().and_then(|subtitle| {
-            subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
-        }),
+        subtitle_input,
     );
     match spawn_stream_body(command) {
         Ok(body) => {

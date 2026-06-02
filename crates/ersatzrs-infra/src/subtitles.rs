@@ -16,20 +16,26 @@
 //!     `crates/ersatzrs-web/src/transport/iptv/stream.rs` `load_path_replacements`.
 //!   * **ffmpeg path**: resolved via `ersatzrs_ffmpeg::ffmpeg_path_from_env`
 //!     instead of the `FFmpegPath` config key / `FFmpegPathMustExist`.
+//!   * **seek re-base delivery**: ErsatzTV serves re-based playback subtitles
+//!     through a localhost HTTP pipe. ErsatzRS writes the same re-based stream
+//!     to the subtitle cache and burns that temp file, matching the existing
+//!     file-cache model used for extracted subtitles.
 
 use std::path::{Path, PathBuf};
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::Result;
-use ersatzrs_ffmpeg::ffmpeg_path_from_env;
+use ersatzrs_ffmpeg::{ffmpeg_path_from_env, InputFile, InputKind, SubtitleMethod};
 use md5::{Digest, Md5};
 use sqlx::{Pool, Row};
 use tokio::process::Command;
 
 use crate::db::Db;
 use crate::ffmpeg_config::{extract_embedded_subtitles, use_embedded_subtitles};
-use crate::file_system_layout::{fonts_cache_folder, subtitle_cache_folder};
+use crate::file_system_layout::{
+    fonts_cache_folder, subtitle_cache_folder, subtitle_seek_cache_folder,
+};
 use crate::metadata::subtitle_kind;
 use crate::repositories::common::encode_datetime;
 
@@ -88,6 +94,144 @@ fn subtitle_codec_arg(codec: &str) -> &'static str {
     } else {
         "copy"
     }
+}
+
+fn seek_subtitle_output_format(input_path: &str) -> (&'static str, &'static str) {
+    let extension_source = input_path.split(['?', '#']).next().unwrap_or(input_path);
+    match Path::new(extension_source)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("ass" | "ssa") => ("ass", "ass"),
+        Some("vtt") => ("webvtt", "vtt"),
+        _ => ("srt", "srt"),
+    }
+}
+
+fn md5_upper_hex(value: &str) -> String {
+    let mut hasher = Md5::new();
+    hasher.update(value.as_bytes());
+    let digest = hasher.finalize();
+    let mut name = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        write!(&mut name, "{byte:02X}").expect("writing to String should not fail");
+    }
+    name
+}
+
+fn format_seek_seconds(seek_seconds: i64) -> String {
+    let hours = seek_seconds / 3_600;
+    let minutes = (seek_seconds % 3_600) / 60;
+    let seconds = seek_seconds % 60;
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
+}
+
+fn seek_subtitle_output_path(input_path: &str, seek_seconds: i64) -> PathBuf {
+    let (_, extension) = seek_subtitle_output_format(input_path);
+    let name = md5_upper_hex(input_path);
+
+    subtitle_seek_cache_folder().join(format!("{name}_{seek_seconds}.{extension}"))
+}
+
+/// Build the ffmpeg playback subtitle seek argv, mirroring
+/// `PipelineBuilderBase.Seek`: read the text subtitle, output-seek to the
+/// current item offset, copy subtitle packets, and write the selected text
+/// container format.
+fn build_seek_subtitle_args(input_path: &str, seek_seconds: i64, out_path: &Path) -> Vec<String> {
+    let (format, _) = seek_subtitle_output_format(input_path);
+    vec![
+        "-nostdin".to_owned(),
+        "-hide_banner".to_owned(),
+        "-nostats".to_owned(),
+        "-loglevel".to_owned(),
+        "error".to_owned(),
+        "-i".to_owned(),
+        input_path.to_owned(),
+        "-ss".to_owned(),
+        format_seek_seconds(seek_seconds),
+        "-c:s".to_owned(),
+        "copy".to_owned(),
+        "-f".to_owned(),
+        format.to_owned(),
+        out_path.to_string_lossy().into_owned(),
+    ]
+}
+
+/// Re-base a text subtitle file to `seek_seconds` for burned playback.
+///
+/// Returns `input_path` unchanged for zero/negative seeks and falls back to the
+/// original path on all ffmpeg/cache failures so playback remains no worse than
+/// the pre-existing behavior.
+pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String {
+    if seek_seconds <= 0 {
+        return input_path.to_owned();
+    }
+
+    let output_path = seek_subtitle_output_path(input_path, seek_seconds);
+    if output_path.exists() {
+        return output_path.to_string_lossy().into_owned();
+    }
+
+    if let Some(parent) = output_path.parent() {
+        if let Err(error) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!(
+                %error,
+                input_hash = %md5_upper_hex(input_path),
+                seek_seconds,
+                "failed to create subtitle seek cache directory"
+            );
+            return input_path.to_owned();
+        }
+    }
+
+    let ffmpeg_path = ffmpeg_path_from_env();
+    let args = build_seek_subtitle_args(input_path, seek_seconds, &output_path);
+    let output = match Command::new(&ffmpeg_path).args(&args).output().await {
+        Ok(output) => output,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                input_hash = %md5_upper_hex(input_path),
+                seek_seconds,
+                "failed to spawn ffmpeg for subtitle seek rebase"
+            );
+            return input_path.to_owned();
+        }
+    };
+
+    if output.status.success() {
+        output_path.to_string_lossy().into_owned()
+    } else {
+        tracing::warn!(
+            input_hash = %md5_upper_hex(input_path),
+            seek_seconds,
+            status = %output.status,
+            stderr_bytes = output.stderr.len(),
+            "failed to rebase subtitle for playback seek"
+        );
+        input_path.to_owned()
+    }
+}
+
+/// Re-base only burned text subtitle inputs. Image subtitles and copied
+/// subtitle streams already ride the seeked media input and must not be
+/// rewritten.
+pub async fn rebase_burned_text_subtitle_input(
+    input: Option<InputFile>,
+    seek_seconds: i64,
+) -> Option<InputFile> {
+    let mut input = input?;
+    if input.kind == InputKind::Subtitle
+        && input.subtitle_method == Some(SubtitleMethod::Burn)
+        && !input.is_image_based_subtitle
+        && seek_seconds > 0
+    {
+        input.path = rebase_text_subtitle(&input.path, seek_seconds).await;
+    }
+    Some(input)
 }
 
 /// One subtitle row scheduled for extraction.
@@ -726,6 +870,92 @@ mod tests {
                 "text".to_owned(),
                 out2.to_string_lossy().into_owned(),
             ]
+        );
+    }
+
+    #[test]
+    fn build_seek_subtitle_args_matches_etv_rebase_pass() {
+        let out = Path::new("/tmp/seeked.srt");
+        let args = build_seek_subtitle_args("/srv/media/show/subtitle.srt", 900, out);
+        assert_eq!(
+            args,
+            vec![
+                "-nostdin".to_owned(),
+                "-hide_banner".to_owned(),
+                "-nostats".to_owned(),
+                "-loglevel".to_owned(),
+                "error".to_owned(),
+                "-i".to_owned(),
+                "/srv/media/show/subtitle.srt".to_owned(),
+                "-ss".to_owned(),
+                "00:15:00".to_owned(),
+                "-c:s".to_owned(),
+                "copy".to_owned(),
+                "-f".to_owned(),
+                "srt".to_owned(),
+                "/tmp/seeked.srt".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_seek_subtitle_args_selects_text_output_format_from_extension() {
+        assert_eq!(
+            build_seek_subtitle_args("/tmp/subtitle.ass", 3_723, Path::new("/tmp/out.ass"))[12],
+            "ass"
+        );
+        assert_eq!(
+            build_seek_subtitle_args("/tmp/subtitle.ssa", 3_723, Path::new("/tmp/out.ass"))[12],
+            "ass"
+        );
+        assert_eq!(
+            build_seek_subtitle_args("/tmp/subtitle.vtt", 3_723, Path::new("/tmp/out.vtt"))[12],
+            "webvtt"
+        );
+        assert_eq!(
+            build_seek_subtitle_args(
+                "https://example.test/subtitle.ass?X-Plex-Token=redacted",
+                3_723,
+                Path::new("/tmp/out.ass")
+            )[12],
+            "ass"
+        );
+        assert_eq!(
+            build_seek_subtitle_args("/tmp/subtitle.subrip", 3_723, Path::new("/tmp/out.srt"))[8],
+            "01:02:03"
+        );
+    }
+
+    #[tokio::test]
+    async fn rebase_text_subtitle_skips_non_positive_seek() {
+        assert_eq!(
+            rebase_text_subtitle("/srv/media/show/subtitle.srt", 0).await,
+            "/srv/media/show/subtitle.srt"
+        );
+        assert_eq!(
+            rebase_text_subtitle("/srv/media/show/subtitle.srt", -1).await,
+            "/srv/media/show/subtitle.srt"
+        );
+    }
+
+    #[tokio::test]
+    async fn rebase_burned_text_subtitle_input_skips_non_text_burn_inputs() {
+        let image = InputFile::image_subtitle("/srv/media/show/video.mkv", SubtitleMethod::Burn);
+        assert_eq!(
+            rebase_burned_text_subtitle_input(Some(image.clone()), 900).await,
+            Some(image)
+        );
+
+        let copied = InputFile::text_subtitle("/srv/media/show/video.mkv", SubtitleMethod::Copy);
+        assert_eq!(
+            rebase_burned_text_subtitle_input(Some(copied.clone()), 900).await,
+            Some(copied)
+        );
+
+        let burned = InputFile::text_subtitle("/srv/media/show/subtitle.srt", SubtitleMethod::Burn);
+        assert_eq!(
+            rebase_burned_text_subtitle_input(Some(burned.clone()), 0).await,
+            Some(burned)
         );
     }
 
