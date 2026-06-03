@@ -1,10 +1,10 @@
 use crate::db::DbRow;
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{GraphicsRepository, Result};
-use ersatzrs_domain::{EntityId, GraphicsElement};
+use ersatzrs_domain::{EntityId, GraphicsElement, GraphicsElementConfig};
 use sqlx::{Pool, Row};
 
-use super::common::{decode_enum_column, encode_enum, not_found};
+use super::common::{decode_bool_column, decode_enum_column, encode_enum, not_found};
 
 #[derive(Clone)]
 pub struct SqliteGraphicsRepository(pub Pool<crate::db::Db>);
@@ -47,21 +47,33 @@ impl GraphicsRepository for SqliteGraphicsRepository {
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {
         sqlx::query(
             r#"REPLACE INTO "GraphicsElement" (
-                "Id", "Name", "Kind", "Path",
-                "X", "Y", "Width", "Height", "ZIndex", "EnableExpression", "Text"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "Id", "Name", "Kind", "Path", "ZIndex",
+                "OpacityPercent", "OpacityExpression", "Location",
+                "HorizontalMarginPercent", "VerticalMarginPercent",
+                "LocationX", "LocationY", "Scale", "ScaleWidthPercent",
+                "PlaceWithinSourceContent", "EpgEntries", "Config"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(element.id)
         .bind(&element.name)
         .bind(encode_enum(element.kind))
         .bind(&element.path)
-        .bind(element.x)
-        .bind(element.y)
-        .bind(element.width)
-        .bind(element.height)
         .bind(element.z_index)
-        .bind(&element.enable_expression)
-        .bind(&element.text)
+        .bind(element.opacity_percent)
+        .bind(&element.opacity_expression)
+        .bind(encode_enum(element.location))
+        .bind(element.horizontal_margin_percent)
+        .bind(element.vertical_margin_percent)
+        .bind(element.location_x)
+        .bind(element.location_y)
+        .bind(element.scale)
+        .bind(element.scale_width_percent)
+        .bind(element.place_within_source_content)
+        .bind(element.epg_entries)
+        .bind(
+            serde_json::to_string(&element.config)
+                .expect("graphics element config should serialize"),
+        )
         .execute(&self.0)
         .await?;
         Ok(())
@@ -74,14 +86,24 @@ fn map_element(row: &DbRow) -> Result<GraphicsElement> {
         name: row.try_get("Name")?,
         kind: decode_enum_column("graphics element kind", row, "Kind")?,
         path: row.try_get("Path")?,
-        x: row.try_get("X").unwrap_or(0),
-        y: row.try_get("Y").unwrap_or(0),
-        width: row.try_get("Width").unwrap_or(0),
-        height: row.try_get("Height").unwrap_or(0),
         z_index: row.try_get("ZIndex").unwrap_or(0),
-        enable_expression: row.try_get("EnableExpression").unwrap_or(None),
-        text: row.try_get("Text").unwrap_or(None),
-        script: None,
-        variables: None,
+        opacity_percent: row.try_get("OpacityPercent").unwrap_or(None),
+        opacity_expression: row.try_get("OpacityExpression").unwrap_or(None),
+        location: decode_enum_column("graphics element location", row, "Location")?,
+        horizontal_margin_percent: row.try_get("HorizontalMarginPercent").unwrap_or(None),
+        vertical_margin_percent: row.try_get("VerticalMarginPercent").unwrap_or(None),
+        location_x: row.try_get("LocationX").unwrap_or(None),
+        location_y: row.try_get("LocationY").unwrap_or(None),
+        scale: decode_bool_column(row, "Scale").unwrap_or(false),
+        scale_width_percent: row.try_get("ScaleWidthPercent").unwrap_or(None),
+        place_within_source_content: decode_bool_column(row, "PlaceWithinSourceContent")
+            .unwrap_or(false),
+        epg_entries: row.try_get("EpgEntries").unwrap_or(0),
+        config: row
+            .try_get::<Option<String>, _>("Config")
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_str(&value).ok())
+            .unwrap_or_else(GraphicsElementConfig::default),
     })
 }

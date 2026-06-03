@@ -263,7 +263,9 @@ pub struct DecoWatermark {
     pub watermark_id: EntityId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+// `Eq` is intentionally omitted: `GraphicsElement` now carries floating-point fields
+// (margins, scale) and no longer implements `Eq`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WatermarkGraphicsState {
     pub watermark_ids: Vec<EntityId>,
     pub graphics_elements: Vec<GraphicsElement>,

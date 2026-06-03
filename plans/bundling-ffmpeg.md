@@ -109,21 +109,47 @@ Add a job above `binaries`, matrixed over the same 6 RIDs, each producing
 artifact `ffmpeg-<rid>` containing a relocatable `ffmpeg/bin/{ffmpeg,ffprobe}[.exe]`
 with co-located shared libs (runnable with no `LD_LIBRARY_PATH`/`DYLD_*`).
 
-- **linux-x64 / linux-arm64 / linux-arm** — reuse the Docker recipe (single
-  source of truth). Use `docker/setup-qemu-action` + `setup-buildx-action`
-  (same as the `docker` job), `docker buildx build --platform linux/<arch>
-  --target ffmpeg-export --output type=local,dest=out`, then the payload is at
-  `out/ffmpeg`. This requires a new tiny export stage in the Dockerfile (below).
+- **linux-x64 / linux-arm64 / linux-arm** — reuse the Docker recipe for the
+  FFmpeg build flags, then export a complete runtime payload. Use
+  `docker/setup-qemu-action` + `setup-buildx-action` (same as the `docker` job),
+  `docker buildx build --platform linux/<arch> --target ffmpeg-export --output
+  type=local,dest=out`; the payload is at `out/ffmpeg`. The export stage must
+  copy the shared-library closure for `ffmpeg/bin/{ffmpeg,ffprobe}` into
+  `ffmpeg/lib`, not just `/opt/ffmpeg`. This includes Debian-packaged runtime
+  libraries pulled in by the Docker build such as cairo, libass, fontconfig,
+  freetype/harfbuzz/fribidi, x264/x265, SVT-AV1, dav1d, vpx, webp, OpenSSL,
+  zimg, aom/vorbis/opus/mp3lame, and any Linux hardware-stack libraries enabled
+  for that architecture. Do not vendor libc, the dynamic loader, libpthread,
+  libdl, libm, librt, libresolv, libgcc_s, or other baseline system ABI
+  libraries. Verify the exported `ffmpeg/bin/ffmpeg` with `ldd` inside a clean
+  Debian/Ubuntu container before upload: every non-baseline dependency must
+  resolve from `ffmpeg/lib`.
 - **win-x64** — `msys2/setup-msys2` with the `mingw-w64-x86_64`
   cairo/libass/x264/x265/svt-av1/etc. stack; build FFmpeg 8.1 from source with
-  the same `--enable-*` flags as the Dockerfile; copy `ffmpeg.exe`,
-  `ffprobe.exe` and their mingw DLLs into `ffmpeg/bin/` (Windows resolves DLLs
-  next to the exe).
+  a Windows-specific flag set. Start from the common required features
+  (`--enable-cairo`, `--enable-libass`, `--enable-libfontconfig`,
+  `--enable-libfreetype`, `--enable-libfribidi`, `--enable-libharfbuzz`,
+  `--enable-gpl`, `--enable-version3`, shared libs, and the codec libraries
+  available from MSYS2), but do **not** use Linux-only Docker flags such as
+  `--enable-libdrm`, `--enable-libv4l2`, `--enable-vaapi`, Linux
+  `TARGETARCH`-gated QSV/Vulkan/VAAPI checks, or Linux rpath linker syntax.
+  Copy `ffmpeg.exe`, `ffprobe.exe`, and the DLL closure reported by
+  `ntldd`/`ldd` into `ffmpeg/bin/` because Windows resolves DLLs next to the
+  executable. The relocated `ffmpeg/bin/ffmpeg.exe` must pass the drawvg smoke
+  test from a shell where MSYS2 library directories are not on `PATH`.
 - **osx-x64 / osx-arm64** — native runners (`macos-13` for x64,
   `macos-latest`/arm64 for arm64 — x64 must build on an Intel runner so
-  Homebrew deps match the arch); Homebrew supplies deps; build with the same
-  flags; relocate dylibs to `@loader_path/../lib` via
-  `install_name_tool`/`dylibbundler` so no `DYLD_*` is needed.
+  Homebrew deps match the arch); Homebrew supplies deps; build with a
+  macOS-specific flag set. Start from the common required features
+  (`--enable-cairo`, `--enable-libass`, `--enable-libfontconfig`,
+  `--enable-libfreetype`, `--enable-libfribidi`, `--enable-libharfbuzz`,
+  `--enable-gpl`, `--enable-version3`, shared libs, and the codec libraries
+  available from Homebrew), but do **not** use Linux-only Docker flags such as
+  `--enable-libdrm`, `--enable-libv4l2`, `--enable-vaapi`, or Linux
+  `TARGETARCH`-gated CUDA/QSV/Vulkan/VAAPI checks. Relocate dylibs to
+  `@loader_path/../lib` via `install_name_tool`/`dylibbundler` so no `DYLD_*`
+  is needed, and run `otool -L ffmpeg/bin/ffmpeg` before upload to ensure
+  non-system dependencies resolve to `@loader_path/../lib`.
 
 Every cell runs the **same drawvg smoke test** the Dockerfile uses
 (`docker/Dockerfile:161-165`: `-f lavfi -i color=... -vf
@@ -134,16 +160,42 @@ fail the release if drawvg is absent.
 ## 3. Build: Dockerfile changes (`docker/Dockerfile`)
 
 - Make the built `bin` relocatable: add
-  `--extra-ldflags='-Wl,-rpath,$ORIGIN/../lib'` to the `./configure` invocation
-  (`Dockerfile:125-155`). Harmless to the runtime image (it still sets
-  `LD_LIBRARY_PATH=/opt/ffmpeg/lib`) and makes the extracted tree self-locating.
-- Add an export-only stage so buildx can emit just the payload:
+  `--extra-ldflags='-Wl,-rpath,$ORIGIN/../lib'` to the Linux `./configure`
+  invocation (`Dockerfile:125-155`). Harmless to the runtime image (it still
+  sets `LD_LIBRARY_PATH=/opt/ffmpeg/lib`) and makes the extracted tree
+  self-locating once the export stage vendors the dependency closure.
+- Add an export-only stage so buildx can emit the payload. This stage must copy
+  `/opt/ffmpeg` and then populate `/ffmpeg/lib` with the runtime library closure
+  for `/ffmpeg/bin/ffmpeg` and `/ffmpeg/bin/ffprobe`:
   ```dockerfile
+  FROM ffmpeg-build AS ffmpeg-export-prep
+  RUN set -eux; \
+      mkdir -p /ffmpeg; \
+      cp -a /opt/ffmpeg/. /ffmpeg/; \
+      mkdir -p /ffmpeg/lib; \
+      for exe in /ffmpeg/bin/ffmpeg /ffmpeg/bin/ffprobe; do \
+          ldd "$exe" \
+              | awk '/=> \// { print $3 } /^\// { print $1 }' \
+              | sort -u \
+              | while read -r lib; do \
+                  case "$lib" in \
+                      /lib*/ld-linux-*|/lib*/libc.so.*|/lib*/libpthread.so.*|/lib*/libdl.so.*|/lib*/libm.so.*|/lib*/librt.so.*|/lib*/libresolv.so.*|/lib*/libgcc_s.so.*) \
+                          continue ;; \
+                  esac; \
+                  cp -L "$lib" /ffmpeg/lib/; \
+              done; \
+      done; \
+      LD_LIBRARY_PATH=/ffmpeg/lib /ffmpeg/bin/ffmpeg -hide_banner -filters | grep -w drawvg; \
+      ! ldd /ffmpeg/bin/ffmpeg | grep 'not found'
+
   FROM scratch AS ffmpeg-export
-  COPY --from=ffmpeg-build /opt/ffmpeg /ffmpeg
+  COPY --from=ffmpeg-export-prep /ffmpeg /ffmpeg
   ```
-  Place it after the `ffmpeg-build` stage. It is not referenced by the default
-  `runtime` target, so the published image is unaffected.
+  The final implementation can keep the copy logic in the Dockerfile or move it
+  to a small checked-in shell script if that is easier to test, but the CI
+  target must export the populated `/ffmpeg` tree. Place it after the
+  `ffmpeg-build` stage. It is not referenced by the default `runtime` target,
+  so the published image is unaffected.
 
 ## 4. Consume payload in `binaries` job (`.github/workflows/release.yml`)
 
@@ -190,6 +242,14 @@ bundling.
   to a built `ersatzrs-web`; run from a clean env (no `ErsatzRS_FFMPEG__PATH`,
   no `LD_LIBRARY_PATH`, FFmpeg off `PATH`) and confirm the startup capability
   check passes and `drawvg` works.
+- **Linux dependency closure**: run the exported `out/ffmpeg/bin/ffmpeg` inside
+  a clean Debian/Ubuntu container with no `LD_LIBRARY_PATH`; `ldd` must report
+  no `not found` entries, and every non-baseline dependency must resolve from
+  `out/ffmpeg/lib`.
+- **Per-OS configure flags**: inspect the CI configure logs for win-x64,
+  osx-x64, and osx-arm64. They must include the common cairo/drawvg dependency
+  flags and must not include Linux-only flags (`libdrm`, `libv4l2`, `vaapi`, or
+  Linux `TARGETARCH`-gated accelerator options).
 - **CI**: run the workflow on a throwaway tag; confirm each of the 6 archives
   contains `ffmpeg/bin/{ffmpeg,ffprobe}` and that each cell's drawvg smoke test
   passed. Download win-x64 + osx archives and launch on a host with no FFmpeg to

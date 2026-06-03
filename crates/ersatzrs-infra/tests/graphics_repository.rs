@@ -5,7 +5,9 @@ use ersatzrs_core::repositories::{
     ChannelRepository, FfmpegProfileRepository, GraphicsRepository, PlayoutRepository,
     ProgramScheduleRepository,
 };
-use ersatzrs_domain::GraphicsElement;
+use ersatzrs_domain::{
+    GraphicsElement, GraphicsElementConfig, GraphicsElementKind, TextAlignment, TextGraphicsConfig,
+};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
 
@@ -46,11 +48,18 @@ async fn graphics_repository_round_trips_elements_and_lists_for_channel() {
         .upsert_element(&GraphicsElement {
             id: 2,
             name: "lower-third".to_owned(),
-            x: 10,
-            y: 20,
-            width: 300,
-            height: 80,
-            text: Some("Now".to_owned()),
+            kind: GraphicsElementKind::Text,
+            z_index: 7,
+            opacity_percent: Some(80),
+            horizontal_margin_percent: Some(10.0),
+            vertical_margin_percent: Some(20.0),
+            scale_width_percent: Some(30.0),
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some("Now".to_owned()),
+                align: TextAlignment::Center,
+                width_percent: Some(30.0),
+                ..TextGraphicsConfig::default()
+            }),
             ..GraphicsElement::default()
         })
         .await
@@ -64,10 +73,17 @@ async fn graphics_repository_round_trips_elements_and_lists_for_channel() {
 
     let element = repos.graphics.get_element(2).await.unwrap();
     assert_eq!(element.name, "lower-third");
-    assert_eq!(element.x, 10);
-    assert_eq!(element.y, 20);
-    assert_eq!(element.width, 300);
-    assert_eq!(element.height, 80);
-    assert_eq!(element.text.as_deref(), Some("Now"));
+    assert_eq!(element.kind, GraphicsElementKind::Text);
+    assert_eq!(element.z_index, 7);
+    assert_eq!(element.opacity_percent, Some(80));
+    assert_eq!(element.horizontal_margin_percent, Some(10.0));
+    assert_eq!(element.vertical_margin_percent, Some(20.0));
+    assert_eq!(element.scale_width_percent, Some(30.0));
+    let GraphicsElementConfig::Text(config) = element.config else {
+        panic!("expected text config");
+    };
+    assert_eq!(config.text.as_deref(), Some("Now"));
+    assert_eq!(config.align, TextAlignment::Center);
+    assert_eq!(config.width_percent, Some(30.0));
     assert_eq!(repos.graphics.list_for_channel(1).await.unwrap()[0].id, 2);
 }

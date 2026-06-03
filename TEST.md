@@ -46,7 +46,7 @@ stabilisation. Apply them every time you wire interactive UI:
 
 1. **Page wrapper stays `#[component]`.** The interactive body becomes
    `#[island]`. `hydrate_islands()` only attaches handlers declared inside
-   `#[island]`. Reference: `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17`.
+   `#[island]`. Reference: `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:18-21`.
 2. **Stable DOM shape.** Replace `cond.then(|| view!{...})` and `<Show when=...>` with
    always-render plus `style:display=move || if cond { "" } else { "none" }` and
    `disabled=move || !cond`. Conditional sub-trees crash hydration with
@@ -72,7 +72,7 @@ stabilisation. Apply them every time you wire interactive UI:
    `Signal::derive(move || delete_target.get().map(|t| t.name.clone()).unwrap_or_default())`.
 5. **Server-state polling pattern.** When the UI needs a server-driven signal
    (e.g. lock state), copy the wasm32-gated `Effect` from
-   `libraries/mod.rs:39-56`: `gloo_timers::future::TimeoutFuture::new(1500)`
+   `libraries/mod.rs:81-95`: `gloo_timers::future::TimeoutFuture::new(1_500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
 
 ## Hydration and UI bug containment

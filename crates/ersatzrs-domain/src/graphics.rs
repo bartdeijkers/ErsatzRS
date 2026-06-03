@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::channel::WatermarkLocation;
 use crate::EntityId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -12,21 +13,165 @@ pub enum GraphicsElementKind {
     Script,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+/// A graphics element definition.
+///
+/// Mirrors ErsatzTV's `GraphicsElement` (`Id`/`Path`/`Name`/`Kind`) but, per the
+/// ErsatzRS "DB is canonical" decision (Decision C), also persists the rich per-kind
+/// configuration that ErsatzTV keeps in the YAML file at `path`. Shared fields are typed
+/// columns; kind-specific extras live in [`GraphicsElement::config`], serialized to the
+/// `Config` JSON column. `path` is retained as the link back to the source YAML so an
+/// import can re-sync.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GraphicsElement {
     pub id: EntityId,
     pub name: String,
     pub kind: GraphicsElementKind,
-    pub x: i32,
-    pub y: i32,
-    pub width: i32,
-    pub height: i32,
-    pub z_index: i32,
+    /// Path to the source YAML the element was imported from, if any.
     pub path: Option<String>,
-    pub enable_expression: Option<String>,
+    pub z_index: i32,
+    /// Static opacity, 0–100 (`Image`/`Text`).
+    pub opacity_percent: Option<i32>,
+    /// Dynamic opacity expression (`Image`/`Text`).
+    pub opacity_expression: Option<String>,
+    /// Anchor location (`Image`/`Text`/`Motion`); reuses the watermark location enum.
+    pub location: WatermarkLocation,
+    pub horizontal_margin_percent: Option<f64>,
+    pub vertical_margin_percent: Option<f64>,
+    /// Absolute placement override (`Image`).
+    pub location_x: Option<f64>,
+    pub location_y: Option<f64>,
+    pub scale: bool,
+    pub scale_width_percent: Option<f64>,
+    pub place_within_source_content: bool,
+    /// Number of EPG entries to expose to the template (`Text`/`Subtitle`/`Motion`/`Script`).
+    pub epg_entries: i32,
+    /// Kind-specific configuration, persisted as JSON in the `Config` column.
+    pub config: GraphicsElementConfig,
+}
+
+/// Kind-specific configuration, stored as JSON in `GraphicsElement.Config`.
+///
+/// Serialized internally tagged by `kind` so the JSON is self-describing; the
+/// `GraphicsElement.kind` column is the denormalized discriminator and must agree.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GraphicsElementConfig {
+    Image(ImageGraphicsConfig),
+    Text(TextGraphicsConfig),
+    Subtitle(SubtitleGraphicsConfig),
+    Motion(MotionGraphicsConfig),
+    Script(ScriptGraphicsConfig),
+}
+
+impl Default for GraphicsElementConfig {
+    fn default() -> Self {
+        Self::Image(ImageGraphicsConfig::default())
+    }
+}
+
+impl GraphicsElementConfig {
+    /// The element kind this configuration represents.
+    #[must_use]
+    pub const fn kind(&self) -> GraphicsElementKind {
+        match self {
+            Self::Image(_) => GraphicsElementKind::Image,
+            Self::Text(_) => GraphicsElementKind::Text,
+            Self::Subtitle(_) => GraphicsElementKind::Subtitle,
+            Self::Motion(_) => GraphicsElementKind::Motion,
+            Self::Script(_) => GraphicsElementKind::Script,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ImageGraphicsConfig {
+    /// Path to the image file to overlay.
+    pub image: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct TextGraphicsConfig {
     pub text: Option<String>,
-    pub script: Option<String>,
-    pub variables: Option<String>,
+    #[serde(rename = "text_fit")]
+    pub fit: TextFit,
+    #[serde(rename = "text_align")]
+    pub align: TextAlignment,
+    pub width_percent: Option<f64>,
+    pub base_style: Option<String>,
+    pub include_fonts_from: Option<String>,
+    pub styles: Vec<StyleDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct SubtitleGraphicsConfig {
+    /// Path to the `.ass` subtitle template.
+    pub template: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct MotionGraphicsConfig {
+    pub video_path: Option<String>,
+    pub start_seconds: Option<f64>,
+    pub hold_seconds: Option<f64>,
+    pub end_behavior: MotionEndBehavior,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ScriptGraphicsConfig {
+    /// External command — imported for round-trip fidelity only. ErsatzRS does not spawn an
+    /// external graphics process (ADR 0005); the `Script` kind is rendered via the scripted
+    /// engine or deferred.
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    pub format: Option<String>,
+    pub pixel_format: Option<String>,
+    pub start_seconds: Option<f64>,
+    pub duration_seconds: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TextFit {
+    #[default]
+    None,
+    Wrap,
+    Scale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TextAlignment {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum MotionEndBehavior {
+    #[default]
+    Disappear,
+    Loop,
+}
+
+/// A named text style, ported from ErsatzTV's `StyleDefinition`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct StyleDefinition {
+    pub name: Option<String>,
+    pub font_family: Option<String>,
+    pub font_size: Option<f32>,
+    pub font_weight: Option<i32>,
+    pub font_italic: Option<bool>,
+    pub text_color: Option<String>,
+    pub letter_spacing: Option<f32>,
+    pub line_height: Option<f32>,
+    pub halo_color: Option<String>,
+    pub halo_width: Option<f32>,
+    pub halo_blur: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

@@ -101,6 +101,12 @@ public open-source project.
 
 Feature-level porting plans live alongside this index.
 
+- `watermark-parity-slice.md` — wire watermarks (all modes) into the streaming pipeline;
+  native FFmpeg overlay/fade for dynamic opacity. Fixes channel-logo watermarks not showing.
+- `graphics-engine-parity-slice.md` — wire the general graphics-element engine
+  (image/text/subtitle/motion) into streaming via drawvg + FFmpeg overlays; ports ErsatzTV's
+  graphics engine within ADR 0005 (no external graphics process).
+
 ## Deferred Contract Work
 
 These are intentionally deferred until code exists:
