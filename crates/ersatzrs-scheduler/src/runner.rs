@@ -11,6 +11,7 @@ use ersatzrs_infra::maintenance::{
 };
 use tokio::sync::mpsc;
 use tokio::time::{interval, MissedTickBehavior};
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Scheduler CLI options after argument parsing.
@@ -36,6 +37,11 @@ pub struct SchedulerOptions {
     /// playout lock state for the playouts-page build spinner. Mirrors
     /// ErsatzTV's single-process `IEntityLocker` singleton.
     pub locker: Option<EntityLocker>,
+    /// Optional external shutdown signal. When supplied (e.g. the web host's
+    /// coordinated `CancellationToken`), the loop exits on cancellation rather
+    /// than installing its own `ctrl_c` handler. When `None` (standalone use),
+    /// it falls back to `tokio::signal::ctrl_c()`.
+    pub shutdown: Option<CancellationToken>,
 }
 
 /// Run the background scheduler.
@@ -55,6 +61,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         scanner_extra_args,
         mut build_requests,
         locker,
+        shutdown,
     } = options;
 
     let startup = db::bootstrap_media_server_database().await?;
@@ -87,7 +94,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
 
     loop {
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
+            () = wait_for_shutdown(shutdown.as_ref()) => {
                 info!("scheduler service shutting down");
                 return Ok(());
             }
@@ -128,6 +135,54 @@ async fn recv_build_request(
     match receiver {
         Some(receiver) => receiver.recv().await,
         None => std::future::pending::<Option<PlayoutBuildRequest>>().await,
+    }
+}
+
+/// Resolve when the scheduler should shut down. Prefers an externally supplied
+/// `CancellationToken` (the web host's coordinated shutdown); otherwise installs
+/// a standalone `ctrl_c` handler so direct callers still stop cleanly.
+async fn wait_for_shutdown(token: Option<&CancellationToken>) {
+    match token {
+        Some(token) => token.cancelled().await,
+        None => {
+            let _ = tokio::signal::ctrl_c().await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// A supplied token must resolve `wait_for_shutdown` as soon as it is
+    /// cancelled, which is how the web host drains the scheduler loop.
+    #[tokio::test]
+    async fn wait_for_shutdown_resolves_when_token_cancelled() {
+        let token = CancellationToken::new();
+        let waiter = token.clone();
+        let handle = tokio::spawn(async move { wait_for_shutdown(Some(&waiter)).await });
+
+        token.cancel();
+
+        let result = tokio::time::timeout(Duration::from_secs(1), handle).await;
+        assert!(
+            matches!(result, Ok(Ok(()))),
+            "wait_for_shutdown did not resolve after the token was cancelled"
+        );
+    }
+
+    /// While the token is live, `wait_for_shutdown` must keep pending so the
+    /// scheduler stays in its loop.
+    #[tokio::test]
+    async fn wait_for_shutdown_pending_while_token_live() {
+        let token = CancellationToken::new();
+        let result =
+            tokio::time::timeout(Duration::from_millis(50), wait_for_shutdown(Some(&token))).await;
+        assert!(
+            result.is_err(),
+            "wait_for_shutdown resolved while the token was still live"
+        );
     }
 }
 

@@ -1,0 +1,50 @@
+[package]
+name = "ersatzrs-launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Packaged into the Windows release zip as `ErsatzRS.exe` (the tray launcher the
+# user double-clicks). On every non-Windows target this builds to a no-op `main`
+# so `cargo build --workspace` stays green on the Linux self-hosted CI.
+[[bin]]
+name = "ersatzrs-launcher"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+# Mirrors ErsatzTV-Windows's proven structure: tray + open-folder/url helpers,
+# data-local-dir resolution consistent with ersatzrs_infra::logging, and the
+# launcher's own exe path so it can find the co-located server + ffmpeg.
+tray-item = "0.10"
+open = "5"
+directories = "6"
+process_path = "0.1"
+# Raw Win32 FFI: console control for the graceful-Ctrl+C "Exit", and MessageBoxW
+# to surface fatal startup failures (the launcher has no console). windows-sys
+# keeps the FFI surface tiny and version-stable vs the higher-level `windows`
+# crate.
+windows-sys = { version = "0.59", features = [
+    "Win32_System_Console",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+# Compile the .rc (embeds the tray icon as a named resource + version info) and
+# statically link the MSVC CRT so the exe needs no VC++ redistributable.
+embed-resource = "2"
+static_vcruntime = "2"
+
+# This crate is the intentional exception to the workspace-wide
+# `unsafe_code = "forbid"` lint. It makes a few small Win32 FFI calls that have
+# no safe wrapper: console control (AttachConsole + GenerateConsoleCtrlEvent) to
+# deliver a graceful Ctrl+C to the spawned server on "Exit", and MessageBoxW to
+# report a fatal startup failure. Each `unsafe` block is small and confined to
+# src/main.rs. We therefore deliberately omit `[lints] workspace = true` and
+# restate the workspace lints here, relaxing only `unsafe_code`.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

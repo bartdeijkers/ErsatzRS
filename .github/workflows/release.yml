@@ -27,6 +27,23 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+      # Needed only for the optional Azure code-signing OIDC login below; granted
+      # unconditionally but unused unless the signing secrets are configured.
+      id-token: write
+    env:
+      # Hosted release runners must not inherit the developer self-hosted
+      # target-dir from the committed .cargo/config.toml (which points at a
+      # local /mnt path that does not exist here). Keep build output inside the
+      # workspace so the `target/...` staging paths below resolve on every RID.
+      # `cross` honours CARGO_TARGET_DIR and mounts it into its container, so the
+      # arm builds land in this same workspace `target/` the staging step reads;
+      # without this override the committed /mnt path would break them inside the
+      # container too.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # Empty unless the signing secrets are configured. Hoisted to job env
+      # because the `secrets` context is not available in step `if:` conditions;
+      # the optional signing steps gate on `env.AZURE_CLIENT_ID != ''`.
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -81,10 +98,87 @@ jobs:
         run: cargo install cross --locked
       - name: Build (cargo)
         if: ${{ !matrix.cross }}
-        run: cargo build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+        shell: bash
+        env:
+          RID: ${{ matrix.rid }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          # win-x64 also ships the tray launcher; build it in this single cargo
+          # invocation instead of a separate one to avoid a redundant build.
+          bins=(--bin ersatzrs-web --bin ersatzrs-scanner)
+          if [ "$RID" = "win-x64" ]; then
+            bins+=(--bin ersatzrs-launcher)
+          fi
+          cargo build --release "${bins[@]}" --target "$TARGET"
       - name: Build (cross)
         if: ${{ matrix.cross }}
         run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+      - name: Build Leptos site assets (win-x64)
+        # The interactive admin UI needs the cargo-leptos hydration bundle. Pin
+        # cargo-leptos to the same version the Docker image uses so the assets
+        # match. Output lands in target/site (workspace-relative site-root).
+        if: ${{ matrix.rid == 'win-x64' }}
+        shell: bash
+        env:
+          # Stable (un-hashed) asset names so the separately-built server exe and
+          # this bundle agree on filenames, with no runtime hash-manifest coupling.
+          LEPTOS_HASH_FILES: "false"
+        run: |
+          set -euo pipefail
+          rustup target add wasm32-unknown-unknown
+          cargo install cargo-leptos --version 0.3.6 --locked
+          (cd crates/ersatzrs-web && cargo leptos build --release --lib-features hydrate)
+          # Fail fast if the hydration bundle did not land where staging expects
+          # it (e.g. site-root resolved elsewhere) instead of silently shipping a
+          # non-interactive UI.
+          test -d target/site/pkg
+      - name: Bundle FFmpeg 8.1 with drawvg (win-x64)
+        if: ${{ matrix.rid == 'win-x64' }}
+        shell: bash
+        env:
+          # Pinned BtbN win64 GPL build of FFmpeg 8.1. ErsatzRS hard-requires the
+          # `drawvg` filter (FFmpeg 8.1+), asserted below. If BtbN renames the
+          # asset, update this URL — the drawvg assert is the correctness guard.
+          FFMPEG_ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-gpl-8.1.zip
+        run: |
+          set -euo pipefail
+          curl -fL "$FFMPEG_ZIP_URL" -o ffmpeg-win64.zip
+          7z x ffmpeg-win64.zip -offmpeg-extracted >/dev/null
+          ffmpeg_exe="$(find ffmpeg-extracted -name ffmpeg.exe | head -n1)"
+          ffprobe_exe="$(find ffmpeg-extracted -name ffprobe.exe | head -n1)"
+          if [ -z "$ffmpeg_exe" ] || [ -z "$ffprobe_exe" ]; then
+            echo "ffmpeg.exe/ffprobe.exe not found in the BtbN archive" >&2
+            exit 1
+          fi
+          cp "$ffmpeg_exe" ffmpeg.exe
+          cp "$ffprobe_exe" ffprobe.exe
+          # Hard-require the drawvg filter; fail the release if it is missing.
+          ./ffmpeg.exe -hide_banner -filters | grep -w drawvg
+      # --- Optional Windows code signing (skipped until secrets exist) ---------
+      # Disabled by default: both steps are skipped unless AZURE_CLIENT_ID is set.
+      # Signs the built exes in place (before staging) so the copies that get
+      # zipped are signed. See RELEASING.md for the one-time Azure setup.
+      - name: Azure login for signing (optional)
+        if: ${{ matrix.rid == 'win-x64' && env.AZURE_CLIENT_ID != '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign Windows binaries (optional)
+        if: ${{ matrix.rid == 'win-x64' && env.AZURE_CLIENT_ID != '' }}
+        uses: azure/trusted-signing-action@v0
+        with:
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: ErsatzRS
+          certificate-profile-name: ErsatzRS
+          files-folder: ${{ github.workspace }}/target/${{ matrix.target }}/release
+          files-folder-filter: ersatzrs-web.exe,ersatzrs-scanner.exe,ersatzrs-launcher.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      # -------------------------------------------------------------------------
       - name: Stage archive
         shell: bash
         env:
@@ -99,6 +193,12 @@ jobs:
           if [ "$RID" = "win-x64" ]; then
             cp "target/${TARGET}/release/ersatzrs-web.exe" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
+            # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
+            cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
+            # Bundled FFmpeg (staged by the earlier step) + Leptos hydration assets.
+            cp ffmpeg.exe "$stage/"
+            cp ffprobe.exe "$stage/"
+            cp -R target/site "$stage/site"
           else
             cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"

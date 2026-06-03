@@ -42,6 +42,16 @@ required by the SSR/WASM hydration model and do not affect native targets.
 
 Use the `platform-parity-fixer` agent to audit and remediate platform-specific code.
 
+**Intentional platform exception — `crates/ersatzrs-launcher`:** this is a
+Windows-only system-tray launcher (ships in the win-x64 release as `ErsatzRS.exe`).
+Its real logic is under `#[cfg(windows)]`; on every other target it compiles to a
+no-op `main`, so `cargo build --workspace` stays green everywhere. It is the single
+crate that opts out of the workspace `unsafe_code = "forbid"` lint (its `Cargo.toml`
+omits `[lints] workspace = true`), for a few small Win32 FFI calls with no safe
+wrapper: console control to send a graceful Ctrl+C to the server on "Exit", and a
+`MessageBoxW` to report a fatal startup failure (the launcher has no console). This
+is the launcher's documented counterpart to the Unix-only-test carve-out above.
+
 ## Current status
 
 **Phase 7 — Hardening and Parity Completion** (Phases 0–6 complete). The Cargo
