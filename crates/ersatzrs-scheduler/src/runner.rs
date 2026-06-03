@@ -150,6 +150,30 @@ async fn wait_for_shutdown(token: Option<&CancellationToken>) {
     }
 }
 
+fn log_report(report: &MaintenancePassReport) {
+    info!(
+        playout_loop_ran = report.loops_ran.playout(),
+        playouts_built = report.playouts_built,
+        playouts_skipped_locked = report.playouts_skipped_locked,
+        playouts_failed = report.playouts_failed,
+        playouts_reset = report.playouts_reset,
+        library_loop_ran = report.loops_ran.library_refresh(),
+        libraries_dispatched = report.libraries_dispatched,
+        libraries_failed = report.libraries_failed,
+        provider_loop_ran = report.loops_ran.provider_poll(),
+        providers_polled = report.providers_polled,
+        providers_reachable = report.providers_reachable,
+        cache_loop_ran = report.loops_ran.cache_cleanup(),
+        transcode_files_removed = report.cache_cleanup.transcode_files_removed,
+        channel_guide_files_removed = report.cache_cleanup.channel_guide_files_removed,
+        search_loop_ran = report.loops_ran.search_index(),
+        search_index_dispatched = report.search_index_dispatched,
+        health_warnings = report.health_summary.map(|summary| summary.warnings),
+        health_errors = report.health_summary.map(|summary| summary.errors),
+        "scheduler pass complete"
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,28 +208,4 @@ mod tests {
             "wait_for_shutdown resolved while the token was still live"
         );
     }
-}
-
-fn log_report(report: &MaintenancePassReport) {
-    info!(
-        playout_loop_ran = report.loops_ran.playout(),
-        playouts_built = report.playouts_built,
-        playouts_skipped_locked = report.playouts_skipped_locked,
-        playouts_failed = report.playouts_failed,
-        playouts_reset = report.playouts_reset,
-        library_loop_ran = report.loops_ran.library_refresh(),
-        libraries_dispatched = report.libraries_dispatched,
-        libraries_failed = report.libraries_failed,
-        provider_loop_ran = report.loops_ran.provider_poll(),
-        providers_polled = report.providers_polled,
-        providers_reachable = report.providers_reachable,
-        cache_loop_ran = report.loops_ran.cache_cleanup(),
-        transcode_files_removed = report.cache_cleanup.transcode_files_removed,
-        channel_guide_files_removed = report.cache_cleanup.channel_guide_files_removed,
-        search_loop_ran = report.loops_ran.search_index(),
-        search_index_dispatched = report.search_index_dispatched,
-        health_warnings = report.health_summary.map(|summary| summary.warnings),
-        health_errors = report.health_summary.map(|summary| summary.errors),
-        "scheduler pass complete"
-    );
 }
