@@ -55,10 +55,10 @@ engine slice in `ersatzrs-core::health` / `ersatzrs-infra::health`. Keep the
 health-check engine current whenever porting work changes FFmpeg capabilities,
 hardware acceleration support, schema readiness, media item state handling,
 metadata persistence, schedules, or provider availability; it is an explicit
-indicator for ErsatzTV port completeness. The next priority is broadening
-health / troubleshooting coverage and the remaining Phase 7 hardening items.
-Run `cargo xtask progress next` for the live phase/focus/gaps view; the
-structured detail lives in [`docs/progress/`](docs/progress/README.md).
+indicator for ErsatzTV port completeness. For the live focus and remaining
+gaps, run `cargo xtask progress next` (the authoritative source) rather than
+relying on a fixed priority here; structured detail lives in
+[`docs/progress/`](docs/progress/README.md).
 
 When adding code, follow the workspace layout in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -219,7 +219,7 @@ indicator of ErsatzTV parity.
 - **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` (99 DbSets) and evolve from there.
 - **Web host:** `axum` + `tower` + `tokio`. Leptos mounts via `leptos_axum`.
 - **CQRS:** no MediatR equivalent - plain `async fn` handlers in `ersatzrs-app`, repository traits in `ersatzrs-core`, sqlx impls in `ersatzrs-infra`.
-- **Scheduling:** three engines to port from `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), and Scripted (`mlua` for Lua 5.4).
+- **Scheduling:** four engines to port from `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), Classic, and Scripted (`mlua` for Lua 5.4).
 - **Binaries:** `ersatzrs-web` (server) and `ersatzrs-scanner` (library scanner) - two binaries sharing the core crates.
 
 ## Porting workflow
