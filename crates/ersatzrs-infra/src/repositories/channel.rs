@@ -375,7 +375,9 @@ async fn select_options(
     pool: &Pool<crate::db::Db>,
     query: &'static str,
 ) -> Result<Vec<ChannelSelectOption>> {
-    let rows = sqlx::query(query).fetch_all(pool).await?;
+    let rows = sqlx::query(crate::db::assert_sql_safe(query))
+        .fetch_all(pool)
+        .await?;
     rows.iter()
         .map(|row| {
             Ok(ChannelSelectOption {
@@ -704,7 +706,10 @@ async fn count_id(pool: &Pool<crate::db::Db>, table: &str, id: EntityId) -> Resu
         "ChannelWatermark" => r#"SELECT COUNT(*) FROM "ChannelWatermark" WHERE "Id" = ?"#,
         _ => unreachable!("validated table name"),
     };
-    Ok(sqlx::query_scalar(query).bind(id).fetch_one(pool).await?)
+    Ok(sqlx::query_scalar(crate::db::assert_sql_safe(query))
+        .bind(id)
+        .fetch_one(pool)
+        .await?)
 }
 
 async fn normalize_editor_form(

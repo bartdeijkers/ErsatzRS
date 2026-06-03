@@ -1901,7 +1901,7 @@ async fn find_plex_media_item(
         PlexCollectionMediaKind::Episode => "PlexEpisode",
     };
     let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "Key" = ?"#);
-    Ok(sqlx::query(&sql)
+    Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.key)
         .fetch_optional(&mut **tx)
         .await?
@@ -1922,7 +1922,7 @@ async fn item_etag_matches(
            INNER JOIN "LibraryPath" ON "LibraryPath"."Id" = "MediaItem"."LibraryPathId"
            WHERE "{table}"."Key" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
-    let Some(row) = sqlx::query(&sql)
+    let Some(row) = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(key)
         .bind(library_id)
         .fetch_optional(pool)
@@ -1955,7 +1955,7 @@ async fn ensure_simple_media_item(
            WHERE "{provider_table}"."{provider_key_column}" = ?
              AND existing_path."LibraryId" = current_path."LibraryId""#
     );
-    if let Some(row) = sqlx::query(&select_sql)
+    if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&select_sql))
         .bind(library_path_id)
         .bind(key)
         .fetch_optional(&mut **tx)
@@ -1963,7 +1963,7 @@ async fn ensure_simple_media_item(
     {
         let id = row.get("Id");
         let update_sql = format!(r#"UPDATE "{provider_table}" SET "Etag" = ? WHERE "Id" = ?"#);
-        sqlx::query(&update_sql)
+        sqlx::query(crate::db::assert_sql_safe(&update_sql))
             .bind(etag)
             .bind(id)
             .execute(&mut **tx)
@@ -1977,11 +1977,14 @@ async fn ensure_simple_media_item(
     }
     let id = insert_media_item(tx, library_path_id).await?;
     let base_sql = format!(r#"INSERT INTO "{base_table}" ("Id") VALUES (?)"#);
-    sqlx::query(&base_sql).bind(id).execute(&mut **tx).await?;
+    sqlx::query(crate::db::assert_sql_safe(&base_sql))
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
     let provider_sql = format!(
         r#"INSERT INTO "{provider_table}" ("Id", "{provider_key_column}", "Etag") VALUES (?, ?, ?)"#
     );
-    sqlx::query(&provider_sql)
+    sqlx::query(crate::db::assert_sql_safe(&provider_sql))
         .bind(id)
         .bind(key)
         .bind(etag)
@@ -2017,7 +2020,7 @@ async fn ensure_media_version(
         VersionOwner::Episode(item_id) => ("EpisodeId", item_id),
     };
     let select_sql = format!(r#"SELECT "Id" FROM "MediaVersion" WHERE "{column}" = ?"#);
-    if let Some(row) = sqlx::query(&select_sql)
+    if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&select_sql))
         .bind(item_id)
         .fetch_optional(&mut **tx)
         .await?
@@ -2032,7 +2035,7 @@ async fn ensure_media_version(
             "Name", "{column}", "RFrameRate", "SampleAspectRatio", "VideoScanKind", "Width"
         ) VALUES (?, ?, ?, ?, ?, 'Main', ?, ?, ?, ?, ?)"#
     );
-    let result = sqlx::query(&insert_sql)
+    let result = sqlx::query(crate::db::assert_sql_safe(&insert_sql))
         .bind(encode_datetime(item.date_added))
         .bind(encode_datetime(item.date_updated))
         .bind(&item.display_aspect_ratio)

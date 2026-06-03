@@ -598,7 +598,7 @@ where
                    ORDER BY "m"."{item_fk}"
                    LIMIT 1"#
             );
-            if let Some(id) = sqlx::query_scalar::<_, EntityId>(&sql)
+            if let Some(id) = sqlx::query_scalar::<_, EntityId>(crate::db::assert_sql_safe(&sql))
                 .bind(guid)
                 .fetch_optional(&self.pool)
                 .await?

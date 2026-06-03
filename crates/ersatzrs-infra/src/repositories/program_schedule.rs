@@ -113,18 +113,20 @@ impl ProgramScheduleRepository for SqliteProgramScheduleRepository {
     }
 
     async fn get_item(&self, id: EntityId) -> Result<ProgramScheduleItem> {
-        let row = sqlx::query(&format!("{ITEM_SELECT_SQL} WHERE psi.\"Id\" = ?"))
-            .bind(id)
-            .fetch_one(&self.0)
-            .await
-            .map_err(|error| not_found("program schedule item", id, error))?;
+        let row = sqlx::query(crate::db::assert_sql_safe(format!(
+            "{ITEM_SELECT_SQL} WHERE psi.\"Id\" = ?"
+        )))
+        .bind(id)
+        .fetch_one(&self.0)
+        .await
+        .map_err(|error| not_found("program schedule item", id, error))?;
         map_program_schedule_item(&self.0, &row).await
     }
 
     async fn list_items(&self, schedule_id: EntityId) -> Result<Vec<ProgramScheduleItem>> {
-        let rows = sqlx::query(&format!(
+        let rows = sqlx::query(crate::db::assert_sql_safe(format!(
             "{ITEM_SELECT_SQL} WHERE psi.\"ProgramScheduleId\" = ? ORDER BY psi.\"Index\", psi.\"Id\""
-        ))
+        )))
         .bind(schedule_id)
         .fetch_all(&self.0)
         .await?;
@@ -444,7 +446,10 @@ async fn load_ids_in_tx(
     sql: &str,
     id: EntityId,
 ) -> Result<Vec<EntityId>> {
-    let rows = sqlx::query(sql).bind(id).fetch_all(&mut **tx).await?;
+    let rows = sqlx::query(crate::db::assert_sql_safe(sql))
+        .bind(id)
+        .fetch_all(&mut **tx)
+        .await?;
     rows.iter()
         .map(|row| row.try_get("Id").map_err(Into::into))
         .collect()

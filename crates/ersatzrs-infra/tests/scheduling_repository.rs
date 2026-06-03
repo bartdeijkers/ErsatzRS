@@ -1220,7 +1220,7 @@ async fn insert_version(pool: &SqlitePool, media_item_id: i64, duration_ms: i64,
             "DateAdded", "DateUpdated", "Width", "Height"
          ) VALUES (?, ?, 'main', ?, 'Progressive', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 1920, 1080)"#
     );
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(media_item_id * 10)
         .bind(media_item_id)
         .bind(duration_text)

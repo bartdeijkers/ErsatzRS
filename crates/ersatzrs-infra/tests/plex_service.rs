@@ -938,7 +938,7 @@ async fn seed_plex_show_scan_config(pool: &SqlitePool, base_url: &str) {
 
 async fn count(pool: &SqlitePool, table: &str) -> i64 {
     let sql = format!(r#"SELECT COUNT(*) AS "Count" FROM "{table}""#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .fetch_one(pool)
         .await
         .unwrap()
@@ -952,7 +952,7 @@ async fn provider_library_key(
     id: i64,
 ) -> Option<String> {
     let sql = format!(r#"SELECT "{column}" AS "Value" FROM "{table}" WHERE "Id" = ?"#);
-    sqlx::query(&sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(id)
         .fetch_one(pool)
         .await

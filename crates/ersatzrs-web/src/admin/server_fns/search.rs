@@ -605,7 +605,7 @@ async fn fetch_with_ids(
     sql: &str,
     ids: &[i64],
 ) -> Result<Vec<ersatzrs_infra::db::DbRow>, ServerFnError> {
-    let mut q = sqlx::query(sql);
+    let mut q = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql));
     for id in ids {
         q = q.bind(*id);
     }
@@ -1136,7 +1136,7 @@ mod section_tests {
             r#"INSERT INTO "Artwork" ("ArtworkKind", "Path", "{fk_column}", "DateAdded", "DateUpdated")
                VALUES (?, ?, ?, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')"#
         );
-        sqlx::query(&sql)
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
             .bind(kind)
             .bind(path)
             .bind(metadata_id)

@@ -719,7 +719,10 @@ async fn append_endpoints(
     provider: &'static str,
     sql: &str,
 ) -> Result<()> {
-    for row in sqlx::query(sql).fetch_all(pool).await? {
+    for row in sqlx::query(crate::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?
+    {
         let Some(url) = row.try_get::<Option<String>, _>("Url")? else {
             continue;
         };

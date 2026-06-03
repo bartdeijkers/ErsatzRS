@@ -298,7 +298,7 @@ async fn ensure_exists(
     missing_message: &'static str,
     language: UiLanguage,
 ) -> Result<(), ApiError> {
-    let count: i64 = sqlx::query_scalar(sql)
+    let count: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(sql))
         .bind(id)
         .fetch_one(&state.pool)
         .await

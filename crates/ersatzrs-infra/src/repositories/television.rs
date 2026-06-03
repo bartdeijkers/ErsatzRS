@@ -346,7 +346,10 @@ async fn load_people(
            WHERE "EpisodeMetadataId" = ?
            ORDER BY "Id""#
     );
-    let rows = sqlx::query(&sql).bind(metadata_id).fetch_all(pool).await?;
+    let rows = sqlx::query(crate::db::assert_sql_safe(&sql))
+        .bind(metadata_id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .filter_map(|row| row.try_get::<Option<String>, _>("Name").ok().flatten())

@@ -1211,11 +1211,12 @@ async fn validate_optional_reference(
     let Some(id) = id.filter(|value| *value > 0) else {
         return Err(ServerFnError::new(format!("{label} must have valid item")));
     };
-    let exists: i64 =
-        sqlx::query_scalar(&format!(r#"SELECT COUNT(*) FROM {table} WHERE "Id" = ?"#))
-            .bind(id)
-            .fetch_one(pool)
-            .await?;
+    let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+        r#"SELECT COUNT(*) FROM {table} WHERE "Id" = ?"#
+    )))
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
     if exists == 0 {
         return Err(ServerFnError::new(format!("{label} item does not exist.")));
     }
@@ -1230,11 +1231,12 @@ async fn validate_ids_exist(
     label: &str,
 ) -> Result<(), ServerFnError> {
     for id in ids.iter().copied().filter(|id| *id > 0) {
-        let exists: i64 =
-            sqlx::query_scalar(&format!(r#"SELECT COUNT(*) FROM {table} WHERE "Id" = ?"#))
-                .bind(id)
-                .fetch_one(pool)
-                .await?;
+        let exists: i64 = sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(format!(
+            r#"SELECT COUNT(*) FROM {table} WHERE "Id" = ?"#
+        )))
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
         if exists == 0 {
             return Err(ServerFnError::new(format!("{label} {id} does not exist.")));
         }
@@ -1369,7 +1371,9 @@ fn normalize_break_content_fields(item: &mut DecoBreakContentForm) {
 async fn load_options(pool: &DbPool, sql: &str) -> Result<Vec<DecoOption>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .map(|row| DecoOption {
@@ -1406,7 +1410,10 @@ async fn load_deco_playlist_options(
 async fn load_i64_ids(pool: &DbPool, sql: &str, id: i64) -> Result<Vec<i64>, ServerFnError> {
     use sqlx::Row;
 
-    let rows = sqlx::query(sql).bind(id).fetch_all(pool).await?;
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(sql))
+        .bind(id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .iter()
         .filter_map(|row| row.try_get("Id").ok())
@@ -1474,12 +1481,12 @@ async fn replace_deco_ids(
     deco_id: i64,
     ids: &[i64],
 ) -> Result<(), ServerFnError> {
-    sqlx::query(delete_sql)
+    sqlx::query(ersatzrs_infra::db::assert_sql_safe(delete_sql))
         .bind(deco_id)
         .execute(&mut **tx)
         .await?;
     for id in ids.iter().copied().filter(|id| *id > 0) {
-        sqlx::query(insert_sql)
+        sqlx::query(ersatzrs_infra::db::assert_sql_safe(insert_sql))
             .bind(deco_id)
             .bind(id)
             .execute(&mut **tx)

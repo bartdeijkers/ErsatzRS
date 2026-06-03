@@ -472,7 +472,7 @@ async fn media_item_ids_with_text_subtitles(
             subtitle_column = join.subtitle_column,
             embedded = subtitle_kind::EMBEDDED,
         );
-        let mut query = sqlx::query(&sql);
+        let mut query = sqlx::query(crate::db::assert_sql_safe(&sql));
         for id in media_item_ids {
             query = query.bind(*id);
         }
@@ -590,7 +590,7 @@ async fn extract_subtitles(
             embedded = subtitle_kind::EMBEDDED,
         );
         rows.extend(
-            sqlx::query(&sql)
+            sqlx::query(crate::db::assert_sql_safe(&sql))
                 .bind(media_item_id)
                 .fetch_all(pool)
                 .await?,
@@ -755,22 +755,17 @@ async fn extract_fonts(
 mod tests {
     use super::*;
     #[cfg(not(feature = "mysql"))]
-    use sqlx::sqlite::SqlitePoolOptions;
-    #[cfg(not(feature = "mysql"))]
     use sqlx::Executor;
 
     #[cfg(not(feature = "mysql"))]
     async fn test_db() -> Pool<Db> {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+        let temp_dir =
+            std::env::temp_dir().join(format!("ersatzrs-subtitles-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create subtitles test db dir");
+        let database_url = format!("sqlite:{}", temp_dir.join("ErsatzRS.db").display());
+        crate::db::init(&database_url)
             .await
-            .expect("create sqlite test pool");
-        sqlx::migrate!("../../migrations")
-            .run(&pool)
-            .await
-            .expect("run migrations");
-        pool
+            .expect("initialize subtitles test database")
     }
 
     #[test]

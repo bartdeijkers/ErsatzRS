@@ -123,7 +123,7 @@ pub async fn replace_strings(
     values: &[String],
 ) -> Result<()> {
     let delete_sql = format!(r#"DELETE FROM "{table}" WHERE "{fk_column}" = ?"#);
-    sqlx::query(&delete_sql)
+    sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
         .await?;
@@ -134,7 +134,7 @@ pub async fn replace_strings(
 
     let insert_sql = format!(r#"INSERT INTO "{table}" ("Name", "{fk_column}") VALUES (?, ?)"#);
     for value in values {
-        sqlx::query(&insert_sql)
+        sqlx::query(crate::db::assert_sql_safe(&insert_sql))
             .bind(value)
             .bind(metadata_id)
             .execute(&mut **tx)
@@ -158,7 +158,7 @@ pub async fn replace_people(
     people: &[PersonRef],
 ) -> Result<()> {
     let delete_sql = format!(r#"DELETE FROM "{table}" WHERE "{fk_column}" = ?"#);
-    sqlx::query(&delete_sql)
+    sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
         .await?;
@@ -178,7 +178,7 @@ pub async fn replace_people(
 
     for person in people {
         if is_actor {
-            sqlx::query(&insert_sql)
+            sqlx::query(crate::db::assert_sql_safe(&insert_sql))
                 .bind(&person.name)
                 .bind(&person.role)
                 .bind(person.order)
@@ -186,7 +186,7 @@ pub async fn replace_people(
                 .execute(&mut **tx)
                 .await?;
         } else {
-            sqlx::query(&insert_sql)
+            sqlx::query(crate::db::assert_sql_safe(&insert_sql))
                 .bind(&person.name)
                 .bind(metadata_id)
                 .execute(&mut **tx)
@@ -220,7 +220,7 @@ pub async fn replace_artwork(
     let delete_sql = format!(
         r#"DELETE FROM "Artwork" WHERE "{fk_column}" = ? AND "ArtworkKind" IN ({placeholders})"#
     );
-    let mut delete = sqlx::query(&delete_sql).bind(metadata_id);
+    let mut delete = sqlx::query(crate::db::assert_sql_safe(&delete_sql)).bind(metadata_id);
     for kind in scope {
         delete = delete.bind(*kind);
     }
@@ -237,7 +237,7 @@ pub async fn replace_artwork(
     );
     let now = encode_datetime(Utc::now());
     for item in items {
-        sqlx::query(&insert_sql)
+        sqlx::query(crate::db::assert_sql_safe(&insert_sql))
             .bind(item.kind)
             .bind(metadata_id)
             .bind(encode_datetime(item.date_added))
@@ -262,7 +262,7 @@ pub async fn replace_guids(
     guids: &[String],
 ) -> Result<()> {
     let delete_sql = format!(r#"DELETE FROM "MetadataGuid" WHERE "{fk_column}" = ?"#);
-    sqlx::query(&delete_sql)
+    sqlx::query(crate::db::assert_sql_safe(&delete_sql))
         .bind(metadata_id)
         .execute(&mut **tx)
         .await?;
@@ -273,7 +273,7 @@ pub async fn replace_guids(
 
     let insert_sql = format!(r#"INSERT INTO "MetadataGuid" ("Guid", "{fk_column}") VALUES (?, ?)"#);
     for guid in guids {
-        sqlx::query(&insert_sql)
+        sqlx::query(crate::db::assert_sql_safe(&insert_sql))
             .bind(guid)
             .bind(metadata_id)
             .execute(&mut **tx)
@@ -383,7 +383,7 @@ async fn load_existing_subtitles(
            WHERE "{}" = ?"#,
         owner.column()
     );
-    let rows = sqlx::query(&sql)
+    let rows = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(owner.id())
         .fetch_all(&mut **tx)
         .await?;
@@ -420,7 +420,7 @@ async fn insert_subtitle(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)"#,
         owner.column()
     );
-    sqlx::query(&sql)
+    sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(owner.id())
         .bind(inc.subtitle_kind)
         .bind(&inc.title)

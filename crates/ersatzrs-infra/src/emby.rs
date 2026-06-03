@@ -1822,7 +1822,7 @@ async fn find_emby_media_item(
         EmbyCollectionMediaKind::Episode => "EmbyEpisode",
     };
     let sql = format!(r#"SELECT "Id" FROM "{table}" WHERE "ItemId" = ?"#);
-    Ok(sqlx::query(&sql)
+    Ok(sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(&item.item_id)
         .fetch_optional(&mut **tx)
         .await?
@@ -1860,7 +1860,7 @@ async fn item_etag_matches(
            {metadata_join}
            WHERE "{table}"."ItemId" = ? AND "LibraryPath"."LibraryId" = ?"#
     );
-    let Some(row) = sqlx::query(&sql)
+    let Some(row) = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(item_id)
         .bind(library_id)
         .fetch_optional(pool)
@@ -2784,7 +2784,7 @@ async fn ensure_media_version(
         VersionOwner::Episode(item_id) => ("EpisodeId", item_id),
     };
     let sql = format!(r#"SELECT "Id" FROM "MediaVersion" WHERE "{column}" = ?"#);
-    if let Some(row) = sqlx::query(&sql)
+    if let Some(row) = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(item_id)
         .fetch_optional(&mut **tx)
         .await?
@@ -2801,7 +2801,7 @@ async fn ensure_media_version(
             "VideoScanKind", "Width"
         ) VALUES (?, ?, ?, ?, ?, 'Main', ?, ?, ?, ?, ?)"#
     );
-    let result = sqlx::query(&sql)
+    let result = sqlx::query(crate::db::assert_sql_safe(&sql))
         .bind(encode_datetime(item.date_created))
         .bind(encode_datetime(Utc::now()))
         .bind(&playback.display_aspect_ratio)

@@ -659,33 +659,33 @@ async fn seed_playout_row(pool: &sqlx::SqlitePool, playout: &Playout) {
         .await;
     let playout_id = playout.id;
     let channel_id = playout.channel_id;
-    let _ = pool
-        .execute(
-            format!(
-                r#"INSERT OR IGNORE INTO "Channel" (
+    let _ = sqlx::query(
+        r#"INSERT OR IGNORE INTO "Channel" (
                     "Id","UniqueId","Number","SortNumber","Name","FFmpegProfileId",
                     "ProgressMessageTemplate","SubtitleMode","MusicVideoCreditsMode",
                     "IsEnabled","StreamingMode","PlexStreamingSession"
                 ) VALUES (
-                    {channel_id},
+                    ?,
                     lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6))),
-                    '{channel_id}',{channel_id},'Channel {channel_id}',1,
+                    ?,?,?,1,
                     '','None','Disabled',
                     1,'TransportStream',0
                 )"#
-            )
-            .as_str(),
-        )
-        .await;
-    let _ = pool
-        .execute(
-            format!(
-                r#"INSERT OR IGNORE INTO "Playout"
+    )
+    .bind(channel_id)
+    .bind(channel_id.to_string())
+    .bind(channel_id)
+    .bind(format!("Channel {channel_id}"))
+    .execute(pool)
+    .await;
+    let _ = sqlx::query(
+        r#"INSERT OR IGNORE INTO "Playout"
                    ("Id","ChannelId","ScheduleKind","Seed")
-                   VALUES ({playout_id},{channel_id},'{:?}',0)"#,
-                playout.schedule_kind
-            )
-            .as_str(),
-        )
-        .await;
+                   VALUES (?,?,?,0)"#,
+    )
+    .bind(playout_id)
+    .bind(channel_id)
+    .bind(format!("{:?}", playout.schedule_kind))
+    .execute(pool)
+    .await;
 }

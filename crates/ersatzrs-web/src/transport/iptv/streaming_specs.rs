@@ -50,7 +50,7 @@ pub async fn load_spec(
     channel_id: i64,
 ) -> Result<Option<ChannelStreamingSpec>, sqlx::Error> {
     let sql = format!("{SELECT_SPECS_SQL} WHERE c.\"Id\" = ?");
-    let row = sqlx::query(&sql)
+    let row = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(channel_id)
         .fetch_optional(pool)
         .await?;
