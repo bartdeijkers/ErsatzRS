@@ -13,8 +13,8 @@ use crate::{
     watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_filter,
     watermark_scale_filter, AudioFilter, CommandGenerator, ComplexFilter, FfmpegCapability,
     FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
-    HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
-    StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
+    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
+    PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -73,6 +73,7 @@ pub struct PipelineRequest {
     pub watermark: Option<WatermarkOverlay>,
     pub watermarks: Vec<WatermarkOverlay>,
     pub drawvg_filters: Vec<String>,
+    pub graphics_overlays: Vec<GraphicsPipelineOverlay>,
     pub subtitle_fonts_dir: Option<String>,
 }
 
@@ -90,6 +91,7 @@ impl PipelineRequest {
             watermark: None,
             watermarks: Vec::new(),
             drawvg_filters: Vec::new(),
+            graphics_overlays: Vec::new(),
             subtitle_fonts_dir: None,
         }
     }
@@ -116,6 +118,44 @@ impl PipelineRequest {
     pub fn with_subtitle_fonts_dir(mut self, fonts_dir: impl Into<String>) -> Self {
         self.subtitle_fonts_dir = Some(fonts_dir.into());
         self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum GraphicsPipelineOverlay {
+    Drawvg {
+        z_index: i32,
+        filter: String,
+    },
+    NativeImage {
+        z_index: i32,
+        input: InputFile,
+        overlay: WatermarkOverlay,
+    },
+}
+
+impl GraphicsPipelineOverlay {
+    #[must_use]
+    pub fn drawvg(z_index: i32, filter: impl Into<String>) -> Self {
+        Self::Drawvg {
+            z_index,
+            filter: filter.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn native_image(z_index: i32, input: InputFile, overlay: WatermarkOverlay) -> Self {
+        Self::NativeImage {
+            z_index,
+            input,
+            overlay,
+        }
+    }
+
+    const fn z_index(&self) -> i32 {
+        match self {
+            Self::Drawvg { z_index, .. } | Self::NativeImage { z_index, .. } => *z_index,
+        }
     }
 }
 
@@ -501,6 +541,7 @@ fn non_empty_string(value: Option<&str>) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FFmpegPipeline {
     pub steps: Vec<PipelineStep>,
+    pub inputs: Vec<InputFile>,
     pub is_intel_vaapi_or_qsv: bool,
     pub filter_graph: Option<String>,
 }
@@ -508,7 +549,16 @@ pub struct FFmpegPipeline {
 impl FFmpegPipeline {
     #[must_use]
     pub fn command(&self, inputs: &[InputFile]) -> FfmpegCommand {
-        CommandGenerator::generate_command(inputs, &self.steps, self.is_intel_vaapi_or_qsv)
+        let effective_inputs = if self.inputs.is_empty() {
+            inputs
+        } else {
+            &self.inputs
+        };
+        CommandGenerator::generate_command(
+            effective_inputs,
+            &self.steps,
+            self.is_intel_vaapi_or_qsv,
+        )
     }
 }
 
@@ -745,12 +795,86 @@ fn build_transcode_pipeline(
         ));
     }
 
-    filter_chain.graphics_overlay.extend(request.drawvg_filters);
-    if !filter_chain.graphics_overlay.is_empty() {
-        request.inputs.push(
-            InputFile::graphics("color=c=black@0.0:s=16x16:d=86400")
-                .with_input_options(["-f", "lavfi"]),
-        );
+    request.graphics_overlays.extend(
+        request
+            .drawvg_filters
+            .iter()
+            .cloned()
+            .map(|filter| GraphicsPipelineOverlay::drawvg(0, filter)),
+    );
+    request
+        .graphics_overlays
+        .sort_by_key(GraphicsPipelineOverlay::z_index);
+    let has_drawvg_graphics = request
+        .graphics_overlays
+        .iter()
+        .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawvg { .. }));
+    let mut graphics_image_index = 0usize;
+    for overlay in request.graphics_overlays {
+        match overlay {
+            GraphicsPipelineOverlay::Drawvg { filter, .. } => {
+                filter_chain
+                    .graphics_overlay
+                    .push(GraphicsOverlayFilter::Drawvg(filter));
+            }
+            GraphicsPipelineOverlay::NativeImage {
+                mut input, overlay, ..
+            } => {
+                if overlay.size == ersatzrs_domain::WatermarkSize::Scaled {
+                    input
+                        .filter_steps
+                        .push(watermark_scale_filter(&overlay, request.desired.frame_size));
+                }
+                if let Some(expression) = overlay
+                    .opacity_expression
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                {
+                    input
+                        .filter_steps
+                        .push(watermark_opacity_expression_filter(expression));
+                } else if overlay.opacity < 100 {
+                    input
+                        .filter_steps
+                        .push(watermark_opacity_filter(overlay.opacity));
+                }
+                input.filter_steps.extend(
+                    overlay
+                        .fade_points
+                        .iter()
+                        .copied()
+                        .map(crate::watermark_fade_filter),
+                );
+                request.inputs.push(input);
+                filter_chain
+                    .graphics_overlay
+                    .push(GraphicsOverlayFilter::NativeImage {
+                        input_index: graphics_image_index,
+                        filter: watermark_overlay_filter(
+                            &overlay,
+                            request.desired.frame_size,
+                            request
+                                .source_video_stream
+                                .as_ref()
+                                .and_then(|stream| {
+                                    stream.square_pixel_frame_size(request.desired.frame_size)
+                                })
+                                .unwrap_or(request.desired.frame_size),
+                            request.desired.pixel_format(),
+                        ),
+                    });
+                graphics_image_index = graphics_image_index.saturating_add(1);
+            }
+        }
+    }
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && effective_acceleration == HardwareAccelerationKind::None
+        && has_drawvg_graphics
+    {
+        filter_chain.pixel_format.push(format!(
+            "format={}",
+            request.desired.pixel_format().ffmpeg_name()
+        ));
     }
 
     let is_intel = matches!(
@@ -790,6 +914,7 @@ fn build_transcode_pipeline(
 
     FFmpegPipeline {
         steps,
+        inputs: request.inputs,
         is_intel_vaapi_or_qsv: is_intel,
         filter_graph,
     }

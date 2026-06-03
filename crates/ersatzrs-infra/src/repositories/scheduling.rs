@@ -2355,6 +2355,7 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
         collection_key: row.try_get("CollectionKey")?,
         collection_etag: row.try_get("CollectionEtag")?,
         graphics_element_ids: Vec::new(),
+        graphics_elements: Vec::new(),
         scheduling_context: row.try_get("SchedulingContext")?,
     })
 }

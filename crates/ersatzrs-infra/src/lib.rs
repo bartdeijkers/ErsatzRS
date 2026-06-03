@@ -6,6 +6,8 @@ pub mod emby;
 pub mod ffmpeg_config;
 pub mod ffprobe;
 pub mod file_system_layout;
+pub mod graphics_import;
+pub mod graphics_template;
 pub mod health;
 pub mod hls;
 pub mod hls_worker;

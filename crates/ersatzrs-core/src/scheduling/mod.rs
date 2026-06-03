@@ -769,6 +769,17 @@ fn playout_item(
     graphics_element_ids: Vec<EntityId>,
     scheduling_context: Option<String>,
 ) -> PlayoutItem {
+    let graphics_elements = graphics_element_ids
+        .iter()
+        .copied()
+        .map(
+            |graphics_element_id| ersatzrs_domain::PlayoutItemGraphicsElement {
+                playout_item_id: 0,
+                graphics_element_id: Some(graphics_element_id),
+                variables: None,
+            },
+        )
+        .collect();
     PlayoutItem {
         playout_id,
         media_item_id: media_item.id,
@@ -782,6 +793,7 @@ fn playout_item(
         disable_watermarks,
         watermark_ids,
         graphics_element_ids,
+        graphics_elements,
         scheduling_context,
         ..PlayoutItem::default()
     }

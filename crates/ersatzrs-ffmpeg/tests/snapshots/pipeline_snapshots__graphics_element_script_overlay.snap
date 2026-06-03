@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: overlay
+---
+drawvg=file='/tmp/ersatzrs-ffmpeg-script-graphics/31-script-lower-third.vgs':enable='between(t,3,10.5)'

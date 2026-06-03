@@ -3,22 +3,26 @@ use std::time::Duration;
 
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
-    FFmpegProfileVideoFormat, FilterMode, HardwareAccelerationKind, NormalizeLoudnessMode,
-    Resolution, ScalingBehavior, StreamingMode, VideoScanKind, WatermarkLocation, WatermarkSize,
+    FFmpegProfileVideoFormat, FilterMode, GraphicsElement, GraphicsElementConfig,
+    HardwareAccelerationKind, ImageGraphicsConfig, MotionEndBehavior, MotionGraphicsConfig,
+    NormalizeLoudnessMode, Resolution, ScalingBehavior, ScriptGraphicsConfig, StreamingMode,
+    StyleDefinition, SubtitleGraphicsConfig, TextAlignment, TextFit, TextGraphicsConfig,
+    VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use ersatzrs_ffmpeg::{
     capability_report_for_tests, colorspace_filter, deinterlace_filter, deinterlace_qsv_filter,
     deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter, hardware_upload_filter,
-    lower_third_overlay, normalize_loudness_filter, song_progress_filter, tonemap_cuda_filter,
-    tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter,
-    translate_watermark_opacity_expression, yadif_cuda_filter, yadif_filter, AmfPipelineBuilder,
-    AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState, DrawvgOverlay,
-    FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState, GraphicsTemplateRenderer,
-    HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
-    PixelFormat, QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder,
-    SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate, TonemapAlgorithm,
-    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkFadeKind,
-    WatermarkFadePoint, WatermarkOverlay,
+    lower_third_overlay, normalize_loudness_filter, song_progress_filter,
+    subtitle_graphics_lavfi_input, tonemap_cuda_filter, tonemap_filter, tonemap_qsv_filter,
+    tonemap_vaapi_filter, translate_watermark_opacity_expression, yadif_cuda_filter, yadif_filter,
+    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
+    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
+    GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
+    GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
+    PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder, RkmppPipelineBuilder,
+    SoftwarePipelineBuilder, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
+    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder,
+    WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -527,15 +531,13 @@ fn filter_graph_with_watermark_subtitle_and_drawvg_snapshot() {
         InputFile::audio("/media/movie.mkv"),
         InputFile::watermark("/media/logo.png"),
         InputFile::image_subtitle("/media/subtitle.sup", ersatzrs_ffmpeg::SubtitleMethod::Burn),
-        InputFile::graphics("color=c=black@0.0:s=16x16:d=86400")
-            .with_input_options(["-f", "lavfi"]),
     ];
     inputs[2]
         .filter_steps
         .push(ersatzrs_ffmpeg::watermark_opacity_filter(75));
 
     let overlay = DrawvgOverlay {
-        svg_path: "/tmp/ErsatzRS/lower-third.svg".into(),
+        script_path: "/tmp/ErsatzRS/lower-third.vgs".into(),
         x: 0,
         y: 810,
         width: 1920,
@@ -558,7 +560,7 @@ fn filter_graph_with_watermark_subtitle_and_drawvg_snapshot() {
         subtitle_overlay: vec![ersatzrs_ffmpeg::subtitle_overlay_filter(
             ersatzrs_ffmpeg::PixelFormat::Yuv420P,
         )],
-        graphics_overlay: vec![overlay.filter()],
+        graphics_overlay: vec![GraphicsOverlayFilter::Drawvg(overlay.filter())],
         ..FilterChain::default()
     };
 
@@ -682,7 +684,7 @@ fn drawvg_lower_third_template_snapshot() {
     insta::assert_snapshot!(template.render(&variables));
 
     let overlay = lower_third_overlay(
-        "/tmp/ErsatzRS/lower-third.svg",
+        "/tmp/ErsatzRS/lower-third.vgs",
         FrameSize::new(1920, 1080),
         Some("between(t,0,8)".to_owned()),
     );
@@ -1021,4 +1023,472 @@ fn graphics_template_renderer_writes_svg() {
     assert!(svg_text.contains("A &amp; B"));
     assert!(svg_text.contains("&lt;Tonight&gt;"));
     std::fs::remove_dir_all(output_dir).expect("test output dir can be removed");
+}
+
+#[test]
+fn graphics_assets_render_drawvg_and_ass_templates() {
+    let mut variables = BTreeMap::new();
+    variables.insert("background_color".to_owned(), "#101820@0.88".to_owned());
+    variables.insert("safe_x".to_owned(), "96".to_owned());
+    variables.insert("safe_y".to_owned(), "812".to_owned());
+    variables.insert("box_width".to_owned(), "880".to_owned());
+    variables.insert("box_height".to_owned(), "132".to_owned());
+    variables.insert("accent_color".to_owned(), "#ffcc00".to_owned());
+    variables.insert("accent_width".to_owned(), "10".to_owned());
+    variables.insert("subtitle_color".to_owned(), "#000000@0.35".to_owned());
+    variables.insert("subtitle_y".to_owned(), "900".to_owned());
+    variables.insert("subtitle_width".to_owned(), "620".to_owned());
+    variables.insert("subtitle_height".to_owned(), "28".to_owned());
+    variables.insert("track_color".to_owned(), "#202020@0.7".to_owned());
+    variables.insert("track_x".to_owned(), "128".to_owned());
+    variables.insert("track_y".to_owned(), "1010".to_owned());
+    variables.insert("track_width".to_owned(), "720".to_owned());
+    variables.insert("track_height".to_owned(), "12".to_owned());
+    variables.insert("elapsed_color".to_owned(), "#44aaff".to_owned());
+    variables.insert("elapsed_width".to_owned(), "312".to_owned());
+    variables.insert("marker_color".to_owned(), "#ffffff".to_owned());
+    variables.insert("marker_x".to_owned(), "438".to_owned());
+    variables.insert("marker_y".to_owned(), "1006".to_owned());
+    variables.insert("marker_width".to_owned(), "4".to_owned());
+    variables.insert("marker_height".to_owned(), "20".to_owned());
+    variables.insert("frame_width".to_owned(), "1920".to_owned());
+    variables.insert("frame_height".to_owned(), "1080".to_owned());
+    variables.insert("font_family".to_owned(), "Arial".to_owned());
+    variables.insert("font_size".to_owned(), "54".to_owned());
+    variables.insert("primary_color".to_owned(), "&H00FFFFFF".to_owned());
+    variables.insert("outline_color".to_owned(), "&H80000000".to_owned());
+    variables.insert("bold".to_owned(), "0".to_owned());
+    variables.insert("outline_width".to_owned(), "2".to_owned());
+    variables.insert("shadow_depth".to_owned(), "1".to_owned());
+    variables.insert("alignment".to_owned(), "2".to_owned());
+    variables.insert("margin_l".to_owned(), "80".to_owned());
+    variables.insert("margin_r".to_owned(), "80".to_owned());
+    variables.insert("margin_v".to_owned(), "72".to_owned());
+    variables.insert("layer".to_owned(), "0".to_owned());
+    variables.insert("start_time".to_owned(), "0:00:00.00".to_owned());
+    variables.insert("end_time".to_owned(), "0:00:08.00".to_owned());
+    variables.insert("text".to_owned(), "A & B".to_owned());
+
+    let lower_third = SvgTemplate::new(include_str!("../../../assets/graphics/lower-third.vgs"))
+        .render_raw(&variables);
+    let song_progress =
+        SvgTemplate::new(include_str!("../../../assets/graphics/song-progress.vgs"))
+            .render_raw(&variables);
+    let subtitle = SvgTemplate::new(include_str!(
+        "../../../assets/graphics/subtitle-template.ass"
+    ))
+    .render_raw(&variables);
+
+    assert!(!lower_third.contains("<svg"));
+    assert!(!lower_third.contains("<?xml"));
+    assert!(lower_third.contains("setcolor #101820@0.88"));
+    assert!(lower_third.contains("rect 96 812 880 132 fill"));
+    assert!(song_progress.contains("rect 128 1010 312 12 fill"));
+    assert!(subtitle.contains("PlayResX: 1920"));
+    assert!(subtitle.contains("Dialogue: 0,0:00:00.00,0:00:08.00,Graphics,,0,0,0,,A & B"));
+}
+
+#[test]
+fn graphics_element_renderer_writes_drawvg_scripts_snapshot() {
+    let output_dir = std::env::temp_dir().join("ersatzrs-ffmpeg-graphics-elements");
+    let _ = std::fs::remove_dir_all(&output_dir);
+    std::fs::create_dir_all(&output_dir).expect("test output dir can be created");
+    let subtitle_template_path = output_dir.join("subtitle-template.ass");
+    std::fs::write(
+        &subtitle_template_path,
+        "[Script Info]\nTitle: Graphics\n[Events]\nDialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,{{title}}\n",
+    )
+    .expect("subtitle template can be written");
+    let renderer = GraphicsTemplateRenderer::new(&output_dir);
+    let mut variables = BTreeMap::new();
+    variables.insert("title".to_owned(), "Late News".to_owned());
+
+    let elements = sample_graphics_elements(subtitle_template_path.to_string_lossy().as_ref());
+
+    let rendered_elements = renderer
+        .render_graphics_elements(
+            &elements,
+            &variables,
+            &GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1440, 1080)),
+        )
+        .expect("graphics render");
+
+    let overlay_plan = rendered_elements
+        .clone()
+        .into_iter()
+        .map(|element| match element.into_pipeline_overlay() {
+            GraphicsPipelineOverlay::Drawvg { z_index, filter } => {
+                format!("drawvg z={z_index} {filter}")
+            }
+            GraphicsPipelineOverlay::NativeImage {
+                z_index,
+                input,
+                overlay,
+            } => format!(
+                "native z={z_index} input={} options={:?} filters={:?} location={:?} width={} opacity={} enable={:?} eof_pass={}",
+                input.path,
+                input.input_options,
+                input.filter_steps,
+                overlay.location,
+                overlay.width_percent,
+                overlay.opacity,
+                overlay.enable,
+                overlay.eof_action_pass
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!("graphics_element_overlay_plan", overlay_plan);
+
+    let filters = rendered_elements
+        .iter()
+        .filter_map(|element| match element {
+            ersatzrs_ffmpeg::RenderedGraphicsElement::Drawvg { overlay, .. } => {
+                Some(overlay.filter())
+            }
+            ersatzrs_ffmpeg::RenderedGraphicsElement::NativeImage { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!("graphics_element_drawvg_filters", filters);
+
+    let scripts = rendered_elements
+        .iter()
+        .filter_map(|element| {
+            let ersatzrs_ffmpeg::RenderedGraphicsElement::Drawvg { script_path, .. } = element
+            else {
+                return None;
+            };
+            Some(
+                std::fs::read_to_string(script_path).expect("rendered graphics script can be read"),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    insta::assert_snapshot!("graphics_element_rendered_scripts", scripts);
+
+    let ass_text =
+        std::fs::read_to_string(output_dir.join("13-subtitle-template.ass")).expect("ass renders");
+    insta::assert_snapshot!("graphics_element_rendered_ass", ass_text);
+
+    std::fs::remove_dir_all(output_dir).expect("test output dir can be removed");
+}
+
+fn sample_graphics_elements(subtitle_template_path: &str) -> Vec<GraphicsElement> {
+    vec![
+        GraphicsElement {
+            id: 7,
+            name: "logo".to_owned(),
+            kind: ersatzrs_domain::GraphicsElementKind::Image,
+            path: Some("templates/graphics-elements/channel-logo.yml".to_owned()),
+            z_index: 20,
+            opacity_percent: Some(75),
+            location: WatermarkLocation::TopRight,
+            horizontal_margin_percent: Some(2.0),
+            vertical_margin_percent: Some(3.0),
+            scale: true,
+            scale_width_percent: Some(12.5),
+            config: GraphicsElementConfig::Image(ImageGraphicsConfig {
+                image: Some("/media/logo.png".to_owned()),
+            }),
+            ..GraphicsElement::default()
+        },
+        GraphicsElement {
+            id: 11,
+            name: "bug".to_owned(),
+            kind: ersatzrs_domain::GraphicsElementKind::Motion,
+            path: Some("templates/graphics-elements/motion-bug.yml".to_owned()),
+            z_index: 15,
+            location: WatermarkLocation::BottomLeft,
+            horizontal_margin_percent: Some(1.0),
+            vertical_margin_percent: Some(2.0),
+            scale: true,
+            scale_width_percent: Some(20.0),
+            config: GraphicsElementConfig::Motion(MotionGraphicsConfig {
+                video_path: Some("/media/bug.webm".to_owned()),
+                start_seconds: Some(2.5),
+                end_behavior: MotionEndBehavior::Loop,
+                ..MotionGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        },
+        GraphicsElement {
+            id: 13,
+            name: "subtitle".to_owned(),
+            kind: ersatzrs_domain::GraphicsElementKind::Subtitle,
+            path: Some("templates/graphics-elements/subtitle-template.yml".to_owned()),
+            z_index: 17,
+            config: GraphicsElementConfig::Subtitle(SubtitleGraphicsConfig {
+                template: Some(subtitle_template_path.to_owned()),
+            }),
+            ..GraphicsElement::default()
+        },
+        GraphicsElement {
+            id: 9,
+            name: "title".to_owned(),
+            kind: ersatzrs_domain::GraphicsElementKind::Text,
+            path: Some("templates/graphics-elements/now-playing.yml".to_owned()),
+            z_index: 10,
+            opacity_percent: Some(90),
+            location: WatermarkLocation::BottomMiddle,
+            horizontal_margin_percent: Some(5.0),
+            vertical_margin_percent: Some(6.0),
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some("Now: {{title}}".to_owned()),
+                fit: TextFit::Scale,
+                align: TextAlignment::Center,
+                width_percent: Some(80.0),
+                base_style: Some("base".to_owned()),
+                styles: vec![StyleDefinition {
+                    name: Some("base".to_owned()),
+                    font_family: Some("Inter".to_owned()),
+                    font_size: Some(54.0),
+                    font_weight: Some(700),
+                    text_color: Some("#f8f8f8".to_owned()),
+                    halo_color: Some("#101010".to_owned()),
+                    halo_width: Some(3.0),
+                    ..StyleDefinition::default()
+                }],
+                ..TextGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        },
+    ]
+}
+
+#[test]
+fn pipeline_interleaves_native_and_drawvg_graphics_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawvg(
+            20,
+            DrawvgOverlay {
+                script_path: "/tmp/ErsatzRS/title.vgs".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                enable: None,
+            }
+            .filter(),
+        ));
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            10,
+            InputFile::graphics_image("/media/logo.png"),
+            WatermarkOverlay {
+                location: WatermarkLocation::TopRight,
+                size: WatermarkSize::Scaled,
+                width_percent: 12.5,
+                horizontal_margin_percent: 2.0,
+                vertical_margin_percent: 3.0,
+                opacity: 75,
+                ..WatermarkOverlay::default()
+            },
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_looped_motion_graphics_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    let input =
+        InputFile::graphics_motion("/media/bug.webm", true).with_filter("setpts=PTS+2.5/TB");
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            15,
+            input,
+            WatermarkOverlay {
+                location: WatermarkLocation::BottomLeft,
+                size: WatermarkSize::Scaled,
+                width_percent: 20.0,
+                horizontal_margin_percent: 1.0,
+                vertical_margin_percent: 2.0,
+                enable: Some("gte(t,2.5)".to_owned()),
+                ..WatermarkOverlay::default()
+            },
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_disappearing_motion_graphics_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            15,
+            InputFile::graphics_motion("/media/bumper.mov", false),
+            WatermarkOverlay {
+                location: WatermarkLocation::MiddleCenter,
+                enable: Some("gte(t,5)".to_owned()),
+                eof_action_pass: true,
+                ..WatermarkOverlay::default()
+            },
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn graphics_element_renderer_bounds_hold_motion_snapshot() {
+    let output_dir = std::env::temp_dir().join("ersatzrs-ffmpeg-hold-motion");
+    let _ = std::fs::remove_dir_all(&output_dir);
+    let renderer = GraphicsTemplateRenderer::new(&output_dir);
+    let element = GraphicsElement {
+        id: 21,
+        name: "hold-bug".to_owned(),
+        kind: ersatzrs_domain::GraphicsElementKind::Motion,
+        z_index: 15,
+        location: WatermarkLocation::MiddleCenter,
+        config: GraphicsElementConfig::Motion(MotionGraphicsConfig {
+            video_path: Some("/media/hold-bug.webm".to_owned()),
+            start_seconds: Some(5.0),
+            hold_seconds: Some(3.25),
+            end_behavior: MotionEndBehavior::Hold,
+        }),
+        ..GraphicsElement::default()
+    };
+
+    let hold_plan = renderer
+        .render_graphics_elements(
+            std::slice::from_ref(&element),
+            &BTreeMap::new(),
+            &GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1920, 1080))
+                .with_motion_source_duration(element.id, 2.5),
+        )
+        .expect("hold motion renders");
+    let plan = hold_plan
+        .into_iter()
+        .map(|element| match element.into_pipeline_overlay() {
+            GraphicsPipelineOverlay::NativeImage { input, overlay, .. } => format!(
+                "input={} options={:?} filters={:?} enable={:?} eof_pass={}",
+                input.path,
+                input.input_options,
+                input.filter_steps,
+                overlay.enable,
+                overlay.eof_action_pass
+            ),
+            GraphicsPipelineOverlay::Drawvg { .. } => "drawvg".to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!("graphics_element_hold_motion_plan", plan);
+}
+
+#[test]
+fn pipeline_with_hold_motion_graphics_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            15,
+            InputFile::graphics_motion("/media/hold-bug.webm", false),
+            WatermarkOverlay {
+                location: WatermarkLocation::MiddleCenter,
+                enable: Some("between(t,5,10.75)".to_owned()),
+                eof_action_pass: false,
+                ..WatermarkOverlay::default()
+            },
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn graphics_element_renderer_writes_script_drawvg_snapshot() {
+    let output_dir = std::env::temp_dir().join("ersatzrs-ffmpeg-script-graphics");
+    let _ = std::fs::remove_dir_all(&output_dir);
+    let renderer = GraphicsTemplateRenderer::new(&output_dir);
+    let element = GraphicsElement {
+        id: 31,
+        name: "lua-script".to_owned(),
+        kind: ersatzrs_domain::GraphicsElementKind::Script,
+        path: Some("templates/graphics-elements/script-lower-third.yml".to_owned()),
+        z_index: 22,
+        config: GraphicsElementConfig::Script(ScriptGraphicsConfig {
+            command: Some(
+                r"return string.format(
+  'rect 24 24 %d 64 setcolor #00ff00 fill',
+  24 + string.len(variables.title .. args[1]) * 24
+)"
+                .to_owned(),
+            ),
+            args: vec!["Live".to_owned()],
+            start_seconds: Some(3.0),
+            duration_seconds: Some(7.5),
+            ..ScriptGraphicsConfig::default()
+        }),
+        ..GraphicsElement::default()
+    };
+    let mut variables = BTreeMap::new();
+    variables.insert("title".to_owned(), "Late News".to_owned());
+
+    let script_plan = renderer
+        .render_graphics_elements(
+            std::slice::from_ref(&element),
+            &variables,
+            &GraphicsRenderContext::new(FrameSize::new(1280, 720), FrameSize::new(1280, 720)),
+        )
+        .expect("script graphics render");
+    let overlay = script_plan
+        .iter()
+        .filter_map(|element| match element {
+            ersatzrs_ffmpeg::RenderedGraphicsElement::Drawvg { overlay, .. } => {
+                Some(overlay.filter())
+            }
+            ersatzrs_ffmpeg::RenderedGraphicsElement::NativeImage { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!("graphics_element_script_overlay", overlay);
+
+    let rendered_script = std::fs::read_to_string(output_dir.join("31-script-lower-third.vgs"))
+        .expect("script drawvg renders");
+    insta::assert_snapshot!("graphics_element_rendered_script_drawvg", rendered_script);
+    std::fs::remove_dir_all(output_dir).expect("test output dir can be removed");
+}
+
+#[test]
+fn pipeline_with_subtitle_graphics_overlay_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            17,
+            InputFile::graphics_subtitle(subtitle_graphics_lavfi_input(
+                "/tmp/ErsatzRS/subtitle.ass",
+                FrameSize::new(1920, 1080),
+                Some("/tmp/ErsatzRS/fonts"),
+            )),
+            WatermarkOverlay {
+                location: WatermarkLocation::MiddleCenter,
+                size: WatermarkSize::ActualSize,
+                width_percent: 100.0,
+                ..WatermarkOverlay::default()
+            },
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
 }

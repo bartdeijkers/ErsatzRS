@@ -5,7 +5,7 @@ use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
 use ersatzrs_core::scheduling::SchedulingResult;
 use ersatzrs_domain::{
     EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
 };
 use sqlx::{Pool, Row, Transaction};
 
@@ -128,6 +128,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                 item_id,
             )
             .await?;
+            item.graphics_elements = load_playout_item_graphics_elements(&self.0, item_id).await?;
             items.push(item);
         }
         Ok(items)
@@ -198,14 +199,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
             &item.watermark_ids,
         )
         .await?;
-        replace_ids(
-            &mut tx,
-            r#"DELETE FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ?"#,
-            r#"REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
-            item.id,
-            &item.graphics_element_ids,
-        )
-        .await?;
+        replace_playout_item_graphics_elements(&mut tx, item.id, item).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -291,15 +285,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
                 .execute(&mut *tx)
                 .await?;
             }
-            for &gfx_id in &item.graphics_element_ids {
-                sqlx::query(
-                    r#"REPLACE INTO "PlayoutItemGraphicsElement" ("PlayoutItemId", "GraphicsElementId") VALUES (?, ?)"#,
-                )
-                .bind(inserted_id)
-                .bind(gfx_id)
-                .execute(&mut *tx)
-                .await?;
-            }
+            replace_playout_item_graphics_elements(&mut tx, inserted_id, item).await?;
         }
 
         // ── gaps ──────────────────────────────────────────────────────────────
@@ -486,8 +472,85 @@ fn map_playout_item(row: &DbRow) -> Result<PlayoutItem> {
         collection_key: row.try_get("CollectionKey")?,
         collection_etag: row.try_get("CollectionEtag")?,
         graphics_element_ids: Vec::new(),
+        graphics_elements: Vec::new(),
         scheduling_context: row.try_get("SchedulingContext")?,
     })
+}
+
+async fn load_playout_item_graphics_elements(
+    pool: &Pool<crate::db::Db>,
+    playout_item_id: EntityId,
+) -> Result<Vec<PlayoutItemGraphicsElement>> {
+    let rows = sqlx::query(
+        r#"SELECT "GraphicsElementId", "Variables"
+           FROM "PlayoutItemGraphicsElement"
+           WHERE "PlayoutItemId" = ?
+           ORDER BY "GraphicsElementId""#,
+    )
+    .bind(playout_item_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.iter()
+        .map(|row| {
+            Ok(PlayoutItemGraphicsElement {
+                playout_item_id,
+                graphics_element_id: row.try_get("GraphicsElementId")?,
+                variables: row.try_get("Variables")?,
+            })
+        })
+        .collect()
+}
+
+async fn replace_playout_item_graphics_elements(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout_item_id: EntityId,
+    item: &PlayoutItem,
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlayoutItemGraphicsElement" WHERE "PlayoutItemId" = ?"#)
+        .bind(playout_item_id)
+        .execute(&mut **tx)
+        .await?;
+
+    if item.graphics_elements.is_empty() {
+        for &graphics_element_id in &item.graphics_element_ids {
+            insert_playout_item_graphics_element(tx, playout_item_id, graphics_element_id, None)
+                .await?;
+        }
+    } else {
+        for graphics in &item.graphics_elements {
+            if let Some(graphics_element_id) = graphics.graphics_element_id {
+                insert_playout_item_graphics_element(
+                    tx,
+                    playout_item_id,
+                    graphics_element_id,
+                    graphics.variables.as_deref(),
+                )
+                .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn insert_playout_item_graphics_element(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout_item_id: EntityId,
+    graphics_element_id: EntityId,
+    variables: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        r#"REPLACE INTO "PlayoutItemGraphicsElement" (
+            "PlayoutItemId", "GraphicsElementId", "Variables"
+         ) VALUES (?, ?, ?)"#,
+    )
+    .bind(playout_item_id)
+    .bind(graphics_element_id)
+    .bind(variables)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 fn map_playout_template(row: &DbRow) -> Result<ersatzrs_domain::PlayoutTemplate> {

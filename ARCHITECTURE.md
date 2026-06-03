@@ -15,7 +15,7 @@ crates/
   ersatzrs-web/      axum + Leptos host, IPTV, HLS, HDHR, API routes
   ersatzrs-scanner/  scanner binary
 migrations/       sqlx migrations
-assets/           drawvg SVG templates and related assets
+assets/           drawvg source templates, VGS scripts, and related assets
 ```
 
 ## Dependency Rules

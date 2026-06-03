@@ -475,7 +475,7 @@ struct YamlContext {
     guide_group: i32,
     guide_group_locked: bool,
     watermark_ids: BTreeSet<EntityId>,
-    graphics_element_ids: BTreeSet<EntityId>,
+    graphics_elements: BTreeMap<EntityId, Option<String>>,
     pre_roll_sequence: Option<String>,
     post_roll_sequence: Option<String>,
     mid_roll_sequence: Option<(String, String)>,
@@ -511,7 +511,7 @@ impl YamlContext {
             guide_group: 1,
             guide_group_locked: false,
             watermark_ids: BTreeSet::new(),
-            graphics_element_ids: BTreeSet::new(),
+            graphics_elements: BTreeMap::new(),
             pre_roll_sequence: None,
             post_roll_sequence: None,
             mid_roll_sequence: None,
@@ -920,10 +920,16 @@ fn handle_graphics_on(
 ) -> Result<(), SchedulingError> {
     if let Some(path) = &instruction.graphics_on {
         if let Some(id) = context.reference_data.graphics_ids_by_path.get(path) {
-            context.graphics_element_ids.insert(*id);
+            let variables = if instruction.variables.is_empty() {
+                None
+            } else {
+                Some(
+                    serde_json::to_string(&instruction.variables)
+                        .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?,
+                )
+            };
+            context.graphics_elements.insert(*id, variables);
         }
-        serde_json::to_string(&instruction.variables)
-            .map_err(|error| SchedulingError::InvalidYaml(error.to_string()))?;
     }
     Ok(())
 }
@@ -931,9 +937,9 @@ fn handle_graphics_on(
 fn handle_graphics_off(context: &mut YamlContext, instruction: &YamlInstruction) {
     if let Some(path) = &instruction.graphics_off {
         if path.trim().is_empty() {
-            context.graphics_element_ids.clear();
+            context.graphics_elements.clear();
         } else if let Some(id) = context.reference_data.graphics_ids_by_path.get(path) {
-            context.graphics_element_ids.remove(id);
+            context.graphics_elements.remove(id);
         }
     }
 }
@@ -1216,7 +1222,12 @@ fn add_media_item(
     duration: Duration,
     history_context: CurrentHistoryContext,
 ) {
-    let item = playout_item(
+    let graphics_element_ids = context
+        .graphics_elements
+        .keys()
+        .copied()
+        .collect::<Vec<_>>();
+    let mut item = playout_item(
         context.playout.id,
         media_item,
         context.current_time,
@@ -1226,12 +1237,23 @@ fn add_media_item(
         instruction.custom_title.clone(),
         instruction.disable_watermarks,
         context.watermark_ids.iter().copied().collect(),
-        context.graphics_element_ids.iter().copied().collect(),
+        graphics_element_ids,
         Some(format!(
             r#"{{"content":"{}","instructionIndex":{}}}"#,
             content, context.instruction_index
         )),
     );
+    item.graphics_elements = context
+        .graphics_elements
+        .iter()
+        .map(
+            |(&graphics_element_id, variables)| ersatzrs_domain::PlayoutItemGraphicsElement {
+                playout_item_id: 0,
+                graphics_element_id: Some(graphics_element_id),
+                variables: variables.clone(),
+            },
+        )
+        .collect();
     let history_key = context.history_key(content);
     match history_context {
         CurrentHistoryContext::Single { index } => {
@@ -1579,10 +1601,11 @@ mod tests {
     }
 
     fn snapshot(yaml: &str) -> serde_json::Value {
-        let (definition, request) = request(yaml);
-        let result = YamlPlayoutEngine
-            .schedule_definition(definition, request)
-            .expect("schedule builds");
+        let result = schedule_yaml(yaml);
+        snapshot_result(&result)
+    }
+
+    fn snapshot_result(result: &SchedulingResult) -> serde_json::Value {
         serde_json::json!({
             "items": result.added_items.iter().map(|item| serde_json::json!({
                 "media": item.media_item_id,
@@ -1598,8 +1621,15 @@ mod tests {
                 "start": gap.start.to_rfc3339(),
                 "finish": gap.finish.to_rfc3339(),
             })).collect::<Vec<_>>(),
-            "anchor": result.anchor.map(|anchor| anchor.next_start.to_rfc3339()),
+            "anchor": result.anchor.as_ref().map(|anchor| anchor.next_start.to_rfc3339()),
         })
+    }
+
+    fn schedule_yaml(yaml: &str) -> SchedulingResult {
+        let (definition, request) = request(yaml);
+        YamlPlayoutEngine
+            .schedule_definition(definition, request)
+            .expect("schedule builds")
     }
 
     fn episode_item(
@@ -1913,8 +1943,7 @@ playout:
 
     #[test]
     fn yaml_graphics_instruction_snapshot() {
-        insta::assert_json_snapshot!(snapshot(
-            r#"
+        let yaml = r#"
 playout:
   - graphics_on: lower-third
     variables:
@@ -1924,8 +1953,17 @@ playout:
   - graphics_off: lower-third
   - count: "1"
     content: main
-"#
-        ));
+"#;
+        let result = schedule_yaml(yaml);
+        assert_eq!(result.added_items[0].graphics_element_ids, vec![77]);
+        assert_eq!(
+            result.added_items[0].graphics_elements[0]
+                .variables
+                .as_deref(),
+            Some(r#"{"title":"Now"}"#)
+        );
+        assert!(result.added_items[1].graphics_elements.is_empty());
+        insta::assert_json_snapshot!(snapshot_result(&result));
     }
 
     #[test]

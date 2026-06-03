@@ -1,0 +1,6 @@
+setcolor {{background_color}}
+rect {{safe_x}} {{safe_y}} {{box_width}} {{box_height}} fill
+setcolor {{accent_color}}
+rect {{safe_x}} {{safe_y}} {{accent_width}} {{box_height}} fill
+setcolor {{subtitle_color}}
+rect {{safe_x}} {{subtitle_y}} {{subtitle_width}} {{subtitle_height}} fill

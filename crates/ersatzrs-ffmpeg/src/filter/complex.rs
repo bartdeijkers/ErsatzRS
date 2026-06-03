@@ -1,5 +1,11 @@
 use crate::{InputFile, InputKind, SubtitleMethod};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphicsOverlayFilter {
+    Drawvg(String),
+    NativeImage { input_index: usize, filter: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FilterChain {
     pub video: Vec<String>,
@@ -9,7 +15,7 @@ pub struct FilterChain {
     pub graphics: Vec<String>,
     pub watermark_overlay: Vec<String>,
     pub subtitle_overlay: Vec<String>,
-    pub graphics_overlay: Vec<String>,
+    pub graphics_overlay: Vec<GraphicsOverlayFilter>,
     pub pixel_format: Vec<String>,
 }
 
@@ -64,18 +70,23 @@ struct ComplexFilterBuilder<'a> {
 impl<'a> ComplexFilterBuilder<'a> {
     fn new(inputs: &'a [InputFile], is_intel_vaapi_or_qsv: bool) -> Self {
         let mut distinct_paths = Vec::new();
-        for input in inputs {
-            match input.kind {
-                InputKind::Audio
-                    if distinct_paths.contains(&input.path) && is_intel_vaapi_or_qsv =>
-                {
-                    distinct_paths.push(input.path.clone());
+        for kind in input_kind_order() {
+            for input in inputs.iter().filter(|input| input.kind == kind) {
+                match input.kind {
+                    InputKind::Audio
+                        if distinct_paths.contains(&input.path) && is_intel_vaapi_or_qsv =>
+                    {
+                        distinct_paths.push(input.path.clone());
+                    }
+                    InputKind::Subtitle if !input.is_image_based_subtitle => {}
+                    InputKind::Video | InputKind::Concat | InputKind::Graphics => {
+                        distinct_paths.push(input.path.clone());
+                    }
+                    _ if !distinct_paths.contains(&input.path) => {
+                        distinct_paths.push(input.path.clone());
+                    }
+                    _ => {}
                 }
-                InputKind::Subtitle if !input.is_image_based_subtitle => {}
-                _ if !distinct_paths.contains(&input.path) => {
-                    distinct_paths.push(input.path.clone());
-                }
-                _ => {}
             }
         }
 
@@ -94,7 +105,7 @@ impl<'a> ComplexFilterBuilder<'a> {
         let mut video_label = "0:v".to_owned();
         let mut watermark_labels = Vec::<String>::new();
         let mut subtitle_label = None::<String>;
-        let mut graphics_label = None::<String>;
+        let mut graphics_image_labels = Vec::<String>::new();
 
         let mut graph_parts = Vec::new();
 
@@ -141,6 +152,27 @@ impl<'a> ComplexFilterBuilder<'a> {
             }
         }
 
+        for (index, image) in self
+            .inputs
+            .iter()
+            .filter(|input| input.kind == InputKind::GraphicsImage)
+            .enumerate()
+        {
+            let input_index = self.input_index(image, false);
+            let Some(stream) = image.streams.first() else {
+                continue;
+            };
+            let label = format!("{input_index}:{}", stream.index);
+            let filters = join_filters(image.filter_steps.iter());
+            if filters.is_empty() {
+                graphics_image_labels.push(format!("[{label}]"));
+            } else {
+                let output = format!("[gi{index}]");
+                graph_parts.push(format!("[{label}]{filters}{output}"));
+                graphics_image_labels.push(output);
+            }
+        }
+
         if let Some(subtitle) = self.inputs.iter().find(|input| {
             input.kind == InputKind::Subtitle
                 && input.is_image_based_subtitle
@@ -161,26 +193,6 @@ impl<'a> ComplexFilterBuilder<'a> {
                     graph_parts.push(format!("[{label}]{filters}[st]"));
                     subtitle_label = Some("[st]".to_owned());
                 }
-            }
-        }
-
-        if let Some(graphics) = self
-            .inputs
-            .iter()
-            .find(|input| input.kind == InputKind::Graphics)
-        {
-            let input_index = self.input_index(graphics, false);
-            let filters = join_filters(
-                graphics
-                    .filter_steps
-                    .iter()
-                    .chain(filter_chain.graphics.iter()),
-            );
-            if filters.is_empty() {
-                graphics_label = Some(format!("[{input_index}:0]"));
-            } else {
-                graph_parts.push(format!("[{input_index}:0]{filters}[ge]"));
-                graphics_label = Some("[ge]".to_owned());
             }
         }
 
@@ -213,15 +225,35 @@ impl<'a> ComplexFilterBuilder<'a> {
             }
         }
 
-        if let Some(label) = graphics_label {
-            let filters = join_filters(filter_chain.graphics_overlay.iter());
-            if !filters.is_empty() {
-                graph_parts.push(format!(
-                    "{}{}{filters}[vge]",
-                    proper_label(&video_label),
-                    proper_label(&label)
-                ));
-                "[vge]".clone_into(&mut video_label);
+        for (index, overlay) in filter_chain.graphics_overlay.iter().enumerate() {
+            match overlay {
+                GraphicsOverlayFilter::Drawvg(filter) => {
+                    let filters = join_filters(std::iter::once(filter));
+                    if !filters.is_empty() {
+                        let output = format!("[vge{index}]");
+                        graph_parts
+                            .push(format!("{}{filters}{output}", proper_label(&video_label)));
+                        video_label = output;
+                    }
+                }
+                GraphicsOverlayFilter::NativeImage {
+                    input_index,
+                    filter,
+                } => {
+                    let Some(label) = graphics_image_labels.get(*input_index) else {
+                        continue;
+                    };
+                    let filters = join_filters(std::iter::once(filter));
+                    if !filters.is_empty() {
+                        let output = format!("[vge{index}]");
+                        graph_parts.push(format!(
+                            "{}{}{filters}{output}",
+                            proper_label(&video_label),
+                            proper_label(label)
+                        ));
+                        video_label = output;
+                    }
+                }
             }
         }
 
@@ -308,4 +340,16 @@ fn proper_label(label: &str) -> String {
     } else {
         format!("[{label}]")
     }
+}
+
+fn input_kind_order() -> [InputKind; 7] {
+    [
+        InputKind::Video,
+        InputKind::Audio,
+        InputKind::Watermark,
+        InputKind::GraphicsImage,
+        InputKind::Concat,
+        InputKind::Graphics,
+        InputKind::Subtitle,
+    ]
 }

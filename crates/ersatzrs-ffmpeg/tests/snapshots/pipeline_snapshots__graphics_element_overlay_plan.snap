@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: overlay_plan
+---
+drawvg z=10 drawvg=file='/tmp/ersatzrs-ffmpeg-graphics-elements/9-now-playing.vgs'
+native z=15 input=/media/bug.webm options=["-stream_loop", "-1"] filters=["setpts=PTS+2.5/TB"] location=BottomLeft width=20 opacity=100 enable=Some("gte(t,2.5)") eof_pass=false
+native z=17 input=color=c=black@0.0:s=1920x1080,format=rgba,subtitles=/tmp/ersatzrs-ffmpeg-graphics-elements/13-subtitle-template.ass:alpha=1 options=["-f", "lavfi"] filters=[] location=MiddleCenter width=100 opacity=100 enable=None eof_pass=false
+native z=20 input=/media/logo.png options=["-loop", "1"] filters=[] location=TopRight width=12.5 opacity=75 enable=None eof_pass=false

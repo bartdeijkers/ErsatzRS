@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: rendered_script
+---
+rect 24 24 336 64 setcolor #00ff00 fill

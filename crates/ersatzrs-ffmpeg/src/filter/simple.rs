@@ -218,6 +218,20 @@ pub fn subtitles_filter(path: &str, fonts_dir: Option<&str>) -> String {
     }
 }
 
+#[must_use]
+pub fn subtitle_graphics_lavfi_input(
+    path: &str,
+    size: FrameSize,
+    fonts_dir: Option<&str>,
+) -> String {
+    let mut subtitles = subtitles_filter(path, fonts_dir);
+    subtitles.push_str(":alpha=1");
+    format!(
+        "color=c=black@0.0:s={}x{},format=rgba,{subtitles}",
+        size.width, size.height
+    )
+}
+
 #[cfg(windows)]
 fn escape_subtitles_filter_path(path: &str) -> String {
     let mut effective = path.replace('\\', r"/\");
@@ -249,6 +263,8 @@ pub struct WatermarkOverlay {
     pub place_within_source_content: bool,
     pub fade_points: Vec<WatermarkFadePoint>,
     pub opacity_expression: Option<String>,
+    pub enable: Option<String>,
+    pub eof_action_pass: bool,
     pub z_index: i32,
 }
 
@@ -264,6 +280,8 @@ impl Default for WatermarkOverlay {
             place_within_source_content: false,
             fade_points: Vec::new(),
             opacity_expression: None,
+            enable: None,
+            eof_action_pass: false,
             z_index: 0,
         }
     }
@@ -302,10 +320,23 @@ pub fn watermark_overlay_filter(
         }
     };
 
-    format!(
+    let mut filter = format!(
         "overlay={position}:format={}",
         output_pixel_format.overlay_format()
-    )
+    );
+    if watermark.eof_action_pass {
+        filter.push_str(":eof_action=pass");
+    }
+    if let Some(enable) = watermark
+        .enable
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        filter.push_str(":enable='");
+        filter.push_str(&escape_overlay_filter_value(enable));
+        filter.push('\'');
+    }
+    filter
 }
 
 #[must_use]
@@ -447,4 +478,8 @@ fn seconds(duration: Duration) -> String {
 
 fn rounded_number(value: f64) -> String {
     format!("{value:.0}")
+}
+
+fn escape_overlay_filter_value(value: &str) -> String {
+    value.replace('\'', "\\'")
 }

@@ -876,6 +876,7 @@ version = "0.1.0"
 dependencies = [
  "ersatzrs-domain",
  "insta",
+ "mlua",
  "thiserror 2.0.18",
  "tokio",
 ]
@@ -896,6 +897,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "sqlx",
  "tempfile",

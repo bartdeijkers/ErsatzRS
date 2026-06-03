@@ -17,9 +17,9 @@ inside this repository so the application binary, migrations, admin UI assets,
 FFmpeg build, and runtime checks evolve together.
 
 FFmpeg 8.1 `drawvg` executes VGS scripts and requires FFmpeg to be configured
-with `--enable-cairo`. Earlier ErsatzRS graphics code and docs describe SVG
-templates feeding `drawvg`; that compatibility gap needs a separate graphics
-follow-up and must not be hidden by the container work.
+with `--enable-cairo`. ADR 0005 owns the graphics-engine rendering decision:
+drawvg receives generated VGS scripts, while SVG assets are source/reference
+material only.
 
 ## Decision
 
@@ -71,8 +71,8 @@ keeps deployment simple and avoids a separate FFmpeg image repository. Nonfree
 CUDA experiments may be added only as local, unpublished build targets unless a
 future ADR accepts the licensing and distribution impact.
 
-The `drawvg` SVG/VGS mismatch remains intentionally visible. Container support
-does not make existing SVG templates valid VGS scripts.
+Container support proves the runtime can execute drawvg; it does not change the
+graphics-engine contract that generated drawvg artifacts are VGS scripts.
 
 ## Alternatives Considered
 

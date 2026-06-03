@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: filters
+---
+drawvg=file='/tmp/ersatzrs-ffmpeg-graphics-elements/9-now-playing.vgs'

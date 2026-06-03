@@ -1,0 +1,6 @@
+setcolor {{track_color}}
+rect {{track_x}} {{track_y}} {{track_width}} {{track_height}} fill
+setcolor {{elapsed_color}}
+rect {{track_x}} {{track_y}} {{elapsed_width}} {{track_height}} fill
+setcolor {{marker_color}}
+rect {{marker_x}} {{marker_y}} {{marker_width}} {{marker_height}} fill

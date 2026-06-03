@@ -1,0 +1,14 @@
+[Script Info]
+ScriptType: v4.00+
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+PlayResX: {{frame_width}}
+PlayResY: {{frame_height}}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Graphics,{{font_family}},{{font_size}},{{primary_color}},&H000000FF,{{outline_color}},&H80000000,{{bold}},0,0,0,100,100,0,0,1,{{outline_width}},{{shadow_depth}},{{alignment}},{{margin_l}},{{margin_r}},{{margin_v}},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: {{layer}},{{start_time}},{{end_time}},Graphics,,0,0,0,,{{text}}
