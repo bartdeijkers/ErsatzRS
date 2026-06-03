@@ -7,6 +7,7 @@ use std::{
     path::PathBuf,
     sync::OnceLock,
 };
+use tokio_util::sync::CancellationToken;
 use tracing_subscriber::registry::Registry;
 use tracing_subscriber::{layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter};
 use uuid::Uuid;
@@ -15,6 +16,9 @@ use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
 
 const LISTEN_ADDR: &str = "0.0.0.0:8409";
 const LISTEN_PORT: u16 = 8409;
+/// Upper bound on how long shutdown waits for background tasks to drain before
+/// forcing exit, so a stuck task cannot hang the tray "Exit" / `docker stop`.
+const SHUTDOWN_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
 const CONFIG_KEY_HDHR_TUNER_COUNT: &str = "hdhr.tuner_count";
 const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
@@ -76,15 +80,24 @@ pub async fn run() {
     .await
     .expect("failed to build application state");
 
-    super::tasks::spawn_background_tasks(
+    // Coordinated shutdown: the signal handler cancels this token, the axum
+    // server drains in-flight requests, and every background task observes the
+    // same token so the whole process exits cleanly (tray "Exit", `docker stop`,
+    // or console Ctrl+C).
+    let shutdown = CancellationToken::new();
+
+    let task_handles = super::tasks::spawn_background_tasks(
         app_state.pool.clone(),
         app_state.device_uuid,
         app_state.tuner_count.clone(),
         LISTEN_PORT,
         playout_build_rx,
         playout_locker,
+        shutdown.clone(),
     );
 
+    // Keep a pool handle for the post-serve cleanup; `build_app` consumes state.
+    let pool = app_state.pool.clone();
     let app = super::router::build_app(app_state);
 
     tracing::info!("ersatzrs-web listening on {LISTEN_ADDR}");
@@ -93,9 +106,75 @@ pub async fn run() {
         .await
         .unwrap_or_else(|e| panic!("failed to bind to {LISTEN_ADDR}: {e}"));
 
-    axum::serve(listener, app.into_make_service())
+    tokio::spawn(shutdown_signal(shutdown.clone()));
+
+    if let Err(error) = axum::serve(listener, app.into_make_service())
+        .with_graceful_shutdown(shutdown.clone().cancelled_owned())
         .await
-        .expect("server error");
+    {
+        tracing::error!(%error, "server error");
+    }
+
+    // Ensure tasks observe shutdown even if serve returned for another reason.
+    shutdown.cancel();
+
+    // Drain background tasks within a bounded window, then close the pool and
+    // flush the final log line.
+    let drain = async {
+        for handle in task_handles {
+            if let Err(error) = handle.await {
+                if !error.is_cancelled() {
+                    tracing::warn!(%error, "background task join failed");
+                }
+            }
+        }
+    };
+    if tokio::time::timeout(SHUTDOWN_DRAIN_TIMEOUT, drain)
+        .await
+        .is_err()
+    {
+        tracing::warn!("timed out draining background tasks during shutdown");
+    }
+
+    pool.close().await;
+    tracing::info!("shutdown complete");
+}
+
+/// Await the first OS shutdown signal and cancel the shared token.
+///
+/// Listens for `Ctrl+C` (which is also the Windows `CTRL_C_EVENT` that the tray
+/// launcher sends to the child) and, on Unix, `SIGTERM` (so `docker stop` drains
+/// cleanly rather than being killed after its grace period).
+async fn shutdown_signal(token: CancellationToken) {
+    let ctrl_c = async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!(%error, "failed to install Ctrl+C handler");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut stream) => {
+                stream.recv().await;
+            }
+            Err(error) => {
+                tracing::error!(%error, "failed to install SIGTERM handler");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => tracing::info!("received Ctrl+C; initiating graceful shutdown"),
+        () = terminate => tracing::info!("received SIGTERM; initiating graceful shutdown"),
+    }
+
+    token.cancel();
 }
 
 async fn init_logging(pool: &DbPool) {

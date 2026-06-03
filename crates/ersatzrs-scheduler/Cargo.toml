@@ -12,10 +12,14 @@ ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }
 sqlx = { workspace = true }
 tokio = { version = "1", features = ["signal", "time"] }
+# CancellationToken (from tokio_util::sync) is used to let the web host drive a
+# coordinated graceful shutdown of the scheduler loop. No extra feature needed.
+tokio-util = "0.7"
 tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt", "time"] }
 
 [features]
 default = []
