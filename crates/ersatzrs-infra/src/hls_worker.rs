@@ -17,13 +17,15 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, HlsOutput, InputFile, OutputFormat, PipelineRequest, SourceVideoStream,
+    FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, OutputFormat,
+    PipelineRequest, SourceVideoStream,
 };
 
 use crate::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
-    select_playback_subtitle, select_playback_watermarks, subtitle_fonts_dir,
-    subtitle_input_for_stream, watermark_overlay_for_stream, PlaybackProfile,
+    render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
+    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
+    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -217,6 +219,66 @@ impl HlsSessionWorker {
                     Vec::new()
                 }
             };
+            let mut graphics_cleanup_dir = None;
+            let graphics_overlays = match select_playback_graphics(
+                &pool,
+                &watermark_channel,
+                active.playout_item_id,
+                now,
+            )
+            .await
+            {
+                Ok(graphics) => {
+                    let frame_size = playback_frame_size(&playback_profile);
+                    let square_pixel_frame_size = source_stream
+                        .as_ref()
+                        .and_then(|stream| stream.square_pixel_frame_size(frame_size))
+                        .unwrap_or(frame_size);
+                    let output_dir = self
+                        .working_dir
+                        .join("graphics")
+                        .join(format!("item-{}", active.playout_item_id));
+                    graphics_cleanup_dir = Some(output_dir.clone());
+                    match render_playback_graphics_overlays(
+                        &pool,
+                        &graphics,
+                        &PlaybackGraphicsRenderContext {
+                            channel_id: self.channel_id,
+                            channel_number: self.channel_number.clone(),
+                            media_item_id: active.media_item_id,
+                            media_path: active.media_path.clone(),
+                            channel_start_time: active.playout_start,
+                            content_start_time: active.playout_start,
+                            stream_seek_seconds: seconds_as_f64(active.start_seconds),
+                            duration_seconds: active
+                                .program_duration
+                                .map_or(0.0, |duration| duration.as_secs_f64()),
+                            frame_size,
+                            square_pixel_frame_size,
+                            frame_rate: target_frame_rate.or_else(|| {
+                                source_stream.as_ref().and_then(|stream| stream.frame_rate)
+                            }),
+                        },
+                        output_dir,
+                    )
+                    .await
+                    {
+                        Ok(overlays) => overlays,
+                        Err(error) => {
+                            if let Some(path) = &graphics_cleanup_dir {
+                                let _ = tokio::fs::remove_dir_all(path).await;
+                            }
+                            graphics_cleanup_dir = None;
+                            tracing::warn!(%error, channel_number = %self.channel_number, "failed to render HLS graphics overlays");
+                            Vec::new()
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %self.channel_number, "failed to select HLS graphics");
+                    Vec::new()
+                }
+            };
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,
@@ -229,6 +291,7 @@ impl HlsSessionWorker {
                 source_stream,
                 subtitle_input,
                 watermark_inputs,
+                graphics_overlays,
             );
             let mut process = Command::new(&command.executable);
             process
@@ -268,6 +331,9 @@ impl HlsSessionWorker {
                         let _ = self.trim_playlist_inner().await;
                     }
                 }
+            }
+            if let Some(path) = graphics_cleanup_dir {
+                let _ = cleanup_working_dir(&path).await;
             }
             if !should_continue {
                 break;
@@ -332,6 +398,7 @@ fn build_hls_command(
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
     let desired = DesiredVideoState::from_profile(
@@ -354,6 +421,7 @@ fn build_hls_command(
         request.inputs.push(input);
         request.watermarks.push(overlay);
     }
+    request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
     if start_seconds > 0 {
         request.state.start_seconds = Some(start_seconds);
@@ -451,6 +519,7 @@ async fn load_active_hls_item(
         media_version_id: row.get::<i64, _>("MediaVersionId"),
         start_seconds: playout_start_seconds(now, playout_start),
         program_duration,
+        playout_start,
         disable_watermarks: row
             .try_get::<i64, _>("DisableWatermarks")
             .is_ok_and(|value| value != 0),
@@ -487,6 +556,7 @@ struct ActiveHlsItem {
     media_version_id: i64,
     start_seconds: i64,
     program_duration: Option<Duration>,
+    playout_start: DateTime<Utc>,
     disable_watermarks: bool,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
@@ -516,6 +586,25 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
 
 fn playout_start_seconds(now: DateTime<Utc>, playout_start: DateTime<Utc>) -> i64 {
     (now - playout_start).num_seconds().max(0)
+}
+
+fn seconds_as_f64(seconds: i64) -> f64 {
+    u64::try_from(seconds)
+        .map(Duration::from_secs)
+        .map_or(0.0, |duration| duration.as_secs_f64())
+}
+
+fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
+    FrameSize::new(
+        u32::try_from(playback_profile.resolution.width)
+            .ok()
+            .filter(|width| *width > 0)
+            .unwrap_or(1920),
+        u32::try_from(playback_profile.resolution.height)
+            .ok()
+            .filter(|height| *height > 0)
+            .unwrap_or(1080),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -889,6 +978,7 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
         insta::assert_snapshot!(command.arguments.join(" "));
     }
@@ -906,6 +996,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
             Vec::new(),
         );
         let arguments = command.arguments.join(" ");
@@ -928,12 +1019,41 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
 
         assert!(command
             .arguments
             .join(" ")
             .contains("-ss 900 -i /media/test.mkv"));
+    }
+
+    #[test]
+    fn build_hls_command_attaches_graphics_overlays() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                12,
+                "drawvg=file=/tmp/hls/1/graphics/item-1/title.vgs",
+            )],
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-filter_complex"));
+        assert!(
+            arguments.contains("drawvg=file=/tmp/hls/1/graphics/item-1/title.vgs"),
+            "{arguments}"
+        );
     }
 
     #[test]
@@ -1065,6 +1185,7 @@ mod tests {
             Some(source_1080p()),
             None,
             Vec::new(),
+            Vec::new(),
         );
 
         let mut process = Command::new(&command.executable);
@@ -1117,6 +1238,152 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg with drawvg on PATH"]
+    async fn hls_segmenter_composites_drawvg_graphics_from_generated_input() {
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path_from_env();
+        if !ffmpeg_has_drawvg(&ffmpeg).await {
+            eprintln!("skipping: ffmpeg drawvg filter not available");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let input = temp.path().join("black.mp4");
+        let script = temp.path().join("green.vgs");
+        std::fs::write(&script, green_drawvg_script()).expect("write graphics script");
+        generate_hls_graphics_input(&ffmpeg, &input).await;
+
+        let working_dir = temp.path().join("hls");
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create hls dir");
+        run_hls_graphics_segmenter(&input, &script, &working_dir).await;
+
+        let segment = working_dir.join("seg00000.ts");
+        assert!(
+            segment.is_file(),
+            "expected first HLS segment at {}",
+            segment.display()
+        );
+        assert_hls_segment_has_green_graphics(&ffmpeg, &segment).await;
+    }
+
+    async fn ffmpeg_has_drawvg(ffmpeg: &str) -> bool {
+        Command::new(ffmpeg)
+            .args(["-hide_banner", "-filters"])
+            .output()
+            .await
+            .is_ok_and(|output| String::from_utf8_lossy(&output.stdout).contains("drawvg"))
+    }
+
+    async fn generate_hls_graphics_input(ffmpeg: &str, input: &Path) {
+        let generated = Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x180:r=25:d=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-t",
+                "1",
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                input.to_string_lossy().as_ref(),
+            ])
+            .output()
+            .await
+            .expect("generate input video");
+        assert!(
+            generated.status.success(),
+            "ffmpeg input generation failed: {}",
+            String::from_utf8_lossy(&generated.stderr)
+        );
+    }
+
+    async fn run_hls_graphics_segmenter(input: &Path, script: &Path, working_dir: &Path) {
+        let command = build_hls_command(
+            input.to_string_lossy().as_ref(),
+            working_dir,
+            OutputFormat::Hls,
+            true,
+            0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
+            Some(source_320p()),
+            None,
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                0,
+                format!("drawvg=file={}", script.to_string_lossy()),
+            )],
+        );
+
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .current_dir(working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        let output = timeout(Duration::from_secs(30), process.output())
+            .await
+            .expect("timed out running hls graphics segmenter")
+            .expect("run hls graphics segmenter");
+        assert!(
+            output.status.success(),
+            "ffmpeg hls failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    async fn assert_hls_segment_has_green_graphics(ffmpeg: &str, segment: &Path) {
+        let decoded = Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                segment.to_string_lossy().as_ref(),
+                "-vf",
+                "crop=80:80:0:0,scale=1:1,format=rgb24",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ])
+            .output()
+            .await
+            .expect("decode hls graphics frame");
+        assert!(
+            decoded.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 3);
+        assert!(
+            decoded.stdout[1] > 180 && decoded.stdout[0] < 80 && decoded.stdout[2] < 80,
+            "expected green graphics crop, got rgb={:?}",
+            decoded.stdout
+        );
+    }
+
     fn playback_profile() -> PlaybackProfile {
         PlaybackProfile {
             profile: FFmpegProfile {
@@ -1146,6 +1413,19 @@ mod tests {
         source.sample_aspect_ratio = Some("1:1".to_owned());
         source.display_aspect_ratio = Some("1920:1080".to_owned());
         source
+    }
+
+    fn source_320p() -> SourceVideoStream {
+        let mut source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264);
+        source.frame_size = Some(ersatzrs_ffmpeg::FrameSize::new(320, 180));
+        source.sample_aspect_ratio = Some("1:1".to_owned());
+        source.display_aspect_ratio = Some("16:9".to_owned());
+        source.pixel_format = Some(ersatzrs_ffmpeg::PixelFormat::Yuv420P);
+        source
+    }
+
+    fn green_drawvg_script() -> &'static str {
+        "rect 0 0 480 270 setcolor #00ff00 fill\n"
     }
 
     fn testdata_fixture() -> Option<PathBuf> {

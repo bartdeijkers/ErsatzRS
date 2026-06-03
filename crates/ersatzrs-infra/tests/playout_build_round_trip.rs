@@ -13,12 +13,15 @@ mod common;
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::playout_builder::PlayoutBuilder;
-use ersatzrs_core::repositories::PlayoutRepository;
+use ersatzrs_core::repositories::{GraphicsRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::{
     PlayoutBuildMode, SchedulingReferenceData, SchedulingRequest, SchedulingResult,
     YamlPlayoutEngine,
 };
-use ersatzrs_domain::{FillerKind, Playout, PlayoutAnchor, PlayoutScheduleKind};
+use ersatzrs_domain::{
+    FillerKind, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, Playout,
+    PlayoutAnchor, PlayoutItemGraphicsElement, PlayoutScheduleKind, TextGraphicsConfig,
+};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
 
@@ -115,6 +118,91 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
         "guide_group": i.guide_group,
         "filler_kind": format!("{:?}", i.filler_kind),
     })).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn apply_build_result_persists_graphics_variables_for_generated_items() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    pool.execute(
+        r#"INSERT OR REPLACE INTO "Playout"
+           ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (1, 1, 'Sequential', 42)"#,
+    )
+    .await
+    .unwrap();
+    repos
+        .graphics
+        .upsert_element(&GraphicsElement {
+            id: 7,
+            name: "lower-third".to_owned(),
+            kind: GraphicsElementKind::Text,
+            path: Some("lower-third".to_owned()),
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some("{{ title }}".to_owned()),
+                ..TextGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        })
+        .await
+        .unwrap();
+
+    let start = common::fixed_time();
+    let mut new_item = ersatzrs_domain::PlayoutItem {
+        playout_id: 1,
+        media_item_id: 1,
+        start,
+        finish: start + Duration::minutes(30),
+        guide_group: 1,
+        filler_kind: FillerKind::None,
+        in_point: Duration::zero(),
+        out_point: Duration::minutes(30),
+        graphics_element_ids: vec![7],
+        ..Default::default()
+    };
+    new_item.graphics_elements = vec![PlayoutItemGraphicsElement {
+        playout_item_id: 0,
+        graphics_element_id: Some(7),
+        variables: Some(r#"{"title":"Now"}"#.to_owned()),
+    }];
+    let playout = Playout {
+        id: 1,
+        channel_id: 1,
+        schedule_kind: PlayoutScheduleKind::Sequential,
+        seed: 42,
+        ..Default::default()
+    };
+    let result = SchedulingResult {
+        clear_items: true,
+        added_items: vec![new_item],
+        ..Default::default()
+    };
+
+    repos
+        .playout
+        .apply_build_result(&result, &playout)
+        .await
+        .unwrap();
+
+    let items = repos
+        .playout
+        .items_in_range(
+            1,
+            start - Duration::minutes(1),
+            start + Duration::minutes(31),
+        )
+        .await
+        .unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].graphics_element_ids, vec![7]);
+    assert_eq!(items[0].graphics_elements.len(), 1);
+    assert_eq!(items[0].graphics_elements[0].graphics_element_id, Some(7));
+    assert_eq!(
+        items[0].graphics_elements[0].variables.as_deref(),
+        Some(r#"{"title":"Now"}"#)
+    );
 }
 
 #[tokio::test]

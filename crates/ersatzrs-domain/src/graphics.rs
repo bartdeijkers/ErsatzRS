@@ -123,9 +123,9 @@ pub struct MotionGraphicsConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ScriptGraphicsConfig {
-    /// External command — imported for round-trip fidelity only. ErsatzRS does not spawn an
-    /// external graphics process (ADR 0005); the `Script` kind is rendered via the scripted
-    /// engine or deferred.
+    /// ErsatzTV external command field. ErsatzRS preserves the field for import fidelity but
+    /// executes it as an in-process Lua script that returns a drawvg script; it never spawns an
+    /// external graphics process (ADR 0005).
     pub command: Option<String>,
     pub args: Vec<String>,
     pub format: Option<String>,
@@ -137,24 +137,34 @@ pub struct ScriptGraphicsConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TextFit {
     #[default]
+    #[serde(alias = "none")]
     None,
+    #[serde(alias = "wrap")]
     Wrap,
+    #[serde(alias = "scale")]
     Scale,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TextAlignment {
     #[default]
+    #[serde(alias = "left")]
     Left,
+    #[serde(alias = "center")]
     Center,
+    #[serde(alias = "right")]
     Right,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MotionEndBehavior {
     #[default]
+    #[serde(alias = "disappear")]
     Disappear,
+    #[serde(alias = "loop")]
     Loop,
+    #[serde(alias = "hold")]
+    Hold,
 }
 
 /// A named text style, ported from ErsatzTV's `StyleDefinition`.

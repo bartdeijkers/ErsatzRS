@@ -503,18 +503,20 @@ pub async fn preview_watermark_placement(
     let ry = ry.clamp(0.0, H - wm_h.max(1.0));
     let opacity = (f64::from(params.opacity) / 100.0).clamp(0.0, 1.0);
 
-    let svg = format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">
-  <rect width="{W}" height="{H}" fill="#1a1a1a"/>
-  <rect x="{rx:.1}" y="{ry:.1}" width="{wm_w:.1}" height="{wm_h:.1}" fill="#4488ff" opacity="{opacity:.2}"/>
-</svg>"##
+    let drawvg = format!(
+        "\
+setcolor #1a1a1a
+rect 0 0 {W} {H} fill
+setcolor #4488ff@{opacity:.2}
+rect {rx:.1} {ry:.1} {wm_w:.1} {wm_h:.1} fill
+"
     );
 
     let mut tmp = tempfile::NamedTempFile::new()
         .map_err(|e| ServerFnError::new(format!("temp file: {e}")))?;
-    tmp.write_all(svg.as_bytes())
-        .map_err(|e| ServerFnError::new(format!("write svg: {e}")))?;
-    let svg_path = tmp.path().to_string_lossy().to_string();
+    tmp.write_all(drawvg.as_bytes())
+        .map_err(|e| ServerFnError::new(format!("write drawvg: {e}")))?;
+    let script_path = tmp.path().to_string_lossy().to_string();
 
     let out = Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
         .args([
@@ -526,7 +528,7 @@ pub async fn preview_watermark_placement(
             "-vframes",
             "1",
             "-vf",
-            &format!("drawvg=file={svg_path}"),
+            &format!("drawvg=file='{script_path}'"),
             "-f",
             "image2pipe",
             "-c:v",

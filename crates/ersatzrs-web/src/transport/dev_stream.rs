@@ -11,8 +11,9 @@ use axum::{
 };
 use ersatzrs_domain::{WatermarkLocation, WatermarkSize};
 use ersatzrs_ffmpeg::{
-    DesiredVideoState, FfmpegCommand, InputFile, OutputFormat, PipelineBuilder, PipelineRequest,
-    SoftwarePipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
+    DesiredVideoState, FfmpegCommand, GraphicsPipelineOverlay, InputFile, OutputFormat,
+    PipelineBuilder, PipelineRequest, SoftwarePipelineBuilder, WatermarkFadeKind,
+    WatermarkFadePoint, WatermarkOverlay,
 };
 use serde::Deserialize;
 use tokio::process::Command;
@@ -68,7 +69,7 @@ fn stream_mpegts_file(
     path: &Path,
     watermark_inputs: Vec<(InputFile, WatermarkOverlay)>,
 ) -> Result<Response<Body>, StreamError> {
-    let command = build_mpegts_stream_command(path, watermark_inputs);
+    let command = build_mpegts_stream_command(path, watermark_inputs, Vec::new());
     let body = spawn_ffmpeg_body(command)?;
 
     let mut response = Response::new(body);
@@ -84,6 +85,7 @@ fn stream_mpegts_file(
 fn build_mpegts_stream_command(
     path: &Path,
     watermark_inputs: Vec<(InputFile, WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string_lossy().into_owned());
     let mut request = PipelineRequest::new(input, DesiredVideoState::h264_1080p());
@@ -91,6 +93,7 @@ fn build_mpegts_stream_command(
         request.inputs.push(input);
         request.watermarks.push(overlay);
     }
+    request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = OutputFormat::MpegTs;
     request.state.report_progress = false;
 
@@ -206,7 +209,8 @@ mod tests {
 
     #[test]
     fn stream_command_uses_mpegts_stdout_without_progress_stdout() {
-        let command = build_mpegts_stream_command(Path::new("/media/bbb.mp4"), Vec::new());
+        let command =
+            build_mpegts_stream_command(Path::new("/media/bbb.mp4"), Vec::new(), Vec::new());
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-f mpegts"));
@@ -225,6 +229,7 @@ mod tests {
                 width_percent: Some(12.5),
                 ..DevStreamQuery::default()
             }),
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
 
@@ -235,6 +240,150 @@ mod tests {
     }
 
     #[test]
+    fn stream_command_can_attach_graphics_overlays() {
+        let command = build_mpegts_stream_command(
+            Path::new("/media/bbb.mp4"),
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                5,
+                "drawvg=file=/tmp/dev-graphics/title.vgs",
+            )],
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-filter_complex"));
+        assert!(
+            arguments.contains("drawvg=file=/tmp/dev-graphics/title.vgs"),
+            "{arguments}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg with drawvg on PATH"]
+    async fn dev_stream_composites_drawvg_graphics_from_generated_input() {
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path_from_env();
+        if !ffmpeg_has_drawvg(&ffmpeg).await {
+            eprintln!("skipping: ffmpeg drawvg filter not available");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let input = temp.path().join("black.mp4");
+        let script = temp.path().join("green.vgs");
+        std::fs::write(&script, green_drawvg_script()).expect("write graphics script");
+        generate_dev_graphics_input(&ffmpeg, &input).await;
+
+        let output = run_dev_graphics_stream(&input, &script).await;
+        assert!(!output.is_empty(), "expected MPEG-TS bytes");
+
+        let stream = temp.path().join("graphics.ts");
+        std::fs::write(&stream, &output).expect("write mpegts sample");
+        assert_stream_has_green_graphics(&ffmpeg, &stream).await;
+    }
+
+    async fn ffmpeg_has_drawvg(ffmpeg: &str) -> bool {
+        tokio::process::Command::new(ffmpeg)
+            .args(["-hide_banner", "-filters"])
+            .output()
+            .await
+            .is_ok_and(|output| String::from_utf8_lossy(&output.stdout).contains("drawvg"))
+    }
+
+    async fn generate_dev_graphics_input(ffmpeg: &str, input: &Path) {
+        let generated = tokio::process::Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x180:r=25:d=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-t",
+                "1",
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                input.to_string_lossy().as_ref(),
+            ])
+            .output()
+            .await
+            .expect("generate input video");
+        assert!(
+            generated.status.success(),
+            "ffmpeg input generation failed: {}",
+            String::from_utf8_lossy(&generated.stderr)
+        );
+    }
+
+    async fn run_dev_graphics_stream(input: &Path, script: &Path) -> Vec<u8> {
+        let command = build_mpegts_stream_command(
+            input,
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                0,
+                format!("drawvg=file={}", script.to_string_lossy()),
+            )],
+        );
+        let mut process = tokio::process::Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        let output = process.output().await.expect("run dev graphics stream");
+        assert!(
+            output.status.success(),
+            "ffmpeg stream failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output.stdout
+    }
+
+    async fn assert_stream_has_green_graphics(ffmpeg: &str, stream: &Path) {
+        let decoded = tokio::process::Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                stream.to_string_lossy().as_ref(),
+                "-vf",
+                "crop=80:80:0:0,scale=1:1,format=rgb24",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ])
+            .output()
+            .await
+            .expect("decode dev graphics frame");
+        assert!(
+            decoded.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 3);
+        assert!(
+            decoded.stdout[1] > 180 && decoded.stdout[0] < 80 && decoded.stdout[2] < 80,
+            "expected green graphics crop, got rgb={:?}",
+            decoded.stdout
+        );
+    }
+
+    #[test]
     fn fixture_search_prefers_1080p_30fps_file_when_available() {
         if let Some(fixture) = find_big_buck_bunny_fixture() {
             assert_eq!(
@@ -242,5 +391,9 @@ mod tests {
                 PathBuf::from("testdata/bbb_sunflower_1080p_30fps_normal.mp4")
             );
         }
+    }
+
+    fn green_drawvg_script() -> &'static str {
+        "rect 0 0 480 270 setcolor #00ff00 fill\n"
     }
 }

@@ -1,7 +1,16 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::FrameSize;
+use ersatzrs_domain::{
+    GraphicsElement, GraphicsElementConfig, MotionEndBehavior, TextAlignment, TextFit,
+    WatermarkLocation,
+};
+use mlua::{Lua, Table, Value};
+
+use crate::{
+    subtitle_graphics_lavfi_input, FrameSize, GraphicsPipelineOverlay, InputFile, WatermarkOverlay,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphicsTemplateError {
@@ -12,11 +21,17 @@ pub enum GraphicsTemplateError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("graphics element {id} has no renderable {field}")]
+    MissingField { id: i64, field: &'static str },
+    #[error("graphics element {id} script failed: {source}")]
+    Script { id: i64, source: mlua::Error },
+    #[error("graphics element {id} script did not return drawvg script")]
+    InvalidScriptResult { id: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DrawvgOverlay {
-    pub svg_path: PathBuf,
+    pub script_path: PathBuf,
     pub x: i32,
     pub y: i32,
     pub width: u32,
@@ -27,14 +42,7 @@ pub struct DrawvgOverlay {
 impl DrawvgOverlay {
     #[must_use]
     pub fn filter(&self) -> String {
-        let mut filter = format!(
-            "drawvg=file='{}':x={}:y={}:w={}:h={}",
-            escape_path(&self.svg_path),
-            self.x,
-            self.y,
-            self.width,
-            self.height
-        );
+        let mut filter = format!("drawvg=file='{}'", escape_path(&self.script_path));
         if let Some(enable) = &self.enable {
             filter.push_str(":enable='");
             filter.push_str(&escape_filter_value(enable));
@@ -59,12 +67,30 @@ impl SvgTemplate {
 
     #[must_use]
     pub fn render(&self, variables: &BTreeMap<String, String>) -> String {
-        let mut rendered = self.source.clone();
-        for (name, value) in variables {
-            rendered = rendered.replace(&format!("{{{{{name}}}}}"), &escape_xml(value));
-        }
-        rendered
+        render_template(&self.source, variables, true)
     }
+
+    #[must_use]
+    pub fn render_raw(&self, variables: &BTreeMap<String, String>) -> String {
+        render_template(&self.source, variables, false)
+    }
+}
+
+fn render_template(
+    source: &str,
+    variables: &BTreeMap<String, String>,
+    escape_values: bool,
+) -> String {
+    let mut rendered = source.to_owned();
+    for (name, value) in variables {
+        let value = if escape_values {
+            escape_xml(value)
+        } else {
+            value.clone()
+        };
+        rendered = rendered.replace(&format!("{{{{{name}}}}}"), &value);
+    }
+    rendered
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +112,7 @@ impl GraphicsTemplateRenderer {
     ///
     /// Returns an error when the template cannot be read, the output directory
     /// cannot be created, the template path has no file name, or the rendered
-    /// SVG cannot be written.
+    /// template cannot be written.
     pub fn render_template_file(
         &self,
         template_path: impl AsRef<Path>,
@@ -115,22 +141,1180 @@ impl GraphicsTemplateRenderer {
         })?;
         Ok(output_path)
     }
+
+    /// Renders DB-backed graphics elements into generated inputs and `drawvg`
+    /// overlays.
+    ///
+    /// This is the FFmpeg-native counterpart to ErsatzTV's Skia
+    /// `GraphicsEngine`: static image elements become native overlay inputs and
+    /// text elements become VGS draw scripts, while timing, opacity, z-order,
+    /// and source-content placement are represented in the generated
+    /// overlay/filter metadata.
+    ///
+    /// Source map:
+    /// - `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/GraphicsEngine.cs`
+    /// - `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/Image/ImageElement.cs`
+    /// - `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/Image/ImageElementBase.cs`
+    /// - `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/Text/TextElement.cs`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an element is missing a required image/text field,
+    /// the output directory cannot be created, or a generated artifact cannot
+    /// be written.
+    pub fn render_graphics_elements(
+        &self,
+        elements: &[GraphicsElement],
+        variables: &BTreeMap<String, String>,
+        context: &GraphicsRenderContext,
+    ) -> Result<Vec<RenderedGraphicsElement>, GraphicsTemplateError> {
+        std::fs::create_dir_all(&self.output_dir).map_err(|source| GraphicsTemplateError::Io {
+            path: self.output_dir.clone(),
+            source,
+        })?;
+
+        let mut rendered = Vec::new();
+        for element in elements {
+            if let Some(rendered_element) =
+                render_graphics_element(element, variables, &self.output_dir, context)?
+            {
+                rendered.push(rendered_element);
+            }
+        }
+
+        rendered.sort_by_key(RenderedGraphicsElement::z_index);
+        Ok(rendered)
+    }
 }
 
 #[must_use]
 pub fn lower_third_overlay(
-    svg_path: impl Into<PathBuf>,
+    script_path: impl Into<PathBuf>,
     frame_size: FrameSize,
     enable: Option<String>,
 ) -> DrawvgOverlay {
     DrawvgOverlay {
-        svg_path: svg_path.into(),
+        script_path: script_path.into(),
         x: 0,
         y: i32::try_from(frame_size.height.saturating_mul(3) / 4).unwrap_or(i32::MAX),
         width: frame_size.width,
         height: frame_size.height / 4,
         enable,
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphicsRenderContext {
+    pub frame_size: FrameSize,
+    pub square_pixel_frame_size: FrameSize,
+    motion_source_durations: BTreeMap<i64, f64>,
+}
+
+impl GraphicsRenderContext {
+    #[must_use]
+    pub fn new(frame_size: FrameSize, square_pixel_frame_size: FrameSize) -> Self {
+        Self {
+            frame_size,
+            square_pixel_frame_size,
+            motion_source_durations: BTreeMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_motion_source_duration(mut self, element_id: i64, duration_seconds: f64) -> Self {
+        if duration_seconds.is_finite() && duration_seconds >= 0.0 {
+            self.motion_source_durations
+                .insert(element_id, duration_seconds);
+        }
+        self
+    }
+
+    fn motion_source_duration(&self, element_id: i64) -> Option<f64> {
+        self.motion_source_durations.get(&element_id).copied()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RenderedGraphicsElement {
+    Drawvg {
+        id: i64,
+        z_index: i32,
+        script_path: PathBuf,
+        overlay: DrawvgOverlay,
+    },
+    NativeImage {
+        id: i64,
+        z_index: i32,
+        input: InputFile,
+        overlay: WatermarkOverlay,
+    },
+}
+
+impl RenderedGraphicsElement {
+    #[must_use]
+    pub const fn z_index(&self) -> i32 {
+        match self {
+            Self::Drawvg { z_index, .. } | Self::NativeImage { z_index, .. } => *z_index,
+        }
+    }
+
+    #[must_use]
+    pub fn into_pipeline_overlay(self) -> GraphicsPipelineOverlay {
+        match self {
+            Self::Drawvg {
+                z_index, overlay, ..
+            } => GraphicsPipelineOverlay::drawvg(z_index, overlay.filter()),
+            Self::NativeImage {
+                z_index,
+                input,
+                overlay,
+                ..
+            } => GraphicsPipelineOverlay::native_image(z_index, input, overlay),
+        }
+    }
+}
+
+#[must_use]
+pub fn graphics_element_drawvg_filter(
+    script_path: impl Into<PathBuf>,
+    element: &GraphicsElement,
+    context: &GraphicsRenderContext,
+) -> DrawvgOverlay {
+    DrawvgOverlay {
+        script_path: script_path.into(),
+        x: 0,
+        y: 0,
+        width: context.frame_size.width,
+        height: context.frame_size.height,
+        enable: graphics_enable_expression(element),
+    }
+}
+
+#[must_use]
+pub fn graphics_image_overlay(element: &GraphicsElement) -> Option<WatermarkOverlay> {
+    if !matches!(element.config, GraphicsElementConfig::Image(_)) {
+        return None;
+    }
+
+    Some(graphics_native_overlay(element, None, false))
+}
+
+#[must_use]
+pub fn graphics_motion_overlay(
+    element: &GraphicsElement,
+    context: &GraphicsRenderContext,
+) -> Option<WatermarkOverlay> {
+    let GraphicsElementConfig::Motion(config) = &element.config else {
+        return None;
+    };
+    Some(graphics_native_overlay(
+        element,
+        Some(graphics_motion_enable_expression(
+            config,
+            context.motion_source_duration(element.id),
+        )),
+        config.end_behavior == MotionEndBehavior::Disappear,
+    ))
+}
+
+fn graphics_subtitle_overlay(element: &GraphicsElement) -> WatermarkOverlay {
+    WatermarkOverlay {
+        location: WatermarkLocation::MiddleCenter,
+        size: ersatzrs_domain::WatermarkSize::ActualSize,
+        width_percent: 100.0,
+        horizontal_margin_percent: 0.0,
+        vertical_margin_percent: 0.0,
+        opacity: 100,
+        place_within_source_content: false,
+        fade_points: Vec::new(),
+        opacity_expression: None,
+        enable: graphics_enable_expression(element),
+        eof_action_pass: false,
+        z_index: element.z_index,
+    }
+}
+
+fn graphics_native_overlay(
+    element: &GraphicsElement,
+    enable: Option<String>,
+    eof_action_pass: bool,
+) -> WatermarkOverlay {
+    WatermarkOverlay {
+        location: element.location,
+        size: if element.scale {
+            ersatzrs_domain::WatermarkSize::Scaled
+        } else {
+            ersatzrs_domain::WatermarkSize::ActualSize
+        },
+        width_percent: element.scale_width_percent.unwrap_or(100.0),
+        horizontal_margin_percent: element.horizontal_margin_percent.unwrap_or(0.0),
+        vertical_margin_percent: element.vertical_margin_percent.unwrap_or(0.0),
+        opacity: u8::try_from(element.opacity_percent.unwrap_or(100).clamp(0, 100)).unwrap_or(100),
+        place_within_source_content: element.place_within_source_content,
+        fade_points: Vec::new(),
+        opacity_expression: element.opacity_expression.clone(),
+        enable,
+        eof_action_pass,
+        z_index: element.z_index,
+    }
+}
+
+fn render_graphics_element(
+    element: &GraphicsElement,
+    variables: &BTreeMap<String, String>,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    match &element.config {
+        GraphicsElementConfig::Image(config) => render_image_graphics_element(element, config),
+        GraphicsElementConfig::Text(_) => {
+            render_text_graphics_element(element, variables, output_dir, context)
+        }
+        GraphicsElementConfig::Motion(config) => {
+            render_motion_graphics_element(element, config, context)
+        }
+        GraphicsElementConfig::Subtitle(config) => {
+            render_subtitle_graphics_element(element, config, variables, output_dir, context)
+        }
+        GraphicsElementConfig::Script(config) => {
+            render_script_graphics_element(element, config, variables, output_dir, context)
+        }
+    }
+}
+
+fn render_image_graphics_element(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::ImageGraphicsConfig,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    let image = config
+        .image
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "image",
+        })?;
+    let overlay = graphics_image_overlay(element).ok_or(GraphicsTemplateError::MissingField {
+        id: element.id,
+        field: "image overlay",
+    })?;
+    Ok(Some(RenderedGraphicsElement::NativeImage {
+        id: element.id,
+        z_index: element.z_index,
+        input: InputFile::graphics_image(image),
+        overlay,
+    }))
+}
+
+fn render_text_graphics_element(
+    element: &GraphicsElement,
+    variables: &BTreeMap<String, String>,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    let output_path = output_dir.join(graphics_drawvg_file_name(element));
+    std::fs::write(
+        &output_path,
+        text_drawvg_for_element(element, variables, context)?,
+    )
+    .map_err(|source| GraphicsTemplateError::Io {
+        path: output_path.clone(),
+        source,
+    })?;
+    Ok(Some(RenderedGraphicsElement::Drawvg {
+        id: element.id,
+        z_index: element.z_index,
+        script_path: output_path.clone(),
+        overlay: DrawvgOverlay {
+            script_path: output_path,
+            x: 0,
+            y: 0,
+            width: context.frame_size.width,
+            height: context.frame_size.height,
+            enable: graphics_enable_expression(element),
+        },
+    }))
+}
+
+fn render_motion_graphics_element(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::MotionGraphicsConfig,
+    context: &GraphicsRenderContext,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    let video_path = config
+        .video_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "video_path",
+        })?;
+    let overlay =
+        graphics_motion_overlay(element, context).ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "motion overlay",
+        })?;
+    let mut input =
+        InputFile::graphics_motion(video_path, config.end_behavior == MotionEndBehavior::Loop);
+    if let Some(start) = config.start_seconds.filter(|value| *value > 0.0) {
+        input
+            .filter_steps
+            .push(format!("setpts=PTS+{}/TB", trim_float(start)));
+    }
+    Ok(Some(RenderedGraphicsElement::NativeImage {
+        id: element.id,
+        z_index: element.z_index,
+        input,
+        overlay,
+    }))
+}
+
+fn render_subtitle_graphics_element(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::SubtitleGraphicsConfig,
+    variables: &BTreeMap<String, String>,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    let template_path = config
+        .template
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "template",
+        })?;
+    let output_path = output_dir.join(graphics_ass_file_name(element));
+    render_subtitle_template_file(template_path, &output_path, variables)?;
+    let input = InputFile::graphics_subtitle(subtitle_graphics_lavfi_input(
+        &output_path.to_string_lossy(),
+        context.frame_size,
+        None,
+    ));
+    Ok(Some(RenderedGraphicsElement::NativeImage {
+        id: element.id,
+        z_index: element.z_index,
+        input,
+        overlay: graphics_subtitle_overlay(element),
+    }))
+}
+
+fn render_script_graphics_element(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::ScriptGraphicsConfig,
+    variables: &BTreeMap<String, String>,
+    output_dir: &Path,
+    context: &GraphicsRenderContext,
+) -> Result<Option<RenderedGraphicsElement>, GraphicsTemplateError> {
+    let command = config
+        .command
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "script command",
+        })?;
+    let output_path = output_dir.join(graphics_script_drawvg_file_name(element));
+    let script = render_script_drawvg(element, config, variables, command, context)?;
+    std::fs::write(&output_path, script).map_err(|source| GraphicsTemplateError::Io {
+        path: output_path.clone(),
+        source,
+    })?;
+    Ok(Some(RenderedGraphicsElement::Drawvg {
+        id: element.id,
+        z_index: element.z_index,
+        script_path: output_path.clone(),
+        overlay: DrawvgOverlay {
+            script_path: output_path,
+            x: 0,
+            y: 0,
+            width: context.frame_size.width,
+            height: context.frame_size.height,
+            enable: Some(graphics_script_enable_expression(config)),
+        },
+    }))
+}
+
+fn render_script_drawvg(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::ScriptGraphicsConfig,
+    variables: &BTreeMap<String, String>,
+    command: &str,
+    context: &GraphicsRenderContext,
+) -> Result<String, GraphicsTemplateError> {
+    let lua = Lua::new();
+    let globals = lua.globals();
+    let variables_table =
+        lua_table_from_map(&lua, variables).map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+    let args_table = lua_table_from_args(&lua, &config.args).map_err(|source| {
+        GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        }
+    })?;
+    let frame_table =
+        lua_frame_table(&lua, context).map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+    let element_table = lua_element_table(&lua, element, config).map_err(|source| {
+        GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        }
+    })?;
+    globals
+        .set("variables", variables_table)
+        .map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+    globals
+        .set("args", args_table)
+        .map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+    globals
+        .set("frame", frame_table)
+        .map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+    globals
+        .set("element", element_table)
+        .map_err(|source| GraphicsTemplateError::Script {
+            id: element.id,
+            source,
+        })?;
+
+    let source = script_lua_source(command).map_err(|source| GraphicsTemplateError::Io {
+        path: PathBuf::from(command),
+        source,
+    })?;
+    let value =
+        lua.load(&source)
+            .eval::<Value>()
+            .map_err(|source| GraphicsTemplateError::Script {
+                id: element.id,
+                source,
+            })?;
+    script_drawvg_from_lua_value(element.id, value)
+}
+
+fn lua_table_from_map(lua: &Lua, values: &BTreeMap<String, String>) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+    for (key, value) in values {
+        table.set(key.as_str(), value.as_str())?;
+    }
+    Ok(table)
+}
+
+fn lua_table_from_args(lua: &Lua, args: &[String]) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+    for (index, value) in args.iter().enumerate() {
+        table.set(index + 1, value.as_str())?;
+    }
+    Ok(table)
+}
+
+fn lua_frame_table(lua: &Lua, context: &GraphicsRenderContext) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+    table.set("width", context.frame_size.width)?;
+    table.set("height", context.frame_size.height)?;
+    table.set("scaled_width", context.square_pixel_frame_size.width)?;
+    table.set("scaled_height", context.square_pixel_frame_size.height)?;
+    Ok(table)
+}
+
+fn lua_element_table(
+    lua: &Lua,
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::ScriptGraphicsConfig,
+) -> mlua::Result<Table> {
+    let table = lua.create_table()?;
+    table.set("id", element.id)?;
+    table.set("name", element.name.as_str())?;
+    table.set("z_index", element.z_index)?;
+    if let Some(start) = config.start_seconds {
+        table.set("start_seconds", start)?;
+    }
+    if let Some(duration) = config.duration_seconds {
+        table.set("duration_seconds", duration)?;
+    }
+    Ok(table)
+}
+
+fn script_lua_source(command: &str) -> std::io::Result<String> {
+    let path = Path::new(command);
+    if path.is_file() {
+        std::fs::read_to_string(path)
+    } else {
+        Ok(command.to_owned())
+    }
+}
+
+fn script_drawvg_from_lua_value(
+    element_id: i64,
+    value: Value,
+) -> Result<String, GraphicsTemplateError> {
+    match value {
+        Value::String(value) => value
+            .to_str()
+            .map(|value| value.to_owned())
+            .map_err(|source| GraphicsTemplateError::Script {
+                id: element_id,
+                source,
+            }),
+        Value::Table(table) => table
+            .get::<String>("drawvg")
+            .or_else(|_| table.get::<String>("script"))
+            .map_err(|source| GraphicsTemplateError::Script {
+                id: element_id,
+                source,
+            }),
+        _ => Err(GraphicsTemplateError::InvalidScriptResult { id: element_id }),
+    }
+}
+
+fn render_subtitle_template_file(
+    template_path: &str,
+    output_path: &Path,
+    variables: &BTreeMap<String, String>,
+) -> Result<(), GraphicsTemplateError> {
+    let template_path = Path::new(template_path);
+    let template =
+        std::fs::read_to_string(template_path).map_err(|source| GraphicsTemplateError::Io {
+            path: template_path.to_path_buf(),
+            source,
+        })?;
+    let rendered = SvgTemplate::new(template).render_raw(variables);
+    std::fs::write(output_path, rendered).map_err(|source| GraphicsTemplateError::Io {
+        path: output_path.to_path_buf(),
+        source,
+    })
+}
+
+fn text_drawvg_for_element(
+    element: &GraphicsElement,
+    variables: &BTreeMap<String, String>,
+    context: &GraphicsRenderContext,
+) -> Result<String, GraphicsTemplateError> {
+    let GraphicsElementConfig::Text(config) = &element.config else {
+        return Err(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "text config",
+        });
+    };
+    let text = config
+        .text
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "text",
+        })?;
+    Ok(text_drawvg(element, config, variables, text, context))
+}
+
+fn text_drawvg(
+    element: &GraphicsElement,
+    config: &ersatzrs_domain::TextGraphicsConfig,
+    variables: &BTreeMap<String, String>,
+    text: &str,
+    context: &GraphicsRenderContext,
+) -> String {
+    let text = SvgTemplate::new(text).render(variables);
+    let style = config
+        .styles
+        .iter()
+        .find(|style| style.name.as_deref() == config.base_style.as_deref())
+        .or_else(|| config.styles.first());
+    let font_size = f64::from(style.and_then(|style| style.font_size).unwrap_or(48.0));
+    let fill = style
+        .and_then(|style| style.text_color.as_deref())
+        .unwrap_or("white");
+    let (x, y, align) = drawvg_text_position(element, config.align, context);
+    let max_width = config
+        .width_percent
+        .map(|percent| percent / 100.0 * f64::from(context.frame_size.width));
+    let opacity = static_opacity(element);
+    let color = drawvg_color(fill, &opacity);
+    let lines = text.lines().collect::<Vec<_>>();
+    let cell = (font_size / 7.0).max(1.0);
+    let glyph_width = cell * 5.0;
+    let glyph_gap = cell;
+    let line_height = font_size * 1.2;
+    let scale = if config.fit == TextFit::Scale {
+        max_width.map_or(1.0, |width| {
+            lines
+                .iter()
+                .map(|line| text_line_width(line, glyph_width, glyph_gap))
+                .fold(1.0_f64, |scale, line_width| {
+                    if line_width > width && line_width > 0.0 {
+                        scale.min(width / line_width)
+                    } else {
+                        scale
+                    }
+                })
+        })
+    } else {
+        1.0
+    };
+    let cell = cell * scale;
+    let glyph_width = glyph_width * scale;
+    let glyph_gap = glyph_gap * scale;
+    let line_height = line_height * scale;
+
+    let mut script = String::from("// ErsatzRS generated text graphics\n");
+    let _ = writeln!(script, "setcolor {color}");
+    for (line_index, line) in lines.iter().enumerate() {
+        let line_width = text_line_width(line, glyph_width, glyph_gap);
+        let line_x = match align {
+            TextAlignment::Left => x,
+            TextAlignment::Center => x - line_width / 2.0,
+            TextAlignment::Right => x - line_width,
+        };
+        let line_y = y + (f64_from_usize(line_index) * line_height);
+        append_drawvg_text_line(&mut script, line, line_x, line_y, cell, glyph_gap);
+    }
+    script
+}
+
+fn drawvg_text_position(
+    element: &GraphicsElement,
+    align: TextAlignment,
+    context: &GraphicsRenderContext,
+) -> (f64, f64, TextAlignment) {
+    if let (Some(x), Some(y)) = (element.location_x, element.location_y) {
+        return (x, y, align);
+    }
+
+    let (horizontal_margin, vertical_margin) = margins(element, context);
+    let x_margin = parse_percent(&horizontal_margin) / 100.0 * f64::from(context.frame_size.width);
+    let y_margin = parse_percent(&vertical_margin) / 100.0 * f64::from(context.frame_size.height);
+    match element.location {
+        WatermarkLocation::TopLeft
+        | WatermarkLocation::LeftMiddle
+        | WatermarkLocation::BottomLeft => (x_margin, y_margin, TextAlignment::Left),
+        WatermarkLocation::TopMiddle
+        | WatermarkLocation::MiddleCenter
+        | WatermarkLocation::BottomMiddle => (
+            f64::from(context.frame_size.width) / 2.0,
+            y_margin,
+            TextAlignment::Center,
+        ),
+        WatermarkLocation::TopRight
+        | WatermarkLocation::RightMiddle
+        | WatermarkLocation::BottomRight => (
+            f64::from(context.frame_size.width) - x_margin,
+            y_margin,
+            TextAlignment::Right,
+        ),
+    }
+}
+
+fn margins(element: &GraphicsElement, context: &GraphicsRenderContext) -> (String, String) {
+    if element.place_within_source_content {
+        let horizontal_padding = context
+            .frame_size
+            .width
+            .saturating_sub(context.square_pixel_frame_size.width);
+        let vertical_padding = context
+            .frame_size
+            .height
+            .saturating_sub(context.square_pixel_frame_size.height);
+        return (
+            format_percentage(
+                element.horizontal_margin_percent.unwrap_or(0.0)
+                    * f64::from(context.square_pixel_frame_size.width)
+                    / f64::from(context.frame_size.width)
+                    + f64::from(horizontal_padding) * 50.0 / f64::from(context.frame_size.width),
+            ),
+            format_percentage(
+                element.vertical_margin_percent.unwrap_or(0.0)
+                    * f64::from(context.square_pixel_frame_size.height)
+                    / f64::from(context.frame_size.height)
+                    + f64::from(vertical_padding) * 50.0 / f64::from(context.frame_size.height),
+            ),
+        );
+    }
+
+    (
+        format_percentage(element.horizontal_margin_percent.unwrap_or(0.0)),
+        format_percentage(element.vertical_margin_percent.unwrap_or(0.0)),
+    )
+}
+
+fn drawvg_color(color: &str, opacity: &str) -> String {
+    let color = color.trim();
+    if color.contains('@') || opacity == "1.00" {
+        color.to_owned()
+    } else {
+        format!("{color}@{opacity}")
+    }
+}
+
+fn text_line_width(line: &str, glyph_width: f64, glyph_gap: f64) -> f64 {
+    let count = line.chars().count();
+    if count == 0 {
+        0.0
+    } else {
+        f64_from_usize(count) * glyph_width + f64_from_usize(count.saturating_sub(1)) * glyph_gap
+    }
+}
+
+fn append_drawvg_text_line(
+    script: &mut String,
+    line: &str,
+    x: f64,
+    y: f64,
+    cell: f64,
+    glyph_gap: f64,
+) {
+    let glyph_width = cell * 5.0;
+    for (char_index, ch) in line.chars().enumerate() {
+        let glyph_x = x + f64_from_usize(char_index) * (glyph_width + glyph_gap);
+        append_drawvg_glyph(script, ch, glyph_x, y, cell);
+    }
+}
+
+fn append_drawvg_glyph(script: &mut String, ch: char, x: f64, y: f64, cell: f64) {
+    let pattern = glyph_pattern(ch);
+    for (row, bits) in pattern.iter().enumerate() {
+        for (column, bit) in bits.chars().enumerate() {
+            if bit != '1' {
+                continue;
+            }
+            let _ = writeln!(
+                script,
+                "rect {} {} {} {} fill",
+                trim_float(x + f64_from_usize(column) * cell),
+                trim_float(y + f64_from_usize(row) * cell),
+                trim_float(cell),
+                trim_float(cell),
+            );
+        }
+    }
+}
+
+type GlyphPattern = [&'static str; 7];
+
+const QUESTION_GLYPH: GlyphPattern = [
+    "01110", "10001", "00001", "00010", "00100", "00000", "00100",
+];
+
+const GLYPHS: &[(char, GlyphPattern)] = &[
+    (
+        'A',
+        [
+            "01110", "10001", "10001", "11111", "10001", "10001", "10001",
+        ],
+    ),
+    (
+        'B',
+        [
+            "11110", "10001", "10001", "11110", "10001", "10001", "11110",
+        ],
+    ),
+    (
+        'C',
+        [
+            "01111", "10000", "10000", "10000", "10000", "10000", "01111",
+        ],
+    ),
+    (
+        'D',
+        [
+            "11110", "10001", "10001", "10001", "10001", "10001", "11110",
+        ],
+    ),
+    (
+        'E',
+        [
+            "11111", "10000", "10000", "11110", "10000", "10000", "11111",
+        ],
+    ),
+    (
+        'F',
+        [
+            "11111", "10000", "10000", "11110", "10000", "10000", "10000",
+        ],
+    ),
+    (
+        'G',
+        [
+            "01111", "10000", "10000", "10111", "10001", "10001", "01111",
+        ],
+    ),
+    (
+        'H',
+        [
+            "10001", "10001", "10001", "11111", "10001", "10001", "10001",
+        ],
+    ),
+    (
+        'I',
+        [
+            "11111", "00100", "00100", "00100", "00100", "00100", "11111",
+        ],
+    ),
+    (
+        'J',
+        [
+            "00111", "00010", "00010", "00010", "10010", "10010", "01100",
+        ],
+    ),
+    (
+        'K',
+        [
+            "10001", "10010", "10100", "11000", "10100", "10010", "10001",
+        ],
+    ),
+    (
+        'L',
+        [
+            "10000", "10000", "10000", "10000", "10000", "10000", "11111",
+        ],
+    ),
+    (
+        'M',
+        [
+            "10001", "11011", "10101", "10101", "10001", "10001", "10001",
+        ],
+    ),
+    (
+        'N',
+        [
+            "10001", "11001", "10101", "10011", "10001", "10001", "10001",
+        ],
+    ),
+    (
+        'O',
+        [
+            "01110", "10001", "10001", "10001", "10001", "10001", "01110",
+        ],
+    ),
+    (
+        'P',
+        [
+            "11110", "10001", "10001", "11110", "10000", "10000", "10000",
+        ],
+    ),
+    (
+        'Q',
+        [
+            "01110", "10001", "10001", "10001", "10101", "10010", "01101",
+        ],
+    ),
+    (
+        'R',
+        [
+            "11110", "10001", "10001", "11110", "10100", "10010", "10001",
+        ],
+    ),
+    (
+        'S',
+        [
+            "01111", "10000", "10000", "01110", "00001", "00001", "11110",
+        ],
+    ),
+    (
+        'T',
+        [
+            "11111", "00100", "00100", "00100", "00100", "00100", "00100",
+        ],
+    ),
+    (
+        'U',
+        [
+            "10001", "10001", "10001", "10001", "10001", "10001", "01110",
+        ],
+    ),
+    (
+        'V',
+        [
+            "10001", "10001", "10001", "10001", "10001", "01010", "00100",
+        ],
+    ),
+    (
+        'W',
+        [
+            "10001", "10001", "10001", "10101", "10101", "10101", "01010",
+        ],
+    ),
+    (
+        'X',
+        [
+            "10001", "10001", "01010", "00100", "01010", "10001", "10001",
+        ],
+    ),
+    (
+        'Y',
+        [
+            "10001", "10001", "01010", "00100", "00100", "00100", "00100",
+        ],
+    ),
+    (
+        'Z',
+        [
+            "11111", "00001", "00010", "00100", "01000", "10000", "11111",
+        ],
+    ),
+    (
+        '0',
+        [
+            "01110", "10001", "10011", "10101", "11001", "10001", "01110",
+        ],
+    ),
+    (
+        '1',
+        [
+            "00100", "01100", "00100", "00100", "00100", "00100", "01110",
+        ],
+    ),
+    (
+        '2',
+        [
+            "01110", "10001", "00001", "00010", "00100", "01000", "11111",
+        ],
+    ),
+    (
+        '3',
+        [
+            "11110", "00001", "00001", "01110", "00001", "00001", "11110",
+        ],
+    ),
+    (
+        '4',
+        [
+            "00010", "00110", "01010", "10010", "11111", "00010", "00010",
+        ],
+    ),
+    (
+        '5',
+        [
+            "11111", "10000", "10000", "11110", "00001", "00001", "11110",
+        ],
+    ),
+    (
+        '6',
+        [
+            "01110", "10000", "10000", "11110", "10001", "10001", "01110",
+        ],
+    ),
+    (
+        '7',
+        [
+            "11111", "00001", "00010", "00100", "01000", "01000", "01000",
+        ],
+    ),
+    (
+        '8',
+        [
+            "01110", "10001", "10001", "01110", "10001", "10001", "01110",
+        ],
+    ),
+    (
+        '9',
+        [
+            "01110", "10001", "10001", "01111", "00001", "00001", "01110",
+        ],
+    ),
+    (
+        ' ',
+        [
+            "00000", "00000", "00000", "00000", "00000", "00000", "00000",
+        ],
+    ),
+    (
+        '&',
+        [
+            "01100", "10010", "10100", "01000", "10101", "10010", "01101",
+        ],
+    ),
+    (
+        '/',
+        [
+            "00001", "00010", "00010", "00100", "01000", "01000", "10000",
+        ],
+    ),
+    (
+        '<',
+        [
+            "00010", "00100", "01000", "10000", "01000", "00100", "00010",
+        ],
+    ),
+    (
+        '>',
+        [
+            "01000", "00100", "00010", "00001", "00010", "00100", "01000",
+        ],
+    ),
+    (
+        '-',
+        [
+            "00000", "00000", "00000", "11111", "00000", "00000", "00000",
+        ],
+    ),
+    (
+        '_',
+        [
+            "00000", "00000", "00000", "00000", "00000", "00000", "11111",
+        ],
+    ),
+    (
+        ':',
+        [
+            "00000", "00100", "00100", "00000", "00100", "00100", "00000",
+        ],
+    ),
+    (
+        '.',
+        [
+            "00000", "00000", "00000", "00000", "00000", "01100", "01100",
+        ],
+    ),
+    (
+        ',',
+        [
+            "00000", "00000", "00000", "00000", "00100", "00100", "01000",
+        ],
+    ),
+    ('?', QUESTION_GLYPH),
+];
+
+fn glyph_pattern(ch: char) -> GlyphPattern {
+    GLYPHS
+        .iter()
+        .find_map(|(glyph, pattern)| (*glyph == ch.to_ascii_uppercase()).then_some(*pattern))
+        .unwrap_or(QUESTION_GLYPH)
+}
+
+fn f64_from_usize(value: usize) -> f64 {
+    f64::from(u32::try_from(value).unwrap_or(u32::MAX))
+}
+
+fn graphics_enable_expression(element: &GraphicsElement) -> Option<String> {
+    match &element.config {
+        GraphicsElementConfig::Motion(config) => {
+            Some(graphics_motion_enable_expression(config, None))
+        }
+        _ => None,
+    }
+}
+
+fn graphics_motion_enable_expression(
+    config: &ersatzrs_domain::MotionGraphicsConfig,
+    source_duration_seconds: Option<f64>,
+) -> String {
+    let start = config.start_seconds.unwrap_or(0.0).max(0.0);
+    match config.end_behavior {
+        MotionEndBehavior::Disappear | MotionEndBehavior::Loop => {
+            format!("gte(t,{})", trim_float(start))
+        }
+        MotionEndBehavior::Hold => {
+            let source_duration = source_duration_seconds.unwrap_or_default().max(0.0);
+            let hold_duration = config.hold_seconds.unwrap_or_default().max(0.0);
+            let end = start + source_duration + hold_duration;
+            if end <= start {
+                return format!("gte(t,{})", trim_float(start));
+            }
+            format!("between(t,{},{})", trim_float(start), trim_float(end))
+        }
+    }
+}
+
+fn graphics_script_enable_expression(config: &ersatzrs_domain::ScriptGraphicsConfig) -> String {
+    let start = config.start_seconds.unwrap_or_default().max(0.0);
+    let Some(duration) = config.duration_seconds.filter(|value| *value > 0.0) else {
+        return format!("gte(t,{})", trim_float(start));
+    };
+    format!(
+        "between(t,{},{})",
+        trim_float(start),
+        trim_float(start + duration)
+    )
+}
+
+fn static_opacity(element: &GraphicsElement) -> String {
+    if element
+        .opacity_expression
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return "1".to_owned();
+    }
+
+    format!(
+        "{:.2}",
+        f64::from(element.opacity_percent.unwrap_or(100).clamp(0, 100)) / 100.0
+    )
+}
+
+fn graphics_drawvg_file_name(element: &GraphicsElement) -> String {
+    let stem = element
+        .path
+        .as_deref()
+        .and_then(|path| Path::new(path).file_stem())
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.trim().is_empty())
+        .unwrap_or("graphics-element");
+    format!("{}-{}.vgs", element.id, sanitize_file_stem(stem))
+}
+
+fn graphics_ass_file_name(element: &GraphicsElement) -> String {
+    let stem = element
+        .path
+        .as_deref()
+        .and_then(|path| Path::new(path).file_stem())
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.trim().is_empty())
+        .unwrap_or("graphics-subtitle");
+    format!("{}-{}.ass", element.id, sanitize_file_stem(stem))
+}
+
+fn graphics_script_drawvg_file_name(element: &GraphicsElement) -> String {
+    let stem = element
+        .path
+        .as_deref()
+        .and_then(|path| Path::new(path).file_stem())
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.trim().is_empty())
+        .unwrap_or("graphics-script");
+    format!("{}-{}.vgs", element.id, sanitize_file_stem(stem))
+}
+
+fn sanitize_file_stem(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn format_percentage(value: f64) -> String {
+    format!("{}%", trim_float(value.clamp(0.0, 100.0)))
+}
+
+fn parse_percent(value: &str) -> f64 {
+    value.trim_end_matches('%').parse::<f64>().unwrap_or(0.0)
+}
+
+fn trim_float(value: f64) -> String {
+    let rounded = format!("{value:.3}");
+    rounded
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
 }
 
 fn escape_path(path: &Path) -> String {

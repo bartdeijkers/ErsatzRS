@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ChannelSubtitleMode, CollectionEnumeratorState, CollectionType, EntityId, FillerKind,
-    MediaChapter, PlayoutTemplate,
+    MediaChapter, PlayoutItemGraphicsElement, PlayoutTemplate,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -93,6 +93,7 @@ pub struct PlayoutItem {
     pub collection_key: Option<String>,
     pub collection_etag: Option<String>,
     pub graphics_element_ids: Vec<EntityId>,
+    pub graphics_elements: Vec<PlayoutItemGraphicsElement>,
     pub scheduling_context: Option<String>,
 }
 
@@ -151,6 +152,7 @@ impl Default for PlayoutItem {
             collection_key: None,
             collection_etag: None,
             graphics_element_ids: Vec::new(),
+            graphics_elements: Vec::new(),
             scheduling_context: None,
         }
     }

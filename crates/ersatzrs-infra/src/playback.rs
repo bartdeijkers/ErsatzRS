@@ -6,14 +6,16 @@ use std::time::Duration;
 
 use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use ersatzrs_core::language_codes;
-use ersatzrs_core::repositories::Result;
+use ersatzrs_core::repositories::{GraphicsRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{
     Channel, ChannelSubtitleMode, ChannelWatermark, ChannelWatermarkImageSource,
-    ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, Resolution, StreamingMode,
-    VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, GraphicsElement,
+    GraphicsElementConfig, MotionEndBehavior, Resolution, StreamingMode, VideoScanKind,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
-    FrameRate, FrameSize, InputFile, OutputFormat, PixelFormat, SourceColorParams,
+    ffprobe_path_from_env, FrameRate, FrameSize, GraphicsPipelineOverlay, GraphicsRenderContext,
+    GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat, SourceColorParams,
     SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
     WatermarkOverlay,
 };
@@ -21,7 +23,12 @@ use sqlx::Row;
 
 use crate::db::DbPool;
 use crate::ffmpeg_config::use_embedded_subtitles;
+use crate::ffprobe::FfprobeExtractor;
 use crate::file_system_layout::{fonts_cache_folder, subtitle_cache_folder};
+use crate::graphics_template::{
+    graphics_template_variables, render_graphics_template, scalar_template_variables,
+    GraphicsTemplateContext,
+};
 use crate::metadata::subtitle_kind;
 use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
@@ -68,6 +75,27 @@ pub struct ResolvedPlaybackWatermark {
     pub image_path: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedPlaybackGraphicsElement {
+    pub element: GraphicsElement,
+    pub variables: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaybackGraphicsRenderContext {
+    pub channel_id: i64,
+    pub channel_number: String,
+    pub media_item_id: i64,
+    pub media_path: String,
+    pub channel_start_time: DateTime<Utc>,
+    pub content_start_time: DateTime<Utc>,
+    pub stream_seek_seconds: f64,
+    pub duration_seconds: f64,
+    pub frame_size: FrameSize,
+    pub square_pixel_frame_size: FrameSize,
+    pub frame_rate: Option<FrameRate>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct PlaybackWatermarkContext {
     playout_id: i64,
@@ -80,6 +108,13 @@ struct PlaybackDeco {
     mode: DecoMode,
     use_watermark_during_filler: bool,
     watermark_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlaybackGraphicsDeco {
+    mode: DecoMode,
+    use_graphics_during_filler: bool,
+    graphics_element_ids: Vec<i64>,
 }
 
 /// Load the source video-stream metadata the `FFmpeg` pipeline needs to make
@@ -489,6 +524,217 @@ pub async fn select_playback_watermarks(
     resolve_playback_watermarks(pool, channel.id, fallback_id.into_iter().collect()).await
 }
 
+/// Select graphics elements for channel playback, porting ErsatzTV's
+/// `GraphicsElementSelector` precedence.
+///
+/// # Errors
+///
+/// Returns database errors from playout/deco/graphics reads.
+pub async fn select_playback_graphics(
+    pool: &DbPool,
+    _channel: &Channel,
+    playout_item_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
+    let context = load_playback_watermark_context(pool, playout_item_id).await?;
+    let mut graphics = Vec::new();
+
+    if let Some(template_deco) =
+        load_active_template_graphics_deco(pool, context.playout_id, now).await?
+    {
+        if apply_deco_graphics(&template_deco, context.filler_kind, &mut graphics) {
+            return resolve_playback_graphics(pool, graphics).await;
+        }
+    }
+
+    if let Some(playout_deco_id) = context.playout_deco_id {
+        let playout_deco = load_playback_graphics_deco(pool, playout_deco_id).await?;
+        if apply_deco_graphics(&playout_deco, context.filler_kind, &mut graphics) {
+            return resolve_playback_graphics(pool, graphics).await;
+        }
+    }
+
+    graphics.extend(load_playout_item_graphics(pool, playout_item_id).await?);
+    resolve_playback_graphics(pool, graphics).await
+}
+
+/// Render selected graphics elements into `FFmpeg` pipeline overlays.
+///
+/// Each graphics element gets its own variable map because
+/// `PlayoutItemGraphicsElement.Variables` is stored per selected element.
+///
+/// # Errors
+///
+/// Returns database/template errors from variable assembly or rendering errors
+/// from generated SVG/ASS artifacts.
+pub async fn render_playback_graphics_overlays(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+) -> Result<Vec<GraphicsPipelineOverlay>> {
+    let renderer = GraphicsTemplateRenderer::new(output_dir.as_ref());
+    let mut overlays = Vec::new();
+    for resolved in graphics {
+        let variable_context = GraphicsTemplateContext {
+            channel_id: context.channel_id,
+            channel_number: context.channel_number.clone(),
+            media_item_id: context.media_item_id,
+            media_path: context.media_path.clone(),
+            channel_start_time: context.channel_start_time,
+            content_start_time: context.content_start_time,
+            stream_seek_seconds: context.stream_seek_seconds,
+            duration_seconds: context.duration_seconds,
+            frame_width: context.frame_size.width,
+            frame_height: context.frame_size.height,
+            scaled_frame_width: context.square_pixel_frame_size.width,
+            scaled_frame_height: context.square_pixel_frame_size.height,
+            r_frame_rate: context.frame_rate.map(FrameRate::r_frame_rate),
+            frame_rate: context.frame_rate.map(FrameRate::parsed),
+        };
+        let variables = graphics_template_variables(
+            pool,
+            &variable_context,
+            usize::try_from(resolved.element.epg_entries.max(0)).unwrap_or_default(),
+            resolved.variables.as_deref(),
+        )
+        .await?;
+        let element = render_graphics_element_templates(&resolved.element, &variables)?;
+        let scalar_variables = scalar_template_variables(&variables);
+        let render_context = graphics_render_context_with_motion_probe(context, &element).await;
+        for rendered in renderer
+            .render_graphics_elements(
+                std::slice::from_ref(&element),
+                &scalar_variables,
+                &render_context,
+            )
+            .map_err(|error| RepositoryError::Decode {
+                kind: "graphics render",
+                value: error.to_string(),
+            })?
+        {
+            overlays.push(rendered.into_pipeline_overlay());
+        }
+    }
+    overlays.sort_by_key(graphics_overlay_z_index);
+    Ok(overlays)
+}
+
+async fn graphics_render_context_with_motion_probe(
+    context: &PlaybackGraphicsRenderContext,
+    element: &GraphicsElement,
+) -> GraphicsRenderContext {
+    let render_context =
+        GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size);
+    let GraphicsElementConfig::Motion(config) = &element.config else {
+        return render_context;
+    };
+    if config.end_behavior != MotionEndBehavior::Hold {
+        return render_context;
+    }
+    let Some(video_path) = config
+        .video_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return render_context;
+    };
+
+    match FfprobeExtractor::new(ffprobe_path_from_env())
+        .extract(video_path)
+        .await
+    {
+        Ok(probe) => {
+            if let Ok(duration) = probe.version.duration.to_std() {
+                render_context.with_motion_source_duration(element.id, duration.as_secs_f64())
+            } else {
+                render_context
+            }
+        }
+        Err(error) => {
+            tracing::debug!(%error, element_id = element.id, video_path, "failed to probe graphics motion duration; using zero-duration hold fallback");
+            render_context.with_motion_source_duration(element.id, 0.0)
+        }
+    }
+}
+
+fn render_graphics_element_templates(
+    element: &GraphicsElement,
+    variables: &serde_json::Value,
+) -> Result<GraphicsElement> {
+    let mut element = element.clone();
+    element.opacity_expression =
+        render_optional_graphics_template(element.opacity_expression.as_deref(), variables)?;
+    element.config = match element.config {
+        GraphicsElementConfig::Image(mut config) => {
+            config.image = render_optional_graphics_template(config.image.as_deref(), variables)?;
+            GraphicsElementConfig::Image(config)
+        }
+        GraphicsElementConfig::Text(mut config) => {
+            config.text = render_optional_graphics_template(config.text.as_deref(), variables)?;
+            config.base_style =
+                render_optional_graphics_template(config.base_style.as_deref(), variables)?;
+            config.include_fonts_from =
+                render_optional_graphics_template(config.include_fonts_from.as_deref(), variables)?;
+            GraphicsElementConfig::Text(config)
+        }
+        GraphicsElementConfig::Subtitle(mut config) => {
+            config.template =
+                render_optional_graphics_template(config.template.as_deref(), variables)?;
+            GraphicsElementConfig::Subtitle(config)
+        }
+        GraphicsElementConfig::Motion(mut config) => {
+            config.video_path =
+                render_optional_graphics_template(config.video_path.as_deref(), variables)?;
+            GraphicsElementConfig::Motion(config)
+        }
+        GraphicsElementConfig::Script(mut config) => {
+            config.command =
+                render_optional_graphics_template(config.command.as_deref(), variables)?;
+            config.args = config
+                .args
+                .iter()
+                .map(|arg| render_graphics_template(arg, variables))
+                .collect::<Result<Vec<_>>>()?;
+            GraphicsElementConfig::Script(config)
+        }
+    };
+    Ok(element)
+}
+
+fn render_optional_graphics_template(
+    value: Option<&str>,
+    variables: &serde_json::Value,
+) -> Result<Option<String>> {
+    value
+        .map(|value| render_graphics_template(value, variables))
+        .transpose()
+}
+
+fn graphics_overlay_z_index(overlay: &GraphicsPipelineOverlay) -> i32 {
+    match overlay {
+        GraphicsPipelineOverlay::Drawvg { z_index, .. }
+        | GraphicsPipelineOverlay::NativeImage { z_index, .. } => *z_index,
+    }
+}
+
+async fn resolve_playback_graphics(
+    pool: &DbPool,
+    graphics: Vec<(i64, Option<String>)>,
+) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
+    let repository = crate::repositories::SqliteGraphicsRepository(pool.clone());
+    let mut resolved = Vec::with_capacity(graphics.len());
+    for (id, variables) in graphics {
+        resolved.push(ResolvedPlaybackGraphicsElement {
+            element: repository.get_element(id).await?,
+            variables,
+        });
+    }
+    resolved.sort_by_key(|graphics| graphics.element.z_index);
+    Ok(resolved)
+}
+
 async fn resolve_playback_watermarks(
     pool: &DbPool,
     channel_id: i64,
@@ -531,6 +777,8 @@ pub fn watermark_overlay_for_stream(
         place_within_source_content: watermark.place_within_source_content,
         fade_points: Vec::new(),
         opacity_expression: None,
+        enable: None,
+        eof_action_pass: false,
         z_index: watermark.z_index,
     };
 
@@ -647,6 +895,22 @@ async fn load_playback_deco(pool: &DbPool, deco_id: i64) -> Result<PlaybackDeco>
     })
 }
 
+async fn load_playback_graphics_deco(pool: &DbPool, deco_id: i64) -> Result<PlaybackGraphicsDeco> {
+    let row = sqlx::query(
+        r#"SELECT "GraphicsElementsMode", "UseGraphicsElementsDuringFiller"
+           FROM "Deco"
+           WHERE "Id" = ?"#,
+    )
+    .bind(deco_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(PlaybackGraphicsDeco {
+        mode: decode_enum_column("deco graphics elements mode", &row, "GraphicsElementsMode")?,
+        use_graphics_during_filler: decode_bool_column(&row, "UseGraphicsElementsDuringFiller")?,
+        graphics_element_ids: load_deco_graphics_element_ids(pool, deco_id).await?,
+    })
+}
+
 async fn load_deco_watermark_ids(pool: &DbPool, deco_id: i64) -> Result<Vec<i64>> {
     let rows = sqlx::query(
         r#"SELECT "WatermarkId"
@@ -659,6 +923,21 @@ async fn load_deco_watermark_ids(pool: &DbPool, deco_id: i64) -> Result<Vec<i64>
     .await?;
     rows.into_iter()
         .map(|row| row.try_get("WatermarkId").map_err(Into::into))
+        .collect()
+}
+
+async fn load_deco_graphics_element_ids(pool: &DbPool, deco_id: i64) -> Result<Vec<i64>> {
+    let rows = sqlx::query(
+        r#"SELECT "GraphicsElementId"
+           FROM "DecoGraphicsElement"
+           WHERE "DecoId" = ?
+           ORDER BY "GraphicsElementId""#,
+    )
+    .bind(deco_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| row.try_get("GraphicsElementId").map_err(Into::into))
         .collect()
 }
 
@@ -696,6 +975,40 @@ async fn load_active_template_deco(
     Ok(None)
 }
 
+async fn load_active_template_graphics_deco(
+    pool: &DbPool,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<PlaybackGraphicsDeco>> {
+    let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
+    else {
+        return Ok(None);
+    };
+
+    let time_seconds = i64::from(now.time().num_seconds_from_midnight());
+    let rows = sqlx::query(
+        r#"SELECT "dti"."DecoId", "dti"."StartTime", "dti"."EndTime"
+           FROM "DecoTemplateItem" AS "dti"
+           WHERE "dti"."DecoTemplateId" = ?
+           ORDER BY "dti"."StartTime", "dti"."Id""#,
+    )
+    .bind(deco_template_id)
+    .fetch_all(pool)
+    .await?;
+
+    for row in rows {
+        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime")?);
+        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime")?);
+        if start <= time_seconds && (finish == 0 || finish > time_seconds) {
+            let deco_id = row.try_get("DecoId")?;
+            let deco = load_playback_graphics_deco(pool, deco_id).await?;
+            return Ok(Some(deco));
+        }
+    }
+
+    Ok(None)
+}
+
 async fn active_playout_template_deco_id(
     pool: &DbPool,
     playout_id: i64,
@@ -721,6 +1034,25 @@ async fn active_playout_template_deco_id(
     Ok(None)
 }
 
+async fn load_playout_item_graphics(
+    pool: &DbPool,
+    playout_item_id: i64,
+) -> Result<Vec<(i64, Option<String>)>> {
+    let rows = sqlx::query(
+        r#"SELECT "GraphicsElementId", "Variables"
+           FROM "PlayoutItemGraphicsElement"
+           WHERE "PlayoutItemId" = ?
+           ORDER BY "GraphicsElementId""#,
+    )
+    .bind(playout_item_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| Ok((row.try_get("GraphicsElementId")?, row.try_get("Variables")?)))
+        .collect()
+}
+
 fn apply_deco_watermarks(deco: &PlaybackDeco, filler_kind: FillerKind, out: &mut Vec<i64>) -> bool {
     let allowed = filler_kind == FillerKind::None || deco.use_watermark_during_filler;
     match deco.mode {
@@ -735,6 +1067,40 @@ fn apply_deco_watermarks(deco: &PlaybackDeco, filler_kind: FillerKind, out: &mut
         DecoMode::Merge | DecoMode::Inherit => false,
         DecoMode::Override => {
             out.extend(deco.watermark_ids.iter().copied());
+            true
+        }
+        DecoMode::Disable => true,
+    }
+}
+
+fn apply_deco_graphics(
+    deco: &PlaybackGraphicsDeco,
+    filler_kind: FillerKind,
+    out: &mut Vec<(i64, Option<String>)>,
+) -> bool {
+    let allowed = filler_kind == FillerKind::None || deco.use_graphics_during_filler;
+    match deco.mode {
+        DecoMode::Merge if allowed => {
+            out.extend(
+                deco.graphics_element_ids
+                    .iter()
+                    .copied()
+                    .map(|id| (id, None)),
+            );
+            false
+        }
+        DecoMode::Merge | DecoMode::Override | DecoMode::Disable if !allowed => {
+            out.clear();
+            true
+        }
+        DecoMode::Merge | DecoMode::Inherit => false,
+        DecoMode::Override => {
+            out.extend(
+                deco.graphics_element_ids
+                    .iter()
+                    .copied()
+                    .map(|id| (id, None)),
+            );
             true
         }
         DecoMode::Disable => true,

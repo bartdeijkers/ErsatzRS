@@ -2,7 +2,7 @@
 # parity/*.toml; query everything with `cargo xtask progress next`.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'watermark streaming parity'
+current_focus = 'remaining Phase 7 parity gaps'
 
 summary = '''
 Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
@@ -16,8 +16,8 @@ the non-web health-check engine in ersatzrs-core::health / ersatzrs-infra::healt
 next_steps = '''
 Broaden health / troubleshooting coverage and the remaining Phase 7 hardening
 items. Active in-progress / not-started feature work (see `cargo xtask progress
-gaps`): watermark streaming parity, FFmpeg command generation + filter graph
-depth, HLS variant playlists / segmenter, settings i18n full coverage,
+gaps`): FFmpeg command generation and filter graph depth, HLS variant playlists / segmenter,
+settings i18n full coverage,
 multi-collections / rerun / playlists / filler presets, support pages
 (health/logs/troubleshooting), and the remote-streams browser UI.
 '''

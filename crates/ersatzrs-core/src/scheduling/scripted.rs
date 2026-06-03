@@ -232,6 +232,7 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                 if !st.graphics_element_ids.contains(&id) {
                     st.graphics_element_ids.push(id);
                 }
+                st.graphics_element_variables.insert(id, None);
                 Ok(())
             })?,
         )?;
@@ -246,8 +247,10 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
                 let mut st = s.borrow_mut();
                 if let Some(id) = id {
                     st.graphics_element_ids.retain(|c| *c != id);
+                    st.graphics_element_variables.remove(&id);
                 } else {
                     st.graphics_element_ids.clear();
+                    st.graphics_element_variables.clear();
                 }
                 Ok(())
             })?,
@@ -551,12 +554,13 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
         let s = Rc::clone(state);
         globals.set(
             "graphics_on_path",
-            lua.create_function_mut(move |_, (path, _vars): (String, Option<String>)| {
+            lua.create_function_mut(move |_, (path, vars): (String, Option<String>)| {
                 let mut st = s.borrow_mut();
                 if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&path) {
                     if !st.graphics_element_ids.contains(&id) {
                         st.graphics_element_ids.push(id);
                     }
+                    st.graphics_element_variables.insert(id, vars);
                 }
                 Ok(())
             })?,
@@ -570,13 +574,14 @@ fn register_all(lua: &Lua, state: &Rc<RefCell<ScriptState>>) -> Result<(), mlua:
             "graphics_off_path",
             lua.create_function_mut(move |_, path: Option<String>| {
                 let mut st = s.borrow_mut();
-                match path {
-                    Some(p) => {
-                        if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&p) {
-                            st.graphics_element_ids.retain(|c| *c != id);
-                        }
+                if let Some(p) = path {
+                    if let Some(&id) = st.reference_data.graphics_ids_by_path.get(&p) {
+                        st.graphics_element_ids.retain(|c| *c != id);
+                        st.graphics_element_variables.remove(&id);
                     }
-                    None => st.graphics_element_ids.clear(),
+                } else {
+                    st.graphics_element_ids.clear();
+                    st.graphics_element_variables.clear();
                 }
                 Ok(())
             })?,
@@ -934,6 +939,7 @@ struct ScriptState {
     reference_data: SchedulingReferenceData,
     watermark_ids: Vec<EntityId>,
     graphics_element_ids: Vec<EntityId>,
+    graphics_element_variables: BTreeMap<EntityId, Option<String>>,
     added_items: Vec<ersatzrs_domain::PlayoutItem>,
     added_history: Vec<ersatzrs_domain::PlayoutHistory>,
     history_to_remove: Vec<EntityId>,
@@ -966,6 +972,7 @@ impl ScriptState {
             reference_data,
             watermark_ids: Vec::new(),
             graphics_element_ids: Vec::new(),
+            graphics_element_variables: BTreeMap::new(),
             added_items: Vec::new(),
             added_history: Vec::new(),
             history_to_remove: Vec::new(),
@@ -1024,6 +1031,24 @@ impl ScriptState {
         } else {
             self.enumerator(key).len()
         }
+    }
+
+    fn active_graphics_elements(&self) -> Vec<ersatzrs_domain::PlayoutItemGraphicsElement> {
+        self.graphics_element_ids
+            .iter()
+            .copied()
+            .map(
+                |graphics_element_id| ersatzrs_domain::PlayoutItemGraphicsElement {
+                    playout_item_id: 0,
+                    graphics_element_id: Some(graphics_element_id),
+                    variables: self
+                        .graphics_element_variables
+                        .get(&graphics_element_id)
+                        .cloned()
+                        .flatten(),
+                },
+            )
+            .collect()
     }
 
     fn history_key_for(&self, key: &str) -> String {
@@ -1192,7 +1217,7 @@ impl ScriptState {
         let duration = duration.unwrap_or(media_item.duration);
         let guide_group = self.peek_guide_group();
         let custom_title = self.custom_title.clone();
-        let item = playout_item(
+        let mut item = playout_item(
             self.playout_id,
             &media_item,
             self.current_time,
@@ -1205,6 +1230,7 @@ impl ScriptState {
             self.graphics_element_ids.clone(),
             Some(format!(r#"{{"scriptContent":"{key}"}}"#)),
         );
+        item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
         self.current_time = item.finish;
@@ -1231,7 +1257,7 @@ impl ScriptState {
             .custom_title
             .clone()
             .or_else(|| self.custom_title.clone());
-        let item = playout_item(
+        let mut item = playout_item(
             self.playout_id,
             &media_item,
             self.current_time,
@@ -1244,6 +1270,7 @@ impl ScriptState {
             self.graphics_element_ids.clone(),
             Some(format!(r#"{{"scriptContent":"{key}"}}"#)),
         );
+        item.graphics_elements = self.active_graphics_elements();
         let history_key = self.history_key_for(key);
         self.push_history_ctx(&item, &media_item, &history_ctx, &history_key);
         self.current_time = item.finish;
@@ -1721,9 +1748,17 @@ schedule_duration("main", "00:05:00")
         rd.graphics_ids_by_path
             .insert("lower-third.svg".to_owned(), 200);
         let result = run(
-            "graphics_on_path(\"lower-third.svg\")\nadd_count(\"main\", 1)\ngraphics_off_path(\"lower-third.svg\")\nadd_count(\"main\", 1)",
+            "graphics_on_path(\"lower-third.svg\", '{\"title\":\"Now\"}')\nadd_count(\"main\", 1)\ngraphics_off_path(\"lower-third.svg\")\nadd_count(\"main\", 1)",
             rd,
         );
+        assert_eq!(result.added_items[0].graphics_element_ids, vec![200]);
+        assert_eq!(
+            result.added_items[0].graphics_elements[0]
+                .variables
+                .as_deref(),
+            Some(r#"{"title":"Now"}"#)
+        );
+        assert!(result.added_items[1].graphics_elements.is_empty());
         insta::assert_json_snapshot!(snapshot_items(&result));
     }
 

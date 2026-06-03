@@ -57,6 +57,7 @@ impl CommandGenerator {
             InputKind::Video,
             InputKind::Audio,
             InputKind::Watermark,
+            InputKind::GraphicsImage,
             InputKind::Concat,
             InputKind::Graphics,
             InputKind::Subtitle,
@@ -70,7 +71,7 @@ impl CommandGenerator {
                     InputKind::Audio => {
                         !included_paths.contains(&input.path) || is_intel_vaapi_or_qsv
                     }
-                    InputKind::Watermark | InputKind::Subtitle => {
+                    InputKind::Watermark | InputKind::GraphicsImage | InputKind::Subtitle => {
                         !included_paths.contains(&input.path)
                     }
                     InputKind::Video | InputKind::Concat | InputKind::Graphics => true,

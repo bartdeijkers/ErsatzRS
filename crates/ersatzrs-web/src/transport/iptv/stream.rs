@@ -1,4 +1,9 @@
-use std::process::Stdio;
+use std::{
+    path::PathBuf,
+    process::Stdio,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use axum::{
     body::Body,
@@ -11,13 +16,15 @@ use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, InputFile, OutputFormat, PipelineRequest, SourceVideoStream,
+    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat, PipelineRequest,
+    SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
-    select_playback_subtitle, select_playback_watermarks, subtitle_fonts_dir,
-    subtitle_input_for_stream, watermark_overlay_for_stream, PlaybackProfile,
+    render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
+    select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
+    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -25,6 +32,8 @@ use tokio::process::Command;
 use tokio_util::io::ReaderStream;
 
 use crate::host::state::AppState;
+
+static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> Response {
     serve_channel_stream(state, channel_number, OutputFormat::MpegTs).await
@@ -158,6 +167,63 @@ pub async fn serve_channel_stream(
             Vec::new()
         }
     };
+    let mut graphics_cleanup_dirs = Vec::new();
+    let graphics_overlays = match select_playback_graphics(
+        &state.pool,
+        &channel,
+        active.playout_item_id,
+        now,
+    )
+    .await
+    {
+        Ok(graphics) => {
+            let frame_size = playback_frame_size(&playback_profile);
+            let square_pixel_frame_size = source_stream
+                .as_ref()
+                .and_then(|stream| stream.square_pixel_frame_size(frame_size))
+                .unwrap_or(frame_size);
+            let graphics_dir = playback_graphics_dir(channel.id, active.playout_item_id);
+            let graphics_cleanup_dir = graphics_dir.clone();
+            let start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
+            match render_playback_graphics_overlays(
+                &state.pool,
+                &graphics,
+                &PlaybackGraphicsRenderContext {
+                    channel_id: channel.id,
+                    channel_number: channel.number.clone(),
+                    media_item_id: active.media_item_id,
+                    media_path: resolved.clone(),
+                    channel_start_time: start_time,
+                    content_start_time: start_time,
+                    stream_seek_seconds: seconds_as_f64(start_seconds),
+                    duration_seconds: active
+                        .program_duration()
+                        .map_or(0.0, |duration| duration.as_secs_f64()),
+                    frame_size,
+                    square_pixel_frame_size,
+                    frame_rate: target_frame_rate
+                        .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+                },
+                graphics_dir,
+            )
+            .await
+            {
+                Ok(overlays) => {
+                    graphics_cleanup_dirs.push(graphics_cleanup_dir);
+                    overlays
+                }
+                Err(error) => {
+                    let _ = tokio::fs::remove_dir_all(&graphics_cleanup_dir).await;
+                    tracing::warn!(%error, channel_number = %channel.number, "failed to render playback graphics");
+                    Vec::new()
+                }
+            }
+        }
+        Err(error) => {
+            tracing::warn!(%error, channel_number = %channel.number, "failed to select playback graphics");
+            Vec::new()
+        }
+    };
     let command = build_stream_command(
         &resolved,
         output_format,
@@ -169,8 +235,9 @@ pub async fn serve_channel_stream(
         source_stream,
         subtitle_input,
         watermark_inputs,
+        graphics_overlays,
     );
-    match spawn_stream_body(command) {
+    match spawn_stream_body(command, graphics_cleanup_dirs) {
         Ok(body) => {
             let mut response = body.into_response();
             response.headers_mut().insert(
@@ -378,6 +445,7 @@ fn build_stream_command(
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let desired = DesiredVideoState::from_profile(
@@ -400,6 +468,7 @@ fn build_stream_command(
         request.inputs.push(input);
         request.watermarks.push(overlay);
     }
+    request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
     if start_seconds > 0 {
         request.state.start_seconds = Some(start_seconds);
@@ -421,8 +490,27 @@ fn build_stream_command(
     pipeline.command(&request.inputs)
 }
 
+fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
+    FrameSize::new(
+        u32::try_from(playback_profile.resolution.width)
+            .ok()
+            .filter(|value| *value > 0)
+            .unwrap_or(1920),
+        u32::try_from(playback_profile.resolution.height)
+            .ok()
+            .filter(|value| *value > 0)
+            .unwrap_or(1080),
+    )
+}
+
 pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
     parse_sqlite_utc_timestamp(playout_start).map_or(0, |start| (now - start).num_seconds().max(0))
+}
+
+fn seconds_as_f64(seconds: i64) -> f64 {
+    u64::try_from(seconds)
+        .map(Duration::from_secs)
+        .map_or(0.0, |duration| duration.as_secs_f64())
 }
 
 fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
@@ -444,7 +532,19 @@ const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
     }
 }
 
-fn spawn_stream_body(command: FfmpegCommand) -> Result<Body, StreamSpawnError> {
+fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
+    let request_id = NEXT_GRAPHICS_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir()
+        .join("ersatzrs-graphics")
+        .join(format!("channel-{channel_id}"))
+        .join(format!("item-{playout_item_id}"))
+        .join(format!("request-{request_id}"))
+}
+
+fn spawn_stream_body(
+    command: FfmpegCommand,
+    cleanup_dirs: Vec<PathBuf>,
+) -> Result<Body, StreamSpawnError> {
     let mut process = Command::new(&command.executable);
     process
         .args(&command.arguments)
@@ -467,6 +567,13 @@ fn spawn_stream_body(command: FfmpegCommand) -> Result<Body, StreamSpawnError> {
             Ok(status) => tracing::debug!(%status, "ffmpeg channel stream exited"),
             Err(error) => tracing::debug!(%error, "failed to wait for ffmpeg channel stream"),
         }
+        for path in cleanup_dirs {
+            if let Err(error) = tokio::fs::remove_dir_all(&path).await {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    tracing::debug!(%error, path = %path.display(), "failed to clean up IPTV graphics artifacts");
+                }
+            }
+        }
     });
 
     Ok(Body::from_stream(ReaderStream::new(stdout)))
@@ -479,8 +586,8 @@ mod tests {
         FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
         StreamingMode, WatermarkLocation, WatermarkSize,
     };
-    use ersatzrs_ffmpeg::{FfmpegCapabilityReport, WatermarkOverlay};
-    use std::path::PathBuf;
+    use ersatzrs_ffmpeg::{FfmpegCapabilityReport, GraphicsPipelineOverlay, WatermarkOverlay};
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
 
     const TESTDATA_CANDIDATES: &[&str] = &[
@@ -508,6 +615,7 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
@@ -529,6 +637,7 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
@@ -549,9 +658,52 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-ss 900 -i /media/movie.mkv"));
+    }
+
+    #[test]
+    fn build_stream_command_attaches_graphics_overlays() {
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            0,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                8,
+                "drawvg=file=/tmp/iptv-graphics/title.vgs",
+            )],
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-filter_complex"));
+        assert!(
+            arguments.contains("drawvg=file=/tmp/iptv-graphics/title.vgs"),
+            "{arguments}"
+        );
+    }
+
+    #[test]
+    fn playback_graphics_dir_uses_unique_request_subdirectories() {
+        let first = playback_graphics_dir(10, 20);
+        let second = playback_graphics_dir(10, 20);
+
+        assert_ne!(first, second);
+        assert!(first
+            .parent()
+            .is_some_and(|path| path.ends_with(PathBuf::from("channel-10/item-20"))));
+        assert!(first
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("request-")));
     }
 
     #[test]
@@ -626,6 +778,7 @@ mod tests {
             None,
             None,
             Vec::new(),
+            Vec::new(),
         );
         let mut process = Command::new(&command.executable);
         process
@@ -699,6 +852,7 @@ mod tests {
                     ..WatermarkOverlay::default()
                 },
             )],
+            Vec::new(),
         );
         let mut process = Command::new(&command.executable);
         process
@@ -755,10 +909,147 @@ mod tests {
         );
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg with drawvg on PATH"]
+    async fn stream_body_composites_drawvg_graphics_from_generated_input() {
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path_from_env();
+        if !ffmpeg_has_drawvg(&ffmpeg).await {
+            eprintln!("skipping: ffmpeg drawvg filter not available");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let input = temp.path().join("black.mp4");
+        let script = temp.path().join("green.vgs");
+        std::fs::write(&script, green_drawvg_script()).expect("write graphics script");
+        generate_graphics_input(&ffmpeg, &input).await;
+
+        let output = run_iptv_graphics_stream(&input, &script).await;
+        assert!(!output.is_empty(), "expected MPEG-TS bytes");
+
+        let stream = temp.path().join("graphics.ts");
+        std::fs::write(&stream, &output).expect("write mpegts sample");
+        assert_stream_has_green_graphics(&ffmpeg, &stream).await;
+    }
+
+    async fn ffmpeg_has_drawvg(ffmpeg: &str) -> bool {
+        tokio::process::Command::new(ffmpeg)
+            .args(["-hide_banner", "-filters"])
+            .output()
+            .await
+            .is_ok_and(|output| String::from_utf8_lossy(&output.stdout).contains("drawvg"))
+    }
+
+    async fn generate_graphics_input(ffmpeg: &str, input: &Path) {
+        let generated = tokio::process::Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x180:r=25:d=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=channel_layout=stereo:sample_rate=48000",
+                "-t",
+                "1",
+                "-shortest",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                input.to_string_lossy().as_ref(),
+            ])
+            .output()
+            .await
+            .expect("generate input video");
+        assert!(
+            generated.status.success(),
+            "ffmpeg input generation failed: {}",
+            String::from_utf8_lossy(&generated.stderr)
+        );
+    }
+
+    async fn run_iptv_graphics_stream(input: &Path, script: &Path) -> Vec<u8> {
+        let command = build_stream_command(
+            input.to_string_lossy().as_ref(),
+            OutputFormat::MpegTs,
+            0,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+            Vec::new(),
+            vec![GraphicsPipelineOverlay::drawvg(
+                0,
+                format!("drawvg=file={}", script.to_string_lossy()),
+            )],
+        );
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        let output = process.output().await.expect("run graphics stream");
+        assert!(
+            output.status.success(),
+            "ffmpeg stream failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output.stdout
+    }
+
+    async fn assert_stream_has_green_graphics(ffmpeg: &str, stream: &Path) {
+        let decoded = tokio::process::Command::new(ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                stream.to_string_lossy().as_ref(),
+                "-vf",
+                "crop=80:80:0:0,scale=1:1,format=rgb24",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ])
+            .output()
+            .await
+            .expect("decode graphics frame");
+        assert!(
+            decoded.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 3);
+        assert!(
+            decoded.stdout[1] > 180 && decoded.stdout[0] < 80 && decoded.stdout[2] < 80,
+            "expected green graphics crop, got rgb={:?}",
+            decoded.stdout
+        );
+    }
+
     fn red_ppm(width: usize, height: usize) -> Vec<u8> {
         let mut ppm = format!("P6\n{width} {height}\n255\n").into_bytes();
         ppm.extend(std::iter::repeat_n([255, 0, 0], width * height).flatten());
         ppm
+    }
+
+    fn green_drawvg_script() -> &'static str {
+        "rect 0 0 480 270 setcolor #00ff00 fill\n"
     }
 
     fn playback_profile() -> PlaybackProfile {

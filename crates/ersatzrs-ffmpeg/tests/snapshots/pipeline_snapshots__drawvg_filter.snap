@@ -2,4 +2,4 @@
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
 expression: overlay.filter()
 ---
-drawvg=file='/tmp/ErsatzRS/lower-third.svg':x=0:y=810:w=1920:h=270:enable='between(t,0,8)'
+drawvg=file='/tmp/ErsatzRS/lower-third.vgs':enable='between(t,0,8)'

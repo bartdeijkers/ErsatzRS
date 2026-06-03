@@ -22,7 +22,7 @@ Use `insta` for generated output that must not drift silently:
 - FFmpeg argv builders.
 - FFmpeg filter-complex builders.
 - YAML scheduling timelines.
-- SVG template rendering and `drawvg` filter fragments.
+- VGS/ASS graphics template rendering and `drawvg` filter fragments.
 
 See [snapshot-tests.md](snapshot-tests.md).
 

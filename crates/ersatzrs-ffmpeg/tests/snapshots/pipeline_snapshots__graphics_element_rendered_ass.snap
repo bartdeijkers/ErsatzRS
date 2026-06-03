@@ -1,0 +1,8 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: ass_text
+---
+[Script Info]
+Title: Graphics
+[Events]
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Late News

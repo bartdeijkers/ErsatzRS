@@ -3,6 +3,7 @@ pub enum InputKind {
     Video,
     Audio,
     Watermark,
+    GraphicsImage,
     Subtitle,
     Concat,
     Graphics,
@@ -69,6 +70,31 @@ impl InputFile {
             .input_options
             .extend(["-loop".to_owned(), "1".to_owned()]);
         input
+    }
+
+    #[must_use]
+    pub fn graphics_image(path: impl Into<String>) -> Self {
+        let mut input = Self::new(InputKind::GraphicsImage, path, 0);
+        input
+            .input_options
+            .extend(["-loop".to_owned(), "1".to_owned()]);
+        input
+    }
+
+    #[must_use]
+    pub fn graphics_motion(path: impl Into<String>, loop_input: bool) -> Self {
+        let mut input = Self::new(InputKind::GraphicsImage, path, 0);
+        if loop_input {
+            input
+                .input_options
+                .extend(["-stream_loop".to_owned(), "-1".to_owned()]);
+        }
+        input
+    }
+
+    #[must_use]
+    pub fn graphics_subtitle(path: impl Into<String>) -> Self {
+        Self::new(InputKind::GraphicsImage, path, 0).with_input_options(["-f", "lavfi"])
     }
 
     #[must_use]

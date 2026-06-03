@@ -1,7 +1,10 @@
 use crate::db::DbRow;
 use async_trait::async_trait;
-use ersatzrs_core::repositories::{GraphicsRepository, Result};
-use ersatzrs_domain::{EntityId, GraphicsElement, GraphicsElementConfig};
+use ersatzrs_core::repositories::{GraphicsRepository, RepositoryError, Result};
+use ersatzrs_domain::{
+    EntityId, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig,
+    MotionGraphicsConfig, ScriptGraphicsConfig, SubtitleGraphicsConfig, TextGraphicsConfig,
+};
 use sqlx::{Pool, Row};
 
 use super::common::{decode_bool_column, decode_enum_column, encode_enum, not_found};
@@ -81,10 +84,16 @@ impl GraphicsRepository for SqliteGraphicsRepository {
 }
 
 fn map_element(row: &DbRow) -> Result<GraphicsElement> {
+    let kind = decode_enum_column("graphics element kind", row, "Kind")?;
+    let config = decode_config(kind, row.try_get("Config").ok().flatten())?;
+
     Ok(GraphicsElement {
         id: row.try_get("Id")?,
-        name: row.try_get("Name")?,
-        kind: decode_enum_column("graphics element kind", row, "Kind")?,
+        name: row
+            .try_get::<Option<String>, _>("Name")
+            .map(Option::unwrap_or_default)
+            .or_else(|_| row.try_get("Name"))?,
+        kind,
         path: row.try_get("Path")?,
         z_index: row.try_get("ZIndex").unwrap_or(0),
         opacity_percent: row.try_get("OpacityPercent").unwrap_or(None),
@@ -99,11 +108,50 @@ fn map_element(row: &DbRow) -> Result<GraphicsElement> {
         place_within_source_content: decode_bool_column(row, "PlaceWithinSourceContent")
             .unwrap_or(false),
         epg_entries: row.try_get("EpgEntries").unwrap_or(0),
-        config: row
-            .try_get::<Option<String>, _>("Config")
-            .ok()
-            .flatten()
-            .and_then(|value| serde_json::from_str(&value).ok())
-            .unwrap_or_else(GraphicsElementConfig::default),
+        config,
     })
+}
+
+fn decode_config(
+    kind: GraphicsElementKind,
+    value: Option<String>,
+) -> Result<GraphicsElementConfig> {
+    let Some(value) = value.filter(|value| !value.trim().is_empty()) else {
+        return Ok(default_config_for_kind(kind));
+    };
+
+    let config: GraphicsElementConfig =
+        serde_json::from_str(&value).map_err(|error| RepositoryError::Decode {
+            kind: "graphics element config",
+            value: error.to_string(),
+        })?;
+
+    if config.kind() != kind {
+        return Err(RepositoryError::Decode {
+            kind: "graphics element config",
+            value: format!(
+                "config kind {:?} does not match row kind {:?}",
+                config.kind(),
+                kind
+            ),
+        });
+    }
+
+    Ok(config)
+}
+
+pub(crate) fn default_config_for_kind(kind: GraphicsElementKind) -> GraphicsElementConfig {
+    match kind {
+        GraphicsElementKind::Image => GraphicsElementConfig::Image(ImageGraphicsConfig::default()),
+        GraphicsElementKind::Text => GraphicsElementConfig::Text(TextGraphicsConfig::default()),
+        GraphicsElementKind::Subtitle => {
+            GraphicsElementConfig::Subtitle(SubtitleGraphicsConfig::default())
+        }
+        GraphicsElementKind::Motion => {
+            GraphicsElementConfig::Motion(MotionGraphicsConfig::default())
+        }
+        GraphicsElementKind::Script => {
+            GraphicsElementConfig::Script(ScriptGraphicsConfig::default())
+        }
+    }
 }

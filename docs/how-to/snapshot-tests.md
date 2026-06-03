@@ -8,7 +8,7 @@ behavior under test.
 - Every FFmpeg argv generator.
 - Every filter-complex builder.
 - Every YAML instruction handler.
-- Every drawvg/SVG template renderer.
+- Every drawvg VGS/ASS template renderer.
 
 ## Workflow
 
