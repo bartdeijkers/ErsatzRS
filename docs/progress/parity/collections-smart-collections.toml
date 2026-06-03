@@ -1,0 +1,8 @@
+feature    = 'Collections / Smart Collections'
+etv_source = '`ErsatzTV/Pages/Collections*.razor`, `ErsatzTV/Pages/SmartCollections.razor`, `ErsatzTV/Pages/SmartCollectionEditor.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/{collections,collection_detail,smart_collections}.rs`, `crates/ersatzrs-web/src/admin/languages/`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: list + editor with `#[island]` autocomplete (debounced `suggest_media_items` over Movie ∪ Show) and member add/remove. Phase 7 Slice 23 adds manual collection detail page at `/media/collections/:id` mirroring `CollectionItems.razor` with poster grid, hover-revealed selection checkbox, multi-select removal, inline rename, and Use Custom Playback Order toggle with Move Up/Down persistence; the rename-only form is now at `/media/collections/:id/edit`. Collection add/remove/custom-order mutations enqueue `BuildPlayout(Refresh)` for playouts whose persisted program-schedule anchors reference the collection, matching `MediaCollectionRepository.PlayoutIdsUsingCollection`. `/media/collections` list/editor/member/detail visible labels, section headings, controls, validation messages, and toasts plus `/media/smart-collections` list/editor visible labels, actions, options, validation messages, toasts, and query placeholder now use the persisted-language i18n layer with per-culture translation modules.
+'''

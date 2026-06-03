@@ -1,0 +1,8 @@
+feature    = 'FFmpeg command generation'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
+rs_target  = '`crates/ersatzrs-ffmpeg`'
+status     = 'In progress'
+adr        = ['0003']
+summary    = '''
+In progress: software pipeline emits a faithful argv; NVENC and VAAPI keep the upstream hardware decode-path shape (`-hwaccel`, `-hwaccel_output_format`, `-init_hw_device`, hardware scaling, and `-noautoscale`); and Phase 7 Slice 6 adds QSV/AMF/VideoToolbox/RKMPP/V4L2M2M builder parity for the command layer with dedicated snapshot coverage. Phase 7 Slice 11 adds source video/audio stream metadata to `PipelineRequest`, ports the known decoder table, and selects input video decoders from source codec + hardware acceleration (`h264`, `h264_qsv`, `h264_v4l2m2m`, etc.) with snapshot coverage for the changed argv. Phase 7 Slice 12 adds report-backed hardware capability checks and capability-gated encoder/decoder fallback before hardware globals and filters are emitted. Remaining work is narrower: broader filter coverage and deeper per-device hardware probes.
+'''

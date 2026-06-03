@@ -1,0 +1,8 @@
+feature    = 'IPTV M3U playlist'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`'
+rs_target  = '`crates/ersatzrs-web/src/transport/iptv/playlist.rs`, `crates/ersatzrs-web/src/transport/iptv/logos.rs`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/iptv/channels.m3u` emits the M3U playlist. Channel logo output prefers stored `ArtworkKind.Logo` rows from the channel editor and falls back to `/iptv/logos/gen?text=...` for generated SVG logos used by M3U output and the channel admin table.
+'''

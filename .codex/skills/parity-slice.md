@@ -162,8 +162,10 @@ evidence:
 - Repeated historical defect class has a reusable regression test or playbook:
   card action menus, hydrated islands attaching, SSR links/fallback modals, or
   post-add/remove/edit side effects.
-- `docs/reference/parity-matrix.md`, `STATUS.md`, `TEST.md`, and any active
-  `/plans` file are updated when their status changed.
+- The feature's `docs/progress/parity/<slug>.toml` (plus `routes.toml` /
+  `hydration.toml` / `phase.toml` as relevant), `TEST.md`, and any active
+  `/plans` file are updated when their status changed, and
+  `cargo xtask progress check` passes.
 
 ## Fast Gate Ladder
 

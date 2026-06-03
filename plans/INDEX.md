@@ -57,7 +57,10 @@ public open-source project.
 - `docs/adr/0005-drawvg-graphics-engine.md`
 - `docs/adr/0006-sqlx-over-sea-orm.md`
 - `docs/adr/0007-conventional-commits.md`
-- `docs/reference/parity-matrix.md`
+- `docs/reference/parity-matrix.md` (now a stub pointing at `docs/progress/`)
+- `docs/progress/` — structured porting-progress source of truth (per-feature
+  parity, route/hydration coverage, phase state, session log). A gitignored
+  `progress.db` index is rebuilt from it by `cargo xtask progress`.
 - `docs/explanation/deviations.md`
 
 ### Diataxis Documentation

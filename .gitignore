@@ -26,7 +26,9 @@ config.local.toml
 # Local Claude settings; shared skills and settings.json stay tracked
 .claude/settings.local.json
 
-# Runtime databases and sqlx scratch files
+# Runtime databases and sqlx scratch files. Also covers progress.db — the
+# derived porting-progress index built by `cargo xtask progress` from the text
+# sources in docs/progress/. It is disposable; never commit or force-add it.
 *.db
 *.db-shm
 *.db-wal

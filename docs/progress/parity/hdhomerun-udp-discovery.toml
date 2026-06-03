@@ -1,0 +1,8 @@
+feature    = 'HDHomeRun UDP discovery'
+etv_source = '`$ERSATZTV_SRC/hdhr.md`'
+rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/udp.rs`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: UDP discovery responder on port 65001 with TLV + CRC32 encoding, covered by protocol round-trip tests.
+'''

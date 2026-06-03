@@ -1,0 +1,8 @@
+feature    = 'Scripted scheduling'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/ScriptedScheduling/`'
+rs_target  = '`crates/ersatzrs-core`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: full Lua API parity (20+ bindings: add_count/all/duration/pad/skip/rewind/pre_roll/guide_group/is_done/watermark/graphics, content registration, add_marathon, create_playlist), Reset-mode history removal, history resume on registration, deterministic ordering. Engine selection + persistence wired through `PlayoutBuilder`.
+'''

@@ -1,0 +1,201 @@
+# Admin UI route coverage. routed=false means advertised-but-404 placeholder.
+
+[[route]]
+nav     = '/channels'
+backing = '`ChannelsListPage` + add/`:id` editor'
+routed  = true
+
+[[route]]
+nav     = '/ffmpeg'
+backing = 'aliased to `/ffmpeg/profiles`; list + add/`:id` editor'
+routed  = true
+
+[[route]]
+nav     = '/watermarks'
+backing = 'list + add/`:id` editor'
+routed  = true
+
+[[route]]
+nav     = '/media/sources/local'
+backing = 'list + add/`:id/edit`'
+routed  = true
+
+[[route]]
+nav     = '/media/sources/jellyfin'
+backing = 'list + edit + `:id/libraries` + `:id/paths`'
+routed  = true
+
+[[route]]
+nav     = '/media/sources/emby'
+backing = 'list + edit + `:id/libraries` + `:id/paths`'
+routed  = true
+
+[[route]]
+nav     = '/media/sources/plex'
+backing = 'list + `:id/libraries` + `:id/paths` (OAuth PIN island)'
+routed  = true
+
+[[route]]
+nav     = '/media/libraries'
+backing = 'management + per-library Scan/Deep Scan + External Collections section with per-source Scan/Deep Scan'
+routed  = true
+
+[[route]]
+nav     = '/media/trash'
+backing = 'trash view across implemented browsers'
+routed  = true
+
+[[route]]
+nav     = '/media/tv/shows'
+backing = 'shows browser (alias `/media/shows`)'
+routed  = true
+
+[[route]]
+nav     = '/media/tv/seasons/:id'
+backing = 'season detail page (alias `/media/seasons/:id`)'
+routed  = true
+
+[[route]]
+nav     = '/media/movies'
+backing = 'movies browser'
+routed  = true
+
+[[route]]
+nav     = '/media/music/artists'
+backing = 'artists browser + `:id` detail'
+routed  = true
+
+[[route]]
+nav     = '/media/other/videos'
+backing = 'other-video browser'
+routed  = true
+
+[[route]]
+nav     = '/media/music/songs'
+backing = 'songs browser'
+routed  = true
+
+[[route]]
+nav     = '/media/browser/images'
+backing = 'images browser (alias `/media/images`)'
+routed  = true
+
+[[route]]
+nav     = '/media/collections'
+backing = 'list + add/`:id` detail + `:id/edit` editor'
+routed  = true
+
+[[route]]
+nav     = '/media/smart-collections'
+backing = 'list + add/`:id`/`:id/edit` editor'
+routed  = true
+
+[[route]]
+nav     = '/media/multi-collections'
+backing = 'list + add/`:id/edit` editor with manual/smart collection items'
+routed  = true
+
+[[route]]
+nav     = '/media/rerun-collections'
+backing = 'list + add/`:id/edit` editor with HTML POST fallback save/delete and playout-refresh side effect on update'
+routed  = true
+
+[[route]]
+nav     = '/media/playlists'
+backing = 'list/tree + `:id` editor with HTML POST fallback create/save/delete; preview dispatches through `PlayoutBuilder` with unsaved playlist reference data'
+routed  = true
+
+[[route]]
+nav     = '/media/trakt/lists'
+backing = 'list + `:id` editor; add/search/match/delete actions with HTML POST fallbacks and persisted rows-per-page'
+routed  = true
+
+[[route]]
+nav     = '/media/filler/presets'
+backing = 'list + add/`:id/edit` editor; HTML POST fallback save/delete'
+routed  = true
+
+[[route]]
+nav     = '/search'
+backing = 'scheduling search result page, including `trakt_list:{id}` queries'
+routed  = true
+
+[[route]]
+nav     = '/blocks'
+backing = 'aliased to `/scheduling/blocks`; list + `:id` editor ported with hydrated and no-JS fallback evidence in `plans/blocks-parity-slice.md`'
+routed  = true
+
+[[route]]
+nav     = '/playouts'
+backing = 'action bar (Add menu + Reset All) + searchable paged list with per-kind row actions (Edit/Refresh|Reset/Schedule Reset/Delete/Edit JSON) + paged detail table (Show Filler, Troubleshoot) + `/playouts/add[/:kind]` create flow + `/playouts/{classic,block,sequential,scripted}/:id` top-level editors + `/playouts/:id/{alternate-schedules,templates}` nested editors'
+routed  = true
+
+[[route]]
+nav     = '/schedules'
+backing = 'list + add/`:id` editor + `:id/items` hydrated add/edit/reorder/delete surface with no-JS save/action form fallbacks'
+routed  = true
+
+[[route]]
+nav     = '/templates'
+backing = 'template group/template list + `:id` editor with hydrated add/copy/delete/save and HTML POST form fallbacks'
+routed  = true
+
+[[route]]
+nav     = '/decos'
+backing = 'deco group/deco list, add/delete routes, and `/decos/:id` editor with hydrated save plus HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/deco-templates'
+backing = 'deco-template group/template list, add/delete routes, and `/deco-templates/:id` item editor with hydrated save plus HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/ffmpeg'
+backing = 'settings page with FFmpeg path/profile/language/subtitle/report/global fallback/HLS/custom-resolution fields and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/logging'
+backing = 'settings page with default/scanning/scheduling/searching/streaming/http minimum log levels and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/hdhr'
+backing = 'settings page with generated UUID display, tuner count persistence, and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/scanner'
+backing = 'settings page with library refresh interval persistence and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/playout'
+backing = 'settings page with days-to-build, skip-missing-items, scripted timeout, playout rebuild enqueue, and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/ui'
+backing = 'settings page with theme/language persistence and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/settings/xmltv'
+backing = 'settings page with days-to-build validation, timezone/block behavior persistence, playout refresh enqueue, and HTML POST fallback'
+routed  = true
+
+[[route]]
+nav     = '/system/logs'
+backing = 'newest OS-local app-data log file in ErsatzTV-style Support log table/search/pager surface'
+routed  = true
+
+[[route]]
+nav     = '/system/troubleshooting'
+backing = 'ErsatzTV-style Support troubleshooting tools/report tab surface; `/system/troubleshooting/playback?mediaItem=ID` for media-specific context'
+routed  = true
+
+[[route]]
+nav     = '/media/remote/streams'
+backing = 'Remote-stream entities exist; no UI yet.'
+routed  = false

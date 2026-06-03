@@ -7,11 +7,14 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/legacy) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
 
-The authoritative project state lives across three documents - read the
+The authoritative project state lives across these sources - read the
 relevant ones before starting non-trivial work:
 
-- **[STATUS.md](STATUS.md)** for the current phase, checklist, gaps, and the
-  session log.
+- **`cargo xtask progress next`** for the current phase, focus, in-progress
+  features, and latest session. The structured source of truth is
+  [`docs/progress/`](docs/progress/README.md) (per-feature parity, route and
+  hydration coverage, session log); [STATUS.md](STATUS.md) is now a slim
+  pointer at it. Prefer the `progress` queries over reading large files.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** for the crate layout and
   dependency rules.
 - **[plans/INDEX.md](plans/INDEX.md)** for locked decisions, the contract
@@ -54,7 +57,8 @@ hardware acceleration support, schema readiness, media item state handling,
 metadata persistence, schedules, or provider availability; it is an explicit
 indicator for ErsatzTV port completeness. The next priority is broadening
 health / troubleshooting coverage and the remaining Phase 7 hardening items.
-See [STATUS.md](STATUS.md) for the current checklist and session log.
+Run `cargo xtask progress next` for the live phase/focus/gaps view; the
+structured detail lives in [`docs/progress/`](docs/progress/README.md).
 
 When adding code, follow the workspace layout in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -126,6 +130,20 @@ test -f README.md && test -f CONTRIBUTING.md && test -f STYLE.md && test -f ARCH
 npx commitlint --from HEAD~1
 ```
 
+Porting progress lives in `docs/progress/` (text source of truth) with a
+gitignored, auto-rebuilt `progress.db` index. Query it instead of reading large
+status files:
+
+```bash
+cargo xtask progress next                 # phase, focus, in-progress features, latest session
+cargo xtask progress gaps                 # everything not yet Ported (what's left for a complete port)
+cargo xtask progress parity --feature <slug> --full   # one feature's full summary + ADRs
+cargo xtask progress routes --unrouted    # advertised-but-404 admin routes
+cargo xtask progress sessions --limit 10  # recent session/handoff log
+cargo xtask progress adr list             # derived ADR index
+cargo xtask progress check                # validate the text sources (CI gate)
+```
+
 ## Language Contract
 
 - Repository-bound content is English: code, comments, commit messages, docs,
@@ -154,7 +172,9 @@ agent framework finds it:
 
 Read the relevant contract before changing that area:
 
-- [STATUS.md](STATUS.md) for current phase progress and session handoff log.
+- [`docs/progress/`](docs/progress/README.md) for current phase, per-feature
+  parity, route/hydration coverage, and the session log (query via
+  `cargo xtask progress …`). [STATUS.md](STATUS.md) is a slim pointer at it.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags, or
   `run.sh` — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
@@ -177,8 +197,9 @@ Read the relevant contract before changing that area:
 - [docs/how-to/testing.md](docs/how-to/testing.md) before adding tests.
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) before adding documentation.
 - [docs/adr/](docs/adr/) before changing architecture or behavior contracts.
-- [docs/reference/parity-matrix.md](docs/reference/parity-matrix.md) when
-  moving a feature toward parity.
+- [`docs/progress/parity/`](docs/progress/README.md) when moving a feature
+  toward parity — edit the feature's `<slug>.toml` and run
+  `cargo xtask progress check` (see the `update-parity` skill).
 
 ## Health Check Parity
 
@@ -214,15 +235,19 @@ This is primarily a porting project, not greenfield design. When implementing a 
 
 - ErsatzTV source tree: `$ERSATZTV_SRC/` (see [PORTING.md](PORTING.md) for the env-var contract)
 - Project contract index: [plans/INDEX.md](plans/INDEX.md)
-- Current phase status: [STATUS.md](STATUS.md)
+- Porting progress (source of truth): [`docs/progress/`](docs/progress/README.md) — query with `cargo xtask progress next`
 - HDHR protocol notes (internal to ErsatzTV repo): `$ERSATZTV_SRC/hdhr.md`
 
 ## Session Handoff
 
-When ending a work session, update [STATUS.md](STATUS.md):
+When ending a work session, update the progress index in `docs/progress/`:
 
-1. Check or uncheck Phase 0 checklist items that changed.
-2. Add a row to the session log with the date, agent name, and a one-line
-   summary of what was done.
-3. If there is unfinished work, note it in "What an Agent Should Do Next".
-4. Commit the update with `docs(status): update session log`.
+1. Record the session:
+   `cargo xtask progress add-session --agent "<name>" --summary "<one line>"`
+   (appends to `docs/progress/sessions.ndjson`).
+2. If parity changed, edit the relevant `docs/progress/parity/<slug>.toml`
+   (status/summary/ADR) — see the `update-parity` skill.
+3. If a phase checklist item, TODO, focus, or remaining work changed, update
+   `docs/progress/phase.toml` (note unfinished work under `next_steps`).
+4. Validate with `cargo xtask progress check`, then commit with
+   `docs(status): update session log`.

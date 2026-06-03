@@ -1,0 +1,8 @@
+feature    = 'XMLTV guide'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (xmltv branch), `$ERSATZTV_SRC/ErsatzTV.Application/Channels/Commands/RefreshChannelDataHandler.cs`'
+rs_target  = '`crates/ersatzrs-core/src/xmltv.rs`, `crates/ersatzrs-infra/src/xmltv.rs`, `crates/ersatzrs-web/src/transport/iptv/guide.rs`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/iptv/xmltv.xml` renders a 48-hour XMLTV guide via quick-xml with COALESCEd titles from the metadata tables. `XmltvBlockBehavior` now lives in core/infra and honors `xmltv.block_behavior` (`SplitTimeEvenly` default, `UseActualTimes` optional) before the transport layer renders XML.
+'''

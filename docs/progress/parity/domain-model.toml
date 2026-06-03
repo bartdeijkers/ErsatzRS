@@ -1,0 +1,8 @@
+feature    = 'Domain model'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Domain/`'
+rs_target  = '`crates/ersatzrs-domain`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported
+'''

@@ -24,7 +24,8 @@ Produce a plan only. Do not write code. For implementation, switch to the
 6. Map important C# concepts to Rust idioms.
 7. Identify traits, structs, tests, snapshots, health/troubleshooting impact,
    and ADR needs.
-8. Point to the parity-matrix row that should be added or updated.
+8. Point to the `docs/progress/parity/<slug>.toml` feature file that should be
+   added or updated (see the `update-parity` skill).
 9. List any known `ParityDebt`; use `None` only when there is no hidden
    deferred behavior.
 

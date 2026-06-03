@@ -1,0 +1,8 @@
+feature    = 'Search index'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`'
+rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-web/src/admin/pages/search.rs`'
+status     = 'Ported'
+adr        = ['0009']
+summary    = '''
+Ported for the non-web parity target: scheduling has a core-owned Lucene-like parser/evaluator and SQL-backed search documents for title/sort/original title, year/release date, genre/tag/studio/actor/director/writer, media kind, show fields, season/episode numbers, metadata kind, provider GUID source fields, languages, codecs, dimensions, chapter counts, duration seconds/minutes, and `trakt_list`. The evaluator now lowercases and accent-folds text, consumes Lucene boost syntax, handles fuzzy terms, phrase slop, numeric exact/range queries, wildcards, and jump-letter page maps for pageable results. Show, season, and artist hits expand to playable children. `/search?query=...` resolves the same scheduling search source used by Trakt list Search actions. Elasticsearch is deliberately dropped; future Tantivy-style indexing is an optional internal optimization, not a parity requirement.
+'''

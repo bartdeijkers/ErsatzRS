@@ -1,0 +1,8 @@
+feature    = 'Classic scheduling'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
+rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
+status     = 'Ported'
+adr        = ['0010']
+summary    = '''
+Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Remaining follow-up is limited to imported-database verification in Slice 21 and rarely used schedule-item filler/group behaviors.
+'''

@@ -1,0 +1,8 @@
+feature    = 'Remote streams browser'
+etv_source = '`ErsatzTV/Pages/RemoteStreams*.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
+status     = 'Not started'
+adr        = []
+summary    = '''
+Not started: nav link advertised in the drawer 404s today. Remote-stream domain entities exist; no UI yet.
+'''

@@ -45,8 +45,9 @@ filter. Startup code must fail fast when an older FFmpeg is detected.
 2. For porting work, read the ErsatzTV source before writing Rust.
 3. Add or update tests at the narrowest useful level.
 4. Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]`.
-5. Update [docs/reference/parity-matrix.md](docs/reference/parity-matrix.md)
-   when a feature changes parity status.
+5. Update the feature's `docs/progress/parity/<slug>.toml` when its parity
+   status changes (see the `update-parity` skill), then run
+   `cargo xtask progress check`.
 6. Add an ADR when required by [docs/adr/0001-record-architecture-decisions.md](docs/adr/0001-record-architecture-decisions.md).
 
 ## Commit Messages

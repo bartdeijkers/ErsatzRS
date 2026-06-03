@@ -37,6 +37,13 @@ fn run_inner(opts: &Opts) -> ExitCode {
     println!("parity-check: scopes: {scopes}");
 
     let mut steps = Vec::new();
+    if !opts.skip_progress {
+        steps.push(Step::new(
+            "progress check",
+            ".",
+            ["cargo", "xtask", "progress", "check"],
+        ));
+    }
     if !opts.skip_fmt {
         steps.push(Step::new(
             "fmt",
@@ -154,6 +161,7 @@ impl Step {
 struct Opts {
     scopes: Vec<String>,
     leptos_build: bool,
+    skip_progress: bool,
     skip_fmt: bool,
     skip_hydration: bool,
     skip_tests: bool,
@@ -167,6 +175,7 @@ impl Opts {
             match arg.as_str() {
                 "-h" | "--help" => return Err(ParseResult::Help),
                 "--leptos-build" => opts.leptos_build = true,
+                "--skip-progress" => opts.skip_progress = true,
                 "--skip-fmt" => opts.skip_fmt = true,
                 "--skip-hydration" => opts.skip_hydration = true,
                 "--skip-tests" => opts.skip_tests = true,
@@ -197,6 +206,7 @@ fn print_help() {
     eprintln!();
     eprintln!("FLAGS:");
     eprintln!("    --leptos-build      Also run cargo leptos build in crates/ersatzrs-web");
+    eprintln!("    --skip-progress     Skip cargo xtask progress check");
     eprintln!("    --skip-fmt          Skip cargo fmt --all -- --check");
     eprintln!("    --skip-hydration    Skip cargo xtask hydration-lint -p ersatzrs-web");
     eprintln!("    --skip-tests        Skip cargo test -p ersatzrs-web");

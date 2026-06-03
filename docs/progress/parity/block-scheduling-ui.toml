@@ -1,0 +1,8 @@
+feature    = 'Block scheduling UI'
+etv_source = '`ErsatzTV/Pages/Blocks*.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/scheduling/blocks.rs`, `block_editor.rs`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/blocks` has group management, empty-group display, add/edit/copy/delete block actions, editor metadata and item replacement, multi-collection targets, watermark/graphics selectors, unsaved-form preview, ErsatzTV-style validation for names/duration/item targets, hydrated browser coverage, no-JS item save fallback, and same-viewport visual evidence; see `plans/blocks-parity-slice.md`.
+'''

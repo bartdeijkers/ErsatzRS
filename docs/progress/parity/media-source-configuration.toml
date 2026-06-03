@@ -1,0 +1,8 @@
+feature    = 'Media source configuration'
+etv_source = '`ErsatzTV/Pages/MediaSources*.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/media_sources/`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: list/editor/libraries/paths pages for Local/Jellyfin/Emby/Plex; Local library create/update validates normalized existing paths, accepts `file://` path input, deduplicates normalized paths, and writes atomically; Plex OAuth PIN island; shared `PathsEditor` sub-component.
+'''

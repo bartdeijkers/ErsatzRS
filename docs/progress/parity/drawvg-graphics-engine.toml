@@ -1,0 +1,8 @@
+feature    = 'Drawvg graphics engine'
+etv_source = 'ErsatzTV external graphics renderer flow'
+rs_target  = '`crates/ersatzrs-ffmpeg`, `assets/`'
+status     = 'Ported'
+adr        = ['0005']
+summary    = '''
+Ported: drawvg SVG template rendering replaces ErsatzTV's external graphics-renderer pipe. Used by the Phase 6.8 watermark editor for the in-browser placement preview (PNG via `file=` drawvg option).
+'''

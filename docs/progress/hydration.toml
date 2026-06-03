@@ -1,0 +1,186 @@
+# Admin UI hydration parity. status: one of the verbatim markers below.
+
+[[page]]
+name   = 'LibrariesPage'
+status = '✅'
+notes  = '`Scan Library` server fn smoke clean; lock-state polling present.'
+
+[[page]]
+name   = 'SearchPage'
+status = '✅'
+notes  = 'Search result `Save As` smart collection server fn smoke clean.'
+
+[[page]]
+name   = 'PlexSourcesPage'
+status = '✅'
+notes  = 'OAuth PIN island.'
+
+[[page]]
+name   = 'WatermarksEditorPage'
+status = '✅'
+notes  = ''
+
+[[page]]
+name   = 'BlockEditorPage'
+status = '✅'
+notes  = ''
+
+[[page]]
+name   = 'YamlEditorPage'
+status = '✅'
+notes  = ''
+
+[[page]]
+name   = 'TimelinePage` (`/playouts`)'
+status = '✅'
+notes  = 'Read-only SVG island; selection is the gap (Slice F).'
+
+[[page]]
+name   = 'CollectionsPage'
+status = '✅'
+notes  = 'Autocomplete island.'
+
+[[page]]
+name   = 'MoviesPage'
+status = 'TODO'
+notes  = 'Item overflow menu wired; Playwright smoke pending.'
+
+[[page]]
+name   = 'MoviePage` (`/media/movies/:id`)'
+status = '✅'
+notes  = 'SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean.'
+
+[[page]]
+name   = 'ArtistPage` (`/media/music/artists/:id`)'
+status = '✅'
+notes  = 'Detail page island wired; `/media/music/artists/2355` modal-open smoke clean.'
+
+[[page]]
+name   = 'ChannelsListPage'
+status = '✅'
+notes  = 'Delete dialog server fn smoke clean.'
+
+[[page]]
+name   = 'FfmpegProfilesListPage'
+status = '✅'
+notes  = 'Delete dialog server fn smoke clean.'
+
+[[page]]
+name   = 'FfmpegProfileEditorPage'
+status = '✅'
+notes  = 'Copy Profile server fn smoke clean.'
+
+[[page]]
+name   = 'ChannelEditorPage'
+status = '✅'
+notes  = 'SSR multipart form; `/channels/add` and `/channels/:id` smoke clean.'
+
+[[page]]
+name   = 'LocalLibrariesPage'
+status = '✅'
+notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged.'
+
+[[page]]
+name   = 'JellyfinSourcesPage` etc.'
+status = '⏳'
+notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
+
+[[page]]
+name   = 'EmbySourcesPage` etc.'
+status = '⏳'
+notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
+
+[[page]]
+name   = 'PlayoutsPage` row selection'
+status = '⏳'
+notes  = 'Slice F — lift selection to URL query param.'
+
+[[page]]
+name   = 'BlocksPage'
+status = '⏳'
+notes  = 'Group add/delete buttons.'
+
+[[page]]
+name   = 'TemplatesPage'
+status = 'TODO'
+notes  = 'Hydrated list actions, delete confirmations, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened.'
+
+[[page]]
+name   = 'TemplateEditorPage'
+status = 'TODO'
+notes  = 'Hydrated add/remove/drag, browser-navigation edit link, save POST fallback, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened.'
+
+[[page]]
+name   = 'WatermarksListPage'
+status = '✅'
+notes  = 'List island; hydrated copy/delete smoke clean.'
+
+[[page]]
+name   = 'TraktListsPage'
+status = 'TODO'
+notes  = 'Browser smoke covered Add dialog, Search/Match/Delete row actions, pager geometry, and console check; add durable E2E spec when automated admin coverage is broadened.'
+
+[[page]]
+name   = 'TraktListEditorPage'
+status = 'TODO'
+notes  = 'Browser smoke covered editor layout, checkbox state, save POST fallback form, and console check; add durable E2E spec when automated admin coverage is broadened.'
+
+[[page]]
+name   = 'FillerPresetsPage'
+status = '⏳'
+notes  = 'List/editor islands with POST fallback save/delete paths.'
+
+[[page]]
+name   = 'RerunCollectionsPage'
+status = '⏳'
+notes  = 'List/editor islands with POST fallback save/delete paths.'
+
+[[page]]
+name   = 'SmartCollectionsPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'TrashPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'PlexLibrariesPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'PlexPathsPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'JellyfinConnectionPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'JellyfinLibrariesPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'JellyfinPathsPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'EmbyConnectionPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'EmbyLibrariesPage'
+status = '⏳'
+notes  = ''
+
+[[page]]
+name   = 'EmbyPathsPage'
+status = '⏳'
+notes  = ''

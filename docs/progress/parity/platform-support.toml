@@ -1,0 +1,8 @@
+feature    = 'Platform support (linux-x64, linux-arm64, linux-arm, osx-x64, osx-arm64, win-x64)'
+etv_source = 'ErsatzTV `.NET runtime identifier` matrix and `dotnet publish -r <RID>` per release'
+rs_target  = '`.github/workflows/{ci,release}.yml`, `Cross.toml`, `rust-toolchain.toml`, `run.ps1`, `run.cmd`, `crates/ersatzrs-ffmpeg/src/version.rs` (Unix-only test split)'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: every PR/push runs a 6-cell `platforms` matrix that builds the workspace for each ErsatzTV-parity RID and runs the test suite on the four natively-built cells (linux-x64 + ubuntu-latest, osx-arm64 + macos-latest, osx-x64 cross-compiled from macos-latest, win-x64 + windows-latest); the two ARM Linux cells build via cross-rs. Tag pushes attach `ersatzrs-<tag>-<rid>.tar.gz` (or `.zip` for win-x64) per RID alongside the existing Docker publish path. Windows contributors use `run.cmd` / `run.ps1` mirroring `run.sh`. Only platform-specific code lives behind documented `cfg` guards (Leptos `wasm32` islands, Unix-only ffmpeg test helpers). Per-RID archives ship the two parity binaries `ersatzrs-web` and `ersatzrs-scanner`; the maintenance scheduler runs as an in-process tokio task inside `ersatzrs-web` (ErsatzTV hosted-service parity).
+'''

@@ -1,0 +1,85 @@
+# Project phase + narrative state. Structured per-feature detail lives in
+# parity/*.toml; query everything with `cargo xtask progress next`.
+
+current_phase = 'Phase 7 — Hardening and Parity Completion'
+current_focus = 'watermark streaming parity'
+
+summary = '''
+Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
+scheduling engines (Block/YAML/Classic/Scripted), media-source scanning,
+IPTV/HDHomeRun endpoints, and the admin UI through Trakt list integration are
+in place. Phase 7 hardening adds shared database URL resolution, explicit
+mediaserver bootstrap, startup readiness/downgrade/schema health reporting, and
+the non-web health-check engine in ersatzrs-core::health / ersatzrs-infra::health.
+'''
+
+next_steps = '''
+Broaden health / troubleshooting coverage and the remaining Phase 7 hardening
+items. Active in-progress / not-started feature work (see `cargo xtask progress
+gaps`): watermark streaming parity, FFmpeg command generation + filter graph
+depth, HLS variant playlists / segmenter, settings i18n full coverage,
+multi-collections / rerun / playlists / filler presets, support pages
+(health/logs/troubleshooting), and the remote-streams browser UI.
+'''
+
+# Phase 0 checklist (all complete).
+[[checklist]]
+item = 'Documentation contracts (CONTRIBUTING, STYLE, ARCHITECTURE, PORTING)'
+done = true
+[[checklist]]
+item = 'ADRs 0001–0007'
+done = true
+[[checklist]]
+item = 'Diataxis documentation structure'
+done = true
+[[checklist]]
+item = 'Parity matrix skeleton'
+done = true
+[[checklist]]
+item = 'GitHub CI, issue templates, PR template, dependabot'
+done = true
+[[checklist]]
+item = 'Tooling config (rustfmt, clippy, deny, editorconfig, gitattributes)'
+done = true
+[[checklist]]
+item = 'Claude skills for recurring workflows'
+done = true
+[[checklist]]
+item = 'Conventional Commits and commitlint'
+done = true
+[[checklist]]
+item = 'Cargo workspace and empty crate stubs'
+done = true
+[[checklist]]
+item = 'FFmpeg 8.1 runtime detection and fail-fast'
+done = true
+[[checklist]]
+item = 'Minimal axum + Leptos SSR page'
+done = true
+[[checklist]]
+item = 'SQLite bootstrap (empty DB on first run)'
+done = true
+[[checklist]]
+item = 'Docker image with FFmpeg 8.1'
+done = true
+[[checklist]]
+item = 'Health endpoint (/healthz → 200)'
+done = true
+
+# Known TODOs carried forward.
+[[known_todo]]
+note = 'Admin pages with dead on:* handlers (islands hydration gap) — tracked in hydration.toml; fix pattern documented in TEST.md, proven on LibrariesPage / PlexSourcesPage.'
+[[known_todo]]
+note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
+[[known_todo]]
+note = 'Replace bash /dev/tcp HEALTHCHECK with a purpose-built ersatzrs-healthcheck binary.'
+[[known_todo]]
+note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
+[[known_todo]]
+note = 'std::env::var("DATABASE_URL") in main.rs uses #[allow(clippy::disallowed_methods)] — replace with a config crate in Phase 1.'
+[[known_todo]]
+note = 'ffmpeg module in ersatzrs-web migrated to ersatzrs-ffmpeg in Phase 2.'
+
+# Blocking decisions.
+[[blocking_decision]]
+note = 'None. All Phase 0 decisions are recorded in ADRs 0001–0007.'

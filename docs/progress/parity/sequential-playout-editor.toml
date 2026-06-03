@@ -1,0 +1,8 @@
+feature    = 'Sequential (YAML) playout editor'
+etv_source = '`ErsatzTV/Pages/SequentialPlayoutEditor.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/scheduling/yaml_editor.rs`, `crates/ersatzrs-web/src/admin/languages/`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/playouts/sequential/:id` with 500 ms debounced YAML validation via `YamlPlayoutEngine::definition_from_str`, save action, erase action with `Modal` confirm. Save spawns a background reset-build through `PlayoutBuilder::default().build()`. Raw YAML stored in `ScheduleFile` (ErsatzRS divergence from ErsatzTV's filesystem-path storage). Visible editor loading/not-found text, title, save/erase actions, confirmation copy, and success/error toasts now use the persisted-language i18n layer with per-culture translation modules.
+'''

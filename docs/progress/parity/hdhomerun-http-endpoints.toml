@@ -1,0 +1,8 @@
+feature    = 'HDHomeRun HTTP endpoints'
+etv_source = '`$ERSATZTV_SRC/hdhr.md`'
+rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/http.rs`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/discover.json`, `/device.xml`, `/lineup_status.json`, and `/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names (DeviceID/LineupURL/GuideNumber/...). Device UUID seeded into `ConfigElement` under `HDHR.DeviceUuid`; tuner count read from `HDHR.TunerCount`.
+'''

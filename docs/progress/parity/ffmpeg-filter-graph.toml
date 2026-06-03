@@ -1,0 +1,8 @@
+feature    = 'FFmpeg filter graph'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs`'
+rs_target  = '`crates/ersatzrs-ffmpeg`'
+status     = 'Ported'
+adr        = ['0003']
+summary    = '''
+Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass. Resource-backed dynamic graphics watermarks remain tracked under the graphics-engine plan.
+'''

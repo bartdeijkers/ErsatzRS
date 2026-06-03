@@ -1,0 +1,8 @@
+feature    = 'MPEG-TS channel streaming'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (ts branch), `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs`'
+rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-ffmpeg`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: `/iptv/channel/{number}.ts` resolves the active PlayoutItem through `MediaVersion`/`MediaFile`, applies provider path replacements, selects subtitles from persisted `Subtitle` rows using playout-item override values falling back to channel preferred subtitle language/mode, expands ISO language aliases (`nl`/`nld`/`dut`, etc.), honors `ffmpeg.use_embedded_subtitles`, requires extracted text embedded subtitles outside HLS-direct, and pipes a software FFmpeg MPEG-TS stream with `kill_on_drop` cleanup. Text subtitles burn through FFmpeg's `subtitles=` filter with the extracted font cache; image subtitles are scaled/padded and centered over video.
+'''

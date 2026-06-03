@@ -1,0 +1,8 @@
+feature    = 'Trakt lists'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Trakt/`, `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/*TraktList*`, `ErsatzTV/Pages/TraktLists.razor`, `ErsatzTV/Pages/TraktListEditor.razor`, `ErsatzTV/Shared/AddTraktListDialog.razor`'
+rs_target  = '`crates/ersatzrs-core/src/trakt.rs`, `crates/ersatzrs-infra/src/{trakt,trakt_sync}.rs`, `crates/ersatzrs-web/src/admin/{server_fns/trakt,pages/media/trakt_lists}.rs`, `crates/ersatzrs-web/src/api/trakt.rs`, `crates/ersatzrs-web/src/admin/languages/`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: ErsatzTV-compatible locator parsing, Trakt v2 API client headers and list/item projection, `TraktList`/`TraktListItem`/`TraktListItemGuid` persistence, GUID-first matching with title/year/season/episode fallback, generated playlists under the system `Trakt Lists` group, auto-refresh/rematch maintenance, Add dialog, Edit/Search/Match/Delete UI, MudTablePager-style page-size persistence, HTML POST fallback routes for add/match/save/delete, and `trakt_list:{id}` search integration. Visible list/editor/dialog/action/toast/pager labels now use the persisted-language i18n layer with per-culture translation modules. `TRAKT__CLIENTID` is required for add/refresh only.
+'''

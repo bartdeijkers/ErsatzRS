@@ -7,9 +7,10 @@ project context, architecture, porting workflow, and contract index.
 ## Quick Reference
 
 - **Project:** ErsatzRS — Rust reimplementation of ErsatzTV
-- **Status:** Phase 0 bootstrap, partially complete. No Cargo.toml yet. See
-  [STATUS.md](../../STATUS.md) for the checklist and session log.
-- **Plan:** [plans/sequential-dancing-valiant.md](../../plans/sequential-dancing-valiant.md)
+- **Status:** Phase 7 — Hardening and Parity Completion (Phases 0–6 complete).
+  Run `cargo xtask progress next` for the live state; structured detail lives in
+  [`docs/progress/`](../../docs/progress/README.md).
+- **Plan:** [plans/INDEX.md](../../plans/INDEX.md)
 - **ErsatzTV source:** `$ERSATZTV_SRC/`
 
 ## Key Commands (once Cargo workspace exists)
@@ -29,4 +30,5 @@ cargo deny check
 - Snapshot-test generated FFmpeg argv with `insta`.
 - Follow [STYLE.md](../../STYLE.md), [ARCHITECTURE.md](../../ARCHITECTURE.md),
   and [PORTING.md](../../PORTING.md).
-- Update [STATUS.md](../../STATUS.md) session log when ending work.
+- Record sessions with `cargo xtask progress add-session` and update
+  `docs/progress/` (parity/phase) when ending work.

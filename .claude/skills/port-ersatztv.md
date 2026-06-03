@@ -20,7 +20,8 @@ Produce a plan only. Do not write code.
 4. Identify the ErsatzRS target crate and module.
 5. Map important C# concepts to Rust idioms.
 6. Identify traits, structs, tests, snapshots, and ADR needs.
-7. Point to the parity-matrix row that should be added or updated.
+7. Point to the `docs/progress/parity/<slug>.toml` feature file that should be
+   added or updated (see the `update-parity` skill).
 
 ## Output
 

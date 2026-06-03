@@ -1,0 +1,8 @@
+feature    = 'Watermark editor'
+etv_source = '`ErsatzTV/Pages/Watermark*.razor`'
+rs_target  = '`crates/ersatzrs-web/src/admin/pages/watermarks/`, `crates/ersatzrs-web/src/admin/languages/`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: list at `/watermarks` with ErsatzTV-like action bar/content/divider layout, image thumbnail, localized Mode/Location columns, and icon Edit/Copy/Delete row actions; SSR wrapper + `#[island]` editor at `/watermarks/add` and `/watermarks/:id`; 17-field form with full `WatermarkEditViewModelValidator.cs` validation parity; custom image upload via axum multipart (`/api/watermarks/image`) + WASM `gloo_net` FormData POST + size guard via `ETV_MAXIMUM_UPLOAD_MB`; drawvg placement preview (320×180 PNG, debounced 400 ms).
+'''

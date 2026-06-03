@@ -1,0 +1,8 @@
+feature    = 'Block scheduling'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/BlockScheduling/`'
+rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
+status     = 'Ported'
+adr        = []
+summary    = '''
+Ported: shared `PlayoutSchedulingEngine` trait, effective-template derivation, alternate template and deco-template selection, SQL-backed template/block/deco loading, change-detection (removal/update), persisted collection-etag comparison, deco block-start/default filler windows, and ErsatzTV-fixture-based regression coverage. End-to-end build wired through `PlayoutBuilder`.
+'''

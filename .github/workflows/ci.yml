@@ -52,6 +52,8 @@ jobs:
         run: cargo install stylance-cli --version 0.8.2 --locked
       - name: Test (all features)
         run: cargo test --workspace --all-features --lib --bins --tests
+      - name: Validate progress index (docs/progress/)
+        run: cargo xtask progress check
 
   deny:
     name: Cargo deny
