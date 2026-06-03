@@ -4,20 +4,21 @@ use std::time::Duration;
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FilterMode, HardwareAccelerationKind, NormalizeLoudnessMode,
-    Resolution, ScalingBehavior, StreamingMode, VideoScanKind, WatermarkLocation,
+    Resolution, ScalingBehavior, StreamingMode, VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use ersatzrs_ffmpeg::{
     capability_report_for_tests, colorspace_filter, deinterlace_filter, deinterlace_qsv_filter,
     deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter, hardware_upload_filter,
     lower_third_overlay, normalize_loudness_filter, song_progress_filter, tonemap_cuda_filter,
-    tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter, yadif_cuda_filter, yadif_filter,
-    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
-    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
-    GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
-    PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder, RkmppPipelineBuilder,
-    SoftwarePipelineBuilder, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
-    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder,
-    WatermarkOverlay,
+    tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter,
+    translate_watermark_opacity_expression, yadif_cuda_filter, yadif_filter, AmfPipelineBuilder,
+    AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState, DrawvgOverlay,
+    FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState, GraphicsTemplateRenderer,
+    HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat, PipelineBuilder, PipelineRequest,
+    PixelFormat, QsvPipelineBuilder, RkmppPipelineBuilder, SoftwarePipelineBuilder,
+    SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate, TonemapAlgorithm,
+    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkFadeKind,
+    WatermarkFadePoint, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -564,6 +565,111 @@ fn filter_graph_with_watermark_subtitle_and_drawvg_snapshot() {
     let filter = ComplexFilter::build(&inputs, chain, false);
 
     insta::assert_snapshot!(filter.options.join(" "));
+}
+
+#[test]
+fn pipeline_with_scaled_permanent_watermark_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 12.5,
+        horizontal_margin_percent: 2.0,
+        vertical_margin_percent: 3.0,
+        opacity: 75,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_intermittent_watermark_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        opacity: 80,
+        fade_points: vec![
+            WatermarkFadePoint {
+                kind: WatermarkFadeKind::In,
+                time: Duration::from_secs(0),
+                enable_start: Duration::from_secs(0),
+                enable_finish: Duration::from_secs(1),
+            },
+            WatermarkFadePoint {
+                kind: WatermarkFadeKind::Out,
+                time: Duration::from_secs(16),
+                enable_start: Duration::from_secs(16),
+                enable_finish: Duration::from_secs(17),
+            },
+        ],
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_opacity_expression_watermark_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        opacity_expression: Some("if(time_of_day_seconds % 60 < 1, 1, 0.25)".to_owned()),
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_with_multiple_watermarks_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/back.png"));
+    request
+        .inputs
+        .push(InputFile::watermark("/media/front.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopLeft,
+        z_index: 10,
+        ..WatermarkOverlay::default()
+    });
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::BottomRight,
+        z_index: 20,
+        opacity: 50,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn watermark_input_loops_still_images() {
+    let input = InputFile::watermark("/media/logo.png");
+    assert_eq!(input.input_options, ["-loop", "1"]);
+}
+
+#[test]
+fn opacity_expression_translation_maps_ersatztv_time_symbols() {
+    assert_eq!(
+        translate_watermark_opacity_expression(
+            "if(time_of_day_seconds < content_time_seconds, content_total_seconds, channel_time_seconds)"
+        ),
+        "if(t < t, NAN, t)"
+    );
 }
 
 #[test]

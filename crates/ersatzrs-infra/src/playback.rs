@@ -2,15 +2,20 @@
 //! metadata, used by both the MPEG-TS and HLS transcode paths.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
+use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{
-    ChannelSubtitleMode, FFmpegProfile, Resolution, StreamingMode, VideoScanKind,
+    Channel, ChannelSubtitleMode, ChannelWatermark, ChannelWatermarkImageSource,
+    ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, Resolution, StreamingMode,
+    VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
     FrameRate, FrameSize, InputFile, OutputFormat, PixelFormat, SourceColorParams,
-    SourceVideoCodec, SourceVideoStream, SubtitleMethod,
+    SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
+    WatermarkOverlay,
 };
 use sqlx::Row;
 
@@ -22,6 +27,9 @@ use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
     decode_optional_string_column, decode_string_column,
 };
+
+const WATERMARK_DIR: &str = "data/watermarks";
+const CHANNEL_LOGO_DIR: &str = "data/iptv/logos";
 
 const IMAGE_SUBTITLE_CODECS: &[&str] = &[
     "hdmv_pgs_subtitle",
@@ -52,6 +60,26 @@ pub struct PlaybackSubtitle {
 pub struct PlaybackProfile {
     pub profile: FFmpegProfile,
     pub resolution: Resolution,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedPlaybackWatermark {
+    pub watermark: ChannelWatermark,
+    pub image_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlaybackWatermarkContext {
+    playout_id: i64,
+    filler_kind: FillerKind,
+    playout_deco_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlaybackDeco {
+    mode: DecoMode,
+    use_watermark_during_filler: bool,
+    watermark_ids: Vec<i64>,
 }
 
 /// Load the source video-stream metadata the `FFmpeg` pipeline needs to make
@@ -414,6 +442,502 @@ pub async fn select_playback_subtitle(
         ChannelSubtitleMode::None => None,
     };
     Ok(selected)
+}
+
+/// Select static `FFmpeg` watermarks for channel playback, porting the non-deco
+/// branches of ErsatzTV's `WatermarkSelector`.
+///
+/// # Errors
+///
+/// Returns database errors from watermark/config/artwork reads.
+pub async fn select_playback_watermarks(
+    pool: &DbPool,
+    channel: &Channel,
+    playout_item_id: i64,
+    disable_watermarks: bool,
+    now: DateTime<Utc>,
+) -> Result<Vec<ResolvedPlaybackWatermark>> {
+    if channel.streaming_mode == StreamingMode::HttpLiveStreamingDirect || disable_watermarks {
+        return Ok(Vec::new());
+    }
+
+    let context = load_playback_watermark_context(pool, playout_item_id).await?;
+    let mut watermark_ids = Vec::new();
+
+    if let Some(template_deco) = load_active_template_deco(pool, context.playout_id, now).await? {
+        if apply_deco_watermarks(&template_deco, context.filler_kind, &mut watermark_ids) {
+            return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
+        }
+    }
+
+    if let Some(playout_deco_id) = context.playout_deco_id {
+        let playout_deco = load_playback_deco(pool, playout_deco_id).await?;
+        if apply_deco_watermarks(&playout_deco, context.filler_kind, &mut watermark_ids) {
+            return resolve_playback_watermarks(pool, channel.id, watermark_ids).await;
+        }
+    }
+
+    let item_ids = load_playout_item_watermark_ids(pool, playout_item_id).await?;
+    if !item_ids.is_empty() {
+        return resolve_playback_watermarks(pool, channel.id, item_ids).await;
+    }
+
+    let fallback_id = match channel.watermark_id {
+        Some(id) => Some(id),
+        None => load_global_watermark_id(pool).await?,
+    };
+    resolve_playback_watermarks(pool, channel.id, fallback_id.into_iter().collect()).await
+}
+
+async fn resolve_playback_watermarks(
+    pool: &DbPool,
+    channel_id: i64,
+    watermark_ids: Vec<i64>,
+) -> Result<Vec<ResolvedPlaybackWatermark>> {
+    let mut watermarks = Vec::with_capacity(watermark_ids.len());
+    for id in watermark_ids {
+        watermarks.push(load_channel_watermark(pool, id).await?);
+    }
+    watermarks.sort_by_key(|watermark| watermark.z_index);
+    let mut resolved = Vec::new();
+    for watermark in watermarks {
+        if let Some(image_path) = resolve_watermark_image_path(pool, channel_id, &watermark).await?
+        {
+            resolved.push(ResolvedPlaybackWatermark {
+                watermark,
+                image_path,
+            });
+        }
+    }
+    Ok(resolved)
+}
+
+#[must_use]
+pub fn watermark_overlay_for_stream(
+    watermark: &ChannelWatermark,
+    program_duration: Option<Duration>,
+) -> Option<WatermarkOverlay> {
+    if watermark.mode == ChannelWatermarkMode::None {
+        return None;
+    }
+    let opacity = u8::try_from(watermark.opacity.clamp(0, 100)).unwrap_or(100);
+    let mut overlay = WatermarkOverlay {
+        location: watermark.location,
+        size: watermark.size,
+        width_percent: watermark.width_percent,
+        horizontal_margin_percent: watermark.horizontal_margin_percent,
+        vertical_margin_percent: watermark.vertical_margin_percent,
+        opacity,
+        place_within_source_content: watermark.place_within_source_content,
+        fade_points: Vec::new(),
+        opacity_expression: None,
+        z_index: watermark.z_index,
+    };
+
+    match watermark.mode {
+        ChannelWatermarkMode::None => None,
+        ChannelWatermarkMode::Permanent => Some(overlay),
+        ChannelWatermarkMode::Intermittent => {
+            overlay.fade_points = watermark_fade_points_for_program(
+                program_duration?,
+                watermark.frequency_minutes,
+                watermark.duration_seconds,
+            );
+            Some(overlay)
+        }
+        ChannelWatermarkMode::OpacityExpression => {
+            overlay
+                .opacity_expression
+                .clone_from(&watermark.opacity_expression);
+            Some(overlay)
+        }
+    }
+}
+
+#[must_use]
+pub fn watermark_fade_points_for_program(
+    program_duration: Duration,
+    frequency_minutes: i32,
+    duration_seconds: i32,
+) -> Vec<WatermarkFadePoint> {
+    let Ok(frequency_minutes) = u64::try_from(frequency_minutes) else {
+        return Vec::new();
+    };
+    let Ok(duration_seconds) = u64::try_from(duration_seconds) else {
+        return Vec::new();
+    };
+    if frequency_minutes == 0 || duration_seconds == 0 {
+        return Vec::new();
+    }
+
+    let frequency = Duration::from_secs(frequency_minutes.saturating_mul(60));
+    let visible = Duration::from_secs(duration_seconds);
+    let fade = Duration::from_secs(1);
+    let mut points = Vec::new();
+    let mut start = Duration::ZERO;
+    while start < program_duration {
+        let hold_finish = start.saturating_add(fade).saturating_add(visible);
+        let fade_finish = hold_finish.saturating_add(fade);
+        points.push(WatermarkFadePoint {
+            kind: WatermarkFadeKind::In,
+            time: start,
+            enable_start: start,
+            enable_finish: start.saturating_add(fade),
+        });
+        points.push(WatermarkFadePoint {
+            kind: WatermarkFadeKind::Out,
+            time: hold_finish,
+            enable_start: hold_finish,
+            enable_finish: fade_finish,
+        });
+        start = start.saturating_add(frequency);
+    }
+    points
+}
+
+async fn load_playout_item_watermark_ids(pool: &DbPool, playout_item_id: i64) -> Result<Vec<i64>> {
+    let rows = sqlx::query(
+        r#"SELECT "WatermarkId"
+           FROM "PlayoutItemWatermark"
+           WHERE "PlayoutItemId" = ?
+           ORDER BY "WatermarkId""#,
+    )
+    .bind(playout_item_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| row.try_get("WatermarkId").map_err(Into::into))
+        .collect()
+}
+
+async fn load_playback_watermark_context(
+    pool: &DbPool,
+    playout_item_id: i64,
+) -> Result<PlaybackWatermarkContext> {
+    let row = sqlx::query(
+        r#"SELECT "pi"."PlayoutId", "pi"."FillerKind", "p"."DecoId"
+           FROM "PlayoutItem" AS "pi"
+           JOIN "Playout" AS "p" ON "p"."Id" = "pi"."PlayoutId"
+           WHERE "pi"."Id" = ?"#,
+    )
+    .bind(playout_item_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(PlaybackWatermarkContext {
+        playout_id: row.try_get("PlayoutId")?,
+        filler_kind: decode_enum_column("playout item filler kind", &row, "FillerKind")?,
+        playout_deco_id: row.try_get("DecoId")?,
+    })
+}
+
+async fn load_playback_deco(pool: &DbPool, deco_id: i64) -> Result<PlaybackDeco> {
+    let row = sqlx::query(
+        r#"SELECT "WatermarkMode", "UseWatermarkDuringFiller"
+           FROM "Deco"
+           WHERE "Id" = ?"#,
+    )
+    .bind(deco_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(PlaybackDeco {
+        mode: decode_enum_column("deco watermark mode", &row, "WatermarkMode")?,
+        use_watermark_during_filler: decode_bool_column(&row, "UseWatermarkDuringFiller")?,
+        watermark_ids: load_deco_watermark_ids(pool, deco_id).await?,
+    })
+}
+
+async fn load_deco_watermark_ids(pool: &DbPool, deco_id: i64) -> Result<Vec<i64>> {
+    let rows = sqlx::query(
+        r#"SELECT "WatermarkId"
+           FROM "DecoWatermark"
+           WHERE "DecoId" = ?
+           ORDER BY "WatermarkId""#,
+    )
+    .bind(deco_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|row| row.try_get("WatermarkId").map_err(Into::into))
+        .collect()
+}
+
+async fn load_active_template_deco(
+    pool: &DbPool,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<PlaybackDeco>> {
+    let Some(deco_template_id) = active_playout_template_deco_id(pool, playout_id, now).await?
+    else {
+        return Ok(None);
+    };
+
+    let time_seconds = i64::from(now.time().num_seconds_from_midnight());
+    let rows = sqlx::query(
+        r#"SELECT "dti"."DecoId", "dti"."StartTime", "dti"."EndTime"
+           FROM "DecoTemplateItem" AS "dti"
+           WHERE "dti"."DecoTemplateId" = ?
+           ORDER BY "dti"."StartTime", "dti"."Id""#,
+    )
+    .bind(deco_template_id)
+    .fetch_all(pool)
+    .await?;
+
+    for row in rows {
+        let start = parse_time_of_day_seconds(&row.try_get::<String, _>("StartTime")?);
+        let finish = parse_time_of_day_seconds(&row.try_get::<String, _>("EndTime")?);
+        if start <= time_seconds && (finish == 0 || finish > time_seconds) {
+            let deco_id = row.try_get("DecoId")?;
+            let deco = load_playback_deco(pool, deco_id).await?;
+            return Ok(Some(deco));
+        }
+    }
+
+    Ok(None)
+}
+
+async fn active_playout_template_deco_id(
+    pool: &DbPool,
+    playout_id: i64,
+    now: DateTime<Utc>,
+) -> Result<Option<i64>> {
+    let rows = sqlx::query(
+        r#"SELECT "DecoTemplateId", "DaysOfWeek", "DaysOfMonth", "MonthsOfYear",
+                  "LimitToDateRange", "StartMonth", "StartDay", "StartYear",
+                  "EndMonth", "EndDay", "EndYear"
+           FROM "PlayoutTemplate"
+           WHERE "PlayoutId" = ? AND "DecoTemplateId" IS NOT NULL
+           ORDER BY "Index", "TemplateId""#,
+    )
+    .bind(playout_id)
+    .fetch_all(pool)
+    .await?;
+
+    for row in rows {
+        if playout_template_matches(&row, now) {
+            return row.try_get("DecoTemplateId").map_err(Into::into);
+        }
+    }
+    Ok(None)
+}
+
+fn apply_deco_watermarks(deco: &PlaybackDeco, filler_kind: FillerKind, out: &mut Vec<i64>) -> bool {
+    let allowed = filler_kind == FillerKind::None || deco.use_watermark_during_filler;
+    match deco.mode {
+        DecoMode::Merge if allowed => {
+            out.extend(deco.watermark_ids.iter().copied());
+            false
+        }
+        DecoMode::Merge | DecoMode::Override | DecoMode::Disable if !allowed => {
+            out.clear();
+            true
+        }
+        DecoMode::Merge | DecoMode::Inherit => false,
+        DecoMode::Override => {
+            out.extend(deco.watermark_ids.iter().copied());
+            true
+        }
+        DecoMode::Disable => true,
+    }
+}
+
+fn playout_template_matches(row: &crate::db::DbRow, now: DateTime<Utc>) -> bool {
+    let days_of_week = row
+        .try_get::<String, _>("DaysOfWeek")
+        .ok()
+        .and_then(|value| parse_integer_list(&value))
+        .unwrap_or_default();
+    let days_of_month = row
+        .try_get::<String, _>("DaysOfMonth")
+        .ok()
+        .and_then(|value| parse_integer_list(&value))
+        .unwrap_or_default();
+    let months_of_year = row
+        .try_get::<String, _>("MonthsOfYear")
+        .ok()
+        .and_then(|value| parse_integer_list(&value))
+        .unwrap_or_default();
+
+    if !matches_integer_filter(&days_of_week, csharp_day_of_week(now.weekday()))
+        || !matches_integer_filter(&days_of_month, i32::try_from(now.day()).unwrap_or_default())
+        || !matches_integer_filter(
+            &months_of_year,
+            i32::try_from(now.month()).unwrap_or_default(),
+        )
+    {
+        return false;
+    }
+
+    let limit = row
+        .try_get::<i64, _>("LimitToDateRange")
+        .is_ok_and(|value| value != 0);
+    if !limit {
+        return true;
+    }
+
+    let date = now.date_naive();
+    let Some(range_start) = NaiveDate::from_ymd_opt(
+        row.try_get::<Option<i32>, _>("StartYear")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| date.year()),
+        u32::try_from(row.try_get::<i32, _>("StartMonth").unwrap_or(1)).unwrap_or_default(),
+        u32::try_from(row.try_get::<i32, _>("StartDay").unwrap_or(1)).unwrap_or_default(),
+    ) else {
+        return false;
+    };
+    let Some(range_end) = NaiveDate::from_ymd_opt(
+        row.try_get::<Option<i32>, _>("EndYear")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| date.year()),
+        u32::try_from(row.try_get::<i32, _>("EndMonth").unwrap_or(12)).unwrap_or_default(),
+        u32::try_from(row.try_get::<i32, _>("EndDay").unwrap_or(31)).unwrap_or_default(),
+    ) else {
+        return false;
+    };
+
+    if range_start <= range_end {
+        date >= range_start && date <= range_end
+    } else {
+        date >= range_start || date <= range_end
+    }
+}
+
+fn parse_integer_list(value: &str) -> Option<Vec<i32>> {
+    let values = serde_json::from_str::<Vec<i32>>(value).ok()?;
+    (!values.is_empty()).then_some(values)
+}
+
+fn matches_integer_filter(values: &[i32], needle: i32) -> bool {
+    values.is_empty() || values.contains(&needle)
+}
+
+fn csharp_day_of_week(weekday: chrono::Weekday) -> i32 {
+    match weekday {
+        chrono::Weekday::Mon => 1,
+        chrono::Weekday::Tue => 2,
+        chrono::Weekday::Wed => 3,
+        chrono::Weekday::Thu => 4,
+        chrono::Weekday::Fri => 5,
+        chrono::Weekday::Sat => 6,
+        chrono::Weekday::Sun => 0,
+    }
+}
+
+fn parse_time_of_day_seconds(value: &str) -> i64 {
+    let mut parts = value.split(':');
+    let hours = parts
+        .next()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    let minutes = parts
+        .next()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    let seconds = parts
+        .next()
+        .and_then(|value| value.split('.').next())
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    hours
+        .saturating_mul(3600)
+        .saturating_add(minutes.saturating_mul(60))
+        .saturating_add(seconds)
+}
+
+async fn load_global_watermark_id(pool: &DbPool) -> Result<Option<i64>> {
+    let value: Option<String> = sqlx::query_scalar(
+        r#"SELECT "Value"
+           FROM "ConfigElement"
+           WHERE "Key" = ?"#,
+    )
+    .bind(CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID)
+    .fetch_optional(pool)
+    .await?;
+    Ok(value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<i64>().ok()))
+}
+
+async fn load_channel_watermark(pool: &DbPool, id: i64) -> Result<ChannelWatermark> {
+    let row = sqlx::query(
+        r#"SELECT "Id","Name","Mode","ImageSource","Image","OriginalContentType",
+                  "Location","Size","WidthPercent","HorizontalMarginPercent",
+                  "VerticalMarginPercent","FrequencyMinutes","DurationSeconds",
+                  "Opacity","PlaceWithinSourceContent","OpacityExpression","ZIndex"
+           FROM "ChannelWatermark"
+           WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    map_channel_watermark(&row)
+}
+
+async fn resolve_watermark_image_path(
+    pool: &DbPool,
+    channel_id: i64,
+    watermark: &ChannelWatermark,
+) -> Result<Option<PathBuf>> {
+    match watermark.image_source {
+        ChannelWatermarkImageSource::Custom => Ok(watermark
+            .image
+            .as_deref()
+            .map(str::trim)
+            .filter(|image| !image.is_empty())
+            .map(|image| Path::new(WATERMARK_DIR).join(image))
+            .filter(|path| path.is_file())),
+        ChannelWatermarkImageSource::ChannelLogo => {
+            let path: Option<String> = sqlx::query_scalar(
+                r#"SELECT "Path"
+                   FROM "Artwork"
+                   WHERE "ChannelId" = ? AND "ArtworkKind" = 2
+                   ORDER BY "Id"
+                   LIMIT 1"#,
+            )
+            .bind(channel_id)
+            .fetch_optional(pool)
+            .await?;
+            Ok(path
+                .as_deref()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .filter(|path| !path.starts_with("http://") && !path.starts_with("https://"))
+                .map(resolve_channel_logo_path)
+                .filter(|path| path.is_file()))
+        }
+        ChannelWatermarkImageSource::Resource => Ok(None),
+    }
+}
+
+fn resolve_channel_logo_path(path: &str) -> PathBuf {
+    let path = path.strip_prefix("iptv/logos/").unwrap_or(path);
+    Path::new(CHANNEL_LOGO_DIR).join(path)
+}
+
+fn map_channel_watermark(row: &crate::db::DbRow) -> Result<ChannelWatermark> {
+    Ok(ChannelWatermark {
+        id: row.try_get("Id")?,
+        name: decode_string_column(row, "Name")?,
+        mode: decode_enum_column("channel watermark mode", row, "Mode")?,
+        image_source: decode_enum_column("channel watermark image source", row, "ImageSource")?,
+        image: decode_optional_string_column(row, "Image")?,
+        original_content_type: decode_optional_string_column(row, "OriginalContentType")?,
+        location: decode_enum_column("watermark location", row, "Location")?,
+        size: decode_enum_column("watermark size", row, "Size")?,
+        width_percent: row.try_get("WidthPercent")?,
+        horizontal_margin_percent: row.try_get("HorizontalMarginPercent")?,
+        vertical_margin_percent: row.try_get("VerticalMarginPercent")?,
+        frequency_minutes: row.try_get("FrequencyMinutes")?,
+        duration_seconds: row.try_get("DurationSeconds")?,
+        opacity: row.try_get("Opacity")?,
+        place_within_source_content: decode_bool_column(row, "PlaceWithinSourceContent")?,
+        opacity_expression: decode_optional_string_column(row, "OpacityExpression")?,
+        z_index: row.try_get("ZIndex")?,
+    })
 }
 
 #[must_use]

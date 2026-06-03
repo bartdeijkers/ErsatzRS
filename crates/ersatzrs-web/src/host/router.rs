@@ -307,10 +307,7 @@ pub fn build_app(app_state: AppState) -> Router {
         .with_state(app_state);
 
     Router::new()
-        .route(
-            "/dev/stream/bbb.ts",
-            get(|| async { dev_stream::stream_big_buck_bunny() }),
-        )
+        .route("/dev/stream/bbb.ts", get(dev_stream::stream_big_buck_bunny))
         .merge(api_router)
         .merge(leptos_router)
         .route_service(

@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
-use ersatzrs_domain::{ChannelSubtitleMode, StreamingMode};
+use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
     FrameRate, HlsOutput, InputFile, OutputFormat, PipelineRequest, SourceVideoStream,
@@ -22,7 +22,8 @@ use ersatzrs_ffmpeg::{
 
 use crate::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
-    select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
+    select_playback_subtitle, select_playback_watermarks, subtitle_fonts_dir,
+    subtitle_input_for_stream, watermark_overlay_for_stream, PlaybackProfile,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -182,6 +183,40 @@ impl HlsSessionWorker {
             };
             let subtitle_input =
                 rebase_burned_text_subtitle_input(subtitle_input, active.start_seconds).await;
+            let watermark_channel = Channel {
+                id: self.channel_id,
+                watermark_id: active.channel_watermark_id,
+                streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                ..Channel::default()
+            };
+            let watermark_inputs = match select_playback_watermarks(
+                &pool,
+                &watermark_channel,
+                active.playout_item_id,
+                active.disable_watermarks,
+                now,
+            )
+            .await
+            {
+                Ok(watermarks) => watermarks
+                    .into_iter()
+                    .filter_map(|resolved| {
+                        watermark_overlay_for_stream(&resolved.watermark, active.program_duration)
+                            .map(|overlay| {
+                                (
+                                    InputFile::watermark(
+                                        resolved.image_path.to_string_lossy().into_owned(),
+                                    ),
+                                    overlay,
+                                )
+                            })
+                    })
+                    .collect(),
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %self.channel_number, "failed to select HLS watermarks");
+                    Vec::new()
+                }
+            };
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,
@@ -193,6 +228,7 @@ impl HlsSessionWorker {
                 self.runtime_capabilities.clone(),
                 source_stream,
                 subtitle_input,
+                watermark_inputs,
             );
             let mut process = Command::new(&command.executable);
             process
@@ -295,6 +331,7 @@ fn build_hls_command(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
     let desired = DesiredVideoState::from_profile(
@@ -312,6 +349,10 @@ fn build_hls_command(
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
+    }
+    for (input, overlay) in watermark_inputs {
+        request.inputs.push(input);
+        request.watermarks.push(overlay);
     }
     request.state.output_format = output_format;
     if start_seconds > 0 {
@@ -354,11 +395,15 @@ async fn load_active_hls_item(
     let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
                   pi."Start" AS "PlayoutStart",
+                  pi."Finish" AS "PlayoutFinish",
+                  pi."DisableWatermarks" AS "DisableWatermarks",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode",
+                  c."WatermarkId" AS "ChannelWatermarkId",
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
                   c."SubtitleMode" AS "ChannelSubtitleMode"
            FROM "PlayoutItem" pi
@@ -394,11 +439,21 @@ async fn load_active_hls_item(
         replace_path(path_replacements, &media_path, PathPlatform::Unix)
     };
     let playout_start = parse_sqlite_utc_timestamp(&row.get::<String, _>("PlayoutStart"))?;
+    let program_duration = row
+        .try_get::<String, _>("PlayoutFinish")
+        .ok()
+        .and_then(|finish| parse_sqlite_utc_timestamp(&finish))
+        .and_then(|finish| (finish - playout_start).to_std().ok());
     Some(ActiveHlsItem {
         media_path: resolved,
+        playout_item_id: row.get::<i64, _>("PlayoutItemId"),
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
         start_seconds: playout_start_seconds(now, playout_start),
+        program_duration,
+        disable_watermarks: row
+            .try_get::<i64, _>("DisableWatermarks")
+            .is_ok_and(|value| value != 0),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -417,19 +472,27 @@ async fn load_active_hls_item(
             .ok()
             .and_then(decode_subtitle_mode)
             .unwrap_or(ChannelSubtitleMode::None),
+        channel_watermark_id: row
+            .try_get::<Option<i64>, _>("ChannelWatermarkId")
+            .ok()
+            .flatten(),
     })
 }
 
 #[derive(Debug, Clone)]
 struct ActiveHlsItem {
     media_path: String,
+    playout_item_id: i64,
     media_item_id: i64,
     media_version_id: i64,
     start_seconds: i64,
+    program_duration: Option<Duration>,
+    disable_watermarks: bool,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
     channel_preferred_subtitle_language_code: Option<String>,
     channel_subtitle_mode: ChannelSubtitleMode,
+    channel_watermark_id: Option<i64>,
 }
 
 const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
@@ -825,6 +888,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         insta::assert_snapshot!(command.arguments.join(" "));
     }
@@ -842,6 +906,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-hls_segment_type fmp4"));
@@ -862,6 +927,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
 
         assert!(command
@@ -998,6 +1064,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             Some(source_1080p()),
             None,
+            Vec::new(),
         );
 
         let mut process = Command::new(&command.executable);

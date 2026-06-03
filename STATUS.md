@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-06-01 (FFmpeg profile playback loading parity)
+Last updated: 2026-06-03 (watermark streaming parity complete)
 
 ## Current Phase
 
@@ -471,18 +471,19 @@ corresponding page.
 
 Tracking the per-page conversion from `#[component]` interactive bodies to
 `#[island]`. See [TEST.md](TEST.md) hydration rules and the reference patterns
-in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:11-17` and
+in `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:18-21` /
+`crates/ersatzrs-web/src/admin/pages/libraries/mod.rs:81-95` and
 `pages/media_sources/plex.rs`.
 
 The first scripted Playwright migration on 2026-05-04 found marker-node
-hydration mismatches on the pages marked ❌ below. Those rows have island
-wiring present, but the browser tests prove their handlers are not reliable
-yet.
+hydration mismatches on several pages. The 2026-06-02 reconciliation reran the
+disputed routes with hydrated server-backed actions and found the stale red
+rows below now clean.
 
 | Page                          | Status | Notes                                                          |
 | ----------------------------- | ------ | -------------------------------------------------------------- |
-| `LibrariesPage`               | ❌     | Playwright hydration mismatch; lock-state polling present.      |
-| `SearchPage`                  | ❌     | Playwright hydration mismatch.                                  |
+| `LibrariesPage`               | ✅     | `Scan Library` server fn smoke clean; lock-state polling present. |
+| `SearchPage`                  | ✅     | Search result `Save As` smart collection server fn smoke clean. |
 | `PlexSourcesPage`             | ✅     | OAuth PIN island.                                              |
 | `WatermarksEditorPage`        | ✅     |                                                                |
 | `BlockEditorPage`             | ✅     |                                                                |
@@ -492,11 +493,11 @@ yet.
 | `MoviesPage`                  | TODO   | Item overflow menu wired; Playwright smoke pending.             |
 | `MoviePage` (`/media/movies/:id`) | ✅ | SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean. |
 | `ArtistPage` (`/media/music/artists/:id`) | ✅ | Detail page island wired; `/media/music/artists/2355` modal-open smoke clean. |
-| `ChannelsListPage`            | ❌     | Playwright hydration mismatch.                                  |
-| `FfmpegProfilesListPage`      | ❌     | Playwright hydration mismatch.                                  |
-| `FfmpegProfileEditorPage`     | ❌     | Playwright hydration mismatch.                                  |
+| `ChannelsListPage`            | ✅     | Delete dialog server fn smoke clean.                            |
+| `FfmpegProfilesListPage`      | ✅     | Delete dialog server fn smoke clean.                            |
+| `FfmpegProfileEditorPage`     | ✅     | Copy Profile server fn smoke clean.                             |
 | `ChannelEditorPage`           | ✅     | SSR multipart form; `/channels/add` and `/channels/:id` smoke clean. |
-| `LocalLibrariesPage`          | ❌     | Playwright hydration mismatch; static HTML add-form unchanged.  |
+| `LocalLibrariesPage`          | ✅     | Delete dialog server fn smoke clean; static HTML add-form unchanged. |
 | `JellyfinSourcesPage` etc.    | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `EmbySourcesPage` etc.        | ⏳     | Awaits Plex pattern + jellyfin/emby mock helper (Slice E).     |
 | `PlayoutsPage` row selection  | ⏳     | Slice F — lift selection to URL query param.                   |
@@ -542,6 +543,8 @@ None. All Phase 0 decisions are recorded in ADRs 0001–0007.
 
 | Date | Agent | Summary |
 | --- | --- | --- |
+| 2026-06-03 | Codex (GPT-5) | Completed the static watermark streaming parity slice: FFmpeg watermark inputs now loop still images, scale by `WidthPercent`, support intermittent fade points, opacity-expression alpha filters, and chain multiple overlays by `ZIndex`; IPTV `.ts` and HLS segmenter commands now resolve active deco-template, playout-deco, playout-item, channel, and global watermarks through `select_playback_watermarks`, attach watermark inputs, honor `DisableWatermarks`, and use JSON/C#-weekday/year-range matching for playout templates; `/dev/stream/bbb.ts` has a dev-only watermark query surface covering Permanent, Intermittent, and OpacityExpression overlays. Added an ignored IPTV proof test that runs the real FFmpeg stream command with a still-image watermark, decodes the MPEG-TS output, and verifies the composited frame crop. Gates run: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo clippy --workspace --all-targets --features mysql -- -D warnings`, `cargo test --workspace --all-features`, `cargo test -p ersatzrs-infra --test playback_subtitles`, `cargo test -p ersatzrs-web transport::iptv::stream::tests::stream_body_composites_watermark_from_fixture -- --ignored --nocapture`, `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`, and `cargo clippy -p ersatzrs-web --all-targets --features mysql -- -D warnings`. |
+| 2026-06-02 | Codex (GPT-5) | Reconciled the stale admin hydration tracker rows for `/media/libraries`, `/search`, `/channels`, `/ffmpeg/profiles`, `/ffmpeg/profiles/:id`, and `/media/sources/local`: rebuilt `./run.sh serve` against an isolated SQLite DB, proved each route's hydrated server-backed action completed with HTTP 200 and no console hydration errors, flipped the stale `STATUS.md` rows to ✅, and corrected the `libraries/mod.rs` hydration-rule anchors in `STATUS.md` / `TEST.md`. |
 | 2026-06-01 | Codex (GPT-5) | Wired MPEG-TS/HLS playback through persisted FFmpeg profiles and resolutions: stream commands now load source sizing/frame-rate metadata, map profile codecs/bitrates/loudness/tonemap/scaling/thread settings into `DesiredVideoState`, select hardware builders with runtime capability fallback, preserve HLS-direct copy behavior, and cover crop/VAAPI padding review fixes plus real FFmpeg/ffprobe HLS segment smoke proof. |
 | 2026-06-01 | Codex (GPT-5) | Implemented movie scanner sidecar metadata parity: local movie scans now parse movie NFOs, attach poster/fanart artwork, persist genres/tags/studios/actors/directors/writers/GUIDs with stable `MovieMetadata.Id`, keep fallback metadata kind at 0, and cover fallback/malformed/idempotent scan cases. |
 | 2026-06-01 | Codex (GPT-5) | Fixed the `/watermarks` list hydration anomaly: moved list actions into a `WatermarksListIsland`, replaced watermark editor/list router-context redirects with browser-location redirects, verified hydrated delete cancel/confirm, copy dispatch/redirect, pager state, and a clean final `/watermarks` console after rebuilt `./run.sh serve`. |

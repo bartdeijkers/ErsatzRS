@@ -242,10 +242,14 @@ fn escape_subtitles_filter_common(path: &str) -> String {
 pub struct WatermarkOverlay {
     pub location: WatermarkLocation,
     pub size: WatermarkSize,
+    pub width_percent: f64,
     pub horizontal_margin_percent: f64,
     pub vertical_margin_percent: f64,
     pub opacity: u8,
     pub place_within_source_content: bool,
+    pub fade_points: Vec<WatermarkFadePoint>,
+    pub opacity_expression: Option<String>,
+    pub z_index: i32,
 }
 
 impl Default for WatermarkOverlay {
@@ -253,12 +257,22 @@ impl Default for WatermarkOverlay {
         Self {
             location: WatermarkLocation::BottomRight,
             size: WatermarkSize::Scaled,
+            width_percent: 10.0,
             horizontal_margin_percent: 2.0,
             vertical_margin_percent: 2.0,
             opacity: 100,
             place_within_source_content: false,
+            fade_points: Vec::new(),
+            opacity_expression: None,
+            z_index: 0,
         }
     }
+}
+
+#[must_use]
+pub fn watermark_scale_filter(watermark: &WatermarkOverlay, resolution: FrameSize) -> String {
+    let width = watermark.width_percent / 100.0 * f64::from(resolution.width);
+    format!("scale={}:-1", rounded_number(width))
 }
 
 #[must_use]
@@ -300,6 +314,23 @@ pub fn watermark_opacity_filter(opacity: u8) -> String {
     format!(
         "format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa={opacity:.2}"
     )
+}
+
+#[must_use]
+pub fn watermark_opacity_expression_filter(expression: &str) -> String {
+    let expression = translate_watermark_opacity_expression(expression);
+    format!(
+        "format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,geq=a='clip(255*({expression}),0,255)'"
+    )
+}
+
+#[must_use]
+pub fn translate_watermark_opacity_expression(expression: &str) -> String {
+    expression
+        .replace("time_of_day_seconds", "t")
+        .replace("content_time_seconds", "t")
+        .replace("channel_time_seconds", "t")
+        .replace("content_total_seconds", "NAN")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

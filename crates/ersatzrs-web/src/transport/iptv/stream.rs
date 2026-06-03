@@ -16,7 +16,8 @@ use ersatzrs_ffmpeg::{
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::playback::{
     load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
-    select_playback_subtitle, subtitle_fonts_dir, subtitle_input_for_stream, PlaybackProfile,
+    select_playback_subtitle, select_playback_watermarks, subtitle_fonts_dir,
+    subtitle_input_for_stream, watermark_overlay_for_stream, PlaybackProfile,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -128,6 +129,35 @@ pub async fn serve_channel_stream(
         subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
     });
     let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
+    let watermark_inputs = match select_playback_watermarks(
+        &state.pool,
+        &channel,
+        active.playout_item_id,
+        active.disable_watermarks,
+        now,
+    )
+    .await
+    {
+        Ok(watermarks) => watermarks
+            .into_iter()
+            .filter_map(|resolved| {
+                watermark_overlay_for_stream(&resolved.watermark, active.program_duration()).map(
+                    |overlay| {
+                        (
+                            InputFile::watermark(
+                                resolved.image_path.to_string_lossy().into_owned(),
+                            ),
+                            overlay,
+                        )
+                    },
+                )
+            })
+            .collect(),
+        Err(error) => {
+            tracing::warn!(%error, channel_number = %channel.number, "failed to select playback watermarks");
+            Vec::new()
+        }
+    };
     let command = build_stream_command(
         &resolved,
         output_format,
@@ -138,6 +168,7 @@ pub async fn serve_channel_stream(
         runtime_capabilities,
         source_stream,
         subtitle_input,
+        watermark_inputs,
     );
     match spawn_stream_body(command) {
         Ok(body) => {
@@ -168,13 +199,23 @@ enum StreamSpawnError {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ActivePlayoutItem {
+    pub(crate) playout_item_id: i64,
     pub(crate) media_path: String,
     pub(crate) media_item_id: i64,
     pub(crate) media_version_id: i64,
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
+    pub(crate) disable_watermarks: bool,
     pub(crate) preferred_subtitle_language_code: Option<String>,
     pub(crate) subtitle_mode: Option<ChannelSubtitleMode>,
+}
+
+impl ActivePlayoutItem {
+    fn program_duration(&self) -> Option<std::time::Duration> {
+        let start = parse_sqlite_utc_timestamp(&self.playout_start)?;
+        let finish = parse_sqlite_utc_timestamp(&self.playout_finish)?;
+        (finish - start).to_std().ok()
+    }
 }
 
 pub(crate) async fn load_active_media_path(
@@ -185,10 +226,12 @@ pub(crate) async fn load_active_media_path(
     let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
+                  pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
+                  pi."DisableWatermarks" AS "DisableWatermarks",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode"
            FROM "PlayoutItem" pi
@@ -216,11 +259,15 @@ pub(crate) async fn load_active_media_path(
     .await?;
 
     Ok(row.map(|row| ActivePlayoutItem {
+        playout_item_id: row.get::<i64, _>("PlayoutItemId"),
         media_path: row.get::<String, _>("MediaPath"),
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
         playout_start: row.get::<String, _>("PlayoutStart"),
         playout_finish: row.get::<String, _>("PlayoutFinish"),
+        disable_watermarks: row
+            .try_get::<i64, _>("DisableWatermarks")
+            .is_ok_and(|value| value != 0),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -330,6 +377,7 @@ fn build_stream_command(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let desired = DesiredVideoState::from_profile(
@@ -347,6 +395,10 @@ fn build_stream_command(
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
+    }
+    for (input, overlay) in watermark_inputs {
+        request.inputs.push(input);
+        request.watermarks.push(overlay);
     }
     request.state.output_format = output_format;
     if start_seconds > 0 {
@@ -425,9 +477,9 @@ mod tests {
     use super::*;
     use ersatzrs_domain::{
         FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
-        StreamingMode,
+        StreamingMode, WatermarkLocation, WatermarkSize,
     };
-    use ersatzrs_ffmpeg::FfmpegCapabilityReport;
+    use ersatzrs_ffmpeg::{FfmpegCapabilityReport, WatermarkOverlay};
     use std::path::PathBuf;
     use std::time::Duration;
 
@@ -436,6 +488,10 @@ mod tests {
         "testdata/bbb_sunflower_1080p_60fps_normal.mp4",
         "testdata/bbb_sunflower_2160p_30fps_normal.mp4",
         "testdata/bbb_sunflower_2160p_60fps_normal.mp4",
+        "../../testdata/bbb_sunflower_1080p_30fps_normal.mp4",
+        "../../testdata/bbb_sunflower_1080p_60fps_normal.mp4",
+        "../../testdata/bbb_sunflower_2160p_30fps_normal.mp4",
+        "../../testdata/bbb_sunflower_2160p_60fps_normal.mp4",
     ];
 
     #[test]
@@ -451,6 +507,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mpegts"));
@@ -471,6 +528,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
@@ -490,6 +548,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-ss 900 -i /media/movie.mkv"));
@@ -566,6 +625,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             None,
+            Vec::new(),
         );
         let mut process = Command::new(&command.executable);
         process
@@ -585,6 +645,120 @@ mod tests {
 
         child.kill().await.ok();
         let _ = child.wait().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg on PATH and the Big Buck Bunny fixture under testdata/"]
+    async fn stream_body_composites_watermark_from_fixture() {
+        use tokio::io::AsyncReadExt;
+        use tokio::time::timeout;
+
+        let Some(fixture) = TESTDATA_CANDIDATES
+            .iter()
+            .map(PathBuf::from)
+            .find(|p| p.is_file())
+        else {
+            eprintln!("skipping: no Big Buck Bunny fixture found in testdata/");
+            return;
+        };
+        if tokio::process::Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_err()
+        {
+            eprintln!("skipping: ffmpeg not on PATH");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let logo = temp.path().join("logo.ppm");
+        std::fs::write(&logo, red_ppm(64, 32)).expect("write watermark fixture");
+
+        let command = build_stream_command(
+            fixture.to_string_lossy().as_ref(),
+            OutputFormat::MpegTs,
+            0,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            FfmpegCapabilityReport::default(),
+            None,
+            None,
+            vec![(
+                InputFile::watermark(logo.to_string_lossy().into_owned()),
+                WatermarkOverlay {
+                    location: WatermarkLocation::TopLeft,
+                    size: WatermarkSize::Scaled,
+                    width_percent: 10.0,
+                    horizontal_margin_percent: 0.0,
+                    vertical_margin_percent: 0.0,
+                    opacity: 100,
+                    ..WatermarkOverlay::default()
+                },
+            )],
+        );
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        let mut child = process.spawn().expect("spawn ffmpeg");
+        let mut stdout = child.stdout.take().expect("stdout pipe");
+
+        let mut buffer = vec![0u8; 2 * 1024 * 1024];
+        let read = timeout(Duration::from_secs(20), stdout.read(&mut buffer))
+            .await
+            .expect("timed out waiting for ffmpeg output")
+            .expect("read ffmpeg stdout");
+        assert!(read > 0, "expected some bytes from ffmpeg");
+        child.kill().await.ok();
+        let _ = child.wait().await;
+
+        let stream = temp.path().join("watermarked.ts");
+        std::fs::write(&stream, &buffer[..read]).expect("write mpegts sample");
+
+        let output = tokio::process::Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                stream.to_string_lossy().as_ref(),
+                "-vf",
+                "crop=160:80:0:0,scale=1:1,format=rgb24",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "pipe:1",
+            ])
+            .output()
+            .await
+            .expect("decode watermarked frame");
+        assert!(
+            output.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout.len(), 3);
+        assert!(
+            output.stdout[0] > 180 && output.stdout[1] < 80 && output.stdout[2] < 80,
+            "expected red watermark crop, got rgb={:?}",
+            output.stdout
+        );
+    }
+
+    fn red_ppm(width: usize, height: usize) -> Vec<u8> {
+        let mut ppm = format!("P6\n{width} {height}\n255\n").into_bytes();
+        ppm.extend(std::iter::repeat_n([255, 0, 0], width * height).flatten());
+        ppm
     }
 
     fn playback_profile() -> PlaybackProfile {

@@ -64,7 +64,11 @@ impl InputFile {
 
     #[must_use]
     pub fn watermark(path: impl Into<String>) -> Self {
-        Self::new(InputKind::Watermark, path, 0)
+        let mut input = Self::new(InputKind::Watermark, path, 0);
+        input
+            .input_options
+            .extend(["-loop".to_owned(), "1".to_owned()]);
+        input
     }
 
     #[must_use]

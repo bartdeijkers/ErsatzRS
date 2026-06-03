@@ -9,8 +9,9 @@ use crate::{
     hardware_upload_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
     no_standard_input, no_stats, normalize_loudness_filter, pad_filter, pipe_output,
     progress_to_stdout, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
-    subtitle_overlay_filter, subtitles_filter, tonemap_filter_for, watermark_opacity_filter,
-    watermark_overlay_filter, AudioFilter, CommandGenerator, ComplexFilter, FfmpegCapability,
+    subtitle_overlay_filter, subtitles_filter, tonemap_filter_for,
+    watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_filter,
+    watermark_scale_filter, AudioFilter, CommandGenerator, ComplexFilter, FfmpegCapability,
     FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
     HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
     StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
@@ -70,6 +71,7 @@ pub struct PipelineRequest {
     pub source_audio_streams: Vec<SourceAudioStream>,
     pub runtime_capabilities: Option<FfmpegCapabilityReport>,
     pub watermark: Option<WatermarkOverlay>,
+    pub watermarks: Vec<WatermarkOverlay>,
     pub drawvg_filters: Vec<String>,
     pub subtitle_fonts_dir: Option<String>,
 }
@@ -86,6 +88,7 @@ impl PipelineRequest {
             source_audio_streams: Vec::new(),
             runtime_capabilities: None,
             watermark: None,
+            watermarks: Vec::new(),
             drawvg_filters: Vec::new(),
             subtitle_fonts_dir: None,
         }
@@ -651,23 +654,54 @@ fn build_transcode_pipeline(
     );
 
     if let Some(watermark) = &request.watermark {
-        if let Some(input) = request
-            .inputs
-            .iter_mut()
-            .find(|input| input.kind == InputKind::Watermark)
-        {
-            if watermark.opacity < 100 {
-                input
-                    .filter_steps
-                    .push(watermark_opacity_filter(watermark.opacity));
-            }
+        request.watermarks.push(watermark.clone());
+    }
+
+    request
+        .watermarks
+        .sort_by_key(|watermark| watermark.z_index);
+    for (input, watermark) in request
+        .inputs
+        .iter_mut()
+        .filter(|input| input.kind == InputKind::Watermark)
+        .zip(request.watermarks.iter())
+    {
+        if watermark.size == ersatzrs_domain::WatermarkSize::Scaled {
+            input.filter_steps.push(watermark_scale_filter(
+                watermark,
+                request.desired.frame_size,
+            ));
         }
+        if let Some(expression) = watermark
+            .opacity_expression
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            input
+                .filter_steps
+                .push(watermark_opacity_expression_filter(expression));
+        } else if watermark.opacity < 100 {
+            input
+                .filter_steps
+                .push(watermark_opacity_filter(watermark.opacity));
+        }
+        input.filter_steps.extend(
+            watermark
+                .fade_points
+                .iter()
+                .copied()
+                .map(crate::watermark_fade_filter),
+        );
         filter_chain
             .watermark_overlay
             .push(watermark_overlay_filter(
                 watermark,
                 request.desired.frame_size,
-                request.desired.frame_size,
+                request
+                    .source_video_stream
+                    .as_ref()
+                    .and_then(|stream| stream.square_pixel_frame_size(request.desired.frame_size))
+                    .unwrap_or(request.desired.frame_size),
                 request.desired.pixel_format(),
             ));
     }

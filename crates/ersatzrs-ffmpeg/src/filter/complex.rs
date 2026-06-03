@@ -92,7 +92,7 @@ impl<'a> ComplexFilterBuilder<'a> {
     ) -> (Vec<String>, Option<String>, String, String) {
         let mut audio_label = "0:a".to_owned();
         let mut video_label = "0:v".to_owned();
-        let mut watermark_label = None::<String>;
+        let mut watermark_labels = Vec::<String>::new();
         let mut subtitle_label = None::<String>;
         let mut graphics_label = None::<String>;
 
@@ -115,26 +115,29 @@ impl<'a> ComplexFilterBuilder<'a> {
             }
         }
 
-        if let Some(watermark) = self
+        for (index, watermark) in self
             .inputs
             .iter()
-            .find(|input| input.kind == InputKind::Watermark)
+            .filter(|input| input.kind == InputKind::Watermark)
+            .enumerate()
         {
             let input_index = self.input_index(watermark, false);
-            if let Some(stream) = watermark.streams.first() {
-                let label = format!("{input_index}:{}", stream.index);
-                let filters = join_filters(
-                    watermark
-                        .filter_steps
-                        .iter()
-                        .chain(filter_chain.watermark.iter()),
-                );
-                if filters.is_empty() {
-                    watermark_label = Some(format!("[{label}]"));
-                } else {
-                    graph_parts.push(format!("[{label}]{filters}[wm]"));
-                    watermark_label = Some("[wm]".to_owned());
-                }
+            let Some(stream) = watermark.streams.first() else {
+                continue;
+            };
+            let label = format!("{input_index}:{}", stream.index);
+            let filters = join_filters(
+                watermark
+                    .filter_steps
+                    .iter()
+                    .chain(filter_chain.watermark.iter()),
+            );
+            if filters.is_empty() {
+                watermark_labels.push(format!("[{label}]"));
+            } else {
+                let output = format!("[wm{index}]");
+                graph_parts.push(format!("[{label}]{filters}{output}"));
+                watermark_labels.push(output);
             }
         }
 
@@ -193,15 +196,20 @@ impl<'a> ComplexFilterBuilder<'a> {
             }
         }
 
-        if let Some(label) = watermark_label {
-            let filters = join_filters(filter_chain.watermark_overlay.iter());
+        for (index, (label, overlay_filter)) in watermark_labels
+            .iter()
+            .zip(filter_chain.watermark_overlay.iter())
+            .enumerate()
+        {
+            let filters = join_filters(std::iter::once(overlay_filter));
             if !filters.is_empty() {
+                let output = format!("[vwm{index}]");
                 graph_parts.push(format!(
-                    "{}{}{filters}[vwm]",
+                    "{}{}{filters}{output}",
                     proper_label(&video_label),
-                    proper_label(&label)
+                    proper_label(label)
                 ));
-                "[vwm]".clone_into(&mut video_label);
+                video_label = output;
             }
         }
 
