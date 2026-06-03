@@ -10,6 +10,30 @@ use std::path::{Path, PathBuf};
 
 use directories::BaseDirs;
 
+const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
+
+/// Application state root, matching the default `SQLite` database directory
+/// (`~/.ersatzrs`).
+#[must_use]
+pub fn app_state_folder() -> PathBuf {
+    BaseDirs::new().map_or_else(
+        || Path::new(".").to_path_buf(),
+        |base_dirs| base_dirs.home_dir().join(DEFAULT_SQLITE_DIR_NAME),
+    )
+}
+
+/// Root for persistent ErsatzRS data files (`~/.ersatzrs/data` by default).
+#[must_use]
+pub fn data_folder() -> PathBuf {
+    app_state_folder().join("data")
+}
+
+/// Resolve a path below the persistent data root.
+#[must_use]
+pub fn data_path(path: impl AsRef<Path>) -> PathBuf {
+    data_folder().join(path)
+}
+
 /// Application data root, matching `logging::default_log_dir`'s base
 /// (`data_local_dir()/ErsatzRS`), falling back to `./` when no home directory
 /// is available.
@@ -83,6 +107,16 @@ mod tests {
         assert!(
             path.ends_with(Path::new("cache").join("streams").join("fonts")),
             "unexpected fonts cache path: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn persistent_data_folder_lives_under_ersatzrs_state_root() {
+        let path = data_folder();
+        assert!(
+            path.ends_with(Path::new(".ersatzrs").join("data")),
+            "unexpected data path: {}",
             path.display()
         );
     }

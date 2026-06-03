@@ -24,7 +24,7 @@ use sqlx::Row;
 use crate::db::DbPool;
 use crate::ffmpeg_config::use_embedded_subtitles;
 use crate::ffprobe::FfprobeExtractor;
-use crate::file_system_layout::{fonts_cache_folder, subtitle_cache_folder};
+use crate::file_system_layout::{data_path, fonts_cache_folder, subtitle_cache_folder};
 use crate::graphics_template::{
     graphics_template_variables, render_graphics_template, scalar_template_variables,
     GraphicsTemplateContext,
@@ -34,9 +34,6 @@ use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
     decode_optional_string_column, decode_string_column,
 };
-
-const WATERMARK_DIR: &str = "data/watermarks";
-const CHANNEL_LOGO_DIR: &str = "data/iptv/logos";
 
 const IMAGE_SUBTITLE_CODECS: &[&str] = &[
     "hdmv_pgs_subtitle",
@@ -1254,7 +1251,7 @@ async fn resolve_watermark_image_path(
             .as_deref()
             .map(str::trim)
             .filter(|image| !image.is_empty())
-            .map(|image| Path::new(WATERMARK_DIR).join(image))
+            .map(|image| data_path(Path::new("watermarks").join(image)))
             .filter(|path| path.is_file())),
         ChannelWatermarkImageSource::ChannelLogo => {
             let path: Option<String> = sqlx::query_scalar(
@@ -1281,7 +1278,7 @@ async fn resolve_watermark_image_path(
 
 fn resolve_channel_logo_path(path: &str) -> PathBuf {
     let path = path.strip_prefix("iptv/logos/").unwrap_or(path);
-    Path::new(CHANNEL_LOGO_DIR).join(path)
+    data_path(Path::new("iptv").join("logos").join(path))
 }
 
 fn map_channel_watermark(row: &crate::db::DbRow) -> Result<ChannelWatermark> {

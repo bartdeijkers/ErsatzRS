@@ -12,6 +12,7 @@ use ersatzrs_ffmpeg::{
     PipelineRequest, SoftwarePipelineBuilder, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
 };
 use ersatzrs_infra::ffmpeg_config::CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES;
+use ersatzrs_infra::file_system_layout::data_path;
 use ersatzrs_infra::graphics_import::upsert_graphics_element_from_yaml;
 use ersatzrs_infra::graphics_template::{
     evaluate_graphics_number, graphics_template_variables, render_graphics_template,
@@ -229,7 +230,7 @@ async fn playback_watermarks_resolve_channel_logo_and_defer_resource() {
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 102).await;
     seed_playout_item(&pool, 102, None, 1001, 10).await;
-    let logo = write_test_file("data/iptv/logos/watermark-test-logo.png");
+    let logo = write_test_file(data_path("iptv/logos/watermark-test-logo.png"));
     seed_watermark(
         &pool,
         205,
@@ -283,7 +284,7 @@ async fn playback_watermarks_resolve_channel_logo_and_defer_resource() {
     assert_eq!(selected[0].watermark.id, 205);
     assert_eq!(
         selected[0].image_path,
-        PathBuf::from("data/iptv/logos/watermark-test-logo.png")
+        data_path("iptv/logos/watermark-test-logo.png")
     );
     cleanup_files([logo]);
 }
@@ -1170,7 +1171,7 @@ async fn set_playout_item_filler_kind(
 
 async fn seed_custom_watermark(pool: &SqlitePool, id: i64, name: &str, z_index: i32) -> PathBuf {
     let filename = format!("watermark-test-{id}.png");
-    let path = write_test_file(Path::new("data/watermarks").join(&filename));
+    let path = write_test_file(data_path(Path::new("watermarks").join(&filename)));
     seed_watermark(
         pool,
         id,

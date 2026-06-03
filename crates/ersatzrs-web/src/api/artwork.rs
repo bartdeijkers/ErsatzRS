@@ -26,13 +26,10 @@ use axum::{
 use serde::Deserialize;
 use sqlx::Row;
 use std::collections::HashMap;
-use std::path::PathBuf;
+
+use ersatzrs_infra::file_system_layout::data_path;
 
 use crate::host::state::AppState;
-
-const LOCAL_POSTER_DIR: &str = "data/artwork/posters";
-const LOCAL_FANART_DIR: &str = "data/artwork/fanart";
-const LOCAL_THUMBNAIL_DIR: &str = "data/artwork/thumbnails";
 
 /// Convert a DB-stored artwork path (`jellyfin://Items/.../Primary?tag=X`, a
 /// raw SHA-1 hash filename, or `http(s)://…`) into a URL suitable for an
@@ -195,17 +192,17 @@ async fn serve_artwork(
 
 async fn serve_local_artwork(kind: &str, file_name: &str) -> Response {
     let base = match kind {
-        "posters" => LOCAL_POSTER_DIR,
-        "fanart" => LOCAL_FANART_DIR,
-        "thumbnails" => LOCAL_THUMBNAIL_DIR,
+        "posters" => data_path("artwork/posters"),
+        "fanart" => data_path("artwork/fanart"),
+        "thumbnails" => data_path("artwork/thumbnails"),
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     // Hash filenames are sharded by the first two hex chars in `ErsatzTV`
     // (`FileSystemLayout.PosterCacheFolder/{hash[..2]}/{hash}`). Honour both
     // forms so existing on-disk caches keep working.
-    let direct = PathBuf::from(base).join(file_name);
+    let direct = base.join(file_name);
     let sharded = if file_name.len() >= 2 {
-        Some(PathBuf::from(base).join(&file_name[..2]).join(file_name))
+        Some(base.join(&file_name[..2]).join(file_name))
     } else {
         None
     };

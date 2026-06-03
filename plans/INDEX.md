@@ -109,6 +109,9 @@ Feature-level porting plans live alongside this index.
 - `graphics-engine-parity-slice.md` — wire the general graphics-element engine
   (image/text/subtitle/motion) into streaming via drawvg + FFmpeg overlays; ports ErsatzTV's
   graphics engine within ADR 0005 (no external graphics process).
+- `release-self-built-ffmpeg.md` — replace public FFmpeg downloads in the
+  release workflow with first-party FFmpeg 8.1 builds and bundled runtime
+  payloads for every release RID.
 
 ## Deferred Contract Work
 

@@ -6,9 +6,10 @@ use axum::{
     Json,
 };
 use serde_json::json;
-use std::path::PathBuf;
 use tokio::fs;
 use uuid::Uuid;
+
+use ersatzrs_infra::file_system_layout::data_path;
 
 use crate::{
     admin::{
@@ -21,7 +22,6 @@ use crate::{
     host::state::AppState,
 };
 
-const WATERMARK_DIR: &str = "data/watermarks";
 const DEFAULT_MAX_UPLOAD_MB: usize = 10;
 
 pub fn max_upload_bytes() -> usize {
@@ -38,7 +38,7 @@ pub async fn upload_watermark_image(
     mut multipart: Multipart,
 ) -> Response {
     let language = load_error_language(&state).await;
-    if let Err(e) = fs::create_dir_all(WATERMARK_DIR).await {
+    if let Err(e) = fs::create_dir_all(watermark_dir()).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": upload_error_text(language, &format!("Cannot create upload directory: {e}"))})),
@@ -178,13 +178,13 @@ pub async fn save_watermark_form(
 }
 
 async fn persist_watermark_image(content_type: &str, bytes: &[u8]) -> std::io::Result<String> {
-    fs::create_dir_all(WATERMARK_DIR).await?;
+    fs::create_dir_all(watermark_dir()).await?;
     let filename = format!(
         "{}.{}",
         Uuid::new_v4(),
         extension_for_content_type(content_type)
     );
-    let dest = PathBuf::from(WATERMARK_DIR).join(&filename);
+    let dest = watermark_dir().join(&filename);
     fs::write(&dest, bytes).await?;
     Ok(filename)
 }
@@ -259,7 +259,7 @@ fn watermark_editor_error_path(id: i64, error: &str) -> String {
 }
 
 pub async fn serve_watermark_image(Path(filename): Path<String>) -> Response {
-    let path = PathBuf::from(WATERMARK_DIR).join(&filename);
+    let path = watermark_dir().join(&filename);
 
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("bin");
     let content_type = match ext {
@@ -274,4 +274,8 @@ pub async fn serve_watermark_image(Path(filename): Path<String>) -> Response {
         Ok(bytes) => ([(header::CONTENT_TYPE, content_type)], Body::from(bytes)).into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+fn watermark_dir() -> std::path::PathBuf {
+    data_path("watermarks")
 }

@@ -361,9 +361,17 @@ async fn load_editor_options(pool: &Pool<crate::db::Db>) -> Result<ChannelEditor
         .await?,
         mirror_channels: load_mirror_channels(pool).await?,
         language_codes: load_language_codes(pool).await?,
-        stream_selectors: list_file_names(Path::new("data/scripts/channel-stream-selectors"), true).await?,
+        stream_selectors: list_file_names(
+            &crate::file_system_layout::data_path(
+                Path::new("scripts").join("channel-stream-selectors"),
+            ),
+            true,
+        )
+        .await?,
         music_video_credit_templates: list_file_names(
-            Path::new("data/templates/music-video-credits"),
+            &crate::file_system_layout::data_path(
+                Path::new("templates").join("music-video-credits"),
+            ),
             false,
         )
         .await?,

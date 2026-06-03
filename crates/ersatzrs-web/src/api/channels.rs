@@ -7,9 +7,11 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 use tokio::fs;
 use uuid::Uuid;
+
+use ersatzrs_infra::file_system_layout::data_path;
 
 use crate::{
     admin::{
@@ -21,8 +23,6 @@ use crate::{
     },
     host::state::AppState,
 };
-
-const CHANNEL_LOGO_DIR: &str = "data/iptv/logos";
 
 #[derive(Debug, Deserialize)]
 pub struct ChannelSaveForm {
@@ -108,7 +108,7 @@ pub async fn save_channel_multipart_form(
     let mut fields = HashMap::new();
     let mut uploaded_logo: Option<(String, String)> = None;
 
-    if let Err(error) = fs::create_dir_all(CHANNEL_LOGO_DIR).await {
+    if let Err(error) = fs::create_dir_all(channel_logo_dir()).await {
         tracing::error!(%error, "failed to create channel logo upload directory");
         return Redirect::to("/channels/add?error=save");
     }
@@ -206,7 +206,7 @@ pub async fn upload_channel_logo(
     mut multipart: Multipart,
 ) -> Response {
     let language = load_error_language(&state).await;
-    if let Err(error) = fs::create_dir_all(CHANNEL_LOGO_DIR).await {
+    if let Err(error) = fs::create_dir_all(channel_logo_dir()).await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": upload_error_text(language, &format!("Cannot create upload directory: {error}"))})),
@@ -267,13 +267,13 @@ async fn load_error_language(state: &AppState) -> UiLanguage {
 }
 
 async fn persist_channel_logo(content_type: &str, bytes: &[u8]) -> std::io::Result<String> {
-    fs::create_dir_all(CHANNEL_LOGO_DIR).await?;
+    fs::create_dir_all(channel_logo_dir()).await?;
     let filename = format!(
         "{}.{}",
         Uuid::new_v4(),
         extension_for_content_type(content_type)
     );
-    let dest = PathBuf::from(CHANNEL_LOGO_DIR).join(&filename);
+    let dest = channel_logo_dir().join(&filename);
     fs::write(&dest, bytes).await?;
     Ok(format!("iptv/logos/{filename}"))
 }
@@ -398,7 +398,7 @@ fn parse_bool(fields: &HashMap<String, String>, name: &str) -> bool {
 }
 
 pub async fn serve_channel_logo(Path(filename): Path<String>) -> Response {
-    let path = PathBuf::from(CHANNEL_LOGO_DIR).join(&filename);
+    let path = channel_logo_dir().join(&filename);
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("bin");
     let content_type = match ext {
         "png" => "image/png",
@@ -413,6 +413,10 @@ pub async fn serve_channel_logo(Path(filename): Path<String>) -> Response {
         Ok(bytes) => ([(header::CONTENT_TYPE, content_type)], Body::from(bytes)).into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+fn channel_logo_dir() -> std::path::PathBuf {
+    data_path("iptv/logos")
 }
 
 #[cfg(test)]
