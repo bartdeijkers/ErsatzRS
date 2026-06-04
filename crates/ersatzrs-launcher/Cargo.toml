@@ -33,7 +33,7 @@ windows-sys = { version = "0.59", features = [
 # Compile the .rc (embeds the tray icon as a named resource + version info) and
 # statically link the MSVC CRT so the exe needs no VC++ redistributable.
 embed-resource = "2"
-static_vcruntime = "2"
+static_vcruntime = "3"
 
 # This crate is the intentional exception to the workspace-wide
 # `unsafe_code = "forbid"` lint. It makes a few small Win32 FFI calls that have
