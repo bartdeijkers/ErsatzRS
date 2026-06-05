@@ -60,6 +60,7 @@ pub struct FfmpegState {
     pub output_format: OutputFormat,
     pub start_seconds: Option<i64>,
     pub duration: Option<Duration>,
+    pub output_ts_offset: Option<Duration>,
     pub thread_count: Option<u32>,
     pub report_progress: bool,
     pub do_not_map_metadata: bool,
@@ -73,6 +74,7 @@ impl Default for FfmpegState {
             output_format: OutputFormat::MpegTs,
             start_seconds: None,
             duration: None,
+            output_ts_offset: None,
             thread_count: None,
             report_progress: true,
             do_not_map_metadata: true,
@@ -2371,6 +2373,20 @@ fn audio_sample_rate_output(sample_rate_hz: u32) -> String {
     }
 }
 
+fn format_duration_seconds(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    let nanos = duration.subsec_nanos();
+    if nanos == 0 {
+        return seconds.to_string();
+    }
+
+    let mut fractional = format!("{nanos:09}");
+    while fractional.ends_with('0') {
+        fractional.pop();
+    }
+    format!("{seconds}.{fractional}")
+}
+
 fn subtitle_encoder(inputs: &[InputFile]) -> Option<PipelineStep> {
     let method = inputs
         .iter()
@@ -2391,6 +2407,24 @@ fn subtitle_encoder(inputs: &[InputFile]) -> Option<PipelineStep> {
         encoder,
         StreamKind::Subtitle,
         Vec::<String>::new(),
+    ))
+}
+
+fn output_ts_offset_option(
+    state: &FfmpegState,
+    desired: &DesiredVideoState,
+) -> Option<PipelineStep> {
+    let offset = state
+        .output_ts_offset
+        .filter(|_| state.output_format != OutputFormat::HlsMp4)
+        .filter(|_| desired.video_format != FFmpegProfileVideoFormat::Copy)?;
+
+    Some(PipelineStep::generic(
+        "output_ts_offset",
+        [
+            "-output_ts_offset".to_owned(),
+            format!("{}s", format_duration_seconds(offset)),
+        ],
     ))
 }
 
@@ -2443,6 +2477,10 @@ fn add_output_options(
                 ["-bufsize:v".to_owned(), format!("{buffer_size}k")],
             ));
         }
+    }
+
+    if let Some(step) = output_ts_offset_option(state, desired) {
+        steps.push(step);
     }
 
     if nvidia_green_line_workaround {

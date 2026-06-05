@@ -16,9 +16,9 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
-    build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat,
-    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
+    build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
+    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
+    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
 };
 
 use crate::playback::{
@@ -301,6 +301,21 @@ impl HlsSessionWorker {
                     Vec::new()
                 }
             };
+            let output_ts_offset = if is_first || self.output_format == OutputFormat::HlsMp4 {
+                None
+            } else {
+                match probe_last_pts_offset(&self.working_dir).await {
+                    Ok(offset) => offset,
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            channel_number = %self.channel_number,
+                            "failed to probe last HLS segment PTS offset"
+                        );
+                        None
+                    }
+                }
+            };
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,
@@ -309,6 +324,7 @@ impl HlsSessionWorker {
                 false,
                 active.start_seconds,
                 None,
+                output_ts_offset,
                 &playback_profile,
                 target_frame_rate,
                 metadata,
@@ -422,6 +438,7 @@ pub fn build_hls_command(
     troubleshooting: bool,
     start_seconds: i64,
     duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     metadata: OutputMetadata,
@@ -470,6 +487,7 @@ pub fn build_hls_command(
         request.state.start_seconds = Some(start_seconds);
     }
     request.state.duration = duration;
+    request.state.output_ts_offset = output_ts_offset;
     request.state.metadata = metadata;
     request.state.report_progress = false;
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
@@ -497,6 +515,63 @@ pub fn build_hls_command(
         request.clone(),
     )
     .command(&request.inputs)
+}
+
+async fn probe_last_pts_offset(working_dir: &Path) -> io::Result<Option<Duration>> {
+    let Some(segment) = last_mpegts_segment(working_dir).await? else {
+        return Ok(None);
+    };
+
+    let output = Command::new(ffprobe_path())
+        .args([
+            "-v",
+            "0",
+            "-show_entries",
+            "packet=pts_time,duration_time",
+            "-of",
+            "compact=p=0:nk=1",
+        ])
+        .arg(&segment)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let max_pts = stdout
+        .lines()
+        .filter_map(parse_pts_line)
+        .max_by(f64::total_cmp);
+    Ok(max_pts.and_then(|seconds| {
+        seconds
+            .is_finite()
+            .then(|| Duration::from_secs_f64(seconds.max(0.0)))
+    }))
+}
+
+async fn last_mpegts_segment(working_dir: &Path) -> io::Result<Option<PathBuf>> {
+    let mut entries = tokio::fs::read_dir(working_dir).await?;
+    let mut segments = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) == Some("ts") {
+            segments.push(path);
+        }
+    }
+    segments.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    Ok(segments.pop())
+}
+
+fn parse_pts_line(line: &str) -> Option<f64> {
+    let mut parts = line.trim().split('|');
+    let pts_time = parts.next()?.parse::<f64>().ok()?;
+    let duration_time = parts
+        .next()
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or_default();
+    Some(pts_time + duration_time)
 }
 
 fn playback_output_metadata(
@@ -1085,6 +1160,7 @@ mod tests {
             false,
             0,
             None,
+            None,
             &playback_profile(),
             None,
             OutputMetadata::default(),
@@ -1100,6 +1176,39 @@ mod tests {
     }
 
     #[test]
+    fn build_hls_command_emits_output_ts_offset() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            false,
+            false,
+            0,
+            None,
+            Some(Duration::from_millis(12_500)),
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("-output_ts_offset 12.5s"));
+    }
+
+    #[test]
+    fn parse_pts_line_adds_packet_duration() {
+        assert_eq!(parse_pts_line("12.5|0.25"), Some(12.75));
+        assert_eq!(parse_pts_line("12.5|N/A"), Some(12.5));
+        assert_eq!(parse_pts_line("not-a-number|0.25"), None);
+    }
+
+    #[test]
     fn build_hls_command_maps_selected_audio_stream() {
         let command = build_hls_command(
             "/media/test.mkv",
@@ -1108,6 +1217,7 @@ mod tests {
             true,
             true,
             0,
+            None,
             None,
             &playback_profile(),
             None,
@@ -1164,6 +1274,7 @@ mod tests {
             false,
             0,
             None,
+            None,
             &playback_profile(),
             None,
             metadata,
@@ -1193,6 +1304,7 @@ mod tests {
             true,
             true,
             120,
+            None,
             None,
             &playback_profile(),
             None,
@@ -1226,6 +1338,7 @@ mod tests {
             false,
             0,
             None,
+            None,
             &playback_profile(),
             None,
             OutputMetadata::default(),
@@ -1252,6 +1365,7 @@ mod tests {
             true,
             false,
             900,
+            None,
             None,
             &playback_profile(),
             None,
@@ -1280,6 +1394,7 @@ mod tests {
             true,
             false,
             0,
+            None,
             None,
             &playback_profile(),
             None,
@@ -1429,6 +1544,7 @@ mod tests {
             false,
             0,
             None,
+            None,
             &playback_profile(),
             None,
             OutputMetadata::default(),
@@ -1572,6 +1688,7 @@ mod tests {
             true,
             false,
             0,
+            None,
             None,
             &playback_profile(),
             None,
