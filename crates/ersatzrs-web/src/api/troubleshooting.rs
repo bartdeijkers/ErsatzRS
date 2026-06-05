@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use ersatzrs_core::path_replacement::{replace_path, PathPlatform};
+use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, HardwareAccelerationKind, StreamingMode};
 use ersatzrs_ffmpeg::{FfmpegCommand, FrameSize, InputFile, OutputFormat};
 use ersatzrs_infra::{
@@ -137,11 +137,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     let path_replacements = stream::load_path_replacements(&state.repositories.media_source)
         .await
         .unwrap_or_default();
-    let media_path = if path_replacements.is_empty() {
-        media.path.clone()
-    } else {
-        replace_path(&path_replacements, &media.path, PathPlatform::Unix)
-    };
+    let media_path = apply_unix_path_replacements(&path_replacements, &media.path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
     let source_stream = load_source_video_stream(&state.pool, media.media_version_id).await;
     let seek_seconds = preview_seek_seconds(query.seek_seconds, media.duration_seconds);
@@ -241,11 +237,7 @@ async fn start_channel_playback_preview(
     let path_replacements = stream::load_path_replacements(&state.repositories.media_source)
         .await
         .unwrap_or_default();
-    let media_path = if path_replacements.is_empty() {
-        active.media_path.clone()
-    } else {
-        replace_path(&path_replacements, &active.media_path, PathPlatform::Unix)
-    };
+    let media_path = apply_unix_path_replacements(&path_replacements, &active.media_path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
     let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
@@ -736,6 +728,14 @@ fn preview_duration_seconds(duration_seconds: f64, seek_seconds: i64) -> f64 {
 
 fn seconds_i64_as_f64(seconds: i64) -> f64 {
     u32::try_from(seconds).map_or_else(|_| f64::from(u32::MAX), f64::from)
+}
+
+fn apply_unix_path_replacements(replacements: &[PathReplacement], path: &str) -> String {
+    if replacements.is_empty() {
+        path.to_owned()
+    } else {
+        replace_path(replacements, path, PathPlatform::Unix)
+    }
 }
 
 fn limit_preview_command_duration(
@@ -1387,12 +1387,16 @@ async fn build_media_sample_archive(
     state: &AppState,
     media_item_id: i64,
 ) -> ApiResult<Option<Vec<u8>>> {
-    let Some(media_path) = load_media_item_path(&state.pool, media_item_id).await? else {
+    let Some(stored_media_path) = load_media_item_path(&state.pool, media_item_id).await? else {
         return Ok(None);
     };
-    if media_path.trim().is_empty() {
+    if stored_media_path.trim().is_empty() {
         return Ok(None);
     }
+    let path_replacements = stream::load_path_replacements(&state.repositories.media_source)
+        .await
+        .unwrap_or_default();
+    let media_path = apply_unix_path_replacements(&path_replacements, &stored_media_path);
 
     let ffmpeg_path = load_ffmpeg_path(&state.pool).await?;
     let extension = FsPath::new(&media_path)
@@ -1603,6 +1607,24 @@ mod tests {
         assert!((preview_duration_seconds(90.0, 80) - 10.0).abs() < f64::EPSILON);
         assert!((preview_duration_seconds(120.0, 0) - 30.0).abs() < f64::EPSILON);
         assert!((preview_duration_seconds(0.0, 0) - 30.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn troubleshooting_paths_apply_configured_unix_replacements() {
+        let replacements = [PathReplacement {
+            source_path: "Z:\\Media".to_owned(),
+            replacement_path: "/mnt/media".to_owned(),
+            source_platform: PathPlatform::Windows,
+        }];
+
+        assert_eq!(
+            apply_unix_path_replacements(&replacements, "Z:\\Media\\Movie\\movie.mkv"),
+            "/mnt/media/Movie/movie.mkv"
+        );
+        assert_eq!(
+            apply_unix_path_replacements(&[], "/media/movie.mkv"),
+            "/media/movie.mkv"
+        );
     }
 
     #[test]
