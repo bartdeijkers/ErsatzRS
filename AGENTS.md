@@ -40,8 +40,6 @@ explicitly documented as intentional (e.g. a Unix-only integration test that is 
 Windows). Leptos `#[cfg(target_arch = "wasm32")]` island splits are exempt — they are
 required by the SSR/WASM hydration model and do not affect native targets.
 
-Use the `platform-parity-fixer` agent to audit and remediate platform-specific code.
-
 **Intentional platform exception — `crates/ersatzrs-launcher`:** this is a
 Windows-only system-tray launcher (ships in the win-x64 release as `ErsatzRS.exe`).
 Its real logic is under `#[cfg(windows)]`; on every other target it compiles to a
@@ -83,12 +81,26 @@ is added on purpose. Never use a different cargo build path.
 # Build
 cargo build --workspace
 
-# Lint
+# Lint (mirror CI: two passes, neither with --all-features, so feature-gated
+# `#![cfg(not(feature = "mysql"))]` test files don't escape lint).
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
 # Test
 cargo test --workspace --all-features
+
+# Inner-loop verification
+# Use focused commands while iterating; reserve the full parity gate for
+# closeout. For admin UI work, start with route/module filters such as:
+#   cargo test -p ersatzrs-web --all-targets <route_or_module_filter>
+#   cargo clippy -p ersatzrs-web --all-targets -- -D warnings
+#   cargo xtask hydration-lint -p ersatzrs-web
+# Run `cargo xtask parity-check web` once before claiming admin UI parity
+# complete, and rerun it after broad dependency, feature, route, or shared
+# primitive changes. If a focused check misses important parity coverage, add a
+# targeted regression instead of repeatedly using the full gate as the only
+# signal.
 
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
@@ -209,7 +221,10 @@ Read the relevant contract before changing that area:
 - [docs/adr/](docs/adr/) before changing architecture or behavior contracts.
 - [`docs/progress/parity/`](docs/progress/README.md) when moving a feature
   toward parity — edit the feature's `<slug>.toml` and run
-  `cargo xtask progress check` (see the `update-parity` skill).
+  `cargo xtask progress check` (see the `update-parity` skill). Important
+  missing parity must be recorded in the relevant parity file as visible
+  `ParityDebt` or remaining-work text; do not leave it only in chat, commit
+  notes, or a private plan.
 
 ## Health Check Parity
 
@@ -238,8 +253,14 @@ This is primarily a porting project, not greenfield design. When implementing a 
 
 1. **Find the ErsatzTV source first.** The critical-file table in [PORTING.md](PORTING.md) maps features to the authoritative C# files under `$ERSATZTV_SRC/`. Read the C# before writing Rust.
 2. **Preserve patterns, not syntax.** ErsatzTV's FFmpeg pipeline builders, filter label routing (`ComplexFilter.cs`), and `ffconcat`/`resetpts` concat handling are version-agnostic and should be mirrored closely in structure. LanguageExt `Option`/`Either` map to native `Option`/`Result`; `anyhow`/`thiserror` for errors. Follow the Rust ↔ C# parity and SQL rules in [STYLE.md](STYLE.md) — in particular, keep ErsatzTV JSON shapes, database identifier casing, and EF-style `PK_/FK_/IX_` names intact.
-3. **Snapshot-test generated FFmpeg argv** the way ErsatzTV's `ErsatzTV.FFmpeg.Tests` does - use `insta`. This is the primary regression gate for the pipeline crate.
-4. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, ErsatzRS should emit a `drawvg` filter node instead.
+3. **Fetch parity-critical dependencies when warranted.** Do not hand-roll a
+   weak substitute just to avoid a dependency fetch. If the ErsatzTV source
+   relies on a real parser/evaluator/protocol library and Rust has a suitable,
+   maintained equivalent, add it deliberately, verify licenses through the
+   normal audit path, and record any missing or deferred parity in
+   `docs/progress/parity/<slug>.toml`.
+4. **Snapshot-test generated FFmpeg argv** the way ErsatzTV's `ErsatzTV.FFmpeg.Tests` does - use `insta`. This is the primary regression gate for the pipeline crate.
+5. **Use the graphics engine as the divergence point.** Anywhere ErsatzTV pipes to an external graphics renderer, ErsatzRS should emit a `drawvg` filter node instead.
 
 ## Reference paths (on this machine)
 
