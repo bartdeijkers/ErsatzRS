@@ -779,7 +779,7 @@ fn build_transcode_pipeline(
         loglevel_error(),
         standard_format_flags(),
         no_demux_decode_delay(),
-        fast_start(),
+        container_movflags(&request.state, &request.desired),
     ];
 
     if request.state.report_progress {
@@ -1649,6 +1649,39 @@ fn add_video_decoder(
             steps.push(PipelineStep::global("video_decoder", options));
         }
     }
+}
+
+fn container_movflags(state: &FfmpegState, desired: &DesiredVideoState) -> PipelineStep {
+    if state.output_format == OutputFormat::Mp4
+        && desired.video_format == FFmpegProfileVideoFormat::Copy
+    {
+        return PipelineStep::generic(
+            "hls_direct_mp4",
+            [
+                "-movflags",
+                "+faststart+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov+delay_moov",
+            ],
+        );
+    }
+
+    if matches!(
+        state.output_format,
+        OutputFormat::Hls | OutputFormat::HlsMp4
+    ) && state
+        .hls
+        .as_ref()
+        .is_some_and(|hls| hls.segment_template.contains("m4s"))
+    {
+        return PipelineStep::generic(
+            "mp4",
+            [
+                "-movflags",
+                "+empty_moov+omit_tfhd_offset+frag_keyframe+default_base_moof",
+            ],
+        );
+    }
+
+    fast_start()
 }
 
 fn add_audio_decoder_input_options(request: &mut PipelineRequest) {

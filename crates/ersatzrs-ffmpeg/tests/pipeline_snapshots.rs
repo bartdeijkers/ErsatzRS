@@ -269,8 +269,9 @@ fn software_pipeline_hls_direct_copy_does_not_scale_source() {
         Some(FrameRate::DEFAULT),
         StreamingMode::HttpLiveStreamingDirect,
     );
-    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+    let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
         .with_source_video_stream(source);
+    request.state.output_format = OutputFormat::Mp4;
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let args = pipeline.command(&request.inputs).arguments.join(" ");
@@ -286,6 +287,38 @@ fn software_pipeline_hls_direct_copy_does_not_scale_source() {
     assert!(
         !args.contains("apad"),
         "direct copy should not include audio padding: {args}"
+    );
+    assert!(
+        args.contains(
+            "+faststart+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov+delay_moov"
+        ),
+        "direct mp4 copy should use ErsatzTV's HLS direct mp4 movflags: {args}"
+    );
+}
+
+#[test]
+fn software_pipeline_fmp4_hls_uses_fragmented_mp4_movflags() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.state.output_format = OutputFormat::HlsMp4;
+    request.state.hls = Some(HlsOutput {
+        segment_template: "/tmp/channel-1/%05d.m4s".to_owned(),
+        init_template: Some("init.mp4".to_owned()),
+        playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
+        segment_options: None,
+        is_first_transcode: true,
+        troubleshooting: false,
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        args.contains("+empty_moov+omit_tfhd_offset+frag_keyframe+default_base_moof"),
+        "fmp4 hls should use ErsatzTV's fragmented mp4 movflags: {args}"
+    );
+    assert!(
+        !args.contains("-movflags +faststart "),
+        "fmp4 hls should not use the default faststart movflags: {args}"
     );
 }
 
