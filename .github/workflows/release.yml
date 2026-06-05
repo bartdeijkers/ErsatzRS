@@ -167,7 +167,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Sign Windows binaries (optional)
         if: ${{ matrix.rid == 'win-x64' && env.AZURE_CLIENT_ID != '' }}
-        uses: azure/trusted-signing-action@v0
+        uses: azure/trusted-signing-action@v2
         with:
           endpoint: https://eus.codesigning.azure.net/
           trusted-signing-account-name: ErsatzRS
