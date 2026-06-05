@@ -19,7 +19,7 @@ use ersatzrs_infra::{
         resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
         select_custom_playback_streams, select_playback_graphics, select_playback_subtitle,
         select_playback_watermarks, subtitle_input_for_stream, watermark_overlay_for_stream,
-        PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+        CustomStreamSelection, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     },
     subtitles::rebase_burned_text_subtitle_input,
 };
@@ -289,7 +289,7 @@ async fn start_channel_playback_preview(
         )
         .await
         {
-            Ok(Some(selection)) if selection.audio_stream_index.is_some() => {
+            Ok(Some(selection)) => {
                 let subtitle_input = selection.subtitle.as_ref().and_then(|subtitle| {
                     subtitle_input_for_stream(
                         subtitle,
@@ -822,14 +822,16 @@ async fn preview_selected_streams(
         )
         .await
         {
-            Ok(Some(selection)) if selection.audio_stream_index.is_some() => {
-                let subtitle = if let Some(id) = subtitle_id {
+            Ok(Some(selection)) => {
+                let explicit_subtitle = if let Some(id) = subtitle_id {
                     load_preview_subtitle(pool, media_item_id, id).await
                 } else {
-                    selection.subtitle
+                    None
                 };
+                let (audio_stream_index, subtitle) =
+                    resolve_custom_media_selection(selection, explicit_subtitle);
                 return (
-                    selection.audio_stream_index,
+                    audio_stream_index,
                     subtitle_input_from_optional_subtitle(
                         subtitle,
                         media_path,
@@ -876,6 +878,16 @@ async fn preview_selected_streams(
         None,
         subtitle_input_from_optional_subtitle(subtitle, media_path, output_format, seek_seconds)
             .await,
+    )
+}
+
+fn resolve_custom_media_selection(
+    selection: CustomStreamSelection,
+    explicit_subtitle: Option<PlaybackSubtitle>,
+) -> (Option<usize>, Option<PlaybackSubtitle>) {
+    (
+        selection.audio_stream_index,
+        explicit_subtitle.or(selection.subtitle),
     )
 }
 
@@ -1623,6 +1635,52 @@ mod tests {
                 "live.m3u8",
             ]
         );
+    }
+
+    #[test]
+    fn custom_media_selection_honors_subtitle_only_result() {
+        let selector_subtitle = test_subtitle(7, "selector");
+        let selection = CustomStreamSelection {
+            audio_stream_index: None,
+            subtitle: Some(selector_subtitle.clone()),
+        };
+
+        let (audio, subtitle) = resolve_custom_media_selection(selection, None);
+
+        assert_eq!(audio, None);
+        assert_eq!(subtitle, Some(selector_subtitle));
+    }
+
+    #[test]
+    fn custom_media_selection_keeps_explicit_subtitle_override() {
+        let selector_subtitle = test_subtitle(7, "selector");
+        let explicit_subtitle = test_subtitle(9, "explicit");
+        let selection = CustomStreamSelection {
+            audio_stream_index: Some(3),
+            subtitle: Some(selector_subtitle),
+        };
+
+        let (audio, subtitle) =
+            resolve_custom_media_selection(selection, Some(explicit_subtitle.clone()));
+
+        assert_eq!(audio, Some(3));
+        assert_eq!(subtitle, Some(explicit_subtitle));
+    }
+
+    fn test_subtitle(id: i64, title: &str) -> PlaybackSubtitle {
+        PlaybackSubtitle {
+            id,
+            subtitle_kind: 1,
+            title: Some(title.to_owned()),
+            stream_index: 4,
+            codec: Some("srt".to_owned()),
+            default: false,
+            forced: false,
+            sdh: false,
+            language: Some("eng".to_owned()),
+            is_extracted: false,
+            path: Some(format!("{title}.srt")),
+        }
     }
 
     #[test]
