@@ -2281,7 +2281,7 @@ fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
             extra.extend(["-ac".to_owned(), channels.to_string()]);
         }
         if let Some(sample_rate) = desired.audio_sample_rate {
-            extra.extend(["-ar".to_owned(), sample_rate.to_string()]);
+            extra.extend(["-ar".to_owned(), audio_sample_rate_output(sample_rate)]);
         }
         if let Some(bitrate) = desired.audio_bitrate {
             extra.extend(["-b:a".to_owned(), format!("{bitrate}k")]);
@@ -2289,6 +2289,14 @@ fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
     }
 
     PipelineStep::encoder(name, StreamKind::Audio, extra)
+}
+
+fn audio_sample_rate_output(sample_rate_hz: u32) -> String {
+    if sample_rate_hz.is_multiple_of(1_000) {
+        format!("{}k", sample_rate_hz / 1_000)
+    } else {
+        sample_rate_hz.to_string()
+    }
 }
 
 fn subtitle_encoder(inputs: &[InputFile]) -> Option<PipelineStep> {
