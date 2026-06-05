@@ -11,7 +11,23 @@ impl FfmpegCommand {
     #[must_use]
     pub fn new(environment: Vec<EnvironmentVariable>, arguments: Vec<String>) -> Self {
         Self {
-            executable: crate::ffmpeg_path_from_env(),
+            executable: crate::ffmpeg_path(),
+            environment,
+            arguments,
+        }
+    }
+
+    /// Build a command with an explicit `ffmpeg` executable path, bypassing the
+    /// process-wide resolved-path holder. Used where the caller has already
+    /// resolved the path (e.g. from DB config).
+    #[must_use]
+    pub fn new_with_executable(
+        executable: impl Into<String>,
+        environment: Vec<EnvironmentVariable>,
+        arguments: Vec<String>,
+    ) -> Self {
+        Self {
+            executable: executable.into(),
             environment,
             arguments,
         }

@@ -261,7 +261,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg with drawvg on PATH"]
     async fn dev_stream_composites_drawvg_graphics_from_generated_input() {
-        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path_from_env();
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
         if !ffmpeg_has_drawvg(&ffmpeg).await {
             eprintln!("skipping: ffmpeg drawvg filter not available");
             return;

@@ -518,7 +518,7 @@ rect {rx:.1} {ry:.1} {wm_w:.1} {wm_h:.1} fill
         .map_err(|e| ServerFnError::new(format!("write drawvg: {e}")))?;
     let script_path = tmp.path().to_string_lossy().to_string();
 
-    let out = Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
+    let out = Command::new(ersatzrs_ffmpeg::ffmpeg_path())
         .args([
             "-y",
             "-f",

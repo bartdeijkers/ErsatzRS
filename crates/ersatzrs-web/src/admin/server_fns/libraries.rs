@@ -178,7 +178,7 @@ pub async fn scan_library(
                 use ersatzrs_scanner::{scan_local_library_with_progress, LocalScanConfig};
                 let config = LocalScanConfig {
                     library_id,
-                    ffprobe_path: ersatzrs_ffmpeg::ffprobe_path_from_env(),
+                    ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
                 };
                 log_err!(scan_local_library_with_progress(&pool, &config, Some(sink_ref)).await);
             }

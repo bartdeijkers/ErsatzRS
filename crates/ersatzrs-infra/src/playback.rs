@@ -14,7 +14,7 @@ use ersatzrs_domain::{
     CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
-    ffprobe_path_from_env, FrameRate, FrameSize, GraphicsPipelineOverlay, GraphicsRenderContext,
+    ffprobe_path, FrameRate, FrameSize, GraphicsPipelineOverlay, GraphicsRenderContext,
     GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat, SourceColorParams,
     SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
     WatermarkOverlay,
@@ -1216,7 +1216,7 @@ async fn graphics_render_context_with_motion_probe(
         return render_context;
     };
 
-    match FfprobeExtractor::new(ffprobe_path_from_env())
+    match FfprobeExtractor::new(ffprobe_path())
         .extract(video_path)
         .await
     {

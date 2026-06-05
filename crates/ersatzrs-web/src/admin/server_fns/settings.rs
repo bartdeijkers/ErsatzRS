@@ -444,6 +444,16 @@ pub async fn save_ffmpeg_settings_with_state(
         &form.ffprobe_path,
     )
     .await?;
+    // Resolve the effective tool paths once (env override → DB config → next to
+    // the executable → PATH), mirroring ErsatzTV re-reading the FFmpegLocator
+    // config per spawn. An empty form field means "auto-detect". The resolved
+    // paths drive both the process-wide holder every spawn site reads (so the
+    // change takes effect without a restart) and the runtime/capability refresh
+    // below, keeping validation and execution consistent.
+    let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
+    let ffprobe_resolved = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(ffmpeg_resolved.clone());
+    ersatzrs_ffmpeg::set_resolved_ffprobe_path(ffprobe_resolved.clone());
     save_config_value(
         &state.pool,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
@@ -557,7 +567,7 @@ pub async fn save_ffmpeg_settings_with_state(
         });
     }
 
-    refresh_ffmpeg_runtime(state, &form).await?;
+    refresh_ffmpeg_runtime(state, &ffmpeg_resolved, &ffprobe_resolved).await?;
 
     Ok(())
 }
@@ -565,11 +575,10 @@ pub async fn save_ffmpeg_settings_with_state(
 #[cfg(feature = "ssr")]
 async fn refresh_ffmpeg_runtime(
     state: &crate::host::state::AppState,
-    form: &FfmpegSettingsForm,
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
 ) -> Result<(), ServerFnError> {
-    let mut config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::from_env();
-    config.ffmpeg_path.clone_from(&form.ffmpeg_path);
-    config.ffprobe_path.clone_from(&form.ffprobe_path);
+    let config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(ffmpeg_path, ffprobe_path);
     let report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?;
@@ -977,8 +986,13 @@ pub async fn delete_custom_resolution_with_pool(
 
 #[cfg(feature = "ssr")]
 async fn validate_ffmpeg_settings(form: &FfmpegSettingsForm) -> Result<(), ServerFnError> {
-    validate_tool_path(&form.ffmpeg_path, "ffmpeg").await?;
-    validate_tool_path(&form.ffprobe_path, "ffprobe").await?;
+    // Validate the *effective* path the locator resolves to: an empty field
+    // means "auto-detect" and resolves to the tool next to the executable / on
+    // PATH, matching ErsatzTV's FFmpegLocator.
+    let ffmpeg = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
+    let ffprobe = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
+    validate_tool_path(&ffmpeg, "ffmpeg").await?;
+    validate_tool_path(&ffprobe, "ffprobe").await?;
     if form.hls_segmenter_idle_timeout < 30 {
         return Err(ServerFnError::new(
             "HLS Segmenter idle timeout must be greater than or equal to 30",

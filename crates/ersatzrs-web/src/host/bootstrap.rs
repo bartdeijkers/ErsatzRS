@@ -40,7 +40,8 @@ pub async fn run() {
         "database initialised"
     );
 
-    let ffmpeg_runtime = check_startup_ffmpeg_runtime().await;
+    let (ffmpeg_path, ffprobe_path) = resolve_and_persist_ffmpeg_paths(&startup.pool).await;
+    let ffmpeg_runtime = check_startup_ffmpeg_runtime(&ffmpeg_path, &ffprobe_path).await;
     let (playout_build_tx, playout_build_rx) =
         tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
     // Single playout lock registry shared with the scheduler: the web host
@@ -277,8 +278,67 @@ impl Write for FileAndStdout {
     }
 }
 
-async fn check_startup_ffmpeg_runtime() -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
-    match ersatzrs_ffmpeg::check_ffmpeg_runtime().await {
+/// Resolve the `ffmpeg`/`ffprobe` paths the way ErsatzTV's `FFmpegLocator` does
+/// — DB config (if it still exists) → next to the running executable → `PATH` —
+/// persist a freshly located path back into DB config, and publish the resolved
+/// paths into the process-wide holder every spawn site reads.
+async fn resolve_and_persist_ffmpeg_paths(pool: &DbPool) -> (String, String) {
+    let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    let ffmpeg = resolve_and_persist_tool(
+        &repositories.config,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
+        "ffmpeg",
+        ersatzrs_ffmpeg::resolve_ffmpeg_path,
+    )
+    .await;
+    let ffprobe = resolve_and_persist_tool(
+        &repositories.config,
+        ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
+        "ffprobe",
+        ersatzrs_ffmpeg::resolve_ffprobe_path,
+    )
+    .await;
+
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(ffmpeg.clone());
+    ersatzrs_ffmpeg::set_resolved_ffprobe_path(ffprobe.clone());
+    (ffmpeg, ffprobe)
+}
+
+async fn resolve_and_persist_tool<R: ConfigRepository>(
+    config: &R,
+    key: &str,
+    tool: &str,
+    resolve: impl Fn(Option<&str>) -> ersatzrs_ffmpeg::LocatedTool,
+) -> String {
+    let configured = config.get(key).await.unwrap_or_default();
+    let located = resolve(configured.as_deref());
+
+    if located.should_persist() {
+        if let Err(error) = config.set(key, &located.path).await {
+            tracing::warn!(%error, key, "failed to persist resolved FFmpeg tool path");
+        } else {
+            tracing::info!(tool, path = %located.path, "located and persisted FFmpeg tool path");
+        }
+    } else if located.db_was_stale {
+        // Configured path no longer exists and nothing else was located; clear
+        // the stale value (ErsatzTV deletes it).
+        let _ = config.set(key, "").await;
+        tracing::warn!(
+            tool,
+            key,
+            "configured FFmpeg tool path no longer exists; cleared"
+        );
+    }
+
+    located.path
+}
+
+async fn check_startup_ffmpeg_runtime(
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
+) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
+    let config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(ffmpeg_path, ffprobe_path);
+    match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await {
         Ok(report) => {
             tracing::info!(
                 ffmpeg = %report.ffmpeg.version,
