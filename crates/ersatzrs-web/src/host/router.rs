@@ -280,6 +280,18 @@ pub fn build_app(app_state: AppState) -> Router {
             get(api::media_actions::media_info),
         )
         .route(
+            "/api/troubleshoot/playback/archive",
+            get(api::troubleshooting::playback_archive),
+        )
+        .route(
+            "/api/troubleshoot/playback.m3u8",
+            get(api::troubleshooting::playback_preview),
+        )
+        .route(
+            "/api/troubleshoot/playback/sample/{media_item_id}",
+            get(api::troubleshooting::playback_sample),
+        )
+        .route(
             "/api/watermarks/save",
             post(api::watermarks::save_watermark_form)
                 .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),

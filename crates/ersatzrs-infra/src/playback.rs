@@ -19,6 +19,10 @@ use ersatzrs_ffmpeg::{
     SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
     WatermarkOverlay,
 };
+use evalexpr::{
+    eval_boolean_with_context, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext,
+    Value,
+};
 use sqlx::Row;
 
 use crate::db::DbPool;
@@ -34,6 +38,7 @@ use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
     decode_optional_string_column, decode_string_column,
 };
+use serde::Deserialize;
 
 const IMAGE_SUBTITLE_CODECS: &[&str] = &[
     "hdmv_pgs_subtitle",
@@ -58,6 +63,23 @@ pub struct PlaybackSubtitle {
     pub language: Option<String>,
     pub is_extracted: bool,
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaybackAudioStream {
+    pub stream_index: i32,
+    pub title: Option<String>,
+    pub language: Option<String>,
+    pub default: bool,
+    pub forced: bool,
+    pub codec: Option<String>,
+    pub channels: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomStreamSelection {
+    pub audio_stream_index: Option<usize>,
+    pub subtitle: Option<PlaybackSubtitle>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,6 +263,67 @@ pub async fn load_channel_playback_profile(
     row.as_ref().map(map_playback_profile).transpose()
 }
 
+/// Load a persisted `FFmpeg` profile and resolution by profile id.
+///
+/// Troubleshooting playback uses an ad hoc `.troubleshooting` channel in
+/// ErsatzTV, so it cannot rely on a real `Channel.FFmpegProfileId` row.
+///
+/// # Errors
+///
+/// Returns an error when the profile or resolution row cannot be queried or
+/// decoded from the database.
+pub async fn load_playback_profile(
+    pool: &DbPool,
+    ffmpeg_profile_id: i64,
+) -> Result<Option<PlaybackProfile>> {
+    let row = sqlx::query(
+        r#"SELECT fp."Id" AS "ProfileId",
+                  fp."Name" AS "ProfileName",
+                  fp."ThreadCount" AS "ThreadCount",
+                  fp."NormalizeAudio" AS "NormalizeAudio",
+                  fp."NormalizeVideo" AS "NormalizeVideo",
+                  fp."HardwareAcceleration" AS "HardwareAcceleration",
+                  fp."VaapiDisplay" AS "VaapiDisplay",
+                  fp."VaapiDriver" AS "VaapiDriver",
+                  fp."VaapiDevice" AS "VaapiDevice",
+                  fp."QsvExtraHardwareFrames" AS "QsvExtraHardwareFrames",
+                  fp."ResolutionId" AS "ResolutionId",
+                  fp."ScalingBehavior" AS "ScalingBehavior",
+                  fp."PadMode" AS "PadMode",
+                  fp."VideoFormat" AS "VideoFormat",
+                  fp."VideoProfile" AS "VideoProfile",
+                  fp."VideoPreset" AS "VideoPreset",
+                  fp."AllowBFrames" AS "AllowBFrames",
+                  fp."BitDepth" AS "BitDepth",
+                  fp."VideoBitrate" AS "VideoBitrate",
+                  fp."VideoBufferSize" AS "VideoBufferSize",
+                  fp."TonemapAlgorithm" AS "TonemapAlgorithm",
+                  fp."AudioFormat" AS "AudioFormat",
+                  fp."AudioBitrate" AS "AudioBitrate",
+                  fp."AudioBufferSize" AS "AudioBufferSize",
+                  fp."NormalizeLoudnessMode" AS "NormalizeLoudnessMode",
+                  fp."TargetLoudness" AS "TargetLoudness",
+                  fp."AudioChannels" AS "AudioChannels",
+                  fp."AudioSampleRate" AS "AudioSampleRate",
+                  fp."NormalizeFramerate" AS "NormalizeFramerate",
+                  fp."NormalizeColors" AS "NormalizeColors",
+                  fp."DeinterlaceVideo" AS "DeinterlaceVideo",
+                  r."Id" AS "ResolutionRowId",
+                  r."Name" AS "ResolutionName",
+                  r."IsCustom" AS "ResolutionIsCustom",
+                  r."Width" AS "ResolutionWidth",
+                  r."Height" AS "ResolutionHeight"
+           FROM "FFmpegProfile" fp
+           JOIN "Resolution" r ON r."Id" = fp."ResolutionId"
+           WHERE fp."Id" = ?"#,
+    )
+    .bind(ffmpeg_profile_id)
+    .fetch_optional(pool)
+    .await?;
+
+    row.as_ref().map(map_playback_profile).transpose()
+}
+
 /// Resolve the channel-level target frame rate used for profile normalization.
 ///
 /// # Errors
@@ -412,6 +495,501 @@ pub async fn load_subtitles_for_media_item(
             })
         })
         .collect()
+}
+
+/// Load the persisted audio streams for a media version.
+///
+/// ErsatzTV's custom channel stream selector evaluates these `MediaStream`
+/// fields before falling back to the built-in audio selector.
+///
+/// # Errors
+///
+/// Returns database errors from the audio stream query.
+pub async fn load_audio_streams_for_media_version(
+    pool: &DbPool,
+    media_version_id: i64,
+) -> Result<Vec<PlaybackAudioStream>> {
+    let rows = sqlx::query(
+        r#"SELECT "Index", "Title", "Language", "Default", "Forced", "Codec", "Channels"
+           FROM "MediaStream"
+           WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 2
+           ORDER BY "Index", "Id""#,
+    )
+    .bind(media_version_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(PlaybackAudioStream {
+                stream_index: row.try_get("Index")?,
+                title: row.try_get("Title")?,
+                language: row.try_get("Language")?,
+                default: row.try_get::<i64, _>("Default")? != 0,
+                forced: row.try_get::<i64, _>("Forced")? != 0,
+                codec: row.try_get("Codec")?,
+                channels: row.try_get("Channels")?,
+            })
+        })
+        .collect()
+}
+
+/// Execute ErsatzTV's custom channel stream-selector YAML against the current
+/// content item.
+///
+/// This ports `CustomStreamSelector.SelectStreams`: selector items are tried in
+/// order; each item may match content, audio, and subtitles; audio/subtitle
+/// language list order decides priority; and embedded text subtitles that have
+/// not been extracted are ignored outside direct HLS.
+///
+/// # Errors
+///
+/// Returns database errors from stream/subtitle reads or decode errors when the
+/// YAML file cannot be read or parsed.
+pub async fn select_custom_playback_streams(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+) -> Result<Option<CustomStreamSelection>> {
+    let Some(selector) = channel
+        .stream_selector
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    if selector.contains("..") || selector.contains('/') || selector.contains('\\') {
+        return Ok(None);
+    }
+
+    let selector_path = data_path("channel-stream-selectors").join(selector);
+    let yaml = match tokio::fs::read_to_string(&selector_path).await {
+        Ok(yaml) => yaml,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(RepositoryError::Decode {
+                kind: "channel stream selector",
+                value: error.to_string(),
+            });
+        }
+    };
+    let selector: StreamSelector =
+        serde_yaml::from_str(&yaml).map_err(|error| RepositoryError::Decode {
+            kind: "channel stream selector",
+            value: error.to_string(),
+        })?;
+
+    let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
+    let mut subtitles = load_subtitles_for_media_item(pool, media_item_id).await?;
+    if streaming_mode != StreamingMode::HttpLiveStreamingDirect {
+        subtitles.retain(|subtitle| {
+            if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
+                return true;
+            }
+            subtitle.is_extracted
+                && subtitle
+                    .path
+                    .as_deref()
+                    .is_some_and(|path| !path.trim().is_empty())
+        });
+    }
+
+    for item in selector.items {
+        if !item.content_condition.trim().is_empty()
+            && !content_matches_condition(channel, content_start_time, &item.content_condition)
+        {
+            continue;
+        }
+
+        let audio = select_custom_audio(&audio_streams, &item);
+        let subtitles = select_custom_subtitle(&subtitles, &item);
+        if audio.passed && subtitles.passed {
+            return Ok(Some(CustomStreamSelection {
+                audio_stream_index: audio
+                    .selected
+                    .and_then(|stream| usize::try_from(stream.stream_index).ok()),
+                subtitle: subtitles.selected.cloned(),
+            }));
+        }
+    }
+
+    Ok(None)
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StreamSelector {
+    #[serde(default)]
+    items: Vec<StreamSelectorItem>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct StreamSelectorItem {
+    #[serde(default, rename = "audio_language")]
+    audio_languages: Vec<String>,
+    #[serde(default, rename = "audio_title_allowlist")]
+    audio_title_allowlist: Vec<String>,
+    #[serde(default, rename = "audio_title_blocklist")]
+    audio_title_blocklist: Vec<String>,
+    #[serde(default, rename = "audio_condition")]
+    audio_condition: String,
+    #[serde(default, rename = "disable_subtitles")]
+    disable_subtitles: bool,
+    #[serde(default, rename = "subtitle_language")]
+    subtitle_languages: Vec<String>,
+    #[serde(default, rename = "subtitle_title_allowlist")]
+    subtitle_title_allowlist: Vec<String>,
+    #[serde(default, rename = "subtitle_title_blocklist")]
+    subtitle_title_blocklist: Vec<String>,
+    #[serde(default, rename = "subtitle_condition")]
+    subtitle_condition: String,
+    #[serde(default, rename = "content_condition")]
+    content_condition: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RankedSelection<'a, T> {
+    passed: bool,
+    selected: Option<&'a T>,
+}
+
+fn select_custom_audio<'a>(
+    audio_streams: &'a [PlaybackAudioStream],
+    item: &StreamSelectorItem,
+) -> RankedSelection<'a, PlaybackAudioStream> {
+    let mut candidates = Vec::new();
+    let mut passed = false;
+    for stream in audio_streams {
+        let safe_title = stream
+            .title
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let safe_language = stream
+            .language
+            .as_deref()
+            .unwrap_or("und")
+            .to_ascii_lowercase();
+        let mut matches = item.audio_languages.is_empty();
+        let mut rank = i32::MAX;
+        for (index, language) in item.audio_languages.iter().enumerate() {
+            if language == "*" || simple_expression_matches(language, &safe_language) {
+                matches = true;
+                rank = rank.min(i32::try_from(index).unwrap_or(i32::MAX));
+            }
+        }
+        if item
+            .audio_title_blocklist
+            .iter()
+            .any(|block| safe_title.contains(&block.to_ascii_lowercase()))
+        {
+            matches = false;
+        }
+        if !item.audio_title_allowlist.is_empty()
+            && !item
+                .audio_title_allowlist
+                .iter()
+                .any(|block| safe_title.contains(&block.to_ascii_lowercase()))
+        {
+            matches = false;
+        }
+        if !item.audio_condition.trim().is_empty()
+            && !audio_matches_condition(stream, &item.audio_condition)
+        {
+            matches = false;
+        }
+        if matches {
+            passed = true;
+            candidates.push((rank, stream.stream_index, stream));
+        }
+    }
+    candidates.sort_by_key(|(rank, stream_index, _)| (*rank, *stream_index));
+    RankedSelection {
+        passed,
+        selected: candidates.first().map(|(_, _, stream)| *stream),
+    }
+}
+
+fn select_custom_subtitle<'a>(
+    subtitles: &'a [PlaybackSubtitle],
+    item: &StreamSelectorItem,
+) -> RankedSelection<'a, PlaybackSubtitle> {
+    if item.disable_subtitles {
+        return RankedSelection {
+            passed: true,
+            selected: None,
+        };
+    }
+
+    let mut candidates = Vec::new();
+    let mut passed = false;
+    for subtitle in subtitles {
+        let safe_title = subtitle
+            .title
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let safe_language = subtitle
+            .language
+            .as_deref()
+            .unwrap_or("und")
+            .to_ascii_lowercase();
+        let mut matches = item.subtitle_languages.is_empty();
+        let mut rank = i32::MAX;
+        for (index, language) in item.subtitle_languages.iter().enumerate() {
+            if language == "*" || simple_expression_matches(language, &safe_language) {
+                matches = true;
+                rank = rank.min(i32::try_from(index).unwrap_or(i32::MAX));
+            }
+        }
+        if item
+            .subtitle_title_blocklist
+            .iter()
+            .any(|block| safe_title.contains(&block.to_ascii_lowercase()))
+        {
+            matches = false;
+        }
+        if !item.subtitle_title_allowlist.is_empty()
+            && !item
+                .subtitle_title_allowlist
+                .iter()
+                .any(|block| safe_title.contains(&block.to_ascii_lowercase()))
+        {
+            matches = false;
+        }
+        if !item.subtitle_condition.trim().is_empty()
+            && !subtitle_matches_condition(subtitle, &item.subtitle_condition)
+        {
+            matches = false;
+        }
+        if matches {
+            passed = true;
+            candidates.push((rank, subtitle.stream_index, subtitle));
+        }
+    }
+    candidates.sort_by_key(|(rank, stream_index, _)| (*rank, *stream_index));
+    RankedSelection {
+        passed,
+        selected: candidates.first().map(|(_, _, subtitle)| *subtitle),
+    }
+}
+
+fn simple_expression_matches(pattern: &str, value: &str) -> bool {
+    fn matches(pattern: &[u8], value: &[u8]) -> bool {
+        if pattern.is_empty() {
+            return value.is_empty();
+        }
+        match pattern[0] {
+            b'*' => {
+                matches(&pattern[1..], value) || !value.is_empty() && matches(pattern, &value[1..])
+            }
+            b'?' => !value.is_empty() && matches(&pattern[1..], &value[1..]),
+            current => {
+                value.first().is_some_and(|candidate| *candidate == current)
+                    && matches(&pattern[1..], &value[1..])
+            }
+        }
+    }
+
+    matches(
+        pattern.to_ascii_lowercase().as_bytes(),
+        value.to_ascii_lowercase().as_bytes(),
+    )
+}
+
+fn audio_matches_condition(stream: &PlaybackAudioStream, condition: &str) -> bool {
+    let mut context = HashMapContext::<DefaultNumericTypes>::new();
+    set_condition_value(
+        &mut context,
+        "id",
+        Value::from_int(i64::from(stream.stream_index)),
+    );
+    set_condition_value(
+        &mut context,
+        "title",
+        stream
+            .title
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "lang",
+        stream
+            .language
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(&mut context, "default", stream.default);
+    set_condition_value(&mut context, "forced", stream.forced);
+    set_condition_value(
+        &mut context,
+        "codec",
+        stream
+            .codec
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "channels",
+        Value::from_int(i64::from(stream.channels.unwrap_or_default())),
+    );
+    evaluate_selector_condition(condition, &context)
+}
+
+fn subtitle_matches_condition(subtitle: &PlaybackSubtitle, condition: &str) -> bool {
+    let mut context = HashMapContext::<DefaultNumericTypes>::new();
+    set_condition_value(
+        &mut context,
+        "id",
+        Value::from_int(i64::from(subtitle.stream_index)),
+    );
+    set_condition_value(
+        &mut context,
+        "title",
+        subtitle
+            .title
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "lang",
+        subtitle
+            .language
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(&mut context, "default", subtitle.default);
+    set_condition_value(&mut context, "forced", subtitle.forced);
+    set_condition_value(&mut context, "sdh", subtitle.sdh);
+    set_condition_value(
+        &mut context,
+        "codec",
+        subtitle
+            .codec
+            .clone()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "external",
+        subtitle.subtitle_kind == subtitle_kind::SIDECAR,
+    );
+    evaluate_selector_condition(condition, &context)
+}
+
+fn content_matches_condition(
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    condition: &str,
+) -> bool {
+    let mut context = HashMapContext::<DefaultNumericTypes>::new();
+    set_condition_value(
+        &mut context,
+        "channel_number",
+        channel.number.to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "channel_name",
+        channel.name.to_ascii_lowercase(),
+    );
+    set_condition_value(
+        &mut context,
+        "time_of_day_seconds",
+        Value::from_int(i64::from(
+            content_start_time.time().num_seconds_from_midnight(),
+        )),
+    );
+    set_condition_value(
+        &mut context,
+        "day_of_week",
+        Value::from_int(i64::from(
+            content_start_time.weekday().num_days_from_monday(),
+        )),
+    );
+    evaluate_selector_condition(condition, &context)
+}
+
+fn set_condition_value<T>(context: &mut HashMapContext<DefaultNumericTypes>, name: &str, value: T)
+where
+    Value<DefaultNumericTypes>: From<T>,
+{
+    let _ = context.set_value(name.to_owned(), Value::from(value));
+}
+
+fn evaluate_selector_condition(
+    condition: &str,
+    context: &HashMapContext<DefaultNumericTypes>,
+) -> bool {
+    let normalized = normalize_selector_condition(condition);
+    eval_boolean_with_context(&normalized, context).unwrap_or(false)
+}
+
+fn normalize_selector_condition(condition: &str) -> String {
+    let mut normalized = String::with_capacity(condition.len());
+    let chars = condition.chars().collect::<Vec<_>>();
+    let mut index = 0usize;
+    while index < chars.len() {
+        let current = chars[index];
+        if current == '\'' || current == '"' {
+            let quote = current;
+            normalized.push('"');
+            index += 1;
+            while index < chars.len() {
+                let inner = chars[index];
+                index += 1;
+                if inner == quote {
+                    break;
+                }
+                if inner == '"' || inner == '\\' {
+                    normalized.push('\\');
+                }
+                normalized.push(inner.to_ascii_lowercase());
+            }
+            normalized.push('"');
+            continue;
+        }
+        if current.is_alphabetic() || current == '_' {
+            let start = index;
+            index += 1;
+            while index < chars.len() && (chars[index].is_alphanumeric() || chars[index] == '_') {
+                index += 1;
+            }
+            let word = chars[start..index].iter().collect::<String>();
+            match word.to_ascii_lowercase().as_str() {
+                "and" => normalized.push_str("&&"),
+                "or" => normalized.push_str("||"),
+                "not" => normalized.push('!'),
+                _ => normalized.push_str(&word),
+            }
+            continue;
+        }
+        if current == '='
+            && chars.get(index + 1) != Some(&'=')
+            && chars.get(index.wrapping_sub(1)) != Some(&'!')
+            && chars.get(index.wrapping_sub(1)) != Some(&'>')
+            && chars.get(index.wrapping_sub(1)) != Some(&'<')
+        {
+            normalized.push_str("==");
+            index += 1;
+            continue;
+        }
+        normalized.push(current);
+        index += 1;
+    }
+    normalized
 }
 
 /// Select the subtitle row for channel playback, porting the built-in branch of
@@ -732,6 +1310,26 @@ async fn resolve_playback_graphics(
     Ok(resolved)
 }
 
+/// Resolve explicit graphics element ids selected on the troubleshooting page.
+///
+/// # Errors
+///
+/// Returns repository errors when any selected graphics element cannot be read
+/// or decoded.
+pub async fn resolve_playback_graphics_by_ids(
+    pool: &DbPool,
+    graphics_element_ids: Vec<i64>,
+) -> Result<Vec<ResolvedPlaybackGraphicsElement>> {
+    resolve_playback_graphics(
+        pool,
+        graphics_element_ids
+            .into_iter()
+            .map(|id| (id, None))
+            .collect(),
+    )
+    .await
+}
+
 async fn resolve_playback_watermarks(
     pool: &DbPool,
     channel_id: i64,
@@ -753,6 +1351,19 @@ async fn resolve_playback_watermarks(
         }
     }
     Ok(resolved)
+}
+
+/// Resolve explicit watermark ids selected on the troubleshooting page.
+///
+/// # Errors
+///
+/// Returns database errors from watermark/artwork reads.
+pub async fn resolve_playback_watermarks_by_ids(
+    pool: &DbPool,
+    channel_id: i64,
+    watermark_ids: Vec<i64>,
+) -> Result<Vec<ResolvedPlaybackWatermark>> {
+    resolve_playback_watermarks(pool, channel_id, watermark_ids).await
 }
 
 #[must_use]
@@ -1439,5 +2050,102 @@ fn derive_color_params(
     SourceColorParams {
         is_hdr,
         is_bt2020_ten: is_bt2020 && is_ten_bit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn custom_stream_selector_prioritizes_audio_language_and_conditions() {
+        let item = StreamSelectorItem {
+            audio_languages: vec!["jpn".to_owned(), "eng".to_owned()],
+            audio_title_blocklist: vec!["commentary".to_owned()],
+            audio_condition: "channels >= 6 and default = false".to_owned(),
+            ..StreamSelectorItem::default()
+        };
+        let streams = vec![
+            PlaybackAudioStream {
+                stream_index: 1,
+                title: Some("English commentary".to_owned()),
+                language: Some("eng".to_owned()),
+                default: false,
+                forced: false,
+                codec: Some("aac".to_owned()),
+                channels: Some(6),
+            },
+            PlaybackAudioStream {
+                stream_index: 2,
+                title: Some("English 5.1".to_owned()),
+                language: Some("eng".to_owned()),
+                default: false,
+                forced: false,
+                codec: Some("aac".to_owned()),
+                channels: Some(6),
+            },
+            PlaybackAudioStream {
+                stream_index: 3,
+                title: Some("Japanese stereo".to_owned()),
+                language: Some("jpn".to_owned()),
+                default: false,
+                forced: false,
+                codec: Some("aac".to_owned()),
+                channels: Some(2),
+            },
+        ];
+
+        let selected = select_custom_audio(&streams, &item);
+
+        assert!(selected.passed);
+        assert_eq!(selected.selected.map(|stream| stream.stream_index), Some(2));
+    }
+
+    #[test]
+    fn custom_stream_selector_matches_content_and_can_disable_subtitles() {
+        let channel = Channel {
+            number: "42".to_owned(),
+            name: "Movies".to_owned(),
+            ..Channel::default()
+        };
+        let start = Utc.with_ymd_and_hms(2026, 6, 1, 20, 0, 0).unwrap();
+        let item = StreamSelectorItem {
+            disable_subtitles: true,
+            content_condition:
+                "channel_number = '42' and channel_name = 'movies' and time_of_day_seconds >= 72000"
+                    .to_owned(),
+            ..StreamSelectorItem::default()
+        };
+
+        let subtitles = [PlaybackSubtitle {
+            id: 1,
+            subtitle_kind: subtitle_kind::SIDECAR,
+            title: Some("English".to_owned()),
+            stream_index: 4,
+            codec: Some("srt".to_owned()),
+            default: false,
+            forced: false,
+            sdh: false,
+            language: Some("eng".to_owned()),
+            is_extracted: false,
+            path: Some("movie.srt".to_owned()),
+        }];
+        let selected = select_custom_subtitle(&subtitles, &item);
+
+        assert!(content_matches_condition(
+            &channel,
+            start,
+            &item.content_condition
+        ));
+        assert!(selected.passed);
+        assert!(selected.selected.is_none());
+    }
+
+    #[test]
+    fn simple_expression_matches_ersatztv_wildcards_case_insensitively() {
+        assert!(simple_expression_matches("en*", "ENG"));
+        assert!(simple_expression_matches("p?r", "por"));
+        assert!(!simple_expression_matches("jpn", "eng"));
     }
 }

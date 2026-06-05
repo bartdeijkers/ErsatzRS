@@ -1,0 +1,45 @@
+- generic [ref=e2] [box=0,0,1365,768]:
+  - banner [ref=e3] [box=0,0,1365,56]:
+    - generic "Toggle navigation" [ref=e4] [cursor=pointer] [box=16,12,32,32]
+    - link "ErsatzRS" [ref=e6] [cursor=pointer] [box=60,9,113,38]:
+      - /url: /
+      - img "ErsatzRS" [ref=e7] [box=60,9,113,38]
+    - search [ref=e8] [box=982,12,256,32]:
+      - searchbox "Search media" [ref=e9] [box=982,12,256,32]
+    - navigation [ref=e10] [box=1250,17,99,22]:
+      - link "M3U" [ref=e11] [cursor=pointer] [box=1250,17,41,22]:
+        - /url: /iptv/channels.m3u
+      - link "XMLTV" [ref=e12] [cursor=pointer] [box=1295,17,54,22]:
+        - /url: /iptv/xmltv.xml
+  - generic [ref=e13] [box=0,56,1365,712]:
+    - complementary [ref=e14] [box=0,56,224,712]:
+      - navigation [ref=e15] [box=0,56,223,386]:
+        - link "Channels" [ref=e16] [cursor=pointer] [box=8,68,207,28]:
+          - /url: /channels
+          - generic [ref=e18] [box=40,74,58,16]: Channels
+        - link "FFmpeg Profiles" [ref=e19] [cursor=pointer] [box=8,98,207,28]:
+          - /url: /ffmpeg
+          - generic [ref=e21] [box=40,104,102,16]: FFmpeg Profiles
+        - link "Watermarks" [ref=e22] [cursor=pointer] [box=8,128,207,28]:
+          - /url: /watermarks
+          - generic [ref=e24] [box=40,134,76,16]: Watermarks
+        - group [ref=e25] [box=8,166,207,21]:
+          - generic "Media Sources" [ref=e26] [cursor=pointer] [box=8,166,207,21]
+        - group [ref=e30] [box=8,197,207,21]:
+          - generic "Media" [ref=e31] [cursor=pointer] [box=8,197,207,21]
+        - group [ref=e35] [box=8,228,207,21]:
+          - generic "Lists" [ref=e36] [cursor=pointer] [box=8,228,207,21]
+        - group [ref=e40] [box=8,259,207,21]:
+          - generic "Scheduling" [ref=e41] [cursor=pointer] [box=8,259,207,21]
+        - group [ref=e46] [box=8,290,207,21]:
+          - generic "Settings" [ref=e47] [cursor=pointer] [box=8,290,207,21]
+        - group [ref=e51] [box=8,321,207,109]:
+          - generic "Support" [ref=e52] [cursor=pointer] [box=8,321,207,21]
+          - generic [ref=e57] [box=16,342,199,88]
+    - main [ref=e68] [box=224,56,1141,712]:
+      - generic [ref=e69] [box=254,86,1081,259]:
+        - heading "Sequential Schedule Validation" [level=1] [ref=e71] [box=254,118,1081,28]
+        - generic [ref=e73] [box=254,179,1081,60]:
+          - generic [ref=e74] [box=254,179,288,60]
+          - generic [ref=e77] [box=558,179,288,60]
+          - button "Validate" [ref=e80] [cursor=pointer] [box=862,201,85,38]

@@ -17,7 +17,7 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, OutputFormat,
+    FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat,
     PipelineRequest, SourceVideoStream,
 };
 
@@ -284,11 +284,13 @@ impl HlsSessionWorker {
                 &self.working_dir,
                 self.output_format,
                 is_first,
+                false,
                 active.start_seconds,
                 &playback_profile,
                 target_frame_rate,
                 self.runtime_capabilities.clone(),
                 source_stream,
+                None,
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
@@ -386,16 +388,19 @@ impl HlsSessionHandle for HlsSessionWorker {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_hls_command(
+#[must_use]
+pub fn build_hls_command(
     media_path: &str,
     _working_dir: &Path,
     output_format: OutputFormat,
     is_first_transcode: bool,
+    troubleshooting: bool,
     start_seconds: i64,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
+    selected_audio_stream_index: Option<usize>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -410,6 +415,15 @@ fn build_hls_command(
     );
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
+    if let Some(stream_index) = selected_audio_stream_index {
+        if let Some(audio_input) = request
+            .inputs
+            .iter_mut()
+            .find(|input| input.kind == InputKind::Audio)
+        {
+            *audio_input = audio_input.clone().with_stream_index(stream_index);
+        }
+    }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
@@ -444,7 +458,7 @@ fn build_hls_command(
         playlist_path: "live.m3u8".to_string(),
         segment_options: None,
         is_first_transcode,
-        troubleshooting: false,
+        troubleshooting,
     });
 
     build_pipeline_for_acceleration(
@@ -971,10 +985,12 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             0,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
+            None,
             None,
             None,
             Vec::new(),
@@ -984,16 +1000,41 @@ mod tests {
     }
 
     #[test]
+    fn build_hls_command_maps_selected_audio_stream() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            true,
+            0,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
+            None,
+            Some(3),
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-map 0:3"), "{arguments}");
+    }
+
+    #[test]
     fn build_hls_command_produces_fmp4_flags() {
         let command = build_hls_command(
             "/media/test.mkv",
             Path::new("/tmp/hls/1"),
             OutputFormat::HlsMp4,
             true,
+            false,
             0,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
+            None,
             None,
             None,
             Vec::new(),
@@ -1012,10 +1053,12 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             900,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
+            None,
             None,
             None,
             Vec::new(),
@@ -1035,10 +1078,12 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             0,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
+            None,
             None,
             None,
             Vec::new(),
@@ -1178,11 +1223,13 @@ mod tests {
             working_dir.path(),
             OutputFormat::Hls,
             true,
+            false,
             0,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             Some(source_1080p()),
+            None,
             None,
             Vec::new(),
             Vec::new(),
@@ -1317,11 +1364,13 @@ mod tests {
             working_dir,
             OutputFormat::Hls,
             true,
+            false,
             0,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             Some(source_320p()),
+            None,
             None,
             Vec::new(),
             vec![GraphicsPipelineOverlay::drawvg(

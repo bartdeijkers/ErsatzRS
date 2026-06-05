@@ -7,7 +7,10 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::StreamingMode;
 use ersatzrs_ffmpeg::OutputFormat;
-use ersatzrs_infra::hls_worker::HlsSessionWorker;
+use ersatzrs_infra::{
+    file_system_layout::{transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL},
+    hls_worker::HlsSessionWorker,
+};
 use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc};
 
@@ -346,6 +349,10 @@ pub async fn get_session_playlist(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
 ) -> Response {
+    if channel_number == TRANSCODE_TROUBLESHOOTING_CHANNEL {
+        return serve_troubleshooting_hls_file("live.m3u8").await;
+    }
+
     if let Some(handle) = state.hls_sessions.try_get(&channel_number).await {
         handle.touch();
         return match handle.trim_playlist().await {
@@ -363,6 +370,10 @@ pub async fn get_session_segment(
 ) -> Response {
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return (StatusCode::BAD_REQUEST, "invalid segment filename").into_response();
+    }
+
+    if channel_number == TRANSCODE_TROUBLESHOOTING_CHANNEL {
+        return serve_troubleshooting_hls_file(&filename).await;
     }
 
     let path = std::env::temp_dir()
@@ -410,6 +421,60 @@ pub async fn get_session_segment(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+async fn serve_troubleshooting_hls_file(filename: &str) -> Response {
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "invalid troubleshooting filename").into_response();
+    }
+
+    match tokio::fs::read(transcode_troubleshooting_folder().join(filename)).await {
+        Ok(body) => hls_file_response(filename, body),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            StatusCode::NOT_FOUND.into_response()
+        }
+        Err(error) => {
+            tracing::warn!(%error, filename, "failed to read troubleshooting hls file");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn hls_file_response(filename: &str, body: Vec<u8>) -> Response {
+    let mut response = body.into_response();
+    match std::path::Path::new(filename)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("m3u8") => {
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HLS_CONTENT_TYPE);
+        }
+        Some("ts") => {
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+        }
+        Some("mp4") => {
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp4"));
+        }
+        Some("m4s") => {
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("video/iso.segment"),
+            );
+        }
+        Some(_) | None => {}
+    }
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 pub async fn get_hls_direct_stream(
@@ -489,5 +554,10 @@ mod tests {
             hls_working_dir("1"),
             std::env::temp_dir().join("ersatzrs-hls").join("1")
         );
+    }
+
+    #[test]
+    fn troubleshooting_channel_is_reserved_session_number() {
+        assert_eq!(TRANSCODE_TROUBLESHOOTING_CHANNEL, ".troubleshooting");
     }
 }

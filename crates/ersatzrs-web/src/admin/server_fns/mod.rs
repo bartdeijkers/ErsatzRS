@@ -14,4 +14,5 @@ pub mod search;
 pub mod settings;
 pub mod templates;
 pub mod trakt;
+pub mod troubleshooting;
 pub mod watermarks;

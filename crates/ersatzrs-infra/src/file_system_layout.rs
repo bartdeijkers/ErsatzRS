@@ -4,7 +4,8 @@
 //! (`<AppDataFolder>/cache/streams/{subtitles,fonts}`). ErsatzRS uses the same
 //! `data_local_dir()/ErsatzRS` base that `logging::default_log_dir` already uses
 //! (see `logging.rs`), so the two stay consistent. Only the subtitle and font
-//! folders required by embedded-subtitle extraction are exposed here.
+//! folders required by embedded-subtitle extraction and troubleshooting
+//! playback are exposed here.
 
 use std::path::{Path, PathBuf};
 
@@ -49,6 +50,24 @@ fn app_data_folder() -> PathBuf {
 #[must_use]
 pub fn streams_cache_folder() -> PathBuf {
     app_data_folder().join("cache").join("streams")
+}
+
+/// `<AppDataFolder>/cache/transcode` — root of HLS transcode sessions.
+/// Mirrors `FileSystemLayout.TranscodeFolder`.
+#[must_use]
+pub fn transcode_folder() -> PathBuf {
+    app_data_folder().join("cache").join("transcode")
+}
+
+/// `.troubleshooting` — the reserved HLS channel number used by ErsatzTV for
+/// one-off troubleshooting playback.
+pub const TRANSCODE_TROUBLESHOOTING_CHANNEL: &str = ".troubleshooting";
+
+/// `<TranscodeFolder>/.troubleshooting` — one-off playback troubleshooting
+/// artifacts and HLS output. Mirrors `FileSystemLayout.TranscodeTroubleshootingFolder`.
+#[must_use]
+pub fn transcode_troubleshooting_folder() -> PathBuf {
+    transcode_folder().join(TRANSCODE_TROUBLESHOOTING_CHANNEL)
 }
 
 /// `<AppDataFolder>/cache/streams/subtitles` — extracted text subtitles.
@@ -107,6 +126,20 @@ mod tests {
         assert!(
             path.ends_with(Path::new("cache").join("streams").join("fonts")),
             "unexpected fonts cache path: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn transcode_troubleshooting_folder_matches_ersatztv_shape() {
+        let path = transcode_troubleshooting_folder();
+        assert!(
+            path.ends_with(
+                Path::new("cache")
+                    .join("transcode")
+                    .join(TRANSCODE_TROUBLESHOOTING_CHANNEL)
+            ),
+            "unexpected troubleshooting transcode path: {}",
             path.display()
         );
     }
