@@ -396,6 +396,39 @@ fn software_pipeline_ac3_stereo_output_uses_decoder_downmix_snapshot() {
 }
 
 #[test]
+fn software_pipeline_omits_audio_channels_when_source_matches_desired() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut audio = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+    audio.channels = Some(2);
+    let request = h264_request(desired).with_source_audio_streams(vec![audio]);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    assert!(!command
+        .arguments
+        .windows(2)
+        .any(|args| args == ["-ac", "2"]));
+}
+
+#[test]
+fn software_pipeline_emits_aac_audio_channels_for_surround_output() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.audio_channels = Some(6);
+    let mut audio = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+    audio.channels = Some(6);
+    let request = h264_request(desired).with_source_audio_streams(vec![audio]);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    assert!(command
+        .arguments
+        .windows(2)
+        .any(|args| args == ["-ac", "6"]));
+}
+
+#[test]
 fn software_pipeline_mpeg2_output_uses_supported_scene_detect_threshold_snapshot() {
     let mut desired = DesiredVideoState::h264_1080p();
     desired.video_format = FFmpegProfileVideoFormat::Mpeg2Video;

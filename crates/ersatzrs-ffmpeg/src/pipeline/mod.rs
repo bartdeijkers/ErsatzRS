@@ -1146,7 +1146,13 @@ fn build_transcode_pipeline(
     }
 
     steps.push(PipelineStep::complex_filter(complex.options));
-    steps.push(audio_encoder(&request.desired));
+    steps.push(audio_encoder(
+        &request.desired,
+        selected_source_audio_stream(
+            request.inputs.as_slice(),
+            request.source_audio_streams.as_slice(),
+        ),
+    ));
     if let Some(encoder) = subtitle_encoder(&request.inputs) {
         steps.push(encoder);
     }
@@ -2266,7 +2272,10 @@ const fn hardware_surface_format(bit_depth: FFmpegProfileBitDepth) -> &'static s
     }
 }
 
-fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
+fn audio_encoder(
+    desired: &DesiredVideoState,
+    source_audio_stream: Option<&SourceAudioStream>,
+) -> PipelineStep {
     let name = match desired.audio_format {
         FFmpegProfileAudioFormat::Copy => "copy",
         FFmpegProfileAudioFormat::Ac3 => "ac3",
@@ -2277,7 +2286,9 @@ fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
 
     let mut extra = Vec::new();
     if desired.audio_format != FFmpegProfileAudioFormat::Copy {
-        if let Some(channels) = desired.audio_channels {
+        if let Some(channels) = desired.audio_channels.filter(|channels| {
+            emit_audio_channels(desired.audio_format, source_audio_stream, *channels)
+        }) {
             extra.extend(["-ac".to_owned(), channels.to_string()]);
         }
         if let Some(sample_rate) = desired.audio_sample_rate {
@@ -2289,6 +2300,36 @@ fn audio_encoder(desired: &DesiredVideoState) -> PipelineStep {
     }
 
     PipelineStep::encoder(name, StreamKind::Audio, extra)
+}
+
+fn selected_source_audio_stream<'a>(
+    inputs: &[InputFile],
+    source_audio_streams: &'a [SourceAudioStream],
+) -> Option<&'a SourceAudioStream> {
+    let stream_index = inputs
+        .iter()
+        .find(|input| input.kind == InputKind::Audio)?
+        .streams
+        .first()?
+        .index;
+    source_audio_streams
+        .iter()
+        .find(|stream| stream.index == stream_index)
+}
+
+fn emit_audio_channels(
+    audio_format: FFmpegProfileAudioFormat,
+    source_audio_stream: Option<&SourceAudioStream>,
+    desired_channels: u32,
+) -> bool {
+    let Some(source_channels) = source_audio_stream.and_then(|stream| stream.channels) else {
+        return false;
+    };
+    source_channels != desired_channels
+        || matches!(
+            audio_format,
+            FFmpegProfileAudioFormat::Aac | FFmpegProfileAudioFormat::AacLatm
+        ) && desired_channels > 2
 }
 
 fn audio_sample_rate_output(sample_rate_hz: u32) -> String {
