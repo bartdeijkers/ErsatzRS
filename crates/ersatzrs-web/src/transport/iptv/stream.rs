@@ -741,7 +741,21 @@ mod tests {
             Vec::new(),
         );
         let arguments = command.arguments.join(" ");
-        assert!(arguments.contains("-ss 900 -i /media/movie.mkv"));
+        // ErsatzTV emits the seek as an input-side option (`StreamSeekInputOption`,
+        // added before the decoder in `PipelineBuilderBase`), so `-ss 900` precedes
+        // the `-i` input with the source decoder option in between. Assert the
+        // input-side seek contract by position rather than hard-coding the decoder
+        // string (that argv is covered by the pipeline snapshot suite).
+        let seek = arguments
+            .find("-ss 900")
+            .unwrap_or_else(|| panic!("expected stream seek in arguments: {arguments}"));
+        let input = arguments
+            .find("-i /media/movie.mkv")
+            .unwrap_or_else(|| panic!("expected input file in arguments: {arguments}"));
+        assert!(
+            seek < input,
+            "stream seek must precede the input file: {arguments}"
+        );
     }
 
     #[test]
