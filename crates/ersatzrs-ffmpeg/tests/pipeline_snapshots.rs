@@ -155,6 +155,7 @@ fn desired_video_state_from_profile_maps_transcode_fields_and_source_sizing() {
         normalize_framerate: true,
         normalize_colors: true,
         pad_mode: FilterMode::Software,
+        qsv_extra_hardware_frames: Some(18),
         ..FFmpegProfile::default()
     };
     let resolution = Resolution {
@@ -189,6 +190,7 @@ fn desired_video_state_from_profile_maps_transcode_fields_and_source_sizing() {
     assert_eq!(desired.target_loudness, Some(-23.0));
     assert_eq!(desired.frame_rate, Some(FrameRate::new(24_000, 1_001)));
     assert!(desired.allow_b_frames);
+    assert_eq!(desired.qsv_extra_hardware_frames, 18);
 }
 
 #[test]
@@ -1131,6 +1133,23 @@ fn qsv_pipeline_falls_back_to_software_when_decoder_is_missing_snapshot() {
         command.environment,
         command.arguments.join(" ")
     ));
+}
+
+#[test]
+fn qsv_pipeline_uses_profile_extra_hardware_frames() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.qsv_extra_hardware_frames = 18;
+    let mut report = capability_report_for_tests();
+    report.decoders.remove("h264_qsv");
+    let request = h264_request(desired).with_runtime_capabilities(report);
+
+    let pipeline = QsvPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    assert!(command
+        .arguments
+        .join(" ")
+        .contains("hwupload=extra_hw_frames=18"));
 }
 
 #[test]

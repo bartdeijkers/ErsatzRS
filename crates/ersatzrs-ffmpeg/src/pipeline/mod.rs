@@ -438,6 +438,7 @@ pub struct DesiredVideoState {
     pub vaapi_device: Option<String>,
     pub vaapi_driver: Option<String>,
     pub qsv_device: Option<String>,
+    pub qsv_extra_hardware_frames: u32,
     pub vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode,
 }
 
@@ -472,6 +473,7 @@ impl DesiredVideoState {
             vaapi_device: None,
             vaapi_driver: None,
             qsv_device: None,
+            qsv_extra_hardware_frames: QSV_EXTRA_HARDWARE_FRAMES,
             vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
@@ -527,6 +529,10 @@ impl DesiredVideoState {
             vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
             vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
             qsv_device: non_empty_string(profile.vaapi_device.as_deref()),
+            qsv_extra_hardware_frames: profile
+                .qsv_extra_hardware_frames
+                .and_then(positive_u32)
+                .unwrap_or(QSV_EXTRA_HARDWARE_FRAMES),
             vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
@@ -565,6 +571,10 @@ impl DesiredVideoState {
             vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
             vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
             qsv_device: non_empty_string(profile.vaapi_device.as_deref()),
+            qsv_extra_hardware_frames: profile
+                .qsv_extra_hardware_frames
+                .and_then(positive_u32)
+                .unwrap_or(QSV_EXTRA_HARDWARE_FRAMES),
             vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
@@ -1208,7 +1218,7 @@ fn apply_source_video_filters(
         filter_chain.video.push(deinterlace_filter(
             acceleration,
             target_state,
-            QSV_EXTRA_HARDWARE_FRAMES,
+            request.desired.qsv_extra_hardware_frames,
         ));
         target_state.deinterlaced = true;
         target_state.frame_data_location = deinterlace_output_location(acceleration);
@@ -1240,6 +1250,7 @@ fn apply_source_video_filters(
         request.desired.scaled_size,
         request.desired.frame_size,
         request.desired.bit_depth,
+        request.desired.qsv_extra_hardware_frames,
     );
     if !scale.trim().is_empty() {
         filter_chain.video.push(scale);
@@ -2182,11 +2193,16 @@ fn video_scale_filter(
     scaled_size: FrameSize,
     padded_size: FrameSize,
     bit_depth: FFmpegProfileBitDepth,
+    qsv_extra_hardware_frames: u32,
 ) -> String {
     match acceleration {
-        HardwareAccelerationKind::Qsv => {
-            scale_qsv_filter(current, scaled_size, padded_size, bit_depth)
-        }
+        HardwareAccelerationKind::Qsv => scale_qsv_filter(
+            current,
+            scaled_size,
+            padded_size,
+            bit_depth,
+            qsv_extra_hardware_frames,
+        ),
         HardwareAccelerationKind::Nvenc => {
             scale_cuda_filter(current, scaled_size, padded_size, bit_depth)
         }
@@ -2206,6 +2222,7 @@ fn scale_qsv_filter(
     scaled_size: FrameSize,
     padded_size: FrameSize,
     bit_depth: FFmpegProfileBitDepth,
+    qsv_extra_hardware_frames: u32,
 ) -> String {
     let format = hardware_surface_format(bit_depth);
     let scale = if current.scaled_size == scaled_size {
@@ -2236,7 +2253,7 @@ fn scale_qsv_filter(
 
     let initial_pixel_format = current.pixel_format.ffmpeg_name();
     format!(
-        "format={initial_pixel_format},hwupload=extra_hw_frames={QSV_EXTRA_HARDWARE_FRAMES},{scale}"
+        "format={initial_pixel_format},hwupload=extra_hw_frames={qsv_extra_hardware_frames},{scale}"
     )
 }
 
