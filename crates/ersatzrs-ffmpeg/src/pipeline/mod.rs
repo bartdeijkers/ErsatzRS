@@ -422,6 +422,7 @@ pub struct DesiredVideoState {
     pub video_preset: Option<String>,
     pub video_bitrate: Option<u32>,
     pub video_buffer_size: Option<u32>,
+    pub video_track_timescale: Option<u32>,
     pub audio_bitrate: Option<u32>,
     pub audio_buffer_size: Option<u32>,
     pub audio_channels: Option<u32>,
@@ -455,6 +456,7 @@ impl DesiredVideoState {
             video_preset: Some("veryfast".to_owned()),
             video_bitrate: Some(8_000),
             video_buffer_size: Some(16_000),
+            video_track_timescale: Some(90_000),
             audio_bitrate: Some(192),
             audio_buffer_size: Some(384),
             audio_channels: Some(2),
@@ -507,6 +509,7 @@ impl DesiredVideoState {
             video_preset: non_empty_string(profile.video_preset.as_deref()),
             video_bitrate: positive_u32(profile.video_bitrate),
             video_buffer_size: positive_u32(profile.video_buffer_size),
+            video_track_timescale: Some(90_000),
             audio_bitrate: positive_u32(profile.audio_bitrate),
             audio_buffer_size: positive_u32(profile.audio_buffer_size),
             audio_channels: positive_u32(profile.audio_channels),
@@ -546,6 +549,7 @@ impl DesiredVideoState {
             video_preset: None,
             video_bitrate: None,
             video_buffer_size: None,
+            video_track_timescale: Some(90_000),
             audio_bitrate: None,
             audio_buffer_size: None,
             audio_channels: None,
@@ -2421,6 +2425,12 @@ fn add_output_options(
     }
 
     if desired.video_format != FFmpegProfileVideoFormat::Copy {
+        if let Some(timescale) = desired.video_track_timescale {
+            steps.push(PipelineStep::generic(
+                "video_track_timescale",
+                ["-video_track_timescale".to_owned(), timescale.to_string()],
+            ));
+        }
         if let Some(bitrate) = desired.video_bitrate {
             steps.push(PipelineStep::generic(
                 "video_bitrate",
