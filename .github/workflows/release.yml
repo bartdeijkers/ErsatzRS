@@ -137,10 +137,9 @@ jobs:
         if: ${{ matrix.rid == 'win-x64' }}
         shell: bash
         env:
-          # Pinned BtbN win64 GPL build of FFmpeg 8.1. ErsatzRS hard-requires the
-          # `drawvg` filter (FFmpeg 8.1+), asserted below. If BtbN renames the
-          # asset, update this URL — the drawvg assert is the correctness guard.
-          FFMPEG_ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-gpl-8.1.zip
+          # Pinned Gyan win64 GPL build of FFmpeg 8.1. ErsatzRS hard-requires the
+          # `drawvg` filter (FFmpeg 8.1+), asserted below.
+          FFMPEG_ZIP_URL: https://github.com/GyanD/codexffmpeg/releases/download/8.1.1/ffmpeg-8.1.1-full_build.zip
         run: |
           set -euo pipefail
           curl -fL "$FFMPEG_ZIP_URL" -o ffmpeg-win64.zip
@@ -148,7 +147,7 @@ jobs:
           ffmpeg_exe="$(find ffmpeg-extracted -name ffmpeg.exe | head -n1)"
           ffprobe_exe="$(find ffmpeg-extracted -name ffprobe.exe | head -n1)"
           if [ -z "$ffmpeg_exe" ] || [ -z "$ffprobe_exe" ]; then
-            echo "ffmpeg.exe/ffprobe.exe not found in the BtbN archive" >&2
+            echo "ffmpeg.exe/ffprobe.exe not found in the GyanD archive" >&2
             exit 1
           fi
           cp "$ffmpeg_exe" ffmpeg.exe
