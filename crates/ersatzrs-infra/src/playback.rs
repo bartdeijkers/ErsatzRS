@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::condition::{evaluate as evaluate_condition, ConditionContext};
 use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::{GraphicsRepository as _, RepositoryError, Result};
@@ -18,10 +19,6 @@ use ersatzrs_ffmpeg::{
     GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat, SourceColorParams,
     SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
     WatermarkOverlay,
-};
-use evalexpr::{
-    eval_boolean_with_context, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext,
-    Value,
 };
 use sqlx::Row;
 
@@ -801,14 +798,9 @@ fn simple_expression_matches(pattern: &str, value: &str) -> bool {
 }
 
 fn audio_matches_condition(stream: &PlaybackAudioStream, condition: &str) -> bool {
-    let mut context = HashMapContext::<DefaultNumericTypes>::new();
-    set_condition_value(
-        &mut context,
-        "id",
-        Value::from_int(i64::from(stream.stream_index)),
-    );
-    set_condition_value(
-        &mut context,
+    let mut context = ConditionContext::new();
+    context.set("id", i64::from(stream.stream_index));
+    context.set(
         "title",
         stream
             .title
@@ -816,8 +808,7 @@ fn audio_matches_condition(stream: &PlaybackAudioStream, condition: &str) -> boo
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(
-        &mut context,
+    context.set(
         "lang",
         stream
             .language
@@ -825,10 +816,9 @@ fn audio_matches_condition(stream: &PlaybackAudioStream, condition: &str) -> boo
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(&mut context, "default", stream.default);
-    set_condition_value(&mut context, "forced", stream.forced);
-    set_condition_value(
-        &mut context,
+    context.set("default", stream.default);
+    context.set("forced", stream.forced);
+    context.set(
         "codec",
         stream
             .codec
@@ -836,23 +826,14 @@ fn audio_matches_condition(stream: &PlaybackAudioStream, condition: &str) -> boo
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(
-        &mut context,
-        "channels",
-        Value::from_int(i64::from(stream.channels.unwrap_or_default())),
-    );
-    evaluate_selector_condition(condition, &context)
+    context.set("channels", i64::from(stream.channels.unwrap_or_default()));
+    evaluate_condition(condition, &context)
 }
 
 fn subtitle_matches_condition(subtitle: &PlaybackSubtitle, condition: &str) -> bool {
-    let mut context = HashMapContext::<DefaultNumericTypes>::new();
-    set_condition_value(
-        &mut context,
-        "id",
-        Value::from_int(i64::from(subtitle.stream_index)),
-    );
-    set_condition_value(
-        &mut context,
+    let mut context = ConditionContext::new();
+    context.set("id", i64::from(subtitle.stream_index));
+    context.set(
         "title",
         subtitle
             .title
@@ -860,8 +841,7 @@ fn subtitle_matches_condition(subtitle: &PlaybackSubtitle, condition: &str) -> b
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(
-        &mut context,
+    context.set(
         "lang",
         subtitle
             .language
@@ -869,11 +849,10 @@ fn subtitle_matches_condition(subtitle: &PlaybackSubtitle, condition: &str) -> b
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(&mut context, "default", subtitle.default);
-    set_condition_value(&mut context, "forced", subtitle.forced);
-    set_condition_value(&mut context, "sdh", subtitle.sdh);
-    set_condition_value(
-        &mut context,
+    context.set("default", subtitle.default);
+    context.set("forced", subtitle.forced);
+    context.set("sdh", subtitle.sdh);
+    context.set(
         "codec",
         subtitle
             .codec
@@ -881,12 +860,8 @@ fn subtitle_matches_condition(subtitle: &PlaybackSubtitle, condition: &str) -> b
             .unwrap_or_default()
             .to_ascii_lowercase(),
     );
-    set_condition_value(
-        &mut context,
-        "external",
-        subtitle.subtitle_kind == subtitle_kind::SIDECAR,
-    );
-    evaluate_selector_condition(condition, &context)
+    context.set("external", subtitle.subtitle_kind == subtitle_kind::SIDECAR);
+    evaluate_condition(condition, &context)
 }
 
 fn content_matches_condition(
@@ -894,102 +869,18 @@ fn content_matches_condition(
     content_start_time: DateTime<Utc>,
     condition: &str,
 ) -> bool {
-    let mut context = HashMapContext::<DefaultNumericTypes>::new();
-    set_condition_value(
-        &mut context,
-        "channel_number",
-        channel.number.to_ascii_lowercase(),
-    );
-    set_condition_value(
-        &mut context,
-        "channel_name",
-        channel.name.to_ascii_lowercase(),
-    );
-    set_condition_value(
-        &mut context,
+    let mut context = ConditionContext::new();
+    context.set("channel_number", channel.number.to_ascii_lowercase());
+    context.set("channel_name", channel.name.to_ascii_lowercase());
+    context.set(
         "time_of_day_seconds",
-        Value::from_int(i64::from(
-            content_start_time.time().num_seconds_from_midnight(),
-        )),
+        i64::from(content_start_time.time().num_seconds_from_midnight()),
     );
-    set_condition_value(
-        &mut context,
+    context.set(
         "day_of_week",
-        Value::from_int(i64::from(
-            content_start_time.weekday().num_days_from_monday(),
-        )),
+        i64::from(content_start_time.weekday().num_days_from_monday()),
     );
-    evaluate_selector_condition(condition, &context)
-}
-
-fn set_condition_value<T>(context: &mut HashMapContext<DefaultNumericTypes>, name: &str, value: T)
-where
-    Value<DefaultNumericTypes>: From<T>,
-{
-    let _ = context.set_value(name.to_owned(), Value::from(value));
-}
-
-fn evaluate_selector_condition(
-    condition: &str,
-    context: &HashMapContext<DefaultNumericTypes>,
-) -> bool {
-    let normalized = normalize_selector_condition(condition);
-    eval_boolean_with_context(&normalized, context).unwrap_or(false)
-}
-
-fn normalize_selector_condition(condition: &str) -> String {
-    let mut normalized = String::with_capacity(condition.len());
-    let chars = condition.chars().collect::<Vec<_>>();
-    let mut index = 0usize;
-    while index < chars.len() {
-        let current = chars[index];
-        if current == '\'' || current == '"' {
-            let quote = current;
-            normalized.push('"');
-            index += 1;
-            while index < chars.len() {
-                let inner = chars[index];
-                index += 1;
-                if inner == quote {
-                    break;
-                }
-                if inner == '"' || inner == '\\' {
-                    normalized.push('\\');
-                }
-                normalized.push(inner.to_ascii_lowercase());
-            }
-            normalized.push('"');
-            continue;
-        }
-        if current.is_alphabetic() || current == '_' {
-            let start = index;
-            index += 1;
-            while index < chars.len() && (chars[index].is_alphanumeric() || chars[index] == '_') {
-                index += 1;
-            }
-            let word = chars[start..index].iter().collect::<String>();
-            match word.to_ascii_lowercase().as_str() {
-                "and" => normalized.push_str("&&"),
-                "or" => normalized.push_str("||"),
-                "not" => normalized.push('!'),
-                _ => normalized.push_str(&word),
-            }
-            continue;
-        }
-        if current == '='
-            && chars.get(index + 1) != Some(&'=')
-            && chars.get(index.wrapping_sub(1)) != Some(&'!')
-            && chars.get(index.wrapping_sub(1)) != Some(&'>')
-            && chars.get(index.wrapping_sub(1)) != Some(&'<')
-        {
-            normalized.push_str("==");
-            index += 1;
-            continue;
-        }
-        normalized.push(current);
-        index += 1;
-    }
-    normalized
+    evaluate_condition(condition, &context)
 }
 
 /// Select the subtitle row for channel playback, porting the built-in branch of

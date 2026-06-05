@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod cache_cleanup;
+pub(crate) mod condition;
 pub mod db;
 pub mod emby;
 pub mod ffmpeg_config;

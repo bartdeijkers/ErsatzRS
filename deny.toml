@@ -25,6 +25,9 @@ allow = [
   "GPL-3.0-or-later",
   "ISC",
   "MIT",
+  # borrow-or-share, pulled in transitively by jsonschema via fluent-uri.
+  # MIT No Attribution is MIT without the attribution clause - fully permissive.
+  "MIT-0",
   # option-ext, pulled in transitively by directories for platform path lookup.
   "MPL-2.0",
   "Unicode-3.0",
