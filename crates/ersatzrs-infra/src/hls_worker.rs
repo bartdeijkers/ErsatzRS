@@ -1194,7 +1194,7 @@ mod tests {
             eprintln!("skipping: no Big Buck Bunny fixture found in testdata/");
             return;
         };
-        if Command::new(ersatzrs_ffmpeg::ffmpeg_path_from_env())
+        if Command::new(ersatzrs_ffmpeg::ffmpeg_path())
             .arg("-version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1205,7 +1205,7 @@ mod tests {
             eprintln!("skipping: ffmpeg not on PATH");
             return;
         }
-        if Command::new(ersatzrs_ffmpeg::ffprobe_path_from_env())
+        if Command::new(ersatzrs_ffmpeg::ffprobe_path())
             .arg("-version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1260,7 +1260,7 @@ mod tests {
         child.kill().await.ok();
         let _ = child.wait().await;
 
-        let output = Command::new(ersatzrs_ffmpeg::ffprobe_path_from_env())
+        let output = Command::new(ersatzrs_ffmpeg::ffprobe_path())
             .args([
                 "-v",
                 "error",
@@ -1288,7 +1288,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg with drawvg on PATH"]
     async fn hls_segmenter_composites_drawvg_graphics_from_generated_input() {
-        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path_from_env();
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
         if !ffmpeg_has_drawvg(&ffmpeg).await {
             eprintln!("skipping: ffmpeg drawvg filter not available");
             return;

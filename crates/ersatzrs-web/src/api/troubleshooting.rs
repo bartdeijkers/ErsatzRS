@@ -1446,9 +1446,7 @@ async fn load_ffmpeg_path(pool: &ersatzrs_infra::db::DbPool) -> ApiResult<String
             .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
             .fetch_optional(pool)
             .await?;
-    Ok(configured
-        .filter(|path| !path.trim().is_empty())
-        .unwrap_or_else(ersatzrs_ffmpeg::ffmpeg_path_from_env))
+    Ok(ersatzrs_ffmpeg::resolve_ffmpeg_path(configured.as_deref()).path)
 }
 
 async fn load_media_item_path(

@@ -6,14 +6,14 @@ pub const REQUIRED_MAJOR: u32 = 8;
 /// Minimum required `FFmpeg` and `ffprobe` minor version.
 pub const REQUIRED_MINOR: u32 = 1;
 
-const DEFAULT_FFMPEG_PATH: &str = "ffmpeg";
-const DEFAULT_FFPROBE_PATH: &str = "ffprobe";
-const FFMPEG_PATH_ENV_VARS: &[&str] = &[
+pub(crate) const DEFAULT_FFMPEG_PATH: &str = "ffmpeg";
+pub(crate) const DEFAULT_FFPROBE_PATH: &str = "ffprobe";
+pub(crate) const FFMPEG_PATH_ENV_VARS: &[&str] = &[
     "ErsatzRS_FFMPEG__PATH",
     "ERSATZRS_FFMPEG__PATH",
     "FFMPEG_PATH",
 ];
-const FFPROBE_PATH_ENV_VARS: &[&str] = &[
+pub(crate) const FFPROBE_PATH_ENV_VARS: &[&str] = &[
     "ErsatzRS_FFPROBE__PATH",
     "ERSATZRS_FFPROBE__PATH",
     "FFPROBE_PATH",
@@ -157,6 +157,20 @@ impl FfmpegRuntimeCheckConfig {
     #[must_use]
     pub fn from_env() -> Self {
         Self::default()
+    }
+
+    /// Create a check config with explicit, already-resolved tool paths.
+    ///
+    /// Used by startup after the [`crate::locator`] has resolved the `ffmpeg`
+    /// and `ffprobe` paths from DB config / next-to-executable / `PATH`, so the
+    /// runtime report reflects the same paths that spawn sites will use.
+    #[must_use]
+    pub fn with_paths(ffmpeg_path: impl Into<String>, ffprobe_path: impl Into<String>) -> Self {
+        Self {
+            ffmpeg_path: ffmpeg_path.into(),
+            ffprobe_path: ffprobe_path.into(),
+            ..Self::default()
+        }
     }
 }
 
@@ -332,12 +346,8 @@ pub fn ffprobe_path_from_env() -> String {
     path_from_env(FFPROBE_PATH_ENV_VARS, DEFAULT_FFPROBE_PATH)
 }
 
-#[allow(clippy::disallowed_methods)]
 fn path_from_env(keys: &[&str], default: &str) -> String {
-    keys.iter()
-        .find_map(|key| std::env::var(key).ok())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| default.to_owned())
+    crate::locator::first_non_empty_env(keys).unwrap_or_else(|| default.to_owned())
 }
 
 /// Parse the version triple from the first line of `ffmpeg -version` or

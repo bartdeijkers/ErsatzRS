@@ -14,8 +14,9 @@
 //!     streaming-proxy URLs for Plex/Jellyfin/Emby. ErsatzRS feeds ffmpeg the
 //!     `MediaFile."Path"` with path-replacements applied, mirroring
 //!     `crates/ersatzrs-web/src/transport/iptv/stream.rs` `load_path_replacements`.
-//!   * **ffmpeg path**: resolved via `ersatzrs_ffmpeg::ffmpeg_path_from_env`
-//!     instead of the `FFmpegPath` config key / `FFmpegPathMustExist`.
+//!   * **ffmpeg path**: resolved via `ersatzrs_ffmpeg::ffmpeg_path` (the shared
+//!     locator: DB config / next-to-exe / `PATH`), mirroring ErsatzTV's
+//!     `FFmpegLocator`.
 //!   * **seek re-base delivery**: ErsatzTV serves re-based playback subtitles
 //!     through a localhost HTTP pipe. ErsatzRS writes the same re-based stream
 //!     to the subtitle cache and burns that temp file, matching the existing
@@ -26,7 +27,7 @@ use std::path::{Path, PathBuf};
 use chrono::{Duration, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::Result;
-use ersatzrs_ffmpeg::{ffmpeg_path_from_env, InputFile, InputKind, SubtitleMethod};
+use ersatzrs_ffmpeg::{ffmpeg_path, InputFile, InputKind, SubtitleMethod};
 use md5::{Digest, Md5};
 use sqlx::{Pool, Row};
 use tokio::process::Command;
@@ -187,7 +188,7 @@ pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String
         }
     }
 
-    let ffmpeg_path = ffmpeg_path_from_env();
+    let ffmpeg_path = ffmpeg_path();
     let args = build_seek_subtitle_args(input_path, seek_seconds, &output_path);
     let output = match Command::new(&ffmpeg_path).args(&args).output().await {
         Ok(output) => output,
@@ -535,8 +536,9 @@ async fn extract_embedded_media_item_subtitles(
     pool: &Pool<Db>,
     media_item_ids: Vec<i64>,
 ) -> Result<()> {
-    // Divergence: ffmpeg path from env, not the FFmpegPath config key.
-    let ffmpeg_path = ffmpeg_path_from_env();
+    // ffmpeg path resolved via the shared locator (DB config / next-to-exe /
+    // PATH), matching ErsatzTV's FFmpegLocator.
+    let ffmpeg_path = ffmpeg_path();
 
     // Gate (mirror handler lines 48-64): both keys must be enabled.
     if !use_embedded_subtitles(pool).await? || !extract_embedded_subtitles(pool).await? {

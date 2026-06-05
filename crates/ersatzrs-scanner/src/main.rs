@@ -93,10 +93,7 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         pool,
         &LocalScanConfig {
             library_id: args.library_id,
-            ffprobe_path: args
-                .ffprobe_path
-                .clone()
-                .unwrap_or_else(ffprobe_path_from_env),
+            ffprobe_path: resolve_ffprobe_path(pool, args).await,
         },
     )
     .await?;
@@ -394,18 +391,30 @@ async fn load_connection_address(
         .context("provider connection not found")
 }
 
-#[allow(clippy::disallowed_methods)]
-fn ffprobe_path_from_env() -> String {
-    [
-        "ErsatzRS_FFPROBE__PATH",
-        "ERSATZRS_FFPROBE__PATH",
-        "FFPROBE_PATH",
-        "ERSATZRS_FFPROBE",
-    ]
-    .iter()
-    .find_map(|key| std::env::var(key).ok())
-    .filter(|value| !value.trim().is_empty())
-    .unwrap_or_else(|| "ffprobe".to_owned())
+/// Resolve the `ffprobe` path for a scan, sharing ErsatzRS's `FFmpegLocator`
+/// port. An explicit `--ffprobe-path` overrides everything; otherwise the DB
+/// config value (if it still exists) and then next-to-exe / `PATH` are tried.
+/// The scanner is a one-shot process, so it resolves but does not persist (the
+/// web host owns persistence).
+async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> String {
+    if let Some(explicit) = args
+        .ffprobe_path
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        return explicit.to_owned();
+    }
+
+    let configured = load_first_config_value(
+        pool,
+        &[ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH.to_owned()],
+        "ffprobe path",
+    )
+    .await
+    .ok();
+
+    ersatzrs_ffmpeg::resolve_ffprobe_path(configured.as_deref()).path
 }
 
 #[cfg(all(test, not(feature = "mysql")))]

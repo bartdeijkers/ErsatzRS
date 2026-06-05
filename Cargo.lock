@@ -1130,6 +1130,7 @@ dependencies = [
  "clap",
  "ersatzrs-core",
  "ersatzrs-domain",
+ "ersatzrs-ffmpeg",
  "ersatzrs-infra",
  "httpmock",
  "md-5",
