@@ -179,21 +179,24 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let command = build_hls_command(
-        &media_path,
-        &working_dir,
-        output_format,
-        true,
-        true,
-        seek_seconds,
-        &playback_profile,
-        None,
-        runtime_capabilities,
-        source_stream,
-        selected_audio_stream_index,
-        subtitle_input,
-        watermark_inputs,
-        graphics_overlays,
+    let command = limit_preview_command_duration(
+        build_hls_command(
+            &media_path,
+            &working_dir,
+            output_format,
+            true,
+            true,
+            seek_seconds,
+            &playback_profile,
+            None,
+            runtime_capabilities,
+            source_stream,
+            selected_audio_stream_index,
+            subtitle_input,
+            watermark_inputs,
+            graphics_overlays,
+        ),
+        program_duration,
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -371,21 +374,24 @@ async fn start_channel_playback_preview(
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let command = build_hls_command(
-        &media_path,
-        &working_dir,
-        output_format,
-        true,
-        true,
-        start_seconds,
-        &playback_profile,
-        target_frame_rate,
-        runtime_capabilities,
-        source_stream,
-        selected_audio_stream_index,
-        subtitle_input,
-        watermark_inputs,
-        graphics_overlays,
+    let command = limit_preview_command_duration(
+        build_hls_command(
+            &media_path,
+            &working_dir,
+            output_format,
+            true,
+            true,
+            start_seconds,
+            &playback_profile,
+            target_frame_rate,
+            runtime_capabilities,
+            source_stream,
+            selected_audio_stream_index,
+            subtitle_input,
+            watermark_inputs,
+            graphics_overlays,
+        ),
+        program_duration,
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -730,6 +736,30 @@ fn preview_duration_seconds(duration_seconds: f64, seek_seconds: i64) -> f64 {
 
 fn seconds_i64_as_f64(seconds: i64) -> f64 {
     u32::try_from(seconds).map_or_else(|_| f64::from(u32::MAX), f64::from)
+}
+
+fn limit_preview_command_duration(
+    mut command: FfmpegCommand,
+    program_duration: Duration,
+) -> FfmpegCommand {
+    let output_index = command.arguments.len().saturating_sub(1);
+    command
+        .arguments
+        .insert(output_index, format_preview_duration(program_duration));
+    command.arguments.insert(output_index, "-t".to_owned());
+    command
+}
+
+fn format_preview_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs_f64();
+    if seconds.fract().abs() < f64::EPSILON {
+        duration.as_secs().to_string()
+    } else {
+        format!("{seconds:.3}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_owned()
+    }
 }
 
 fn preview_selector_channel(
@@ -1561,6 +1591,38 @@ mod tests {
         assert!((preview_duration_seconds(90.0, 80) - 10.0).abs() < f64::EPSILON);
         assert!((preview_duration_seconds(120.0, 0) - 30.0).abs() < f64::EPSILON);
         assert!((preview_duration_seconds(0.0, 0) - 30.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn preview_duration_limit_is_inserted_before_hls_output() {
+        let command = FfmpegCommand {
+            executable: "ffmpeg".to_owned(),
+            environment: Vec::new(),
+            arguments: vec![
+                "-nostdin".to_owned(),
+                "-i".to_owned(),
+                "/media/test.mkv".to_owned(),
+                "-f".to_owned(),
+                "hls".to_owned(),
+                "live.m3u8".to_owned(),
+            ],
+        };
+
+        let limited = limit_preview_command_duration(command, Duration::from_millis(12_500));
+
+        assert_eq!(
+            limited.arguments,
+            [
+                "-nostdin",
+                "-i",
+                "/media/test.mkv",
+                "-f",
+                "hls",
+                "-t",
+                "12.5",
+                "live.m3u8",
+            ]
+        );
     }
 
     #[test]
