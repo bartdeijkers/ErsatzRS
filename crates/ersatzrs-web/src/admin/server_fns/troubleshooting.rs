@@ -193,17 +193,12 @@ pub async fn load_troubleshooting_report_with_state(
     let info = GeneralTroubleshootingInfo {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         environment: troubleshooting_environment(),
+        runtime: runtime_summary(),
         cpus: cpu_summary(),
-        video_controllers: Vec::new(),
         health,
         ffmpeg_settings,
         ffmpeg_profiles: load_ffmpeg_profiles(&state.pool).await?,
         channels: load_channels(&state.pool).await?,
-        avi_synth: AviSynthSummary {
-            demuxer: runtime.capabilities.has_filter("avisynth")
-                || runtime.capabilities.has_decoder("avisynth"),
-            installed: false,
-        },
     };
 
     Ok(TroubleshootingReport {
@@ -256,11 +251,10 @@ pub async fn load_troubleshooting_report_with_state(
 struct GeneralTroubleshootingInfo {
     version: String,
     environment: BTreeMap<String, String>,
+    runtime: RuntimeSummary,
     cpus: Vec<CpuSummary>,
-    video_controllers: Vec<VideoControllerSummary>,
     health: Vec<HealthSummary>,
     ffmpeg_settings: FfmpegSettingsSummary,
-    avi_synth: AviSynthSummary,
     channels: Vec<ChannelSummary>,
     ffmpeg_profiles: Vec<FfmpegProfileSummary>,
 }
@@ -275,13 +269,6 @@ struct CpuSummary {
 #[cfg(feature = "ssr")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-struct VideoControllerSummary {
-    name: String,
-}
-
-#[cfg(feature = "ssr")]
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 struct HealthSummary {
     title: String,
     message: String,
@@ -290,9 +277,13 @@ struct HealthSummary {
 #[cfg(feature = "ssr")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-struct AviSynthSummary {
-    demuxer: bool,
-    installed: bool,
+struct RuntimeSummary {
+    os: &'static str,
+    arch: &'static str,
+    executable: String,
+    current_directory: String,
+    data_directory: String,
+    transcode_directory: String,
 }
 
 #[cfg(feature = "ssr")]
@@ -505,15 +496,64 @@ async fn load_bool(
 
 #[cfg(feature = "ssr")]
 fn troubleshooting_environment() -> BTreeMap<String, String> {
-    std::env::vars()
-        .filter(|(key, _)| {
-            key.starts_with("ETV_")
-                || key.starts_with("DOTNET_")
-                || key.starts_with("ASPNETCORE_")
-                || key == "PROVIDER"
-                || key.starts_with("ELASTICSEARCH")
+    troubleshooting_environment_from(std::env::vars())
+}
+
+#[cfg(feature = "ssr")]
+fn troubleshooting_environment_from(
+    variables: impl IntoIterator<Item = (String, String)>,
+) -> BTreeMap<String, String> {
+    variables
+        .into_iter()
+        .filter(|(key, _)| is_troubleshooting_environment_key(key))
+        .map(|(key, value)| {
+            let value = if is_sensitive_environment_key(&key) {
+                "<redacted>".to_owned()
+            } else {
+                value
+            };
+            (key, value)
         })
         .collect()
+}
+
+#[cfg(feature = "ssr")]
+fn is_troubleshooting_environment_key(key: &str) -> bool {
+    key.starts_with("ETV_")
+        || key.starts_with("ErsatzRS_")
+        || key.starts_with("ERSATZRS_")
+        || key.starts_with("LEPTOS_")
+        || matches!(
+            key,
+            "DATABASE_URL" | "FFMPEG_PATH" | "FFPROBE_PATH" | "RUST_LOG"
+        )
+}
+
+#[cfg(feature = "ssr")]
+fn is_sensitive_environment_key(key: &str) -> bool {
+    let key = key.to_ascii_uppercase();
+    ["PASSWORD", "PASS", "SECRET", "TOKEN", "KEY", "CREDENTIAL"]
+        .iter()
+        .any(|needle| key.contains(needle))
+}
+
+#[cfg(feature = "ssr")]
+fn runtime_summary() -> RuntimeSummary {
+    RuntimeSummary {
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        executable: display_path(std::env::current_exe().ok()),
+        current_directory: display_path(std::env::current_dir().ok()),
+        data_directory: display_path(Some(ersatzrs_infra::file_system_layout::data_path(""))),
+        transcode_directory: display_path(Some(
+            ersatzrs_infra::file_system_layout::transcode_folder(),
+        )),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn display_path(path: Option<std::path::PathBuf>) -> String {
+    path.map_or_else(String::new, |path| path.display().to_string())
 }
 
 #[cfg(feature = "ssr")]
@@ -1260,6 +1300,96 @@ mod tests {
         assert!(report.contains("h264_qsv: available"));
         assert!(report.contains("hevc_qsv: missing"));
         assert!(report.contains("h264_qsv: missing"));
+    }
+
+    #[test]
+    fn troubleshooting_environment_reports_rust_runtime_keys_and_redacts_secrets() {
+        let environment = troubleshooting_environment_from([
+            (
+                "DOTNET_BUNDLE_EXTRACT_BASE_DIR".to_owned(),
+                "/tmp/dotnet".to_owned(),
+            ),
+            ("ASPNETCORE_URLS".to_owned(), "http://+:8409".to_owned()),
+            (
+                "ELASTICSEARCH_URL".to_owned(),
+                "http://localhost".to_owned(),
+            ),
+            (
+                "ErsatzRS_FFMPEG__PATH".to_owned(),
+                "/opt/ffmpeg/bin/ffmpeg".to_owned(),
+            ),
+            ("ERSATZRS_API_TOKEN".to_owned(), "secret-token".to_owned()),
+            (
+                "DATABASE_URL".to_owned(),
+                "sqlite:/tmp/ErsatzRS.db".to_owned(),
+            ),
+            ("RUST_LOG".to_owned(), "info".to_owned()),
+            ("LEPTOS_SITE_ROOT".to_owned(), "target/site".to_owned()),
+        ]);
+
+        assert!(!environment.contains_key("DOTNET_BUNDLE_EXTRACT_BASE_DIR"));
+        assert!(!environment.contains_key("ASPNETCORE_URLS"));
+        assert!(!environment.contains_key("ELASTICSEARCH_URL"));
+        assert_eq!(
+            environment.get("ErsatzRS_FFMPEG__PATH").map(String::as_str),
+            Some("/opt/ffmpeg/bin/ffmpeg")
+        );
+        assert_eq!(
+            environment.get("ERSATZRS_API_TOKEN").map(String::as_str),
+            Some("<redacted>")
+        );
+        assert_eq!(
+            environment.get("DATABASE_URL").map(String::as_str),
+            Some("sqlite:/tmp/ErsatzRS.db")
+        );
+        assert_eq!(
+            environment.get("RUST_LOG").map(String::as_str),
+            Some("info")
+        );
+        assert_eq!(
+            environment.get("LEPTOS_SITE_ROOT").map(String::as_str),
+            Some("target/site")
+        );
+    }
+
+    #[test]
+    fn general_report_replaces_empty_dotnet_carryovers_with_runtime_summary() {
+        let info = GeneralTroubleshootingInfo {
+            version: "0.1.0".to_owned(),
+            environment: BTreeMap::new(),
+            runtime: RuntimeSummary {
+                os: "linux",
+                arch: "x86_64",
+                executable: "/usr/bin/ersatzrs-web".to_owned(),
+                current_directory: "/srv/ersatzrs".to_owned(),
+                data_directory: "/var/lib/ersatzrs/data".to_owned(),
+                transcode_directory: "/var/lib/ersatzrs/transcode".to_owned(),
+            },
+            cpus: Vec::new(),
+            health: Vec::new(),
+            ffmpeg_settings: FfmpegSettingsSummary {
+                ffmpeg_path: String::new(),
+                ffprobe_path: String::new(),
+                default_ffmpeg_profile_id: 0,
+                save_reports: false,
+                use_embedded_subtitles: true,
+                extract_embedded_subtitles: false,
+                preferred_audio_language_code: "eng".to_owned(),
+                hls_segmenter_idle_timeout: 60,
+                work_ahead_segmenter_limit: 1,
+                initial_segment_count: 1,
+                hls_direct_output_format: 2,
+                default_mpeg_ts_script: "default".to_owned(),
+            },
+            channels: Vec::new(),
+            ffmpeg_profiles: Vec::new(),
+        };
+
+        let json = serde_json::to_value(&info).expect("general info serializes");
+
+        assert!(json.get("Runtime").is_some());
+        assert!(json.get("VideoControllers").is_none());
+        assert!(json.get("AviSynth").is_none());
     }
 
     #[cfg(feature = "ssr")]
