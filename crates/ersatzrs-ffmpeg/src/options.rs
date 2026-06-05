@@ -223,7 +223,7 @@ pub fn standard_format_flags() -> PipelineStep {
 
 #[must_use]
 pub fn closed_gop() -> PipelineStep {
-    PipelineStep::generic("closed_gop", ["-flags", "+cgop"])
+    PipelineStep::generic("closed_gop", ["-flags", "cgop"])
 }
 
 #[must_use]
