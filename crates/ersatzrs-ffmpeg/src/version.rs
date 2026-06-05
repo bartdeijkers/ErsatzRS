@@ -850,7 +850,8 @@ async fn enrich_device_profiles(
     }
 
     if report.has_hwaccel("videotoolbox") || has_encoder_suffix(&report.encoders, "_videotoolbox") {
-        let videotoolbox = probe_videotoolbox_framework_capabilities();
+        let videotoolbox =
+            probe_videotoolbox_framework_capabilities(&config.ffmpeg_path, report).await;
         report.videotoolbox_decoders = videotoolbox.decoders;
         report.videotoolbox_encoders = videotoolbox.encoders;
     }
@@ -1246,23 +1247,182 @@ struct VideoToolboxFrameworkCapabilities {
     encoders: BTreeSet<String>,
 }
 
-fn probe_videotoolbox_framework_capabilities() -> VideoToolboxFrameworkCapabilities {
-    probe_videotoolbox_framework_capabilities_inner()
+async fn probe_videotoolbox_framework_capabilities(
+    ffmpeg_path: &str,
+    report: &FfmpegCapabilityReport,
+) -> VideoToolboxFrameworkCapabilities {
+    if cfg!(target_os = "macos") {
+        probe_videotoolbox_ffmpeg_capabilities(ffmpeg_path, report).await
+    } else {
+        VideoToolboxFrameworkCapabilities::default()
+    }
 }
 
-#[cfg(target_os = "macos")]
-fn probe_videotoolbox_framework_capabilities_inner() -> VideoToolboxFrameworkCapabilities {
-    // ErsatzTV uses VideoToolbox.framework and CoreFoundation.framework here
-    // (`VTIsHardwareDecodeSupported` and `VTCopyVideoEncoderList`). The
-    // workspace forbids unsafe Rust outside the documented Windows launcher
-    // exception, so the report keeps explicit framework-backed fields while
-    // the native safe binding is added in a follow-up slice.
-    VideoToolboxFrameworkCapabilities::default()
+#[derive(Debug, Clone, Copy)]
+struct VideoToolboxDecoderProbeSpec {
+    fourcc: &'static str,
+    encoder: &'static str,
+    pixel_format: &'static str,
 }
 
-#[cfg(not(target_os = "macos"))]
-fn probe_videotoolbox_framework_capabilities_inner() -> VideoToolboxFrameworkCapabilities {
-    VideoToolboxFrameworkCapabilities::default()
+async fn probe_videotoolbox_ffmpeg_capabilities(
+    ffmpeg_path: &str,
+    report: &FfmpegCapabilityReport,
+) -> VideoToolboxFrameworkCapabilities {
+    let mut capabilities = VideoToolboxFrameworkCapabilities::default();
+    for spec in videotoolbox_decoder_probe_specs(report) {
+        if probe_videotoolbox_decoder_capability(ffmpeg_path, spec).await {
+            capabilities.decoders.insert(spec.fourcc.to_owned());
+        }
+    }
+    if report.has_encoder("h264_videotoolbox")
+        && probe_videotoolbox_encoder_capability(ffmpeg_path, "h264_videotoolbox").await
+    {
+        capabilities.encoders.insert("H.264 (HW)".to_owned());
+    }
+    if report.has_encoder("hevc_videotoolbox")
+        && probe_videotoolbox_encoder_capability(ffmpeg_path, "hevc_videotoolbox").await
+    {
+        capabilities.encoders.insert("HEVC (HW)".to_owned());
+    }
+    capabilities
+}
+
+fn videotoolbox_decoder_probe_specs(
+    report: &FfmpegCapabilityReport,
+) -> Vec<VideoToolboxDecoderProbeSpec> {
+    const SPECS: &[VideoToolboxDecoderProbeSpec] = &[
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "av01",
+            encoder: "libaom-av1",
+            pixel_format: "yuv420p",
+        },
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "avc1",
+            encoder: "libx264",
+            pixel_format: "yuv420p",
+        },
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "hvc1",
+            encoder: "libx265",
+            pixel_format: "yuv420p",
+        },
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "mp2v",
+            encoder: "mpeg2video",
+            pixel_format: "yuv420p",
+        },
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "mp4v",
+            encoder: "mpeg4",
+            pixel_format: "yuv420p",
+        },
+        VideoToolboxDecoderProbeSpec {
+            fourcc: "vp09",
+            encoder: "libvpx-vp9",
+            pixel_format: "yuv420p",
+        },
+    ];
+    SPECS
+        .iter()
+        .copied()
+        .filter(|spec| report.has_encoder(spec.encoder))
+        .collect()
+}
+
+async fn probe_videotoolbox_decoder_capability(
+    ffmpeg_path: &str,
+    spec: VideoToolboxDecoderProbeSpec,
+) -> bool {
+    let sample_path = videotoolbox_probe_sample_path(spec.fourcc);
+    let sample = sample_path.to_string_lossy().into_owned();
+    let mut encode_args = vec![
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=64x64:rate=1:duration=1",
+        "-frames:v",
+        "1",
+        "-pix_fmt",
+        spec.pixel_format,
+        "-c:v",
+        spec.encoder,
+        "-f",
+        "matroska",
+    ];
+    if spec.encoder == "libx265" {
+        encode_args.extend(["-x265-params", "log-level=error"]);
+    }
+    encode_args.extend(["-y", &sample]);
+
+    let encoded = tokio::process::Command::new(ffmpeg_path)
+        .args(&encode_args)
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success());
+    if !encoded {
+        let _ = std::fs::remove_file(&sample_path);
+        return false;
+    }
+
+    let decoded = tokio::process::Command::new(ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-hwaccel",
+            "videotoolbox",
+            "-i",
+            &sample,
+            "-frames:v",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success());
+    let _ = std::fs::remove_file(sample_path);
+    decoded
+}
+
+async fn probe_videotoolbox_encoder_capability(ffmpeg_path: &str, encoder: &str) -> bool {
+    tokio::process::Command::new(ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=64x64:rate=1:duration=1",
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            encoder,
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success())
+}
+
+fn videotoolbox_probe_sample_path(fourcc: &str) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    std::env::temp_dir().join(format!(
+        "ersatzrs-videotoolbox-probe-{}-{fourcc}-{nanos}.mkv",
+        std::process::id()
+    ))
 }
 
 async fn probe_qsv_profiles(
@@ -1489,9 +1649,9 @@ mod tests {
         collect_runtime_issues, dedupe_vaapi_profiles, nvidia_decoder_probe_specs,
         nvidia_gpu_list_summary, parse_capability_names, parse_configuration_flags, parse_hwaccels,
         parse_nvidia_decoder_capabilities, parse_nvidia_encoder_capability,
-        parse_vaapi_profile_entrypoints, parse_version, FfmpegCapabilityReport,
-        FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
-        NvidiaDecoderCapability, VaapiProfileEntrypoint,
+        parse_vaapi_profile_entrypoints, parse_version, videotoolbox_decoder_probe_specs,
+        FfmpegCapabilityReport, FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig,
+        FfmpegRuntimeIssue, FfmpegVersion, NvidiaDecoderCapability, VaapiProfileEntrypoint,
     };
     use std::collections::BTreeSet;
 
@@ -1724,6 +1884,25 @@ h264_nvenc AVOptions:
     }
 
     #[test]
+    fn videotoolbox_decoder_probe_specs_require_sample_encoder() {
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from([
+                "libx264".to_owned(),
+                "libx265".to_owned(),
+                "libaom-av1".to_owned(),
+            ]),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        let specs = videotoolbox_decoder_probe_specs(&report);
+
+        assert_eq!(
+            specs.iter().map(|spec| spec.fourcc).collect::<Vec<_>>(),
+            vec!["av01", "avc1", "hvc1"]
+        );
+    }
+
+    #[test]
     fn reports_missing_required_and_optional_capabilities() {
         let config = FfmpegRuntimeCheckConfig {
             required_filters: vec!["drawvg".to_owned()],
@@ -1776,7 +1955,8 @@ h264_nvenc AVOptions:
 #[cfg(all(test, unix))]
 mod unix_tests {
     use super::{
-        check_ffmpeg_runtime_with_config, collect_ffmpeg_capabilities, FfmpegCheckError,
+        check_ffmpeg_runtime_with_config, collect_ffmpeg_capabilities,
+        probe_videotoolbox_ffmpeg_capabilities, FfmpegCapabilityReport, FfmpegCheckError,
         FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
     };
     use std::fs;
@@ -1951,6 +2131,40 @@ mod unix_tests {
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn videotoolbox_probe_populates_framework_result_fields() {
+        let dir = temp_test_dir("videotoolbox-probe");
+        let ffmpeg = write_videotoolbox_probe_ffmpeg_script(&dir);
+        let report = FfmpegCapabilityReport {
+            encoders: [
+                "libx264",
+                "libx265",
+                "h264_videotoolbox",
+                "hevc_videotoolbox",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        let capabilities =
+            probe_videotoolbox_ffmpeg_capabilities(ffmpeg.to_str().expect("utf-8 path"), &report)
+                .await;
+
+        assert_eq!(
+            capabilities.decoders,
+            ["avc1".to_owned(), "hvc1".to_owned()].into_iter().collect()
+        );
+        assert_eq!(
+            capabilities.encoders,
+            ["H.264 (HW)".to_owned(), "HEVC (HW)".to_owned()]
+                .into_iter()
+                .collect()
+        );
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
     fn test_config(ffmpeg_path: &str, ffprobe_path: &str) -> FfmpegRuntimeCheckConfig {
         FfmpegRuntimeCheckConfig {
             ffmpeg_path: ffmpeg_path.to_owned(),
@@ -2073,6 +2287,32 @@ EOF
     exit 0
     ;;
   "-hide_banner -loglevel error -hwaccel cuda -hwaccel_output_format cuda -c:v hevc_cuvid -i "*)
+    exit 0
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+"#;
+        write_script(dir, "ffmpeg", body)
+    }
+
+    fn write_videotoolbox_probe_ffmpeg_script(dir: &Path) -> PathBuf {
+        let body = r#"#!/bin/sh
+case "$*" in
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v libx264 -f matroska -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v libx265 -f matroska -x265-params log-level=error -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -hwaccel videotoolbox -i "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v h264_videotoolbox -f null -")
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v hevc_videotoolbox -f null -")
     exit 0
     ;;
   *)
