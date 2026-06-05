@@ -1824,6 +1824,18 @@ fn video_encoder(
         extra.extend(["-look_ahead".to_owned(), "0".to_owned()]);
     }
 
+    match (acceleration, desired.video_format) {
+        (HardwareAccelerationKind::None, FFmpegProfileVideoFormat::Hevc) => {
+            extra.extend(["-tag:v".to_owned(), "hvc1".to_owned()]);
+            extra.extend(["-x265-params".to_owned(), "log-level=error".to_owned()]);
+        }
+        (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Hevc) => {
+            extra.extend(["-tag:v".to_owned(), "hvc1".to_owned()]);
+            extra.extend(["-b_ref_mode".to_owned(), "0".to_owned()]);
+        }
+        _ => {}
+    }
+
     if acceleration != HardwareAccelerationKind::Vaapi {
         if let Some(preset) = &desired.video_preset {
             if !preset.trim().is_empty() {
