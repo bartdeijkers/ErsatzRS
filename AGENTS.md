@@ -127,7 +127,10 @@ cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
 # Dependency audit
 cargo deny check
 
-# Snapshot review (after test changes)
+# Snapshot review (after test changes). cargo-insta is already installed, so use
+# it directly (no `cargo install cargo-insta` step needed). Use `cargo insta
+# review` to inspect changes interactively, or `cargo insta accept` to accept
+# all pending `.snap.new` snapshots non-interactively.
 cargo insta review
 
 # Keep target/ pruned to avoid slow cold rebuilds. ROUTINE maintenance is
