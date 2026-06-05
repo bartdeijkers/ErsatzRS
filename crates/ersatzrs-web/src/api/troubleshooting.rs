@@ -104,6 +104,7 @@ impl std::fmt::Display for PreviewNotFound {
 
 impl std::error::Error for PreviewNotFound {}
 
+#[allow(clippy::too_many_lines)]
 async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) -> ApiResult<()> {
     if query.channel.is_some_and(|id| id > 0) {
         return start_channel_playback_preview(state, query).await;
@@ -183,6 +184,14 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
+    let no_subtitle = Option::<PlaybackSubtitle>::None;
+    let metadata = stream::playback_output_metadata(
+        Some("ErsatzTV"),
+        Some(&selector_channel.name),
+        selector_channel.preferred_audio_language_code.as_deref(),
+        &source_audio_streams,
+        no_subtitle.as_ref(),
+    );
     let command = build_hls_command(
         &media_path,
         &working_dir,
@@ -193,6 +202,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
         Some(program_duration),
         &playback_profile,
         None,
+        metadata,
         runtime_capabilities,
         source_stream,
         source_audio_streams,
@@ -381,6 +391,14 @@ async fn start_channel_playback_preview(
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
+    let no_subtitle = Option::<PlaybackSubtitle>::None;
+    let metadata = stream::playback_output_metadata(
+        Some("ErsatzTV"),
+        Some(&channel.name),
+        channel.preferred_audio_language_code.as_deref(),
+        &source_audio_streams,
+        no_subtitle.as_ref(),
+    );
     let command = build_hls_command(
         &media_path,
         &working_dir,
@@ -391,6 +409,7 @@ async fn start_channel_playback_preview(
         Some(program_duration),
         &playback_profile,
         target_frame_rate,
+        metadata,
         runtime_capabilities,
         source_stream,
         source_audio_streams,
@@ -481,7 +500,8 @@ async fn load_preview_channel(
     let row = sqlx::query(
         r#"SELECT "Id", "Number", COALESCE("Name", '') AS "Name",
                   "FFmpegProfileId", "WatermarkId", "StreamingMode",
-                  "StreamSelector", "PreferredSubtitleLanguageCode",
+                  "StreamSelector", "PreferredAudioLanguageCode",
+                  "PreferredSubtitleLanguageCode",
                   "SubtitleMode", "IsEnabled"
            FROM "Channel"
            WHERE "Id" = ?"#,
@@ -498,6 +518,7 @@ async fn load_preview_channel(
         watermark_id: row.try_get("WatermarkId").ok().flatten(),
         streaming_mode: decode_streaming_mode(row.try_get("StreamingMode").unwrap_or_default()),
         stream_selector: row.try_get("StreamSelector").ok().flatten(),
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").ok().flatten(),
         preferred_subtitle_language_code: row
             .try_get("PreferredSubtitleLanguageCode")
             .ok()

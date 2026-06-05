@@ -215,7 +215,7 @@ pub async fn load_source_audio_streams(
     media_version_id: i64,
 ) -> Vec<SourceAudioStream> {
     let rows = sqlx::query(
-        r#"SELECT "Index", "Codec", "Channels"
+        r#"SELECT "Index", "Codec", "Channels", "Language", "Title"
            FROM "MediaStream"
            WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 2
            ORDER BY "Index", "Id""#,
@@ -231,15 +231,28 @@ pub async fn load_source_audio_streams(
             let index = usize::try_from(index).ok()?;
             let codec: Option<String> = row.try_get("Codec").ok().flatten();
             let channels: Option<i32> = row.try_get("Channels").ok().flatten();
+            let language: Option<String> = row.try_get("Language").ok().flatten();
+            let title: Option<String> = row.try_get("Title").ok().flatten();
 
             let mut stream = SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name(
                 codec.as_deref().unwrap_or_default(),
             ))
             .with_index(index);
             stream.channels = channels.and_then(|channels| u32::try_from(channels).ok());
+            stream.language = language.as_deref().and_then(non_empty_string);
+            stream.title = title.as_deref().and_then(non_empty_string);
             Some(stream)
         })
         .collect()
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
 }
 
 /// Populate runtime-only playback flags that ErsatzTV probes immediately before

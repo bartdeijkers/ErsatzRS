@@ -46,6 +46,15 @@ pub struct HlsOutput {
     pub troubleshooting: bool,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OutputMetadata {
+    pub service_provider: Option<String>,
+    pub service_name: Option<String>,
+    pub audio_language: Option<String>,
+    pub subtitle_language: Option<String>,
+    pub subtitle_title: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegState {
     pub output_format: OutputFormat,
@@ -54,6 +63,7 @@ pub struct FfmpegState {
     pub thread_count: Option<u32>,
     pub report_progress: bool,
     pub do_not_map_metadata: bool,
+    pub metadata: OutputMetadata,
     pub hls: Option<HlsOutput>,
 }
 
@@ -66,6 +76,7 @@ impl Default for FfmpegState {
             thread_count: None,
             report_progress: true,
             do_not_map_metadata: true,
+            metadata: OutputMetadata::default(),
             hls: None,
         }
     }
@@ -328,6 +339,8 @@ pub struct SourceAudioStream {
     pub codec: SourceAudioCodec,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
+    pub language: Option<String>,
+    pub title: Option<String>,
 }
 
 impl SourceAudioStream {
@@ -338,6 +351,8 @@ impl SourceAudioStream {
             codec,
             channels: None,
             sample_rate: None,
+            language: None,
+            title: None,
         }
     }
 
@@ -2347,6 +2362,8 @@ fn add_output_options(
         ));
     }
 
+    add_metadata_output_options(steps, &state.metadata);
+
     if let Some(duration) = state.duration {
         steps.push(time_limit(duration));
     }
@@ -2373,6 +2390,58 @@ fn add_output_options(
                 steps.push(hls_output(state.output_format, hls, desired, acceleration));
             }
         }
+    }
+}
+
+fn add_metadata_output_options(steps: &mut Vec<PipelineStep>, metadata: &OutputMetadata) {
+    if let Some(service_provider) = metadata.service_provider.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_service_provider",
+            [
+                "-metadata".to_owned(),
+                format!("service_provider=\"{service_provider}\""),
+            ],
+        ));
+    }
+
+    if let Some(service_name) = metadata.service_name.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_service_name",
+            [
+                "-metadata".to_owned(),
+                format!("service_name=\"{service_name}\""),
+            ],
+        ));
+    }
+
+    if let Some(audio_language) = metadata.audio_language.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_audio_language",
+            [
+                "-metadata:s:a:0".to_owned(),
+                format!("language={audio_language}"),
+            ],
+        ));
+    }
+
+    if let Some(subtitle_language) = metadata.subtitle_language.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_subtitle_language",
+            [
+                "-metadata:s:s:0".to_owned(),
+                format!("language={subtitle_language}"),
+            ],
+        ));
+    }
+
+    if let Some(subtitle_title) = metadata.subtitle_title.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_subtitle_title",
+            [
+                "-metadata:s:s:0".to_owned(),
+                format!("title={subtitle_title}"),
+            ],
+        ));
     }
 }
 

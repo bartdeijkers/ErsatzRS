@@ -20,11 +20,11 @@ use ersatzrs_ffmpeg::{
     ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate,
     FrameSize, FrameState, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
     GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
-    PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder, RealtimeMode,
-    RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec, SourceAudioStream,
-    SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate, TonemapAlgorithm,
-    V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder, WatermarkFadeKind,
-    WatermarkFadePoint, WatermarkOverlay,
+    OutputMetadata, PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder,
+    RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec,
+    SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
+    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder,
+    WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -64,6 +64,24 @@ fn hevc_10bit_desired() -> DesiredVideoState {
 fn software_pipeline_single_video_mpegts_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let request = h264_request(desired);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn software_pipeline_emits_output_metadata_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut request = h264_request(desired);
+    request.state.metadata = OutputMetadata {
+        service_provider: Some("ErsatzTV".to_owned()),
+        service_name: Some("Cinema One".to_owned()),
+        audio_language: Some("eng".to_owned()),
+        subtitle_language: Some("nld".to_owned()),
+        subtitle_title: Some("Dutch SDH".to_owned()),
+    };
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);

@@ -16,8 +16,8 @@ use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat, PipelineRequest,
-    SourceVideoStream,
+    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat, OutputMetadata,
+    PipelineRequest, SourceAudioStream, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::playback::{
@@ -25,7 +25,7 @@ use ersatzrs_infra::playback::{
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
     render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
+    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -146,6 +146,16 @@ pub async fn serve_channel_stream(
         }
     };
     let start_seconds = playout_start_seconds(now, &active.playout_start);
+    let metadata = playback_output_metadata(
+        Some("ErsatzTV"),
+        Some(&channel.name),
+        active
+            .preferred_audio_language_code
+            .as_deref()
+            .or(channel.preferred_audio_language_code.as_deref()),
+        &source_audio_streams,
+        subtitle.as_ref(),
+    );
     let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
         subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
     });
@@ -243,6 +253,7 @@ pub async fn serve_channel_stream(
         &playback_profile,
         target_frame_rate,
         channel.streaming_mode,
+        metadata,
         runtime_capabilities,
         source_stream,
         source_audio_streams,
@@ -286,6 +297,7 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
     pub(crate) disable_watermarks: bool,
+    pub(crate) preferred_audio_language_code: Option<String>,
     pub(crate) preferred_subtitle_language_code: Option<String>,
     pub(crate) subtitle_mode: Option<ChannelSubtitleMode>,
 }
@@ -312,6 +324,7 @@ pub(crate) async fn load_active_media_path(
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
+                  pi."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode"
            FROM "PlayoutItem" pi
@@ -348,6 +361,10 @@ pub(crate) async fn load_active_media_path(
         disable_watermarks: row
             .try_get::<i64, _>("DisableWatermarks")
             .is_ok_and(|value| value != 0),
+        preferred_audio_language_code: row
+            .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+            .ok()
+            .flatten(),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -454,6 +471,7 @@ fn build_stream_command(
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     streaming_mode: ersatzrs_domain::StreamingMode,
+    metadata: OutputMetadata,
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
@@ -488,6 +506,7 @@ fn build_stream_command(
     if start_seconds > 0 {
         request.state.start_seconds = Some(start_seconds);
     }
+    request.state.metadata = metadata;
     request.state.report_progress = false;
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
         if thread_count > 0 {
@@ -503,6 +522,46 @@ fn build_stream_command(
     };
     let pipeline = build_pipeline_for_acceleration(acceleration, request.clone());
     pipeline.command(&request.inputs)
+}
+
+pub(crate) fn playback_output_metadata(
+    service_provider: Option<&str>,
+    service_name: Option<&str>,
+    preferred_audio_language: Option<&str>,
+    source_audio_streams: &[SourceAudioStream],
+    subtitle: Option<&PlaybackSubtitle>,
+) -> OutputMetadata {
+    let audio_language = preferred_audio_language
+        .and_then(trimmed_string)
+        .or_else(|| first_audio_language(source_audio_streams));
+
+    OutputMetadata {
+        service_provider: service_provider.and_then(trimmed_string),
+        service_name: service_name.and_then(trimmed_string),
+        audio_language,
+        subtitle_language: subtitle
+            .and_then(|subtitle| subtitle.language.as_deref())
+            .and_then(trimmed_string),
+        subtitle_title: subtitle
+            .and_then(|subtitle| subtitle.title.as_deref())
+            .and_then(trimmed_string),
+    }
+}
+
+fn first_audio_language(source_audio_streams: &[SourceAudioStream]) -> Option<String> {
+    source_audio_streams
+        .iter()
+        .filter_map(|stream| stream.language.as_deref())
+        .find_map(trimmed_string)
+}
+
+fn trimmed_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
 }
 
 fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
@@ -626,6 +685,7 @@ mod tests {
             &profile,
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -649,6 +709,7 @@ mod tests {
             &profile,
             None,
             StreamingMode::HttpLiveStreamingDirect,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -671,6 +732,7 @@ mod tests {
             &profile,
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -683,6 +745,39 @@ mod tests {
     }
 
     #[test]
+    fn build_stream_command_emits_channel_output_metadata() {
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            0,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata {
+                service_provider: Some("ErsatzTV".to_owned()),
+                service_name: Some("Cinema One".to_owned()),
+                audio_language: Some("eng".to_owned()),
+                subtitle_language: Some("nld".to_owned()),
+                subtitle_title: Some("Dutch SDH".to_owned()),
+            },
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
+        assert!(arguments.contains("-metadata service_name=\"Cinema One\""));
+        assert!(arguments.contains("-metadata:s:a:0 language=eng"));
+        assert!(arguments.contains("-metadata:s:s:0 language=nld"));
+        assert!(arguments.contains("-metadata:s:s:0 title=Dutch SDH"));
+    }
+
+    #[test]
     fn build_stream_command_attaches_graphics_overlays() {
         let profile = playback_profile();
         let command = build_stream_command(
@@ -692,6 +787,7 @@ mod tests {
             &profile,
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -793,6 +889,7 @@ mod tests {
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -857,6 +954,7 @@ mod tests {
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1004,6 +1102,7 @@ mod tests {
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),

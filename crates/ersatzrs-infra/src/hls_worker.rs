@@ -18,7 +18,7 @@ use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
     FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat,
-    PipelineRequest, SourceVideoStream,
+    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
 };
 
 use crate::playback::{
@@ -26,7 +26,7 @@ use crate::playback::{
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
     render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
+    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
@@ -171,7 +171,7 @@ impl HlsSessionWorker {
                 .preferred_subtitle_language_code
                 .as_deref()
                 .or(active.channel_preferred_subtitle_language_code.as_deref());
-            let subtitle_input = match select_playback_subtitle(
+            let subtitle = match select_playback_subtitle(
                 &pool,
                 active.media_item_id,
                 preferred_subtitle_language,
@@ -180,18 +180,31 @@ impl HlsSessionWorker {
             )
             .await
             {
-                Ok(Some(subtitle)) => subtitle_input_for_stream(
-                    &subtitle,
-                    &active.media_path,
-                    self.output_format,
-                    StreamingMode::HttpLiveStreamingSegmenter,
-                ),
-                Ok(None) => None,
+                Ok(subtitle) => subtitle,
                 Err(error) => {
                     tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select HLS subtitle");
                     None
                 }
             };
+            let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
+                subtitle_input_for_stream(
+                    subtitle,
+                    &active.media_path,
+                    self.output_format,
+                    StreamingMode::HttpLiveStreamingSegmenter,
+                )
+            });
+            let metadata = playback_output_metadata(
+                Some("ErsatzTV"),
+                Some(&active.channel_name),
+                active
+                    .preferred_audio_language_code
+                    .as_deref()
+                    .or(active.channel_preferred_audio_language_code.as_deref()),
+                &source_audio_streams,
+                subtitle.as_ref(),
+                None,
+            );
             let subtitle_input =
                 rebase_burned_text_subtitle_input(subtitle_input, active.start_seconds).await;
             let watermark_channel = Channel {
@@ -298,6 +311,7 @@ impl HlsSessionWorker {
                 None,
                 &playback_profile,
                 target_frame_rate,
+                metadata,
                 self.runtime_capabilities.clone(),
                 source_stream,
                 source_audio_streams,
@@ -410,6 +424,7 @@ pub fn build_hls_command(
     duration: Option<Duration>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
@@ -455,6 +470,7 @@ pub fn build_hls_command(
         request.state.start_seconds = Some(start_seconds);
     }
     request.state.duration = duration;
+    request.state.metadata = metadata;
     request.state.report_progress = false;
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
         if thread_count > 0 {
@@ -483,6 +499,55 @@ pub fn build_hls_command(
     .command(&request.inputs)
 }
 
+fn playback_output_metadata(
+    service_provider: Option<&str>,
+    service_name: Option<&str>,
+    preferred_audio_language: Option<&str>,
+    source_audio_streams: &[SourceAudioStream],
+    subtitle: Option<&PlaybackSubtitle>,
+    selected_audio_stream_index: Option<usize>,
+) -> OutputMetadata {
+    let audio_language = selected_audio_stream_index
+        .and_then(|index| {
+            source_audio_streams
+                .iter()
+                .find(|stream| stream.index == index)
+                .and_then(|stream| stream.language.as_deref())
+                .and_then(trimmed_string)
+        })
+        .or_else(|| preferred_audio_language.and_then(trimmed_string))
+        .or_else(|| first_audio_language(source_audio_streams));
+
+    OutputMetadata {
+        service_provider: service_provider.and_then(trimmed_string),
+        service_name: service_name.and_then(trimmed_string),
+        audio_language,
+        subtitle_language: subtitle
+            .and_then(|subtitle| subtitle.language.as_deref())
+            .and_then(trimmed_string),
+        subtitle_title: subtitle
+            .and_then(|subtitle| subtitle.title.as_deref())
+            .and_then(trimmed_string),
+    }
+}
+
+fn first_audio_language(source_audio_streams: &[SourceAudioStream]) -> Option<String> {
+    source_audio_streams
+        .iter()
+        .filter_map(|stream| stream.language.as_deref())
+        .find_map(trimmed_string)
+}
+
+fn trimmed_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 async fn load_active_hls_item(
     pool: &DbPool,
     channel_id: i64,
@@ -498,9 +563,12 @@ async fn load_active_hls_item(
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
+                  pi."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode",
+                  c."Name" AS "ChannelName",
                   c."WatermarkId" AS "ChannelWatermarkId",
+                  c."PreferredAudioLanguageCode" AS "ChannelPreferredAudioLanguageCode",
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
                   c."SubtitleMode" AS "ChannelSubtitleMode"
            FROM "PlayoutItem" pi
@@ -552,6 +620,10 @@ async fn load_active_hls_item(
         disable_watermarks: row
             .try_get::<i64, _>("DisableWatermarks")
             .is_ok_and(|value| value != 0),
+        preferred_audio_language_code: row
+            .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+            .ok()
+            .flatten(),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -561,6 +633,13 @@ async fn load_active_hls_item(
             .ok()
             .flatten()
             .and_then(decode_subtitle_mode),
+        channel_name: row
+            .try_get::<String, _>("ChannelName")
+            .unwrap_or_else(|_| String::new()),
+        channel_preferred_audio_language_code: row
+            .try_get::<Option<String>, _>("ChannelPreferredAudioLanguageCode")
+            .ok()
+            .flatten(),
         channel_preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("ChannelPreferredSubtitleLanguageCode")
             .ok()
@@ -587,8 +666,11 @@ struct ActiveHlsItem {
     program_duration: Option<Duration>,
     playout_start: DateTime<Utc>,
     disable_watermarks: bool,
+    preferred_audio_language_code: Option<String>,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
+    channel_name: String,
+    channel_preferred_audio_language_code: Option<String>,
     channel_preferred_subtitle_language_code: Option<String>,
     channel_subtitle_mode: ChannelSubtitleMode,
     channel_watermark_id: Option<i64>,
@@ -1005,6 +1087,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1028,6 +1111,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1046,6 +1130,61 @@ mod tests {
     }
 
     #[test]
+    fn build_hls_command_emits_playback_output_metadata() {
+        let mut audio_stream =
+            ersatzrs_ffmpeg::SourceAudioStream::new(ersatzrs_ffmpeg::SourceAudioCodec::Aac)
+                .with_index(3);
+        audio_stream.language = Some("jpn".to_owned());
+        let subtitle = Some(PlaybackSubtitle {
+            id: 1,
+            subtitle_kind: 2,
+            title: Some("Dutch SDH".to_owned()),
+            stream_index: 4,
+            codec: Some("subrip".to_owned()),
+            default: false,
+            forced: false,
+            sdh: true,
+            language: Some("nld".to_owned()),
+            is_extracted: false,
+            path: None,
+        });
+        let metadata = playback_output_metadata(
+            Some("ErsatzTV"),
+            Some("Cinema One"),
+            Some("eng"),
+            &[audio_stream.clone()],
+            subtitle.as_ref(),
+            Some(3),
+        );
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            0,
+            None,
+            &playback_profile(),
+            None,
+            metadata,
+            FfmpegCapabilityReport::default(),
+            None,
+            vec![audio_stream],
+            Some(3),
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
+        assert!(arguments.contains("-metadata service_name=\"Cinema One\""));
+        assert!(arguments.contains("-metadata:s:a:0 language=jpn"));
+        assert!(arguments.contains("-metadata:s:s:0 language=nld"));
+        assert!(arguments.contains("-metadata:s:s:0 title=Dutch SDH"));
+    }
+
+    #[test]
     fn build_hls_command_seeking_dts_uses_core_only_decoder() {
         let command = build_hls_command(
             "/media/test.mkv",
@@ -1057,6 +1196,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             vec![
@@ -1088,6 +1228,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1114,6 +1255,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1141,6 +1283,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
@@ -1288,6 +1431,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             Some(source_1080p()),
             Vec::new(),
@@ -1431,6 +1575,7 @@ mod tests {
             None,
             &playback_profile(),
             None,
+            OutputMetadata::default(),
             FfmpegCapabilityReport::default(),
             Some(source_320p()),
             Vec::new(),
