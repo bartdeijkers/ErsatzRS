@@ -839,11 +839,14 @@ async fn enrich_device_profiles(
     if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
         report.nvidia_gpu_list = probe_nvidia_gpu_list(&config.ffmpeg_path).await;
         report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
-        report.nvidia_decoders = report
-            .nvidia_gpu_list
-            .as_deref()
-            .map(parse_nvidia_decoder_capabilities)
-            .unwrap_or_default();
+        report.nvidia_decoders = probe_nvidia_decoder_capabilities(config, report).await;
+        if report.nvidia_decoders.is_empty() {
+            report.nvidia_decoders = report
+                .nvidia_gpu_list
+                .as_deref()
+                .map(parse_nvidia_decoder_capabilities)
+                .unwrap_or_default();
+        }
     }
 
     if report.has_hwaccel("videotoolbox") || has_encoder_suffix(&report.encoders, "_videotoolbox") {
@@ -926,6 +929,189 @@ async fn probe_nvidia_encoder_capabilities(
         capabilities.push(parse_nvidia_encoder_capability(encoder, &text));
     }
     capabilities
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NvidiaDecoderProbeSpec {
+    codec: &'static str,
+    bit_depth: u8,
+    decoder: &'static str,
+    encoder: &'static str,
+    pixel_format: &'static str,
+}
+
+async fn probe_nvidia_decoder_capabilities(
+    config: &FfmpegRuntimeCheckConfig,
+    report: &FfmpegCapabilityReport,
+) -> Vec<NvidiaDecoderCapability> {
+    let mut capabilities = Vec::new();
+    for spec in nvidia_decoder_probe_specs(report) {
+        if probe_nvidia_decoder_capability(&config.ffmpeg_path, spec).await {
+            capabilities.push(NvidiaDecoderCapability::new(spec.codec, spec.bit_depth));
+        }
+    }
+    capabilities
+}
+
+fn nvidia_decoder_probe_specs(report: &FfmpegCapabilityReport) -> Vec<NvidiaDecoderProbeSpec> {
+    const SPECS: &[NvidiaDecoderProbeSpec] = &[
+        NvidiaDecoderProbeSpec {
+            codec: "h264",
+            bit_depth: 8,
+            decoder: "h264_cuvid",
+            encoder: "libx264",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "h264",
+            bit_depth: 10,
+            decoder: "h264_cuvid",
+            encoder: "libx264",
+            pixel_format: "yuv420p10le",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "hevc",
+            bit_depth: 8,
+            decoder: "hevc_cuvid",
+            encoder: "libx265",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "hevc",
+            bit_depth: 10,
+            decoder: "hevc_cuvid",
+            encoder: "libx265",
+            pixel_format: "yuv420p10le",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "mpeg2video",
+            bit_depth: 8,
+            decoder: "mpeg2_cuvid",
+            encoder: "mpeg2video",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "mpeg4",
+            bit_depth: 8,
+            decoder: "mpeg4_cuvid",
+            encoder: "mpeg4",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "vp8",
+            bit_depth: 8,
+            decoder: "vp8_cuvid",
+            encoder: "libvpx",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "vp9",
+            bit_depth: 8,
+            decoder: "vp9_cuvid",
+            encoder: "libvpx-vp9",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "vp9",
+            bit_depth: 10,
+            decoder: "vp9_cuvid",
+            encoder: "libvpx-vp9",
+            pixel_format: "yuv420p10le",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "av1",
+            bit_depth: 8,
+            decoder: "av1_cuvid",
+            encoder: "libaom-av1",
+            pixel_format: "yuv420p",
+        },
+        NvidiaDecoderProbeSpec {
+            codec: "av1",
+            bit_depth: 10,
+            decoder: "av1_cuvid",
+            encoder: "libaom-av1",
+            pixel_format: "yuv420p10le",
+        },
+    ];
+
+    SPECS
+        .iter()
+        .copied()
+        .filter(|spec| report.has_decoder(spec.decoder) && report.has_encoder(spec.encoder))
+        .collect()
+}
+
+async fn probe_nvidia_decoder_capability(ffmpeg_path: &str, spec: NvidiaDecoderProbeSpec) -> bool {
+    let sample_path = nvidia_decoder_probe_sample_path(spec);
+    let sample = sample_path.to_string_lossy().into_owned();
+    let mut encode_args = vec![
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=64x64:rate=1:duration=1",
+        "-frames:v",
+        "1",
+        "-pix_fmt",
+        spec.pixel_format,
+        "-c:v",
+        spec.encoder,
+        "-f",
+        "matroska",
+    ];
+    if spec.encoder == "libx265" {
+        encode_args.extend(["-x265-params", "log-level=error"]);
+    }
+    encode_args.extend(["-y", &sample]);
+
+    let encoded = tokio::process::Command::new(ffmpeg_path)
+        .args(&encode_args)
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success());
+    if !encoded {
+        let _ = std::fs::remove_file(&sample_path);
+        return false;
+    }
+
+    let decoded = tokio::process::Command::new(ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-hwaccel",
+            "cuda",
+            "-hwaccel_output_format",
+            "cuda",
+            "-c:v",
+            spec.decoder,
+            "-i",
+            &sample,
+            "-frames:v",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success());
+    let _ = std::fs::remove_file(sample_path);
+    decoded
+}
+
+fn nvidia_decoder_probe_sample_path(spec: NvidiaDecoderProbeSpec) -> std::path::PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    std::env::temp_dir().join(format!(
+        "ersatzrs-nvdec-probe-{}-{}-{}-{nanos}.mkv",
+        std::process::id(),
+        spec.codec,
+        spec.bit_depth
+    ))
 }
 
 /// Extract the useful NVIDIA device lines from `FFmpeg`'s `-gpu list` output.
@@ -1300,12 +1486,12 @@ fn to_owned_vec(values: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_runtime_issues, dedupe_vaapi_profiles, nvidia_gpu_list_summary,
-        parse_capability_names, parse_configuration_flags, parse_hwaccels,
+        collect_runtime_issues, dedupe_vaapi_profiles, nvidia_decoder_probe_specs,
+        nvidia_gpu_list_summary, parse_capability_names, parse_configuration_flags, parse_hwaccels,
         parse_nvidia_decoder_capabilities, parse_nvidia_encoder_capability,
         parse_vaapi_profile_entrypoints, parse_version, FfmpegCapabilityReport,
         FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
-        VaapiProfileEntrypoint,
+        NvidiaDecoderCapability, VaapiProfileEntrypoint,
     };
     use std::collections::BTreeSet;
 
@@ -1510,6 +1696,34 @@ h264_nvenc AVOptions:
     }
 
     #[test]
+    fn native_nvidia_decoder_probe_specs_require_decoder_and_sample_encoder() {
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from(["libx264".to_owned(), "libx265".to_owned()]),
+            decoders: BTreeSet::from([
+                "h264_cuvid".to_owned(),
+                "hevc_cuvid".to_owned(),
+                "av1_cuvid".to_owned(),
+            ]),
+            ..FfmpegCapabilityReport::default()
+        };
+
+        let specs = nvidia_decoder_probe_specs(&report);
+
+        assert_eq!(
+            specs
+                .iter()
+                .map(|spec| NvidiaDecoderCapability::new(spec.codec, spec.bit_depth))
+                .collect::<Vec<_>>(),
+            vec![
+                NvidiaDecoderCapability::new("h264", 8),
+                NvidiaDecoderCapability::new("h264", 10),
+                NvidiaDecoderCapability::new("hevc", 8),
+                NvidiaDecoderCapability::new("hevc", 10),
+            ]
+        );
+    }
+
+    #[test]
     fn reports_missing_required_and_optional_capabilities() {
         let config = FfmpegRuntimeCheckConfig {
             required_filters: vec!["drawvg".to_owned()],
@@ -1562,8 +1776,8 @@ h264_nvenc AVOptions:
 #[cfg(all(test, unix))]
 mod unix_tests {
     use super::{
-        check_ffmpeg_runtime_with_config, FfmpegCheckError, FfmpegRuntimeCheckConfig,
-        FfmpegRuntimeIssue, FfmpegVersion,
+        check_ffmpeg_runtime_with_config, collect_ffmpeg_capabilities, FfmpegCheckError,
+        FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
     };
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -1711,6 +1925,32 @@ mod unix_tests {
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn native_nvidia_decoder_probe_populates_decoder_rows() {
+        let dir = temp_test_dir("nvidia-decoder-probe");
+        let ffmpeg = write_nvidia_decoder_probe_ffmpeg_script(&dir);
+        let config = FfmpegRuntimeCheckConfig::with_paths(
+            ffmpeg.to_str().expect("utf-8 path"),
+            "/unused/ffprobe",
+        );
+
+        let report = collect_ffmpeg_capabilities(&config)
+            .await
+            .expect("fake ffmpeg should produce capabilities");
+
+        assert!(report.nvidia_gpu_list.is_none());
+        assert_eq!(report.nvidia_decoders.len(), 4);
+        assert!(report
+            .nvidia_decoders
+            .iter()
+            .any(|decoder| decoder.supports("h264", 10)));
+        assert!(report
+            .nvidia_decoders
+            .iter()
+            .any(|decoder| decoder.supports("hevc", 10)));
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
     fn test_config(ffmpeg_path: &str, ffprobe_path: &str) -> FfmpegRuntimeCheckConfig {
         FfmpegRuntimeCheckConfig {
             ffmpeg_path: ffmpeg_path.to_owned(),
@@ -1789,6 +2029,58 @@ esac
 "#
         );
         write_script(dir, name, &body)
+    }
+
+    fn write_nvidia_decoder_probe_ffmpeg_script(dir: &Path) -> PathBuf {
+        let body = r#"#!/bin/sh
+case "$*" in
+  "-hide_banner -filters")
+    cat <<'EOF'
+Filters:
+  TSC drawvg            V->V       Draw vector graphics.
+EOF
+    ;;
+  "-hide_banner -encoders")
+    cat <<'EOF'
+Encoders:
+ V....D libx264         H.264 encoder
+ V....D libx265         HEVC encoder
+EOF
+    ;;
+  "-hide_banner -decoders")
+    cat <<'EOF'
+Decoders:
+ V....D h264_cuvid      Nvidia CUVID H264 decoder
+ V....D hevc_cuvid      Nvidia CUVID HEVC decoder
+EOF
+    ;;
+  "-hide_banner -hwaccels")
+    printf 'Hardware acceleration methods:\ncuda\n'
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v libx264 -f matroska -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p10le -c:v libx264 -f matroska -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p -c:v libx265 -f matroska -x265-params log-level=error -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -pix_fmt yuv420p10le -c:v libx265 -f matroska -x265-params log-level=error -y "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -hwaccel cuda -hwaccel_output_format cuda -c:v h264_cuvid -i "*)
+    exit 0
+    ;;
+  "-hide_banner -loglevel error -hwaccel cuda -hwaccel_output_format cuda -c:v hevc_cuvid -i "*)
+    exit 0
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+"#;
+        write_script(dir, "ffmpeg", body)
     }
 
     fn write_ffprobe_script(dir: &Path, name: &str, version: &str) -> PathBuf {
