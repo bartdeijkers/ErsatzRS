@@ -190,6 +190,7 @@ pub async fn load_troubleshooting_report_with_state(
         .collect();
 
     let runtime = state.ffmpeg_runtime.read().await.clone();
+    let nvidia_probe_output = nvidia_probe_output(&runtime.capabilities);
     let video_toolbox_probe_output = video_toolbox_probe_output(&runtime.capabilities);
     let info = GeneralTroubleshootingInfo {
         version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -212,7 +213,7 @@ pub async fn load_troubleshooting_report_with_state(
             expected_encoders: &["h264_nvenc", "hevc_nvenc", "av1_nvenc"],
             decoders: &runtime.capabilities.decoders,
             expected_decoders: &["h264_cuvid", "hevc_cuvid", "mpeg2_cuvid", "mpeg4_cuvid"],
-            raw_probe_output: runtime.capabilities.nvidia_gpu_list.as_deref(),
+            raw_probe_output: nvidia_probe_output.as_deref(),
         }),
         qsv_capabilities: hardware_report(HardwareReportSpec {
             title: "QSV",
@@ -609,15 +610,65 @@ fn hardware_report(spec: HardwareReportSpec<'_>) -> String {
         .filter(|value| !value.trim().is_empty())
     {
         lines.push("Device probe:".to_owned());
+        lines.extend(output.lines().map(|line| format!("  {line}")));
+        lines.push(String::new());
+    }
+    lines.join("\n")
+}
+
+#[cfg(feature = "ssr")]
+fn nvidia_probe_output(capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport) -> Option<String> {
+    let mut lines = Vec::new();
+
+    if let Some(output) = capabilities
+        .nvidia_gpu_list
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        lines.push("gpu list:".to_owned());
         let summary = ersatzrs_ffmpeg::nvidia_gpu_list_summary(output);
         if summary.is_empty() {
             lines.extend(output.lines().map(|line| format!("  {line}")));
         } else {
             lines.extend(summary.into_iter().map(|line| format!("  {line}")));
         }
-        lines.push(String::new());
     }
-    lines.join("\n")
+
+    if !capabilities.nvidia_decoders.is_empty() {
+        lines.push("decoders:".to_owned());
+        for decoder in &capabilities.nvidia_decoders {
+            lines.push(format!("  {} {}-bit", decoder.codec, decoder.bit_depth));
+        }
+    }
+
+    if !capabilities.nvidia_encoders.is_empty() {
+        lines.push("encoders:".to_owned());
+        for encoder in &capabilities.nvidia_encoders {
+            lines.push(format!("  {}", encoder.encoder));
+            lines.push("    pixel formats:".to_owned());
+            append_probe_values_indented(&mut lines, &encoder.pixel_formats);
+            lines.push("    profiles:".to_owned());
+            append_probe_values_indented(&mut lines, &encoder.profiles);
+        }
+    }
+
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn append_probe_values_indented(
+    lines: &mut Vec<String>,
+    values: &std::collections::BTreeSet<String>,
+) {
+    if values.is_empty() {
+        lines.push("      none".to_owned());
+    } else {
+        lines.extend(values.iter().map(|value| format!("      {value}")));
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -1364,7 +1415,7 @@ mod tests {
     }
 
     #[test]
-    fn hardware_report_includes_nvidia_device_probe_summary() {
+    fn hardware_report_includes_device_probe_output_verbatim() {
         let hwaccels = std::collections::BTreeSet::from(["cuda".to_owned()]);
         let encoders = std::collections::BTreeSet::from(["h264_nvenc".to_owned()]);
         let decoders = std::collections::BTreeSet::new();
@@ -1377,12 +1428,52 @@ mod tests {
             expected_encoders: &["h264_nvenc"],
             decoders: &decoders,
             expected_decoders: &[],
-            raw_probe_output: Some("GPU #0: NVIDIA GeForce RTX 4070\nunrelated line"),
+            raw_probe_output: Some("gpu list:\n  GPU #0: NVIDIA GeForce RTX 4070"),
         });
 
         assert!(report.contains("Device probe:"));
         assert!(report.contains("GPU #0: NVIDIA GeForce RTX 4070"));
-        assert!(!report.contains("unrelated line"));
+    }
+
+    #[test]
+    fn nvidia_probe_output_summarizes_gpu_list_and_includes_decoder_encoder_details() {
+        let capabilities = ersatzrs_ffmpeg::FfmpegCapabilityReport {
+            nvidia_gpu_list: Some("GPU #0: NVIDIA GeForce RTX 4070\nunrelated line".to_owned()),
+            nvidia_decoders: vec![
+                ersatzrs_ffmpeg::NvidiaDecoderCapability::new("h264", 8),
+                ersatzrs_ffmpeg::NvidiaDecoderCapability::new("hevc", 10),
+            ],
+            nvidia_encoders: vec![ersatzrs_ffmpeg::NvidiaEncoderCapability::new(
+                "h264_nvenc",
+                std::collections::BTreeSet::from(["yuv420p".to_owned()]),
+                std::collections::BTreeSet::from(["high".to_owned()]),
+            )],
+            ..Default::default()
+        };
+
+        let output = nvidia_probe_output(&capabilities).expect("nvidia probe output");
+
+        // GPU list is summarized: noise is filtered out, the device line stays.
+        assert!(output.contains("gpu list:"));
+        assert!(output.contains("GPU #0: NVIDIA GeForce RTX 4070"));
+        assert!(!output.contains("unrelated line"));
+
+        // Decoder detail (codec + bit depth) is now surfaced, mirroring VideoToolbox.
+        assert!(output.contains("decoders:"));
+        assert!(output.contains("h264 8-bit"));
+        assert!(output.contains("hevc 10-bit"));
+
+        // Encoder detail (pixel formats + profiles) is surfaced.
+        assert!(output.contains("encoders:"));
+        assert!(output.contains("h264_nvenc"));
+        assert!(output.contains("yuv420p"));
+        assert!(output.contains("high"));
+    }
+
+    #[test]
+    fn nvidia_probe_output_is_none_without_probe_data() {
+        let capabilities = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
+        assert!(nvidia_probe_output(&capabilities).is_none());
     }
 
     #[test]

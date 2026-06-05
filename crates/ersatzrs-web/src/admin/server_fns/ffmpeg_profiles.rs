@@ -375,6 +375,18 @@ pub async fn get_ffmpeg_profile_form(id: i64) -> Result<Option<FfmpegProfileForm
     }))
 }
 
+/// `QsvExtraHardwareFrames` is only meaningful for QSV acceleration, so it is
+/// persisted as a value only when QSV (1) is selected and `NULL` otherwise. The
+/// editor form always carries the field (see [`FfmpegProfileForm`]); this is the
+/// single place that decides whether it reaches the database.
+#[cfg(feature = "ssr")]
+fn qsv_extra_hardware_frames_for_persist(
+    hardware_acceleration: i32,
+    qsv_extra_hardware_frames: i32,
+) -> Option<i32> {
+    (hardware_acceleration == 1).then_some(qsv_extra_hardware_frames)
+}
+
 /// Validates and creates or updates a profile. Returns the profile id.
 ///
 /// Server-side rules mirror `CreateFFmpegProfileHandler` / `UpdateFFmpegProfileHandler`:
@@ -493,11 +505,8 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         Some(&preset_str)
     };
     let deinterlace: Option<i32> = Some(i32::from(form.deinterlace_video));
-    let qsv_frames: Option<i32> = if hw_accel == 1 {
-        Some(form.qsv_extra_hardware_frames)
-    } else {
-        None
-    };
+    let qsv_frames: Option<i32> =
+        qsv_extra_hardware_frames_for_persist(hw_accel, form.qsv_extra_hardware_frames);
 
     if form.id == 0 {
         // Resolve ResolutionId — seed a default 1080p entry if none exists.
@@ -689,6 +698,20 @@ mod tests {
     use super::*;
     use ersatzrs_ffmpeg::FfmpegCapabilityReport;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn qsv_extra_hardware_frames_persisted_only_for_qsv() {
+        // QSV (1) carries the field through to the database.
+        assert_eq!(qsv_extra_hardware_frames_for_persist(1, 96), Some(96));
+        // Every other acceleration persists NULL regardless of the form value.
+        for hw_accel in [0, 2, 3, 4, 5, 7] {
+            assert_eq!(
+                qsv_extra_hardware_frames_for_persist(hw_accel, 96),
+                None,
+                "hw_accel {hw_accel} must not persist QsvExtraHardwareFrames"
+            );
+        }
+    }
 
     #[test]
     fn hardware_acceleration_options_always_includes_all_standard_options() {
