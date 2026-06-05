@@ -2457,6 +2457,30 @@ fn output_ts_offset_option(
     ))
 }
 
+fn audio_bitrate_option(bitrate: u32) -> PipelineStep {
+    PipelineStep::generic(
+        "audio_bitrate",
+        [
+            "-b:a".to_owned(),
+            format!("{bitrate}k"),
+            "-maxrate:a".to_owned(),
+            format!("{bitrate}k"),
+        ],
+    )
+}
+
+fn video_bitrate_option(bitrate: u32) -> PipelineStep {
+    PipelineStep::generic(
+        "video_bitrate",
+        [
+            "-b:v".to_owned(),
+            format!("{bitrate}k"),
+            "-maxrate:v".to_owned(),
+            format!("{bitrate}k"),
+        ],
+    )
+}
+
 fn add_output_options(
     steps: &mut Vec<PipelineStep>,
     state: &FfmpegState,
@@ -2468,10 +2492,7 @@ fn add_output_options(
         && desired.audio_format != FFmpegProfileAudioFormat::Copy
     {
         if let Some(bitrate) = desired.audio_bitrate {
-            steps.push(PipelineStep::generic(
-                "audio_bitrate",
-                ["-b:a".to_owned(), format!("{bitrate}k")],
-            ));
+            steps.push(audio_bitrate_option(bitrate));
         }
         if let Some(buffer_size) = desired.audio_buffer_size {
             steps.push(PipelineStep::generic(
@@ -2495,10 +2516,7 @@ fn add_output_options(
             ));
         }
         if let Some(bitrate) = desired.video_bitrate {
-            steps.push(PipelineStep::generic(
-                "video_bitrate",
-                ["-b:v".to_owned(), format!("{bitrate}k")],
-            ));
+            steps.push(video_bitrate_option(bitrate));
         }
         if let Some(buffer_size) = desired.video_buffer_size {
             steps.push(PipelineStep::generic(

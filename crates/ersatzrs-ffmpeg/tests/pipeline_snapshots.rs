@@ -67,8 +67,11 @@ fn software_pipeline_single_video_mpegts_snapshot() {
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
 
-    insta::assert_snapshot!(command.arguments.join(" "));
+    assert!(arguments.contains("-maxrate:a 192k"));
+    assert!(arguments.contains("-maxrate:v 8000k"));
+    insta::assert_snapshot!(arguments);
 }
 
 #[test]
