@@ -429,6 +429,20 @@ fn software_pipeline_emits_aac_audio_channels_for_surround_output() {
 }
 
 #[test]
+fn software_pipeline_nut_output_skips_audio_rate_and_buffer_options() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.state.output_format = OutputFormat::Nut;
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    assert!(!command
+        .arguments
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "-b:a" | "-bufsize:a" | "-ar")));
+}
+
+#[test]
 fn software_pipeline_mpeg2_output_uses_supported_scene_detect_threshold_snapshot() {
     let mut desired = DesiredVideoState::h264_1080p();
     desired.video_format = FFmpegProfileVideoFormat::Mpeg2Video;

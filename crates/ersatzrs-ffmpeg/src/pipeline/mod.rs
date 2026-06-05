@@ -2291,12 +2291,6 @@ fn audio_encoder(
         }) {
             extra.extend(["-ac".to_owned(), channels.to_string()]);
         }
-        if let Some(sample_rate) = desired.audio_sample_rate {
-            extra.extend(["-ar".to_owned(), audio_sample_rate_output(sample_rate)]);
-        }
-        if let Some(bitrate) = desired.audio_bitrate {
-            extra.extend(["-b:a".to_owned(), format!("{bitrate}k")]);
-        }
     }
 
     PipelineStep::encoder(name, StreamKind::Audio, extra)
@@ -2370,6 +2364,29 @@ fn add_output_options(
     acceleration: HardwareAccelerationKind,
     nvidia_green_line_workaround: bool,
 ) {
+    if state.output_format != OutputFormat::Nut
+        && desired.audio_format != FFmpegProfileAudioFormat::Copy
+    {
+        if let Some(bitrate) = desired.audio_bitrate {
+            steps.push(PipelineStep::generic(
+                "audio_bitrate",
+                ["-b:a".to_owned(), format!("{bitrate}k")],
+            ));
+        }
+        if let Some(buffer_size) = desired.audio_buffer_size {
+            steps.push(PipelineStep::generic(
+                "audio_buffer_size",
+                ["-bufsize:a".to_owned(), format!("{buffer_size}k")],
+            ));
+        }
+        if let Some(sample_rate) = desired.audio_sample_rate {
+            steps.push(PipelineStep::generic(
+                "audio_sample_rate",
+                ["-ar".to_owned(), audio_sample_rate_output(sample_rate)],
+            ));
+        }
+    }
+
     if desired.video_format != FFmpegProfileVideoFormat::Copy {
         if let Some(bitrate) = desired.video_bitrate {
             steps.push(PipelineStep::generic(
