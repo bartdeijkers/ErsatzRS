@@ -23,7 +23,7 @@ process_path = "0.1"
 # to surface fatal startup failures (the launcher has no console). windows-sys
 # keeps the FFI surface tiny and version-stable vs the higher-level `windows`
 # crate.
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
