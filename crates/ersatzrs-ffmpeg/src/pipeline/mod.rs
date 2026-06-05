@@ -3,18 +3,25 @@ use ersatzrs_domain::{
     FFmpegProfileVideoFormat, FilterMode, HardwareAccelerationKind, NormalizeLoudnessMode,
     Resolution, ScalingBehavior, StreamingMode, VideoScanKind,
 };
+use std::time::Duration;
 
 use crate::{
-    closed_gop, crop_filter, deinterlace_filter, fast_start, frame_rate_filter,
-    hardware_upload_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale, no_b_frames,
-    no_standard_input, no_stats, normalize_loudness_filter, pad_filter, pipe_output,
-    progress_to_stdout, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
-    subtitle_overlay_filter, subtitles_filter, tonemap_filter_for,
-    watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_filter,
-    watermark_scale_filter, AudioFilter, CommandGenerator, ComplexFilter, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
-    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
-    PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm, WatermarkOverlay,
+    audio_pad_filter, audio_resample_filter, closed_gop, crop_filter,
+    cuda_software_fallback_upload_filter, deinterlace_filter, fast_start, frame_rate_filter,
+    graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
+    hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
+    no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
+    normalize_loudness_filter, pad_filter, pipe_output, progress_to_stdout, reset_pts_filter,
+    scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
+    still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
+    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
+    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_cuda_filter,
+    watermark_overlay_filter, watermark_scale_filter, AudioFilter, CommandGenerator, ComplexFilter,
+    FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize,
+    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind,
+    PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
+    WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -43,6 +50,7 @@ pub struct HlsOutput {
 pub struct FfmpegState {
     pub output_format: OutputFormat,
     pub start_seconds: Option<i64>,
+    pub duration: Option<Duration>,
     pub thread_count: Option<u32>,
     pub report_progress: bool,
     pub do_not_map_metadata: bool,
@@ -54,6 +62,7 @@ impl Default for FfmpegState {
         Self {
             output_format: OutputFormat::MpegTs,
             start_seconds: None,
+            duration: None,
             thread_count: None,
             report_progress: true,
             do_not_map_metadata: true,
@@ -166,6 +175,8 @@ pub struct SourceVideoStream {
     pub profile: Option<String>,
     pub pixel_format: Option<PixelFormat>,
     pub color_params: SourceColorParams,
+    pub has_multiple_profiles: bool,
+    pub is_still_image: bool,
     pub scan_kind: VideoScanKind,
     pub frame_rate: Option<FrameRate>,
     pub frame_size: Option<FrameSize>,
@@ -184,6 +195,8 @@ impl SourceVideoStream {
                 is_hdr: false,
                 is_bt2020_ten: false,
             },
+            has_multiple_profiles: false,
+            is_still_image: false,
             scan_kind: VideoScanKind::Unknown,
             frame_rate: None,
             frame_size: None,
@@ -311,6 +324,7 @@ const fn even_frame_size(width: u32, height: u32) -> FrameSize {
 /// Source audio stream metadata reserved for audio decoder dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceAudioStream {
+    pub index: usize,
     pub codec: SourceAudioCodec,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
@@ -320,10 +334,17 @@ impl SourceAudioStream {
     #[must_use]
     pub const fn new(codec: SourceAudioCodec) -> Self {
         Self {
+            index: 1,
             codec,
             channels: None,
             sample_rate: None,
         }
+    }
+
+    #[must_use]
+    pub const fn with_index(mut self, index: usize) -> Self {
+        self.index = index;
+        self
     }
 }
 
@@ -337,11 +358,38 @@ pub enum SourceAudioCodec {
     Unknown,
 }
 
+impl SourceAudioCodec {
+    #[must_use]
+    pub fn from_ffmpeg_name(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "aac" => Self::Aac,
+            "aac_latm" | "aac-latm" => Self::AacLatm,
+            "ac3" | "eac3" => Self::Ac3,
+            "dts" => Self::Dts,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// Source color metadata that affects later filter and decoder choices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SourceColorParams {
     pub is_hdr: bool,
     pub is_bt2020_ten: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VulkanHdrTonemapMode {
+    #[default]
+    Auto,
+    Disabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RealtimeMode {
+    #[default]
+    Off,
+    On,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -363,10 +411,16 @@ pub struct DesiredVideoState {
     pub audio_buffer_size: Option<u32>,
     pub audio_channels: Option<u32>,
     pub audio_sample_rate: Option<u32>,
+    pub pad_audio: bool,
+    pub realtime_mode: RealtimeMode,
     pub normalize_loudness_mode: NormalizeLoudnessMode,
     pub target_loudness: Option<f64>,
     pub normalize_colors: bool,
     pub allow_b_frames: bool,
+    pub vaapi_device: Option<String>,
+    pub vaapi_driver: Option<String>,
+    pub qsv_device: Option<String>,
+    pub vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode,
 }
 
 impl DesiredVideoState {
@@ -390,10 +444,16 @@ impl DesiredVideoState {
             audio_buffer_size: Some(384),
             audio_channels: Some(2),
             audio_sample_rate: Some(48_000),
+            pad_audio: true,
+            realtime_mode: RealtimeMode::Off,
             normalize_loudness_mode: NormalizeLoudnessMode::Off,
             target_loudness: None,
             normalize_colors: false,
             allow_b_frames: false,
+            vaapi_device: None,
+            vaapi_driver: None,
+            qsv_device: None,
+            vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
 
@@ -406,7 +466,7 @@ impl DesiredVideoState {
         streaming_mode: StreamingMode,
     ) -> Self {
         if streaming_mode == StreamingMode::HttpLiveStreamingDirect {
-            return Self::copy_from_profile(profile, resolution);
+            return Self::copy_from_profile(profile, resolution, streaming_mode);
         }
 
         let frame_size = resolution_frame_size(resolution);
@@ -436,16 +496,26 @@ impl DesiredVideoState {
             audio_buffer_size: positive_u32(profile.audio_buffer_size),
             audio_channels: positive_u32(profile.audio_channels),
             audio_sample_rate,
+            pad_audio: profile.audio_format != FFmpegProfileAudioFormat::Copy,
+            realtime_mode: realtime_mode_for_streaming(streaming_mode),
             normalize_loudness_mode,
             target_loudness: (normalize_loudness_mode == NormalizeLoudnessMode::LoudNorm)
                 .then_some(profile.target_loudness)
                 .flatten(),
             normalize_colors: profile.normalize_colors,
             allow_b_frames: profile.allow_b_frames,
+            vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
+            vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
+            qsv_device: non_empty_string(profile.vaapi_device.as_deref()),
+            vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
 
-    fn copy_from_profile(profile: &FFmpegProfile, resolution: &Resolution) -> Self {
+    fn copy_from_profile(
+        profile: &FFmpegProfile,
+        resolution: &Resolution,
+        streaming_mode: StreamingMode,
+    ) -> Self {
         let frame_size = resolution_frame_size(resolution);
         Self {
             scaled_size: frame_size,
@@ -465,10 +535,16 @@ impl DesiredVideoState {
             audio_buffer_size: None,
             audio_channels: None,
             audio_sample_rate: None,
+            pad_audio: false,
+            realtime_mode: realtime_mode_for_streaming(streaming_mode),
             normalize_loudness_mode: NormalizeLoudnessMode::Off,
             target_loudness: None,
             normalize_colors: profile.normalize_colors,
             allow_b_frames: true,
+            vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
+            vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
+            qsv_device: non_empty_string(profile.vaapi_device.as_deref()),
+            vulkan_hdr_tonemap_mode: VulkanHdrTonemapMode::Auto,
         }
     }
 
@@ -536,6 +612,24 @@ fn non_empty_string(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
+}
+
+const fn realtime_mode_for_streaming(streaming_mode: StreamingMode) -> RealtimeMode {
+    if matches!(streaming_mode, StreamingMode::HttpLiveStreamingSegmenter) {
+        RealtimeMode::Off
+    } else {
+        RealtimeMode::On
+    }
+}
+
+const fn vaapi_driver_name(driver: ersatzrs_domain::VaapiDriver) -> Option<&'static str> {
+    match driver {
+        ersatzrs_domain::VaapiDriver::Auto => None,
+        ersatzrs_domain::VaapiDriver::IHD => Some("iHD"),
+        ersatzrs_domain::VaapiDriver::I965 => Some("i965"),
+        ersatzrs_domain::VaapiDriver::RadeonSI => Some("radeonsi"),
+        ersatzrs_domain::VaapiDriver::Nouveau => Some("nouveau"),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -661,12 +755,15 @@ fn build_transcode_pipeline(
     acceleration: HardwareAccelerationKind,
 ) -> FFmpegPipeline {
     let effective_acceleration = effective_video_acceleration(&request, acceleration);
+    let effective_decode_acceleration =
+        effective_decode_acceleration(&request, acceleration, effective_acceleration);
     let mut steps = vec![
         no_standard_input(),
         hide_banner(),
         no_stats(),
         loglevel_error(),
         standard_format_flags(),
+        no_demux_decode_delay(),
         fast_start(),
     ];
 
@@ -685,7 +782,8 @@ fn build_transcode_pipeline(
         steps.push(PipelineStep::stream_seek(start_seconds));
     }
 
-    if request.desired.video_format != FFmpegProfileVideoFormat::Copy {
+    let is_video_copy = request.desired.video_format == FFmpegProfileVideoFormat::Copy;
+    if !is_video_copy {
         steps.push(closed_gop());
         if !request.desired.allow_b_frames {
             steps.push(no_b_frames());
@@ -693,10 +791,31 @@ fn build_transcode_pipeline(
     }
 
     let mut filter_chain = FilterChain::default();
-    let mut target_state =
-        configure_hardware_acceleration(&mut request, &mut steps, effective_acceleration);
+    let mut target_state = configure_hardware_acceleration(
+        &mut request,
+        &mut steps,
+        effective_acceleration,
+        effective_decode_acceleration,
+    );
+    if !is_video_copy {
+        steps.push(no_scene_detect(scene_detect_threshold(
+            &request,
+            effective_decode_acceleration,
+        )));
+    }
+    let use_cuda_overlay = uses_cuda_overlay(effective_acceleration, &request.desired);
     add_video_decoder(&request, &mut steps, effective_acceleration);
+    add_audio_decoder_input_options(&mut request);
+    add_realtime_input_options(&mut request);
+    add_cuda_software_fallback_upload(&mut request, effective_acceleration);
     apply_source_video_filters(
+        &request,
+        effective_acceleration,
+        &mut target_state,
+        &mut filter_chain,
+    );
+    apply_still_image_loop_filter(&request, &mut filter_chain);
+    apply_qsv_download_and_reset_pts(
         &request,
         effective_acceleration,
         &mut target_state,
@@ -710,6 +829,45 @@ fn build_transcode_pipeline(
     request
         .watermarks
         .sort_by_key(|watermark| watermark.z_index);
+    let has_watermark_overlay = request
+        .inputs
+        .iter()
+        .any(|input| input.kind == InputKind::Watermark);
+    let has_image_subtitle_burn = request.inputs.iter().any(|input| {
+        input.kind == InputKind::Subtitle
+            && input.is_image_based_subtitle
+            && input.subtitle_method == Some(SubtitleMethod::Burn)
+    });
+    let has_native_graphics_overlay = request
+        .graphics_overlays
+        .iter()
+        .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::NativeImage { .. }));
+    let force_vaapi_software_overlay = force_vaapi_software_overlay(
+        &request.desired,
+        has_watermark_overlay,
+        has_image_subtitle_burn,
+    );
+    download_cuda_frames_for_software_overlay(
+        effective_acceleration,
+        &request.desired,
+        has_watermark_overlay || has_image_subtitle_burn || has_native_graphics_overlay,
+        &mut target_state,
+        &mut filter_chain,
+    );
+    force_vaapi_frames_to_software_for_overlay(
+        effective_acceleration,
+        force_vaapi_software_overlay,
+        has_watermark_overlay || has_image_subtitle_burn || has_native_graphics_overlay,
+        &request.desired,
+        &mut target_state,
+        &mut filter_chain,
+    );
+    let use_vaapi_overlay = uses_vaapi_overlay(
+        effective_acceleration,
+        &request.desired,
+        &target_state,
+        force_vaapi_software_overlay,
+    );
     for (input, watermark) in request
         .inputs
         .iter_mut()
@@ -742,44 +900,91 @@ fn build_transcode_pipeline(
                 .copied()
                 .map(crate::watermark_fade_filter),
         );
-        filter_chain
-            .watermark_overlay
-            .push(watermark_overlay_filter(
-                watermark,
-                request.desired.frame_size,
-                request
-                    .source_video_stream
-                    .as_ref()
-                    .and_then(|stream| stream.square_pixel_frame_size(request.desired.frame_size))
-                    .unwrap_or(request.desired.frame_size),
-                request.desired.pixel_format(),
+        let square_pixel_frame_size = request
+            .source_video_stream
+            .as_ref()
+            .and_then(|stream| stream.square_pixel_frame_size(request.desired.frame_size))
+            .unwrap_or(request.desired.frame_size);
+        if use_cuda_overlay {
+            input.filter_steps.push(watermark_alpha_format_filter());
+            input.filter_steps.push(hardware_upload_filter(
+                HardwareAccelerationKind::Nvenc,
+                QSV_EXTRA_HARDWARE_FRAMES,
             ));
+            filter_chain
+                .watermark_overlay
+                .push(watermark_overlay_cuda_filter(
+                    watermark,
+                    request.desired.frame_size,
+                    square_pixel_frame_size,
+                ));
+        } else {
+            filter_chain
+                .watermark_overlay
+                .push(watermark_overlay_filter(
+                    watermark,
+                    request.desired.frame_size,
+                    square_pixel_frame_size,
+                    request.desired.pixel_format(),
+                ));
+        }
     }
 
-    let has_image_subtitle_burn = request.inputs.iter().any(|input| {
-        input.kind == InputKind::Subtitle
-            && input.is_image_based_subtitle
-            && input.subtitle_method == Some(SubtitleMethod::Burn)
-    });
     if has_image_subtitle_burn {
-        filter_chain
-            .subtitle
-            .push(scale_subtitle_image_filter(request.desired.frame_size));
-        filter_chain
-            .subtitle_overlay
-            .push(subtitle_overlay_filter(request.desired.pixel_format()));
+        if use_vaapi_overlay {
+            filter_chain
+                .subtitle
+                .push(vaapi_subtitle_pixel_format_filter());
+            filter_chain
+                .subtitle
+                .push(scale_subtitle_image_filter(request.desired.frame_size));
+            filter_chain
+                .subtitle
+                .push(hardware_upload_vaapi_filter(false));
+            filter_chain
+                .subtitle_overlay
+                .push(subtitle_overlay_vaapi_filter());
+        } else if use_cuda_overlay {
+            if use_cuda_subtitle_scale_npp(&request) {
+                filter_chain.subtitle.push(watermark_alpha_format_filter());
+                filter_chain.subtitle.push(hardware_upload_filter(
+                    HardwareAccelerationKind::Nvenc,
+                    QSV_EXTRA_HARDWARE_FRAMES,
+                ));
+                filter_chain
+                    .subtitle
+                    .push(subtitle_scale_npp_filter(request.desired.frame_size));
+            } else {
+                filter_chain
+                    .subtitle
+                    .push(scale_subtitle_image_filter(request.desired.frame_size));
+                filter_chain.subtitle.push(watermark_alpha_format_filter());
+                filter_chain.subtitle.push(hardware_upload_filter(
+                    HardwareAccelerationKind::Nvenc,
+                    QSV_EXTRA_HARDWARE_FRAMES,
+                ));
+            }
+            filter_chain
+                .subtitle_overlay
+                .push(subtitle_overlay_cuda_filter());
+        } else {
+            filter_chain
+                .subtitle
+                .push(scale_subtitle_image_filter(request.desired.frame_size));
+            filter_chain
+                .subtitle_overlay
+                .push(subtitle_overlay_filter(request.desired.pixel_format()));
+        }
     }
 
-    for input in request.inputs.iter().filter(|input| {
-        input.kind == InputKind::Subtitle
-            && !input.is_image_based_subtitle
-            && input.subtitle_method == Some(SubtitleMethod::Burn)
-    }) {
-        filter_chain.video.push(subtitles_filter(
-            &input.path,
-            request.subtitle_fonts_dir.as_deref(),
-        ));
-    }
+    apply_text_subtitle_burn_filters(
+        &request,
+        effective_acceleration,
+        use_cuda_overlay,
+        has_watermark_overlay || has_native_graphics_overlay || !request.drawvg_filters.is_empty(),
+        &mut target_state,
+        &mut filter_chain,
+    );
 
     if request.desired.audio_format != FFmpegProfileAudioFormat::Copy {
         filter_chain.audio.push(normalize_loudness_filter(
@@ -793,6 +998,10 @@ fn build_transcode_pipeline(
                 .audio_sample_rate
                 .map(|sample_rate_hz| sample_rate_hz / 1_000),
         ));
+        filter_chain.audio.push(audio_resample_filter());
+        if request.desired.pad_audio {
+            filter_chain.audio.push(audio_pad_filter());
+        }
     }
 
     request.graphics_overlays.extend(
@@ -809,6 +1018,15 @@ fn build_transcode_pipeline(
         .graphics_overlays
         .iter()
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawvg { .. }));
+    let emit_pixel_format_output_option =
+        should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
+    let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
+        &request,
+        effective_acceleration,
+        has_watermark_overlay,
+        has_image_subtitle_burn,
+        has_native_graphics_overlay || has_drawvg_graphics,
+    );
     let mut graphics_image_index = 0usize;
     for overlay in request.graphics_overlays {
         match overlay {
@@ -845,23 +1063,39 @@ fn build_transcode_pipeline(
                         .copied()
                         .map(crate::watermark_fade_filter),
                 );
+                let square_pixel_frame_size = request
+                    .source_video_stream
+                    .as_ref()
+                    .and_then(|stream| stream.square_pixel_frame_size(request.desired.frame_size))
+                    .unwrap_or(request.desired.frame_size);
+                let filter = if use_vaapi_overlay {
+                    input.filter_steps.push(hardware_upload_vaapi_filter(false));
+                    graphics_overlay_vaapi_filter()
+                } else if use_cuda_overlay {
+                    input.filter_steps.push(watermark_alpha_format_filter());
+                    input.filter_steps.push(hardware_upload_filter(
+                        HardwareAccelerationKind::Nvenc,
+                        QSV_EXTRA_HARDWARE_FRAMES,
+                    ));
+                    watermark_overlay_cuda_filter(
+                        &overlay,
+                        request.desired.frame_size,
+                        square_pixel_frame_size,
+                    )
+                } else {
+                    watermark_overlay_filter(
+                        &overlay,
+                        request.desired.frame_size,
+                        square_pixel_frame_size,
+                        request.desired.pixel_format(),
+                    )
+                };
                 request.inputs.push(input);
                 filter_chain
                     .graphics_overlay
                     .push(GraphicsOverlayFilter::NativeImage {
                         input_index: graphics_image_index,
-                        filter: watermark_overlay_filter(
-                            &overlay,
-                            request.desired.frame_size,
-                            request
-                                .source_video_stream
-                                .as_ref()
-                                .and_then(|stream| {
-                                    stream.square_pixel_frame_size(request.desired.frame_size)
-                                })
-                                .unwrap_or(request.desired.frame_size),
-                            request.desired.pixel_format(),
-                        ),
+                        filter,
                     });
                 graphics_image_index = graphics_image_index.saturating_add(1);
             }
@@ -892,10 +1126,7 @@ fn build_transcode_pipeline(
     // 10-bit (`yuv420p10le`) source down to 8-bit `yuv420p` so the libx264
     // `high` profile (8-bit only) can open the encoder. Gated on a known source
     // stream so pipelines built without probe metadata are unchanged.
-    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
-        && request.source_video_stream.is_some()
-        && target_state.pixel_format != request.desired.pixel_format()
-    {
+    if emit_pixel_format_output_option {
         steps.push(pixel_format_output_option(request.desired.pixel_format()));
     }
 
@@ -910,6 +1141,7 @@ fn build_transcode_pipeline(
         &request.state,
         &request.desired,
         effective_acceleration,
+        use_nvidia_green_line_workaround,
     );
 
     FFmpegPipeline {
@@ -986,6 +1218,13 @@ fn apply_source_video_filters(
         filter_chain.video.push(scale);
         target_state.scaled_size = request.desired.scaled_size;
         target_state.padded_size = request.desired.scaled_size;
+        if acceleration == HardwareAccelerationKind::Qsv {
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            target_state.pixel_format = match request.desired.bit_depth {
+                FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
+                FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
+            };
+        }
     }
 
     if request.desired.cropped_size.is_none()
@@ -1027,6 +1266,20 @@ fn apply_source_video_filters(
     }
 }
 
+fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut FilterChain) {
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return;
+    }
+
+    if request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(|source| source.is_still_image)
+    {
+        filter_chain.video.push(still_image_loop_filter());
+    }
+}
+
 fn upload_software_frames_for_hardware_encoder(
     acceleration: HardwareAccelerationKind,
     target_state: &mut FrameState,
@@ -1044,6 +1297,184 @@ fn upload_software_frames_for_hardware_encoder(
     ));
     target_state.frame_data_location = crate::FrameDataLocation::Hardware;
     target_state.pixel_format = PixelFormat::Vaapi;
+}
+
+fn uses_cuda_overlay(acceleration: HardwareAccelerationKind, desired: &DesiredVideoState) -> bool {
+    acceleration == HardwareAccelerationKind::Nvenc
+        && desired.video_format != FFmpegProfileVideoFormat::Copy
+        && desired.bit_depth == FFmpegProfileBitDepth::EightBit
+}
+
+fn uses_vaapi_overlay(
+    acceleration: HardwareAccelerationKind,
+    desired: &DesiredVideoState,
+    target_state: &FrameState,
+    force_software_overlay: bool,
+) -> bool {
+    acceleration == HardwareAccelerationKind::Vaapi
+        && desired.video_format != FFmpegProfileVideoFormat::Copy
+        && !force_software_overlay
+        && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+}
+
+fn force_vaapi_software_overlay(
+    desired: &DesiredVideoState,
+    has_watermark: bool,
+    has_image_subtitle: bool,
+) -> bool {
+    (has_image_subtitle && has_watermark) || desired.vaapi_driver.as_deref() == Some("radeonsi")
+}
+
+fn force_vaapi_frames_to_software_for_overlay(
+    acceleration: HardwareAccelerationKind,
+    force_software_overlay: bool,
+    has_overlay: bool,
+    desired: &DesiredVideoState,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if acceleration != HardwareAccelerationKind::Vaapi
+        || !force_software_overlay
+        || !has_overlay
+        || target_state.frame_data_location != crate::FrameDataLocation::Hardware
+    {
+        return;
+    }
+
+    filter_chain
+        .video
+        .push(hardware_download_filter(target_state));
+    target_state.frame_data_location = crate::FrameDataLocation::Software;
+    target_state.pixel_format = desired.pixel_format();
+}
+
+fn use_cuda_subtitle_scale_npp(request: &PipelineRequest) -> bool {
+    request
+        .runtime_capabilities
+        .as_ref()
+        .is_some_and(|report| report.has_filter("scale_npp"))
+        && primary_video_needs_spatial_filter(request)
+}
+
+fn primary_video_needs_spatial_filter(request: &PipelineRequest) -> bool {
+    request.desired.cropped_size.is_some()
+        || request.desired.scaled_size != request.desired.frame_size
+        || request
+            .source_video_stream
+            .as_ref()
+            .and_then(|source| source.frame_size)
+            .is_some_and(|frame_size| frame_size != request.desired.scaled_size)
+}
+
+fn download_cuda_frames_for_software_overlay(
+    acceleration: HardwareAccelerationKind,
+    desired: &DesiredVideoState,
+    has_software_overlay: bool,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if acceleration != HardwareAccelerationKind::Nvenc
+        || desired.bit_depth != FFmpegProfileBitDepth::TenBit
+        || !has_software_overlay
+        || target_state.frame_data_location != crate::FrameDataLocation::Hardware
+    {
+        return;
+    }
+
+    filter_chain
+        .video
+        .push(hardware_download_filter(target_state));
+    target_state.frame_data_location = crate::FrameDataLocation::Software;
+    target_state.pixel_format = desired.pixel_format();
+}
+
+fn apply_text_subtitle_burn_filters(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    use_cuda_overlay: bool,
+    has_later_cuda_overlay: bool,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    for input in request.inputs.iter().filter(|input| {
+        input.kind == InputKind::Subtitle
+            && !input.is_image_based_subtitle
+            && input.subtitle_method == Some(SubtitleMethod::Burn)
+    }) {
+        if matches!(
+            acceleration,
+            HardwareAccelerationKind::Nvenc | HardwareAccelerationKind::Vaapi
+        ) && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+        {
+            filter_chain
+                .video
+                .push(hardware_download_filter(target_state));
+            target_state.frame_data_location = crate::FrameDataLocation::Software;
+            target_state.pixel_format = request.desired.pixel_format();
+        }
+
+        filter_chain.video.push(subtitles_filter(
+            &input.path,
+            request.subtitle_fonts_dir.as_deref(),
+        ));
+
+        if use_cuda_overlay && has_later_cuda_overlay {
+            filter_chain.video.push(hardware_upload_filter(
+                HardwareAccelerationKind::Nvenc,
+                QSV_EXTRA_HARDWARE_FRAMES,
+            ));
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+        }
+
+        if acceleration == HardwareAccelerationKind::Vaapi
+            && target_state.frame_data_location == crate::FrameDataLocation::Software
+        {
+            filter_chain.video.push(hardware_upload_filter(
+                HardwareAccelerationKind::Vaapi,
+                QSV_EXTRA_HARDWARE_FRAMES,
+            ));
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            target_state.pixel_format = PixelFormat::Vaapi;
+        }
+    }
+}
+
+fn apply_qsv_download_and_reset_pts(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if acceleration != HardwareAccelerationKind::Qsv
+        || request.desired.video_format == FFmpegProfileVideoFormat::Copy
+    {
+        return;
+    }
+
+    if target_state.frame_data_location == crate::FrameDataLocation::Hardware {
+        target_state.pixel_format = match request.desired.bit_depth {
+            FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
+            FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
+        };
+        filter_chain
+            .video
+            .push(hardware_download_filter(target_state));
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.pixel_format = request.desired.pixel_format();
+    }
+
+    let frame_rate = request
+        .desired
+        .frame_rate
+        .or_else(|| {
+            request
+                .source_video_stream
+                .as_ref()
+                .and_then(|source| source.frame_rate)
+        })
+        .unwrap_or(FrameRate::DEFAULT);
+    filter_chain.video.push(reset_pts_filter(frame_rate));
+    target_state.frame_rate = Some(frame_rate);
 }
 
 const fn tonemap_algorithm(algorithm: FFmpegProfileTonemapAlgorithm) -> TonemapAlgorithm {
@@ -1106,11 +1537,61 @@ fn effective_video_acceleration(
         .as_ref()
         .is_none_or(|source| capabilities.can_decode(source) == FfmpegCapability::Hardware);
 
+    if matches!(
+        acceleration,
+        HardwareAccelerationKind::Nvenc
+            | HardwareAccelerationKind::Qsv
+            | HardwareAccelerationKind::VideoToolbox
+    ) && can_encode
+    {
+        return capabilities.acceleration();
+    }
+
     if can_encode && can_decode {
         capabilities.acceleration()
     } else {
         HardwareAccelerationKind::None
     }
+}
+
+fn effective_decode_acceleration(
+    request: &PipelineRequest,
+    requested_acceleration: HardwareAccelerationKind,
+    effective_acceleration: HardwareAccelerationKind,
+) -> HardwareAccelerationKind {
+    let Some(source) = &request.source_video_stream else {
+        return effective_acceleration;
+    };
+
+    if qsv_multiple_profile_decode_workaround(request, requested_acceleration, source) {
+        return HardwareAccelerationKind::None;
+    }
+
+    let Some(report) = &request.runtime_capabilities else {
+        return effective_acceleration;
+    };
+
+    let capabilities =
+        HardwareCapabilitiesFactory::new(report).for_acceleration(requested_acceleration);
+    if capabilities.can_decode(source) == FfmpegCapability::Hardware {
+        capabilities.acceleration()
+    } else {
+        HardwareAccelerationKind::None
+    }
+}
+
+fn qsv_multiple_profile_decode_workaround(
+    request: &PipelineRequest,
+    requested_acceleration: HardwareAccelerationKind,
+    source: &SourceVideoStream,
+) -> bool {
+    requested_acceleration == HardwareAccelerationKind::Qsv
+        && source.codec == SourceVideoCodec::H264
+        && source.has_multiple_profiles
+        && request
+            .state
+            .start_seconds
+            .is_none_or(|seconds| seconds <= 0)
 }
 
 fn add_video_decoder(
@@ -1126,16 +1607,20 @@ fn add_video_decoder(
         return;
     };
 
-    let decode_acceleration = if let Some(report) = &request.runtime_capabilities {
-        let capabilities = HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
-        if capabilities.can_decode(source) == FfmpegCapability::Hardware {
-            capabilities.acceleration()
-        } else {
+    let decode_acceleration =
+        if qsv_multiple_profile_decode_workaround(request, acceleration, source) {
             HardwareAccelerationKind::None
-        }
-    } else {
-        acceleration
-    };
+        } else if let Some(report) = &request.runtime_capabilities {
+            let capabilities =
+                HardwareCapabilitiesFactory::new(report).for_acceleration(acceleration);
+            if capabilities.can_decode(source) == FfmpegCapability::Hardware {
+                capabilities.acceleration()
+            } else {
+                HardwareAccelerationKind::None
+            }
+        } else {
+            acceleration
+        };
 
     if let Some(decoder) = select_video_decoder(decode_acceleration, source.codec) {
         let options = decoder.input_options();
@@ -1143,6 +1628,109 @@ fn add_video_decoder(
             steps.push(PipelineStep::global("video_decoder", options));
         }
     }
+}
+
+fn add_audio_decoder_input_options(request: &mut PipelineRequest) {
+    for input in request
+        .inputs
+        .iter_mut()
+        .filter(|input| input.kind == InputKind::Audio)
+    {
+        let Some(stream) = request.source_audio_streams.iter().find(|stream| {
+            input
+                .streams
+                .iter()
+                .any(|input_stream| input_stream.index == stream.index)
+        }) else {
+            continue;
+        };
+
+        if request
+            .state
+            .start_seconds
+            .is_some_and(|seconds| seconds > 0)
+            && stream.codec == SourceAudioCodec::Dts
+        {
+            input.input_options.extend([
+                "-c:a".to_owned(),
+                "dts".to_owned(),
+                "-core_only".to_owned(),
+                "true".to_owned(),
+            ]);
+            continue;
+        }
+
+        if stream.codec == SourceAudioCodec::Ac3
+            && stream.channels.is_some_and(|channels| channels >= 2)
+            && request.desired.audio_channels == Some(2)
+        {
+            input.input_options.extend([
+                "-c:a".to_owned(),
+                "ac3".to_owned(),
+                "-downmix".to_owned(),
+                "stereo".to_owned(),
+            ]);
+        }
+    }
+}
+
+fn add_realtime_input_options(request: &mut PipelineRequest) {
+    if request.desired.realtime_mode != RealtimeMode::On {
+        return;
+    }
+
+    let readrate = if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        "1.0"
+    } else {
+        "1.05"
+    };
+    let source_is_still_image = request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(|source| source.is_still_image);
+
+    for input in &mut request.inputs {
+        match input.kind {
+            InputKind::Video if !source_is_still_image => input.add_readrate(readrate),
+            InputKind::Audio => input.add_readrate(readrate),
+            _ => {}
+        }
+    }
+}
+
+fn add_cuda_software_fallback_upload(
+    request: &mut PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+) {
+    if acceleration != HardwareAccelerationKind::Nvenc
+        || request.desired.video_format == FFmpegProfileVideoFormat::Copy
+        || request.source_video_stream.is_none()
+        || nvidia_vulkan_hdr_tonemap(request)
+    {
+        return;
+    }
+
+    if let Some(input) = request
+        .inputs
+        .iter_mut()
+        .find(|input| input.kind == InputKind::Video)
+    {
+        input
+            .filter_steps
+            .push(cuda_software_fallback_upload_filter());
+    }
+}
+
+fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
+    request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(|source| source.color_params.is_hdr)
+        && request
+            .runtime_capabilities
+            .as_ref()
+            .is_some_and(|report| report.has_hwaccel("vulkan"))
+        && request.desired.vulkan_hdr_tonemap_mode == VulkanHdrTonemapMode::Auto
 }
 
 fn video_encoder(
@@ -1195,6 +1783,127 @@ fn pixel_format_output_option(pixel_format: PixelFormat) -> PipelineStep {
         "pixel_format",
         ["-pix_fmt".to_owned(), pixel_format.ffmpeg_name().to_owned()],
     )
+}
+
+fn crop_metadata_workaround_filter(
+    name: &'static str,
+    video_format: FFmpegProfileVideoFormat,
+    frame_size: FrameSize,
+) -> Option<PipelineStep> {
+    let (metadata_filter, crop_pixels) = match video_format {
+        FFmpegProfileVideoFormat::H264 => {
+            let crop_pixels = match frame_size.height {
+                1080 => 8,
+                720 => 16,
+                _ => return None,
+            };
+            ("h264_metadata", crop_pixels)
+        }
+        FFmpegProfileVideoFormat::Hevc => {
+            let crop_pixels = match frame_size.height {
+                1080 => 8,
+                _ => return None,
+            };
+            ("hevc_metadata", crop_pixels)
+        }
+        FFmpegProfileVideoFormat::Av1
+        | FFmpegProfileVideoFormat::Mpeg2Video
+        | FFmpegProfileVideoFormat::None
+        | FFmpegProfileVideoFormat::Copy => return None,
+    };
+
+    Some(PipelineStep::generic(
+        name,
+        [
+            "-bsf:v".to_owned(),
+            format!("{metadata_filter}=crop_bottom={crop_pixels}"),
+        ],
+    ))
+}
+
+fn nvidia_green_line_workaround_filter(frame_size: FrameSize) -> Option<PipelineStep> {
+    crop_metadata_workaround_filter(
+        "nvidia_green_line_workaround",
+        FFmpegProfileVideoFormat::H264,
+        frame_size,
+    )
+}
+
+fn amd_crop_metadata_workaround_filter(
+    video_format: FFmpegProfileVideoFormat,
+    frame_size: FrameSize,
+) -> Option<PipelineStep> {
+    if video_format != FFmpegProfileVideoFormat::Hevc {
+        return None;
+    }
+
+    crop_metadata_workaround_filter("amd_crop_metadata_workaround", video_format, frame_size)
+}
+
+fn nvidia_green_line_workaround_applies(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    has_watermark: bool,
+    has_subtitle_overlay: bool,
+    has_graphics: bool,
+) -> bool {
+    if acceleration != HardwareAccelerationKind::Nvenc
+        || request.desired.video_format != FFmpegProfileVideoFormat::H264
+        || !(has_watermark || has_subtitle_overlay || has_graphics)
+    {
+        return false;
+    }
+
+    let source_matches_scaled = request
+        .source_video_stream
+        .as_ref()
+        .and_then(|source| source.frame_size)
+        == Some(request.desired.scaled_size);
+    let subtitle_graphics_scaled = has_subtitle_overlay
+        && has_graphics
+        && request.desired.frame_size == request.desired.scaled_size;
+
+    source_matches_scaled || subtitle_graphics_scaled
+}
+
+fn scene_detect_threshold(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+) -> u32 {
+    if acceleration == HardwareAccelerationKind::VideoToolbox
+        || request.desired.video_format == FFmpegProfileVideoFormat::Mpeg2Video
+        || request
+            .source_video_stream
+            .as_ref()
+            .is_some_and(|source| source.codec == SourceVideoCodec::Mpeg2Video)
+    {
+        1_000_000_000
+    } else {
+        0
+    }
+}
+
+fn should_emit_pixel_format_output_option(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &FrameState,
+) -> bool {
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
+        return false;
+    }
+
+    if matches!(
+        acceleration,
+        HardwareAccelerationKind::Amf
+            | HardwareAccelerationKind::VideoToolbox
+            | HardwareAccelerationKind::V4l2m2m
+            | HardwareAccelerationKind::Rkmpp
+    ) {
+        return true;
+    }
+
+    request.source_video_stream.is_some()
+        && target_state.pixel_format != request.desired.pixel_format()
 }
 
 const fn software_video_encoder_name(format: FFmpegProfileVideoFormat) -> &'static str {
@@ -1251,6 +1960,7 @@ fn configure_hardware_acceleration(
     request: &mut PipelineRequest,
     steps: &mut Vec<PipelineStep>,
     acceleration: HardwareAccelerationKind,
+    decode_acceleration: HardwareAccelerationKind,
 ) -> FrameState {
     let mut state = FrameState::new(
         request
@@ -1268,29 +1978,46 @@ fn configure_hardware_acceleration(
         | HardwareAccelerationKind::Amf
         | HardwareAccelerationKind::V4l2m2m => {}
         HardwareAccelerationKind::Qsv => {
-            steps.push(PipelineStep::global("qsv_hwaccel", ["-hwaccel", "qsv"]));
-            steps.push(PipelineStep::global(
-                "qsv_hwaccel_output_format",
-                ["-hwaccel_output_format", "qsv"],
-            ));
-            steps.push(PipelineStep::global(
-                "qsv_hw_device",
-                ["-init_hw_device", "qsv=hw", "-filter_hw_device", "hw"],
-            ));
+            let decode_hardware = decode_acceleration == HardwareAccelerationKind::Qsv;
+            add_qsv_hardware_options(steps, &request.desired, decode_hardware);
 
-            state.frame_data_location = crate::FrameDataLocation::Hardware;
-            state.pixel_format = request.desired.pixel_format();
+            if decode_hardware {
+                state.frame_data_location = crate::FrameDataLocation::Hardware;
+                state.pixel_format = request.desired.pixel_format();
+            }
         }
         HardwareAccelerationKind::Nvenc => {
-            steps.push(PipelineStep::global(
-                "cuda_hw_device",
-                ["-init_hw_device", "cuda"],
-            ));
-            steps.push(PipelineStep::global("cuda_hwaccel", ["-hwaccel", "cuda"]));
-            steps.push(PipelineStep::global(
-                "cuda_hwaccel_output_format",
-                ["-hwaccel_output_format", "cuda"],
-            ));
+            if decode_acceleration != HardwareAccelerationKind::Nvenc {
+                return state;
+            }
+            if nvidia_vulkan_hdr_tonemap(request) {
+                steps.push(PipelineStep::global(
+                    "cuda_hw_device",
+                    ["-init_hw_device", "cuda=nv"],
+                ));
+                steps.push(PipelineStep::global(
+                    "vulkan_hw_device",
+                    ["-init_hw_device", "vulkan=vk@nv"],
+                ));
+                steps.push(PipelineStep::global(
+                    "vulkan_hwaccel",
+                    ["-hwaccel", "vulkan"],
+                ));
+                steps.push(PipelineStep::global(
+                    "vulkan_hwaccel_output_format",
+                    ["-hwaccel_output_format", "vulkan"],
+                ));
+            } else {
+                steps.push(PipelineStep::global(
+                    "cuda_hw_device",
+                    ["-init_hw_device", "cuda"],
+                ));
+                steps.push(PipelineStep::global("cuda_hwaccel", ["-hwaccel", "cuda"]));
+                steps.push(PipelineStep::global(
+                    "cuda_hwaccel_output_format",
+                    ["-hwaccel_output_format", "cuda"],
+                ));
+            }
             steps.push(no_autoscale());
 
             state.frame_data_location = crate::FrameDataLocation::Hardware;
@@ -1301,15 +2028,7 @@ fn configure_hardware_acceleration(
             };
         }
         HardwareAccelerationKind::Vaapi => {
-            steps.push(PipelineStep::global(
-                "vaapi_hw_device",
-                ["-init_hw_device", "vaapi"],
-            ));
-            steps.push(PipelineStep::global("vaapi_hwaccel", ["-hwaccel", "vaapi"]));
-            steps.push(PipelineStep::global(
-                "vaapi_hwaccel_output_format",
-                ["-hwaccel_output_format", "vaapi"],
-            ));
+            add_vaapi_hardware_options(steps, &request.desired);
             steps.push(no_autoscale());
 
             state.frame_data_location = crate::FrameDataLocation::Hardware;
@@ -1320,6 +2039,9 @@ fn configure_hardware_acceleration(
             };
         }
         HardwareAccelerationKind::VideoToolbox => {
+            if decode_acceleration != HardwareAccelerationKind::VideoToolbox {
+                return state;
+            }
             steps.push(PipelineStep::global(
                 "videotoolbox_hwaccel",
                 ["-hwaccel", "videotoolbox"],
@@ -1337,6 +2059,61 @@ fn configure_hardware_acceleration(
     }
 
     state
+}
+
+fn add_qsv_hardware_options(
+    steps: &mut Vec<PipelineStep>,
+    desired: &DesiredVideoState,
+    decode_hardware: bool,
+) {
+    steps.push(PipelineStep::env(
+        "cuda_visible_devices",
+        crate::EnvironmentVariable::new("CUDA_VISIBLE_DEVICES", "999"),
+    ));
+    if decode_hardware {
+        steps.push(PipelineStep::global("qsv_hwaccel", ["-hwaccel", "qsv"]));
+        steps.push(PipelineStep::global(
+            "qsv_hwaccel_output_format",
+            ["-hwaccel_output_format", "qsv"],
+        ));
+    }
+    if cfg!(target_os = "linux") {
+        if let Some(device) = desired.qsv_device.as_deref() {
+            steps.push(PipelineStep::global(
+                "qsv_device",
+                ["-qsv_device".to_owned(), device.to_owned()],
+            ));
+        }
+    }
+    steps.push(PipelineStep::global(
+        "qsv_hw_device",
+        ["-init_hw_device", "qsv=hw", "-filter_hw_device", "hw"],
+    ));
+}
+
+fn add_vaapi_hardware_options(steps: &mut Vec<PipelineStep>, desired: &DesiredVideoState) {
+    if let Some(device) = desired.vaapi_device.as_deref() {
+        steps.push(PipelineStep::global(
+            "vaapi_hw_device",
+            ["-vaapi_device".to_owned(), device.to_owned()],
+        ));
+    } else {
+        steps.push(PipelineStep::global(
+            "vaapi_hw_device",
+            ["-init_hw_device", "vaapi"],
+        ));
+    }
+    if let Some(driver) = desired.vaapi_driver.as_deref() {
+        steps.push(PipelineStep::env(
+            "libva_driver_name",
+            crate::EnvironmentVariable::new("LIBVA_DRIVER_NAME", driver),
+        ));
+    }
+    steps.push(PipelineStep::global("vaapi_hwaccel", ["-hwaccel", "vaapi"]));
+    steps.push(PipelineStep::global(
+        "vaapi_hwaccel_output_format",
+        ["-hwaccel_output_format", "vaapi"],
+    ));
 }
 
 fn video_scale_filter(
@@ -1371,27 +2148,36 @@ fn scale_qsv_filter(
     bit_depth: FFmpegProfileBitDepth,
 ) -> String {
     let format = hardware_surface_format(bit_depth);
-    if current.scaled_size == scaled_size {
-        return format!("vpp_qsv=format={format}");
+    let scale = if current.scaled_size == scaled_size {
+        format!("vpp_qsv=format={format}")
+    } else {
+        let format_segment = format!(":format={format}");
+        if current.is_anamorphic {
+            format!(
+                "vpp_qsv=w=iw*sar:h=ih{format_segment},setsar=1,vpp_qsv=w={}:h={}{format_segment},setsar=1",
+                padded_size.width, padded_size.height
+            )
+        } else {
+            let target = if current.cropped_size.is_some() {
+                padded_size
+            } else {
+                scaled_size
+            };
+            format!(
+                "vpp_qsv=w={}:h={}{format_segment},setsar=1",
+                target.width, target.height
+            )
+        }
+    };
+
+    if current.frame_data_location == crate::FrameDataLocation::Hardware {
+        return scale;
     }
 
-    let format_segment = format!(":format={format}");
-    if current.is_anamorphic {
-        format!(
-            "vpp_qsv=w=iw*sar:h=ih{format_segment},setsar=1,vpp_qsv=w={}:h={}{format_segment},setsar=1",
-            padded_size.width, padded_size.height
-        )
-    } else {
-        let target = if current.cropped_size.is_some() {
-            padded_size
-        } else {
-            scaled_size
-        };
-        format!(
-            "vpp_qsv=w={}:h={}{format_segment},setsar=1",
-            target.width, target.height
-        )
-    }
+    let initial_pixel_format = current.pixel_format.ffmpeg_name();
+    format!(
+        "format={initial_pixel_format},hwupload=extra_hw_frames={QSV_EXTRA_HARDWARE_FRAMES},{scale}"
+    )
 }
 
 fn scale_cuda_filter(
@@ -1518,6 +2304,7 @@ fn add_output_options(
     state: &FfmpegState,
     desired: &DesiredVideoState,
     acceleration: HardwareAccelerationKind,
+    nvidia_green_line_workaround: bool,
 ) {
     if desired.video_format != FFmpegProfileVideoFormat::Copy {
         if let Some(bitrate) = desired.video_bitrate {
@@ -1534,11 +2321,34 @@ fn add_output_options(
         }
     }
 
+    if nvidia_green_line_workaround {
+        if let Some(step) =
+            nvidia_green_line_workaround_filter(desired.cropped_size.unwrap_or(desired.frame_size))
+        {
+            steps.push(step);
+        }
+    }
+
+    if acceleration == HardwareAccelerationKind::Vaapi
+        && desired.vaapi_driver.as_deref() == Some("radeonsi")
+    {
+        if let Some(step) = amd_crop_metadata_workaround_filter(
+            desired.video_format,
+            desired.cropped_size.unwrap_or(desired.frame_size),
+        ) {
+            steps.push(step);
+        }
+    }
+
     if state.do_not_map_metadata {
         steps.push(PipelineStep::generic(
             "no_metadata",
             ["-map_metadata", "-1"],
         ));
+    }
+
+    if let Some(duration) = state.duration {
+        steps.push(time_limit(duration));
     }
 
     match state.output_format {

@@ -22,7 +22,8 @@ use ersatzrs_ffmpeg::{
 };
 
 use crate::playback::{
-    load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
+    enrich_source_video_stream_for_playback, load_channel_playback_profile,
+    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
     render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
     watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
@@ -121,6 +122,8 @@ impl HlsSessionWorker {
             };
 
             let source_stream = load_source_video_stream(&pool, active.media_version_id).await;
+            let source_audio_streams =
+                load_source_audio_streams(&pool, active.media_version_id).await;
             let playback_profile = match load_channel_playback_profile(&pool, self.channel_id).await
             {
                 Ok(Some(profile)) => profile,
@@ -142,6 +145,12 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
+            let source_stream = enrich_source_video_stream_for_playback(
+                source_stream,
+                playback_profile.profile.hardware_acceleration,
+                &active.media_path,
+            )
+            .await;
             let target_frame_rate = if playback_profile.profile.normalize_framerate {
                 match load_channel_target_frame_rate(&pool, self.channel_id).await {
                     Ok(frame_rate) => frame_rate,
@@ -286,10 +295,12 @@ impl HlsSessionWorker {
                 is_first,
                 false,
                 active.start_seconds,
+                None,
                 &playback_profile,
                 target_frame_rate,
                 self.runtime_capabilities.clone(),
                 source_stream,
+                source_audio_streams,
                 None,
                 subtitle_input,
                 watermark_inputs,
@@ -396,10 +407,12 @@ pub fn build_hls_command(
     is_first_transcode: bool,
     troubleshooting: bool,
     start_seconds: i64,
+    duration: Option<Duration>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
     selected_audio_stream_index: Option<usize>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
@@ -427,6 +440,7 @@ pub fn build_hls_command(
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
+    request = request.with_source_audio_streams(source_audio_streams);
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
@@ -440,6 +454,7 @@ pub fn build_hls_command(
     if start_seconds > 0 {
         request.state.start_seconds = Some(start_seconds);
     }
+    request.state.duration = duration;
     request.state.report_progress = false;
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
         if thread_count > 0 {
@@ -987,10 +1002,12 @@ mod tests {
             true,
             false,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             None,
             Vec::new(),
@@ -1008,10 +1025,12 @@ mod tests {
             true,
             true,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             Some(3),
             None,
             Vec::new(),
@@ -1019,7 +1038,42 @@ mod tests {
         );
         let arguments = command.arguments.join(" ");
 
-        assert!(arguments.contains("-map 0:3"), "{arguments}");
+        assert!(
+            arguments.contains("[0:3]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-map [a]"), "{arguments}");
+    }
+
+    #[test]
+    fn build_hls_command_seeking_dts_uses_core_only_decoder() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            true,
+            120,
+            None,
+            &playback_profile(),
+            None,
+            FfmpegCapabilityReport::default(),
+            None,
+            vec![
+                ersatzrs_ffmpeg::SourceAudioStream::new(ersatzrs_ffmpeg::SourceAudioCodec::Dts)
+                    .with_index(1),
+            ],
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(
+            arguments.contains("-ss 120 -c:a dts -core_only true -i /media/test.mkv"),
+            "{arguments}"
+        );
     }
 
     #[test]
@@ -1031,10 +1085,12 @@ mod tests {
             true,
             false,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             None,
             Vec::new(),
@@ -1055,10 +1111,12 @@ mod tests {
             true,
             false,
             900,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             None,
             Vec::new(),
@@ -1080,10 +1138,12 @@ mod tests {
             true,
             false,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             None,
             Vec::new(),
@@ -1225,10 +1285,12 @@ mod tests {
             true,
             false,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             Some(source_1080p()),
+            Vec::new(),
             None,
             None,
             Vec::new(),
@@ -1366,10 +1428,12 @@ mod tests {
             true,
             false,
             0,
+            None,
             &playback_profile(),
             None,
             FfmpegCapabilityReport::default(),
             Some(source_320p()),
+            Vec::new(),
             None,
             None,
             Vec::new(),

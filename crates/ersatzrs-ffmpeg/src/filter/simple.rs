@@ -199,10 +199,33 @@ pub fn subtitle_overlay_filter(output_pixel_format: PixelFormat) -> String {
 }
 
 #[must_use]
+pub fn subtitle_overlay_cuda_filter() -> String {
+    "overlay_cuda=x=(W-w)/2:y=(H-h)/2".to_owned()
+}
+
+#[must_use]
+pub fn subtitle_overlay_vaapi_filter() -> String {
+    "overlay_vaapi".to_owned()
+}
+
+#[must_use]
+pub fn vaapi_subtitle_pixel_format_filter() -> String {
+    "format=vaapi|yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8".to_owned()
+}
+
+#[must_use]
 pub fn scale_subtitle_image_filter(size: FrameSize) -> String {
     format!(
         "scale={}:{}:force_original_aspect_ratio=decrease,pad=w={}:h={}:x=-1:y=-1:color=black@0",
         size.width, size.height, size.width, size.height
+    )
+}
+
+#[must_use]
+pub fn subtitle_scale_npp_filter(size: FrameSize) -> String {
+    format!(
+        "scale_npp={}:{}:force_original_aspect_ratio=1",
+        size.width, size.height
     )
 }
 
@@ -300,13 +323,54 @@ pub fn watermark_overlay_filter(
     square_pixel_frame_size: FrameSize,
     output_pixel_format: PixelFormat,
 ) -> String {
+    let position = watermark_overlay_position(watermark, resolution, square_pixel_frame_size);
+    let mut filter = format!(
+        "overlay={position}:format={}",
+        output_pixel_format.overlay_format()
+    );
+    append_overlay_timing_options(&mut filter, watermark);
+    filter
+}
+
+#[must_use]
+pub fn watermark_overlay_cuda_filter(
+    watermark: &WatermarkOverlay,
+    resolution: FrameSize,
+    square_pixel_frame_size: FrameSize,
+) -> String {
+    let position = watermark_overlay_position(watermark, resolution, square_pixel_frame_size);
+    let mut filter = format!("overlay_cuda={position}");
+    append_overlay_timing_options(&mut filter, watermark);
+    filter
+}
+
+#[must_use]
+pub fn still_image_loop_filter() -> String {
+    "loop=-1:1".to_owned()
+}
+
+#[must_use]
+pub fn realtime_filter() -> String {
+    "realtime".to_owned()
+}
+
+#[must_use]
+pub fn graphics_overlay_vaapi_filter() -> String {
+    "overlay_vaapi".to_owned()
+}
+
+fn watermark_overlay_position(
+    watermark: &WatermarkOverlay,
+    resolution: FrameSize,
+    square_pixel_frame_size: FrameSize,
+) -> String {
     let (horizontal_margin, vertical_margin) = if watermark.place_within_source_content {
         source_content_margins(watermark, resolution, square_pixel_frame_size)
     } else {
         normal_margins(watermark, resolution)
     };
 
-    let position = match watermark.location {
+    match watermark.location {
         WatermarkLocation::BottomLeft => format!("x={horizontal_margin}:y=H-h-{vertical_margin}"),
         WatermarkLocation::TopLeft => format!("x={horizontal_margin}:y={vertical_margin}"),
         WatermarkLocation::TopRight => format!("x=W-w-{horizontal_margin}:y={vertical_margin}"),
@@ -318,12 +382,10 @@ pub fn watermark_overlay_filter(
         WatermarkLocation::BottomRight => {
             format!("x=W-w-{horizontal_margin}:y=H-h-{vertical_margin}")
         }
-    };
+    }
+}
 
-    let mut filter = format!(
-        "overlay={position}:format={}",
-        output_pixel_format.overlay_format()
-    );
+fn append_overlay_timing_options(filter: &mut String, watermark: &WatermarkOverlay) {
     if watermark.eof_action_pass {
         filter.push_str(":eof_action=pass");
     }
@@ -336,7 +398,6 @@ pub fn watermark_overlay_filter(
         filter.push_str(&escape_overlay_filter_value(enable));
         filter.push('\'');
     }
-    filter
 }
 
 #[must_use]
@@ -345,6 +406,11 @@ pub fn watermark_opacity_filter(opacity: u8) -> String {
     format!(
         "format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa={opacity:.2}"
     )
+}
+
+#[must_use]
+pub fn watermark_alpha_format_filter() -> String {
+    "format=yuva420p".to_owned()
 }
 
 #[must_use]

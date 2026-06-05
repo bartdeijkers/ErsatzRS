@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: "format!(\"env={:?}\\nargs={}\", command.environment, command.arguments.join(\" \"))"
+---
+env=[EnvironmentVariable { name: "CUDA_VISIBLE_DEVICES", value: "999" }]
+args=-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -init_hw_device qsv=hw -filter_hw_device hw -c:v h264 -i /media/movie.mkv -i /media/movie.mkv -filter_complex [0:0]format=yuv420p,hwupload=extra_hw_frames=64,vpp_qsv=format=nv12,hwdownload,format=nv12,setpts=PTS-STARTPTS,fps=30000/1001[v];[1:1]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags +cgop -bf 0 -sc_threshold 0 -codec:v h264_qsv -profile:v high -low_power 0 -look_ahead 0 -preset:v veryfast -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

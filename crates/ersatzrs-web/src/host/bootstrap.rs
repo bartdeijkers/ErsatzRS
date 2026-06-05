@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
-use ersatzrs_core::repositories::{ConfigRepository, RepositoryError};
+use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository, RepositoryError};
+use ersatzrs_domain::{HardwareAccelerationKind, VaapiDriver};
 use ersatzrs_infra::db::{DatabaseBackend, DbPool};
 use std::{
     fs::{File, OpenOptions},
@@ -41,7 +42,8 @@ pub async fn run() {
     );
 
     let (ffmpeg_path, ffprobe_path) = resolve_and_persist_ffmpeg_paths(&startup.pool).await;
-    let ffmpeg_runtime = check_startup_ffmpeg_runtime(&ffmpeg_path, &ffprobe_path).await;
+    let ffmpeg_runtime =
+        check_startup_ffmpeg_runtime(&startup.pool, &ffmpeg_path, &ffprobe_path).await;
     let (playout_build_tx, playout_build_rx) =
         tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
     // Single playout lock registry shared with the scheduler: the web host
@@ -334,10 +336,11 @@ async fn resolve_and_persist_tool<R: ConfigRepository>(
 }
 
 async fn check_startup_ffmpeg_runtime(
+    pool: &DbPool,
     ffmpeg_path: &str,
     ffprobe_path: &str,
 ) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
-    let config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(ffmpeg_path, ffprobe_path);
+    let config = ffmpeg_runtime_config_with_profile_probes(pool, ffmpeg_path, ffprobe_path).await;
     match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await {
         Ok(report) => {
             tracing::info!(
@@ -356,6 +359,66 @@ async fn check_startup_ffmpeg_runtime(
             tracing::error!(error = %error, "FFmpeg runtime check failed");
             std::process::exit(1);
         }
+    }
+}
+
+pub(crate) async fn ffmpeg_runtime_config_with_profile_probes(
+    pool: &DbPool,
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
+) -> ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig {
+    let mut config =
+        ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(ffmpeg_path, ffprobe_path);
+    let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    match repositories.ffmpeg_profile.list().await {
+        Ok(profiles) => {
+            let devices = profiles
+                .into_iter()
+                .filter(|profile| {
+                    matches!(
+                        profile.hardware_acceleration,
+                        HardwareAccelerationKind::Vaapi | HardwareAccelerationKind::Qsv
+                    )
+                })
+                .filter_map(|profile| {
+                    let display = non_empty_profile_value(profile.vaapi_display);
+                    let device = non_empty_profile_value(profile.vaapi_device);
+                    let driver = vaapi_driver_name(profile.vaapi_driver).map(str::to_owned);
+                    (display.is_some() || device.is_some() || driver.is_some()).then(|| {
+                        ersatzrs_ffmpeg::FfmpegHardwareProbeDevice::new(display, device, driver)
+                    })
+                })
+                .fold(Vec::new(), |mut devices, device| {
+                    if !devices.contains(&device) {
+                        devices.push(device);
+                    }
+                    devices
+                });
+            config = config.with_hardware_probe_devices(devices);
+        }
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "failed to load FFmpeg profiles for hardware capability probes"
+            );
+        }
+    }
+    config
+}
+
+fn non_empty_profile_value(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+const fn vaapi_driver_name(driver: VaapiDriver) -> Option<&'static str> {
+    match driver {
+        VaapiDriver::Auto => None,
+        VaapiDriver::IHD => Some("iHD"),
+        VaapiDriver::I965 => Some("i965"),
+        VaapiDriver::RadeonSI => Some("radeonsi"),
+        VaapiDriver::Nouveau => Some("nouveau"),
     }
 }
 

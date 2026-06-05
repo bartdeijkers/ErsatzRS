@@ -14,7 +14,8 @@ use ersatzrs_infra::{
     },
     hls_worker::build_hls_command,
     playback::{
-        load_channel_target_frame_rate, load_playback_profile, load_source_video_stream,
+        enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
+        load_playback_profile, load_source_audio_streams, load_source_video_stream,
         load_subtitles_for_media_item, render_playback_graphics_overlays,
         resolve_playback_graphics_by_ids, resolve_playback_watermarks_by_ids,
         select_custom_playback_streams, select_playback_graphics, select_playback_subtitle,
@@ -140,6 +141,13 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     let media_path = apply_unix_path_replacements(&path_replacements, &media.path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
     let source_stream = load_source_video_stream(&state.pool, media.media_version_id).await;
+    let source_audio_streams = load_source_audio_streams(&state.pool, media.media_version_id).await;
+    let source_stream = enrich_source_video_stream_for_playback(
+        source_stream,
+        playback_profile.profile.hardware_acceleration,
+        &media_path,
+    )
+    .await;
     let seek_seconds = preview_seek_seconds(query.seek_seconds, media.duration_seconds);
     let program_duration = Duration::from_secs_f64(preview_duration_seconds(
         media.duration_seconds,
@@ -175,24 +183,23 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let command = limit_preview_command_duration(
-        build_hls_command(
-            &media_path,
-            &working_dir,
-            output_format,
-            true,
-            true,
-            seek_seconds,
-            &playback_profile,
-            None,
-            runtime_capabilities,
-            source_stream,
-            selected_audio_stream_index,
-            subtitle_input,
-            watermark_inputs,
-            graphics_overlays,
-        ),
-        program_duration,
+    let command = build_hls_command(
+        &media_path,
+        &working_dir,
+        output_format,
+        true,
+        true,
+        seek_seconds,
+        Some(program_duration),
+        &playback_profile,
+        None,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        selected_audio_stream_index,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -240,6 +247,14 @@ async fn start_channel_playback_preview(
     let media_path = apply_unix_path_replacements(&path_replacements, &active.media_path);
     let output_format = preview_output_format(query.streaming_mode.as_deref());
     let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let source_audio_streams =
+        load_source_audio_streams(&state.pool, active.media_version_id).await;
+    let source_stream = enrich_source_video_stream_for_playback(
+        source_stream,
+        playback_profile.profile.hardware_acceleration,
+        &media_path,
+    )
+    .await;
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         load_channel_target_frame_rate(&state.pool, channel.id)
             .await
@@ -366,24 +381,23 @@ async fn start_channel_playback_preview(
     })
     .await;
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
-    let command = limit_preview_command_duration(
-        build_hls_command(
-            &media_path,
-            &working_dir,
-            output_format,
-            true,
-            true,
-            start_seconds,
-            &playback_profile,
-            target_frame_rate,
-            runtime_capabilities,
-            source_stream,
-            selected_audio_stream_index,
-            subtitle_input,
-            watermark_inputs,
-            graphics_overlays,
-        ),
-        program_duration,
+    let command = build_hls_command(
+        &media_path,
+        &working_dir,
+        output_format,
+        true,
+        true,
+        start_seconds,
+        Some(program_duration),
+        &playback_profile,
+        target_frame_rate,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        selected_audio_stream_index,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -664,7 +678,7 @@ async fn write_capability_file(
     name: &str,
     report: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> ApiResult<()> {
-    let text = format!(
+    let mut text = format!(
         "hwaccels:\n{}\n\nencoders:\n{}\n\ndecoders:\n{}\n\nfilters:\n{}\n",
         report
             .hwaccels
@@ -691,8 +705,56 @@ async fn write_capability_file(
             .collect::<Vec<_>>()
             .join("\n"),
     );
+    if let Some(output) = report
+        .nvidia_gpu_list
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        text.push_str("\n\nnvidia_gpu_list:\n");
+        text.push_str(output);
+        text.push('\n');
+    }
+    if !report.nvidia_encoders.is_empty() {
+        text.push_str("\n\nnvidia_encoder_details:\n");
+        for encoder in &report.nvidia_encoders {
+            text.push_str("  ");
+            text.push_str(&encoder.encoder);
+            text.push('\n');
+            append_probe_set(&mut text, "pixel_formats", &encoder.pixel_formats);
+            append_probe_set(&mut text, "profiles", &encoder.profiles);
+        }
+    }
+    if !report.nvidia_decoders.is_empty() {
+        text.push_str("\n\nnvidia_decoder_details:\n");
+        for decoder in &report.nvidia_decoders {
+            text.push_str("  ");
+            text.push_str(&decoder.codec);
+            text.push(' ');
+            text.push_str(&decoder.bit_depth.to_string());
+            text.push_str("-bit\n");
+        }
+    }
+    if !report.videotoolbox_decoders.is_empty() || !report.videotoolbox_encoders.is_empty() {
+        text.push_str("\n\nvideotoolbox_framework:\n");
+        append_probe_set(&mut text, "decoders", &report.videotoolbox_decoders);
+        append_probe_set(&mut text, "encoders", &report.videotoolbox_encoders);
+    }
     tokio::fs::write(working_dir.join(name), text).await?;
     Ok(())
+}
+
+fn append_probe_set(text: &mut String, heading: &str, values: &std::collections::BTreeSet<String>) {
+    text.push_str(heading);
+    text.push_str(":\n");
+    if values.is_empty() {
+        text.push_str("  none\n");
+    } else {
+        for value in values {
+            text.push_str("  ");
+            text.push_str(value);
+            text.push('\n');
+        }
+    }
 }
 
 fn preview_output_format(streaming_mode: Option<&str>) -> OutputFormat {
@@ -735,30 +797,6 @@ fn apply_unix_path_replacements(replacements: &[PathReplacement], path: &str) ->
         path.to_owned()
     } else {
         replace_path(replacements, path, PathPlatform::Unix)
-    }
-}
-
-fn limit_preview_command_duration(
-    mut command: FfmpegCommand,
-    program_duration: Duration,
-) -> FfmpegCommand {
-    let output_index = command.arguments.len().saturating_sub(1);
-    command
-        .arguments
-        .insert(output_index, format_preview_duration(program_duration));
-    command.arguments.insert(output_index, "-t".to_owned());
-    command
-}
-
-fn format_preview_duration(duration: Duration) -> String {
-    let seconds = duration.as_secs_f64();
-    if seconds.fract().abs() < f64::EPSILON {
-        duration.as_secs().to_string()
-    } else {
-        format!("{seconds:.3}")
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_owned()
     }
 }
 
@@ -1576,6 +1614,7 @@ fn write_u32(out: &mut Vec<u8>, value: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_ffmpeg::format_time_limit;
 
     #[test]
     fn archive_member_filter_matches_ersatztv() {
@@ -1626,34 +1665,10 @@ mod tests {
     }
 
     #[test]
-    fn preview_duration_limit_is_inserted_before_hls_output() {
-        let command = FfmpegCommand {
-            executable: "ffmpeg".to_owned(),
-            environment: Vec::new(),
-            arguments: vec![
-                "-nostdin".to_owned(),
-                "-i".to_owned(),
-                "/media/test.mkv".to_owned(),
-                "-f".to_owned(),
-                "hls".to_owned(),
-                "live.m3u8".to_owned(),
-            ],
-        };
-
-        let limited = limit_preview_command_duration(command, Duration::from_millis(12_500));
-
+    fn preview_duration_limit_uses_ersatztv_time_limit_format() {
         assert_eq!(
-            limited.arguments,
-            [
-                "-nostdin",
-                "-i",
-                "/media/test.mkv",
-                "-f",
-                "hls",
-                "-t",
-                "12.5",
-                "live.m3u8",
-            ]
+            format_time_limit(Duration::from_millis(12_500)),
+            "00:00:12.5000000"
         );
     }
 

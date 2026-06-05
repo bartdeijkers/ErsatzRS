@@ -190,6 +190,7 @@ pub async fn load_troubleshooting_report_with_state(
         .collect();
 
     let runtime = state.ffmpeg_runtime.read().await.clone();
+    let video_toolbox_probe_output = video_toolbox_probe_output(&runtime.capabilities);
     let info = GeneralTroubleshootingInfo {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         environment: troubleshooting_environment(),
@@ -203,42 +204,46 @@ pub async fn load_troubleshooting_report_with_state(
 
     Ok(TroubleshootingReport {
         general_json: serde_json::to_string_pretty(&info)?,
-        nvidia_capabilities: hardware_report(
-            "NVIDIA",
-            &runtime.capabilities.hwaccels,
-            &["cuda", "cuvid"],
-            &runtime.capabilities.encoders,
-            &["h264_nvenc", "hevc_nvenc", "av1_nvenc"],
-            &runtime.capabilities.decoders,
-            &["h264_cuvid", "hevc_cuvid", "mpeg2_cuvid", "mpeg4_cuvid"],
-        ),
-        qsv_capabilities: hardware_report(
-            "QSV",
-            &runtime.capabilities.hwaccels,
-            &["qsv"],
-            &runtime.capabilities.encoders,
-            &["h264_qsv", "hevc_qsv", "mpeg2_qsv", "av1_qsv"],
-            &runtime.capabilities.decoders,
-            &["h264_qsv", "hevc_qsv", "mpeg2_qsv", "av1_qsv"],
-        ),
-        vaapi_capabilities: hardware_report(
-            "VAAPI",
-            &runtime.capabilities.hwaccels,
-            &["vaapi"],
-            &runtime.capabilities.encoders,
-            &["h264_vaapi", "hevc_vaapi", "mpeg2_vaapi", "av1_vaapi"],
-            &runtime.capabilities.decoders,
-            &[],
-        ),
-        video_toolbox_capabilities: hardware_report(
-            "VideoToolbox",
-            &runtime.capabilities.hwaccels,
-            &["videotoolbox"],
-            &runtime.capabilities.encoders,
-            &["h264_videotoolbox", "hevc_videotoolbox"],
-            &runtime.capabilities.decoders,
-            &["h264_videotoolbox", "hevc_videotoolbox"],
-        ),
+        nvidia_capabilities: hardware_report(HardwareReportSpec {
+            title: "NVIDIA",
+            hwaccels: &runtime.capabilities.hwaccels,
+            expected_hwaccels: &["cuda", "cuvid"],
+            encoders: &runtime.capabilities.encoders,
+            expected_encoders: &["h264_nvenc", "hevc_nvenc", "av1_nvenc"],
+            decoders: &runtime.capabilities.decoders,
+            expected_decoders: &["h264_cuvid", "hevc_cuvid", "mpeg2_cuvid", "mpeg4_cuvid"],
+            raw_probe_output: runtime.capabilities.nvidia_gpu_list.as_deref(),
+        }),
+        qsv_capabilities: hardware_report(HardwareReportSpec {
+            title: "QSV",
+            hwaccels: &runtime.capabilities.hwaccels,
+            expected_hwaccels: &["qsv"],
+            encoders: &runtime.capabilities.encoders,
+            expected_encoders: &["h264_qsv", "hevc_qsv", "mpeg2_qsv", "av1_qsv"],
+            decoders: &runtime.capabilities.decoders,
+            expected_decoders: &["h264_qsv", "hevc_qsv", "mpeg2_qsv", "av1_qsv"],
+            raw_probe_output: None,
+        }),
+        vaapi_capabilities: hardware_report(HardwareReportSpec {
+            title: "VAAPI",
+            hwaccels: &runtime.capabilities.hwaccels,
+            expected_hwaccels: &["vaapi"],
+            encoders: &runtime.capabilities.encoders,
+            expected_encoders: &["h264_vaapi", "hevc_vaapi", "mpeg2_vaapi", "av1_vaapi"],
+            decoders: &runtime.capabilities.decoders,
+            expected_decoders: &[],
+            raw_probe_output: None,
+        }),
+        video_toolbox_capabilities: hardware_report(HardwareReportSpec {
+            title: "VideoToolbox",
+            hwaccels: &runtime.capabilities.hwaccels,
+            expected_hwaccels: &["videotoolbox"],
+            encoders: &runtime.capabilities.encoders,
+            expected_encoders: &["h264_videotoolbox", "hevc_videotoolbox"],
+            decoders: &runtime.capabilities.decoders,
+            expected_decoders: &["h264_videotoolbox", "hevc_videotoolbox"],
+            raw_probe_output: video_toolbox_probe_output.as_deref(),
+        }),
         show_nvidia_qsv: !cfg!(target_os = "macos"),
         show_vaapi: cfg!(target_os = "linux"),
         show_video_toolbox: cfg!(target_os = "macos"),
@@ -565,26 +570,81 @@ fn cpu_summary() -> Vec<CpuSummary> {
 }
 
 #[cfg(feature = "ssr")]
-fn hardware_report(
-    title: &str,
-    hwaccels: &std::collections::BTreeSet<String>,
-    expected_hwaccels: &[&str],
-    encoders: &std::collections::BTreeSet<String>,
-    expected_encoders: &[&str],
-    decoders: &std::collections::BTreeSet<String>,
-    expected_decoders: &[&str],
-) -> String {
-    let mut lines = vec![format!("{title} FFmpeg capability report")];
+#[derive(Clone, Copy)]
+struct HardwareReportSpec<'a> {
+    title: &'a str,
+    hwaccels: &'a std::collections::BTreeSet<String>,
+    expected_hwaccels: &'a [&'a str],
+    encoders: &'a std::collections::BTreeSet<String>,
+    expected_encoders: &'a [&'a str],
+    decoders: &'a std::collections::BTreeSet<String>,
+    expected_decoders: &'a [&'a str],
+    raw_probe_output: Option<&'a str>,
+}
+
+#[cfg(feature = "ssr")]
+fn hardware_report(spec: HardwareReportSpec<'_>) -> String {
+    let mut lines = vec![format!("{} FFmpeg capability report", spec.title)];
     lines.push(String::new());
     append_capability_section(
         &mut lines,
         "Hardware accelerators",
-        hwaccels,
-        expected_hwaccels,
+        spec.hwaccels,
+        spec.expected_hwaccels,
     );
-    append_capability_section(&mut lines, "Encoders", encoders, expected_encoders);
-    append_capability_section(&mut lines, "Decoders", decoders, expected_decoders);
+    append_capability_section(
+        &mut lines,
+        "Encoders",
+        spec.encoders,
+        spec.expected_encoders,
+    );
+    append_capability_section(
+        &mut lines,
+        "Decoders",
+        spec.decoders,
+        spec.expected_decoders,
+    );
+    if let Some(output) = spec
+        .raw_probe_output
+        .filter(|value| !value.trim().is_empty())
+    {
+        lines.push("Device probe:".to_owned());
+        let summary = ersatzrs_ffmpeg::nvidia_gpu_list_summary(output);
+        if summary.is_empty() {
+            lines.extend(output.lines().map(|line| format!("  {line}")));
+        } else {
+            lines.extend(summary.into_iter().map(|line| format!("  {line}")));
+        }
+        lines.push(String::new());
+    }
     lines.join("\n")
+}
+
+#[cfg(feature = "ssr")]
+fn video_toolbox_probe_output(
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> Option<String> {
+    if capabilities.videotoolbox_decoders.is_empty()
+        && capabilities.videotoolbox_encoders.is_empty()
+    {
+        return None;
+    }
+
+    let mut lines = Vec::new();
+    lines.push("framework decoders:".to_owned());
+    append_probe_values(&mut lines, &capabilities.videotoolbox_decoders);
+    lines.push("framework encoders:".to_owned());
+    append_probe_values(&mut lines, &capabilities.videotoolbox_encoders);
+    Some(lines.join("\n"))
+}
+
+#[cfg(feature = "ssr")]
+fn append_probe_values(lines: &mut Vec<String>, values: &std::collections::BTreeSet<String>) {
+    if values.is_empty() {
+        lines.push("  none".to_owned());
+    } else {
+        lines.extend(values.iter().map(|value| format!("  {value}")));
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -1286,20 +1346,43 @@ mod tests {
         let encoders = std::collections::BTreeSet::from(["h264_qsv".to_owned()]);
         let decoders = std::collections::BTreeSet::new();
 
-        let report = hardware_report(
-            "QSV",
-            &hwaccels,
-            &["qsv"],
-            &encoders,
-            &["h264_qsv", "hevc_qsv"],
-            &decoders,
-            &["h264_qsv"],
-        );
+        let report = hardware_report(HardwareReportSpec {
+            title: "QSV",
+            hwaccels: &hwaccels,
+            expected_hwaccels: &["qsv"],
+            encoders: &encoders,
+            expected_encoders: &["h264_qsv", "hevc_qsv"],
+            decoders: &decoders,
+            expected_decoders: &["h264_qsv"],
+            raw_probe_output: None,
+        });
 
         assert!(report.contains("qsv: available"));
         assert!(report.contains("h264_qsv: available"));
         assert!(report.contains("hevc_qsv: missing"));
         assert!(report.contains("h264_qsv: missing"));
+    }
+
+    #[test]
+    fn hardware_report_includes_nvidia_device_probe_summary() {
+        let hwaccels = std::collections::BTreeSet::from(["cuda".to_owned()]);
+        let encoders = std::collections::BTreeSet::from(["h264_nvenc".to_owned()]);
+        let decoders = std::collections::BTreeSet::new();
+
+        let report = hardware_report(HardwareReportSpec {
+            title: "NVIDIA",
+            hwaccels: &hwaccels,
+            expected_hwaccels: &["cuda"],
+            encoders: &encoders,
+            expected_encoders: &["h264_nvenc"],
+            decoders: &decoders,
+            expected_decoders: &[],
+            raw_probe_output: Some("GPU #0: NVIDIA GeForce RTX 4070\nunrelated line"),
+        });
+
+        assert!(report.contains("Device probe:"));
+        assert!(report.contains("GPU #0: NVIDIA GeForce RTX 4070"));
+        assert!(!report.contains("unrelated line"));
     }
 
     #[test]

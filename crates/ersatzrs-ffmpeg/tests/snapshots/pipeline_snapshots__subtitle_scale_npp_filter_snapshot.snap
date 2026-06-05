@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: "subtitle_scale_npp_filter(FrameSize::new(1920, 1080))"
+---
+scale_npp=1920:1080:force_original_aspect_ratio=1

@@ -22,3 +22,13 @@ pub fn normalize_loudness_filter(
         }
     }
 }
+
+#[must_use]
+pub fn audio_resample_filter() -> String {
+    "aresample=async=1".to_owned()
+}
+
+#[must_use]
+pub fn audio_pad_filter() -> String {
+    "apad".to_owned()
+}

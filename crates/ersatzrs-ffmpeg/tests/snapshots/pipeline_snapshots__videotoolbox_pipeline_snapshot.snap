@@ -2,4 +2,4 @@
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel videotoolbox -i /media/movie.mkv -map 0:0 -map 0:1 -movflags +faststart -flags +cgop -bf 0 -codec:v h264_videotoolbox -profile:v high -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel videotoolbox -i /media/movie.mkv -filter_complex [0:1]aresample=async=1,apad[a] -map 0:0 -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags +cgop -bf 0 -sc_threshold 1000000000 -codec:v h264_videotoolbox -profile:v high -pix_fmt yuv420p -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

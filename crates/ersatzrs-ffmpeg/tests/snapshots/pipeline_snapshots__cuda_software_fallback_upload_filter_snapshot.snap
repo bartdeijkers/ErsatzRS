@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: cuda_software_fallback_upload_filter()
+---
+hwupload

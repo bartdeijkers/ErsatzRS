@@ -1,7 +1,9 @@
 //! Shared helpers for building `FFmpeg` playback pipelines from persisted media
 //! metadata, used by both the MPEG-TS and HLS transcode paths.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
 
 use crate::condition::{evaluate as evaluate_condition, ConditionContext};
@@ -11,14 +13,14 @@ use ersatzrs_core::repositories::{GraphicsRepository as _, RepositoryError, Resu
 use ersatzrs_domain::{
     Channel, ChannelSubtitleMode, ChannelWatermark, ChannelWatermarkImageSource,
     ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, GraphicsElement,
-    GraphicsElementConfig, MotionEndBehavior, Resolution, StreamingMode, VideoScanKind,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    GraphicsElementConfig, HardwareAccelerationKind, MotionEndBehavior, Resolution, StreamingMode,
+    VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
-    ffprobe_path, FrameRate, FrameSize, GraphicsPipelineOverlay, GraphicsRenderContext,
-    GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat, SourceColorParams,
-    SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
-    WatermarkOverlay,
+    ffmpeg_path, ffprobe_path, FrameRate, FrameSize, GraphicsPipelineOverlay,
+    GraphicsRenderContext, GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat,
+    SourceAudioCodec, SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream,
+    SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
 };
 use sqlx::Row;
 
@@ -36,6 +38,8 @@ use crate::repositories::common::{
     decode_optional_string_column, decode_string_column,
 };
 use serde::Deserialize;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 
 const IMAGE_SUBTITLE_CODECS: &[&str] = &[
     "hdmv_pgs_subtitle",
@@ -154,7 +158,8 @@ pub async fn load_source_video_stream(
                   mv."Height" AS "Height",
                   mv."RFrameRate" AS "RFrameRate",
                   mv."SampleAspectRatio" AS "SampleAspectRatio",
-                  mv."DisplayAspectRatio" AS "DisplayAspectRatio"
+                  mv."DisplayAspectRatio" AS "DisplayAspectRatio",
+                  mv."ImageId" IS NOT NULL AS "IsStillImage"
            FROM "MediaVersion" mv
            JOIN "MediaStream" ms
                ON ms."MediaVersionId" = mv."Id" AND ms."MediaStreamKind" = 1
@@ -191,6 +196,10 @@ pub async fn load_source_video_stream(
     stream.frame_rate = frame_rate.as_deref().and_then(parse_frame_rate);
     stream.sample_aspect_ratio = row.try_get("SampleAspectRatio").ok().flatten();
     stream.display_aspect_ratio = row.try_get("DisplayAspectRatio").ok().flatten();
+    stream.is_still_image = row
+        .try_get::<i64, _>("IsStillImage")
+        .ok()
+        .is_some_and(|value| value != 0);
     stream.color_params = derive_color_params(
         pixel_format.as_deref(),
         color_transfer.as_deref(),
@@ -199,6 +208,183 @@ pub async fn load_source_video_stream(
     );
 
     Some(stream)
+}
+
+pub async fn load_source_audio_streams(
+    pool: &DbPool,
+    media_version_id: i64,
+) -> Vec<SourceAudioStream> {
+    let rows = sqlx::query(
+        r#"SELECT "Index", "Codec", "Channels"
+           FROM "MediaStream"
+           WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 2
+           ORDER BY "Index", "Id""#,
+    )
+    .bind(media_version_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    rows.into_iter()
+        .filter_map(|row| {
+            let index = row.try_get::<i64, _>("Index").ok()?;
+            let index = usize::try_from(index).ok()?;
+            let codec: Option<String> = row.try_get("Codec").ok().flatten();
+            let channels: Option<i32> = row.try_get("Channels").ok().flatten();
+
+            let mut stream = SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name(
+                codec.as_deref().unwrap_or_default(),
+            ))
+            .with_index(index);
+            stream.channels = channels.and_then(|channels| u32::try_from(channels).ok());
+            Some(stream)
+        })
+        .collect()
+}
+
+/// Populate runtime-only playback flags that ErsatzTV probes immediately before
+/// command generation instead of storing in the media schema.
+pub async fn enrich_source_video_stream_for_playback(
+    source_stream: Option<SourceVideoStream>,
+    acceleration: HardwareAccelerationKind,
+    media_path: &str,
+) -> Option<SourceVideoStream> {
+    let mut stream = source_stream?;
+
+    if should_probe_h264_profile_count(&stream, acceleration) {
+        match trace_headers_profile_count(&ffmpeg_path(), media_path).await {
+            Ok(count) => {
+                stream.has_multiple_profiles = count > 1;
+            }
+            Err(error) => {
+                tracing::info!(
+                    %error,
+                    media_path,
+                    "failed to probe H.264 profile count for QSV decode workaround"
+                );
+            }
+        }
+    }
+
+    Some(stream)
+}
+
+fn should_probe_h264_profile_count(
+    stream: &SourceVideoStream,
+    acceleration: HardwareAccelerationKind,
+) -> bool {
+    acceleration == HardwareAccelerationKind::Qsv
+        && stream.codec == SourceVideoCodec::H264
+        && !stream.has_multiple_profiles
+}
+
+#[derive(Debug, thiserror::Error)]
+enum ProfileCountProbeError {
+    #[error("failed to spawn ffmpeg profile-count probe for {path}: {source}")]
+    Spawn {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("ffmpeg profile-count probe for {path} exited with status {status}")]
+    Process {
+        path: String,
+        status: std::process::ExitStatus,
+    },
+}
+
+fn trace_headers_profile_count_args(path: &str) -> Vec<String> {
+    [
+        "-hide_banner",
+        "-t",
+        "30",
+        "-i",
+        path,
+        "-c",
+        "copy",
+        "-bsf:v",
+        "trace_headers",
+        "-f",
+        "null",
+        "-",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+async fn trace_headers_profile_count(
+    ffmpeg_path: &str,
+    media_path: &str,
+) -> std::result::Result<usize, ProfileCountProbeError> {
+    let mut child = Command::new(ffmpeg_path)
+        .args(trace_headers_profile_count_args(media_path))
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|source| ProfileCountProbeError::Spawn {
+            path: media_path.to_owned(),
+            source,
+        })?;
+
+    let Some(stderr) = child.stderr.take() else {
+        let status = child
+            .wait()
+            .await
+            .map_err(|source| ProfileCountProbeError::Spawn {
+                path: media_path.to_owned(),
+                source,
+            })?;
+        return if status.success() {
+            Ok(0)
+        } else {
+            Err(ProfileCountProbeError::Process {
+                path: media_path.to_owned(),
+                status,
+            })
+        };
+    };
+
+    let mut profiles = HashSet::new();
+    let mut lines = BufReader::new(stderr).lines();
+    while let Some(line) =
+        lines
+            .next_line()
+            .await
+            .map_err(|source| ProfileCountProbeError::Spawn {
+                path: media_path.to_owned(),
+                source,
+            })?
+    {
+        collect_trace_headers_profile_idc(&line, &mut profiles);
+        if profiles.len() > 1 {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Ok(profiles.len());
+        }
+    }
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|source| ProfileCountProbeError::Spawn {
+            path: media_path.to_owned(),
+            source,
+        })?;
+    if status.success() {
+        Ok(profiles.len())
+    } else {
+        Err(ProfileCountProbeError::Process {
+            path: media_path.to_owned(),
+            status,
+        })
+    }
+}
+
+fn collect_trace_headers_profile_idc(line: &str, profiles: &mut HashSet<String>) {
+    if let Some(idx) = line.find("profile_idc") {
+        profiles.insert(line[idx..].to_owned());
+    }
 }
 
 /// Load the persisted `FFmpeg` profile and resolution assigned to a channel.
@@ -1948,6 +2134,66 @@ fn derive_color_params(
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn qsv_h264_profile_count_probe_uses_ersatztv_trace_headers_args() {
+        assert_eq!(
+            trace_headers_profile_count_args("/media/movie.mkv"),
+            vec![
+                "-hide_banner",
+                "-t",
+                "30",
+                "-i",
+                "/media/movie.mkv",
+                "-c",
+                "copy",
+                "-bsf:v",
+                "trace_headers",
+                "-f",
+                "null",
+                "-",
+            ]
+        );
+    }
+
+    #[test]
+    fn qsv_h264_profile_count_probe_counts_distinct_profile_idc_lines() {
+        let mut profiles = HashSet::new();
+
+        collect_trace_headers_profile_idc(
+            "[trace_headers @ 0x1] 42          profile_idc 00111100 = 60",
+            &mut profiles,
+        );
+        collect_trace_headers_profile_idc(
+            "[trace_headers @ 0x1] 42          profile_idc 00111100 = 60",
+            &mut profiles,
+        );
+        collect_trace_headers_profile_idc(
+            "[trace_headers @ 0x1] 42          profile_idc 01100100 = 100",
+            &mut profiles,
+        );
+
+        assert_eq!(profiles.len(), 2);
+    }
+
+    #[test]
+    fn qsv_h264_profile_count_probe_is_limited_to_qsv_h264() {
+        let h264 = SourceVideoStream::new(SourceVideoCodec::H264);
+        let hevc = SourceVideoStream::new(SourceVideoCodec::Hevc);
+
+        assert!(should_probe_h264_profile_count(
+            &h264,
+            HardwareAccelerationKind::Qsv
+        ));
+        assert!(!should_probe_h264_profile_count(
+            &h264,
+            HardwareAccelerationKind::Nvenc
+        ));
+        assert!(!should_probe_h264_profile_count(
+            &hevc,
+            HardwareAccelerationKind::Qsv
+        ));
+    }
 
     #[test]
     fn custom_stream_selector_prioritizes_audio_language_and_conditions() {

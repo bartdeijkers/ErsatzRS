@@ -2,7 +2,7 @@ use ersatzrs_domain::{FFmpegProfileBitDepth, FFmpegProfileVideoFormat, HardwareA
 
 use crate::{
     DesiredVideoState, FfmpegCapabilityReport, FfmpegKnownDecoder, PixelFormat, SourceVideoCodec,
-    SourceVideoStream,
+    SourceVideoStream, VaapiProfileEntrypoint,
 };
 
 /// Whether an encode/decode decision should use hardware or software.
@@ -76,7 +76,7 @@ impl<'a> HardwareCapabilitiesFactory<'a> {
             HardwareAccelerationKind::VideoToolbox => Box::new(ReportHardwareCapabilities::new(
                 acceleration,
                 self.report,
-                HardwareRules::Default,
+                HardwareRules::VideoToolbox,
             )),
             HardwareAccelerationKind::Amf => Box::new(ReportHardwareCapabilities::new(
                 acceleration,
@@ -132,9 +132,9 @@ impl HardwareCapabilities for NoHardwareCapabilities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HardwareRules {
-    Default,
     Qsv,
     Nvidia,
+    VideoToolbox,
     Vaapi,
     Amf,
     V4l2m2m,
@@ -168,9 +168,10 @@ impl HardwareCapabilities for ReportHardwareCapabilities<'_> {
 
     fn can_decode(&self, source: &SourceVideoStream) -> FfmpegCapability {
         match self.rules {
-            HardwareRules::Default | HardwareRules::Vaapi => default_decode(source),
+            HardwareRules::Vaapi => vaapi_decode(self.report, source),
             HardwareRules::Qsv => qsv_decode(self.report, source),
             HardwareRules::Nvidia => nvidia_decode(self.report, source),
+            HardwareRules::VideoToolbox => videotoolbox_decode(self.report, source),
             HardwareRules::Amf => FfmpegCapability::Software,
             HardwareRules::V4l2m2m => v4l2m2m_decode(self.report, source),
             HardwareRules::Rkmpp => FfmpegCapability::Hardware,
@@ -179,11 +180,11 @@ impl HardwareCapabilities for ReportHardwareCapabilities<'_> {
 
     fn can_encode(&self, desired: &DesiredVideoState) -> FfmpegCapability {
         match self.rules {
-            HardwareRules::Default
-            | HardwareRules::Qsv
-            | HardwareRules::Vaapi
-            | HardwareRules::V4l2m2m => default_encode(self.report, self.acceleration, desired),
-            HardwareRules::Nvidia => encoder_available(self.report, self.acceleration, desired),
+            HardwareRules::V4l2m2m => default_encode(self.report, self.acceleration, desired),
+            HardwareRules::Qsv => qsv_encode(self.report, desired),
+            HardwareRules::Vaapi => vaapi_encode(self.report, desired),
+            HardwareRules::Nvidia => nvidia_encode(self.report, desired),
+            HardwareRules::VideoToolbox => videotoolbox_encode(self.report, desired),
             HardwareRules::Amf | HardwareRules::Rkmpp => {
                 if is_unsupported_ten_bit_hardware_encode(desired) {
                     FfmpegCapability::Software
@@ -215,8 +216,40 @@ fn default_encode(
     }
 }
 
+fn vaapi_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) -> FfmpegCapability {
+    if report.vaapi_profiles.is_empty() {
+        return default_decode(source);
+    }
+
+    if vaapi_decode_profile_matches(&report.vaapi_profiles, source) {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
+fn vaapi_encode(report: &FfmpegCapabilityReport, desired: &DesiredVideoState) -> FfmpegCapability {
+    if report.vaapi_profiles.is_empty() {
+        return default_encode(report, HardwareAccelerationKind::Vaapi, desired);
+    }
+
+    let Some(encoder_name) =
+        hardware_encoder_name(HardwareAccelerationKind::Vaapi, desired.video_format)
+    else {
+        return FfmpegCapability::Software;
+    };
+
+    if report.has_encoder(encoder_name)
+        && vaapi_encode_profile_matches(&report.vaapi_profiles, desired)
+    {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
 fn qsv_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) -> FfmpegCapability {
-    if is_unsupported_hardware_decode(source) {
+    if is_unsupported_qsv_decode(source) {
         return FfmpegCapability::Software;
     }
 
@@ -224,11 +257,155 @@ fn qsv_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) -> Ff
         return FfmpegCapability::Software;
     };
 
-    if report.has_decoder(name) {
+    let device_profile_matches = report.qsv_profiles.is_empty()
+        || vaapi_decode_profile_matches(&report.qsv_profiles, source);
+    if report.has_decoder(name) && device_profile_matches {
         FfmpegCapability::Hardware
     } else {
         FfmpegCapability::Software
     }
+}
+
+fn is_unsupported_qsv_decode(source: &SourceVideoStream) -> bool {
+    let is_h264_or_hevc = matches!(
+        source.codec,
+        SourceVideoCodec::H264 | SourceVideoCodec::Hevc
+    );
+    is_unsupported_hardware_decode(source)
+        || (is_h264_or_hevc && bit_depth(source.pixel_format) == 10)
+}
+
+fn qsv_encode(report: &FfmpegCapabilityReport, desired: &DesiredVideoState) -> FfmpegCapability {
+    if report.qsv_profiles.is_empty() {
+        return default_encode(report, HardwareAccelerationKind::Qsv, desired);
+    }
+
+    let Some(encoder_name) =
+        hardware_encoder_name(HardwareAccelerationKind::Qsv, desired.video_format)
+    else {
+        return FfmpegCapability::Software;
+    };
+
+    if report.has_encoder(encoder_name)
+        && vaapi_encode_profile_matches(&report.qsv_profiles, desired)
+    {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
+fn vaapi_decode_profile_matches(
+    profiles: &[VaapiProfileEntrypoint],
+    source: &SourceVideoStream,
+) -> bool {
+    if source.color_params.is_bt2020_ten
+        || (source.codec == SourceVideoCodec::H264 && bit_depth(source.pixel_format) == 10)
+    {
+        return false;
+    }
+
+    vaapi_decode_profiles(source)
+        .iter()
+        .any(|profile| has_vaapi_entrypoint(profiles, profile, VaapiEntrypointKind::Decode))
+}
+
+fn vaapi_encode_profile_matches(
+    profiles: &[VaapiProfileEntrypoint],
+    desired: &DesiredVideoState,
+) -> bool {
+    if desired.video_format == FFmpegProfileVideoFormat::H264
+        && desired.bit_depth == FFmpegProfileBitDepth::TenBit
+    {
+        return false;
+    }
+
+    vaapi_encode_profiles(desired)
+        .iter()
+        .any(|profile| has_vaapi_entrypoint(profiles, profile, VaapiEntrypointKind::Encode))
+}
+
+fn vaapi_decode_profiles(source: &SourceVideoStream) -> Vec<&'static str> {
+    let profile = source
+        .profile
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match source.codec {
+        SourceVideoCodec::H264 => match profile.as_str() {
+            "baseline" | "66" => Vec::new(),
+            "main" | "77" => vec!["VAProfileH264Main"],
+            "high" | "100" | "high 10" | "110" => vec!["VAProfileH264High"],
+            "baseline constrained" | "constrained baseline" | "578" => {
+                vec!["VAProfileH264ConstrainedBaseline"]
+            }
+            _ => vec!["VAProfileH264Main", "VAProfileH264High"],
+        },
+        SourceVideoCodec::Hevc => match profile.as_str() {
+            "main 10" | "2" => vec!["VAProfileHEVCMain10"],
+            _ => vec!["VAProfileHEVCMain"],
+        },
+        SourceVideoCodec::Mpeg2Video => match profile.as_str() {
+            "simple" | "5" => vec!["VAProfileMPEG2Simple"],
+            _ => vec!["VAProfileMPEG2Main"],
+        },
+        SourceVideoCodec::Vc1 => match profile.as_str() {
+            "simple" | "0" => vec!["VAProfileVC1Simple"],
+            "advanced" | "3" => vec!["VAProfileVC1Advanced"],
+            _ => vec!["VAProfileVC1Main"],
+        },
+        SourceVideoCodec::Vp9 => match profile.as_str() {
+            "profile 1" | "1" => vec!["VAProfileVP9Profile1"],
+            "profile 2" | "2" => vec!["VAProfileVP9Profile2"],
+            "profile 3" | "3" => vec!["VAProfileVP9Profile3"],
+            _ => vec!["VAProfileVP9Profile0"],
+        },
+        SourceVideoCodec::Av1 => vec!["VAProfileAV1Profile0"],
+        SourceVideoCodec::Mpeg1Video
+        | SourceVideoCodec::Mpeg4
+        | SourceVideoCodec::MsMpeg4V2
+        | SourceVideoCodec::MsMpeg4V3
+        | SourceVideoCodec::RawVideo
+        | SourceVideoCodec::Vp8
+        | SourceVideoCodec::Unknown => Vec::new(),
+    }
+}
+
+fn vaapi_encode_profiles(desired: &DesiredVideoState) -> Vec<&'static str> {
+    match (desired.video_format, desired.bit_depth) {
+        (FFmpegProfileVideoFormat::H264, FFmpegProfileBitDepth::EightBit) => {
+            vec!["VAProfileH264Main"]
+        }
+        (FFmpegProfileVideoFormat::Hevc, FFmpegProfileBitDepth::TenBit) => {
+            vec!["VAProfileHEVCMain10"]
+        }
+        (FFmpegProfileVideoFormat::Hevc, FFmpegProfileBitDepth::EightBit) => {
+            vec!["VAProfileHEVCMain"]
+        }
+        (FFmpegProfileVideoFormat::Av1, _) => vec!["VAProfileAV1Profile0"],
+        (FFmpegProfileVideoFormat::Mpeg2Video, _) => vec!["VAProfileMPEG2Main"],
+        _ => Vec::new(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VaapiEntrypointKind {
+    Decode,
+    Encode,
+}
+
+fn has_vaapi_entrypoint(
+    profiles: &[VaapiProfileEntrypoint],
+    expected_profile: &str,
+    kind: VaapiEntrypointKind,
+) -> bool {
+    profiles.iter().any(|entry| {
+        entry.profile_matches(expected_profile)
+            && match kind {
+                VaapiEntrypointKind::Decode => entry.is_decode(),
+                VaapiEntrypointKind::Encode => entry.is_encode(),
+            }
+    })
 }
 
 fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) -> FfmpegCapability {
@@ -240,7 +417,149 @@ fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) ->
         return FfmpegCapability::Software;
     };
 
+    if !report.nvidia_decoders.is_empty()
+        && !report.nvidia_decoders.iter().any(|details| {
+            details.supports(
+                nvidia_decoder_codec(source.codec),
+                bit_depth(source.pixel_format),
+            )
+        })
+    {
+        return FfmpegCapability::Software;
+    }
+
     if report.has_decoder(decoder.name()) {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
+fn nvidia_encode(report: &FfmpegCapabilityReport, desired: &DesiredVideoState) -> FfmpegCapability {
+    let Some(encoder_name) =
+        hardware_encoder_name(HardwareAccelerationKind::Nvenc, desired.video_format)
+    else {
+        return FfmpegCapability::Software;
+    };
+
+    if !report.has_encoder(encoder_name) {
+        return FfmpegCapability::Software;
+    }
+
+    let Some(details) = report
+        .nvidia_encoders
+        .iter()
+        .find(|details| details.encoder_matches(encoder_name))
+    else {
+        return FfmpegCapability::Hardware;
+    };
+
+    if !nvidia_encoder_supports_bit_depth(details, desired.bit_depth) {
+        return FfmpegCapability::Software;
+    }
+
+    let Some(profile) = nvidia_required_profile(desired) else {
+        return FfmpegCapability::Hardware;
+    };
+    if details.profiles.is_empty() || details.has_profile(profile) {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
+fn nvidia_encoder_supports_bit_depth(
+    details: &crate::NvidiaEncoderCapability,
+    bit_depth: FFmpegProfileBitDepth,
+) -> bool {
+    match bit_depth {
+        FFmpegProfileBitDepth::EightBit => {
+            details.pixel_formats.is_empty()
+                || ["yuv420p", "nv12", "yuv444p"]
+                    .iter()
+                    .any(|format| details.has_pixel_format(format))
+        }
+        FFmpegProfileBitDepth::TenBit => ["p010le", "p016le", "yuv420p10le", "yuv444p16le"]
+            .iter()
+            .any(|format| details.has_pixel_format(format)),
+    }
+}
+
+fn nvidia_required_profile(desired: &DesiredVideoState) -> Option<&'static str> {
+    match (desired.video_format, desired.bit_depth) {
+        (FFmpegProfileVideoFormat::Hevc, FFmpegProfileBitDepth::EightBit)
+        | (FFmpegProfileVideoFormat::Av1, _) => Some("main"),
+        (FFmpegProfileVideoFormat::Hevc, FFmpegProfileBitDepth::TenBit) => Some("main10"),
+        (FFmpegProfileVideoFormat::H264, FFmpegProfileBitDepth::TenBit) => Some("high444p"),
+        (FFmpegProfileVideoFormat::H264, FFmpegProfileBitDepth::EightBit) => {
+            let profile = desired
+                .video_profile
+                .as_deref()
+                .unwrap_or("main")
+                .to_ascii_lowercase();
+            match profile.as_str() {
+                "high" => Some("high"),
+                "high10" | "high 10" => Some("high444p"),
+                "baseline" => Some("baseline"),
+                _ => Some("main"),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn videotoolbox_decode(
+    report: &FfmpegCapabilityReport,
+    source: &SourceVideoStream,
+) -> FfmpegCapability {
+    if is_unsupported_hardware_decode(source) {
+        return FfmpegCapability::Software;
+    }
+
+    let Some(fourcc) = videotoolbox_decoder_fourcc(source.codec) else {
+        return FfmpegCapability::Software;
+    };
+
+    if report
+        .videotoolbox_decoders
+        .iter()
+        .any(|decoder| decoder.eq_ignore_ascii_case(fourcc))
+    {
+        FfmpegCapability::Hardware
+    } else {
+        FfmpegCapability::Software
+    }
+}
+
+fn videotoolbox_encode(
+    report: &FfmpegCapabilityReport,
+    desired: &DesiredVideoState,
+) -> FfmpegCapability {
+    if is_unsupported_h264_ten_bit(desired.video_format, desired.bit_depth) {
+        return FfmpegCapability::Software;
+    }
+
+    let Some(encoder_name) =
+        hardware_encoder_name(HardwareAccelerationKind::VideoToolbox, desired.video_format)
+    else {
+        return FfmpegCapability::Software;
+    };
+
+    if !report.has_encoder(encoder_name) {
+        return FfmpegCapability::Software;
+    }
+
+    let expected = match desired.video_format {
+        FFmpegProfileVideoFormat::H264 => "H.264 (HW)",
+        FFmpegProfileVideoFormat::Hevc => "HEVC (HW)",
+        _ => return FfmpegCapability::Software,
+    };
+
+    if report.videotoolbox_encoders.iter().any(|encoder| {
+        encoder
+            .to_ascii_lowercase()
+            .contains(&expected.to_ascii_lowercase())
+    }) {
         FfmpegCapability::Hardware
     } else {
         FfmpegCapability::Software
@@ -327,6 +646,36 @@ fn cuvid_decoder_for_codec(codec: SourceVideoCodec) -> Option<FfmpegKnownDecoder
         SourceVideoCodec::Mpeg4 => Some(FfmpegKnownDecoder::Mpeg4Cuvid),
         SourceVideoCodec::Vc1 => Some(FfmpegKnownDecoder::Vc1Cuvid),
         SourceVideoCodec::Vp9 => Some(FfmpegKnownDecoder::Vp9Cuvid),
+        _ => None,
+    }
+}
+
+const fn nvidia_decoder_codec(codec: SourceVideoCodec) -> &'static str {
+    match codec {
+        SourceVideoCodec::Av1 => "av1",
+        SourceVideoCodec::H264 => "h264",
+        SourceVideoCodec::Hevc => "hevc",
+        SourceVideoCodec::Mpeg2Video => "mpeg2video",
+        SourceVideoCodec::Mpeg4 => "mpeg4",
+        SourceVideoCodec::Vc1 => "vc1",
+        SourceVideoCodec::Vp8 => "vp8",
+        SourceVideoCodec::Vp9 => "vp9",
+        SourceVideoCodec::Mpeg1Video
+        | SourceVideoCodec::MsMpeg4V2
+        | SourceVideoCodec::MsMpeg4V3
+        | SourceVideoCodec::RawVideo
+        | SourceVideoCodec::Unknown => "",
+    }
+}
+
+const fn videotoolbox_decoder_fourcc(codec: SourceVideoCodec) -> Option<&'static str> {
+    match codec {
+        SourceVideoCodec::Av1 => Some("av01"),
+        SourceVideoCodec::H264 => Some("avc1"),
+        SourceVideoCodec::Hevc => Some("hvc1"),
+        SourceVideoCodec::Mpeg2Video => Some("mp2v"),
+        SourceVideoCodec::Mpeg4 => Some("mp4v"),
+        SourceVideoCodec::Vp9 => Some("vp09"),
         _ => None,
     }
 }
@@ -482,7 +831,51 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
             "videotoolbox".to_owned(),
         ]),
         configuration_flags: BTreeSet::new(),
+        vaapi_profiles: Vec::new(),
+        qsv_profiles: Vec::new(),
+        nvidia_gpu_list: None,
+        nvidia_encoders: vec![
+            crate::NvidiaEncoderCapability::new(
+                "h264_nvenc",
+                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+                BTreeSet::from(["main".to_owned(), "high".to_owned(), "high444p".to_owned()]),
+            ),
+            crate::NvidiaEncoderCapability::new(
+                "hevc_nvenc",
+                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+                BTreeSet::from(["main".to_owned(), "main10".to_owned()]),
+            ),
+            crate::NvidiaEncoderCapability::new(
+                "av1_nvenc",
+                BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+                BTreeSet::from(["main".to_owned()]),
+            ),
+        ],
+        nvidia_decoders: nvidia_decoders_for_tests(),
+        videotoolbox_decoders: BTreeSet::from([
+            "av01".to_owned(),
+            "avc1".to_owned(),
+            "hvc1".to_owned(),
+            "mp2v".to_owned(),
+            "mp4v".to_owned(),
+            "vp09".to_owned(),
+        ]),
+        videotoolbox_encoders: BTreeSet::from(["H.264 (HW)".to_owned(), "HEVC (HW)".to_owned()]),
     }
+}
+
+fn nvidia_decoders_for_tests() -> Vec<crate::NvidiaDecoderCapability> {
+    vec![
+        crate::NvidiaDecoderCapability::new("h264", 8),
+        crate::NvidiaDecoderCapability::new("hevc", 8),
+        crate::NvidiaDecoderCapability::new("hevc", 10),
+        crate::NvidiaDecoderCapability::new("mpeg2video", 8),
+        crate::NvidiaDecoderCapability::new("mpeg4", 8),
+        crate::NvidiaDecoderCapability::new("vc1", 8),
+        crate::NvidiaDecoderCapability::new("vp9", 8),
+        crate::NvidiaDecoderCapability::new("av1", 8),
+        crate::NvidiaDecoderCapability::new("av1", 10),
+    ]
 }
 
 #[cfg(test)]
@@ -534,5 +927,151 @@ mod tests {
             capabilities.can_encode(&desired),
             FfmpegCapability::Software
         );
+    }
+
+    #[test]
+    fn vaapi_decode_uses_device_profile_entrypoints_when_present() {
+        let mut report = capability_report_for_tests();
+        report.vaapi_profiles = vec![VaapiProfileEntrypoint::new(
+            "VAProfileH264Main",
+            "VAEntrypointVLD",
+        )];
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Vaapi);
+        let mut high_profile = SourceVideoStream::new(SourceVideoCodec::H264);
+        high_profile.profile = Some("high".to_owned());
+        let mut main_profile = SourceVideoStream::new(SourceVideoCodec::H264);
+        main_profile.profile = Some("main".to_owned());
+
+        assert_eq!(
+            capabilities.can_decode(&high_profile),
+            FfmpegCapability::Software
+        );
+        assert_eq!(
+            capabilities.can_decode(&main_profile),
+            FfmpegCapability::Hardware
+        );
+    }
+
+    #[test]
+    fn qsv_encode_uses_device_profile_entrypoints_when_present() {
+        let mut report = capability_report_for_tests();
+        report.qsv_profiles = vec![VaapiProfileEntrypoint::new(
+            "VAProfileHEVCMain",
+            "VAEntrypointEncSlice",
+        )];
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Qsv);
+        let mut desired = DesiredVideoState::h264_1080p();
+        desired.video_format = FFmpegProfileVideoFormat::Hevc;
+        desired.bit_depth = FFmpegProfileBitDepth::TenBit;
+
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Software
+        );
+
+        desired.bit_depth = FFmpegProfileBitDepth::EightBit;
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Hardware
+        );
+    }
+
+    #[test]
+    fn qsv_decode_forces_ten_bit_h264_and_hevc_to_software() {
+        let report = capability_report_for_tests();
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Qsv);
+        let mut h264 = SourceVideoStream::new(SourceVideoCodec::H264);
+        h264.pixel_format = Some(PixelFormat::Yuv420P10Le);
+        let mut hevc = SourceVideoStream::new(SourceVideoCodec::Hevc);
+        hevc.pixel_format = Some(PixelFormat::Yuv420P10Le);
+
+        assert_eq!(capabilities.can_decode(&h264), FfmpegCapability::Software);
+        assert_eq!(capabilities.can_decode(&hevc), FfmpegCapability::Software);
+    }
+
+    #[test]
+    fn videotoolbox_uses_framework_decoder_and_encoder_lists() {
+        let mut report = capability_report_for_tests();
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::VideoToolbox);
+        let source = SourceVideoStream::new(SourceVideoCodec::H264);
+        let desired = DesiredVideoState::h264_1080p();
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Hardware);
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Hardware
+        );
+        drop(capabilities);
+
+        report.videotoolbox_decoders.clear();
+        report.videotoolbox_encoders.clear();
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::VideoToolbox);
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Software);
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Software
+        );
+    }
+
+    #[test]
+    fn nvidia_encode_uses_encoder_detail_bit_depth_and_profiles_when_present() {
+        let mut report = capability_report_for_tests();
+        report.nvidia_encoders = vec![crate::NvidiaEncoderCapability::new(
+            "hevc_nvenc",
+            std::collections::BTreeSet::from(["nv12".to_owned()]),
+            std::collections::BTreeSet::from(["main".to_owned(), "main10".to_owned()]),
+        )];
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        let mut desired = DesiredVideoState::h264_1080p();
+        desired.video_format = FFmpegProfileVideoFormat::Hevc;
+        desired.bit_depth = FFmpegProfileBitDepth::TenBit;
+        desired.video_profile = None;
+
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Software
+        );
+        drop(capabilities);
+
+        report.nvidia_encoders = vec![crate::NvidiaEncoderCapability::new(
+            "hevc_nvenc",
+            std::collections::BTreeSet::from(["nv12".to_owned(), "p010le".to_owned()]),
+            std::collections::BTreeSet::from(["main".to_owned(), "main10".to_owned()]),
+        )];
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Hardware
+        );
+    }
+
+    #[test]
+    fn nvidia_decode_uses_decoder_detail_bit_depth_when_present() {
+        let mut report = capability_report_for_tests();
+        report.nvidia_decoders = vec![crate::NvidiaDecoderCapability::new("hevc", 8)];
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);
+        source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Software);
+        drop(capabilities);
+
+        report
+            .nvidia_decoders
+            .push(crate::NvidiaDecoderCapability::new("hevc", 10));
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Hardware);
     }
 }

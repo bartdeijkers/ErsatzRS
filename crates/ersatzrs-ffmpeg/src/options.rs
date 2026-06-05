@@ -237,6 +237,37 @@ pub fn fast_start() -> PipelineStep {
 }
 
 #[must_use]
+pub fn no_demux_decode_delay() -> PipelineStep {
+    PipelineStep::generic(
+        "no_demux_decode_delay",
+        ["-muxdelay", "0", "-muxpreload", "0"],
+    )
+}
+
+#[must_use]
+pub fn no_scene_detect(value: u32) -> PipelineStep {
+    PipelineStep::generic(
+        "no_scene_detect",
+        ["-sc_threshold".to_owned(), value.to_string()],
+    )
+}
+
+#[must_use]
+pub fn time_limit(duration: Duration) -> PipelineStep {
+    PipelineStep::generic("time_limit", ["-t".to_owned(), format_time_limit(duration)])
+}
+
+#[must_use]
+pub fn format_time_limit(duration: Duration) -> String {
+    let total_seconds = duration.as_secs();
+    let hours = total_seconds / 3_600;
+    let minutes = (total_seconds % 3_600) / 60;
+    let seconds = total_seconds % 60;
+    let ticks = duration.subsec_nanos() / 100;
+    format!("{hours:02}:{minutes:02}:{seconds:02}.{ticks:07}")
+}
+
+#[must_use]
 pub fn no_autoscale() -> PipelineStep {
     PipelineStep::generic("no_autoscale", ["-noautoscale"])
 }
@@ -257,3 +288,4 @@ pub fn mpegts_output(initial_discontinuity: bool) -> PipelineStep {
 pub fn pipe_output() -> PipelineStep {
     PipelineStep::generic("pipe", ["pipe:1"])
 }
+use std::time::Duration;

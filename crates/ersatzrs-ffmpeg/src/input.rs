@@ -139,6 +139,11 @@ impl InputFile {
         self
     }
 
+    pub fn add_readrate(&mut self, readrate: &str) {
+        self.input_options
+            .extend(["-readrate".to_owned(), readrate.to_owned()]);
+    }
+
     #[must_use]
     pub fn with_filter(mut self, filter: impl Into<String>) -> Self {
         self.filter_steps.push(filter.into());

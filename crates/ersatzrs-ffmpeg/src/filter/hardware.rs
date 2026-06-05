@@ -13,12 +13,26 @@ pub fn hardware_upload_filter(
         HardwareAccelerationKind::Qsv => {
             format!("hwupload=extra_hw_frames={qsv_extra_hardware_frames}")
         }
-        HardwareAccelerationKind::Vaapi => "format=nv12|p010le|vaapi,hwupload".to_owned(),
+        HardwareAccelerationKind::Vaapi => hardware_upload_vaapi_filter(true),
         HardwareAccelerationKind::Amf
         | HardwareAccelerationKind::VideoToolbox
         | HardwareAccelerationKind::V4l2m2m
         | HardwareAccelerationKind::Rkmpp => "hwupload".to_owned(),
     }
+}
+
+#[must_use]
+pub fn hardware_upload_vaapi_filter(set_format: bool) -> String {
+    if set_format {
+        "format=nv12|p010le|vaapi,hwupload".to_owned()
+    } else {
+        "hwupload".to_owned()
+    }
+}
+
+#[must_use]
+pub fn cuda_software_fallback_upload_filter() -> String {
+    "hwupload".to_owned()
 }
 
 #[must_use]

@@ -1,6 +1,5 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 653
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -i /media/movie.mkv -loop 1 -i /media/back.png -loop 1 -i /media/front.png -filter_complex [1:0]scale=192:-1[wm0];[2:0]scale=192:-1,format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.50[wm1];[0:0][wm0]overlay=x=38:y=22:format=0[vwm0];[vwm0][wm1]overlay=x=W-w-38:y=H-h-22:format=0[vwm1] -map [vwm1] -map 0:1 -movflags +faststart -flags +cgop -bf 0 -codec:v libx264 -profile:v high -preset:v veryfast -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -i /media/movie.mkv -loop 1 -i /media/back.png -loop 1 -i /media/front.png -filter_complex [1:0]scale=192:-1[wm0];[2:0]scale=192:-1,format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.50[wm1];[0:0][wm0]overlay=x=38:y=22:format=0[vwm0];[vwm0][wm1]overlay=x=W-w-38:y=H-h-22:format=0[vwm1];[0:1]aresample=async=1,apad[a] -map [vwm1] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags +cgop -bf 0 -sc_threshold 0 -codec:v libx264 -profile:v high -preset:v veryfast -codec:a aac -ac 2 -ar 48000 -b:a 192k -b:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

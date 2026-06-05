@@ -133,6 +133,9 @@ pub struct FfmpegRuntimeCheckConfig {
     pub required_hwaccels: Vec<String>,
     /// Hardware accelerators to report as warnings when absent.
     pub optional_hwaccels: Vec<String>,
+    /// Optional hardware devices to probe for per-device VAAPI/QSV capability
+    /// details.
+    pub hardware_probe_devices: Vec<FfmpegHardwareProbeDevice>,
 }
 
 impl Default for FfmpegRuntimeCheckConfig {
@@ -148,6 +151,7 @@ impl Default for FfmpegRuntimeCheckConfig {
             required_configuration_flags: to_owned_vec(REQUIRED_CONFIGURATION_FLAGS),
             required_hwaccels: Vec::new(),
             optional_hwaccels: Vec::new(),
+            hardware_probe_devices: Vec::new(),
         }
     }
 }
@@ -170,6 +174,40 @@ impl FfmpegRuntimeCheckConfig {
             ffmpeg_path: ffmpeg_path.into(),
             ffprobe_path: ffprobe_path.into(),
             ..Self::default()
+        }
+    }
+
+    /// Attach optional hardware device probes to this runtime check.
+    #[must_use]
+    pub fn with_hardware_probe_devices(mut self, devices: Vec<FfmpegHardwareProbeDevice>) -> Self {
+        self.hardware_probe_devices = devices;
+        self
+    }
+}
+
+/// Profile-specific hardware probe inputs used to enrich the runtime report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FfmpegHardwareProbeDevice {
+    /// VAAPI display name, such as `drm`.
+    pub vaapi_display: Option<String>,
+    /// VAAPI/QSV device path, such as `/dev/dri/renderD128`.
+    pub vaapi_device: Option<String>,
+    /// Driver name for `LIBVA_DRIVER_NAME`.
+    pub vaapi_driver: Option<String>,
+}
+
+impl FfmpegHardwareProbeDevice {
+    /// Create a hardware probe config from optional profile values.
+    #[must_use]
+    pub fn new(
+        vaapi_display: Option<String>,
+        vaapi_device: Option<String>,
+        vaapi_driver: Option<String>,
+    ) -> Self {
+        Self {
+            vaapi_display,
+            vaapi_device,
+            vaapi_driver,
         }
     }
 }
@@ -200,6 +238,24 @@ pub struct FfmpegCapabilityReport {
     pub hwaccels: BTreeSet<String>,
     /// Configure flags parsed from `ffmpeg -version`.
     pub configuration_flags: BTreeSet<String>,
+    /// VAAPI device profile/entrypoint rows, usually parsed from `vainfo`.
+    pub vaapi_profiles: Vec<VaapiProfileEntrypoint>,
+    /// QSV device profile/entrypoint rows, usually parsed from `ffmpeg` QSV
+    /// probe output plus `vainfo` on Linux.
+    pub qsv_profiles: Vec<VaapiProfileEntrypoint>,
+    /// Raw NVIDIA GPU-list probe output from `FFmpeg`'s `h264_nvenc -gpu list`
+    /// fallback path.
+    pub nvidia_gpu_list: Option<String>,
+    /// NVIDIA encoder details parsed from `ffmpeg -h encoder=<name>` output.
+    pub nvidia_encoders: Vec<NvidiaEncoderCapability>,
+    /// NVIDIA decoder details reported by the native CUDA/NVDEC device probe.
+    pub nvidia_decoders: Vec<NvidiaDecoderCapability>,
+    /// `VideoToolbox` hardware decoder `FourCC` values reported by the macOS
+    /// framework probe, such as `avc1` or `hvc1`.
+    pub videotoolbox_decoders: BTreeSet<String>,
+    /// `VideoToolbox` encoder names reported by the macOS framework probe, such
+    /// as `H.264 (HW)` or `HEVC (HW)`.
+    pub videotoolbox_encoders: BTreeSet<String>,
 }
 
 impl FfmpegCapabilityReport {
@@ -231,6 +287,117 @@ impl FfmpegCapabilityReport {
     #[must_use]
     pub fn has_configuration_flag(&self, flag: &str) -> bool {
         self.configuration_flags.contains(flag)
+    }
+}
+
+/// One VAAPI-style profile/entrypoint row reported by a hardware device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VaapiProfileEntrypoint {
+    /// Profile name, such as `VAProfileH264High` or `VAProfileHEVCMain10`.
+    pub profile: String,
+    /// Entrypoint name, such as `VAEntrypointVLD`, `VAEntrypointEncSlice`, or
+    /// `VAEntrypointEncSliceLP`.
+    pub entrypoint: String,
+}
+
+/// `FFmpeg`-reported details for one NVIDIA encoder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvidiaEncoderCapability {
+    /// Encoder name, such as `h264_nvenc`.
+    pub encoder: String,
+    /// Pixel formats accepted by the encoder.
+    pub pixel_formats: BTreeSet<String>,
+    /// Profile option names accepted by the encoder.
+    pub profiles: BTreeSet<String>,
+}
+
+impl NvidiaEncoderCapability {
+    /// Create an NVIDIA encoder detail row.
+    #[must_use]
+    pub fn new(
+        encoder: impl Into<String>,
+        pixel_formats: BTreeSet<String>,
+        profiles: BTreeSet<String>,
+    ) -> Self {
+        Self {
+            encoder: encoder.into(),
+            pixel_formats,
+            profiles,
+        }
+    }
+
+    #[must_use]
+    pub fn encoder_matches(&self, expected: &str) -> bool {
+        self.encoder.eq_ignore_ascii_case(expected)
+    }
+
+    #[must_use]
+    pub fn has_pixel_format(&self, expected: &str) -> bool {
+        self.pixel_formats
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(expected))
+    }
+
+    #[must_use]
+    pub fn has_profile(&self, expected: &str) -> bool {
+        self.profiles
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(expected))
+    }
+}
+
+/// Native CUDA/NVDEC support for one source codec and bit depth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvidiaDecoderCapability {
+    /// Source codec name, such as `h264`, `hevc`, or `av1`.
+    pub codec: String,
+    /// Supported decoded bit depth.
+    pub bit_depth: u8,
+}
+
+impl NvidiaDecoderCapability {
+    /// Create an NVIDIA decoder detail row.
+    #[must_use]
+    pub fn new(codec: impl Into<String>, bit_depth: u8) -> Self {
+        Self {
+            codec: codec.into(),
+            bit_depth,
+        }
+    }
+
+    #[must_use]
+    pub fn supports(&self, codec: &str, bit_depth: u8) -> bool {
+        self.bit_depth == bit_depth && self.codec.eq_ignore_ascii_case(codec)
+    }
+}
+
+impl VaapiProfileEntrypoint {
+    /// Create a profile/entrypoint row from raw probe text.
+    #[must_use]
+    pub fn new(profile: impl Into<String>, entrypoint: impl Into<String>) -> Self {
+        Self {
+            profile: profile.into(),
+            entrypoint: entrypoint.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn is_decode(&self) -> bool {
+        self.entrypoint.eq_ignore_ascii_case("VAEntrypointVLD")
+            || self.entrypoint.eq_ignore_ascii_case("Decode")
+    }
+
+    #[must_use]
+    pub fn is_encode(&self) -> bool {
+        matches!(
+            self.entrypoint.to_ascii_lowercase().as_str(),
+            "vaentrypointencslice" | "vaentrypointencslicelp" | "encode" | "encodelowpower"
+        )
+    }
+
+    #[must_use]
+    pub fn profile_matches(&self, expected: &str) -> bool {
+        self.profile.eq_ignore_ascii_case(expected)
     }
 }
 
@@ -314,6 +481,13 @@ impl FfmpegRuntimeReport {
             decoders: BTreeSet::from_iter(to_owned_vec(REQUIRED_DECODERS)),
             hwaccels: BTreeSet::new(),
             configuration_flags: flags.clone(),
+            vaapi_profiles: Vec::new(),
+            qsv_profiles: Vec::new(),
+            nvidia_gpu_list: None,
+            nvidia_encoders: Vec::new(),
+            nvidia_decoders: Vec::new(),
+            videotoolbox_decoders: BTreeSet::new(),
+            videotoolbox_encoders: BTreeSet::new(),
         };
         Self {
             ffmpeg: FfmpegToolVersion {
@@ -519,7 +693,7 @@ pub async fn check_ffmpeg_runtime_with_config(
     .await?;
     check_ffprobe_json(&config.ffprobe_path).await?;
 
-    let mut capabilities = collect_ffmpeg_capabilities(&config.ffmpeg_path).await?;
+    let mut capabilities = collect_ffmpeg_capabilities(config).await?;
     capabilities
         .configuration_flags
         .clone_from(&ffmpeg.configuration_flags);
@@ -584,40 +758,442 @@ async fn check_tool_version(
 }
 
 async fn collect_ffmpeg_capabilities(
-    ffmpeg_path: &str,
+    config: &FfmpegRuntimeCheckConfig,
 ) -> Result<FfmpegCapabilityReport, FfmpegCheckError> {
-    let filters =
-        String::from_utf8(run_tool("ffmpeg", ffmpeg_path, &["-hide_banner", "-filters"]).await?)
-            .map_err(|error| FfmpegCheckError::ParseError {
-                tool: "ffmpeg",
-                output: error.to_string(),
-            })?;
-    let encoders =
-        String::from_utf8(run_tool("ffmpeg", ffmpeg_path, &["-hide_banner", "-encoders"]).await?)
-            .map_err(|error| FfmpegCheckError::ParseError {
-            tool: "ffmpeg",
-            output: error.to_string(),
-        })?;
-    let decoders =
-        String::from_utf8(run_tool("ffmpeg", ffmpeg_path, &["-hide_banner", "-decoders"]).await?)
-            .map_err(|error| FfmpegCheckError::ParseError {
-            tool: "ffmpeg",
-            output: error.to_string(),
-        })?;
-    let hwaccels =
-        String::from_utf8(run_tool("ffmpeg", ffmpeg_path, &["-hide_banner", "-hwaccels"]).await?)
-            .map_err(|error| FfmpegCheckError::ParseError {
-            tool: "ffmpeg",
-            output: error.to_string(),
-        })?;
+    let filters = String::from_utf8(
+        run_tool("ffmpeg", &config.ffmpeg_path, &["-hide_banner", "-filters"]).await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
+    let encoders = String::from_utf8(
+        run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &["-hide_banner", "-encoders"],
+        )
+        .await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
+    let decoders = String::from_utf8(
+        run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &["-hide_banner", "-decoders"],
+        )
+        .await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
+    let hwaccels = String::from_utf8(
+        run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &["-hide_banner", "-hwaccels"],
+        )
+        .await?,
+    )
+    .map_err(|error| FfmpegCheckError::ParseError {
+        tool: "ffmpeg",
+        output: error.to_string(),
+    })?;
 
-    Ok(FfmpegCapabilityReport {
+    let mut report = FfmpegCapabilityReport {
         filters: parse_capability_names(&filters),
         encoders: parse_capability_names(&encoders),
         decoders: parse_capability_names(&decoders),
         hwaccels: parse_hwaccels(&hwaccels),
         configuration_flags: BTreeSet::new(),
-    })
+        vaapi_profiles: Vec::new(),
+        qsv_profiles: Vec::new(),
+        nvidia_gpu_list: None,
+        nvidia_encoders: Vec::new(),
+        nvidia_decoders: Vec::new(),
+        videotoolbox_decoders: BTreeSet::new(),
+        videotoolbox_encoders: BTreeSet::new(),
+    };
+
+    enrich_device_profiles(config, &mut report).await;
+
+    Ok(report)
+}
+
+async fn enrich_device_profiles(
+    config: &FfmpegRuntimeCheckConfig,
+    report: &mut FfmpegCapabilityReport,
+) {
+    if report.has_hwaccel("vaapi") || has_encoder_suffix(&report.encoders, "_vaapi") {
+        report.vaapi_profiles = probe_all_vainfo_profiles(&config.hardware_probe_devices).await;
+    }
+
+    if report.has_hwaccel("qsv") || has_encoder_suffix(&report.encoders, "_qsv") {
+        report.qsv_profiles = probe_all_qsv_profiles(config).await;
+    }
+
+    if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
+        report.nvidia_gpu_list = probe_nvidia_gpu_list(&config.ffmpeg_path).await;
+        report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
+        report.nvidia_decoders = report
+            .nvidia_gpu_list
+            .as_deref()
+            .map(parse_nvidia_decoder_capabilities)
+            .unwrap_or_default();
+    }
+
+    if report.has_hwaccel("videotoolbox") || has_encoder_suffix(&report.encoders, "_videotoolbox") {
+        let videotoolbox = probe_videotoolbox_framework_capabilities();
+        report.videotoolbox_decoders = videotoolbox.decoders;
+        report.videotoolbox_encoders = videotoolbox.encoders;
+    }
+}
+
+fn has_encoder_suffix(encoders: &BTreeSet<String>, suffix: &str) -> bool {
+    encoders.iter().any(|name| name.ends_with(suffix))
+}
+
+async fn probe_all_qsv_profiles(config: &FfmpegRuntimeCheckConfig) -> Vec<VaapiProfileEntrypoint> {
+    if config.hardware_probe_devices.is_empty() {
+        return probe_qsv_profiles(&config.ffmpeg_path, None).await;
+    }
+
+    let mut profiles = Vec::new();
+    for device in &config.hardware_probe_devices {
+        profiles.extend(probe_qsv_profiles(&config.ffmpeg_path, Some(device)).await);
+    }
+    dedupe_vaapi_profiles(profiles)
+}
+
+async fn probe_nvidia_gpu_list(ffmpeg_path: &str) -> Option<String> {
+    if cfg!(target_os = "macos") {
+        return None;
+    }
+
+    let output = tokio::process::Command::new(ffmpeg_path)
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "nullsrc",
+            "-c:v",
+            "h264_nvenc",
+            "-gpu",
+            "list",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .await
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = if stdout.trim().is_empty() {
+        stderr.trim()
+    } else {
+        stdout.trim()
+    };
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+async fn probe_nvidia_encoder_capabilities(
+    config: &FfmpegRuntimeCheckConfig,
+    report: &FfmpegCapabilityReport,
+) -> Vec<NvidiaEncoderCapability> {
+    let mut capabilities = Vec::new();
+    for encoder in ["h264_nvenc", "hevc_nvenc", "av1_nvenc"] {
+        if !report.has_encoder(encoder) {
+            continue;
+        }
+
+        let encoder_arg = format!("encoder={encoder}");
+        let Ok(output) = run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &["-hide_banner", "-h", &encoder_arg],
+        )
+        .await
+        else {
+            continue;
+        };
+        let text = String::from_utf8_lossy(&output);
+        capabilities.push(parse_nvidia_encoder_capability(encoder, &text));
+    }
+    capabilities
+}
+
+/// Extract the useful NVIDIA device lines from `FFmpeg`'s `-gpu list` output.
+#[must_use]
+pub fn nvidia_gpu_list_summary(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.starts_with("gpu #")
+                || lower.contains("nvidia")
+                || lower.contains("geforce")
+                || lower.contains("quadro")
+                || lower.contains("tesla")
+                || lower.contains("rtx")
+                || lower.contains("gtx")
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Parse NVIDIA encoder details from `ffmpeg -h encoder=<name>` output.
+#[must_use]
+pub fn parse_nvidia_encoder_capability(encoder: &str, output: &str) -> NvidiaEncoderCapability {
+    let mut pixel_formats = BTreeSet::new();
+    let mut profiles = BTreeSet::new();
+    let mut in_profile_options = false;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Supported pixel formats:") {
+            pixel_formats.extend(rest.split_whitespace().map(str::to_owned));
+            in_profile_options = false;
+            continue;
+        }
+
+        if trimmed.starts_with("-profile") {
+            in_profile_options = true;
+            continue;
+        }
+
+        if in_profile_options {
+            if trimmed.starts_with('-') && !trimmed.starts_with("-profile") {
+                in_profile_options = false;
+                continue;
+            }
+
+            let mut parts = trimmed.split_whitespace();
+            let Some(candidate) = parts.next() else {
+                continue;
+            };
+            if candidate
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+            {
+                profiles.insert(candidate.to_owned());
+            }
+        }
+    }
+
+    NvidiaEncoderCapability::new(encoder, pixel_formats, profiles)
+}
+
+/// Parse native NVIDIA decoder details from CUDA device-detail text.
+///
+/// ErsatzTV's CUDA helper reports decoder support as
+/// `- Supports <codec> <bit-depth>-bit` under a "Decoding" heading. The
+/// current `FFmpeg` CLI fallback does not emit those rows, so an empty result
+/// means no native decoder detail was available.
+#[must_use]
+pub fn parse_nvidia_decoder_capabilities(output: &str) -> Vec<NvidiaDecoderCapability> {
+    let mut capabilities = Vec::new();
+    let mut in_decoding = false;
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.eq_ignore_ascii_case("decoding:") {
+            in_decoding = true;
+            continue;
+        }
+        if trimmed.eq_ignore_ascii_case("encoding:") {
+            in_decoding = false;
+            continue;
+        }
+        if !in_decoding {
+            continue;
+        }
+
+        let Some(rest) = trimmed.strip_prefix("- Supports ") else {
+            continue;
+        };
+        let mut parts = rest.split_whitespace();
+        let Some(codec) = parts.next() else {
+            continue;
+        };
+        let Some(bit_depth) = parts
+            .next()
+            .and_then(|value| value.strip_suffix("-bit"))
+            .and_then(|value| value.parse::<u8>().ok())
+        else {
+            continue;
+        };
+
+        capabilities.push(NvidiaDecoderCapability::new(
+            normalize_nvidia_decoder_codec(codec),
+            bit_depth,
+        ));
+    }
+
+    capabilities
+}
+
+fn normalize_nvidia_decoder_codec(codec: &str) -> String {
+    match codec.to_ascii_lowercase().as_str() {
+        "h264" => "h264".to_owned(),
+        "hevc" => "hevc".to_owned(),
+        "mpeg2video" => "mpeg2video".to_owned(),
+        "mpeg4" => "mpeg4".to_owned(),
+        "vc1" => "vc1".to_owned(),
+        "vp8" => "vp8".to_owned(),
+        "vp9" => "vp9".to_owned(),
+        "av1" => "av1".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct VideoToolboxFrameworkCapabilities {
+    decoders: BTreeSet<String>,
+    encoders: BTreeSet<String>,
+}
+
+fn probe_videotoolbox_framework_capabilities() -> VideoToolboxFrameworkCapabilities {
+    probe_videotoolbox_framework_capabilities_inner()
+}
+
+#[cfg(target_os = "macos")]
+fn probe_videotoolbox_framework_capabilities_inner() -> VideoToolboxFrameworkCapabilities {
+    // ErsatzTV uses VideoToolbox.framework and CoreFoundation.framework here
+    // (`VTIsHardwareDecodeSupported` and `VTCopyVideoEncoderList`). The
+    // workspace forbids unsafe Rust outside the documented Windows launcher
+    // exception, so the report keeps explicit framework-backed fields while
+    // the native safe binding is added in a follow-up slice.
+    VideoToolboxFrameworkCapabilities::default()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn probe_videotoolbox_framework_capabilities_inner() -> VideoToolboxFrameworkCapabilities {
+    VideoToolboxFrameworkCapabilities::default()
+}
+
+async fn probe_qsv_profiles(
+    ffmpeg_path: &str,
+    device: Option<&FfmpegHardwareProbeDevice>,
+) -> Vec<VaapiProfileEntrypoint> {
+    let mut args = Vec::from([
+        "-f".to_owned(),
+        "lavfi".to_owned(),
+        "-i".to_owned(),
+        "nullsrc".to_owned(),
+        "-t".to_owned(),
+        "00:00:01".to_owned(),
+    ]);
+    if cfg!(target_os = "linux") {
+        if let Some(qsv_device) = device.and_then(|device| device.vaapi_device.as_deref()) {
+            args.extend(["-qsv_device".to_owned(), qsv_device.to_owned()]);
+        }
+    }
+    args.extend([
+        "-c:v".to_owned(),
+        "h264_qsv".to_owned(),
+        "-f".to_owned(),
+        "null".to_owned(),
+        "-".to_owned(),
+    ]);
+
+    let Ok(output) = tokio::process::Command::new(ffmpeg_path)
+        .args(args)
+        .output()
+        .await
+    else {
+        return Vec::new();
+    };
+
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    if cfg!(target_os = "linux") {
+        probe_vainfo_profiles(device).await
+    } else {
+        Vec::new()
+    }
+}
+
+async fn probe_all_vainfo_profiles(
+    devices: &[FfmpegHardwareProbeDevice],
+) -> Vec<VaapiProfileEntrypoint> {
+    if devices.is_empty() {
+        return probe_vainfo_profiles(None).await;
+    }
+
+    let mut profiles = Vec::new();
+    for device in devices {
+        profiles.extend(probe_vainfo_profiles(Some(device)).await);
+    }
+    dedupe_vaapi_profiles(profiles)
+}
+
+async fn probe_vainfo_profiles(
+    device: Option<&FfmpegHardwareProbeDevice>,
+) -> Vec<VaapiProfileEntrypoint> {
+    let mut args = Vec::new();
+    let display = device
+        .and_then(|device| device.vaapi_display.as_deref())
+        .unwrap_or("drm");
+    args.extend(["--display".to_owned(), display.to_owned()]);
+    if let Some(device_path) = device.and_then(|device| device.vaapi_device.as_deref()) {
+        args.extend(["--device".to_owned(), device_path.to_owned()]);
+    }
+    args.push("-a".to_owned());
+
+    let mut command = tokio::process::Command::new("vainfo");
+    command.args(args);
+    if let Some(driver) = device.and_then(|device| device.vaapi_driver.as_deref()) {
+        command.env("LIBVA_DRIVER_NAME", driver);
+    }
+
+    let Ok(output) = command.output().await else {
+        return Vec::new();
+    };
+
+    let mut combined = String::new();
+    combined.push_str(&String::from_utf8_lossy(&output.stdout));
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    parse_vaapi_profile_entrypoints(&combined)
+}
+
+fn dedupe_vaapi_profiles(profiles: Vec<VaapiProfileEntrypoint>) -> Vec<VaapiProfileEntrypoint> {
+    let mut deduped = Vec::new();
+    for profile in profiles {
+        if !deduped.contains(&profile) {
+            deduped.push(profile);
+        }
+    }
+    deduped
+}
+
+/// Parse VAAPI profile/entrypoint rows from `vainfo -a` output.
+#[must_use]
+pub fn parse_vaapi_profile_entrypoints(output: &str) -> Vec<VaapiProfileEntrypoint> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let mut profile = None;
+            let mut entrypoint = None;
+            for token in line.split(|ch: char| ch.is_whitespace() || ch == ':' || ch == ',') {
+                if token.starts_with("VAProfile") {
+                    profile = Some(token);
+                } else if token.starts_with("VAEntrypoint") {
+                    entrypoint = Some(token);
+                }
+            }
+            Some(VaapiProfileEntrypoint::new(profile?, entrypoint?))
+        })
+        .collect()
 }
 
 async fn check_ffprobe_json(ffprobe_path: &str) -> Result<(), FfmpegCheckError> {
@@ -724,9 +1300,12 @@ fn to_owned_vec(values: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_runtime_issues, parse_capability_names, parse_configuration_flags, parse_hwaccels,
-        parse_version, FfmpegCapabilityReport, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue,
-        FfmpegVersion,
+        collect_runtime_issues, dedupe_vaapi_profiles, nvidia_gpu_list_summary,
+        parse_capability_names, parse_configuration_flags, parse_hwaccels,
+        parse_nvidia_decoder_capabilities, parse_nvidia_encoder_capability,
+        parse_vaapi_profile_entrypoints, parse_version, FfmpegCapabilityReport,
+        FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion,
+        VaapiProfileEntrypoint,
     };
     use std::collections::BTreeSet;
 
@@ -809,6 +1388,128 @@ Encoders:
     }
 
     #[test]
+    fn parses_vainfo_profile_entrypoints() {
+        let output = "\
+vainfo: VA-API version: 1.22
+      VAProfileH264Main               : VAEntrypointVLD
+      VAProfileH264Main               : VAEntrypointEncSlice
+      VAProfileHEVCMain10             : VAEntrypointEncSliceLP
+";
+
+        let entries = parse_vaapi_profile_entrypoints(output);
+
+        assert_eq!(entries.len(), 3);
+        assert!(entries[0].profile_matches("VAProfileH264Main"));
+        assert!(entries[0].is_decode());
+        assert!(entries[1].is_encode());
+        assert!(entries[2].profile_matches("VAProfileHEVCMain10"));
+        assert!(entries[2].is_encode());
+    }
+
+    #[test]
+    fn runtime_config_accepts_profile_hardware_probe_devices() {
+        let config = FfmpegRuntimeCheckConfig::with_paths("ffmpeg-custom", "ffprobe-custom")
+            .with_hardware_probe_devices(vec![FfmpegHardwareProbeDevice::new(
+                Some("drm".to_owned()),
+                Some("/dev/dri/renderD128".to_owned()),
+                Some("iHD".to_owned()),
+            )]);
+
+        assert_eq!(config.ffmpeg_path, "ffmpeg-custom");
+        assert_eq!(config.ffprobe_path, "ffprobe-custom");
+        assert_eq!(
+            config.hardware_probe_devices,
+            vec![FfmpegHardwareProbeDevice::new(
+                Some("drm".to_owned()),
+                Some("/dev/dri/renderD128".to_owned()),
+                Some("iHD".to_owned())
+            )]
+        );
+    }
+
+    #[test]
+    fn dedupes_vaapi_profile_entrypoint_rows() {
+        let entries = dedupe_vaapi_profiles(vec![
+            VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointVLD"),
+            VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointVLD"),
+            VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointEncSlice"),
+        ]);
+
+        assert_eq!(
+            entries,
+            vec![
+                VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointVLD"),
+                VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointEncSlice"),
+            ]
+        );
+    }
+
+    #[test]
+    fn summarizes_nvidia_gpu_list_output() {
+        let output = "\
+[h264_nvenc @ 0x123] Available devices for encoding:
+  GPU #0: NVIDIA GeForce RTX 4070
+  GPU #1: Tesla T4
+  unrelated line
+";
+
+        assert_eq!(
+            nvidia_gpu_list_summary(output),
+            vec![
+                "GPU #0: NVIDIA GeForce RTX 4070".to_owned(),
+                "GPU #1: Tesla T4".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_nvidia_encoder_capability_help() {
+        let output = "\
+Encoder h264_nvenc [NVIDIA NVENC H.264 encoder]:
+    Supported hardware devices: cuda cuda
+    Supported pixel formats: yuv420p nv12 p010le yuv444p
+h264_nvenc AVOptions:
+  -profile           <int>        E..V....... Set the encoding profile
+     baseline        0            E..V.......
+     main            1            E..V.......
+     high            2            E..V.......
+     high444p        3            E..V.......
+  -preset            <int>        E..V....... Set the encoding preset
+";
+
+        let capability = parse_nvidia_encoder_capability("h264_nvenc", output);
+
+        assert_eq!(capability.encoder, "h264_nvenc");
+        assert!(capability.has_pixel_format("p010le"));
+        assert!(capability.has_profile("high444p"));
+        assert!(!capability.has_profile("preset"));
+    }
+
+    #[test]
+    fn parses_nvidia_decoder_device_details() {
+        let output = "\
+  Encoding:
+    - Supports hevc 8-bit (with B-frames)
+
+  Decoding:
+    - Supports h264 8-bit
+    - Supports hevc 8-bit
+    - Supports hevc 10-bit
+    - Supports av1 10-bit
+";
+
+        let capabilities = parse_nvidia_decoder_capabilities(output);
+
+        assert_eq!(capabilities.len(), 4);
+        assert!(capabilities
+            .iter()
+            .any(|capability| capability.supports("hevc", 10)));
+        assert!(capabilities
+            .iter()
+            .any(|capability| capability.supports("av1", 10)));
+    }
+
+    #[test]
     fn reports_missing_required_and_optional_capabilities() {
         let config = FfmpegRuntimeCheckConfig {
             required_filters: vec!["drawvg".to_owned()],
@@ -825,6 +1526,13 @@ Encoders:
             decoders: BTreeSet::from(["h264".to_owned()]),
             hwaccels: BTreeSet::new(),
             configuration_flags: BTreeSet::new(),
+            vaapi_profiles: Vec::new(),
+            qsv_profiles: Vec::new(),
+            nvidia_gpu_list: None,
+            nvidia_encoders: Vec::new(),
+            nvidia_decoders: Vec::new(),
+            videotoolbox_decoders: BTreeSet::new(),
+            videotoolbox_encoders: BTreeSet::new(),
         };
 
         let issues = collect_runtime_issues(&config, &capabilities);

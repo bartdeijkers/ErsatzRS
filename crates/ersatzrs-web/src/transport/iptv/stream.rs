@@ -21,7 +21,8 @@ use ersatzrs_ffmpeg::{
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::playback::{
-    load_channel_playback_profile, load_channel_target_frame_rate, load_source_video_stream,
+    enrich_source_video_stream_for_playback, load_channel_playback_profile,
+    load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
     render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
     watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile,
@@ -90,6 +91,8 @@ pub async fn serve_channel_stream(
     };
 
     let source_stream = load_source_video_stream(&state.pool, active.media_version_id).await;
+    let source_audio_streams =
+        load_source_audio_streams(&state.pool, active.media_version_id).await;
     let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
         Ok(Some(profile)) => profile,
         Ok(None) => {
@@ -101,6 +104,15 @@ pub async fn serve_channel_stream(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+    let effective_acceleration =
+        if channel.streaming_mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect {
+            ersatzrs_domain::HardwareAccelerationKind::None
+        } else {
+            playback_profile.profile.hardware_acceleration
+        };
+    let source_stream =
+        enrich_source_video_stream_for_playback(source_stream, effective_acceleration, &resolved)
+            .await;
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
             Ok(frame_rate) => frame_rate,
@@ -233,6 +245,7 @@ pub async fn serve_channel_stream(
         channel.streaming_mode,
         runtime_capabilities,
         source_stream,
+        source_audio_streams,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -443,6 +456,7 @@ fn build_stream_command(
     streaming_mode: ersatzrs_domain::StreamingMode,
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -460,6 +474,7 @@ fn build_stream_command(
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
+    request = request.with_source_audio_streams(source_audio_streams);
     if let Some(subtitle_input) = subtitle_input {
         request.inputs.push(subtitle_input);
         request = request.with_subtitle_fonts_dir(subtitle_fonts_dir());
@@ -613,6 +628,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             Vec::new(),
@@ -635,6 +651,7 @@ mod tests {
             StreamingMode::HttpLiveStreamingDirect,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             Vec::new(),
@@ -656,6 +673,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             Vec::new(),
@@ -676,6 +694,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             vec![GraphicsPipelineOverlay::drawvg(
@@ -776,6 +795,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             Vec::new(),
@@ -839,6 +859,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             vec![(
                 InputFile::watermark(logo.to_string_lossy().into_owned()),
@@ -985,6 +1006,7 @@ mod tests {
             StreamingMode::TransportStream,
             FfmpegCapabilityReport::default(),
             None,
+            Vec::new(),
             None,
             Vec::new(),
             vec![GraphicsPipelineOverlay::drawvg(

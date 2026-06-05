@@ -95,9 +95,19 @@ impl CommandGenerator {
 
                 if should_include {
                     included_paths.push(input.path.clone());
+                    if kind == InputKind::Video && same_audio_and_video && !is_intel_vaapi_or_qsv {
+                        for audio_input in inputs.iter().filter(|audio_input| {
+                            audio_input.kind == InputKind::Audio
+                                && audio_input.path == input.path
+                                && !audio_input.input_options.is_empty()
+                        }) {
+                            arguments.extend(shared_video_audio_input_options(audio_input));
+                        }
+                    }
                     arguments.extend(input.input_options.iter().cloned());
                     arguments.extend(["-i".to_owned(), input.path.clone()]);
-                } else if same_audio_and_video && kind == InputKind::Audio {
+                } else if same_audio_and_video && kind == InputKind::Audio && is_intel_vaapi_or_qsv
+                {
                     arguments.extend(input.input_options.iter().cloned());
                 }
             }
@@ -152,4 +162,21 @@ fn same_audio_and_video(inputs: &[InputFile]) -> bool {
         .find(|input| input.kind == InputKind::Audio)
         .map(|input| &input.path);
     video_path.is_some() && video_path == audio_path
+}
+
+fn shared_video_audio_input_options(input: &InputFile) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut options = input.input_options.iter();
+    while let Some(option) = options.next() {
+        if option == "-readrate" {
+            let _ = options.next();
+            continue;
+        }
+
+        result.push(option.clone());
+        if let Some(value) = options.next() {
+            result.push(value.clone());
+        }
+    }
+    result
 }

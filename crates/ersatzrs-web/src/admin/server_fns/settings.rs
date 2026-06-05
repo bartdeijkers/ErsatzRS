@@ -578,7 +578,12 @@ async fn refresh_ffmpeg_runtime(
     ffmpeg_path: &str,
     ffprobe_path: &str,
 ) -> Result<(), ServerFnError> {
-    let config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(ffmpeg_path, ffprobe_path);
+    let config = crate::host::bootstrap::ffmpeg_runtime_config_with_profile_probes(
+        &state.pool,
+        ffmpeg_path,
+        ffprobe_path,
+    )
+    .await;
     let report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?;
