@@ -2481,6 +2481,18 @@ fn video_bitrate_option(bitrate: u32) -> PipelineStep {
     )
 }
 
+fn frame_rate_output_option(frame_rate: FrameRate) -> PipelineStep {
+    PipelineStep::generic(
+        "frame_rate_output",
+        [
+            "-r".to_owned(),
+            frame_rate.r_frame_rate(),
+            "-vsync".to_owned(),
+            "cfr".to_owned(),
+        ],
+    )
+}
+
 fn add_output_options(
     steps: &mut Vec<PipelineStep>,
     state: &FfmpegState,
@@ -2509,6 +2521,11 @@ fn add_output_options(
     }
 
     if desired.video_format != FFmpegProfileVideoFormat::Copy {
+        if acceleration != HardwareAccelerationKind::Qsv {
+            if let Some(frame_rate) = desired.frame_rate {
+                steps.push(frame_rate_output_option(frame_rate));
+            }
+        }
         if let Some(timescale) = desired.video_track_timescale {
             steps.push(PipelineStep::generic(
                 "video_track_timescale",
