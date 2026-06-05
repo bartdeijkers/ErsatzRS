@@ -32,7 +32,7 @@ windows-sys = { version = "0.61", features = [
 [target.'cfg(windows)'.build-dependencies]
 # Compile the .rc (embeds the tray icon as a named resource + version info) and
 # statically link the MSVC CRT so the exe needs no VC++ redistributable.
-embed-resource = "2"
+embed-resource = "3"
 static_vcruntime = "3"
 
 # This crate is the intentional exception to the workspace-wide
