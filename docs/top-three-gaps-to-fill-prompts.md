@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-05
-last_processed_commit: ef671bb02715144080a36e8c14e91895990d570d
+generated: 2026-06-06
+last_processed_commit: 65ece702ccf8a07af03a6200a889f01788943211
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,10 +21,10 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: all three carried over — the window (ef671bb) added only
-docs/automation/ scaffolding; no feature parity commits landed. Phase 7 focus
-leads with health/troubleshooting coverage (first item in `next_steps`), then
-the foundational FFmpeg pipeline gaps that everything downstream depends on.
+Ranking this run: all three carried over — the window (ef671bb..65ece70)
+contained only the previous daily routine run (docs-only); no feature parity
+commits landed. Phase 7 focus leads with support-pages (health/troubleshooting),
+then the foundational FFmpeg pipeline and HLS transport gaps.
 
 ---
 
