@@ -21,7 +21,7 @@ use crate::{
     FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize,
     FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind,
     PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    WatermarkOverlay,
+    VaapiProfileEntrypoint, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -1051,6 +1051,7 @@ fn build_transcode_pipeline(
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawvg { .. }));
     let emit_pixel_format_output_option =
         should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
+    let runtime_capabilities = request.runtime_capabilities.clone();
     let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
         &request,
         effective_acceleration,
@@ -1149,7 +1150,11 @@ fn build_transcode_pipeline(
     let complex = ComplexFilter::build(&request.inputs, filter_chain, is_intel);
     let filter_graph = complex.filter_graph.clone();
 
-    steps.push(video_encoder(effective_acceleration, &request.desired));
+    steps.push(video_encoder(
+        effective_acceleration,
+        &request.desired,
+        runtime_capabilities.as_ref(),
+    ));
 
     // Port of `SoftwarePipelineBuilder.SetPixelFormat`: when the source frame
     // is in software memory and its pixel format differs from the desired
@@ -1807,6 +1812,7 @@ fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
 fn video_encoder(
     acceleration: HardwareAccelerationKind,
     desired: &DesiredVideoState,
+    runtime_capabilities: Option<&FfmpegCapabilityReport>,
 ) -> PipelineStep {
     let name = match desired.video_format {
         FFmpegProfileVideoFormat::Copy => "copy",
@@ -1815,6 +1821,10 @@ fn video_encoder(
     };
 
     let mut extra = Vec::new();
+    if acceleration == HardwareAccelerationKind::Vaapi {
+        extra.extend(vaapi_encoder_options(runtime_capabilities, desired));
+    }
+
     if let Some(profile) = video_profile_option(acceleration, desired) {
         extra.extend(["-profile:v".to_owned(), profile]);
     }
@@ -1857,6 +1867,60 @@ fn video_encoder(
     }
 
     PipelineStep::encoder(name, StreamKind::Video, extra)
+}
+
+fn vaapi_encoder_options(
+    report: Option<&FfmpegCapabilityReport>,
+    desired: &DesiredVideoState,
+) -> Vec<String> {
+    let Some(entrypoint) =
+        report.and_then(|report| vaapi_encoder_profile_entry(&report.vaapi_profiles, desired))
+    else {
+        return Vec::new();
+    };
+
+    let mut options = Vec::new();
+    if entrypoint.has_rate_control_mode("CQP")
+        && !entrypoint.has_rate_control_mode("VBR")
+        && !entrypoint.has_rate_control_mode("CBR")
+    {
+        options.extend(["-rc_mode".to_owned(), "1".to_owned()]);
+    }
+
+    if matches!(
+        desired.video_format,
+        FFmpegProfileVideoFormat::H264 | FFmpegProfileVideoFormat::Hevc
+    ) && entrypoint.packed_header_misc
+    {
+        options.extend(["-sei".to_owned(), "-a53_cc".to_owned()]);
+    }
+
+    options
+}
+
+fn vaapi_encoder_profile_entry<'a>(
+    profiles: &'a [VaapiProfileEntrypoint],
+    desired: &DesiredVideoState,
+) -> Option<&'a VaapiProfileEntrypoint> {
+    let bit_depth = match desired.bit_depth {
+        FFmpegProfileBitDepth::EightBit => 8,
+        FFmpegProfileBitDepth::TenBit => 10,
+    };
+
+    profiles.iter().find(|entry| {
+        entry.is_encode()
+            && match desired.video_format {
+                FFmpegProfileVideoFormat::H264 if bit_depth == 10 => false,
+                FFmpegProfileVideoFormat::H264 => entry.profile_matches("VAProfileH264Main"),
+                FFmpegProfileVideoFormat::Hevc if bit_depth == 10 => {
+                    entry.profile_matches("VAProfileHEVCMain10")
+                }
+                FFmpegProfileVideoFormat::Hevc => entry.profile_matches("VAProfileHEVCMain"),
+                FFmpegProfileVideoFormat::Av1 => entry.profile_matches("VAProfileAV1Profile0"),
+                FFmpegProfileVideoFormat::Mpeg2Video => entry.profile_matches("VAProfileMPEG2Main"),
+                FFmpegProfileVideoFormat::None | FFmpegProfileVideoFormat::Copy => false,
+            }
+    })
 }
 
 /// Port of `ErsatzTV`'s `PixelFormatOutputOption` for software encoders:

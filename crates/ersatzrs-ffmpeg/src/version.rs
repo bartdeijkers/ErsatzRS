@@ -298,6 +298,10 @@ pub struct VaapiProfileEntrypoint {
     /// Entrypoint name, such as `VAEntrypointVLD`, `VAEntrypointEncSlice`, or
     /// `VAEntrypointEncSliceLP`.
     pub entrypoint: String,
+    /// Rate-control modes reported for this profile/entrypoint row.
+    pub rate_control_modes: BTreeSet<String>,
+    /// Whether the row reports `VA_ENC_PACKED_HEADER_MISC`.
+    pub packed_header_misc: bool,
 }
 
 /// `FFmpeg`-reported details for one NVIDIA encoder.
@@ -378,7 +382,23 @@ impl VaapiProfileEntrypoint {
         Self {
             profile: profile.into(),
             entrypoint: entrypoint.into(),
+            rate_control_modes: BTreeSet::new(),
+            packed_header_misc: false,
         }
+    }
+
+    /// Return a copy with one VAAPI rate-control mode attached.
+    #[must_use]
+    pub fn with_rate_control_mode(mut self, mode: impl Into<String>) -> Self {
+        self.rate_control_modes.insert(mode.into());
+        self
+    }
+
+    /// Return a copy with packed-header misc support attached.
+    #[must_use]
+    pub fn with_packed_header_misc(mut self) -> Self {
+        self.packed_header_misc = true;
+        self
     }
 
     #[must_use]
@@ -398,6 +418,13 @@ impl VaapiProfileEntrypoint {
     #[must_use]
     pub fn profile_matches(&self, expected: &str) -> bool {
         self.profile.eq_ignore_ascii_case(expected)
+    }
+
+    #[must_use]
+    pub fn has_rate_control_mode(&self, expected: &str) -> bool {
+        self.rate_control_modes
+            .iter()
+            .any(|mode| mode.eq_ignore_ascii_case(expected))
     }
 }
 
@@ -1525,9 +1552,9 @@ fn dedupe_vaapi_profiles(profiles: Vec<VaapiProfileEntrypoint>) -> Vec<VaapiProf
 /// Parse VAAPI profile/entrypoint rows from `vainfo -a` output.
 #[must_use]
 pub fn parse_vaapi_profile_entrypoints(output: &str) -> Vec<VaapiProfileEntrypoint> {
-    output
-        .lines()
-        .filter_map(|line| {
+    let mut profiles = Vec::new();
+    for line in output.lines() {
+        if let Some(entry) = (|| {
             let mut profile = None;
             let mut entrypoint = None;
             for token in line.split(|ch: char| ch.is_whitespace() || ch == ':' || ch == ',') {
@@ -1538,8 +1565,22 @@ pub fn parse_vaapi_profile_entrypoints(output: &str) -> Vec<VaapiProfileEntrypoi
                 }
             }
             Some(VaapiProfileEntrypoint::new(profile?, entrypoint?))
-        })
-        .collect()
+        })() {
+            profiles.push(entry);
+            continue;
+        }
+
+        if let Some(last) = profiles.last_mut() {
+            for token in line.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_') {
+                if let Some(mode) = token.strip_prefix("VA_RC_") {
+                    last.rate_control_modes.insert(mode.to_owned());
+                } else if token == "VA_ENC_PACKED_HEADER_MISC" {
+                    last.packed_header_misc = true;
+                }
+            }
+        }
+    }
+    profiles
 }
 
 async fn check_ffprobe_json(ffprobe_path: &str) -> Result<(), FfmpegCheckError> {
@@ -1739,7 +1780,10 @@ Encoders:
 vainfo: VA-API version: 1.22
       VAProfileH264Main               : VAEntrypointVLD
       VAProfileH264Main               : VAEntrypointEncSlice
+          VAConfigAttribRateControl              : VA_RC_CQP
+          VAConfigAttribEncPackedHeaders         : VA_ENC_PACKED_HEADER_MISC
       VAProfileHEVCMain10             : VAEntrypointEncSliceLP
+          VAConfigAttribRateControl              : VA_RC_CBR
 ";
 
         let entries = parse_vaapi_profile_entrypoints(output);
@@ -1748,8 +1792,11 @@ vainfo: VA-API version: 1.22
         assert!(entries[0].profile_matches("VAProfileH264Main"));
         assert!(entries[0].is_decode());
         assert!(entries[1].is_encode());
+        assert!(entries[1].has_rate_control_mode("CQP"));
+        assert!(entries[1].packed_header_misc);
         assert!(entries[2].profile_matches("VAProfileHEVCMain10"));
         assert!(entries[2].is_encode());
+        assert!(entries[2].has_rate_control_mode("CBR"));
     }
 
     #[test]

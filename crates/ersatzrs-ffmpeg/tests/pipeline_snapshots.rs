@@ -23,8 +23,8 @@ use ersatzrs_ffmpeg::{
     OutputMetadata, PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder,
     RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec,
     SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
-    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VideoToolboxPipelineBuilder,
-    WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
+    TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VaapiProfileEntrypoint,
+    VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -934,6 +934,25 @@ fn vaapi_pipeline_uses_profile_device_and_driver_snapshot() {
         command.environment,
         command.arguments.join(" ")
     ));
+}
+
+#[test]
+fn vaapi_pipeline_emits_encoder_capability_options_snapshot() {
+    let mut report = capability_report_for_tests();
+    report.vaapi_profiles = vec![
+        VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointVLD"),
+        VaapiProfileEntrypoint::new("VAProfileH264Main", "VAEntrypointEncSlice")
+            .with_rate_control_mode("CQP")
+            .with_packed_header_misc(),
+    ];
+    let request = h264_request(DesiredVideoState::h264_1080p()).with_runtime_capabilities(report);
+
+    let pipeline = VaapiPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-codec:v h264_vaapi -rc_mode 1 -sei -a53_cc -profile:v high"));
+    insta::assert_snapshot!(arguments);
 }
 
 #[test]
