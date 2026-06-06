@@ -909,7 +909,26 @@ async fn enrich_device_profiles(
         } else {
             report.nvidia_gpu_list = probe_nvidia_gpu_list(&config.ffmpeg_path).await;
         }
-        report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
+        if nvidia.encoders_attempted {
+            report.nvidia_encoders = nvidia
+                .encoders
+                .into_iter()
+                .map(|encoder| {
+                    let capability = NvidiaEncoderCapability::new(
+                        encoder.encoder,
+                        encoder.pixel_formats,
+                        encoder.profiles,
+                    );
+                    if encoder.supports_b_frames {
+                        capability.with_b_frames()
+                    } else {
+                        capability
+                    }
+                })
+                .collect();
+        } else {
+            report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
+        }
         if nvidia_attempted {
             report.nvidia_decoders = nvidia
                 .decoders

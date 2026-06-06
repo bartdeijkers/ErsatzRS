@@ -11,11 +11,46 @@ use std::collections::BTreeSet;
 pub struct NvidiaProbe {
     /// Whether this runtime attempted the native CUDA/NVDEC probe.
     pub attempted: bool,
+    /// Whether this runtime attempted the native NVENC encoder probe.
+    pub encoders_attempted: bool,
+    /// Supported hardware encoder rows.
+    pub encoders: Vec<NvidiaEncoderProbe>,
     /// Supported hardware decoder rows.
     pub decoders: Vec<NvidiaDecoderProbe>,
     /// Human-readable native device detail text, matching ErsatzTV's
     /// troubleshooting shape where practical.
     pub device_details: Option<String>,
+}
+
+/// One NVIDIA native encoder capability row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvidiaEncoderProbe {
+    /// `FFmpeg` encoder name such as `h264_nvenc`, `hevc_nvenc`, or `av1_nvenc`.
+    pub encoder: String,
+    /// Pixel formats accepted by the encoder.
+    pub pixel_formats: BTreeSet<String>,
+    /// `FFmpeg` profile names accepted by the encoder.
+    pub profiles: BTreeSet<String>,
+    /// Whether the hardware encoder supports B-frame reference mode.
+    pub supports_b_frames: bool,
+}
+
+impl NvidiaEncoderProbe {
+    /// Create a native NVIDIA encoder row.
+    #[must_use]
+    pub fn new(
+        encoder: impl Into<String>,
+        pixel_formats: BTreeSet<String>,
+        profiles: BTreeSet<String>,
+        supports_b_frames: bool,
+    ) -> Self {
+        Self {
+            encoder: encoder.into(),
+            pixel_formats,
+            profiles,
+            supports_b_frames,
+        }
+    }
 }
 
 /// One NVIDIA native decoder capability row.
@@ -99,20 +134,32 @@ fn probe_videotoolbox_impl() -> VideoToolboxProbe {
 
 #[cfg(any(all(unix, not(target_os = "macos")), windows))]
 mod nvidia {
+    use std::collections::BTreeSet;
     use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
     use std::fmt::Write;
     use std::ptr;
 
-    use crate::{NvidiaDecoderProbe, NvidiaProbe};
+    use crate::{NvidiaDecoderProbe, NvidiaEncoderProbe, NvidiaProbe};
 
     type CuDevice = c_int;
     type CuContext = *mut c_void;
     type CuResult = c_int;
+    type NvEncStatus = c_int;
+    type NvEncoder = *mut c_void;
 
     const CUDA_SUCCESS: CuResult = 0;
     const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: c_int = 75;
     const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: c_int = 76;
     const CUDA_VIDEO_CHROMA_FORMAT_YUV420: c_uint = 1;
+    const NV_ENC_SUCCESS: c_int = 0;
+    const NV_ENC_DEVICE_TYPE_CUDA: c_uint = 1;
+    const NVENCAPI_VERSION: c_uint = 0x0c | (1 << 24);
+    const NVENCAPI_STRUCT_VERSION_ONE: c_uint = NVENCAPI_VERSION | (1 << 16) | (0x7 << 28);
+    const NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER: c_uint = NVENCAPI_STRUCT_VERSION_ONE;
+    const NV_ENC_CAPS_PARAM_VER: c_uint = NVENCAPI_STRUCT_VERSION_ONE;
+    const NV_ENCODE_API_FUNCTION_LIST_VER: c_uint = NVENCAPI_VERSION | (2 << 16) | (0x7 << 28);
+    const NV_ENC_CAPS_SUPPORT_10BIT_ENCODE: c_uint = 39;
+    const NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE: c_uint = 43;
 
     #[derive(Debug, Clone, Copy)]
     struct DecoderSpec {
@@ -121,6 +168,108 @@ mod nvidia {
         cuda_codec: c_uint,
         bit_depth: u8,
     }
+
+    #[derive(Debug, Clone, Copy)]
+    struct EncoderSpec {
+        encoder: &'static str,
+        guid: Guid,
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct Guid {
+        data1: u32,
+        data2: u16,
+        data3: u16,
+        data4: [u8; 8],
+    }
+
+    impl Guid {
+        const fn new(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Self {
+            Self {
+                data1,
+                data2,
+                data3,
+                data4,
+            }
+        }
+    }
+
+    const NV_ENC_CODEC_H264_GUID: Guid = Guid::new(
+        0x6bc8_2762,
+        0x4e63,
+        0x4ca4,
+        [0xaa, 0x85, 0x1e, 0x50, 0xf3, 0x21, 0xf6, 0xbf],
+    );
+    const NV_ENC_CODEC_HEVC_GUID: Guid = Guid::new(
+        0x790c_dc88,
+        0x4522,
+        0x4d7b,
+        [0x94, 0x25, 0xbd, 0xa9, 0x97, 0x5f, 0x76, 0x03],
+    );
+    const NV_ENC_CODEC_AV1_GUID: Guid = Guid::new(
+        0x0a35_2289,
+        0x0aa7,
+        0x4759,
+        [0x86, 0x2d, 0x5d, 0x15, 0xcd, 0x16, 0xd2, 0x54],
+    );
+    const NV_ENC_H264_PROFILE_BASELINE_GUID: Guid = Guid::new(
+        0x0727_bcaa,
+        0x78c4,
+        0x4c83,
+        [0x8c, 0x2f, 0xef, 0x3d, 0xff, 0x26, 0x7c, 0x6a],
+    );
+    const NV_ENC_H264_PROFILE_MAIN_GUID: Guid = Guid::new(
+        0x60b5_c1d4,
+        0x67fe,
+        0x4790,
+        [0x94, 0xd5, 0xc4, 0x72, 0x6d, 0x7b, 0x6e, 0x6d],
+    );
+    const NV_ENC_H264_PROFILE_HIGH_GUID: Guid = Guid::new(
+        0xe7cb_c309,
+        0x4f7a,
+        0x4b89,
+        [0xaf, 0x2a, 0xd5, 0x37, 0xc9, 0x2b, 0xe3, 0x10],
+    );
+    const NV_ENC_H264_PROFILE_HIGH_444_GUID: Guid = Guid::new(
+        0x7ac6_63cb,
+        0xa598,
+        0x4960,
+        [0xb8, 0x44, 0x33, 0x9b, 0x26, 0x1a, 0x7d, 0x52],
+    );
+    const NV_ENC_HEVC_PROFILE_MAIN_GUID: Guid = Guid::new(
+        0xb514_c39a,
+        0xb55b,
+        0x40fa,
+        [0x87, 0x8f, 0xf1, 0x25, 0x3b, 0x4d, 0xfd, 0xec],
+    );
+    const NV_ENC_HEVC_PROFILE_MAIN10_GUID: Guid = Guid::new(
+        0xfa4d_2b6c,
+        0x3a5b,
+        0x411a,
+        [0x80, 0x18, 0x0a, 0x3f, 0x5e, 0x3c, 0x9b, 0xe5],
+    );
+    const NV_ENC_AV1_PROFILE_MAIN_GUID: Guid = Guid::new(
+        0x5f2a_39f5,
+        0xf14e,
+        0x4f95,
+        [0x9a, 0x9e, 0xb7, 0x6d, 0x56, 0x8f, 0xcf, 0x97],
+    );
+
+    const ENCODER_SPECS: &[EncoderSpec] = &[
+        EncoderSpec {
+            encoder: "h264_nvenc",
+            guid: NV_ENC_CODEC_H264_GUID,
+        },
+        EncoderSpec {
+            encoder: "hevc_nvenc",
+            guid: NV_ENC_CODEC_HEVC_GUID,
+        },
+        EncoderSpec {
+            encoder: "av1_nvenc",
+            guid: NV_ENC_CODEC_AV1_GUID,
+        },
+    ];
 
     const DECODER_SPECS: &[DecoderSpec] = &[
         DecoderSpec {
@@ -263,9 +412,174 @@ mod nvidia {
         }
     }
 
+    #[repr(C)]
+    struct NvEncOpenEncodeSessionExParams {
+        version: c_uint,
+        device_type: c_uint,
+        device: *mut c_void,
+        reserved: *mut c_void,
+        api_version: c_uint,
+        reserved1: [c_uint; 253],
+        reserved2: [*mut c_void; 64],
+    }
+
+    impl NvEncOpenEncodeSessionExParams {
+        fn for_cuda_context(context: CuContext) -> Self {
+            Self {
+                version: NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER,
+                device_type: NV_ENC_DEVICE_TYPE_CUDA,
+                device: context,
+                reserved: ptr::null_mut(),
+                api_version: NVENCAPI_VERSION,
+                reserved1: [0; 253],
+                reserved2: [ptr::null_mut(); 64],
+            }
+        }
+    }
+
+    #[repr(C)]
+    struct NvEncCapsParam {
+        version: c_uint,
+        caps_to_query: c_uint,
+        reserved: [c_uint; 62],
+    }
+
+    impl NvEncCapsParam {
+        fn new(caps_to_query: c_uint) -> Self {
+            Self {
+                version: NV_ENC_CAPS_PARAM_VER,
+                caps_to_query,
+                reserved: [0; 62],
+            }
+        }
+    }
+
+    type NvEncOpenEncodeSession =
+        Option<unsafe extern "C" fn(*mut c_void, c_uint, *mut NvEncoder) -> NvEncStatus>;
+    type NvEncGetEncodeGuidCount =
+        Option<unsafe extern "C" fn(NvEncoder, *mut c_uint) -> NvEncStatus>;
+    type NvEncGetEncodeGuids =
+        Option<unsafe extern "C" fn(NvEncoder, *mut Guid, c_uint, *mut c_uint) -> NvEncStatus>;
+    type NvEncGetEncodeProfileGuidCount =
+        Option<unsafe extern "C" fn(NvEncoder, Guid, *mut c_uint) -> NvEncStatus>;
+    type NvEncGetEncodeProfileGuids = Option<
+        unsafe extern "C" fn(NvEncoder, Guid, *mut Guid, c_uint, *mut c_uint) -> NvEncStatus,
+    >;
+    type NvEncGetEncodeCaps = Option<
+        unsafe extern "C" fn(NvEncoder, Guid, *mut NvEncCapsParam, *mut c_int) -> NvEncStatus,
+    >;
+    type NvEncDestroyEncoder = Option<unsafe extern "C" fn(NvEncoder) -> NvEncStatus>;
+    type NvEncOpenEncodeSessionEx = Option<
+        unsafe extern "C" fn(*mut NvEncOpenEncodeSessionExParams, *mut NvEncoder) -> NvEncStatus,
+    >;
+
+    #[repr(C)]
+    struct NvEncodeApiFunctionList {
+        version: c_uint,
+        reserved: c_uint,
+        nv_enc_open_encode_session: NvEncOpenEncodeSession,
+        nv_enc_get_encode_guid_count: NvEncGetEncodeGuidCount,
+        nv_enc_get_encode_profile_guid_count: NvEncGetEncodeProfileGuidCount,
+        nv_enc_get_encode_profile_guids: NvEncGetEncodeProfileGuids,
+        nv_enc_get_encode_guids: NvEncGetEncodeGuids,
+        nv_enc_get_input_format_count: *mut c_void,
+        nv_enc_get_input_formats: *mut c_void,
+        nv_enc_get_encode_caps: NvEncGetEncodeCaps,
+        nv_enc_get_encode_preset_count: *mut c_void,
+        nv_enc_get_encode_preset_guids: *mut c_void,
+        nv_enc_get_encode_preset_config: *mut c_void,
+        nv_enc_initialize_encoder: *mut c_void,
+        nv_enc_create_input_buffer: *mut c_void,
+        nv_enc_destroy_input_buffer: *mut c_void,
+        nv_enc_create_bitstream_buffer: *mut c_void,
+        nv_enc_destroy_bitstream_buffer: *mut c_void,
+        nv_enc_encode_picture: *mut c_void,
+        nv_enc_lock_bitstream: *mut c_void,
+        nv_enc_unlock_bitstream: *mut c_void,
+        nv_enc_lock_input_buffer: *mut c_void,
+        nv_enc_unlock_input_buffer: *mut c_void,
+        nv_enc_get_encode_stats: *mut c_void,
+        nv_enc_get_sequence_params: *mut c_void,
+        nv_enc_register_async_event: *mut c_void,
+        nv_enc_unregister_async_event: *mut c_void,
+        nv_enc_map_input_resource: *mut c_void,
+        nv_enc_unmap_input_resource: *mut c_void,
+        nv_enc_destroy_encoder: NvEncDestroyEncoder,
+        nv_enc_invalidate_ref_frames: *mut c_void,
+        nv_enc_open_encode_session_ex: NvEncOpenEncodeSessionEx,
+        nv_enc_register_resource: *mut c_void,
+        nv_enc_unregister_resource: *mut c_void,
+        nv_enc_reconfigure_encoder: *mut c_void,
+        reserved1: *mut c_void,
+        nv_enc_create_mv_buffer: *mut c_void,
+        nv_enc_destroy_mv_buffer: *mut c_void,
+        nv_enc_run_motion_estimation_only: *mut c_void,
+        nv_enc_get_last_error_string: *mut c_void,
+        nv_enc_set_io_cuda_streams: *mut c_void,
+        nv_enc_get_encode_preset_config_ex: *mut c_void,
+        nv_enc_get_sequence_param_ex: *mut c_void,
+        nv_enc_restore_encoder_state: *mut c_void,
+        nv_enc_lookahead_picture: *mut c_void,
+        reserved2: [*mut c_void; 275],
+    }
+
+    impl NvEncodeApiFunctionList {
+        fn new() -> Self {
+            Self {
+                version: NV_ENCODE_API_FUNCTION_LIST_VER,
+                reserved: 0,
+                nv_enc_open_encode_session: None,
+                nv_enc_get_encode_guid_count: None,
+                nv_enc_get_encode_profile_guid_count: None,
+                nv_enc_get_encode_profile_guids: None,
+                nv_enc_get_encode_guids: None,
+                nv_enc_get_input_format_count: ptr::null_mut(),
+                nv_enc_get_input_formats: ptr::null_mut(),
+                nv_enc_get_encode_caps: None,
+                nv_enc_get_encode_preset_count: ptr::null_mut(),
+                nv_enc_get_encode_preset_guids: ptr::null_mut(),
+                nv_enc_get_encode_preset_config: ptr::null_mut(),
+                nv_enc_initialize_encoder: ptr::null_mut(),
+                nv_enc_create_input_buffer: ptr::null_mut(),
+                nv_enc_destroy_input_buffer: ptr::null_mut(),
+                nv_enc_create_bitstream_buffer: ptr::null_mut(),
+                nv_enc_destroy_bitstream_buffer: ptr::null_mut(),
+                nv_enc_encode_picture: ptr::null_mut(),
+                nv_enc_lock_bitstream: ptr::null_mut(),
+                nv_enc_unlock_bitstream: ptr::null_mut(),
+                nv_enc_lock_input_buffer: ptr::null_mut(),
+                nv_enc_unlock_input_buffer: ptr::null_mut(),
+                nv_enc_get_encode_stats: ptr::null_mut(),
+                nv_enc_get_sequence_params: ptr::null_mut(),
+                nv_enc_register_async_event: ptr::null_mut(),
+                nv_enc_unregister_async_event: ptr::null_mut(),
+                nv_enc_map_input_resource: ptr::null_mut(),
+                nv_enc_unmap_input_resource: ptr::null_mut(),
+                nv_enc_destroy_encoder: None,
+                nv_enc_invalidate_ref_frames: ptr::null_mut(),
+                nv_enc_open_encode_session_ex: None,
+                nv_enc_register_resource: ptr::null_mut(),
+                nv_enc_unregister_resource: ptr::null_mut(),
+                nv_enc_reconfigure_encoder: ptr::null_mut(),
+                reserved1: ptr::null_mut(),
+                nv_enc_create_mv_buffer: ptr::null_mut(),
+                nv_enc_destroy_mv_buffer: ptr::null_mut(),
+                nv_enc_run_motion_estimation_only: ptr::null_mut(),
+                nv_enc_get_last_error_string: ptr::null_mut(),
+                nv_enc_set_io_cuda_streams: ptr::null_mut(),
+                nv_enc_get_encode_preset_config_ex: ptr::null_mut(),
+                nv_enc_get_sequence_param_ex: ptr::null_mut(),
+                nv_enc_restore_encoder_state: ptr::null_mut(),
+                nv_enc_lookahead_picture: ptr::null_mut(),
+                reserved2: [ptr::null_mut(); 275],
+            }
+        }
+    }
+
     struct CudaApi {
         _cuda: Library,
         _cuvid: Library,
+        nvenc: Option<NvencApi>,
         cu_init: unsafe extern "C" fn(c_uint) -> CuResult,
         cu_device_get_count: unsafe extern "C" fn(*mut c_int) -> CuResult,
         cu_device_get: unsafe extern "C" fn(*mut CuDevice, c_int) -> CuResult,
@@ -301,6 +615,8 @@ mod nvidia {
             }
         }
 
+        let encoders_attempted = api.nvenc.is_some();
+        let mut encoders = Vec::new();
         let mut decoders = Vec::new();
         let mut details = String::new();
         for index in 0..device_count {
@@ -317,11 +633,34 @@ mod nvidia {
                 minor.unwrap_or_default()
             );
             let _ = writeln!(details);
-            let _ = writeln!(details, "  Decoding:");
 
             let Some(context) = api.create_context(device) else {
                 continue;
             };
+
+            let _ = writeln!(details, "  Encoding:");
+            if let Some(nvenc) = &api.nvenc {
+                for encoder in nvenc.encoders(context) {
+                    let b_frames = if encoder.supports_b_frames {
+                        " (with B-frames)"
+                    } else {
+                        ""
+                    };
+                    let supports_10_bit = encoder
+                        .pixel_formats
+                        .iter()
+                        .any(|format| format.eq_ignore_ascii_case("p010le"));
+                    let label = encoder_label(&encoder.encoder);
+                    let _ = writeln!(details, "    - Supports {label} 8-bit{b_frames}");
+                    if supports_10_bit {
+                        let _ = writeln!(details, "    - Supports {label} 10-bit{b_frames}");
+                    }
+                    encoders.push(encoder);
+                }
+            }
+
+            let _ = writeln!(details);
+            let _ = writeln!(details, "  Decoding:");
             for spec in DECODER_SPECS {
                 if api.decoder_supported(*spec) {
                     decoders.push(NvidiaDecoderProbe::new(spec.codec, spec.bit_depth));
@@ -333,6 +672,13 @@ mod nvidia {
             }
         }
 
+        encoders.sort_by(|left, right| left.encoder.cmp(&right.encoder));
+        encoders.dedup_by(|left, right| {
+            left.encoder == right.encoder
+                && left.pixel_formats == right.pixel_formats
+                && left.profiles == right.profiles
+                && left.supports_b_frames == right.supports_b_frames
+        });
         decoders.sort_by(|left, right| {
             left.codec
                 .cmp(&right.codec)
@@ -342,6 +688,8 @@ mod nvidia {
 
         NvidiaProbe {
             attempted: true,
+            encoders_attempted,
+            encoders,
             decoders,
             device_details: (!details.trim().is_empty()).then_some(details),
         }
@@ -361,6 +709,7 @@ mod nvidia {
                 cu_ctx_create: cuda.symbol_any(&["cuCtxCreate_v2\0", "cuCtxCreate\0"])?,
                 cu_ctx_destroy: cuda.symbol_any(&["cuCtxDestroy_v2\0", "cuCtxDestroy\0"])?,
                 cuvid_get_decoder_caps: cuvid.symbol("cuvidGetDecoderCaps\0")?,
+                nvenc: NvencApi::load(),
                 _cuda: cuda,
                 _cuvid: cuvid,
             })
@@ -412,6 +761,225 @@ mod nvidia {
         }
     }
 
+    struct NvencApi {
+        _nvenc: Library,
+        functions: NvEncodeApiFunctionList,
+    }
+
+    impl NvencApi {
+        fn load() -> Option<Self> {
+            let nvenc = Library::open_any(nvenc_library_names())?;
+            let create_instance: unsafe extern "C" fn(*mut NvEncodeApiFunctionList) -> NvEncStatus =
+                nvenc.symbol("NvEncodeAPICreateInstance\0")?;
+            let mut functions = NvEncodeApiFunctionList::new();
+            unsafe {
+                if create_instance(&raw mut functions) != NV_ENC_SUCCESS {
+                    return None;
+                }
+            }
+
+            if functions.nv_enc_open_encode_session_ex.is_none()
+                || functions.nv_enc_get_encode_guid_count.is_none()
+                || functions.nv_enc_get_encode_guids.is_none()
+                || functions.nv_enc_get_encode_profile_guid_count.is_none()
+                || functions.nv_enc_get_encode_profile_guids.is_none()
+                || functions.nv_enc_get_encode_caps.is_none()
+                || functions.nv_enc_destroy_encoder.is_none()
+            {
+                return None;
+            }
+
+            Some(Self {
+                _nvenc: nvenc,
+                functions,
+            })
+        }
+
+        fn encoders(&self, context: CuContext) -> Vec<NvidiaEncoderProbe> {
+            let Some(encoder) = self.open_encoder(context) else {
+                return Vec::new();
+            };
+
+            let codec_guids = self.encode_guids(encoder);
+            let mut encoders = Vec::new();
+            for spec in ENCODER_SPECS {
+                if !codec_guids.contains(&spec.guid) {
+                    continue;
+                }
+
+                let supports_10_bit =
+                    self.capability(encoder, spec.guid, NV_ENC_CAPS_SUPPORT_10BIT_ENCODE) > 0;
+                let supports_b_frames =
+                    self.capability(encoder, spec.guid, NV_ENC_CAPS_SUPPORT_BFRAME_REF_MODE) > 0;
+                let mut pixel_formats = BTreeSet::from(["nv12".to_owned()]);
+                if supports_10_bit {
+                    pixel_formats.insert("p010le".to_owned());
+                }
+                let profiles = self
+                    .profile_guids(encoder, spec.guid)
+                    .into_iter()
+                    .filter_map(profile_name)
+                    .map(str::to_owned)
+                    .collect();
+
+                encoders.push(NvidiaEncoderProbe::new(
+                    spec.encoder,
+                    pixel_formats,
+                    profiles,
+                    supports_b_frames,
+                ));
+            }
+
+            unsafe {
+                let _ = (self.functions.nv_enc_destroy_encoder.expect("checked"))(encoder);
+            }
+            encoders
+        }
+
+        fn open_encoder(&self, context: CuContext) -> Option<NvEncoder> {
+            let mut params = NvEncOpenEncodeSessionExParams::for_cuda_context(context);
+            let mut encoder = ptr::null_mut();
+            unsafe {
+                ((self
+                    .functions
+                    .nv_enc_open_encode_session_ex
+                    .expect("checked"))(&raw mut params, &raw mut encoder)
+                    == NV_ENC_SUCCESS
+                    && !encoder.is_null())
+                .then_some(encoder)
+            }
+        }
+
+        fn encode_guids(&self, encoder: NvEncoder) -> Vec<Guid> {
+            let Some(count) = self.count(encoder, CountKind::EncodeGuid) else {
+                return Vec::new();
+            };
+            let mut guids = vec![zeroed_guid(); count as usize];
+            let mut actual = 0;
+            unsafe {
+                if (self.functions.nv_enc_get_encode_guids.expect("checked"))(
+                    encoder,
+                    guids.as_mut_ptr(),
+                    count,
+                    &raw mut actual,
+                ) != NV_ENC_SUCCESS
+                {
+                    return Vec::new();
+                }
+            }
+            guids.truncate(actual as usize);
+            guids
+        }
+
+        fn profile_guids(&self, encoder: NvEncoder, codec: Guid) -> Vec<Guid> {
+            let Some(count) = self.count_for_codec(encoder, codec, CountKind::ProfileGuid) else {
+                return Vec::new();
+            };
+            let mut guids = vec![zeroed_guid(); count as usize];
+            let mut actual = 0;
+            unsafe {
+                if (self
+                    .functions
+                    .nv_enc_get_encode_profile_guids
+                    .expect("checked"))(
+                    encoder, codec, guids.as_mut_ptr(), count, &raw mut actual
+                ) != NV_ENC_SUCCESS
+                {
+                    return Vec::new();
+                }
+            }
+            guids.truncate(actual as usize);
+            guids
+        }
+
+        fn capability(&self, encoder: NvEncoder, codec: Guid, capability: c_uint) -> c_int {
+            let mut params = NvEncCapsParam::new(capability);
+            let mut value = 0;
+            unsafe {
+                if (self.functions.nv_enc_get_encode_caps.expect("checked"))(
+                    encoder,
+                    codec,
+                    &raw mut params,
+                    &raw mut value,
+                ) == NV_ENC_SUCCESS
+                {
+                    value
+                } else {
+                    0
+                }
+            }
+        }
+
+        fn count(&self, encoder: NvEncoder, kind: CountKind) -> Option<c_uint> {
+            let mut count = 0;
+            let status = unsafe {
+                match kind {
+                    CountKind::EncodeGuid => {
+                        (self
+                            .functions
+                            .nv_enc_get_encode_guid_count
+                            .expect("checked"))(encoder, &raw mut count)
+                    }
+                    CountKind::ProfileGuid => return None,
+                }
+            };
+            (status == NV_ENC_SUCCESS).then_some(count)
+        }
+
+        fn count_for_codec(
+            &self,
+            encoder: NvEncoder,
+            codec: Guid,
+            kind: CountKind,
+        ) -> Option<c_uint> {
+            let mut count = 0;
+            let status = unsafe {
+                match kind {
+                    CountKind::EncodeGuid => return None,
+                    CountKind::ProfileGuid => (self
+                        .functions
+                        .nv_enc_get_encode_profile_guid_count
+                        .expect("checked"))(
+                        encoder, codec, &raw mut count
+                    ),
+                }
+            };
+            (status == NV_ENC_SUCCESS).then_some(count)
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum CountKind {
+        EncodeGuid,
+        ProfileGuid,
+    }
+
+    fn zeroed_guid() -> Guid {
+        Guid::new(0, 0, 0, [0; 8])
+    }
+
+    fn encoder_label(encoder: &str) -> &str {
+        match encoder {
+            "h264_nvenc" => "h264",
+            "hevc_nvenc" => "hevc",
+            "av1_nvenc" => "av1",
+            _ => encoder,
+        }
+    }
+
+    fn profile_name(guid: Guid) -> Option<&'static str> {
+        match guid {
+            NV_ENC_H264_PROFILE_BASELINE_GUID => Some("baseline"),
+            NV_ENC_H264_PROFILE_MAIN_GUID
+            | NV_ENC_HEVC_PROFILE_MAIN_GUID
+            | NV_ENC_AV1_PROFILE_MAIN_GUID => Some("main"),
+            NV_ENC_H264_PROFILE_HIGH_GUID => Some("high"),
+            NV_ENC_H264_PROFILE_HIGH_444_GUID => Some("high444p"),
+            NV_ENC_HEVC_PROFILE_MAIN10_GUID => Some("main10"),
+            _ => None,
+        }
+    }
+
     #[cfg(unix)]
     fn cuda_library_names() -> &'static [&'static str] {
         &["libcuda.so.1", "libcuda.so"]
@@ -430,6 +998,16 @@ mod nvidia {
     #[cfg(windows)]
     fn cuvid_library_names() -> &'static [&'static str] {
         &["nvcuvid.dll"]
+    }
+
+    #[cfg(unix)]
+    fn nvenc_library_names() -> &'static [&'static str] {
+        &["libnvidia-encode.so.1", "libnvidia-encode.so"]
+    }
+
+    #[cfg(windows)]
+    fn nvenc_library_names() -> &'static [&'static str] {
+        &["nvEncodeAPI64.dll"]
     }
 
     struct Library {
@@ -523,7 +1101,11 @@ mod nvidia {
 
     #[cfg(test)]
     mod tests {
-        use super::{CuvidDecodeCaps, DECODER_SPECS};
+        use super::{
+            profile_name, CuvidDecodeCaps, NvEncOpenEncodeSessionExParams, NvEncodeApiFunctionList,
+            DECODER_SPECS, ENCODER_SPECS, NV_ENC_AV1_PROFILE_MAIN_GUID,
+            NV_ENC_H264_PROFILE_HIGH_444_GUID, NV_ENC_HEVC_PROFILE_MAIN10_GUID,
+        };
 
         #[test]
         fn decoder_specs_match_ersatztv_cuda_helper() {
@@ -558,6 +1140,31 @@ mod nvidia {
         #[test]
         fn cuvid_decode_caps_layout_covers_expected_fields() {
             assert!(std::mem::size_of::<CuvidDecodeCaps>() >= 64);
+        }
+
+        #[test]
+        fn encoder_specs_match_ersatztv_cuda_helper() {
+            let encoders = ENCODER_SPECS
+                .iter()
+                .map(|spec| spec.encoder)
+                .collect::<Vec<_>>();
+
+            assert_eq!(encoders, ["h264_nvenc", "hevc_nvenc", "av1_nvenc"]);
+            assert_eq!(
+                profile_name(NV_ENC_H264_PROFILE_HIGH_444_GUID),
+                Some("high444p")
+            );
+            assert_eq!(
+                profile_name(NV_ENC_HEVC_PROFILE_MAIN10_GUID),
+                Some("main10")
+            );
+            assert_eq!(profile_name(NV_ENC_AV1_PROFILE_MAIN_GUID), Some("main"));
+        }
+
+        #[test]
+        fn nvenc_layouts_cover_expected_fields() {
+            assert!(std::mem::size_of::<NvEncOpenEncodeSessionExParams>() >= 1_280);
+            assert!(std::mem::size_of::<NvEncodeApiFunctionList>() >= 2_500);
         }
     }
 }
