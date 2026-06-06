@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-05
-last_processed_commit: ef671bb02715144080a36e8c14e91895990d570d
+generated: 2026-06-06
+last_processed_commit: b7a5a1a68bae449dec088206cb0f4b76032864b6
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,10 +21,10 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: all three carried over — the window (ef671bb) added only
-docs/automation/ scaffolding; no feature parity commits landed. Phase 7 focus
-leads with health/troubleshooting coverage (first item in `next_steps`), then
-the foundational FFmpeg pipeline gaps that everything downstream depends on.
+Ranking this run: the fetched daily reconcile was docs-only and still listed
+FFmpeg command generation, but the local closeout marked that feature `Ported`.
+The current top three are support-pages (phase focus), HLS transport
+(foundational backend), then the in-progress media route-family parity slice.
 
 ---
 
@@ -70,44 +70,7 @@ Report Source Map, Visual Source Map, behavior implemented, remaining
 
 ---
 
-## 2 — FFmpeg command generation (slug `ffmpeg-command-generation`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation (slug
-`ffmpeg-command-generation`). This is a backend/pipeline gap — no admin UI.
-
-Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current remaining ParityDebt (from
-`docs/progress/parity/ffmpeg-command-generation.toml`): broader filter coverage
-and deeper per-device hardware probes. ErsatzTV source:
-`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs` (and the filter/codec
-neighbors). ErsatzRS target: `crates/ersatzrs-ffmpeg`. See ADR 0003.
-
-Before editing:
-1. Read `CommandGenerator.cs` and the filter-graph/codec builders it drives,
-   identifying the filters and per-device probe paths ErsatzRS does not yet
-   emit.
-2. Inspect the current `crates/ersatzrs-ffmpeg` builders and their `insta`
-   snapshots.
-3. Build a Source Map (ErsatzTV builders/filters, ErsatzRS target modules,
-   intentional deviations); identify remaining `ParityDebt`.
-
-Implement the slice: extend filter coverage and per-device hardware probing to
-mirror the ErsatzTV `CommandGenerator` structure (preserve its filter-label
-routing and concat handling; do not hand-roll a weaker substitute). Add or
-update `insta` snapshot tests for every changed argv — that is the primary
-regression gate. Update the parity file's remaining-work text.
-
-Verify with the focused crate gates (`cargo test -p ersatzrs-ffmpeg`, then
-`cargo clippy -p ersatzrs-ffmpeg --all-targets -- -D warnings`),
-`cargo insta review`, and `cargo xtask progress check`.
-Report Source Map, behavior implemented, remaining `ParityDebt`, the snapshot
-diffs reviewed, verification run, and changed files.
-
----
-
-## 3 — HLS variant playlists / segmenter (slug `hls-variant-playlists-segmenter`)
+## 2 — HLS variant playlists / segmenter (slug `hls-variant-playlists-segmenter`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: HLS variant playlists / segmenter
 (slug `hls-variant-playlists-segmenter`). Primarily backend/transport.
@@ -143,3 +106,59 @@ Verify with the focused transport/crate gates and `cargo xtask progress check`.
 If any IPTV playlist output is exercised live, capture a short runtime smoke as
 evidence. Report Source Map, behavior implemented, remaining `ParityDebt`,
 verification run, and changed files.
+
+---
+
+## 3 — Multi-collections / Rerun collections / Playlists / Filler presets (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: Multi-collections / Rerun
+collections / Playlists / Filler presets — routes `/media/multi-collections`,
+`/media/rerun-collections`, `/media/playlists`, and `/media/filler/presets`
+(slug `multi-collections-rerun-collections-playlists-filler-presets`).
+
+Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current parity state (from
+`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`):
+the list/editor surfaces are largely ported, including persisted page sizes,
+HTML POST fallback paths, playout refresh side effects, playlist item actions,
+canonical Classic scheduler-backed preview data, and persisted-language labels.
+Generated/system playlists intentionally diverge from ErsatzTV's disabled-editor
+presentation under ADR 0011.
+
+ErsatzTV source: `ErsatzTV/Pages/MultiCollections*.razor`,
+`ErsatzTV/Pages/RerunCollections.razor`,
+`ErsatzTV/Pages/RerunCollectionEditor.razor`,
+`ErsatzTV/Pages/Playlists.razor`, `ErsatzTV/Pages/PlaylistEditor.razor`,
+`ErsatzTV/Pages/FillerPresets.razor`, and
+`ErsatzTV/Pages/FillerPresetEditor.razor`. ErsatzRS target:
+`crates/ersatzrs-web/src/admin/pages/media/` and
+`crates/ersatzrs-web/src/admin/languages/`.
+
+Before editing:
+1. Read the ErsatzTV Razor/editor sources above, focusing on any remaining
+   route-family gaps, generated playlist behavior, list actions, dialogs,
+   preview data, and delete/save side effects.
+2. Inspect the current ErsatzRS media pages, server functions, i18n language
+   modules, fallback routes, and focused media-page tests.
+3. Build a Source Map and Visual Source Map for the touched route(s), including
+   tables, action bars, editors, dialogs, pager geometry, and known ADR 0011
+   deviation.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+
+Implement the coherent end-to-end slice: close the next remaining route-family
+gap while preserving ErsatzTV fields, actions, labels, validation, persistence,
+delete/copy/edit side effects, playout refresh behavior, and visible layout.
+Keep SSR/browser-safe fallback paths working, follow `TEST.md` hydration rules,
+localize every new visible string across `en-us`/`pl`/`pt-br`/`nl`, add focused
+tests, and update the parity file.
+
+Visual verification: serve via `./run.sh serve` after rebuilding Leptos assets,
+open each touched route in a fresh context, and compare same-viewport geometry
+against ErsatzTV references or the Razor-derived contract. Cover action bars,
+tables/forms, dialogs, pagers, clipped text, and overflow.
+
+Verify with focused media-page tests, `cargo xtask parity-check web`, and
+`cargo xtask progress check`. Report Source Map, Visual Source Map, behavior
+implemented, remaining `ParityDebt`, verification run, and changed files.
