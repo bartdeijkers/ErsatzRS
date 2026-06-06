@@ -268,8 +268,8 @@ pub struct FfmpegCapabilityReport {
     /// QSV device profile/entrypoint rows, usually parsed from `ffmpeg` QSV
     /// probe output plus `vainfo` on Linux.
     pub qsv_profiles: Vec<VaapiProfileEntrypoint>,
-    /// Raw NVIDIA GPU-list probe output from `FFmpeg`'s `h264_nvenc -gpu list`
-    /// fallback path.
+    /// NVIDIA native device details, or raw GPU-list probe output from
+    /// `FFmpeg`'s `h264_nvenc -gpu list` fallback path.
     pub nvidia_gpu_list: Option<String>,
     /// NVIDIA encoder details parsed from `ffmpeg -h encoder=<name>` output.
     pub nvidia_encoders: Vec<NvidiaEncoderCapability>,
@@ -899,10 +899,27 @@ async fn enrich_device_profiles(
     }
 
     if report.has_hwaccel("cuda") || has_encoder_suffix(&report.encoders, "_nvenc") {
-        report.nvidia_gpu_list = probe_nvidia_gpu_list(&config.ffmpeg_path).await;
+        let nvidia = ersatzrs_hwprobe::probe_nvidia();
+        let nvidia_attempted = nvidia.attempted;
+        if nvidia_attempted {
+            report.nvidia_gpu_list = match nvidia.device_details {
+                Some(details) => Some(details),
+                None => probe_nvidia_gpu_list(&config.ffmpeg_path).await,
+            };
+        } else {
+            report.nvidia_gpu_list = probe_nvidia_gpu_list(&config.ffmpeg_path).await;
+        }
         report.nvidia_encoders = probe_nvidia_encoder_capabilities(config, report).await;
-        report.nvidia_decoders = probe_nvidia_decoder_capabilities(config, report).await;
-        if report.nvidia_decoders.is_empty() {
+        if nvidia_attempted {
+            report.nvidia_decoders = nvidia
+                .decoders
+                .into_iter()
+                .map(|decoder| NvidiaDecoderCapability::new(decoder.codec, decoder.bit_depth))
+                .collect();
+        } else {
+            report.nvidia_decoders = probe_nvidia_decoder_capabilities(config, report).await;
+        }
+        if !nvidia_attempted && report.nvidia_decoders.is_empty() {
             report.nvidia_decoders = report
                 .nvidia_gpu_list
                 .as_deref()
