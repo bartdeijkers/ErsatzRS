@@ -313,6 +313,9 @@ pub struct NvidiaEncoderCapability {
     pub pixel_formats: BTreeSet<String>,
     /// Profile option names accepted by the encoder.
     pub profiles: BTreeSet<String>,
+    /// Whether the hardware encoder accepted B-frame reference mode in a safe
+    /// encode probe.
+    pub supports_b_frames: bool,
 }
 
 impl NvidiaEncoderCapability {
@@ -327,7 +330,14 @@ impl NvidiaEncoderCapability {
             encoder: encoder.into(),
             pixel_formats,
             profiles,
+            supports_b_frames: false,
         }
+    }
+
+    #[must_use]
+    pub fn with_b_frames(mut self) -> Self {
+        self.supports_b_frames = true;
+        self
     }
 
     #[must_use]
@@ -954,9 +964,46 @@ async fn probe_nvidia_encoder_capabilities(
             continue;
         };
         let text = String::from_utf8_lossy(&output);
-        capabilities.push(parse_nvidia_encoder_capability(encoder, &text));
+        let mut capability = parse_nvidia_encoder_capability(encoder, &text);
+        if encoder == "hevc_nvenc" && probe_hevc_nvenc_b_frame_ref_mode(&config.ffmpeg_path).await {
+            capability = capability.with_b_frames();
+        }
+        capabilities.push(capability);
     }
     capabilities
+}
+
+async fn probe_hevc_nvenc_b_frame_ref_mode(ffmpeg_path: &str) -> bool {
+    if cfg!(target_os = "macos") {
+        return false;
+    }
+
+    tokio::process::Command::new(ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=64x64:rate=1:duration=1",
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "hevc_nvenc",
+            "-bf",
+            "1",
+            "-b_ref_mode",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .await
+        .is_ok_and(|output| output.status.success())
 }
 
 #[derive(Debug, Clone, Copy)]

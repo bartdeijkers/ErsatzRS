@@ -686,6 +686,29 @@ fn nvenc_pipeline_uses_software_decode_when_decoder_detail_lacks_10bit_snapshot(
 }
 
 #[test]
+fn nvenc_hevc_pipeline_uses_b_ref_mode_when_probe_supports_b_frames_snapshot() {
+    let mut desired = hevc_10bit_desired();
+    desired.allow_b_frames = true;
+    desired.video_preset = Some("medium".to_owned());
+    let mut report = capability_report_for_tests();
+    report.nvidia_encoders = vec![ersatzrs_ffmpeg::NvidiaEncoderCapability::new(
+        "hevc_nvenc",
+        std::collections::BTreeSet::from(["p010le".to_owned()]),
+        std::collections::BTreeSet::from(["main10".to_owned()]),
+    )
+    .with_b_frames()];
+    let request = h264_request(desired).with_runtime_capabilities(report);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-codec:v hevc_nvenc -tag:v hvc1 -b_ref_mode 1"));
+    assert!(!arguments.contains("-bf 0"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn nvenc_pipeline_uses_software_encode_when_encoder_detail_lacks_10bit_snapshot() {
     let mut request = h264_request(hevc_10bit_desired());
     let mut report = capability_report_for_tests();

@@ -1841,7 +1841,10 @@ fn video_encoder(
         }
         (HardwareAccelerationKind::Nvenc, FFmpegProfileVideoFormat::Hevc) => {
             extra.extend(["-tag:v".to_owned(), "hvc1".to_owned()]);
-            extra.extend(["-b_ref_mode".to_owned(), "0".to_owned()]);
+            extra.extend([
+                "-b_ref_mode".to_owned(),
+                nvidia_hevc_b_ref_mode(runtime_capabilities, desired).to_owned(),
+            ]);
         }
         _ => {}
     }
@@ -1896,6 +1899,30 @@ fn vaapi_encoder_options(
     }
 
     options
+}
+
+fn nvidia_hevc_b_ref_mode(
+    report: Option<&FfmpegCapabilityReport>,
+    desired: &DesiredVideoState,
+) -> &'static str {
+    if !desired.allow_b_frames {
+        return "0";
+    }
+
+    let Some(details) = report.and_then(|report| {
+        report
+            .nvidia_encoders
+            .iter()
+            .find(|details| details.encoder_matches("hevc_nvenc"))
+    }) else {
+        return "0";
+    };
+
+    if details.supports_b_frames {
+        "1"
+    } else {
+        "0"
+    }
 }
 
 fn vaapi_encoder_profile_entry<'a>(
