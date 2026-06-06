@@ -20,7 +20,32 @@ pub(crate) const FFPROBE_PATH_ENV_VARS: &[&str] = &[
     "ERSATZRS_FFPROBE",
 ];
 
-const REQUIRED_FILTERS: &[&str] = &["drawvg", "format", "overlay", "scale", "subtitles"];
+const REQUIRED_FILTERS: &[&str] = &[
+    // ErsatzRS intentionally adds drawvg for the in-process graphics engine
+    // replacement covered by ADR 0003.
+    "drawvg",
+    "apad",
+    "aresample",
+    "color",
+    "colorchannelmixer",
+    "colorspace",
+    "crop",
+    "fade",
+    "format",
+    "fps",
+    "framerate",
+    "loop",
+    "loudnorm",
+    "overlay",
+    "pad",
+    "realtime",
+    "setpts",
+    "scale",
+    "subtitles",
+    "tonemap",
+    "yadif",
+    "zscale",
+];
 const REQUIRED_ENCODERS: &[&str] = &["aac", "ac3", "libsvtav1", "libx264", "libx265"];
 const REQUIRED_DECODERS: &[&str] = &["av1", "h264", "hevc"];
 const REQUIRED_CONFIGURATION_FLAGS: &[&str] = &[
@@ -1993,6 +2018,39 @@ h264_nvenc AVOptions:
         assert_eq!(
             specs.iter().map(|spec| spec.fourcc).collect::<Vec<_>>(),
             vec!["av01", "avc1", "hvc1"]
+        );
+    }
+
+    #[test]
+    fn default_runtime_check_requires_ersatztv_filters_plus_drawvg() {
+        let config = FfmpegRuntimeCheckConfig::default();
+
+        assert_eq!(
+            config.required_filters,
+            [
+                "drawvg",
+                "apad",
+                "aresample",
+                "color",
+                "colorchannelmixer",
+                "colorspace",
+                "crop",
+                "fade",
+                "format",
+                "fps",
+                "framerate",
+                "loop",
+                "loudnorm",
+                "overlay",
+                "pad",
+                "realtime",
+                "setpts",
+                "scale",
+                "subtitles",
+                "tonemap",
+                "yadif",
+                "zscale",
+            ]
         );
     }
 
