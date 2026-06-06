@@ -11,8 +11,8 @@ use crate::{
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
     no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
-    normalize_loudness_filter, pad_filter, pipe_output, progress_to_stdout, reset_pts_filter,
-    scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
+    normalize_loudness_filter, pad_filter, pipe_output, progress_to_stdout, realtime_filter,
+    reset_pts_filter, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
     still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
@@ -1320,6 +1320,9 @@ fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut F
         .is_some_and(|source| source.is_still_image)
     {
         filter_chain.video.push(still_image_loop_filter());
+        if request.desired.realtime_mode == RealtimeMode::On {
+            filter_chain.video.push(realtime_filter());
+        }
     }
 }
 

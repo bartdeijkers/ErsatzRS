@@ -641,6 +641,25 @@ fn software_pipeline_still_image_source_loops_video_snapshot() {
 }
 
 #[test]
+fn software_pipeline_realtime_still_image_source_uses_realtime_filter_snapshot() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.realtime_mode = RealtimeMode::On;
+    let mut source = source_1080p(SourceVideoCodec::Unknown, 1920, 1080);
+    source.is_still_image = true;
+    source.frame_rate = Some(FrameRate::DEFAULT);
+    let request = PipelineRequest::new(InputFile::video("/media/poster.jpg"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("loop=-1:1,realtime"));
+    assert!(!arguments.contains("-readrate 1.05 -i /media/poster.jpg"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn nvenc_pipeline_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let request = h264_request(desired);
