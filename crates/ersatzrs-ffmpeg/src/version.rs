@@ -1350,6 +1350,14 @@ async fn probe_videotoolbox_framework_capabilities(
     ffmpeg_path: &str,
     report: &FfmpegCapabilityReport,
 ) -> VideoToolboxFrameworkCapabilities {
+    let native_probe = ersatzrs_hwprobe::probe_videotoolbox();
+    if native_probe.attempted {
+        return VideoToolboxFrameworkCapabilities {
+            decoders: native_probe.decoders,
+            encoders: native_probe.encoders,
+        };
+    }
+
     if cfg!(target_os = "macos") {
         probe_videotoolbox_ffmpeg_capabilities(ffmpeg_path, report).await
     } else {

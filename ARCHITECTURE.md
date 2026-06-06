@@ -9,6 +9,7 @@ boundaries explicit.
 crates/
   ersatzrs-domain/   entities, enums, value objects
   ersatzrs-core/     business logic, scheduling traits, repository traits
+  ersatzrs-hwprobe/  native OS/GPU capability probes behind a safe API
   ersatzrs-ffmpeg/   FFmpeg argument and filter-graph builders
   ersatzrs-infra/    sqlx repositories, migrations, provider clients
   ersatzrs-app/      use-case handlers
@@ -36,6 +37,10 @@ Rules:
 
 - `ersatzrs-domain` depends on no other ErsatzRS crate.
 - `ersatzrs-core` owns traits and business rules, not sqlx or HTTP clients.
+- `ersatzrs-hwprobe` is the only non-launcher crate allowed to use small,
+  platform-guarded native FFI for hardware capability enumeration. It exposes
+  safe value objects to `ersatzrs-ffmpeg`; command generation must not contain
+  native FFI directly.
 - `ersatzrs-infra` implements repository and provider traits from `ersatzrs-core`.
 - `ersatzrs-app` coordinates use cases and depends on traits, not concrete storage.
 - `ersatzrs-web` owns HTTP, Leptos, IPTV, HLS, and HDHomeRun endpoints.
@@ -44,7 +49,8 @@ Rules:
   `host` for runtime, `transport` for IPTV/HDHomeRun-style protocols, `api` for
   plain axum admin APIs, and `admin` for the Leptos UI.
 - `ersatzrs-scanner` owns scanner CLI concerns.
-- `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction.
+- `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction, and consumes
+  safe hardware capability rows from `ersatzrs-hwprobe`.
 - Cycles are forbidden.
 
 ## Porting Rule

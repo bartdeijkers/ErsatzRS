@@ -1,0 +1,17 @@
+[package]
+name = "ersatzrs-hwprobe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+# This crate is the narrow native-probe boundary for hardware APIs that have no
+# safe Rust wrapper in the workspace. Keep unsafe code platform-guarded and
+# expose safe value objects to the rest of ErsatzRS.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

@@ -1075,11 +1075,16 @@ name = "ersatzrs-ffmpeg"
 version = "0.1.0"
 dependencies = [
  "ersatzrs-domain",
+ "ersatzrs-hwprobe",
  "insta",
  "mlua",
  "thiserror 2.0.18",
  "tokio",
 ]
+
+[[package]]
+name = "ersatzrs-hwprobe"
+version = "0.1.0"
 
 [[package]]
 name = "ersatzrs-infra"

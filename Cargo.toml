@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/ersatzrs-domain",
     "crates/ersatzrs-core",
+    "crates/ersatzrs-hwprobe",
     "crates/ersatzrs-ffmpeg",
     "crates/ersatzrs-infra",
     "crates/ersatzrs-app",
