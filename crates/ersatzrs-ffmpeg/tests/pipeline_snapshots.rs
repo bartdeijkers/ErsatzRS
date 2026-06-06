@@ -1869,7 +1869,7 @@ fn nvenc_pipeline_uses_vulkan_hwaccel_for_hdr_tonemap_snapshot() {
 }
 
 #[test]
-fn pipeline_emits_frame_rate_filter_when_source_differs_snapshot() {
+fn software_pipeline_uses_output_frame_rate_when_source_differs_snapshot() {
     let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
     source.frame_rate = Some(FrameRate::new(25, 1));
     let mut desired = DesiredVideoState::h264_1080p();
@@ -1882,6 +1882,7 @@ fn pipeline_emits_frame_rate_filter_when_source_differs_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-r 60/1 -vsync cfr"));
+    assert!(!arguments.contains("framerate=fps=60/1"));
     insta::assert_snapshot!(arguments);
 }
 

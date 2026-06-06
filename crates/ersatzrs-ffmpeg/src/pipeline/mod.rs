@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, crop_filter,
-    cuda_software_fallback_upload_filter, deinterlace_filter, fast_start, frame_rate_filter,
+    cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
     no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
@@ -1293,19 +1293,6 @@ fn apply_source_video_filters(
         target_state.frame_data_location = crate::FrameDataLocation::Software;
         target_state.pixel_format = request.desired.pixel_format();
         upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
-    }
-
-    if let Some(desired_rate) = request.desired.frame_rate {
-        let needs_fps_filter = request
-            .source_video_stream
-            .as_ref()
-            .and_then(|source| source.frame_rate)
-            .is_some_and(|source_rate| source_rate != desired_rate);
-        if needs_fps_filter && is_transcode {
-            filter_chain
-                .video
-                .push(frame_rate_filter(target_state, desired_rate));
-        }
     }
 }
 
