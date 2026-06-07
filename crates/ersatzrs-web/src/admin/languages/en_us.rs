@@ -1323,6 +1323,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::StopOnDisconnect => "Stop On Disconnect",
         TextKey::StopScheduling => "Stop Scheduling",
         TextKey::StopSchedulingBlockItems => "Stop scheduling block items",
+        TextKey::StopTranscodeSession => "Stop Transcode Session",
         TextKey::StartFromBeginning => "Start From Beginning",
         TextKey::StreamSelector => "Stream Selector",
         TextKey::StreamSelectorMode => "Stream Selector Mode",

@@ -426,6 +426,14 @@ impl HlsSessionHandle for HlsSessionWorker {
             .await
             .map(|trimmed| trimmed.playlist)
     }
+
+    async fn cancel(&self) {
+        // Wake the worker's `run` select loop, which kills the FFmpeg child,
+        // cleans up the working directory, and removes itself from the
+        // registry. `notify_one` stores a permit if the worker is briefly
+        // between iterations, so the cancellation is never lost.
+        self.cancel.notify_one();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1149,6 +1157,26 @@ mod tests {
     use std::process::Stdio;
     use tokio::time::timeout;
     use uuid::Uuid;
+
+    #[tokio::test]
+    async fn cancel_signals_worker_run_loop() {
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-cancel"),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+
+        // `cancel` is requested while nothing is awaiting; `notify_one` must
+        // store a permit so the worker's select loop observes it on its next
+        // `cancel.notified()` poll.
+        worker.cancel().await;
+        timeout(Duration::from_millis(250), worker.cancel.notified())
+            .await
+            .expect("worker run loop observes the cancellation signal");
+    }
 
     #[test]
     fn build_hls_command_produces_hls_flags() {

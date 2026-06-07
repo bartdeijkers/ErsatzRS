@@ -1,3 +1,4 @@
+{"agent":"Claude","date":"2026-06-07","summary":"Port /channels Stop Transcode Session button: HLS registry cancel/is_active/stop_channel + active_channels, stop/active server fns, poll-driven stop icon between preview and edit (verified live: session start->visible, click->teardown)"}
 {"agent":"claude-opus","date":"2026-06-07","summary":"Require zscale (libzimg) in self-built/release FFmpeg runtimes; document drawvg+zscale diagnosis/remediation for fail-fast startup check"}
 {"agent":"ersatzrs-daily-progress","date":"2026-06-07","summary":"Daily reconcile: one docs-only commit (advance gap prompt marker); no parity changes; carried over top-3 gaps (support-pages, hls-variant-playlists-segmenter, multi-collections-rerun-collections-playlists-filler-presets)."}
 {"agent":"Codex","date":"2026-06-06","summary":"FFmpeg command-generation parity: closed native VideoToolbox, CUDA/NVDEC, and NVENC capability enumeration and marked the feature ported."}

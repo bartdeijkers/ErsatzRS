@@ -169,6 +169,7 @@
 }
 
 .row-btn-preview::before { content: "▶"; }
+.row-btn-stop::before { content: "■"; font-size: 1rem; }
 .row-btn-edit::before { content: "✎"; }
 .row-btn-search::before { content: "⌕"; }
 .row-btn-delete::before { content: "×"; }
@@ -178,6 +179,14 @@
 .row-btn-delete::before {
     font-size: 1.25rem;
     line-height: 1;
+}
+
+/* Stop transcode session button. Always present in the DOM (stable hydration
+   shape) and it always reserves its slot, matching ErsatzTV's 48px placeholder
+   so the row geometry does not shift; `visibility` is toggled reactively from
+   the live-session poll. */
+.row-btn-stop {
+    visibility: hidden;
 }
 
 .row-btn-disabled {

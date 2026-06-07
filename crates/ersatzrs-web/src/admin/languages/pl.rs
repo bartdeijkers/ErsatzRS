@@ -1959,6 +1959,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::StopOnDisconnect => "Zatrzymaj po rozłączeniu",
         TextKey::StopScheduling => "Zatrzymaj harmonogramowanie",
         TextKey::StopSchedulingBlockItems => "Zatrzymaj harmonogramowanie elementów bloku",
+        TextKey::StopTranscodeSession => "Zatrzymaj transkodowanie",
         TextKey::StartFromBeginning => "Rozpocznij od początku",
         TextKey::StreamSelector => "Selektor strumienia",
         TextKey::StreamSelectorMode => "Tryb selektora strumienia",

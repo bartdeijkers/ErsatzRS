@@ -48,6 +48,11 @@ impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
         let mut guard = self.inner.write().await;
         guard.remove(channel_number);
     }
+
+    async fn active_channels(&self) -> Vec<String> {
+        let guard = self.inner.read().await;
+        guard.keys().cloned().collect()
+    }
 }
 
 #[cfg(test)]
@@ -58,6 +63,17 @@ mod tests {
     struct FakeHandle {
         channel: String,
         touched: AtomicUsize,
+        cancelled: AtomicUsize,
+    }
+
+    impl FakeHandle {
+        fn new(channel: &str) -> Arc<Self> {
+            Arc::new(Self {
+                channel: channel.to_string(),
+                touched: AtomicUsize::new(0),
+                cancelled: AtomicUsize::new(0),
+            })
+        }
     }
 
     #[async_trait]
@@ -73,15 +89,16 @@ mod tests {
         async fn trim_playlist(&self) -> Option<String> {
             None
         }
+
+        async fn cancel(&self) {
+            self.cancelled.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     #[tokio::test]
     async fn try_get_returns_handle_after_insert() {
         let registry = InMemoryHlsSessionRegistry::new();
-        let handle = Arc::new(FakeHandle {
-            channel: "42".to_string(),
-            touched: AtomicUsize::new(0),
-        });
+        let handle = FakeHandle::new("42");
         registry.insert(handle.clone()).await;
 
         let retrieved = registry.try_get("42").await.expect("handle present");
@@ -95,17 +112,39 @@ mod tests {
     #[tokio::test]
     async fn try_insert_returns_false_when_channel_exists() {
         let registry = InMemoryHlsSessionRegistry::new();
-        let first = Arc::new(FakeHandle {
-            channel: "42".to_string(),
-            touched: AtomicUsize::new(0),
-        });
-        let second = Arc::new(FakeHandle {
-            channel: "42".to_string(),
-            touched: AtomicUsize::new(0),
-        });
+        let first = FakeHandle::new("42");
+        let second = FakeHandle::new("42");
 
         assert!(registry.try_insert(first).await);
         assert!(!registry.try_insert(second).await);
+    }
+
+    #[tokio::test]
+    async fn is_active_and_active_channels_track_registered_sessions() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        assert!(!registry.is_active("7").await);
+        assert!(registry.active_channels().await.is_empty());
+
+        registry.insert(FakeHandle::new("7")).await;
+        assert!(registry.is_active("7").await);
+        assert_eq!(registry.active_channels().await, vec!["7".to_string()]);
+
+        registry.remove("7").await;
+        assert!(!registry.is_active("7").await);
+        assert!(registry.active_channels().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stop_channel_cancels_handle_and_reports_presence() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("9");
+        registry.insert(handle.clone()).await;
+
+        assert!(registry.stop_channel("9").await);
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 1);
+
+        // Unknown channels report no session to stop.
+        assert!(!registry.stop_channel("missing").await);
     }
 
     #[tokio::test]

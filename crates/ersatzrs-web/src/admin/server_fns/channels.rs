@@ -490,6 +490,28 @@ fn dispatch_channel_save_side_effects(
     });
 }
 
+/// Returns the channel numbers that currently have a live transcode session.
+///
+/// Ports the `IFFmpegSegmenterService.Workers`/`IsActive` lookup that
+/// `ErsatzTV`'s `Channels.razor` uses to decide which rows show a stop button.
+#[server]
+pub async fn list_active_channel_numbers() -> Result<Vec<String>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.hls_sessions.active_channels().await)
+}
+
+/// Stops the active transcode session for `number`, returning whether one was
+/// running. Ports `Channels.StopChannel` → `IFFmpegSegmenterService.StopChannel`.
+#[server]
+pub async fn stop_channel_session(number: String) -> Result<bool, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    Ok(state.hls_sessions.stop_channel(&number).await)
+}
+
 /// Deletes a channel by id.
 #[server]
 pub async fn delete_channel(id: i64) -> Result<(), ServerFnError> {

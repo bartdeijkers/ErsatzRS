@@ -1949,6 +1949,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::StopOnDisconnect => "Stoppen bij verbreken",
         TextKey::StopScheduling => "Planning stoppen",
         TextKey::StopSchedulingBlockItems => "Planning van blokitems stoppen",
+        TextKey::StopTranscodeSession => "Transcodeersessie stoppen",
         TextKey::StartFromBeginning => "Vanaf begin starten",
         TextKey::StreamSelector => "Streamselector",
         TextKey::StreamSelectorMode => "Streamselectormodus",

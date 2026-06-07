@@ -2,8 +2,10 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{channel_language_label, channel_streaming_mode_label, tr, TextKey};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::channels::list_active_channel_numbers;
 use crate::admin::server_fns::channels::{
-    count_channels, delete_channel, list_channel_rows, ChannelListRow,
+    count_channels, delete_channel, list_channel_rows, stop_channel_session, ChannelListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -43,6 +45,35 @@ fn ChannelsListIsland() -> impl IntoView {
     let delete_action = Action::new(|id: &i64| delete_channel(*id));
     let delete_target: RwSignal<Option<ChannelListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
+
+    // Channel numbers with a live transcode session. Mirrors ErsatzTV's
+    // `IFFmpegSegmenterService.IsActive` check in `Channels.razor`; ErsatzTV
+    // re-renders on the `OnWorkersChanged` event, so we poll the registry the
+    // same way the libraries page polls the entity locker (client-side, no
+    // SignalR). The set drives the per-row stop-button visibility.
+    let active_numbers: RwSignal<Vec<String>> = RwSignal::new(Vec::new());
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(numbers) = list_active_channel_numbers().await {
+                        active_numbers.set(numbers);
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
+
+    // Stop the active transcode session for a channel number. The worker tears
+    // itself down asynchronously and removes itself from the registry, so the
+    // stop button disappears on the next poll tick — matching ErsatzTV, where
+    // the icon clears on the `OnWorkersChanged` event after teardown.
+    let stop_action = Action::new(|number: &String| {
+        let number = number.clone();
+        async move { stop_channel_session(number).await }
+    });
 
     Effect::new(move |_| {
         if matches!(delete_action.value().get(), Some(Ok(()))) {
@@ -115,6 +146,10 @@ fn ChannelsListIsland() -> impl IntoView {
         let id = ch.id;
         let number = ch.number.clone();
         let ch_clone = ch.clone();
+        let stop_number = number.clone();
+        let active_number = number.clone();
+        let is_active =
+            move || active_numbers.with(|nums| nums.iter().any(|n| n == &active_number));
         view! {
             <div class=style::row_actions>
                 <a
@@ -124,6 +159,15 @@ fn ChannelsListIsland() -> impl IntoView {
                     title=tr(TextKey::PreviewChannel)
                     aria-label=tr(TextKey::PreviewChannel)
                 ></a>
+                <button
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_stop)
+                    style:visibility=move || if is_active() { "visible" } else { "hidden" }
+                    title=tr(TextKey::StopTranscodeSession)
+                    aria-label=tr(TextKey::StopTranscodeSession)
+                    on:click=move |_| {
+                        stop_action.dispatch(stop_number.clone());
+                    }
+                ></button>
                 <a
                     href=format!("/channels/{id}")
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_edit)
