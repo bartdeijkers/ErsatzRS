@@ -5,9 +5,10 @@
 The Windows release workflow currently downloads a public FFmpeg archive and
 stages `ffmpeg.exe` / `ffprobe.exe` next to the launcher. That is too weak for
 ErsatzRS: startup requires both tools to report a parseable FFmpeg version
-`>= 8.1`, the `drawvg` filter, and configure flags including `--enable-cairo`.
-Recent BtbN/Gyan-style public builds either missed those capabilities or did
-not produce version/configuration output that the runtime checker accepted.
+`>= 8.1`, the `drawvg` filter (via `--enable-cairo`), and the `zscale` filter
+(via `--enable-libzimg`) for the HDR/tonemap color pipeline. Recent
+BtbN/Gyan-style public builds either missed those capabilities or did not
+produce version/configuration output that the runtime checker accepted.
 
 Replace the public download with a first-party FFmpeg 8.1 build in GitHub
 Actions. The release archive should carry the exact runtime that the app
@@ -20,7 +21,8 @@ validates.
 - Include the runtime library closure needed by the payload on each platform.
 - Run the same runtime checks that ErsatzRS uses before uploading artifacts:
   parseable `ffmpeg -version` / `ffprobe -version`, `--enable-cairo`, `drawvg`,
-  required codecs, and a real `drawvg` smoke transcode.
+  `--enable-libzimg`, `zscale`, required codecs, a real `drawvg` smoke
+  transcode, and a real `zscale`/`tonemap` smoke transcode.
 - Remove all BtbN/Gyan download assumptions from `.github/workflows/release.yml`
   and release docs.
 - Keep environment overrides higher priority than bundled binaries.
@@ -80,9 +82,10 @@ Build FFmpeg 8.1 from source on `windows-latest` using MSYS2 UCRT64 or MINGW64.
   svt-av1, dav1d, aom, vpx, opus, lame, vorbis, webp, zimg, OpenSSL, nasm,
   yasm, pkg-config, and the compiler toolchain.
 - Configure with the common required flags:
-  `--enable-cairo`, `--enable-libfontconfig`, `--enable-libass`,
-  `--enable-libfreetype`, `--enable-libfribidi`, `--enable-libharfbuzz`,
-  `--enable-gpl`, `--enable-version3`, `--enable-shared`, `--enable-ffprobe`.
+  `--enable-cairo`, `--enable-libzimg`, `--enable-libfontconfig`,
+  `--enable-libass`, `--enable-libfreetype`, `--enable-libfribidi`,
+  `--enable-libharfbuzz`, `--enable-gpl`, `--enable-version3`,
+  `--enable-shared`, `--enable-ffprobe`.
 - Include codec/library flags that map to the installed MSYS2 packages.
 - Exclude Linux-only flags such as `--enable-libdrm`, `--enable-libv4l2`,
   `--enable-vaapi`, and Linux rpath linker syntax.
@@ -95,9 +98,10 @@ Build FFmpeg 8.1 from source on `windows-latest` using MSYS2 UCRT64 or MINGW64.
 Build FFmpeg 8.1 from source on native macOS runners.
 
 - Use an Intel runner for `osx-x64` and an arm64 runner for `osx-arm64`.
-- Install required dependencies via Homebrew.
-- Configure with the common cairo/libass/font stack and codecs available on
-  Homebrew.
+- Install required dependencies via Homebrew, including `zimg` (Homebrew
+  formula `zimg`) so `--enable-libzimg`/`zscale` is available.
+- Configure with the common cairo/zimg/libass/font stack and codecs available
+  on Homebrew, including `--enable-libzimg`.
 - Exclude Linux-only flags such as `libdrm`, `libv4l2`, `vaapi`, CUDA/QSV, and
   Linux `TARGETARCH`-gated accelerator options.
 - Relocate non-system dylibs to `@loader_path/../lib` and verify with
@@ -114,9 +118,15 @@ ffmpeg/bin/ffmpeg -version
 ffmpeg/bin/ffprobe -version
 ffmpeg/bin/ffmpeg -hide_banner -buildconf | grep -- --enable-cairo
 ffmpeg/bin/ffmpeg -hide_banner -filters | grep -w drawvg
+ffmpeg/bin/ffmpeg -hide_banner -buildconf | grep -- --enable-libzimg
+ffmpeg/bin/ffmpeg -hide_banner -filters | grep -w zscale
 ffmpeg/bin/ffmpeg -hide_banner \
   -f lavfi -i color=c=black:s=32x32:d=0.1 \
   -vf "drawvg=script='rect 4 4 16 16 fill',format=yuv420p" \
+  -frames:v 1 -f null -
+ffmpeg/bin/ffmpeg -hide_banner -loglevel error \
+  -f lavfi -i color=c=black:s=64x64:d=0.1 \
+  -vf "zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p" \
   -frames:v 1 -f null -
 ```
 
@@ -192,7 +202,9 @@ ersatzrs-vX.Y.Z-<rid>/
 - Windows launcher starts from the zip on a machine without system FFmpeg.
 - `ffmpeg -version` and `ffprobe -version` are parseable by
   `crates/ersatzrs-ffmpeg/src/version.rs`.
-- `--enable-cairo` and `drawvg` are checked in CI before artifact upload.
+- `--enable-cairo`, `drawvg`, `--enable-libzimg`, and `zscale` are checked in
+  CI before artifact upload, and a `zscale`/`tonemap` smoke transcode passes, so
+  a drawvg-only (zimg-less) FFmpeg build cannot produce a release archive.
 - Linux exported payload runs in a clean container without `LD_LIBRARY_PATH`.
 - macOS payload runs without `DYLD_LIBRARY_PATH`.
 - Windows payload runs without adding MSYS2 directories to `PATH`.

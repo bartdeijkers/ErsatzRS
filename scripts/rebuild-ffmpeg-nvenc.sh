@@ -5,10 +5,14 @@
 #   - NVIDIA driver visible in WSL (nvidia-smi works)
 #   - /usr/lib/wsl/lib/libnvidia-encode.so.1 (WSL GPU libs)
 #   - nv-codec-headers (installed by this script)
+#   - libzimg development headers (apt: libzimg-dev) for the zscale filter
 #
 # The existing FFmpeg in ~/.local/ffmpeg-8.1/ was built without
 # --enable-nvenc / --enable-cuda-nvcc, so h264_nvenc and friends
-# are absent from `ffmpeg -encoders`.
+# are absent from `ffmpeg -encoders`. It was also built without
+# --enable-libzimg, so the `zscale` filter (required by the HDR/tonemap
+# color pipeline and the ErsatzRS startup runtime check) is absent from
+# `ffmpeg -filters`.
 
 set -euo pipefail
 
@@ -29,6 +33,15 @@ if [[ ! -f "$WSL_LIB/libnvidia-encode.so.1" ]]; then
 fi
 if [[ ! -d "$CUDA_HOME" ]]; then
     echo "ERROR: CUDA_HOME=$CUDA_HOME not found. Install CUDA toolkit." >&2
+    exit 1
+fi
+# zimg provides the zscale filter, required for the HDR/tonemap color pipeline
+# and asserted by the ErsatzRS startup runtime check. Fail clearly here rather
+# than letting configure silently drop --enable-libzimg.
+if ! pkg-config --exists zimg; then
+    echo "ERROR: zimg development headers not found (pkg-config can't find 'zimg')." >&2
+    echo "       Install them so FFmpeg can be built with --enable-libzimg (zscale)." >&2
+    echo "       Debian/Ubuntu/WSL: sudo apt-get install libzimg-dev" >&2
     exit 1
 fi
 
@@ -73,6 +86,7 @@ export CFLAGS="-I$PREFIX/include -I$CUDA_HOME/include ${CFLAGS:-}"
     --enable-libvpx \
     --enable-libx264 \
     --enable-libx265 \
+    --enable-libzimg \
     --enable-openssl \
     --enable-pic \
     --enable-shared \
@@ -111,6 +125,30 @@ LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -filters 2>/dev/null | grep -q drawvg || {
 }
 echo "    [ok] drawvg filter present (ADR 0005)"
 
+# zscale (via zimg) is the hard runtime requirement for the HDR/tonemap color
+# pipeline; ErsatzRS startup fails fast without it. Confirm the configure flag
+# is recorded, the filter is exposed, and a real zscale/tonemap graph runs.
+LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -hide_banner -buildconf 2>/dev/null | grep -q -- --enable-libzimg || {
+    echo "ERROR: --enable-libzimg missing from buildconf — zimg was not compiled in. Re-run configure with --enable-libzimg." >&2
+    exit 1
+}
+echo "    [ok] --enable-libzimg present in buildconf"
+
+LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -filters 2>/dev/null | grep -qw zscale || {
+    echo "ERROR: zscale filter missing — zimg was not compiled in. Re-run configure with --enable-libzimg." >&2
+    exit 1
+}
+echo "    [ok] zscale filter present"
+
+LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -hide_banner -loglevel error \
+    -f lavfi -i color=c=black:s=64x64:d=0.1 \
+    -vf "zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p" \
+    -frames:v 1 -f null - || {
+    echo "ERROR: zscale/tonemap smoke transcode failed — the color pipeline is not usable." >&2
+    exit 1
+}
+echo "    [ok] zscale/tonemap smoke transcode succeeded"
+
 echo ""
-echo "==> Done. $PREFIX/bin/ffmpeg has both NVENC and drawvg."
+echo "==> Done. $PREFIX/bin/ffmpeg has NVENC, drawvg, and zscale."
 echo "    Restart the ErsatzRS server with ./run.sh dev to pick up the new binary."

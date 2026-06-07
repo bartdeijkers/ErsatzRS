@@ -112,6 +112,9 @@ Feature-level porting plans live alongside this index.
 - `release-self-built-ffmpeg.md` — replace public FFmpeg downloads in the
   release workflow with first-party FFmpeg 8.1 builds and bundled runtime
   payloads for every release RID.
+- `ffmpeg-zscale-runtime-remediation.md` — ensure the self-built and release
+  FFmpeg runtimes include `zscale` (via `--enable-libzimg`) alongside `drawvg`,
+  and document diagnosis/remediation for the fail-fast startup capability check.
 
 ## Deferred Contract Work
 

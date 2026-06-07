@@ -32,9 +32,37 @@ directory on startup.
 ## FFmpeg runtime
 
 ErsatzRS checks both FFmpeg and ffprobe at web startup. Both tools must be
-version 8.1 or newer and FFmpeg must expose the required drawvg, codec, and
-subtitle/text capabilities described by
-[ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md).
+version 8.1 or newer and FFmpeg must expose the required capabilities described
+by [ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md). In
+particular FFmpeg must expose:
+
+- `drawvg` (built with `--enable-cairo`) for the graphics engine.
+- `zscale` (built with `--enable-libzimg`) for the HDR/tonemap color pipeline.
+
+Startup fails fast when the selected FFmpeg binary is missing a required
+capability, for example:
+
+```text
+FFmpeg runtime is missing required capabilities: [RequiredFilter { name: "zscale" }]
+```
+
+This is a runtime packaging gap, not an application bug. Diagnose the configured
+binary with:
+
+```bash
+ffmpeg -hide_banner -buildconf | grep -- --enable-libzimg
+ffmpeg -hide_banner -filters | grep -w zscale
+ffmpeg -hide_banner -buildconf | grep -- --enable-cairo
+ffmpeg -hide_banner -filters | grep -w drawvg
+```
+
+If `zscale` (or `drawvg`) is absent, rebuild FFmpeg with the corresponding flag
+(`--enable-libzimg` for zscale, `--enable-cairo` for drawvg) or replace it with
+a compliant FFmpeg 8.1 binary. On the local WSL/NVIDIA dev box,
+`scripts/rebuild-ffmpeg-nvenc.sh` produces a compliant build (NVENC + drawvg +
+zscale). When multiple FFmpeg installs exist, point ErsatzRS at the compliant
+one with the path override variables below rather than weakening the runtime
+check.
 
 Accepted path override variables:
 
