@@ -90,8 +90,8 @@ If a compliant FFmpeg binary is already available locally, also verify:
 ffmpeg -hide_banner -buildconf | grep -- --enable-libzimg
 ffmpeg -hide_banner -filters | grep -w zscale
 ffmpeg -hide_banner -loglevel error \
-  -f lavfi -i color=c=black:s=64x64:d=0.1 \
-  -vf "zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p" \
+  -f lavfi -i "color=c=black:s=64x64:d=0.1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc" \
+  -vf "zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p" \
   -frames:v 1 -f null -
 ```
 

@@ -117,9 +117,18 @@ LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -encoders 2>/dev/null | grep -i nvenc || {
 }
 echo "    [ok] NVENC encoders present"
 
+# Capture the filter list once. Do not discard stderr: if the freshly installed
+# binary can't load its shared libs, we want the real linker error here instead
+# of a misleading "filter missing" message.
+if ! FILTERS="$(LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -hide_banner -filters 2>&1)"; then
+    echo "ERROR: '$FFMPEG_BIN -filters' failed to run. Output:" >&2
+    echo "$FILTERS" >&2
+    exit 1
+fi
+
 # ADR 0005: drawvg is the hard runtime requirement for the ErsatzRS graphics engine.
 # cairo must be compiled in; drawvg must appear in -filters.
-LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -filters 2>/dev/null | grep -q drawvg || {
+echo "$FILTERS" | grep -qw drawvg || {
     echo "ERROR: drawvg filter missing — cairo was not compiled in. Re-run configure with --enable-cairo." >&2
     exit 1
 }
@@ -134,15 +143,18 @@ LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -hide_banner -buildconf 2>/dev/null | grep 
 }
 echo "    [ok] --enable-libzimg present in buildconf"
 
-LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -filters 2>/dev/null | grep -qw zscale || {
+echo "$FILTERS" | grep -qw zscale || {
     echo "ERROR: zscale filter missing — zimg was not compiled in. Re-run configure with --enable-libzimg." >&2
     exit 1
 }
 echo "    [ok] zscale filter present"
 
+# The synthetic source must carry HDR color metadata, otherwise zscale reports
+# "no path between colorspaces" regardless of whether zimg is present. Tag the
+# input as bt2020/PQ, tonemap to bt709, and force an 8-bit output.
 LD_LIBRARY_PATH="$LLP" "$FFMPEG_BIN" -hide_banner -loglevel error \
-    -f lavfi -i color=c=black:s=64x64:d=0.1 \
-    -vf "zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p" \
+    -f lavfi -i "color=c=black:s=64x64:d=0.1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc" \
+    -vf "zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p" \
     -frames:v 1 -f null - || {
     echo "ERROR: zscale/tonemap smoke transcode failed — the color pipeline is not usable." >&2
     exit 1

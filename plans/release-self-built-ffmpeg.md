@@ -125,10 +125,15 @@ ffmpeg/bin/ffmpeg -hide_banner \
   -vf "drawvg=script='rect 4 4 16 16 fill',format=yuv420p" \
   -frames:v 1 -f null -
 ffmpeg/bin/ffmpeg -hide_banner -loglevel error \
-  -f lavfi -i color=c=black:s=64x64:d=0.1 \
-  -vf "zscale=transfer=linear,tonemap=hable,zscale=transfer=bt709,format=yuv420p" \
+  -f lavfi -i "color=c=black:s=64x64:d=0.1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc" \
+  -vf "zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p" \
   -frames:v 1 -f null -
 ```
+
+The synthetic source must be tagged with HDR color metadata
+(`setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc`);
+otherwise `zscale` reports "no path between colorspaces" even on a correct zimg
+build and the smoke check fails spuriously.
 
 Also keep the existing release capability reports for Docker images. The release
 archive validation should be explicit and independent from image validation.
