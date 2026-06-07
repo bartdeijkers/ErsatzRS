@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-06
-last_processed_commit: fa604e1f2d3c32d7dd292858d241ac1baa507d28
+generated: 2026-06-07
+last_processed_commit: 8bc6b7f42f037de8a63cf98b668647c17a4254d1
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,10 +21,12 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: the fetched daily reconcile was docs-only and still listed
-FFmpeg command generation, but the local closeout marked that feature `Ported`.
-The current top three are support-pages (phase focus), HLS transport
-(foundational backend), then the in-progress media route-family parity slice.
+Ranking this run: all three are carried over from the previous run — the only
+commit in the window was a docs-only marker advancement, so no feature work
+landed. Order: support-pages (health/troubleshooting explicitly called out
+first in `phase.toml` next_steps), HLS transport (foundational backend,
+foundational-before-leaf-UI rule), then the in-progress media route-family
+parity slice (alphabetical tiebreaker).
 
 ---
 
@@ -44,8 +46,9 @@ ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
 `crates/ersatzrs-web/src/admin/pages/system/`.
 
 Before editing:
-1. Read the ErsatzTV source above under `$ERSATZTV_SRC/`, focusing on the log
-   table paging/sort and the nav badge count sources.
+1. Read the ErsatzTV source above under `$ERSATZTV_SRC/` (at pinned commit
+   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on the log table
+   paging/sort and the nav badge count sources.
 2. Inspect the current ErsatzRS `system/` pages, routes, i18n languages, and
    `tests/e2e/support-pages.spec.ts`.
 3. Build a Source Map (UI/pages, view models, handlers, repository/query paths,
@@ -91,8 +94,9 @@ items after HLS completion. ErsatzTV source:
 `crates/ersatzrs-ffmpeg`.
 
 Before editing:
-1. Read the ErsatzTV HLS output format and session worker, focusing on fMP4
-   init-segment caching/lifetime.
+1. Read the ErsatzTV HLS output format and session worker under `$ERSATZTV_SRC/`
+   (at pinned commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on
+   fMP4 init-segment caching/lifetime.
 2. Inspect the current ErsatzRS segmenter worker, session registry, and the
    `/iptv/session/{n}/{file}` + `#EXT-X-MAP`/`init.mp4` delivery path.
 3. Build a Source Map; identify remaining `ParityDebt`.
@@ -137,9 +141,10 @@ ErsatzTV source: `ErsatzTV/Pages/MultiCollections*.razor`,
 `crates/ersatzrs-web/src/admin/languages/`.
 
 Before editing:
-1. Read the ErsatzTV Razor/editor sources above, focusing on any remaining
-   route-family gaps, generated playlist behavior, list actions, dialogs,
-   preview data, and delete/save side effects.
+1. Read the ErsatzTV Razor/editor sources above under `$ERSATZTV_SRC/` (at
+   pinned commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on any
+   remaining route-family gaps, generated playlist behavior, list actions,
+   dialogs, preview data, and delete/save side effects.
 2. Inspect the current ErsatzRS media pages, server functions, i18n language
    modules, fallback routes, and focused media-page tests.
 3. Build a Source Map and Visual Source Map for the touched route(s), including
