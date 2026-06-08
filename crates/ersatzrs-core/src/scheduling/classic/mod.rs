@@ -155,7 +155,13 @@ impl ClassicContext {
             media.insert(key, enumerator);
         }
 
-        let remove_before = state.current_time;
+        // Mirror ErsatzTV `PlayoutBuilder.BuildPlayoutItems`:
+        // `trimBefore = playoutStart.AddHours(-4)`, i.e. `now - 4h`. This trims
+        // only genuinely-old items while retaining a short history window and
+        // ALL future items. Using `state.current_time` is wrong for Continue
+        // builds, where it equals the anchor's far-future `next_start` and would
+        // delete the entire already-scheduled timeline.
+        let remove_before = request.start - Duration::hours(4);
         let mut fill_group_states = BTreeMap::new();
         for index in &request.reference_data.existing_fill_group_indices {
             fill_group_states.insert(index.program_schedule_item_id, index.enumerator_state);

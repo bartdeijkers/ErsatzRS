@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError, Result};
 use ersatzrs_core::scheduling::SchedulingResult;
 use ersatzrs_domain::{
-    EntityId, Playout, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
+    EntityId, Playout, PlayoutAnchor, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
     PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
 };
 use sqlx::{Pool, Row, Transaction};
@@ -145,7 +145,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         let mut tx = self.0.begin().await?;
 
         update_playout_checkpoint(&mut tx, playout).await?;
-        replace_anchor_state(&mut tx, playout).await?;
+        replace_anchor_state(&mut tx, playout.id, playout.anchor.as_ref()).await?;
         replace_gaps(&mut tx, playout.id, gaps).await?;
         replace_history(&mut tx, playout.id, history).await?;
         replace_program_schedule_anchors(&mut tx, playout.id, program_schedule_anchors).await?;
@@ -342,7 +342,14 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         }
 
         // ── anchor, program-schedule anchors, fill-group indices, templates ───
-        replace_anchor_state(&mut tx, playout).await?;
+        // Persist the anchor produced by *this* build (`result.anchor`), not the
+        // stale anchor carried on the input `playout`. The input anchor is the
+        // pre-build state; for a fresh playout it is `None`, and writing it back
+        // would delete the row and force every Continue build to restart from
+        // `now` — producing overlapping, stacked playout items. ErsatzTV's
+        // `PlayoutBuilder` mutates `playout.Anchor` in place before saving; the
+        // result anchor is our equivalent of that post-build value.
+        replace_anchor_state(&mut tx, playout.id, result.anchor.as_ref()).await?;
         replace_program_schedule_anchors(&mut tx, playout.id, &result.program_schedule_anchors)
             .await?;
         replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
@@ -613,9 +620,10 @@ async fn update_playout_checkpoint(
 
 async fn replace_anchor_state(
     tx: &mut Transaction<'_, crate::db::Db>,
-    playout: &Playout,
+    playout_id: EntityId,
+    anchor: Option<&PlayoutAnchor>,
 ) -> Result<()> {
-    if let Some(anchor) = &playout.anchor {
+    if let Some(anchor) = anchor {
         sqlx::query(
             r#"REPLACE INTO "PlayoutAnchor" (
                 "PlayoutId", "DurationFinish", "InDurationFiller", "InFlood",
@@ -623,7 +631,7 @@ async fn replace_anchor_state(
                 "NextInstructionIndex", "Context"
              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
-        .bind(playout.id)
+        .bind(playout_id)
         .bind(encode_optional_datetime(anchor.duration_finish))
         .bind(anchor.in_duration_filler)
         .bind(anchor.in_flood)
@@ -639,14 +647,14 @@ async fn replace_anchor_state(
                 "PlayoutAnchorPlayoutId", "Seed", "Index"
              ) VALUES (?, ?, ?)"#,
         )
-        .bind(playout.id)
+        .bind(playout_id)
         .bind(anchor.schedule_items_enumerator_state.seed)
         .bind(anchor.schedule_items_enumerator_state.index)
         .execute(&mut **tx)
         .await?;
     } else {
         sqlx::query(r#"DELETE FROM "PlayoutAnchor" WHERE "PlayoutId" = ?"#)
-            .bind(playout.id)
+            .bind(playout_id)
             .execute(&mut **tx)
             .await?;
     }

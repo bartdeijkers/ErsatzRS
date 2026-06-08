@@ -67,20 +67,23 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
         out_point: Duration::minutes(30),
         ..Default::default()
     };
-    let mut playout = Playout {
+    // The input playout carries its pre-build anchor (None on a fresh build);
+    // the engine emits the post-build anchor in the result.
+    let playout = Playout {
         id: 1,
         channel_id: 1,
         schedule_kind: PlayoutScheduleKind::Block,
         seed: 42,
-        anchor: Some(PlayoutAnchor {
-            next_start: new_start + Duration::minutes(30),
-            ..Default::default()
-        }),
+        anchor: None,
         ..Default::default()
     };
     let result = SchedulingResult {
         clear_items: true,
         added_items: vec![new_item.clone()],
+        anchor: Some(PlayoutAnchor {
+            next_start: new_start + Duration::minutes(30),
+            ..Default::default()
+        }),
         ..Default::default()
     };
 
@@ -102,11 +105,7 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
     assert_eq!(item.media_item_id, 1);
     assert_eq!(item.guide_group, 1);
 
-    // Read anchor back to confirm it was written.
-    playout.anchor = Some(PlayoutAnchor {
-        next_start: new_start + Duration::minutes(30),
-        ..Default::default()
-    });
+    // The anchor produced by the build result must be persisted.
     let loaded = repos.playout.get_with_anchor(1).await.unwrap();
     assert!(loaded.anchor.is_some());
 
@@ -285,6 +284,66 @@ async fn apply_build_result_continue_appends_and_removes_selectively() {
         guide_groups.contains(&2),
         "new item (guide_group=2) present"
     );
+}
+
+#[tokio::test]
+async fn apply_build_result_persists_result_anchor_when_input_anchor_is_none() {
+    // Regression: the production build path (`maintenance::build_playout`) loads
+    // the playout with its *pre-build* anchor (None for a freshly built playout),
+    // then hands `apply_build_result` a `SchedulingResult` carrying the anchor the
+    // engine just computed. Persistence must write `result.anchor`, not the stale
+    // `playout.anchor`. Previously it wrote the input anchor, so the row was always
+    // deleted and every Continue build restarted from `now`, stacking overlapping
+    // items on the channel.
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_graph(&pool).await;
+    pool.execute(
+        r#"INSERT OR REPLACE INTO "Playout"
+           ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (1, 1, 'Classic', 42)"#,
+    )
+    .await
+    .unwrap();
+
+    let start = common::fixed_time();
+    let next_start = start + Duration::hours(48);
+
+    // Input playout has no anchor yet (first build); the engine result carries one.
+    let playout = Playout {
+        id: 1,
+        channel_id: 1,
+        schedule_kind: PlayoutScheduleKind::Classic,
+        seed: 42,
+        anchor: None,
+        ..Default::default()
+    };
+    let result = SchedulingResult {
+        clear_items: false,
+        anchor: Some(PlayoutAnchor {
+            next_start,
+            next_guide_group: 3,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    repos
+        .playout
+        .apply_build_result(&result, &playout)
+        .await
+        .unwrap();
+
+    let loaded = repos.playout.get_with_anchor(1).await.unwrap();
+    let anchor = loaded
+        .anchor
+        .expect("result anchor must be persisted even when the input playout anchor is None");
+    assert_eq!(
+        anchor.next_start, next_start,
+        "persisted anchor must come from the build result"
+    );
+    assert_eq!(anchor.next_guide_group, 3);
 }
 
 // ── YAML engine round-trip (in-memory, no file I/O) ───────────────────────────
