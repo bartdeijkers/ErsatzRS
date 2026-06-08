@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-07
-last_processed_commit: 8bc6b7f42f037de8a63cf98b668647c17a4254d1
+generated: 2026-06-08
+last_processed_commit: c5162a20bb60de5efc6de08094e62f2d5a1113e8
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,12 +21,15 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: all three are carried over from the previous run — the only
-commit in the window was a docs-only marker advancement, so no feature work
-landed. Order: support-pages (health/troubleshooting explicitly called out
-first in `phase.toml` next_steps), HLS transport (foundational backend,
-foundational-before-leaf-UI rule), then the in-progress media route-family
-parity slice (alphabetical tiebreaker).
+Ranking this run (window `8bc6b7f..c5162a2`): real feature work landed — the
+`/channels` Stop Transcode Session button advanced `channels-admin-ui` (which
+the feature commit already marked `Ported`) and extended the HLS session
+registry/worker with cancel/stop parity. The top three are re-ranked normally:
+support-pages (health/troubleshooting explicitly called out first in
+`phase.toml` next_steps), HLS transport (still `In progress`, foundational
+backend, foundational-before-leaf-UI rule, even after the cancel/stop slice),
+then the `In progress` media route-family parity slice (alphabetical tiebreaker
+over `settings`).
 
 ---
 
@@ -40,8 +43,8 @@ Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
 Current remaining ParityDebt (from `docs/progress/parity/support-pages.toml`):
-dynamic nav badge counts and full log search/sort paging are not yet ported.
-ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
+"Dynamic nav badge counts and full log search/sort paging remain future parity
+work." ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
 `ErsatzTV/Pages/Troubleshooting/`. ErsatzRS target:
 `crates/ersatzrs-web/src/admin/pages/system/`.
 
@@ -81,14 +84,20 @@ Fix the next ErsatzTV parity gap in ErsatzRS: HLS variant playlists / segmenter
 Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current remaining ParityDebt (from
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`): fMP4 init-segment
+Current parity state (from
+`docs/progress/parity/hls-variant-playlists-segmenter.toml`): the entry surface,
+multi-variant playlist, segmenter/fMP4 worker, live playlist trim with
+discontinuity preservation, hls-direct branch, IPTV JWT authorization, and the
+shared subtitle selector are ported. The latest slice (driven by the `/channels`
+Stop Transcode Session button) added `HlsSessionHandle::cancel`,
+`HlsSessionRegistry::active_channels`/`is_active`/`stop_channel`, and worker
+`cancel`. Remaining ParityDebt quoted from the summary: "any fMP4 init-segment
 cache parity that still matters after direct mode, then the broader Phase 7
-items after HLS completion. ErsatzTV source:
+items after HLS completion." ErsatzTV source:
 `$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`,
-`ErsatzTV/Controllers/IptvController.cs`,
-`ErsatzTV.Application/Streaming/HlsSessionWorker.cs`,
-`ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`. ErsatzRS target:
+`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`,
+`$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`,
+`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`. ErsatzRS target:
 `crates/ersatzrs-web/src/transport/iptv/`, `crates/ersatzrs-core/src/hls.rs`,
 `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`,
 `crates/ersatzrs-ffmpeg`.
@@ -97,14 +106,16 @@ Before editing:
 1. Read the ErsatzTV HLS output format and session worker under `$ERSATZTV_SRC/`
    (at pinned commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on
    fMP4 init-segment caching/lifetime.
-2. Inspect the current ErsatzRS segmenter worker, session registry, and the
+2. Inspect the current ErsatzRS segmenter worker, session registry (including
+   the new cancel/stop_channel/active_channels paths), and the
    `/iptv/session/{n}/{file}` + `#EXT-X-MAP`/`init.mp4` delivery path.
 3. Build a Source Map; identify remaining `ParityDebt`.
 
 Implement the slice: port fMP4 init-segment cache parity (lifetime, reuse,
-cleanup) to match ErsatzTV, preserving the existing playlist-trim and
-discontinuity behavior. Add focused crate/transport tests, including snapshot
-coverage where the playlist/argv shape changes. Update the parity file.
+cleanup) to match ErsatzTV, preserving the existing playlist-trim,
+discontinuity, and cancel/stop behavior. Add focused crate/transport tests,
+including snapshot coverage where the playlist/argv shape changes. Update the
+parity file.
 
 Verify with the focused transport/crate gates and `cargo xtask progress check`.
 If any IPTV playlist output is exercised live, capture a short runtime smoke as
@@ -129,7 +140,8 @@ the list/editor surfaces are largely ported, including persisted page sizes,
 HTML POST fallback paths, playout refresh side effects, playlist item actions,
 canonical Classic scheduler-backed preview data, and persisted-language labels.
 Generated/system playlists intentionally diverge from ErsatzTV's disabled-editor
-presentation under ADR 0011.
+presentation under ADR 0011 (read-only projections with clearer Count and Play
+All labels).
 
 ErsatzTV source: `ErsatzTV/Pages/MultiCollections*.razor`,
 `ErsatzTV/Pages/RerunCollections.razor`,
