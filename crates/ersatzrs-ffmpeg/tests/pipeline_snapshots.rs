@@ -666,8 +666,12 @@ fn nvenc_pipeline_snapshot() {
 
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
 
-    insta::assert_snapshot!(command.arguments.join(" "));
+    assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(arguments.contains("-hwaccel cuda"));
+    assert!(arguments.contains("-hwaccel_output_format cuda"));
+    insta::assert_snapshot!(arguments);
 }
 
 #[test]
@@ -679,8 +683,12 @@ fn nvenc_pipeline_uses_software_decode_when_cuvid_decoder_missing_snapshot() {
 
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
 
-    insta::assert_snapshot!(command.arguments.join(" "));
+    assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    assert!(!arguments.contains("-hwaccel_output_format cuda"));
+    insta::assert_snapshot!(arguments);
 }
 
 #[test]
@@ -699,6 +707,9 @@ fn nvenc_pipeline_uses_software_decode_when_decoder_detail_lacks_10bit_snapshot(
     let command = pipeline.command(&request.inputs);
     let arguments = command.arguments.join(" ");
 
+    assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    assert!(!arguments.contains("-hwaccel_output_format cuda"));
     assert!(arguments.contains("-tag:v hvc1"));
     assert!(arguments.contains("-b_ref_mode 0"));
     insta::assert_snapshot!(arguments);

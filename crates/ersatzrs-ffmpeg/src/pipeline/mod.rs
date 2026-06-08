@@ -2151,9 +2151,6 @@ fn configure_hardware_acceleration(
             }
         }
         HardwareAccelerationKind::Nvenc => {
-            if decode_acceleration != HardwareAccelerationKind::Nvenc {
-                return state;
-            }
             if nvidia_vulkan_hdr_tonemap(request) {
                 steps.push(PipelineStep::global(
                     "cuda_hw_device",
@@ -2163,6 +2160,17 @@ fn configure_hardware_acceleration(
                     "vulkan_hw_device",
                     ["-init_hw_device", "vulkan=vk@nv"],
                 ));
+            } else {
+                steps.push(PipelineStep::global(
+                    "cuda_hw_device",
+                    ["-init_hw_device", "cuda"],
+                ));
+            }
+
+            if decode_acceleration != HardwareAccelerationKind::Nvenc {
+                return state;
+            }
+            if nvidia_vulkan_hdr_tonemap(request) {
                 steps.push(PipelineStep::global(
                     "vulkan_hwaccel",
                     ["-hwaccel", "vulkan"],
@@ -2172,10 +2180,6 @@ fn configure_hardware_acceleration(
                     ["-hwaccel_output_format", "vulkan"],
                 ));
             } else {
-                steps.push(PipelineStep::global(
-                    "cuda_hw_device",
-                    ["-init_hw_device", "cuda"],
-                ));
                 steps.push(PipelineStep::global("cuda_hwaccel", ["-hwaccel", "cuda"]));
                 steps.push(PipelineStep::global(
                     "cuda_hwaccel_output_format",
