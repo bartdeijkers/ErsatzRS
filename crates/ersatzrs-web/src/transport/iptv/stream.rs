@@ -29,12 +29,14 @@ use ersatzrs_infra::playback::{
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
 
 use crate::host::state::AppState;
 
 static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 
 pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> Response {
     serve_channel_stream(state, channel_number, OutputFormat::MpegTs).await
@@ -623,7 +625,7 @@ fn spawn_stream_body(
     process
         .args(&command.arguments)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .kill_on_drop(true);
 
     for variable in command.environment {
@@ -634,12 +636,20 @@ fn spawn_stream_body(
         .spawn()
         .map_err(|error| StreamSpawnError::Spawn(error.to_string()))?;
     let stdout = child.stdout.take().ok_or(StreamSpawnError::MissingStdout)?;
+    let stderr = child.stderr.take();
 
     tokio::spawn(async move {
+        let stderr_task = stderr.map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
         match child.wait().await {
             Ok(status) if status.success() => {}
-            Ok(status) => tracing::debug!(%status, "ffmpeg channel stream exited"),
-            Err(error) => tracing::debug!(%error, "failed to wait for ffmpeg channel stream"),
+            Ok(status) => {
+                let stderr = await_stderr_tail(stderr_task).await;
+                tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+            }
+            Err(error) => {
+                let stderr = await_stderr_tail(stderr_task).await;
+                tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
+            }
         }
         for path in cleanup_dirs {
             if let Err(error) = tokio::fs::remove_dir_all(&path).await {
@@ -651,6 +661,35 @@ fn spawn_stream_body(
     });
 
     Ok(Body::from_stream(ReaderStream::new(stdout)))
+}
+
+async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> String {
+    let mut tail = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        match stderr.read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(read) => {
+                tail.extend_from_slice(&buffer[..read]);
+                if tail.len() > FFMPEG_STDERR_TAIL_BYTES {
+                    let remove = tail.len() - FFMPEG_STDERR_TAIL_BYTES;
+                    tail.drain(..remove);
+                }
+            }
+            Err(error) => return format!("failed to read ffmpeg stderr: {error}"),
+        }
+    }
+
+    String::from_utf8_lossy(&tail).trim().to_owned()
+}
+
+async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>) -> String {
+    match stderr_task {
+        Some(task) => task
+            .await
+            .unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}")),
+        None => String::new(),
+    }
 }
 
 #[cfg(test)]
