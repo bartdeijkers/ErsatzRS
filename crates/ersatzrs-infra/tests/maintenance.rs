@@ -2,8 +2,11 @@
 mod common;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
 use chrono::{Duration, Utc};
+use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
@@ -14,6 +17,38 @@ use ersatzrs_infra::maintenance::{
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
+
+#[derive(Default)]
+struct FakeHlsRegistry {
+    playout_updates: Mutex<Vec<String>>,
+}
+
+#[async_trait]
+impl HlsSessionRegistry for FakeHlsRegistry {
+    async fn try_get(&self, _channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
+        None
+    }
+
+    async fn try_insert(&self, _handle: Arc<dyn HlsSessionHandle>) -> bool {
+        false
+    }
+
+    async fn insert(&self, _handle: Arc<dyn HlsSessionHandle>) {}
+
+    async fn remove(&self, _channel_number: &str) {}
+
+    async fn active_channels(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    async fn playout_updated(&self, channel_number: &str) -> bool {
+        self.playout_updates
+            .lock()
+            .expect("fake hls registry lock")
+            .push(channel_number.to_owned());
+        true
+    }
+}
 
 /// Build a tiny shell script that records its arguments to `record_path`,
 /// then exits with the requested status. The returned path is suitable for
@@ -76,6 +111,7 @@ async fn maintenance_pass_dispatches_due_libraries_and_records_loop_runs() {
         &LibraryDispatchConfig::default(),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();
@@ -132,6 +168,7 @@ async fn maintenance_skips_disabled_library_refresh_loop_by_default() {
         &LibraryDispatchConfig::default(),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();
@@ -188,6 +225,7 @@ async fn maintenance_respects_recent_library_scan_cutoff() {
         &LibraryDispatchConfig::default(),
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();
@@ -217,6 +255,7 @@ async fn maintenance_skips_playouts_with_held_in_memory_lock() {
         &LibraryDispatchConfig::default(),
         &locker,
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();
@@ -234,6 +273,10 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 1).await;
+    sqlx::query(r#"UPDATE "Channel" SET "PlayoutMode" = 1 WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     pool.execute(
         r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
            VALUES (78, 1, 20, 0)"#,
@@ -251,12 +294,14 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
             mode: PlayoutBuildMode::Refresh,
         },
         Utc::now(),
+        None,
     )
     .await
     .unwrap();
     assert!(!skipped);
     assert!(locker.unlock_playout(78));
 
+    let hls_registry = Arc::new(FakeHlsRegistry::default());
     let built = run_requested_playout_build(
         &pool,
         &locker,
@@ -265,6 +310,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
             mode: PlayoutBuildMode::Refresh,
         },
         Utc::now(),
+        Some(hls_registry.as_ref()),
     )
     .await
     .unwrap();
@@ -281,6 +327,13 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     assert_eq!(status.get::<i64, _>("Success"), 1);
     assert_eq!(status.get::<Option<String>, _>("Message"), None);
     assert!(!locker.is_playout_locked(78));
+    assert_eq!(
+        *hls_registry
+            .playout_updates
+            .lock()
+            .expect("fake hls registry lock"),
+        vec!["1".to_owned()]
+    );
 }
 
 #[tokio::test]
@@ -340,6 +393,7 @@ async fn maintenance_dispatch_invokes_scanner_subprocess() {
         },
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();
@@ -394,6 +448,7 @@ async fn maintenance_dispatch_marks_failed_libraries_when_scanner_exits_nonzero(
         },
         &EntityLocker::new(),
         DatabaseSchemaStatus::default(),
+        None,
     )
     .await
     .unwrap();

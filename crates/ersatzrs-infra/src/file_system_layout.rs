@@ -59,6 +59,20 @@ pub fn transcode_folder() -> PathBuf {
     app_data_folder().join("cache").join("transcode")
 }
 
+/// `<AppDataFolder>/scripts` — root for user-editable scripts.
+/// Mirrors `FileSystemLayout.ScriptsFolder`.
+#[must_use]
+pub fn scripts_folder() -> PathBuf {
+    app_data_folder().join("scripts")
+}
+
+/// `<AppDataFolder>/scripts/mpegts` — MPEG-TS wrapper script folders.
+/// Mirrors `FileSystemLayout.MpegTsScriptsFolder`.
+#[must_use]
+pub fn mpegts_scripts_folder() -> PathBuf {
+    scripts_folder().join("mpegts")
+}
+
 /// `.troubleshooting` — the reserved HLS channel number used by ErsatzTV for
 /// one-off troubleshooting playback.
 pub const TRANSCODE_TROUBLESHOOTING_CHANNEL: &str = ".troubleshooting";

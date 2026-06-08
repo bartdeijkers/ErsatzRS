@@ -330,7 +330,7 @@ pub fn build_app(app_state: AppState) -> Router {
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
-    Router::new()
+    let iptv_routes = Router::new()
         .route("/iptv/channels.m3u", get(iptv::playlist::get_channels_m3u))
         .route("/iptv/xmltv.xml", get(iptv::guide::get_xmltv_xml))
         .route("/iptv/logos/gen", get(iptv::logos::get_generated_logo))
@@ -354,5 +354,17 @@ fn build_iptv_router(app_state: &AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             iptv::access_token::require_iptv_access,
-        ))
+        ));
+
+    let internal_ffmpeg_routes = Router::new()
+        .route(
+            "/ffmpeg/concat/{channel_number}",
+            get(iptv::get_concat_playlist),
+        )
+        .route(
+            "/ffmpeg/stream/{channel_number}",
+            get(iptv::get_internal_stream),
+        );
+
+    iptv_routes.merge(internal_ffmpeg_routes)
 }

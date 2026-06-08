@@ -1,3 +1,4 @@
+use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::db::DbPool;
@@ -13,38 +14,50 @@ use tokio_util::sync::CancellationToken;
 /// host can await a clean drain on shutdown. Every task observes `shutdown` and
 /// exits promptly when it is cancelled.
 pub fn spawn_background_tasks(
-    pool: DbPool,
-    device_uuid: uuid::Uuid,
-    tuner_count: Arc<AtomicI32>,
-    listen_port: u16,
-    playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
-    playout_locker: EntityLocker,
+    hdhr: HdhrTaskInputs,
+    maintenance: MaintenanceTaskInputs,
     shutdown: CancellationToken,
 ) -> Vec<JoinHandle<()>> {
     vec![
         tokio::spawn(crate::transport::hdhr::run_udp_discovery(
-            device_uuid,
-            tuner_count,
-            listen_port,
+            hdhr.device_uuid,
+            hdhr.tuner_count,
+            hdhr.listen_port,
             shutdown.clone(),
         )),
-        tokio::spawn(run_trakt_maintenance(pool, shutdown.clone())),
+        tokio::spawn(run_trakt_maintenance(maintenance.pool, shutdown.clone())),
         tokio::spawn(run_maintenance_scheduler(
-            playout_build_rx,
-            playout_locker,
+            maintenance.playout_build_rx,
+            maintenance.playout_locker,
+            maintenance.hls_sessions,
             shutdown,
         )),
     ]
 }
 
+pub struct HdhrTaskInputs {
+    pub device_uuid: uuid::Uuid,
+    pub tuner_count: Arc<AtomicI32>,
+    pub listen_port: u16,
+}
+
+pub struct MaintenanceTaskInputs {
+    pub pool: DbPool,
+    pub playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
+    pub playout_locker: EntityLocker,
+    pub hls_sessions: Arc<dyn HlsSessionRegistry>,
+}
+
 async fn run_maintenance_scheduler(
     playout_build_rx: mpsc::Receiver<PlayoutBuildRequest>,
     playout_locker: EntityLocker,
+    hls_sessions: Arc<dyn HlsSessionRegistry>,
     shutdown: CancellationToken,
 ) {
     if let Err(error) = run_scheduler(SchedulerOptions {
         tick: std::time::Duration::from_mins(1),
         build_requests: Some(playout_build_rx),
+        hls_sessions: Some(hls_sessions),
         locker: Some(playout_locker),
         shutdown: Some(shutdown),
         ..SchedulerOptions::default()

@@ -90,12 +90,17 @@ pub async fn run() {
     let shutdown = CancellationToken::new();
 
     let task_handles = super::tasks::spawn_background_tasks(
-        app_state.pool.clone(),
-        app_state.device_uuid,
-        app_state.tuner_count.clone(),
-        LISTEN_PORT,
-        playout_build_rx,
-        playout_locker,
+        super::tasks::HdhrTaskInputs {
+            device_uuid: app_state.device_uuid,
+            tuner_count: app_state.tuner_count.clone(),
+            listen_port: LISTEN_PORT,
+        },
+        super::tasks::MaintenanceTaskInputs {
+            pool: app_state.pool.clone(),
+            playout_build_rx,
+            playout_locker,
+            hls_sessions: app_state.hls_sessions.clone(),
+        },
         shutdown.clone(),
     );
 

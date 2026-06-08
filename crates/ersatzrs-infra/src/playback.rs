@@ -150,6 +150,7 @@ pub async fn load_source_video_stream(
     let row = sqlx::query(
         r#"SELECT ms."Codec" AS "Codec",
                   ms."PixelFormat" AS "PixelFormat",
+                  ms."ColorRange" AS "ColorRange",
                   ms."ColorTransfer" AS "ColorTransfer",
                   ms."ColorPrimaries" AS "ColorPrimaries",
                   ms."ColorSpace" AS "ColorSpace",
@@ -174,6 +175,7 @@ pub async fn load_source_video_stream(
 
     let codec: String = row.try_get("Codec").ok()?;
     let pixel_format: Option<String> = row.try_get("PixelFormat").ok().flatten();
+    let color_range: Option<String> = row.try_get("ColorRange").ok().flatten();
     let color_transfer: Option<String> = row.try_get("ColorTransfer").ok().flatten();
     let color_primaries: Option<String> = row.try_get("ColorPrimaries").ok().flatten();
     let color_space: Option<String> = row.try_get("ColorSpace").ok().flatten();
@@ -202,6 +204,7 @@ pub async fn load_source_video_stream(
         .is_some_and(|value| value != 0);
     stream.color_params = derive_color_params(
         pixel_format.as_deref(),
+        color_range.as_deref(),
         color_transfer.as_deref(),
         color_primaries.as_deref(),
         color_space.as_deref(),
@@ -2117,6 +2120,7 @@ fn parse_frame_rate(value: &str) -> Option<FrameRate> {
 /// stream => the BT.2020 ten-bit colorspace path).
 fn derive_color_params(
     pixel_format: Option<&str>,
+    color_range: Option<&str>,
     color_transfer: Option<&str>,
     color_primaries: Option<&str>,
     color_space: Option<&str>,
@@ -2137,7 +2141,14 @@ fn derive_color_params(
             .to_ascii_lowercase()
             .contains("bt2020");
 
+    // Carry the raw ffprobe color tags through to the pipeline so the ported
+    // `colorspace`/`colormatrix` normalization filter can classify the source
+    // (bt470bg / mixed / unknown) exactly like ErsatzTV's `ColorParams`.
     SourceColorParams {
+        color_range: color_range.and_then(non_empty_string),
+        color_space: color_space.and_then(non_empty_string),
+        color_transfer: color_transfer.and_then(non_empty_string),
+        color_primaries: color_primaries.and_then(non_empty_string),
         is_hdr,
         is_bt2020_ten: is_bt2020 && is_ten_bit,
     }

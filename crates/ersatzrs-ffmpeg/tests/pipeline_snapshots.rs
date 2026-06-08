@@ -1886,6 +1886,7 @@ fn pipeline_emits_tonemap_for_hdr_source_snapshot() {
     source.color_params = SourceColorParams {
         is_hdr: true,
         is_bt2020_ten: true,
+        ..SourceColorParams::default()
     };
     let request = PipelineRequest::new(
         InputFile::video("/media/hdr-movie.mkv"),
@@ -1905,6 +1906,7 @@ fn nvenc_pipeline_uses_vulkan_hwaccel_for_hdr_tonemap_snapshot() {
     source.color_params = SourceColorParams {
         is_hdr: true,
         is_bt2020_ten: false,
+        ..SourceColorParams::default()
     };
     let mut report = capability_report_for_tests();
     report.hwaccels.insert("vulkan".to_owned());

@@ -1,4 +1,9 @@
-use crate::{EnvironmentVariable, InputFile, InputKind, PipelineStep};
+use crate::{
+    closed_gop, copy_all_streams, fast_start, hide_banner, loglevel_error, map_all_streams,
+    mpegts_output, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
+    pipe_output, standard_format_flags, EnvironmentVariable, InputFile, InputKind, OutputMetadata,
+    PipelineStep,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegCommand {
@@ -31,6 +36,102 @@ impl FfmpegCommand {
             environment,
             arguments,
         }
+    }
+}
+
+/// Build the MPEG-TS hybrid wrapper command used by ErsatzTV's
+/// `FFmpegLibraryProcessService.WrapSegmenter`.
+///
+/// The input is the live HLS segmenter URL. The wrapper does not transcode; it
+/// paces reads from the segmenter playlist and copies every stream into an
+/// MPEG-TS stdout pipe.
+#[must_use]
+pub fn build_mpegts_segmenter_wrapper_command(
+    hls_url: impl Into<String>,
+    metadata: &OutputMetadata,
+    aac_latm_audio: bool,
+) -> FfmpegCommand {
+    let mut input = InputFile::video(hls_url);
+    if aac_latm_audio {
+        input
+            .input_options
+            .extend(["-c:a".to_owned(), "aac_latm".to_owned()]);
+    }
+    input.add_readrate("1.0");
+
+    let mut steps = vec![
+        no_standard_input(),
+        PipelineStep::global("threads", ["-threads", "1"]),
+        hide_banner(),
+        loglevel_error(),
+        no_stats(),
+        standard_format_flags(),
+        map_all_streams(),
+        copy_all_streams(),
+    ];
+    add_service_metadata_steps(&mut steps, metadata);
+    steps.push(mpegts_output(false));
+    steps.push(pipe_output());
+
+    CommandGenerator::generate_command(&[input], &steps, false)
+}
+
+/// Build the MPEG-TS legacy concat command used by ErsatzTV's
+/// `FFmpegLibraryProcessService.ConcatChannel`.
+///
+/// The input URL is the internal `ffconcat` playlist endpoint. `FFmpeg` loops the
+/// concat playlist, paces reads in realtime, copies every stream, and emits an
+/// MPEG-TS stdout pipe.
+#[must_use]
+pub fn build_mpegts_concat_command(
+    concat_url: impl Into<String>,
+    metadata: &OutputMetadata,
+) -> FfmpegCommand {
+    let mut input = InputFile::concat(concat_url);
+    input.add_readrate("1.0");
+    input
+        .input_options
+        .extend(["-stream_loop".to_owned(), "-1".to_owned()]);
+
+    let mut steps = vec![
+        no_standard_input(),
+        hide_banner(),
+        no_stats(),
+        loglevel_error(),
+        standard_format_flags(),
+        no_demux_decode_delay(),
+        fast_start(),
+        closed_gop(),
+        no_scene_detect(0),
+        copy_all_streams(),
+        PipelineStep::generic("no_metadata", ["-map_metadata", "-1"]),
+    ];
+    add_service_metadata_steps(&mut steps, metadata);
+    steps.push(mpegts_output(true));
+    steps.push(pipe_output());
+
+    CommandGenerator::generate_command(&[input], &steps, false)
+}
+
+fn add_service_metadata_steps(steps: &mut Vec<PipelineStep>, metadata: &OutputMetadata) {
+    if let Some(service_provider) = metadata.service_provider.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_service_provider",
+            [
+                "-metadata".to_owned(),
+                format!("service_provider=\"{service_provider}\""),
+            ],
+        ));
+    }
+
+    if let Some(service_name) = metadata.service_name.as_deref() {
+        steps.push(PipelineStep::generic(
+            "metadata_service_name",
+            [
+                "-metadata".to_owned(),
+                format!("service_name=\"{service_name}\""),
+            ],
+        ));
     }
 }
 
@@ -179,4 +280,59 @@ fn shared_video_audio_input_options(input: &InputFile) -> Vec<String> {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mpegts_segmenter_wrapper_matches_upstream_default_shape() {
+        let metadata = OutputMetadata {
+            service_provider: Some("ErsatzTV".to_owned()),
+            service_name: Some("Channel One".to_owned()),
+            ..OutputMetadata::default()
+        };
+        let command = build_mpegts_segmenter_wrapper_command(
+            "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter",
+            &metadata,
+            false,
+        );
+
+        insta::assert_snapshot!(
+            "mpegts_segmenter_wrapper_default",
+            command.arguments.join(" ")
+        );
+    }
+
+    #[test]
+    fn mpegts_segmenter_wrapper_adds_aac_latm_decoder() {
+        let metadata = OutputMetadata::default();
+        let command = build_mpegts_segmenter_wrapper_command(
+            "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter",
+            &metadata,
+            true,
+        );
+
+        let arguments = command.arguments.join(" ");
+        assert!(
+            arguments.contains("-c:a aac_latm -readrate 1.0 -i"),
+            "{arguments}"
+        );
+    }
+
+    #[test]
+    fn mpegts_concat_matches_upstream_default_shape() {
+        let metadata = OutputMetadata {
+            service_provider: Some("ErsatzTV".to_owned()),
+            service_name: Some("Channel One".to_owned()),
+            ..OutputMetadata::default()
+        };
+        let command = build_mpegts_concat_command(
+            "http://localhost:8409/ffmpeg/concat/1?mode=ts-legacy",
+            &metadata,
+        );
+
+        insta::assert_snapshot!("mpegts_concat_default", command.arguments.join(" "));
+    }
 }

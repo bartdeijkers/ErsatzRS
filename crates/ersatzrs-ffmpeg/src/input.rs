@@ -64,6 +64,16 @@ impl InputFile {
     }
 
     #[must_use]
+    pub fn lavfi_video(filter: impl Into<String>) -> Self {
+        Self::new(InputKind::Video, filter, 0).with_input_options(["-f", "lavfi"])
+    }
+
+    #[must_use]
+    pub fn lavfi_audio(filter: impl Into<String>) -> Self {
+        Self::new(InputKind::Audio, filter, 0).with_input_options(["-f", "lavfi"])
+    }
+
+    #[must_use]
     pub fn watermark(path: impl Into<String>) -> Self {
         let mut input = Self::new(InputKind::Watermark, path, 0);
         input
@@ -105,6 +115,10 @@ impl InputFile {
             "concat".to_owned(),
             "-safe".to_owned(),
             "0".to_owned(),
+            "-protocol_whitelist".to_owned(),
+            "file,http,tcp,https,tcp,tls".to_owned(),
+            "-probesize".to_owned(),
+            "32".to_owned(),
         ]);
         input
     }

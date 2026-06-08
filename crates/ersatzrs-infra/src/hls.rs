@@ -64,6 +64,7 @@ mod tests {
         channel: String,
         touched: AtomicUsize,
         cancelled: AtomicUsize,
+        playout_updated: AtomicUsize,
     }
 
     impl FakeHandle {
@@ -72,6 +73,7 @@ mod tests {
                 channel: channel.to_string(),
                 touched: AtomicUsize::new(0),
                 cancelled: AtomicUsize::new(0),
+                playout_updated: AtomicUsize::new(0),
             })
         }
     }
@@ -92,6 +94,10 @@ mod tests {
 
         async fn cancel(&self) {
             self.cancelled.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn playout_updated(&self) {
+            self.playout_updated.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -145,6 +151,17 @@ mod tests {
 
         // Unknown channels report no session to stop.
         assert!(!registry.stop_channel("missing").await);
+    }
+
+    #[tokio::test]
+    async fn playout_updated_notifies_active_handle_and_reports_presence() {
+        let registry = InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("12");
+        registry.insert(handle.clone()).await;
+
+        assert!(registry.playout_updated("12").await);
+        assert_eq!(handle.playout_updated.load(Ordering::SeqCst), 1);
+        assert!(!registry.playout_updated("missing").await);
     }
 
     #[tokio::test]

@@ -22,32 +22,43 @@ Reopened audit (2026-06-08): ErsatzTV exposes two different `.ts` behaviors.
 `GetWrappedProcessByChannelNumber` and `FFmpegProcessService.WrapSegmenter`,
 which wraps the live HLS segmenter URL
 `/iptv/channel/{n}.m3u8?mode=segmenter` into an MPEG-TS output and can execute
-the configured MPEG-TS script. ErsatzRS currently strips only the `.ts` suffix
-in `dispatch_channel_request`, ignores the `mode` query, and routes both
-`ts` and `ts-legacy` to the same direct `serve_transport_stream` path. That
-means the admin-visible `MPEG-TS` mode is not the ErsatzTV hybrid wrapper, and
-`MPEG-TS (Legacy)` is not a distinct concat/legacy process.
+the configured MPEG-TS script. The dispatch/wrapper slice now parses the `.ts`
+`mode` query: empty/mixed mode resolves the channel setting, HLS-configured
+channels redirect back to `.m3u8`, `mode=ts` selects the modern wrapper, and
+`mode=ts-legacy` selects the legacy direct branch. The default hybrid wrapper
+starts/touches the HLS segmenter, reads
+`/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, and emits the
+upstream copy-all/readrate/mpegts stdout pipe shape, including AAC-LATM decoder
+selection when the playback profile requires it.
 
-ParityDebt - MPEG-TS hybrid wrapper: port ErsatzTV's `WrapSegmenter` path so
-`StreamingMode.TransportStreamHybrid` and `mode=ts` start/touch the HLS
-segmenter, read from its live `.m3u8`, and emit a wrapped MPEG-TS stream using
-the upstream copy-all/readrate/mpegts pipe shape. This is the MPEG-TS side of
-the reported channel 1 HLS-segmenter skip/stop behavior: in ErsatzTV the modern
-MPEG-TS mode depends on the segmenter state machine, while ErsatzRS bypasses it
-entirely.
+The legacy concat slice ports ErsatzTV's `ConcatChannel` process model:
+`StreamingMode.TransportStream` and `mode=ts-legacy` now spawn a concat-demuxer
+FFmpeg command that reads `/ffmpeg/concat/{n}?mode=ts-legacy`, loops that
+playlist in realtime, copies all streams, and emits MPEG-TS to stdout with the
+upstream initial-discontinuity output shape. ErsatzRS now exposes internal
+`/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes; the concat playlist
+repeats `/ffmpeg/stream/{n}?mode=ts-legacy`, and the internal stream route uses
+the existing direct playout-item process with `StreamingMode.TransportStream`
+semantics. The command snapshots prove that modern wrapper and legacy concat
+paths are observably different.
 
-ParityDebt - MPEG-TS legacy dispatch: parse the `.ts` query mode and preserve
-the ErsatzTV split where empty/mixed mode resolves the channel setting,
-`mode=ts` selects the hybrid wrapper, and `mode=ts-legacy` selects the legacy
-concat/direct branch. Add route tests proving `/iptv/channel/{n}.ts`,
-`/iptv/channel/{n}.ts?mode=ts`, and `/iptv/channel/{n}.ts?mode=ts-legacy`
-choose different process builders when the channel setting requires it.
+The MPEG-TS script runtime now mirrors ErsatzTV's default-script hook for the
+modern wrapper path: the configured `ffmpeg.default_mpegts_script` is resolved
+against `<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`, the ErsatzTV YAML
+shape (`name`, `linux_script`, `windows_script`) is parsed with `serde_yaml`,
+`HlsUrl`, `ChannelName`, and `FFmpegPath` are rendered into the platform script,
+and the rendered script replaces the default wrapper command. Unix executes the
+rendered script through `bash`; Windows executes the rendered `.bat` path
+directly. Missing, invalid, or platform-incomplete scripts warn and fall back to
+the default wrapper command.
 
-ParityDebt - default MPEG-TS script runtime: ErsatzTV's `MpegTsScriptService`
-loads scripts from the MPEG-TS script folder, renders `HlsUrl`, `ChannelName`,
-and `FFmpegPath` through Scriban, and lets the configured
-`ffmpeg.default_mpegts_script` replace the default wrapper command. ErsatzRS
-seeds and displays `ffmpeg.default_mpegts_script`, but no streaming runtime
-path loads or executes MPEG-TS scripts yet. Until this exists, the settings UI
-is cosmetic for the actual `MPEG-TS` mode.
+Runtime proof (2026-06-08): channel 1 modern MPEG-TS wrapper
+`/iptv/channel/1.ts?mode=ts` was captured for a bounded 65-second window while
+the HLS segmenter remained active; curl timed out at the expected bound after
+68,410,380 bytes and ffprobe read HEVC video plus AAC audio from the captured
+MPEG-TS sample. Channel 1 legacy MPEG-TS
+`/iptv/channel/1.ts?mode=ts-legacy` was captured with the same 65-second bound;
+curl timed out after 66,922,924 bytes and ffprobe read HEVC video plus AAC
+audio, proving the legacy branch remains readable and observably distinct from
+the modern segmenter wrapper.
 '''

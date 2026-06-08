@@ -10,20 +10,25 @@ use std::{
 
 use axum::{
     body::Body,
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
-use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
-use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
+use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, MediaSourceRepository};
+use ersatzrs_domain::{
+    Channel, ChannelSubtitleMode, EmbyMediaSource, FFmpegProfileAudioFormat, JellyfinMediaSource,
+    PlexMediaSource, StreamingMode,
+};
 use ersatzrs_ffmpeg::{
-    build_pipeline_for_acceleration, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand,
-    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat, OutputMetadata,
-    PipelineRequest, SourceAudioStream, SourceVideoStream,
+    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
+    build_pipeline_for_acceleration, ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport,
+    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat,
+    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
@@ -32,6 +37,7 @@ use ersatzrs_infra::playback::{
     watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
+use serde::Deserialize;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
@@ -39,12 +45,70 @@ use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 
 use crate::host::state::AppState;
+use crate::transport::iptv::access_token::AccessToken;
+use crate::transport::iptv::{hls, hls::HlsQuery};
 
 static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
+const DEFAULT_MPEG_TS_SCRIPT_ID: &str = "default";
 
-pub async fn serve_transport_stream(state: &AppState, channel_number: &str) -> Response {
-    serve_channel_stream(state, channel_number, OutputFormat::MpegTs).await
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct MpegTsScriptDefinition {
+    name: String,
+    #[serde(default)]
+    linux_script: Option<String>,
+    #[serde(default)]
+    windows_script: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MpegTsScript {
+    id: String,
+    folder: PathBuf,
+    definition: MpegTsScriptDefinition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MpegTsScriptRenderData {
+    hls_url: String,
+    channel_name: String,
+    ffmpeg_path: String,
+}
+
+pub async fn serve_transport_stream(
+    state: &AppState,
+    channel_number: &str,
+    headers: &HeaderMap,
+    query: &HlsQuery,
+) -> Response {
+    let channel = match state
+        .repositories
+        .channel
+        .get_by_number(channel_number)
+        .await
+    {
+        Ok(channel) if channel.is_enabled => channel,
+        Ok(_) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::debug!(%error, channel_number, "channel not found for transport stream");
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+
+    match resolve_transport_stream_mode(query.mode.as_deref(), channel.streaming_mode) {
+        TransportStreamMode::RedirectToHls => {
+            let access_token = AccessToken::new(query.access_token.clone());
+            let target = format!(
+                "/iptv/channel/{channel_number}.m3u8{}",
+                access_token.query()
+            );
+            axum::response::Redirect::temporary(&target).into_response()
+        }
+        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, headers),
+        TransportStreamMode::HybridWrapper => {
+            serve_segmenter_wrapper_stream(state, &channel, headers, query).await
+        }
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -67,6 +131,84 @@ pub async fn serve_channel_stream(
         }
     };
 
+    let effective_streaming_mode = channel.streaming_mode;
+    serve_channel_stream_with_channel(state, channel, output_format, effective_streaming_mode).await
+}
+
+pub async fn serve_concat_playlist(
+    state: &AppState,
+    channel_number: &str,
+    headers: &HeaderMap,
+    query: &HlsQuery,
+) -> Response {
+    let channel = match state
+        .repositories
+        .channel
+        .get_by_number(channel_number)
+        .await
+    {
+        Ok(channel) if channel.is_enabled => channel,
+        Ok(_) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::debug!(%error, channel_number, "channel not found for concat playlist");
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+    let mode = query
+        .mode
+        .as_deref()
+        .map(str::trim)
+        .filter(|mode| !mode.is_empty())
+        .unwrap_or("ts-legacy");
+    let playlist = ConcatPlaylist::new(
+        hls::request_scheme(headers),
+        hls::request_host(headers),
+        channel.number,
+        mode,
+    );
+
+    let mut response = playlist.render().into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str) -> Response {
+    let channel = match state
+        .repositories
+        .channel
+        .get_by_number(channel_number)
+        .await
+    {
+        Ok(channel) if channel.is_enabled => channel,
+        Ok(_) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            tracing::debug!(%error, channel_number, "channel not found for internal legacy stream");
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+
+    serve_channel_stream_with_channel(
+        state,
+        channel,
+        OutputFormat::MpegTs,
+        StreamingMode::TransportStream,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn serve_channel_stream_with_channel(
+    state: &AppState,
+    channel: Channel,
+    output_format: OutputFormat,
+    effective_streaming_mode: StreamingMode,
+) -> Response {
     let now = Utc::now();
     let active = match load_active_media_path(&state.pool, channel.id, now).await {
         Ok(Some(path)) => path,
@@ -112,7 +254,7 @@ pub async fn serve_channel_stream(
         }
     };
     let effective_acceleration =
-        if channel.streaming_mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect {
+        if effective_streaming_mode == ersatzrs_domain::StreamingMode::HttpLiveStreamingDirect {
             ersatzrs_domain::HardwareAccelerationKind::None
         } else {
             playback_profile.profile.hardware_acceleration
@@ -142,7 +284,7 @@ pub async fn serve_channel_stream(
         active.media_item_id,
         preferred_subtitle_language,
         subtitle_mode,
-        channel.streaming_mode,
+        effective_streaming_mode,
     )
     .await
     {
@@ -164,7 +306,7 @@ pub async fn serve_channel_stream(
         subtitle.as_ref(),
     );
     let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
-        subtitle_input_for_stream(subtitle, &resolved, output_format, channel.streaming_mode)
+        subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
     });
     let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
     let watermark_inputs = match select_playback_watermarks(
@@ -259,7 +401,7 @@ pub async fn serve_channel_stream(
         start_seconds,
         &playback_profile,
         target_frame_rate,
-        channel.streaming_mode,
+        effective_streaming_mode,
         metadata,
         runtime_capabilities,
         source_stream,
@@ -290,6 +432,319 @@ pub async fn serve_channel_stream(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TransportStreamMode {
+    RedirectToHls,
+    Legacy,
+    HybridWrapper,
+}
+
+fn resolve_transport_stream_mode(
+    requested_mode: Option<&str>,
+    channel_streaming_mode: StreamingMode,
+) -> TransportStreamMode {
+    match requested_mode.unwrap_or_default().trim() {
+        "" | "mixed" => match channel_streaming_mode {
+            StreamingMode::TransportStream => TransportStreamMode::Legacy,
+            StreamingMode::TransportStreamHybrid => TransportStreamMode::HybridWrapper,
+            StreamingMode::HttpLiveStreamingDirect | StreamingMode::HttpLiveStreamingSegmenter => {
+                TransportStreamMode::RedirectToHls
+            }
+        },
+        "ts-legacy" => TransportStreamMode::Legacy,
+        _ => TransportStreamMode::HybridWrapper,
+    }
+}
+
+async fn serve_segmenter_wrapper_stream(
+    state: &AppState,
+    channel: &Channel,
+    headers: &HeaderMap,
+    query: &HlsQuery,
+) -> Response {
+    let path_replacements = match load_path_replacements(&state.repositories.media_source).await {
+        Ok(replacements) => replacements,
+        Err(error) => {
+            tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for wrapped segmenter; continuing with raw path");
+            Vec::new()
+        }
+    };
+
+    hls::ensure_segmenter_worker_running(
+        state,
+        &channel.number,
+        channel.id,
+        channel.idle_behavior,
+        OutputFormat::Hls,
+        path_replacements,
+    )
+    .await;
+
+    let aac_latm_audio = match load_channel_playback_profile(&state.pool, channel.id).await {
+        Ok(Some(profile)) => profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm,
+        Ok(None) => {
+            tracing::error!(channel_number = %channel.number, "channel has no playback ffmpeg profile");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number = %channel.number, "failed to load playback ffmpeg profile for wrapped segmenter");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let access_token = AccessToken::new(query.access_token.clone());
+    let hls_url = build_segmenter_wrapper_hls_url(
+        &hls::request_scheme(headers),
+        &hls::request_host(headers),
+        &channel.number,
+        &access_token,
+    );
+    let metadata = OutputMetadata {
+        service_provider: Some("ErsatzTV".to_owned()),
+        service_name: Some(channel.name.clone()),
+        ..OutputMetadata::default()
+    };
+    let (command, cleanup_paths) =
+        match configured_mpegts_script_command(state, channel, &hls_url).await {
+            Some(command) => command,
+            None => (
+                build_mpegts_segmenter_wrapper_command(hls_url, &metadata, aac_latm_audio),
+                Vec::new(),
+            ),
+        };
+
+    match spawn_stream_body(
+        command,
+        cleanup_paths,
+        channel.number.clone(),
+        state.hls_sessions.clone(),
+    ) {
+        Ok(body) => {
+            let mut response = body.into_response();
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for wrapped segmenter");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn serve_legacy_concat_stream(
+    state: &AppState,
+    channel: &Channel,
+    headers: &HeaderMap,
+) -> Response {
+    let concat_url = build_legacy_concat_url(
+        &hls::request_scheme(headers),
+        &hls::request_host(headers),
+        &channel.number,
+    );
+    let metadata = OutputMetadata {
+        service_provider: Some("ErsatzTV".to_owned()),
+        service_name: Some(channel.name.clone()),
+        ..OutputMetadata::default()
+    };
+    let command = build_mpegts_concat_command(concat_url, &metadata);
+
+    match spawn_stream_body(
+        command,
+        Vec::new(),
+        channel.number.clone(),
+        state.hls_sessions.clone(),
+    ) {
+        Ok(body) => {
+            let mut response = body.into_response();
+            response
+                .headers_mut()
+                .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+            response
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            response
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for legacy concat stream");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn build_legacy_concat_url(scheme: &str, host: &str, channel_number: &str) -> String {
+    format!("{scheme}://{host}/ffmpeg/concat/{channel_number}?mode=ts-legacy")
+}
+
+fn build_segmenter_wrapper_hls_url(
+    scheme: &str,
+    host: &str,
+    channel_number: &str,
+    access_token: &AccessToken,
+) -> String {
+    format!(
+        "{scheme}://{host}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
+        access_token.query_amp()
+    )
+}
+
+async fn configured_mpegts_script_command(
+    state: &AppState,
+    channel: &Channel,
+    hls_url: &str,
+) -> Option<(FfmpegCommand, Vec<PathBuf>)> {
+    let configured = match state
+        .repositories
+        .config
+        .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT)
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!(%error, channel_number = %channel.number, "failed to load default MPEG-TS script config");
+            None
+        }
+    }
+    .unwrap_or_else(|| DEFAULT_MPEG_TS_SCRIPT_ID.to_owned());
+    let configured = configured.trim();
+    if configured.is_empty() {
+        return None;
+    }
+
+    let Some(script) = find_mpegts_script(configured).await else {
+        tracing::warn!(
+            script_id = configured,
+            "unable to locate MPEG-TS script folder"
+        );
+        return None;
+    };
+
+    match render_mpegts_script_command(
+        &script,
+        &MpegTsScriptRenderData {
+            hls_url: hls_url.to_owned(),
+            channel_name: channel.name.clone(),
+            ffmpeg_path: ersatzrs_ffmpeg::ffmpeg_path(),
+        },
+    )
+    .await
+    {
+        Ok(command) => Some(command),
+        Err(error) => {
+            tracing::warn!(%error, script_id = %script.id, "failed to prepare MPEG-TS script command; falling back to default wrapper");
+            None
+        }
+    }
+}
+
+async fn find_mpegts_script(script_id: &str) -> Option<MpegTsScript> {
+    find_mpegts_script_in(&file_system_layout::mpegts_scripts_folder(), script_id).await
+}
+
+async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Option<MpegTsScript> {
+    let mut entries = tokio::fs::read_dir(&root).await.ok()?;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let Ok(file_type) = entry.file_type().await else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().into_owned();
+        if id != script_id {
+            continue;
+        }
+        let folder = entry.path();
+        let yaml = tokio::fs::read_to_string(folder.join("mpegts.yml"))
+            .await
+            .ok()?;
+        let definition = match serde_yaml::from_str::<MpegTsScriptDefinition>(&yaml) {
+            Ok(definition) => definition,
+            Err(error) => {
+                tracing::warn!(%error, script_id, "failed to parse MPEG-TS script YAML definition");
+                return None;
+            }
+        };
+        return Some(MpegTsScript {
+            id,
+            folder,
+            definition,
+        });
+    }
+    None
+}
+
+async fn render_mpegts_script_command(
+    script: &MpegTsScript,
+    data: &MpegTsScriptRenderData,
+) -> Result<(FfmpegCommand, Vec<PathBuf>), std::io::Error> {
+    let script_name = platform_mpegts_script_name(&script.definition);
+    let Some(script_name) = script_name
+        .as_deref()
+        .filter(|name| !name.trim().is_empty())
+    else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "mpegts script definition has no script for this platform",
+        ));
+    };
+    let template_path = script.folder.join(script_name);
+    let template = tokio::fs::read_to_string(&template_path).await?;
+    let rendered = render_mpegts_script_template(&template, data);
+    let temp_path = temp_mpegts_script_path(cfg!(windows));
+    tokio::fs::write(&temp_path, rendered).await?;
+
+    if cfg!(windows) {
+        Ok((
+            FfmpegCommand::new_with_executable(
+                temp_path.to_string_lossy().into_owned(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            vec![temp_path],
+        ))
+    } else {
+        Ok((
+            FfmpegCommand::new_with_executable(
+                "bash",
+                Vec::new(),
+                vec![temp_path.to_string_lossy().into_owned()],
+            ),
+            vec![temp_path],
+        ))
+    }
+}
+
+fn platform_mpegts_script_name(definition: &MpegTsScriptDefinition) -> Option<String> {
+    if cfg!(windows) {
+        definition.windows_script.clone()
+    } else {
+        definition.linux_script.clone()
+    }
+}
+
+fn temp_mpegts_script_path(windows: bool) -> PathBuf {
+    let extension = if windows { "bat" } else { "sh" };
+    std::env::temp_dir().join(format!(
+        "ersatzrs-mpegts-script-{}.{}",
+        uuid::Uuid::new_v4(),
+        extension
+    ))
+}
+
+fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) -> String {
+    template
+        .replace("{{ HlsUrl }}", &data.hls_url)
+        .replace("{{HlsUrl}}", &data.hls_url)
+        .replace("{{ ChannelName }}", &data.channel_name)
+        .replace("{{ChannelName}}", &data.channel_name)
+        .replace("{{ FFmpegPath }}", &data.ffmpeg_path)
+        .replace("{{FFmpegPath}}", &data.ffmpeg_path)
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -629,7 +1084,7 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 
 fn spawn_stream_body(
     command: FfmpegCommand,
-    cleanup_dirs: Vec<PathBuf>,
+    cleanup_paths: Vec<PathBuf>,
     channel_number: String,
     session_registry: Arc<dyn HlsSessionRegistry>,
 ) -> Result<Body, StreamSpawnError> {
@@ -682,16 +1137,25 @@ fn spawn_stream_body(
         if registered {
             session_registry.remove(&channel_number).await;
         }
-        for path in cleanup_dirs {
-            if let Err(error) = tokio::fs::remove_dir_all(&path).await {
-                if error.kind() != std::io::ErrorKind::NotFound {
-                    tracing::debug!(%error, path = %path.display(), "failed to clean up IPTV graphics artifacts");
-                }
-            }
+        for path in cleanup_paths {
+            cleanup_stream_artifact(&path).await;
         }
     });
 
     Ok(Body::from_stream(ReaderStream::new(stdout)))
+}
+
+async fn cleanup_stream_artifact(path: &std::path::Path) {
+    let result = match tokio::fs::metadata(path).await {
+        Ok(metadata) if metadata.is_dir() => tokio::fs::remove_dir_all(path).await,
+        Ok(_) => tokio::fs::remove_file(path).await,
+        Err(error) => Err(error),
+    };
+    if let Err(error) = result {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            tracing::debug!(%error, path = %path.display(), "failed to clean up IPTV stream artifact");
+        }
+    }
 }
 
 struct DirectStreamHandle {
@@ -723,6 +1187,8 @@ impl HlsSessionHandle for DirectStreamHandle {
     async fn cancel(&self) {
         self.cancel.notify_waiters();
     }
+
+    fn playout_updated(&self) {}
 }
 
 async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> String {
@@ -962,6 +1428,189 @@ mod tests {
         assert_eq!(
             content_type_for_output_format(OutputFormat::Mkv),
             "video/x-matroska"
+        );
+    }
+
+    #[test]
+    fn transport_stream_mode_resolves_channel_setting_for_mixed_requests() {
+        assert_eq!(
+            resolve_transport_stream_mode(None, StreamingMode::TransportStream),
+            TransportStreamMode::Legacy
+        );
+        assert_eq!(
+            resolve_transport_stream_mode(Some("mixed"), StreamingMode::TransportStreamHybrid),
+            TransportStreamMode::HybridWrapper
+        );
+        assert_eq!(
+            resolve_transport_stream_mode(None, StreamingMode::HttpLiveStreamingSegmenter),
+            TransportStreamMode::RedirectToHls
+        );
+    }
+
+    #[test]
+    fn transport_stream_mode_explicit_query_overrides_channel_setting() {
+        assert_eq!(
+            resolve_transport_stream_mode(Some("ts-legacy"), StreamingMode::TransportStreamHybrid),
+            TransportStreamMode::Legacy
+        );
+        assert_eq!(
+            resolve_transport_stream_mode(Some("ts"), StreamingMode::TransportStream),
+            TransportStreamMode::HybridWrapper
+        );
+    }
+
+    #[test]
+    fn segmenter_wrapper_url_preserves_access_token() {
+        let token = AccessToken::new(Some("abc123".to_owned()));
+        assert_eq!(
+            build_segmenter_wrapper_hls_url("http", "localhost:8409", "7", &token),
+            "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=abc123"
+        );
+    }
+
+    #[test]
+    fn mpegts_script_yaml_uses_ersatztv_field_names() {
+        let script: MpegTsScriptDefinition = serde_yaml::from_str(
+            "name: Default\nlinux_script: mpegts.sh\nwindows_script: mpegts.bat\n",
+        )
+        .expect("parse script yaml");
+
+        assert_eq!(script.name, "Default");
+        assert_eq!(script.linux_script.as_deref(), Some("mpegts.sh"));
+        assert_eq!(script.windows_script.as_deref(), Some("mpegts.bat"));
+    }
+
+    #[test]
+    fn mpegts_script_renderer_substitutes_known_scriban_variables() {
+        let rendered = render_mpegts_script_template(
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -metadata service_name="{{ ChannelName }}""#,
+            &MpegTsScriptRenderData {
+                hls_url: "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter".to_owned(),
+                channel_name: "Channel One".to_owned(),
+                ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
+            },
+        );
+
+        assert_eq!(
+            rendered,
+            r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -metadata service_name="Channel One""#
+        );
+    }
+
+    #[test]
+    fn mpegts_script_platform_selection_is_cfg_guarded() {
+        let definition = MpegTsScriptDefinition {
+            name: "Default".to_owned(),
+            linux_script: Some("mpegts.sh".to_owned()),
+            windows_script: Some("mpegts.bat".to_owned()),
+        };
+
+        if cfg!(windows) {
+            assert_eq!(
+                platform_mpegts_script_name(&definition).as_deref(),
+                Some("mpegts.bat")
+            );
+        } else {
+            assert_eq!(
+                platform_mpegts_script_name(&definition).as_deref(),
+                Some("mpegts.sh")
+            );
+        }
+    }
+
+    #[test]
+    fn mpegts_script_temp_path_uses_platform_extension() {
+        assert_eq!(
+            temp_mpegts_script_path(false)
+                .extension()
+                .and_then(|extension| extension.to_str()),
+            Some("sh")
+        );
+        assert_eq!(
+            temp_mpegts_script_path(true)
+                .extension()
+                .and_then(|extension| extension.to_str()),
+            Some("bat")
+        );
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_discovery_reads_ersatztv_folder_shape() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("custom");
+        std::fs::create_dir_all(&folder).expect("create script folder");
+        std::fs::write(
+            folder.join("mpegts.yml"),
+            "name: Custom\nlinux_script: run.sh\nwindows_script: run.bat\n",
+        )
+        .expect("write script yaml");
+
+        let script = find_mpegts_script_in(root.path(), "custom")
+            .await
+            .expect("script discovered");
+
+        assert_eq!(script.id, "custom");
+        assert_eq!(script.definition.name, "Custom");
+        assert_eq!(script.definition.linux_script.as_deref(), Some("run.sh"));
+    }
+
+    #[tokio::test]
+    async fn mpegts_script_command_writes_rendered_platform_script() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("default");
+        std::fs::create_dir_all(&folder).expect("create script folder");
+        let script_name = if cfg!(windows) { "run.bat" } else { "run.sh" };
+        std::fs::write(
+            folder.join(script_name),
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -metadata service_name="{{ ChannelName }}""#,
+        )
+        .expect("write script template");
+        let script = MpegTsScript {
+            id: "default".to_owned(),
+            folder,
+            definition: MpegTsScriptDefinition {
+                name: "Default".to_owned(),
+                linux_script: Some("run.sh".to_owned()),
+                windows_script: Some("run.bat".to_owned()),
+            },
+        };
+
+        let (command, cleanup_paths) = render_mpegts_script_command(
+            &script,
+            &MpegTsScriptRenderData {
+                hls_url: "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter".to_owned(),
+                channel_name: "Channel One".to_owned(),
+                ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
+            },
+        )
+        .await
+        .expect("render command");
+
+        let rendered_path = cleanup_paths.first().expect("cleanup path");
+        let rendered = std::fs::read_to_string(rendered_path).expect("read rendered script");
+        assert!(rendered.contains("/opt/ffmpeg/bin/ffmpeg"));
+        assert!(rendered.contains("Channel One"));
+        if cfg!(windows) {
+            assert_eq!(
+                command.executable,
+                rendered_path.to_string_lossy().into_owned()
+            );
+            assert!(command.arguments.is_empty());
+        } else {
+            assert_eq!(command.executable, "bash");
+            assert_eq!(
+                command.arguments,
+                vec![rendered_path.to_string_lossy().into_owned()]
+            );
+        }
+        cleanup_stream_artifact(rendered_path).await;
+    }
+
+    #[test]
+    fn legacy_concat_url_matches_internal_endpoint_shape() {
+        assert_eq!(
+            build_legacy_concat_url("http", "localhost:8409", "7"),
+            "http://localhost:8409/ffmpeg/concat/7?mode=ts-legacy"
         );
     }
 

@@ -4,21 +4,26 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
+    atomic::{AtomicI32, AtomicI64, Ordering},
     Arc,
 };
 use std::time::Duration;
 
 use crate::db::DbPool;
+use crate::repositories::common::encode_datetime;
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
-use ersatzrs_domain::{Channel, ChannelSubtitleMode, StreamingMode};
+use ersatzrs_domain::{
+    Channel, ChannelSubtitleMode, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat,
+    StreamingMode, VideoScanKind,
+};
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
     FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
-    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
+    OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec,
+    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
 };
 
 use crate::playback::{
@@ -41,6 +46,101 @@ const PLAYLIST_DELETE_INTERVAL_MS: i64 = 30_000;
 const PLAYLIST_FILTER_BEFORE_SECONDS: i64 = 30;
 const SEGMENT_CLEANUP_INTERVAL: Duration = Duration::from_secs(5);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
+const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
+const HLS_REALTIME_BUFFER_SECONDS: i64 = 30;
+const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
+const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
+
+static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
+
+const ERROR_BACKGROUND_PNG: &[u8] = include_bytes!("../../../assets/_background.png");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HlsSessionState {
+    SeekAndWorkAhead,
+    ZeroAndWorkAhead,
+    SeekAndRealtime,
+    ZeroAndRealtime,
+    SlugAndWorkAhead,
+    SlugAndRealtime,
+    #[allow(dead_code)]
+    PlayoutUpdated,
+}
+
+impl HlsSessionState {
+    const fn as_i32(self) -> i32 {
+        match self {
+            Self::SeekAndWorkAhead => 0,
+            Self::ZeroAndWorkAhead => 1,
+            Self::SeekAndRealtime => 2,
+            Self::ZeroAndRealtime => 3,
+            Self::SlugAndWorkAhead => 4,
+            Self::SlugAndRealtime => 5,
+            Self::PlayoutUpdated => 6,
+        }
+    }
+
+    const fn from_i32(value: i32) -> Self {
+        match value {
+            0 => Self::SeekAndWorkAhead,
+            1 => Self::ZeroAndWorkAhead,
+            3 => Self::ZeroAndRealtime,
+            4 => Self::SlugAndWorkAhead,
+            5 => Self::SlugAndRealtime,
+            6 => Self::PlayoutUpdated,
+            // Discriminant 2 is `SeekAndRealtime`; unknown values use the same
+            // conservative state instead of panicking in a live stream worker.
+            _ => Self::SeekAndRealtime,
+        }
+    }
+
+    fn start_at_zero(self) -> bool {
+        matches!(
+            self,
+            Self::ZeroAndWorkAhead
+                | Self::ZeroAndRealtime
+                | Self::SlugAndWorkAhead
+                | Self::SlugAndRealtime
+        )
+    }
+
+    fn is_slug(self) -> bool {
+        matches!(self, Self::SlugAndWorkAhead | Self::SlugAndRealtime)
+    }
+
+    fn accelerate(self) -> Self {
+        match self {
+            Self::SeekAndRealtime => Self::SeekAndWorkAhead,
+            Self::ZeroAndRealtime => Self::ZeroAndWorkAhead,
+            _ => self,
+        }
+    }
+
+    fn throttle(self) -> Self {
+        match self {
+            Self::SeekAndWorkAhead => Self::SeekAndRealtime,
+            Self::ZeroAndWorkAhead => Self::ZeroAndRealtime,
+            Self::SlugAndWorkAhead => Self::SlugAndRealtime,
+            _ => self,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HlsTranscodeDecision {
+    state: HlsSessionState,
+    realtime: bool,
+    working_ahead: bool,
+    request_time: DateTime<Utc>,
+    start_at_zero: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HlsProcessOutcome {
+    Success,
+    Failed(String),
+    Cancelled,
+}
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
 pub struct HlsSessionWorker {
@@ -52,6 +152,7 @@ pub struct HlsSessionWorker {
     runtime_capabilities: FfmpegCapabilityReport,
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
+    state: AtomicI32,
     init_segment_cache: Mutex<HlsInitSegmentCache>,
     cancel: Arc<Notify>,
 }
@@ -75,9 +176,18 @@ impl HlsSessionWorker {
             runtime_capabilities,
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
+            state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
             init_segment_cache: Mutex::new(HlsInitSegmentCache::default()),
             cancel: Arc::new(Notify::new()),
         })
+    }
+
+    fn session_state(&self) -> HlsSessionState {
+        HlsSessionState::from_i32(self.state.load(Ordering::Relaxed))
+    }
+
+    fn set_session_state(&self, state: HlsSessionState) {
+        self.state.store(state.as_i32(), Ordering::Relaxed);
     }
 
     pub fn start(
@@ -106,6 +216,28 @@ impl HlsSessionWorker {
         self.touch();
 
         let mut is_first = true;
+        let mut transcoded_until = Utc::now();
+        let slug_duration = load_channel_slug_seconds(&pool, self.channel_id)
+            .await
+            .filter(|seconds| *seconds > 0.0)
+            .map(Duration::from_secs_f64);
+        let has_slug = slug_duration.is_some();
+        if let Err(error) =
+            time_shift_on_demand_playout(&pool, self.channel_id, transcoded_until).await
+        {
+            tracing::warn!(
+                %error,
+                channel_number = %self.channel_number,
+                "failed to time shift on-demand playout before starting hls segmenter"
+            );
+        }
+        let initial_work_ahead =
+            HLS_WORK_AHEAD_COUNT.load(Ordering::Relaxed) < load_hls_work_ahead_limit(&pool).await;
+        self.set_session_state(if initial_work_ahead {
+            HlsSessionState::SeekAndWorkAhead
+        } else {
+            HlsSessionState::SeekAndRealtime
+        });
         let mut cleanup_interval = tokio::time::interval(SEGMENT_CLEANUP_INTERVAL);
         cleanup_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
@@ -119,12 +251,133 @@ impl HlsSessionWorker {
             }
 
             let now = Utc::now();
-            let Some(active) =
-                load_active_hls_item(&pool, self.channel_id, &self.path_replacements, now).await
+            if !should_transcode_for_buffer(transcoded_until, now) {
+                let _ = self.trim_playlist_inner().await;
+                tokio::time::sleep(SEGMENT_CLEANUP_INTERVAL).await;
+                continue;
+            }
+
+            let realtime_by_buffer = should_use_realtime(transcoded_until, now);
+            let work_ahead_reservation = if realtime_by_buffer {
+                None
+            } else {
+                let work_ahead_limit = load_hls_work_ahead_limit(&pool).await;
+                try_reserve_work_ahead(work_ahead_limit)
+            };
+            let realtime = realtime_by_buffer || work_ahead_reservation.is_none();
+            let decision =
+                hls_transcode_decision(self.session_state(), transcoded_until, now, realtime);
+            self.set_session_state(decision.state);
+
+            if decision.state.is_slug() {
+                let Some(duration) = slug_duration else {
+                    self.set_session_state(next_hls_session_state(decision.state, true, false));
+                    continue;
+                };
+                let playback_profile =
+                    match load_channel_playback_profile(&pool, self.channel_id).await {
+                        Ok(Some(profile)) => profile,
+                        Ok(None) => {
+                            tracing::warn!(
+                                channel_number = %self.channel_number,
+                                "channel has no playback ffmpeg profile; delaying hls slug"
+                            );
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                channel_number = %self.channel_number,
+                                "failed to load playback ffmpeg profile; delaying hls slug"
+                            );
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    };
+                let channel_name = load_channel_name(&pool, self.channel_id)
+                    .await
+                    .unwrap_or_else(|| self.channel_number.clone());
+                let target_frame_rate = if playback_profile.profile.normalize_framerate {
+                    match load_channel_target_frame_rate(&pool, self.channel_id).await {
+                        Ok(frame_rate) => frame_rate,
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                channel_number = %self.channel_number,
+                                "failed to load channel target frame rate for hls slug"
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+                let command = build_hls_slug_command(
+                    self.output_format,
+                    is_first,
+                    decision.realtime,
+                    duration,
+                    output_ts_offset,
+                    &playback_profile,
+                    target_frame_rate,
+                    OutputMetadata {
+                        service_provider: Some("ErsatzTV".to_owned()),
+                        service_name: Some(channel_name),
+                        ..OutputMetadata::default()
+                    },
+                    self.runtime_capabilities.clone(),
+                );
+                let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
+                if let Err(error) =
+                    update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
+                {
+                    tracing::debug!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        "failed to update on-demand checkpoint after hls slug transcode"
+                    );
+                }
+                if outcome == HlsProcessOutcome::Success {
+                    transcoded_until = add_std_duration(decision.request_time, duration);
+                    self.set_session_state(next_hls_session_state(
+                        self.session_state(),
+                        true,
+                        has_slug,
+                    ));
+                    is_first = false;
+                    continue;
+                }
+                break;
+            }
+
+            let Some(active) = load_active_hls_item(
+                &pool,
+                self.channel_id,
+                &self.path_replacements,
+                decision.request_time,
+            )
+            .await
             else {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
+            let start_seconds = if decision.start_at_zero {
+                0
+            } else {
+                playout_start_seconds(decision.request_time, active.playout_start)
+            };
+            let duration = hls_playout_item_duration(
+                &active,
+                decision.request_time,
+                decision.start_at_zero,
+                decision.realtime,
+            );
+            if duration.is_none_or(|duration| duration.is_zero()) {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                continue;
+            }
 
             let source_stream = load_source_video_stream(&pool, active.media_version_id).await;
             let source_audio_streams =
@@ -211,7 +464,7 @@ impl HlsSessionWorker {
                 None,
             );
             let subtitle_input =
-                rebase_burned_text_subtitle_input(subtitle_input, active.start_seconds).await;
+                rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
             let watermark_channel = Channel {
                 id: self.channel_id,
                 watermark_id: active.channel_watermark_id,
@@ -276,7 +529,7 @@ impl HlsSessionWorker {
                             media_path: active.media_path.clone(),
                             channel_start_time: active.playout_start,
                             content_start_time: active.playout_start,
-                            stream_seek_seconds: seconds_as_f64(active.start_seconds),
+                            stream_seek_seconds: seconds_as_f64(start_seconds),
                             duration_seconds: active
                                 .program_duration
                                 .map_or(0.0, |duration| duration.as_secs_f64()),
@@ -306,43 +559,16 @@ impl HlsSessionWorker {
                     Vec::new()
                 }
             };
-            let output_ts_offset = if is_first {
-                None
-            } else if self.output_format == OutputFormat::HlsMp4 {
-                let mut init_cache = self.init_segment_cache.lock().await;
-                let _ = refresh_init_segments(&self.working_dir, &mut init_cache).await;
-                match probe_last_pts_offset(&self.working_dir, Some(&init_cache)).await {
-                    Ok(offset) => offset,
-                    Err(error) => {
-                        tracing::warn!(
-                            %error,
-                            channel_number = %self.channel_number,
-                            "failed to probe last fMP4 HLS segment PTS offset"
-                        );
-                        None
-                    }
-                }
-            } else {
-                match probe_last_pts_offset(&self.working_dir, None).await {
-                    Ok(offset) => offset,
-                    Err(error) => {
-                        tracing::warn!(
-                            %error,
-                            channel_number = %self.channel_number,
-                            "failed to probe last HLS segment PTS offset"
-                        );
-                        None
-                    }
-                }
-            };
+            let output_ts_offset = self.probe_output_ts_offset(is_first).await;
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,
                 self.output_format,
                 is_first,
                 false,
-                active.start_seconds,
-                None,
+                decision.realtime,
+                start_seconds,
+                duration,
                 output_ts_offset,
                 &playback_profile,
                 target_frame_rate,
@@ -355,72 +581,71 @@ impl HlsSessionWorker {
                 watermark_inputs,
                 graphics_overlays,
             );
-            let mut process = Command::new(&command.executable);
-            process
-                .args(&command.arguments)
-                .current_dir(&self.working_dir)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .kill_on_drop(true);
-
-            for variable in command.environment {
-                process.env(variable.name, variable.value);
-            }
-
-            let Ok(mut child) = process.spawn() else {
-                tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
-                break;
-            };
-            let mut stderr_task = child
-                .stderr
-                .take()
-                .map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
-
-            let mut should_continue = true;
-            loop {
-                tokio::select! {
-                    result = child.wait() => {
-                        match result {
-                            Ok(status) if status.success() => {}
-                            Ok(status) => {
-                                let stderr = await_stderr_tail(stderr_task.take()).await;
-                                tracing::warn!(
-                                    channel_number = %self.channel_number,
-                                    %status,
-                                    stderr = %stderr,
-                                    "ffmpeg hls segmenter exited unsuccessfully"
-                                );
-                                should_continue = false;
-                            }
-                            Err(error) => {
-                                let stderr = await_stderr_tail(stderr_task.take()).await;
-                                tracing::warn!(
-                                    channel_number = %self.channel_number,
-                                    %error,
-                                    stderr = %stderr,
-                                    "failed to wait for ffmpeg hls segmenter"
-                                );
-                                should_continue = false;
-                            }
-                        }
-                        break;
-                    }
-                    () = self.cancel.notified() => {
-                        let _ = child.start_kill();
-                        should_continue = false;
-                        break;
-                    }
-                    _ = cleanup_interval.tick() => {
-                        let _ = self.trim_playlist_inner().await;
-                    }
-                }
-            }
+            let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }
-            if !should_continue {
-                break;
+            if let Err(error) =
+                update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
+            {
+                tracing::debug!(
+                    %error,
+                    channel_number = %self.channel_number,
+                    "failed to update on-demand checkpoint after hls transcode"
+                );
+            }
+            match outcome {
+                HlsProcessOutcome::Success => {
+                    if let Some(duration) = duration {
+                        transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.set_session_state(next_hls_session_state(
+                            self.session_state(),
+                            item_complete(&active, transcoded_until),
+                            has_slug,
+                        ));
+                    }
+                }
+                HlsProcessOutcome::Failed(error_message) => {
+                    let Some(duration) = duration else {
+                        break;
+                    };
+                    let Some(error_command) = build_hls_error_command(HlsErrorProcessRequest {
+                        working_dir: &self.working_dir,
+                        output_format: self.output_format,
+                        is_first_transcode: is_first,
+                        hls_realtime: decision.realtime,
+                        duration,
+                        output_ts_offset,
+                        playback_profile: &playback_profile,
+                        target_frame_rate,
+                        metadata: OutputMetadata {
+                            service_provider: Some("ErsatzTV".to_owned()),
+                            service_name: Some(active.channel_name.clone()),
+                            ..OutputMetadata::default()
+                        },
+                        runtime_capabilities: self.runtime_capabilities.clone(),
+                        error_message: &error_message,
+                    })
+                    .await
+                    else {
+                        break;
+                    };
+                    if self
+                        .run_hls_process(error_command, &mut cleanup_interval)
+                        .await
+                        == HlsProcessOutcome::Success
+                    {
+                        transcoded_until = add_std_duration(decision.request_time, duration);
+                        self.set_session_state(next_hls_session_state(
+                            self.session_state(),
+                            false,
+                            has_slug,
+                        ));
+                    } else {
+                        break;
+                    }
+                }
+                HlsProcessOutcome::Cancelled => break,
             }
 
             is_first = false;
@@ -428,6 +653,115 @@ impl HlsSessionWorker {
 
         let _ = cleanup_working_dir(&self.working_dir).await;
         registry.remove(&self.channel_number).await;
+    }
+
+    async fn run_hls_process(
+        &self,
+        command: FfmpegCommand,
+        cleanup_interval: &mut tokio::time::Interval,
+    ) -> HlsProcessOutcome {
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .current_dir(&self.working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+
+        let Ok(mut child) = process.spawn() else {
+            tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
+            return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
+        };
+        let mut stderr_task = child
+            .stderr
+            .take()
+            .map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
+
+        loop {
+            tokio::select! {
+                result = child.wait() => {
+                    match result {
+                        Ok(status) if status.success() => return HlsProcessOutcome::Success,
+                        Ok(status) => {
+                            let stderr = await_stderr_tail(stderr_task.take()).await;
+                            let error_message = if stderr.trim().is_empty() {
+                                format!("Unknown FFMPEG error; exit code {status}")
+                            } else {
+                                stderr.clone()
+                            };
+                            tracing::warn!(
+                                channel_number = %self.channel_number,
+                                %status,
+                                stderr = %stderr,
+                                "ffmpeg hls segmenter exited unsuccessfully"
+                            );
+                            return HlsProcessOutcome::Failed(error_message);
+                        }
+                        Err(error) => {
+                            let stderr = await_stderr_tail(stderr_task.take()).await;
+                            let error_message = if stderr.trim().is_empty() {
+                                format!("failed to wait for ffmpeg hls segmenter: {error}")
+                            } else {
+                                stderr.clone()
+                            };
+                            tracing::warn!(
+                                channel_number = %self.channel_number,
+                                %error,
+                                stderr = %stderr,
+                                "failed to wait for ffmpeg hls segmenter"
+                            );
+                            return HlsProcessOutcome::Failed(error_message);
+                        }
+                    }
+                }
+                () = self.cancel.notified() => {
+                    let _ = child.start_kill();
+                    return HlsProcessOutcome::Cancelled;
+                }
+                _ = cleanup_interval.tick() => {
+                    let _ = self.trim_playlist_inner().await;
+                }
+            }
+        }
+    }
+
+    async fn probe_output_ts_offset(&self, is_first: bool) -> Option<Duration> {
+        if is_first {
+            return None;
+        }
+
+        if self.output_format == OutputFormat::HlsMp4 {
+            let mut init_cache = self.init_segment_cache.lock().await;
+            let _ = refresh_init_segments(&self.working_dir, &mut init_cache).await;
+            match probe_last_pts_offset(&self.working_dir, Some(&init_cache)).await {
+                Ok(offset) => offset,
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        "failed to probe last fMP4 HLS segment PTS offset"
+                    );
+                    None
+                }
+            }
+        } else {
+            match probe_last_pts_offset(&self.working_dir, None).await {
+                Ok(offset) => offset,
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        "failed to probe last HLS segment PTS offset"
+                    );
+                    None
+                }
+            }
+        }
     }
 
     async fn trim_playlist_inner(&self) -> Option<TrimmedPlaylist> {
@@ -519,6 +853,10 @@ impl HlsSessionHandle for HlsSessionWorker {
         // between iterations, so the cancellation is never lost.
         self.cancel.notify_one();
     }
+
+    fn playout_updated(&self) {
+        self.set_session_state(HlsSessionState::PlayoutUpdated);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -529,6 +867,7 @@ pub fn build_hls_command(
     output_format: OutputFormat,
     is_first_transcode: bool,
     troubleshooting: bool,
+    hls_realtime: bool,
     start_seconds: i64,
     duration: Option<Duration>,
     output_ts_offset: Option<Duration>,
@@ -544,13 +883,16 @@ pub fn build_hls_command(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
-    let desired = DesiredVideoState::from_profile(
+    let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
         &playback_profile.resolution,
         source_stream.as_ref(),
         target_frame_rate,
         StreamingMode::HttpLiveStreamingSegmenter,
     );
+    if hls_realtime {
+        desired.realtime_mode = RealtimeMode::On;
+    }
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
     if let Some(stream_index) = selected_audio_stream_index {
@@ -599,7 +941,11 @@ pub fn build_hls_command(
             _ => None,
         },
         playlist_path: "live.m3u8".to_string(),
-        segment_options: None,
+        segment_options: hls_segment_options(
+            output_format,
+            output_ts_offset,
+            playback_profile.profile.audio_format,
+        ),
         is_first_transcode,
         troubleshooting,
     });
@@ -609,6 +955,791 @@ pub fn build_hls_command(
         request.clone(),
     )
     .command(&request.inputs)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn build_hls_slug_command(
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    hls_realtime: bool,
+    duration: Duration,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+) -> FfmpegCommand {
+    let frame_size = playback_frame_size(playback_profile);
+    let frame_rate = target_frame_rate.unwrap_or(FrameRate::DEFAULT);
+    let video_input = InputFile::lavfi_video(format!(
+        "color=c=black:s={}x{}:r={}:d={}",
+        frame_size.width,
+        frame_size.height,
+        frame_rate.r_frame_rate(),
+        duration.as_secs_f64()
+    ));
+    let audio_sample_rate = generated_audio_sample_rate(playback_profile);
+    let audio_input = InputFile::lavfi_audio(format!(
+        "anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"
+    ));
+    let mut desired = DesiredVideoState::from_profile(
+        &playback_profile.profile,
+        &playback_profile.resolution,
+        None,
+        target_frame_rate,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    if matches!(
+        desired.video_format,
+        FFmpegProfileVideoFormat::Copy | FFmpegProfileVideoFormat::None
+    ) {
+        desired.video_format = FFmpegProfileVideoFormat::H264;
+    }
+    if desired.audio_format == FFmpegProfileAudioFormat::Copy {
+        desired.audio_format = FFmpegProfileAudioFormat::Aac;
+    }
+    if hls_realtime {
+        desired.realtime_mode = RealtimeMode::On;
+    }
+    desired.frame_rate = Some(frame_rate);
+    desired.scaled_size = frame_size;
+    desired.frame_size = frame_size;
+    desired.cropped_size = None;
+
+    let mut request = PipelineRequest {
+        inputs: vec![video_input, audio_input],
+        state: ersatzrs_ffmpeg::FfmpegState::default(),
+        desired,
+        source_video_stream: Some(generated_slug_video_stream(frame_size, frame_rate)),
+        source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        runtime_capabilities: Some(runtime_capabilities),
+        watermark: None,
+        watermarks: Vec::new(),
+        drawvg_filters: Vec::new(),
+        graphics_overlays: Vec::new(),
+        subtitle_fonts_dir: None,
+    };
+    request.state.output_format = output_format;
+    request.state.duration = Some(duration);
+    request.state.output_ts_offset = output_ts_offset;
+    request.state.metadata = metadata;
+    request.state.report_progress = false;
+    if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
+        if thread_count > 0 {
+            request.state.thread_count = Some(thread_count);
+        }
+    }
+    let hls_generated_at = Utc::now().timestamp();
+    request.state.hls = Some(HlsOutput {
+        segment_template: match output_format {
+            OutputFormat::HlsMp4 => format!("live_{hls_generated_at}_%06d.m4s"),
+            _ => "live%06d.ts".to_string(),
+        },
+        init_template: match output_format {
+            OutputFormat::HlsMp4 => Some(format!("{hls_generated_at}_init.mp4")),
+            _ => None,
+        },
+        playlist_path: "live.m3u8".to_string(),
+        segment_options: hls_segment_options(
+            output_format,
+            output_ts_offset,
+            request.desired.audio_format,
+        ),
+        is_first_transcode,
+        troubleshooting: false,
+    });
+
+    build_pipeline_for_acceleration(
+        playback_profile.profile.hardware_acceleration,
+        request.clone(),
+    )
+    .command(&request.inputs)
+}
+
+struct HlsErrorProcessRequest<'a> {
+    working_dir: &'a Path,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    hls_realtime: bool,
+    duration: Duration,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &'a PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    error_message: &'a str,
+}
+
+async fn build_hls_error_command(request: HlsErrorProcessRequest<'_>) -> Option<FfmpegCommand> {
+    let assets_dir = request.working_dir.join("error");
+    if let Err(error) = tokio::fs::create_dir_all(&assets_dir).await {
+        tracing::warn!(%error, path = %assets_dir.display(), "failed to create hls error asset directory");
+        return None;
+    }
+
+    let background_path = assets_dir.join("background.png");
+    if let Err(error) = tokio::fs::write(&background_path, ERROR_BACKGROUND_PNG).await {
+        tracing::warn!(%error, path = %background_path.display(), "failed to write hls error background");
+        return None;
+    }
+
+    let subtitle_path = assets_dir.join("error.ass");
+    let subtitle = hls_error_ass(
+        request.error_message,
+        playback_frame_size(request.playback_profile),
+    );
+    if let Err(error) = tokio::fs::write(&subtitle_path, subtitle).await {
+        tracing::warn!(%error, path = %subtitle_path.display(), "failed to write hls error subtitle");
+        return None;
+    }
+
+    Some(build_hls_error_command_from_assets(
+        HlsErrorCommandRequest {
+            background_path: &background_path,
+            subtitle_path: &subtitle_path,
+            output_format: request.output_format,
+            is_first_transcode: request.is_first_transcode,
+            hls_realtime: request.hls_realtime,
+            duration: request.duration,
+            output_ts_offset: request.output_ts_offset,
+            playback_profile: request.playback_profile,
+            target_frame_rate: request.target_frame_rate,
+            metadata: request.metadata,
+            runtime_capabilities: request.runtime_capabilities,
+        },
+    ))
+}
+
+struct HlsErrorCommandRequest<'a> {
+    background_path: &'a Path,
+    subtitle_path: &'a Path,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    hls_realtime: bool,
+    duration: Duration,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &'a PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+}
+
+#[must_use]
+fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> FfmpegCommand {
+    let frame_size = playback_frame_size(request.playback_profile);
+    let frame_rate = request.target_frame_rate.unwrap_or(FrameRate::DEFAULT);
+    let video_input = InputFile::video(request.background_path.to_string_lossy().into_owned())
+        .with_input_options(["-loop", "1"]);
+    let audio_sample_rate = generated_audio_sample_rate(request.playback_profile);
+    let audio_input = InputFile::lavfi_audio(format!(
+        "anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"
+    ));
+    let subtitle_input = InputFile::text_subtitle(
+        request.subtitle_path.to_string_lossy().into_owned(),
+        SubtitleMethod::Burn,
+    );
+    let mut desired = DesiredVideoState::from_profile(
+        &request.playback_profile.profile,
+        &request.playback_profile.resolution,
+        Some(&generated_error_video_stream(frame_size, frame_rate)),
+        request.target_frame_rate,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    if matches!(
+        desired.video_format,
+        FFmpegProfileVideoFormat::Copy | FFmpegProfileVideoFormat::None
+    ) {
+        desired.video_format = FFmpegProfileVideoFormat::H264;
+    }
+    if desired.audio_format == FFmpegProfileAudioFormat::Copy {
+        desired.audio_format = FFmpegProfileAudioFormat::Aac;
+    }
+    if request.hls_realtime {
+        desired.realtime_mode = RealtimeMode::On;
+    }
+    desired.frame_rate = Some(frame_rate);
+    desired.scaled_size = frame_size;
+    desired.frame_size = frame_size;
+    desired.cropped_size = None;
+
+    let mut pipeline_request = PipelineRequest {
+        inputs: vec![video_input, audio_input, subtitle_input],
+        state: ersatzrs_ffmpeg::FfmpegState::default(),
+        desired,
+        source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
+        source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        runtime_capabilities: Some(request.runtime_capabilities),
+        watermark: None,
+        watermarks: Vec::new(),
+        drawvg_filters: Vec::new(),
+        graphics_overlays: Vec::new(),
+        subtitle_fonts_dir: Some(subtitle_fonts_dir()),
+    };
+    pipeline_request.state.output_format = request.output_format;
+    pipeline_request.state.duration = Some(request.duration);
+    pipeline_request.state.output_ts_offset = request.output_ts_offset;
+    pipeline_request.state.metadata = request.metadata;
+    pipeline_request.state.report_progress = false;
+    if let Ok(thread_count) = u32::try_from(request.playback_profile.profile.thread_count) {
+        if thread_count > 0 {
+            pipeline_request.state.thread_count = Some(thread_count);
+        }
+    }
+    let hls_generated_at = Utc::now().timestamp();
+    pipeline_request.state.hls = Some(HlsOutput {
+        segment_template: match request.output_format {
+            OutputFormat::HlsMp4 => format!("live_{hls_generated_at}_%06d.m4s"),
+            _ => "live%06d.ts".to_string(),
+        },
+        init_template: match request.output_format {
+            OutputFormat::HlsMp4 => Some(format!("{hls_generated_at}_init.mp4")),
+            _ => None,
+        },
+        playlist_path: "live.m3u8".to_string(),
+        segment_options: hls_segment_options(
+            request.output_format,
+            request.output_ts_offset,
+            pipeline_request.desired.audio_format,
+        ),
+        is_first_transcode: request.is_first_transcode,
+        troubleshooting: false,
+    });
+
+    build_pipeline_for_acceleration(
+        request.playback_profile.profile.hardware_acceleration,
+        pipeline_request.clone(),
+    )
+    .command(&pipeline_request.inputs)
+}
+
+fn generated_audio_sample_rate(playback_profile: &PlaybackProfile) -> u32 {
+    playback_profile
+        .profile
+        .audio_sample_rate
+        .try_into()
+        .ok()
+        .filter(|sample_rate: &u32| *sample_rate > 0)
+        .map_or(48_000, |sample_rate| sample_rate.saturating_mul(1_000))
+}
+
+fn generated_slug_video_stream(frame_size: FrameSize, frame_rate: FrameRate) -> SourceVideoStream {
+    let mut stream = SourceVideoStream::new(SourceVideoCodec::Unknown);
+    stream.frame_size = Some(frame_size);
+    stream.frame_rate = Some(frame_rate);
+    stream.sample_aspect_ratio = Some("1:1".to_owned());
+    stream.scan_kind = VideoScanKind::Progressive;
+    stream
+}
+
+fn generated_error_video_stream(frame_size: FrameSize, frame_rate: FrameRate) -> SourceVideoStream {
+    let mut stream = generated_slug_video_stream(frame_size, frame_rate);
+    stream.is_still_image = true;
+    stream
+}
+
+fn generated_slug_audio_stream(sample_rate: u32) -> SourceAudioStream {
+    let mut stream = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(0);
+    stream.channels = Some(2);
+    stream.sample_rate = Some(sample_rate);
+    stream
+}
+
+fn hls_error_ass(error_message: &str, frame_size: FrameSize) -> String {
+    let font_size = (frame_size.height / 20).max(1);
+    let margin = frame_size
+        .height
+        .saturating_add(10)
+        .saturating_div(20)
+        .max(1);
+    let escaped = escape_ass_dialogue_text(error_message);
+
+    format!(
+        "[Script Info]\n\
+ScriptType: v4.00+\n\
+PlayResX: {}\n\
+PlayResY: {}\n\
+\n\
+[V4+ Styles]\n\
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
+Style: Default,Roboto,{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,{margin},{margin},{margin},1\n\
+\n\
+[Events]\n\
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n\
+Dialogue: 0,0:00:00.00,9:59:59.00,Default,,0,0,0,,{escaped}\n",
+        frame_size.width, frame_size.height
+    )
+}
+
+fn escape_ass_dialogue_text(value: &str) -> String {
+    value
+        .replace('\r', "")
+        .replace('\\', r"\\")
+        .replace('\n', r"\N")
+        .replace('{', "(")
+        .replace('}', ")")
+}
+
+fn hls_segment_options(
+    output_format: OutputFormat,
+    output_ts_offset: Option<Duration>,
+    audio_format: FFmpegProfileAudioFormat,
+) -> Option<String> {
+    if output_format != OutputFormat::Hls {
+        return None;
+    }
+
+    let mut mpegts_flags = Vec::new();
+    if output_ts_offset.is_none_or(|offset| offset.is_zero()) {
+        mpegts_flags.push("+initial_discontinuity");
+    }
+    if audio_format == FFmpegProfileAudioFormat::AacLatm {
+        mpegts_flags.push("+latm");
+    }
+
+    (!mpegts_flags.is_empty()).then(|| format!("mpegts_flags={}", mpegts_flags.join("")))
+}
+
+#[allow(clippy::match_same_arms)]
+fn next_hls_session_state(
+    state: HlsSessionState,
+    item_complete: bool,
+    has_slug: bool,
+) -> HlsSessionState {
+    match state {
+        HlsSessionState::PlayoutUpdated => HlsSessionState::SeekAndWorkAhead,
+        HlsSessionState::SeekAndWorkAhead if !item_complete => HlsSessionState::SeekAndRealtime,
+        HlsSessionState::SlugAndWorkAhead => HlsSessionState::ZeroAndWorkAhead,
+        HlsSessionState::SlugAndRealtime => HlsSessionState::ZeroAndRealtime,
+        HlsSessionState::ZeroAndWorkAhead | HlsSessionState::SeekAndWorkAhead
+            if item_complete && has_slug =>
+        {
+            HlsSessionState::SlugAndWorkAhead
+        }
+        HlsSessionState::ZeroAndRealtime | HlsSessionState::SeekAndRealtime
+            if item_complete && has_slug =>
+        {
+            HlsSessionState::SlugAndRealtime
+        }
+        HlsSessionState::SeekAndWorkAhead => HlsSessionState::ZeroAndWorkAhead,
+        HlsSessionState::ZeroAndWorkAhead if !item_complete => HlsSessionState::SeekAndRealtime,
+        HlsSessionState::ZeroAndWorkAhead => HlsSessionState::ZeroAndWorkAhead,
+        HlsSessionState::SeekAndRealtime => HlsSessionState::ZeroAndRealtime,
+        HlsSessionState::ZeroAndRealtime => HlsSessionState::ZeroAndRealtime,
+    }
+}
+
+fn should_transcode_for_buffer(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
+    transcoded_buffer(transcoded_until, now).num_seconds() <= HLS_WORK_AHEAD_BUFFER_SECONDS
+}
+
+fn should_use_realtime(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> bool {
+    transcoded_buffer(transcoded_until, now).num_seconds() >= HLS_REALTIME_BUFFER_SECONDS
+}
+
+fn transcoded_buffer(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> chrono::Duration {
+    (transcoded_until - now).max(chrono::Duration::zero())
+}
+
+fn hls_transcode_decision(
+    state: HlsSessionState,
+    transcoded_until: DateTime<Utc>,
+    wall_clock_now: DateTime<Utc>,
+    realtime: bool,
+) -> HlsTranscodeDecision {
+    let was_seek_and_work_ahead = state == HlsSessionState::SeekAndWorkAhead;
+    let state = if realtime {
+        state.throttle()
+    } else {
+        state.accelerate()
+    };
+    let request_time = if was_seek_and_work_ahead {
+        wall_clock_now
+    } else {
+        transcoded_until
+    };
+
+    HlsTranscodeDecision {
+        state,
+        realtime,
+        working_ahead: !realtime,
+        request_time,
+        start_at_zero: state.start_at_zero(),
+    }
+}
+
+fn remaining_item_duration(
+    active: &ActiveHlsItem,
+    request_time: DateTime<Utc>,
+    start_at_zero: bool,
+) -> Option<Duration> {
+    let finish = active.playout_finish?;
+    let effective_start = if start_at_zero {
+        active.playout_start
+    } else {
+        request_time.max(active.playout_start)
+    };
+    (finish - effective_start).to_std().ok()
+}
+
+fn hls_playout_item_duration(
+    active: &ActiveHlsItem,
+    request_time: DateTime<Utc>,
+    start_at_zero: bool,
+    hls_realtime: bool,
+) -> Option<Duration> {
+    let duration = remaining_item_duration(active, request_time, start_at_zero)?;
+    if hls_realtime || duration <= Duration::from_secs(HLS_WORK_AHEAD_TRANSCODE_SECONDS) {
+        Some(duration)
+    } else {
+        Some(Duration::from_secs(HLS_WORK_AHEAD_TRANSCODE_SECONDS))
+    }
+}
+
+fn add_std_duration(timestamp: DateTime<Utc>, duration: Duration) -> DateTime<Utc> {
+    timestamp + chrono::Duration::from_std(duration).unwrap_or_else(|_| chrono::Duration::zero())
+}
+
+fn item_complete(active: &ActiveHlsItem, transcoded_until: DateTime<Utc>) -> bool {
+    active
+        .playout_finish
+        .is_some_and(|finish| transcoded_until >= finish)
+}
+
+struct WorkAheadReservation;
+
+impl Drop for WorkAheadReservation {
+    fn drop(&mut self) {
+        release_work_ahead();
+    }
+}
+
+fn try_reserve_work_ahead(limit: i32) -> Option<WorkAheadReservation> {
+    if limit <= 0 {
+        return None;
+    }
+
+    let mut current = HLS_WORK_AHEAD_COUNT.load(Ordering::Relaxed);
+    loop {
+        if current >= limit {
+            return None;
+        }
+        match HLS_WORK_AHEAD_COUNT.compare_exchange_weak(
+            current,
+            current + 1,
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return Some(WorkAheadReservation),
+            Err(next) => current = next,
+        }
+    }
+}
+
+fn release_work_ahead() {
+    HLS_WORK_AHEAD_COUNT
+        .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
+            (current > 0).then_some(current - 1)
+        })
+        .ok();
+}
+
+async fn load_hls_work_ahead_limit(pool: &DbPool) -> i32 {
+    sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT)
+        .max(0)
+}
+
+async fn load_channel_slug_seconds(pool: &DbPool, channel_id: i64) -> Option<f64> {
+    sqlx::query_scalar::<_, Option<f64>>(r#"SELECT "SlugSeconds" FROM "Channel" WHERE "Id" = ?"#)
+        .bind(channel_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .flatten()
+}
+
+async fn load_channel_name(pool: &DbPool, channel_id: i64) -> Option<String> {
+    sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Channel" WHERE "Id" = ?"#)
+        .bind(channel_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn time_shift_on_demand_playout(
+    pool: &DbPool,
+    channel_id: i64,
+    now: DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    let Some(playout) = sqlx::query(
+        r#"SELECT p."Id" AS "PlayoutId",
+                  p."OnDemandCheckpoint" AS "OnDemandCheckpoint"
+           FROM "Playout" p
+           JOIN "Channel" c ON c."Id" = p."ChannelId"
+           WHERE p."ChannelId" = ?
+             AND c."PlayoutMode" = 1
+           LIMIT 1"#,
+    )
+    .bind(channel_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(());
+    };
+
+    let playout_id = playout.get::<i64, _>("PlayoutId");
+    let item_window = sqlx::query(
+        r#"SELECT COUNT(*) AS "ItemCount",
+                  MIN("Start") AS "FirstStart"
+           FROM "PlayoutItem"
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await?;
+    if item_window.get::<i64, _>("ItemCount") == 0 {
+        return Ok(());
+    }
+
+    let checkpoint = playout
+        .try_get::<Option<String>, _>("OnDemandCheckpoint")?
+        .as_deref()
+        .map(|value| parse_required_timestamp("playout OnDemandCheckpoint", value))
+        .transpose()?
+        .or_else(|| {
+            item_window
+                .try_get::<Option<String>, _>("FirstStart")
+                .ok()
+                .flatten()
+                .and_then(|value| parse_sqlite_utc_timestamp(&value))
+        })
+        .unwrap_or(now);
+    let offset = now - checkpoint;
+
+    let mut tx = pool.begin().await?;
+    shift_playout_items(&mut tx, playout_id, offset).await?;
+    shift_playout_history(&mut tx, playout_id, offset).await?;
+    shift_playout_program_schedule_anchors(&mut tx, playout_id, offset).await?;
+    shift_playout_anchor(&mut tx, playout_id, offset).await?;
+    sqlx::query(r#"UPDATE "Playout" SET "OnDemandCheckpoint" = ? WHERE "Id" = ?"#)
+        .bind(encode_datetime(now))
+        .bind(playout_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn update_on_demand_checkpoint(
+    pool: &DbPool,
+    channel_id: i64,
+    now: DateTime<Utc>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE "Playout"
+           SET "OnDemandCheckpoint" = ?
+           WHERE "ChannelId" = ?
+             AND EXISTS (
+                 SELECT 1
+                 FROM "Channel" c
+                 WHERE c."Id" = "Playout"."ChannelId"
+                   AND c."PlayoutMode" = 1
+             )"#,
+    )
+    .bind(encode_datetime(now))
+    .bind(channel_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn shift_playout_items(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    playout_id: i64,
+    offset: chrono::Duration,
+) -> Result<(), sqlx::Error> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "Start", "Finish", "GuideStart", "GuideFinish"
+           FROM "PlayoutItem"
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"UPDATE "PlayoutItem"
+               SET "Start" = ?, "Finish" = ?, "GuideStart" = ?, "GuideFinish" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(shift_required_datetime(
+            "playout item Start",
+            &row.try_get::<String, _>("Start")?,
+            offset,
+        )?)
+        .bind(shift_required_datetime(
+            "playout item Finish",
+            &row.try_get::<String, _>("Finish")?,
+            offset,
+        )?)
+        .bind(shift_optional_datetime(
+            "playout item GuideStart",
+            row.try_get("GuideStart")?,
+            offset,
+        )?)
+        .bind(shift_optional_datetime(
+            "playout item GuideFinish",
+            row.try_get("GuideFinish")?,
+            offset,
+        )?)
+        .bind(row.get::<i64, _>("Id"))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn shift_playout_history(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    playout_id: i64,
+    offset: chrono::Duration,
+) -> Result<(), sqlx::Error> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "When", "Finish"
+           FROM "PlayoutHistory"
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"UPDATE "PlayoutHistory"
+               SET "When" = ?, "Finish" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(shift_required_datetime(
+            "playout history When",
+            &row.try_get::<String, _>("When")?,
+            offset,
+        )?)
+        .bind(shift_required_datetime(
+            "playout history Finish",
+            &row.try_get::<String, _>("Finish")?,
+            offset,
+        )?)
+        .bind(row.get::<i64, _>("Id"))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn shift_playout_program_schedule_anchors(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    playout_id: i64,
+    offset: chrono::Duration,
+) -> Result<(), sqlx::Error> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "AnchorDate"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"UPDATE "PlayoutProgramScheduleAnchor"
+               SET "AnchorDate" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(shift_optional_datetime(
+            "playout program schedule anchor AnchorDate",
+            row.try_get("AnchorDate")?,
+            offset,
+        )?)
+        .bind(row.get::<i64, _>("Id"))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn shift_playout_anchor(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    playout_id: i64,
+    offset: chrono::Duration,
+) -> Result<(), sqlx::Error> {
+    let Some(row) = sqlx::query(
+        r#"SELECT "NextStart", "DurationFinish"
+           FROM "PlayoutAnchor"
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    else {
+        return Ok(());
+    };
+
+    sqlx::query(
+        r#"UPDATE "PlayoutAnchor"
+           SET "NextStart" = ?, "DurationFinish" = ?
+           WHERE "PlayoutId" = ?"#,
+    )
+    .bind(shift_required_datetime(
+        "playout anchor NextStart",
+        &row.try_get::<String, _>("NextStart")?,
+        offset,
+    )?)
+    .bind(shift_optional_datetime(
+        "playout anchor DurationFinish",
+        row.try_get("DurationFinish")?,
+        offset,
+    )?)
+    .bind(playout_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+fn shift_required_datetime(
+    kind: &'static str,
+    value: &str,
+    offset: chrono::Duration,
+) -> Result<String, sqlx::Error> {
+    Ok(encode_datetime(
+        parse_required_timestamp(kind, value)? + offset,
+    ))
+}
+
+fn shift_optional_datetime(
+    kind: &'static str,
+    value: Option<String>,
+    offset: chrono::Duration,
+) -> Result<Option<String>, sqlx::Error> {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| shift_required_datetime(kind, &value, offset))
+        .transpose()
+}
+
+fn parse_required_timestamp(kind: &'static str, value: &str) -> Result<DateTime<Utc>, sqlx::Error> {
+    parse_sqlite_utc_timestamp(value)
+        .ok_or_else(|| sqlx::Error::Decode(format!("invalid {kind}: {value}").into()))
 }
 
 async fn probe_last_pts_offset(
@@ -920,14 +2051,18 @@ async fn load_active_hls_item(
         .ok()
         .and_then(|finish| parse_sqlite_utc_timestamp(&finish))
         .and_then(|finish| (finish - playout_start).to_std().ok());
+    let playout_finish = row
+        .try_get::<String, _>("PlayoutFinish")
+        .ok()
+        .and_then(|finish| parse_sqlite_utc_timestamp(&finish));
     Some(ActiveHlsItem {
         media_path: resolved,
         playout_item_id: row.get::<i64, _>("PlayoutItemId"),
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
-        start_seconds: playout_start_seconds(now, playout_start),
         program_duration,
         playout_start,
+        playout_finish,
         disable_watermarks: row
             .try_get::<i64, _>("DisableWatermarks")
             .is_ok_and(|value| value != 0),
@@ -973,9 +2108,9 @@ struct ActiveHlsItem {
     playout_item_id: i64,
     media_item_id: i64,
     media_version_id: i64,
-    start_seconds: i64,
     program_duration: Option<Duration>,
     playout_start: DateTime<Utc>,
+    playout_finish: Option<DateTime<Utc>>,
     disable_watermarks: bool,
     preferred_audio_language_code: Option<String>,
     preferred_subtitle_language_code: Option<String>,
@@ -1481,12 +2616,347 @@ mod tests {
     }
 
     #[test]
+    fn playout_updated_sets_worker_state_for_next_iteration() {
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-playout-updated"),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+
+        worker.set_session_state(HlsSessionState::ZeroAndRealtime);
+        worker.playout_updated();
+
+        assert_eq!(worker.session_state(), HlsSessionState::PlayoutUpdated);
+    }
+
+    #[test]
+    fn hls_session_state_transitions_match_ersatztv_table_without_slug() {
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::PlayoutUpdated, false, false),
+            HlsSessionState::SeekAndWorkAhead
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SeekAndWorkAhead, false, false),
+            HlsSessionState::SeekAndRealtime
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SeekAndWorkAhead, true, false),
+            HlsSessionState::ZeroAndWorkAhead
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::ZeroAndWorkAhead, false, false),
+            HlsSessionState::SeekAndRealtime
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::ZeroAndWorkAhead, true, false),
+            HlsSessionState::ZeroAndWorkAhead
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SeekAndRealtime, true, false),
+            HlsSessionState::ZeroAndRealtime
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::ZeroAndRealtime, true, false),
+            HlsSessionState::ZeroAndRealtime
+        );
+    }
+
+    #[test]
+    fn hls_session_state_transitions_insert_and_leave_slug_when_configured() {
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SeekAndWorkAhead, true, true),
+            HlsSessionState::SlugAndWorkAhead
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::ZeroAndRealtime, true, true),
+            HlsSessionState::SlugAndRealtime
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SlugAndWorkAhead, true, true),
+            HlsSessionState::ZeroAndWorkAhead
+        );
+        assert_eq!(
+            next_hls_session_state(HlsSessionState::SlugAndRealtime, true, true),
+            HlsSessionState::ZeroAndRealtime
+        );
+    }
+
+    #[test]
+    fn hls_transcode_decision_uses_buffer_state_and_request_time() {
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let transcoded_until = now + chrono::Duration::seconds(20);
+        let decision = hls_transcode_decision(
+            HlsSessionState::SeekAndWorkAhead,
+            transcoded_until,
+            now,
+            false,
+        );
+
+        assert_eq!(decision.state, HlsSessionState::SeekAndWorkAhead);
+        assert!(!decision.realtime);
+        assert!(decision.working_ahead);
+        assert_eq!(decision.request_time, now);
+        assert!(!decision.start_at_zero);
+
+        let throttled = hls_transcode_decision(
+            HlsSessionState::ZeroAndWorkAhead,
+            transcoded_until,
+            now,
+            true,
+        );
+        assert_eq!(throttled.state, HlsSessionState::ZeroAndRealtime);
+        assert!(throttled.realtime);
+        assert!(!throttled.working_ahead);
+        assert_eq!(throttled.request_time, transcoded_until);
+        assert!(throttled.start_at_zero);
+    }
+
+    #[test]
+    fn hls_buffer_thresholds_match_ersatztv_worker_loop() {
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+
+        assert!(should_transcode_for_buffer(
+            now + chrono::Duration::seconds(60),
+            now
+        ));
+        assert!(!should_transcode_for_buffer(
+            now + chrono::Duration::seconds(61),
+            now
+        ));
+        assert!(!should_use_realtime(
+            now + chrono::Duration::seconds(29),
+            now
+        ));
+        assert!(should_use_realtime(
+            now + chrono::Duration::seconds(30),
+            now
+        ));
+    }
+
+    #[test]
+    fn remaining_item_duration_uses_start_at_zero_or_request_time() {
+        let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let active = active_hls_item_for_window(start, start + chrono::Duration::seconds(48));
+
+        assert_eq!(
+            remaining_item_duration(&active, start + chrono::Duration::seconds(20), false),
+            Some(Duration::from_secs(28))
+        );
+        assert_eq!(
+            remaining_item_duration(&active, start + chrono::Duration::seconds(20), true),
+            Some(Duration::from_secs(48))
+        );
+    }
+
+    #[test]
+    fn hls_playout_item_duration_caps_work_ahead_to_ersatztv_limit() {
+        let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let active = active_hls_item_for_window(start, start + chrono::Duration::minutes(45));
+
+        assert_eq!(
+            hls_playout_item_duration(&active, start, false, false),
+            Some(Duration::from_secs(HLS_WORK_AHEAD_TRANSCODE_SECONDS))
+        );
+        assert_eq!(
+            hls_playout_item_duration(&active, start, false, true),
+            Some(Duration::from_mins(45))
+        );
+    }
+
+    #[test]
+    fn work_ahead_reservation_respects_configured_limit() {
+        HLS_WORK_AHEAD_COUNT.store(0, Ordering::Relaxed);
+        let first = try_reserve_work_ahead(1);
+        assert!(first.is_some());
+        assert!(try_reserve_work_ahead(1).is_none());
+        drop(first);
+        assert_eq!(HLS_WORK_AHEAD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(try_reserve_work_ahead(0).is_none());
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn on_demand_startup_timeshifts_playout_and_updates_checkpoint() {
+        let pool = on_demand_test_pool().await;
+
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        assert_eq!(load_channel_slug_seconds(&pool, 7).await, Some(2.5));
+        time_shift_on_demand_playout(&pool, 7, now)
+            .await
+            .expect("time shift on-demand playout");
+
+        assert_on_demand_playout_shifted(&pool).await;
+
+        let later = DateTime::parse_from_rfc3339("2026-06-08T12:05:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        update_on_demand_checkpoint(&pool, 7, later)
+            .await
+            .expect("update on-demand checkpoint");
+        let checkpoint =
+            sqlx::query(r#"SELECT "OnDemandCheckpoint" FROM "Playout" WHERE "Id" = 11"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load updated checkpoint");
+        assert_eq!(
+            checkpoint.get::<String, _>("OnDemandCheckpoint"),
+            "2026-06-08 12:05:00"
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn on_demand_test_pool() -> sqlx::SqlitePool {
+        use sqlx::sqlite::SqlitePoolOptions;
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        create_on_demand_test_schema(&pool).await;
+        seed_on_demand_test_playout(&pool).await;
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn create_on_demand_test_schema(pool: &sqlx::SqlitePool) {
+        for statement in [
+            r#"CREATE TABLE "Channel" (
+                "Id" INTEGER PRIMARY KEY, "Number" TEXT NOT NULL, "Name" TEXT NOT NULL,
+                "PlayoutMode" INTEGER NOT NULL, "SlugSeconds" REAL NULL)"#,
+            r#"CREATE TABLE "Playout" (
+                "Id" INTEGER PRIMARY KEY, "ChannelId" INTEGER NOT NULL,
+                "OnDemandCheckpoint" TEXT NULL)"#,
+            r#"CREATE TABLE "PlayoutItem" (
+                "Id" INTEGER PRIMARY KEY, "PlayoutId" INTEGER NOT NULL,
+                "Start" TEXT NOT NULL, "Finish" TEXT NOT NULL,
+                "GuideStart" TEXT NULL, "GuideFinish" TEXT NULL)"#,
+            r#"CREATE TABLE "PlayoutHistory" (
+                "Id" INTEGER PRIMARY KEY, "PlayoutId" INTEGER NOT NULL,
+                "When" TEXT NOT NULL, "Finish" TEXT NOT NULL)"#,
+            r#"CREATE TABLE "PlayoutProgramScheduleAnchor" (
+                "Id" INTEGER PRIMARY KEY, "PlayoutId" INTEGER NOT NULL,
+                "AnchorDate" TEXT NULL)"#,
+            r#"CREATE TABLE "PlayoutAnchor" (
+                "PlayoutId" INTEGER PRIMARY KEY, "NextStart" TEXT NOT NULL,
+                "DurationFinish" TEXT NULL)"#,
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("create on-demand test table");
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_on_demand_test_playout(pool: &sqlx::SqlitePool) {
+        for statement in [
+            r#"INSERT INTO "Channel" ("Id", "Number", "Name", "PlayoutMode", "SlugSeconds")
+               VALUES (7, '7', 'On Demand', 1, 2.5)"#,
+            r#"INSERT INTO "Playout" ("Id", "ChannelId", "OnDemandCheckpoint")
+               VALUES (11, 7, NULL)"#,
+            r#"INSERT INTO "PlayoutItem"
+               ("Id", "PlayoutId", "Start", "Finish", "GuideStart", "GuideFinish")
+               VALUES
+               (21, 11, '2026-06-08 10:00:00', '2026-06-08 10:00:24',
+                '2026-06-08 10:00:05', '2026-06-08 10:00:20')"#,
+            r#"INSERT INTO "PlayoutHistory" ("Id", "PlayoutId", "When", "Finish")
+               VALUES (31, 11, '2026-06-08 09:30:00', '2026-06-08 09:45:00')"#,
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor" ("Id", "PlayoutId", "AnchorDate")
+               VALUES (41, 11, '2026-06-08 09:00:00')"#,
+            r#"INSERT INTO "PlayoutAnchor" ("PlayoutId", "NextStart", "DurationFinish")
+               VALUES (11, '2026-06-08 11:00:00', '2026-06-08 11:30:00')"#,
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("seed on-demand test data");
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn assert_on_demand_playout_shifted(pool: &sqlx::SqlitePool) {
+        let item = sqlx::query(
+            r#"SELECT "Start", "Finish", "GuideStart", "GuideFinish"
+               FROM "PlayoutItem"
+               WHERE "Id" = 21"#,
+        )
+        .fetch_one(pool)
+        .await
+        .expect("load shifted item");
+        assert_eq!(item.get::<String, _>("Start"), "2026-06-08 12:00:00");
+        assert_eq!(item.get::<String, _>("Finish"), "2026-06-08 12:00:24");
+        assert_eq!(item.get::<String, _>("GuideStart"), "2026-06-08 12:00:05");
+        assert_eq!(item.get::<String, _>("GuideFinish"), "2026-06-08 12:00:20");
+
+        let history = sqlx::query(
+            r#"SELECT "When", "Finish"
+               FROM "PlayoutHistory"
+               WHERE "Id" = 31"#,
+        )
+        .fetch_one(pool)
+        .await
+        .expect("load shifted history");
+        assert_eq!(history.get::<String, _>("When"), "2026-06-08 11:30:00");
+        assert_eq!(history.get::<String, _>("Finish"), "2026-06-08 11:45:00");
+
+        let program_anchor = sqlx::query(
+            r#"SELECT "AnchorDate" FROM "PlayoutProgramScheduleAnchor" WHERE "Id" = 41"#,
+        )
+        .fetch_one(pool)
+        .await
+        .expect("load shifted program anchor");
+        assert_eq!(
+            program_anchor.get::<String, _>("AnchorDate"),
+            "2026-06-08 11:00:00"
+        );
+
+        let anchor = sqlx::query(
+            r#"SELECT "NextStart", "DurationFinish"
+               FROM "PlayoutAnchor"
+               WHERE "PlayoutId" = 11"#,
+        )
+        .fetch_one(pool)
+        .await
+        .expect("load shifted anchor");
+        assert_eq!(anchor.get::<String, _>("NextStart"), "2026-06-08 13:00:00");
+        assert_eq!(
+            anchor.get::<String, _>("DurationFinish"),
+            "2026-06-08 13:30:00"
+        );
+
+        let checkpoint =
+            sqlx::query(r#"SELECT "OnDemandCheckpoint" FROM "Playout" WHERE "Id" = 11"#)
+                .fetch_one(pool)
+                .await
+                .expect("load checkpoint");
+        assert_eq!(
+            checkpoint.get::<String, _>("OnDemandCheckpoint"),
+            "2026-06-08 12:00:00"
+        );
+    }
+
+    #[test]
     fn build_hls_command_produces_hls_flags() {
         let command = build_hls_command(
             "/media/test.mkv",
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             false,
             0,
             None,
@@ -1506,11 +2976,72 @@ mod tests {
     }
 
     #[test]
+    fn hls_segment_options_match_ersatztv_mpegts_rules() {
+        assert_eq!(
+            hls_segment_options(OutputFormat::Hls, None, FFmpegProfileAudioFormat::Aac),
+            Some("mpegts_flags=+initial_discontinuity".to_owned())
+        );
+        assert_eq!(
+            hls_segment_options(
+                OutputFormat::Hls,
+                Some(Duration::ZERO),
+                FFmpegProfileAudioFormat::AacLatm,
+            ),
+            Some("mpegts_flags=+initial_discontinuity+latm".to_owned())
+        );
+        assert_eq!(
+            hls_segment_options(
+                OutputFormat::Hls,
+                Some(Duration::from_secs(12)),
+                FFmpegProfileAudioFormat::AacLatm,
+            ),
+            Some("mpegts_flags=+latm".to_owned())
+        );
+        assert_eq!(
+            hls_segment_options(
+                OutputFormat::HlsMp4,
+                None,
+                FFmpegProfileAudioFormat::AacLatm
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn build_hls_command_emits_initial_discontinuity_segment_options() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            0,
+            None,
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[test]
     fn build_hls_command_emits_output_ts_offset() {
         let command = build_hls_command(
             "/media/test.mkv",
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
+            false,
             false,
             false,
             0,
@@ -1529,6 +3060,191 @@ mod tests {
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-output_ts_offset 12.5s"));
+        assert!(
+            !arguments.contains("mpegts_flags=+initial_discontinuity"),
+            "{arguments}"
+        );
+    }
+
+    #[test]
+    fn build_hls_command_paces_realtime_segmenter_input() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            0,
+            Some(Duration::from_secs(30)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-readrate 1.05 -i /media/test.mkv"));
+    }
+
+    #[test]
+    fn build_hls_command_emits_aac_latm_segment_options() {
+        let mut playback_profile = playback_profile();
+        playback_profile.profile.audio_format = FFmpegProfileAudioFormat::AacLatm;
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            0,
+            None,
+            None,
+            &playback_profile,
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity+latm"));
+    }
+
+    #[test]
+    fn build_hls_slug_command_uses_generated_black_video_and_null_audio() {
+        let command = build_hls_slug_command(
+            OutputFormat::Hls,
+            true,
+            false,
+            Duration::from_secs(3),
+            None,
+            &playback_profile(),
+            Some(FrameRate::new(24, 1)),
+            OutputMetadata {
+                service_provider: Some("ErsatzTV".to_owned()),
+                service_name: Some("Channel One".to_owned()),
+                ..OutputMetadata::default()
+            },
+            FfmpegCapabilityReport::default(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-f lavfi -i color=c=black:s=1920x1080:r=24/1:d=3"));
+        assert!(arguments.contains("-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000"));
+        assert!(arguments.contains("-t 00:00:03.0000000"));
+        assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
+        assert!(arguments.contains("-metadata service_name=\"Channel One\""));
+        assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[test]
+    fn build_hls_slug_command_uses_pts_offset_for_subsequent_segments() {
+        let command = build_hls_slug_command(
+            OutputFormat::Hls,
+            false,
+            false,
+            Duration::from_secs(2),
+            Some(Duration::from_millis(7_500)),
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-output_ts_offset 7.5s"));
+        assert!(arguments.contains("-hls_flags program_date_time+omit_endlist+append_list+discont_start+independent_segments"));
+        assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[test]
+    fn build_hls_error_command_uses_background_subtitle_and_null_audio() {
+        let command = build_hls_error_command_from_assets(HlsErrorCommandRequest {
+            background_path: Path::new("/tmp/hls/error/background.png"),
+            subtitle_path: Path::new("/tmp/hls/error/error.ass"),
+            output_format: OutputFormat::Hls,
+            is_first_transcode: true,
+            hls_realtime: false,
+            duration: Duration::from_secs(4),
+            output_ts_offset: None,
+            playback_profile: &playback_profile(),
+            target_frame_rate: Some(FrameRate::new(30000, 1001)),
+            metadata: OutputMetadata {
+                service_provider: Some("ErsatzTV".to_owned()),
+                service_name: Some("Channel One".to_owned()),
+                ..OutputMetadata::default()
+            },
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+        });
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-loop 1 -i /tmp/hls/error/background.png"));
+        assert!(arguments.contains("-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000"));
+        assert!(arguments.contains("subtitles=/tmp/hls/error/error.ass"));
+        assert!(arguments.contains("-t 00:00:04.0000000"));
+        assert!(arguments.contains("-metadata service_provider=\"ErsatzTV\""));
+        assert!(arguments.contains("-metadata service_name=\"Channel One\""));
+        assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[tokio::test]
+    async fn build_hls_error_command_writes_generated_assets() {
+        let working_dir = tempfile::tempdir().expect("create hls temp dir");
+        let command = build_hls_error_command(HlsErrorProcessRequest {
+            working_dir: working_dir.path(),
+            output_format: OutputFormat::Hls,
+            is_first_transcode: false,
+            hls_realtime: false,
+            duration: Duration::from_secs(2),
+            output_ts_offset: Some(Duration::from_secs(8)),
+            playback_profile: &playback_profile(),
+            target_frame_rate: None,
+            metadata: OutputMetadata::default(),
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+            error_message: "first line\nsecond {line}",
+        })
+        .await
+        .expect("hls error command");
+
+        let subtitle = tokio::fs::read_to_string(working_dir.path().join("error/error.ass"))
+            .await
+            .expect("read hls error subtitle");
+        assert!(working_dir.path().join("error/background.png").exists());
+        assert!(subtitle.contains("PlayResX: 1920"));
+        assert!(subtitle.contains("PlayResY: 1080"));
+        assert!(subtitle.contains(r"first line\Nsecond (line)"));
+
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("-output_ts_offset 8s"));
+        assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[test]
+    fn hls_error_ass_matches_ersatztv_overlay_shape() {
+        let ass = hls_error_ass(
+            "ffmpeg failed\r\nUse {fallback}\\path",
+            FrameSize::new(1280, 720),
+        );
+
+        assert!(ass.contains("PlayResX: 1280"));
+        assert!(ass.contains("PlayResY: 720"));
+        assert!(ass.contains("Style: Default,Roboto,36"));
+        assert!(ass.contains(",36,36,36,1"));
+        assert!(ass.contains(r"ffmpeg failed\NUse (fallback)\\path"));
     }
 
     #[test]
@@ -1546,6 +3262,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             true,
+            false,
             0,
             None,
             None,
@@ -1602,6 +3319,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             false,
+            false,
             0,
             None,
             None,
@@ -1633,6 +3351,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             true,
+            false,
             120,
             None,
             None,
@@ -1666,6 +3385,7 @@ mod tests {
             OutputFormat::HlsMp4,
             true,
             false,
+            false,
             0,
             None,
             None,
@@ -1685,6 +3405,7 @@ mod tests {
         assert!(arguments.contains("_init.mp4"));
         assert!(arguments.contains("-hls_segment_filename live_"));
         assert!(arguments.contains("_%06d.m4s"));
+        assert!(!arguments.contains("-hls_segment_options"));
     }
 
     #[test]
@@ -1694,6 +3415,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             false,
             900,
             None,
@@ -1723,6 +3445,7 @@ mod tests {
             Path::new("/tmp/hls/1"),
             OutputFormat::Hls,
             true,
+            false,
             false,
             0,
             None,
@@ -1875,6 +3598,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             false,
+            false,
             0,
             None,
             None,
@@ -1958,6 +3682,7 @@ mod tests {
             working_dir.path(),
             OutputFormat::HlsMp4,
             true,
+            false,
             false,
             0,
             Some(Duration::from_secs(5)),
@@ -2172,6 +3897,7 @@ mod tests {
             OutputFormat::Hls,
             true,
             false,
+            false,
             0,
             None,
             None,
@@ -2264,6 +3990,30 @@ mod tests {
                 height: 1080,
                 ..Resolution::default()
             },
+        }
+    }
+
+    fn active_hls_item_for_window(
+        playout_start: DateTime<Utc>,
+        playout_finish: DateTime<Utc>,
+    ) -> ActiveHlsItem {
+        ActiveHlsItem {
+            media_path: "/media/test.mkv".to_owned(),
+            playout_item_id: 1,
+            media_item_id: 1,
+            media_version_id: 1,
+            program_duration: (playout_finish - playout_start).to_std().ok(),
+            playout_start,
+            playout_finish: Some(playout_finish),
+            disable_watermarks: false,
+            preferred_audio_language_code: None,
+            preferred_subtitle_language_code: None,
+            subtitle_mode: None,
+            channel_name: "Channel One".to_owned(),
+            channel_preferred_audio_language_code: None,
+            channel_preferred_subtitle_language_code: None,
+            channel_subtitle_mode: ChannelSubtitleMode::None,
+            channel_watermark_id: None,
         }
     }
 

@@ -28,7 +28,23 @@ pub async fn dispatch_channel_request(
         return hls::serve_channel_m3u8(&state, channel_number, &headers, &query).await;
     }
     if let Some(channel_number) = file.strip_suffix(".ts") {
-        return stream::serve_transport_stream(&state, channel_number).await;
+        return stream::serve_transport_stream(&state, channel_number, &headers, &query).await;
     }
     StatusCode::NOT_FOUND.into_response()
+}
+
+pub async fn get_concat_playlist(
+    State(state): State<AppState>,
+    Path(channel_number): Path<String>,
+    headers: HeaderMap,
+    Query(query): Query<hls::HlsQuery>,
+) -> Response {
+    stream::serve_concat_playlist(&state, &channel_number, &headers, &query).await
+}
+
+pub async fn get_internal_stream(
+    State(state): State<AppState>,
+    Path(channel_number): Path<String>,
+) -> Response {
+    stream::serve_internal_legacy_stream(&state, &channel_number).await
 }

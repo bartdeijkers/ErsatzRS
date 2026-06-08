@@ -1,7 +1,9 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
+use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
@@ -15,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Scheduler CLI options after argument parsing.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SchedulerOptions {
     /// Run a single pass and exit.
     pub run_once: bool,
@@ -32,6 +34,9 @@ pub struct SchedulerOptions {
     pub scanner_extra_args: Vec<OsString>,
     /// Requests from the web host for immediate playout rebuilds.
     pub build_requests: Option<mpsc::Receiver<PlayoutBuildRequest>>,
+    /// Optional live HLS session registry supplied by the web host so playout
+    /// rebuilds can notify active segmenter workers.
+    pub hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
     /// Shared playout lock registry. When provided, the scheduler reuses this
     /// `EntityLocker` instead of constructing its own so the web host can poll
     /// playout lock state for the playouts-page build spinner. Mirrors
@@ -60,6 +65,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
         scanner_command,
         scanner_extra_args,
         mut build_requests,
+        hls_sessions,
         locker,
         shutdown,
     } = options;
@@ -82,6 +88,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
             &library_dispatch,
             &locker,
             startup.schema_status,
+            hls_sessions.clone(),
         )
         .await?;
         log_report(&report);
@@ -105,6 +112,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                     &library_dispatch,
                     &locker,
                     startup.schema_status.clone(),
+                    hls_sessions.clone(),
                 )
                 .await
                 {
@@ -119,7 +127,15 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 };
                 let playout_id = request.playout_id;
                 let mode = request.mode;
-                match run_requested_playout_build(&startup.pool, &locker, request, chrono::Utc::now()).await {
+                match run_requested_playout_build(
+                    &startup.pool,
+                    &locker,
+                    request,
+                    chrono::Utc::now(),
+                    hls_sessions.as_deref(),
+                )
+                .await
+                {
                     Ok(true) => info!(playout_id, ?mode, "requested playout build complete"),
                     Ok(false) => info!(playout_id, ?mode, "requested playout build skipped because playout is locked"),
                     Err(error) => warn!(playout_id, ?mode, %error, "requested playout build failed"),

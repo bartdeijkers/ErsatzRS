@@ -6,7 +6,7 @@ use ersatzrs_domain::{
 use std::time::Duration;
 
 use crate::{
-    audio_pad_filter, audio_resample_filter, closed_gop, crop_filter,
+    audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
     cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
@@ -18,8 +18,8 @@ use crate::{
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
     watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_cuda_filter,
     watermark_overlay_filter, watermark_scale_filter, yadif_cuda_filter, AudioFilter,
-    CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
-    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
+    ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport,
+    FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
     HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
     StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOverlay,
 };
@@ -205,6 +205,10 @@ impl SourceVideoStream {
             profile: None,
             pixel_format: None,
             color_params: SourceColorParams {
+                color_range: None,
+                color_space: None,
+                color_transfer: None,
+                color_primaries: None,
                 is_hdr: false,
                 is_bt2020_ten: false,
             },
@@ -389,10 +393,76 @@ impl SourceAudioCodec {
 }
 
 /// Source color metadata that affects later filter and decoder choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Mirrors ErsatzTV's `ColorParams` (range/space/transfer/primaries) plus the
+/// HDR flags ErsatzRS already uses for tonemap dispatch. The raw tags feed the
+/// `colorspace`/`colormatrix` normalization filter ported from
+/// `*PipelineBuilder.SetPixelFormat`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SourceColorParams {
+    pub color_range: Option<String>,
+    pub color_space: Option<String>,
+    pub color_transfer: Option<String>,
+    pub color_primaries: Option<String>,
     pub is_hdr: bool,
     pub is_bt2020_ten: bool,
+}
+
+impl SourceColorParams {
+    /// Mirror of ErsatzTV `ColorParams.IsBt709`: already-bt709 sources need no
+    /// colorspace normalization. True when the tags equal the fully-specified
+    /// bt709 default, or when range is `tv`/space is `bt709` with transfer and
+    /// primaries unset (some sources omit those two tags).
+    #[must_use]
+    pub fn is_bt709(&self) -> bool {
+        let range = trimmed_tag(self.color_range.as_deref());
+        let space = trimmed_tag(self.color_space.as_deref());
+        let transfer = trimmed_tag(self.color_transfer.as_deref());
+        let primaries = trimmed_tag(self.color_primaries.as_deref());
+
+        if range == "tv" && space == "bt709" && transfer == "bt709" && primaries == "bt709" {
+            return true;
+        }
+
+        range == "tv" && space == "bt709" && transfer.is_empty() && primaries.is_empty()
+    }
+
+    /// Build the filter-facing [`ColorParams`], deriving the ErsatzTV
+    /// classification flags (`IsUnknown`/`IsMixed`/`Bt470Bg`/`IsBt2020Ten`)
+    /// directly from the raw tags so `colorspace_filter` matches ErsatzTV's
+    /// `ColorspaceFilter` branch-for-branch.
+    #[must_use]
+    fn to_filter_color_params(&self) -> ColorParams {
+        let range = trimmed_tag(self.color_range.as_deref());
+        let space = trimmed_tag(self.color_space.as_deref());
+        let transfer = trimmed_tag(self.color_transfer.as_deref());
+        let primaries = trimmed_tag(self.color_primaries.as_deref());
+
+        // ErsatzTV: ColorParams.Bt470Bg == ("tv", "bt470bg", "bt470bg", "bt470bg").
+        let is_bt470_bg =
+            range == "tv" && space == "bt470bg" && transfer == "bt470bg" && primaries == "bt470bg";
+        // ErsatzTV: IsUnknown == space/transfer/primaries all blank.
+        let is_unknown = space.is_empty() && transfer.is_empty() && primaries.is_empty();
+        // ErsatzTV: IsMixed == space != transfer || transfer != primaries || range blank.
+        let is_mixed = space != transfer || transfer != primaries || range.is_empty();
+        // ErsatzTV: IsBt2020Ten == transfer is "bt2020-10".
+        let is_bt2020_ten = transfer == "bt2020-10";
+
+        ColorParams {
+            color_range: self.color_range.clone(),
+            color_space: self.color_space.clone(),
+            color_transfer: self.color_transfer.clone(),
+            color_primaries: self.color_primaries.clone(),
+            is_unknown,
+            is_mixed,
+            is_bt470_bg,
+            is_bt2020_ten,
+        }
+    }
+}
+
+fn trimmed_tag(value: Option<&str>) -> &str {
+    value.map(str::trim).unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1080,7 +1150,7 @@ fn build_transcode_pipeline(
         .graphics_overlays
         .iter()
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawvg { .. }));
-    let emit_pixel_format_output_option =
+    let mut emit_pixel_format_output_option =
         should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
     let runtime_capabilities = request.runtime_capabilities.clone();
     let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
@@ -1172,6 +1242,56 @@ fn build_transcode_pipeline(
             "format={}",
             request.desired.pixel_format().ffmpeg_name()
         ));
+    }
+
+    // Port of `*PipelineBuilder.SetPixelFormat` colorspace branch: normalize a
+    // non-bt709 source (SD bt601/bt470bg DVD content, or mixed/unknown color
+    // tags) to bt709 with an explicit `colorspace`/`colormatrix`/`setparams`
+    // node before the encoder. Without it, swscale performs the matrix/range/
+    // format conversion implicitly with its default ordered dither, producing
+    // the color banding and GIF-like dot pattern reported on SD footage. The
+    // shared `colorspace_filter` reproduces the hardware `hwdownload` prefixes,
+    // so a single insertion mirrors ErsatzTV's per-builder behavior. ErsatzTV
+    // appends this in `pixelFormatFilterSteps`, i.e. at the end of the graph,
+    // which is exactly where `filter_chain.pixel_format` is assembled.
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request.desired.normalize_colors
+    {
+        if let Some(source) = request.source_video_stream.as_ref() {
+            let is_qsv = effective_acceleration == HardwareAccelerationKind::Qsv;
+            // ErsatzRS' QSV transcode path always scales/deinterlaces through
+            // `vpp_qsv`, matching ErsatzTV's `usesVppQsv`, which both widens the
+            // gate and forces input color overrides.
+            let uses_vpp_qsv = is_qsv;
+            if !source.color_params.is_bt709() || uses_vpp_qsv {
+                let color_params = source.color_params.to_filter_color_params();
+                let filter = colorspace_filter(
+                    &target_state,
+                    &color_params,
+                    request.desired.pixel_format(),
+                    uses_vpp_qsv,
+                    is_qsv,
+                );
+                if !filter.trim().is_empty() {
+                    filter_chain.pixel_format.push(filter);
+                    // Mirror `ColorspaceFilter.NextState`: a known (non-unknown)
+                    // source is downloaded to software and pinned to the desired
+                    // pixel format, so the standalone `-pix_fmt` output option is
+                    // no longer required (and would be redundant). Unknown sources
+                    // use `setparams`, which does not change the format, so the
+                    // existing `-pix_fmt` decision is left untouched.
+                    if !color_params.is_unknown {
+                        target_state.frame_data_location = crate::FrameDataLocation::Software;
+                        target_state.pixel_format = request.desired.pixel_format();
+                        emit_pixel_format_output_option = should_emit_pixel_format_output_option(
+                            &request,
+                            effective_acceleration,
+                            &target_state,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     let is_intel = matches!(

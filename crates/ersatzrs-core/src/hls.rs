@@ -22,6 +22,15 @@ pub trait HlsSessionHandle: Send + Sync {
     ///
     /// [`IHlsSessionWorker.Cancel`]: /home/bart/ErsatzTV/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
     async fn cancel(&self);
+
+    /// Marks the active playout as modified so the segmenter seeks on its next
+    /// iteration instead of assuming the already-buffered timeline is still
+    /// valid.
+    ///
+    /// Ports [`IHlsSessionWorker.PlayoutUpdated`].
+    ///
+    /// [`IHlsSessionWorker.PlayoutUpdated`]: /home/bart/ErsatzTV/ErsatzTV.Core/Interfaces/Streaming/IHlsSessionWorker.cs
+    fn playout_updated(&self);
 }
 
 /// Tracks the set of running HLS sessions keyed by channel number.
@@ -56,6 +65,18 @@ pub trait HlsSessionRegistry: Send + Sync {
     async fn stop_channel(&self, channel_number: &str) -> bool {
         if let Some(handle) = self.try_get(channel_number).await {
             handle.cancel().await;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Notifies an active session that its playout was rebuilt.
+    ///
+    /// Ports `IFFmpegSegmenterService.PlayoutUpdated`.
+    async fn playout_updated(&self, channel_number: &str) -> bool {
+        if let Some(handle) = self.try_get(channel_number).await {
+            handle.playout_updated();
             true
         } else {
             false

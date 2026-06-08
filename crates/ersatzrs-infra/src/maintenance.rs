@@ -1,8 +1,10 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 
 use chrono::{DateTime, Duration, NaiveTime, TimeZone, Utc};
+use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::locking::{EntityLocker, PlayoutLockGuard};
 use ersatzrs_core::maintenance::{
     scanner_library_refresh_interval, MaintenanceLoop, CACHE_CLEANUP_INTERVAL,
@@ -11,9 +13,9 @@ use ersatzrs_core::maintenance::{
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{
-    PlayoutBuildMode, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
+    PlayoutBuildMode, PlayoutBuildRequest, SchedulingError, SchedulingRequest, SchedulingResult,
 };
-use ersatzrs_domain::{EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
+use ersatzrs_domain::{ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
@@ -194,13 +196,15 @@ pub async fn run_maintenance_once(
     library_dispatch: &LibraryDispatchConfig,
     locker: &EntityLocker,
     schema_status: DatabaseSchemaStatus,
+    hls_sessions: Option<Arc<dyn HlsSessionRegistry>>,
 ) -> Result<MaintenancePassReport> {
     let now = Utc::now();
     let library_refresh_interval = load_library_refresh_interval(&pool).await?;
     let mut report = MaintenancePassReport::default();
 
     if loop_due(&pool, "playout", PLAYOUT_BUILD_INTERVAL, now).await? {
-        let playout_report = build_due_playouts(&pool, locker, now).await?;
+        let playout_report =
+            build_due_playouts(&pool, locker, now, hls_sessions.as_deref()).await?;
         report.playouts_built = playout_report.built;
         report.playouts_skipped_locked = playout_report.skipped_locked;
         report.playouts_failed = playout_report.failed;
@@ -321,12 +325,13 @@ pub async fn run_requested_playout_build(
     locker: &EntityLocker,
     request: PlayoutBuildRequest,
     now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<bool> {
     let Some(_guard) = PlayoutLockGuard::try_acquire(locker, request.playout_id) else {
         return Ok(false);
     };
 
-    match build_playout(pool, request.playout_id, request.mode, now).await {
+    match build_playout(pool, request.playout_id, request.mode, now, hls_sessions).await {
         Ok(()) => Ok(true),
         Err(error) => {
             let message = error.to_string();
@@ -362,6 +367,7 @@ async fn build_due_playouts(
     pool: &Pool<Db>,
     locker: &EntityLocker,
     now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<PlayoutBuildReport> {
     let cutoff = encode_datetime(now - PLAYOUT_BUILD_INTERVAL);
     let rows = sqlx::query(
@@ -408,7 +414,7 @@ async fn build_due_playouts(
             PlayoutBuildMode::Continue
         };
 
-        match build_playout(pool, entry.playout_id, mode, now).await {
+        match build_playout(pool, entry.playout_id, mode, now, hls_sessions).await {
             Ok(()) => report.built += 1,
             Err(error) => {
                 report.failed += 1;
@@ -434,6 +440,7 @@ async fn build_playout(
     playout_id: EntityId,
     mode: PlayoutBuildMode,
     now: DateTime<Utc>,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<()> {
     let repository = SqlitePlayoutRepository(pool.clone());
     let scheduling = SqliteSchedulingContentRepository(pool.clone());
@@ -472,6 +479,10 @@ async fn build_playout(
         mode,
         reference_data,
     })?;
+    let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
+    let should_notify_segmenter = mode != PlayoutBuildMode::Continue
+        && (scheduling_result_has_persisted_changes(&result)
+            || channel_info.playout_mode == ChannelPlayoutMode::OnDemand);
     repository.apply_build_result(&result, &playout).await?;
     repository
         .upsert_build_status(&PlayoutBuildStatus {
@@ -489,7 +500,52 @@ async fn build_playout(
             "embedded subtitle extraction failed after playout build"
         );
     }
+    if should_notify_segmenter {
+        if let Some(hls_sessions) = hls_sessions {
+            hls_sessions
+                .playout_updated(&channel_info.channel_number)
+                .await;
+        }
+    }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlayoutChannelInfo {
+    channel_number: String,
+    playout_mode: ChannelPlayoutMode,
+}
+
+async fn load_playout_channel_info(
+    pool: &Pool<Db>,
+    channel_id: EntityId,
+) -> Result<PlayoutChannelInfo> {
+    let row = sqlx::query(r#"SELECT "Number", "PlayoutMode" FROM "Channel" WHERE "Id" = ?"#)
+        .bind(channel_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(PlayoutChannelInfo {
+        channel_number: row
+            .try_get::<Option<String>, _>("Number")?
+            .unwrap_or_default(),
+        playout_mode: match row.try_get::<i64, _>("PlayoutMode").unwrap_or_default() {
+            1 => ChannelPlayoutMode::OnDemand,
+            _ => ChannelPlayoutMode::Continuous,
+        },
+    })
+}
+
+fn scheduling_result_has_persisted_changes(result: &SchedulingResult) -> bool {
+    result.clear_items
+        || result.remove_before.is_some()
+        || !result.added_items.is_empty()
+        || !result.added_gaps.is_empty()
+        || !result.added_history.is_empty()
+        || !result.history_to_remove.is_empty()
+        || !result.items_to_remove.is_empty()
+        || result.anchor.is_some()
+        || !result.program_schedule_anchors.is_empty()
+        || !result.fill_group_indices.is_empty()
 }
 
 async fn dispatch_due_library_refreshes(

@@ -75,37 +75,77 @@ orchestration. ErsatzTV's `StartFFmpegSessionHandler` reads
 `ffmpeg.segmenter.timeout_seconds`, disables the timeout for KeepRunning
 channels, refreshes graphics elements, starts a worker, and waits for
 `ffmpeg.segmenter.initial_segment_count` segments before returning the
-multi-variant playlist. ErsatzRS currently starts the worker from
-`/iptv/channel/{n}.m3u8?mode=segmenter` with a hard-coded 30-second idle
-timeout and returns the variant playlist immediately; the saved initial segment
-count and work-ahead settings are persisted and displayed, but not enforced by
-the worker start path.
+multi-variant playlist. The startup-settings slice now reads the persisted
+segmenter timeout (default 60 seconds), disables the idle timeout for
+KeepRunning channels, starts/touches the worker from both HLS segmenter and
+MPEG-TS wrapper paths, and waits until the configured initial segment count is
+visible in the live session playlist before returning the multi-variant
+playlist. `ffmpeg.segmenter.work_ahead_limit` is still persisted and displayed
+but belongs to the worker state machine and is not yet enforced by runtime
+transcode scheduling.
 
-ParityDebt - HLS Segmenter worker state machine: ErsatzTV's
-`HlsSessionWorker` maintains `_transcodedUntil`, `PlaylistStart`,
-`_channelStart`, `_hasWrittenSegments`, discontinuity sequence state, slug
-duration, on-demand timeshift/checkpoint updates, and a
-Seek/Zero/Slug x WorkAhead/Realtime state machine. It decides whether to seek
-or start at zero, throttles or accelerates based on buffered duration and
-`ffmpeg.segmenter.work_ahead_limit`, inserts slug/error transcodes when needed,
-and requests playout-item processes with explicit `StartAtZero`, `HlsRealtime`,
-`ChannelStart`, and `PtsOffset` values. ErsatzRS uses a simpler loop that
-polls the active playout item at `Utc::now()`, seeks to `now - PlayoutStart`,
-spawns one FFmpeg HLS command, and repeats after process exit. This can diverge
-at item boundaries and short-content seams, which matches the reported channel
-1 symptom where HLS segmenter playback skips after about 24 seconds and the
-stream stops around 48 seconds. A parity fix needs to port the upstream
-segmenter state machine instead of only adjusting HLS flags.
+The HLS command-options slice ports ErsatzTV's MPEG-TS segment option rule:
+MPEG-TS HLS output now emits
+`-hls_segment_options mpegts_flags=+initial_discontinuity` for the first
+transcode or any transcode with zero PTS offset, adds `+latm` when the playback
+profile uses AAC-LATM, skips the initial-discontinuity flag when a non-zero PTS
+offset is applied, and leaves fMP4 HLS output without MPEG-TS segment options.
 
-ParityDebt - HLS segment options and startup readiness: ErsatzTV sets
-`-hls_segment_options mpegts_flags=+initial_discontinuity` for the first MPEG-TS
-segmenter transcode when there is no PTS offset, adds `+latm` for AAC-LATM, and
-waits up to the configured initial segment count before treating session start
-as successful. ErsatzRS has command support for arbitrary `segment_options`,
-but `build_hls_command` always passes `None`; it also returns the variant
-playlist before the configured segment count exists. This should be closed with
-focused command snapshots plus a runtime segmenter smoke that proves the first
-served playlist and segment sequence across the reported 24s/48s window.
+The first state-machine slice ports the deterministic `HlsSessionState`
+transition table and the core worker-loop scheduling rules from ErsatzTV:
+Rust now tracks `SeekAndWorkAhead`, `ZeroAndWorkAhead`, `SeekAndRealtime`,
+`ZeroAndRealtime`, slug states, and `PlayoutUpdated`; gates transcoding on the
+same 60-second buffered-output threshold; switches to realtime once at least
+30 seconds are buffered; reads `ffmpeg.segmenter.work_ahead_limit`; reserves a
+global work-ahead slot while accelerated transcodes are running; chooses the
+request timestamp and start-at-zero behavior from the current state; and bounds
+each work-ahead segmenter FFmpeg command to ErsatzTV's 44-second cap before
+switching to realtime-paced input, instead of running the full remaining media
+path open-ended.
+
+The playout-update notification slice wires the modeled `PlayoutUpdated` state
+into the scheduler-owned build path: active HLS handles and registries now
+expose `playout_updated`, the concrete worker stores state outside the run-loop
+local so notifications can switch the next iteration to `PlayoutUpdated`, and
+both requested and periodic playout builds can notify active segmenter sessions
+after successful non-Continue builds when persisted playout output changed or
+the channel is OnDemand. The web host passes its live HLS registry into the
+scheduler so the notification reaches in-process workers.
+
+The on-demand runtime slice ports the segmenter-owned playout time-shift and
+checkpoint behavior: HLS worker startup now time-shifts OnDemand playout item
+windows, guide windows, history, program-schedule anchors, and playout anchors
+to the worker start time when needed; successful and failed transcode attempts
+refresh `Playout.OnDemandCheckpoint` for OnDemand channels; and the worker now
+loads `Channel.SlugSeconds` so the already-ported slug states can be selected
+when a channel has slug seconds configured.
+
+The slug-generation slice wires those slug states to runtime output: when the
+state machine enters `SlugAndWorkAhead` or `SlugAndRealtime`, the worker now
+bypasses playout-item lookup and emits an ErsatzTV-shaped generated black-video
+plus silent-audio HLS command for the configured `Channel.SlugSeconds`
+duration, preserving profile/resolution metadata, HLS segment options, PTS
+offset continuity, and the normal worker cancellation/trim loop before
+returning to the zero-start playout state.
+
+The error-fallback slice ports ErsatzTV's failed-transcode replacement process:
+when an item FFmpeg segmenter exits unsuccessfully, the worker captures the
+stderr tail or fallback exit-code text, writes a generated error ASS subtitle
+over the bundled background image, pairs it with null audio, preserves the same
+duration, output PTS offset, metadata, HLS segment options, and trim/cancel
+loop, then advances with the ErsatzTV-equivalent `NextState(_state, null)`
+transition so playlist continuity is maintained after the failed item attempt.
+
+Runtime proof (2026-06-08): with channel 1 in HLS Segmenter mode, the rebuilt
+worker returned the multi-variant playlist, then `/iptv/session/1/hls.m3u8`
+was sampled for about 70 seconds across the reported 24-second skip and
+48-second stop window. Before the work-ahead cap fix, the same proof showed the
+playlist media sequence racing from 63 to 228 in about 71 seconds, which let
+VLC fall behind deleted segments. After the fix, media sequence advanced from
+3 to 22 over the same wall-clock window, and each sampled newest segment
+ffprobed as readable HEVC video plus AAC audio. HLS Direct was also reloaded
+and a bounded partial `/iptv/hls-direct/1.ts` stream ffprobed with HEVC video
+plus AAC audio.
 
 HLS Direct audit: the direct branch remains mostly aligned for the current
 surface: `.m3u8?mode=hls-direct` returns a single-entry playlist, target

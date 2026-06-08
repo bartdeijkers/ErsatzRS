@@ -222,6 +222,16 @@ pub fn standard_format_flags() -> PipelineStep {
 }
 
 #[must_use]
+pub fn map_all_streams() -> PipelineStep {
+    PipelineStep::generic("map_all_streams", ["-map", "0"])
+}
+
+#[must_use]
+pub fn copy_all_streams() -> PipelineStep {
+    PipelineStep::generic("copy_all_streams", ["-c", "copy"])
+}
+
+#[must_use]
 pub fn closed_gop() -> PipelineStep {
     PipelineStep::generic("closed_gop", ["-flags", "cgop"])
 }

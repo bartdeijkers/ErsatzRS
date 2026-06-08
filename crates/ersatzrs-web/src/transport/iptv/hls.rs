@@ -5,14 +5,14 @@ use axum::{
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
-use ersatzrs_domain::StreamingMode;
+use ersatzrs_domain::{Channel, ChannelIdleBehavior, StreamingMode};
 use ersatzrs_ffmpeg::OutputFormat;
 use ersatzrs_infra::{
     file_system_layout::{transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL},
     hls_worker::HlsSessionWorker,
 };
 use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
@@ -33,8 +33,11 @@ pub struct HlsQuery {
 /// `ErsatzTV`'s `IptvController`.
 const HLS_CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/vnd.apple.mpegurl");
 const CONFIG_KEY_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_format";
+const DEFAULT_SEGMENTER_TIMEOUT_SECONDS_USIZE: usize = 60;
+const DEFAULT_INITIAL_SEGMENT_COUNT: usize = 1;
+const INITIAL_SEGMENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-fn request_scheme(headers: &HeaderMap) -> String {
+pub(crate) fn request_scheme(headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-proto")
         .and_then(|value| value.to_str().ok())
@@ -44,7 +47,7 @@ fn request_scheme(headers: &HeaderMap) -> String {
         )
 }
 
-fn request_host(headers: &HeaderMap) -> String {
+pub(crate) fn request_host(headers: &HeaderMap) -> String {
     headers
         .get("x-forwarded-host")
         .or_else(|| headers.get(header::HOST))
@@ -66,10 +69,11 @@ fn hls_response(body: String) -> Response {
     response
 }
 
-async fn ensure_segmenter_worker_running(
+pub(crate) async fn ensure_segmenter_worker_running(
     state: &AppState,
     channel_number: &str,
     channel_id: i64,
+    idle_behavior: ChannelIdleBehavior,
     output_format: OutputFormat,
     path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
 ) {
@@ -78,6 +82,7 @@ async fn ensure_segmenter_worker_running(
         return;
     }
 
+    let segmenter_timeout = load_segmenter_idle_timeout(state, idle_behavior).await;
     let working_dir = hls_working_dir(channel_number);
     let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
     let worker = HlsSessionWorker::new(
@@ -92,11 +97,109 @@ async fn ensure_segmenter_worker_running(
         worker.start(
             state.pool.clone(),
             Arc::clone(&state.hls_sessions),
-            Some(std::time::Duration::from_secs(30)),
+            segmenter_timeout,
         );
     } else if let Some(existing_worker) = state.hls_sessions.try_get(channel_number).await {
         existing_worker.touch();
     }
+}
+
+async fn load_segmenter_idle_timeout(
+    state: &AppState,
+    idle_behavior: ChannelIdleBehavior,
+) -> Option<Duration> {
+    if idle_behavior == ChannelIdleBehavior::KeepRunning {
+        return None;
+    }
+
+    let seconds = load_config_usize(
+        state,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+        DEFAULT_SEGMENTER_TIMEOUT_SECONDS_USIZE,
+    )
+    .await;
+    segmenter_idle_timeout_for(idle_behavior, seconds)
+}
+
+fn segmenter_idle_timeout_for(
+    idle_behavior: ChannelIdleBehavior,
+    timeout_seconds: usize,
+) -> Option<Duration> {
+    if idle_behavior == ChannelIdleBehavior::KeepRunning {
+        None
+    } else {
+        Some(Duration::from_secs(timeout_seconds as u64))
+    }
+}
+
+async fn load_segmenter_startup_timeout(state: &AppState) -> Duration {
+    let seconds = load_config_usize(
+        state,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+        DEFAULT_SEGMENTER_TIMEOUT_SECONDS_USIZE,
+    )
+    .await;
+    Duration::from_secs(seconds as u64)
+}
+
+async fn load_initial_segment_count(state: &AppState) -> usize {
+    load_config_usize(
+        state,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+        DEFAULT_INITIAL_SEGMENT_COUNT,
+    )
+    .await
+    .max(1)
+}
+
+async fn load_config_usize(state: &AppState, key: &str, default: usize) -> usize {
+    state
+        .repositories
+        .config
+        .get(key)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|value| parse_positive_usize(&value))
+        .unwrap_or(default)
+}
+
+fn parse_positive_usize(value: &str) -> Option<usize> {
+    value
+        .trim()
+        .parse::<usize>()
+        .ok()
+        .filter(|value| *value > 0)
+}
+
+async fn wait_for_initial_segments(
+    state: &AppState,
+    channel_number: &str,
+    segment_count: usize,
+    startup_timeout: Duration,
+) -> bool {
+    let started_at = tokio::time::Instant::now();
+    while started_at.elapsed() < startup_timeout {
+        if let Some(handle) = state.hls_sessions.try_get(channel_number).await {
+            if let Some(playlist) = handle.trim_playlist().await {
+                if count_playlist_segments(&playlist) >= segment_count {
+                    return true;
+                }
+            }
+        } else {
+            return false;
+        }
+        tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
+    }
+
+    false
+}
+
+fn count_playlist_segments(playlist: &str) -> usize {
+    playlist
+        .lines()
+        .filter(|line| line.trim_start().starts_with("#EXTINF:"))
+        .count()
 }
 
 fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
@@ -274,49 +377,15 @@ pub async fn serve_channel_m3u8(
             } else {
                 OutputFormat::Hls
             };
-            let scheme = request_scheme(headers);
-            let host = request_host(headers);
-            let spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
-                Ok(spec) => spec,
-                Err(error) => {
-                    tracing::warn!(
-                        %error,
-                        channel_number = %channel.number,
-                        "failed to load channel streaming spec; emitting playlist with default bandwidth"
-                    );
-                    None
-                }
-            };
-
-            let path_replacements = match stream::load_path_replacements(
-                &state.repositories.media_source,
+            serve_hls_segmenter_playlist(
+                state,
+                channel_number,
+                headers,
+                &channel,
+                &access_token,
+                output_format,
             )
             .await
-            {
-                Ok(replacements) => replacements,
-                Err(error) => {
-                    tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for hls worker; continuing with raw path");
-                    Vec::new()
-                }
-            };
-
-            ensure_segmenter_worker_running(
-                state,
-                &channel.number,
-                channel.id,
-                output_format,
-                path_replacements,
-            )
-            .await;
-
-            let body = build_multi_variant_playlist(
-                &scheme,
-                &host,
-                channel_number,
-                spec.as_ref(),
-                &access_token,
-            );
-            hls_response(body)
         }
         "hls-direct" => {
             let scheme = request_scheme(headers);
@@ -336,6 +405,72 @@ pub async fn serve_channel_m3u8(
             axum::response::Redirect::temporary(&target).into_response()
         }
     }
+}
+
+async fn serve_hls_segmenter_playlist(
+    state: &AppState,
+    channel_number: &str,
+    headers: &HeaderMap,
+    channel: &Channel,
+    access_token: &AccessToken,
+    output_format: OutputFormat,
+) -> Response {
+    let scheme = request_scheme(headers);
+    let host = request_host(headers);
+    let spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
+        Ok(spec) => spec,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                channel_number = %channel.number,
+                "failed to load channel streaming spec; emitting playlist with default bandwidth"
+            );
+            None
+        }
+    };
+
+    let path_replacements = match stream::load_path_replacements(&state.repositories.media_source)
+        .await
+    {
+        Ok(replacements) => replacements,
+        Err(error) => {
+            tracing::warn!(%error, channel_number = %channel.number, "failed to load path replacements for hls worker; continuing with raw path");
+            Vec::new()
+        }
+    };
+
+    ensure_segmenter_worker_running(
+        state,
+        &channel.number,
+        channel.id,
+        channel.idle_behavior,
+        output_format,
+        path_replacements,
+    )
+    .await;
+
+    let initial_segment_count = load_initial_segment_count(state).await;
+    let startup_timeout = load_segmenter_startup_timeout(state).await;
+    if !wait_for_initial_segments(
+        state,
+        &channel.number,
+        initial_segment_count,
+        startup_timeout,
+    )
+    .await
+    {
+        tracing::warn!(
+            channel_number = %channel.number,
+            initial_segment_count,
+            startup_timeout_seconds = startup_timeout.as_secs(),
+            "hls segmenter did not produce initial playlist segments before timeout"
+        );
+        return (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response();
+    }
+
+    let body =
+        build_multi_variant_playlist(&scheme, &host, channel_number, spec.as_ref(), access_token);
+    hls_response(body)
 }
 
 /// `GET /iptv/session/{number}/hls.m3u8` — trimmed variant playlist.
@@ -559,5 +694,33 @@ mod tests {
     #[test]
     fn troubleshooting_channel_is_reserved_session_number() {
         assert_eq!(TRANSCODE_TROUBLESHOOTING_CHANNEL, ".troubleshooting");
+    }
+
+    #[test]
+    fn parse_positive_usize_rejects_empty_zero_and_negative_values() {
+        assert_eq!(parse_positive_usize(" 3 "), Some(3));
+        assert_eq!(parse_positive_usize("0"), None);
+        assert_eq!(parse_positive_usize("-1"), None);
+        assert_eq!(parse_positive_usize(""), None);
+        assert_eq!(parse_positive_usize("abc"), None);
+    }
+
+    #[test]
+    fn segmenter_idle_timeout_respects_keep_running_channels() {
+        assert_eq!(
+            segmenter_idle_timeout_for(ChannelIdleBehavior::StopOnDisconnect, 45),
+            Some(Duration::from_secs(45))
+        );
+        assert_eq!(
+            segmenter_idle_timeout_for(ChannelIdleBehavior::KeepRunning, 45),
+            None
+        );
+    }
+
+    #[test]
+    fn count_playlist_segments_counts_extinf_lines_only() {
+        let playlist = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.000,\nsegment-1.ts\n#EXT-X-DISCONTINUITY\n  #EXTINF:3.500,\nsegment-2.ts\n";
+
+        assert_eq!(count_playlist_segments(playlist), 2);
     }
 }
