@@ -17,11 +17,11 @@ use crate::{
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
     watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_cuda_filter,
-    watermark_overlay_filter, watermark_scale_filter, AudioFilter, CommandGenerator, ComplexFilter,
-    FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize,
-    FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind,
-    PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOverlay,
+    watermark_overlay_filter, watermark_scale_filter, yadif_cuda_filter, AudioFilter,
+    CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
+    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
+    HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
+    StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -834,14 +834,15 @@ fn build_transcode_pipeline(
             effective_decode_acceleration,
         )));
     }
-    let use_cuda_overlay = uses_cuda_overlay(effective_acceleration, &request.desired);
     add_video_decoder(&request, &mut steps, effective_acceleration);
     add_audio_decoder_input_options(&mut request);
     add_realtime_input_options(&mut request);
-    add_cuda_software_fallback_upload(&mut request, effective_acceleration);
+    let uploaded_cuda_fallback =
+        add_cuda_software_fallback_upload(&mut request, effective_acceleration);
     apply_source_video_filters(
         &request,
         effective_acceleration,
+        uploaded_cuda_fallback,
         &mut target_state,
         &mut filter_chain,
     );
@@ -873,6 +874,13 @@ fn build_transcode_pipeline(
         .graphics_overlays
         .iter()
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::NativeImage { .. }));
+    let has_text_subtitle_burn = request.inputs.iter().any(|input| {
+        input.kind == InputKind::Subtitle
+            && !input.is_image_based_subtitle
+            && input.subtitle_method == Some(SubtitleMethod::Burn)
+    });
+    let use_cuda_overlay =
+        uses_cuda_overlay(effective_acceleration, &request.desired) && !has_text_subtitle_burn;
     let force_vaapi_software_overlay = force_vaapi_software_overlay(
         &request.desired,
         has_watermark_overlay,
@@ -899,6 +907,29 @@ fn build_transcode_pipeline(
         &target_state,
         force_vaapi_software_overlay,
     );
+    // Mirror ErsatzTV `NvidiaPipelineBuilder` (lines 239-271): for an 8-bit CUDA
+    // overlay the main surface must be `yuv420p` before compositing.
+    // `overlay_cuda` refuses to overlay a `yuva420p` watermark/graphic onto an
+    // `nv12` surface ("Can't overlay yuva420p on nv12") — both inputs need the
+    // matching 4:2:0 planar layout. Convert the main on the GPU
+    // (`scale_cuda=format=yuv420p`) so the alpha overlay composites and nvenc
+    // still encodes a CUDA surface directly. 10-bit overlays take the
+    // software-download path above instead, so this is gated on 8-bit hardware
+    // frames.
+    let has_cuda_overlay_input =
+        has_watermark_overlay || has_image_subtitle_burn || has_native_graphics_overlay;
+    if use_cuda_overlay
+        && has_cuda_overlay_input
+        && request.desired.bit_depth == FFmpegProfileBitDepth::EightBit
+        && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+        && target_state.pixel_format != PixelFormat::Yuv420P
+    {
+        filter_chain.video.push(format!(
+            "scale_cuda=format={}",
+            PixelFormat::Yuv420P.ffmpeg_name()
+        ));
+        target_state.pixel_format = PixelFormat::Yuv420P;
+    }
     for (input, watermark) in request
         .inputs
         .iter_mut()
@@ -1197,6 +1228,7 @@ fn build_transcode_pipeline(
 fn apply_source_video_filters(
     request: &PipelineRequest,
     acceleration: HardwareAccelerationKind,
+    uploaded_cuda_fallback: bool,
     target_state: &mut FrameState,
     filter_chain: &mut FilterChain,
 ) {
@@ -1220,11 +1252,22 @@ fn apply_source_video_filters(
     }
 
     if target_state.should_deinterlace && !target_state.deinterlaced {
-        filter_chain.video.push(deinterlace_filter(
-            acceleration,
-            target_state,
-            request.desired.qsv_extra_hardware_frames,
-        ));
+        if acceleration == HardwareAccelerationKind::Nvenc
+            && uploaded_cuda_fallback
+            && target_state.frame_data_location == crate::FrameDataLocation::Software
+        {
+            let mut uploaded_state = target_state.clone();
+            uploaded_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            filter_chain
+                .video
+                .push(yadif_cuda_filter(&uploaded_state).to_owned());
+        } else {
+            filter_chain.video.push(deinterlace_filter(
+                acceleration,
+                target_state,
+                request.desired.qsv_extra_hardware_frames,
+            ));
+        }
         target_state.deinterlaced = true;
         target_state.frame_data_location = deinterlace_output_location(acceleration);
     }
@@ -1267,6 +1310,12 @@ fn apply_source_video_filters(
                 FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
                 FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
             };
+        } else if acceleration == HardwareAccelerationKind::Nvenc
+            && uploaded_cuda_fallback
+            && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+            && target_state.should_deinterlace
+        {
+            target_state.pixel_format = cuda_surface_pixel_format(request.desired.bit_depth);
         }
     }
 
@@ -1767,13 +1816,13 @@ fn add_realtime_input_options(request: &mut PipelineRequest) {
 fn add_cuda_software_fallback_upload(
     request: &mut PipelineRequest,
     acceleration: HardwareAccelerationKind,
-) {
+) -> bool {
     if acceleration != HardwareAccelerationKind::Nvenc
         || request.desired.video_format == FFmpegProfileVideoFormat::Copy
         || request.source_video_stream.is_none()
         || nvidia_vulkan_hdr_tonemap(request)
     {
-        return;
+        return false;
     }
 
     if let Some(input) = request
@@ -1784,7 +1833,10 @@ fn add_cuda_software_fallback_upload(
         input
             .filter_steps
             .push(cuda_software_fallback_upload_filter());
+        return true;
     }
+
+    false
 }
 
 fn nvidia_vulkan_hdr_tonemap(request: &PipelineRequest) -> bool {
@@ -2064,6 +2116,26 @@ fn should_emit_pixel_format_output_option(
             | HardwareAccelerationKind::Rkmpp
     ) {
         return true;
+    }
+
+    // On the NVENC path the frames reaching the encoder are a CUDA hardware
+    // surface whose pixel format was already normalized on the GPU
+    // (`scale_cuda=format=nv12`; `overlay_cuda` preserves that surface format).
+    // A software `-pix_fmt yuv420p` cannot be applied to a CUDA surface: ffmpeg
+    // inserts an `auto_scale` to bridge the formats, which fails with
+    // "Impossible to convert between the formats supported by the filter
+    // 'overlay_cuda' and the filter 'auto_scale'" and aborts the encode (the
+    // encoder receives no frames). nvenc encodes the nv12/p010le surface
+    // directly, so do not emit the option while the frames remain on the GPU.
+    // Mirrors ErsatzTV `NvidiaPipelineBuilder.SetPixelFormat`, which keeps the
+    // format on the GPU for hardware frames instead of adding a software
+    // pixel-format output option. The software-overlay path (e.g. text/image
+    // subtitle burn) downloads frames first, so `target_state` is `Software`
+    // there and the option is still emitted.
+    if acceleration == HardwareAccelerationKind::Nvenc
+        && target_state.frame_data_location == crate::FrameDataLocation::Hardware
+    {
+        return false;
     }
 
     request.source_video_stream.is_some()
@@ -2422,6 +2494,13 @@ const fn hardware_surface_format(bit_depth: FFmpegProfileBitDepth) -> &'static s
     match bit_depth {
         FFmpegProfileBitDepth::EightBit => "nv12",
         FFmpegProfileBitDepth::TenBit => "p010le",
+    }
+}
+
+const fn cuda_surface_pixel_format(bit_depth: FFmpegProfileBitDepth) -> PixelFormat {
+    match bit_depth {
+        FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
+        FFmpegProfileBitDepth::TenBit => PixelFormat::Cuda,
     }
 }
 

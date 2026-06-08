@@ -804,6 +804,48 @@ fn nvenc_pipeline_burns_text_subtitle_before_cuda_watermark_snapshot() {
 }
 
 #[test]
+fn nvenc_pipeline_interlaced_software_decode_does_not_double_upload_before_yadif() {
+    let mut source = source_1080p(SourceVideoCodec::Hevc, 1920, 1080);
+    source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+    source.scan_kind = VideoScanKind::Interlaced;
+    let mut report = capability_report_for_tests();
+    report.decoders.remove("hevc_cuvid");
+    let mut request = PipelineRequest::new(
+        InputFile::video("/media/movie.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source)
+    .with_runtime_capabilities(report)
+    .with_subtitle_fonts_dir("/cache/streams/fonts");
+    request.inputs.push(InputFile::text_subtitle(
+        "/cache/streams/subtitles/AA/BB/subtitle.srt",
+        ersatzrs_ffmpeg::SubtitleMethod::Burn,
+    ));
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 12.5,
+        horizontal_margin_percent: 2.0,
+        vertical_margin_percent: 3.0,
+        opacity: 75,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("[0:0]hwupload,yadif_cuda"));
+    assert!(!arguments.contains("hwupload,hwupload_cuda,yadif_cuda"));
+    assert!(arguments.contains("scale_cuda=format=nv12,hwdownload,format=nv12,subtitles="));
+    assert!(!arguments.contains("hwdownload,format=yuv420p10le"));
+    assert!(arguments.contains("subtitles=/cache/streams/subtitles/AA/BB/subtitle.srt"));
+    assert!(!arguments.contains("overlay_cuda"));
+    assert!(arguments.contains("overlay=x=W-w-38:y=32:format=0"));
+}
+
+#[test]
 fn nvenc_pipeline_with_1080p_overlay_uses_green_line_workaround_snapshot() {
     let mut request = PipelineRequest::new(
         InputFile::video("/media/movie.mkv"),
