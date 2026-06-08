@@ -4,6 +4,30 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Skip the Rust CI gate when a push touches only non-code paths (docs,
+    # plans, markdown, images, agent config). The daily progress routine
+    # commits doc-only changes directly to main (see
+    # docs/automation/daily-progress-routine.md) and validates them locally
+    # with `cargo xtask progress check`. A push that also changes anything
+    # outside this list (any .rs, Cargo manifest, or .github/ file) still runs
+    # CI in full. Applies to push only; pull_request always runs the gate.
+    paths-ignore:
+      - 'docs/**'
+      - 'plans/**'
+      - '.claude/**'
+      - '.codex/**'
+      - '*.md'
+      - '**/*.md'
+      - '*.png'
+      - '**/*.png'
+
+# Bursty pushing is common here (44% of recent consecutive commits landed
+# <10 min apart). On the single self-hosted runner that queues full clippy+test
+# cycles nobody waits for, so cancel superseded runs per ref (PR branches and
+# main). Only the latest commit on a ref is validated.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -20,6 +44,9 @@ jobs:
   clippy:
     name: Clippy
     runs-on: self-hosted
+    # Gate on the fast fmt job so a formatting failure doesn't burn a full
+    # clippy build on the serial self-hosted runner.
+    needs: fmt
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -39,6 +66,9 @@ jobs:
   test:
     name: Test
     runs-on: self-hosted
+    # Gate on the fast fmt job so a formatting failure doesn't burn a full
+    # test build on the serial self-hosted runner.
+    needs: fmt
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
