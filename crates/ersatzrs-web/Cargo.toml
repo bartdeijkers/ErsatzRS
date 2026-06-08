@@ -27,6 +27,7 @@ stylance = "0.8"
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+async-trait = "0.1"
 ersatzrs-core = { path = "../ersatzrs-core", version = "0.1.0" }
 ersatzrs-ffmpeg = { path = "../ersatzrs-ffmpeg", version = "0.1.0" }
 ersatzrs-infra = { path = "../ersatzrs-infra", version = "0.1.0" }

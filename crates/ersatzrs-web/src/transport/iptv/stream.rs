@@ -1,7 +1,10 @@
 use std::{
     path::PathBuf,
     process::Stdio,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -11,6 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
+use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{ChannelRepository, MediaSourceRepository};
 use ersatzrs_domain::{ChannelSubtitleMode, EmbyMediaSource, JellyfinMediaSource, PlexMediaSource};
@@ -31,6 +35,7 @@ use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
+use tokio::sync::Notify;
 use tokio_util::io::ReaderStream;
 
 use crate::host::state::AppState;
@@ -263,7 +268,12 @@ pub async fn serve_channel_stream(
         watermark_inputs,
         graphics_overlays,
     );
-    match spawn_stream_body(command, graphics_cleanup_dirs) {
+    match spawn_stream_body(
+        command,
+        graphics_cleanup_dirs,
+        channel.number.clone(),
+        state.hls_sessions.clone(),
+    ) {
         Ok(body) => {
             let mut response = body.into_response();
             response.headers_mut().insert(
@@ -620,6 +630,8 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 fn spawn_stream_body(
     command: FfmpegCommand,
     cleanup_dirs: Vec<PathBuf>,
+    channel_number: String,
+    session_registry: Arc<dyn HlsSessionRegistry>,
 ) -> Result<Body, StreamSpawnError> {
     let mut process = Command::new(&command.executable);
     process
@@ -637,19 +649,38 @@ fn spawn_stream_body(
         .map_err(|error| StreamSpawnError::Spawn(error.to_string()))?;
     let stdout = child.stdout.take().ok_or(StreamSpawnError::MissingStdout)?;
     let stderr = child.stderr.take();
+    let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
+    let cancel = handle.cancel.clone();
 
     tokio::spawn(async move {
+        let registered = session_registry.try_insert(handle).await;
         let stderr_task = stderr.map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
-        match child.wait().await {
-            Ok(status) if status.success() => {}
-            Ok(status) => {
-                let stderr = await_stderr_tail(stderr_task).await;
-                tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+        tokio::select! {
+            result = child.wait() => {
+                match result {
+                    Ok(status) if status.success() => {}
+                    Ok(status) => {
+                        let stderr = await_stderr_tail(stderr_task).await;
+                        tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+                    }
+                    Err(error) => {
+                        let stderr = await_stderr_tail(stderr_task).await;
+                        tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
+                    }
+                }
             }
-            Err(error) => {
+            () = cancel.notified() => {
+                if let Err(error) = child.kill().await {
+                    tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
+                }
                 let stderr = await_stderr_tail(stderr_task).await;
-                tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
+                if !stderr.is_empty() {
+                    tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
+                }
             }
+        }
+        if registered {
+            session_registry.remove(&channel_number).await;
         }
         for path in cleanup_dirs {
             if let Err(error) = tokio::fs::remove_dir_all(&path).await {
@@ -661,6 +692,37 @@ fn spawn_stream_body(
     });
 
     Ok(Body::from_stream(ReaderStream::new(stdout)))
+}
+
+struct DirectStreamHandle {
+    channel_number: String,
+    cancel: Arc<Notify>,
+}
+
+impl DirectStreamHandle {
+    fn new(channel_number: String) -> Self {
+        Self {
+            channel_number,
+            cancel: Arc::new(Notify::new()),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl HlsSessionHandle for DirectStreamHandle {
+    fn channel_number(&self) -> &str {
+        &self.channel_number
+    }
+
+    fn touch(&self) {}
+
+    async fn trim_playlist(&self) -> Option<String> {
+        None
+    }
+
+    async fn cancel(&self) {
+        self.cancel.notify_waiters();
+    }
 }
 
 async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> String {
