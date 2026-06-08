@@ -1880,6 +1880,111 @@ fn pipeline_emits_deinterlace_for_interlaced_source_snapshot() {
     insta::assert_snapshot!(command.arguments.join(" "));
 }
 
+fn sd_source_with_colors(
+    range: Option<&str>,
+    space: Option<&str>,
+    transfer: Option<&str>,
+    primaries: Option<&str>,
+) -> SourceVideoStream {
+    let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
+    source.frame_size = Some(FrameSize::new(720, 480));
+    source.sample_aspect_ratio = Some("1:1".to_owned());
+    source.display_aspect_ratio = Some("720:480".to_owned());
+    source.scan_kind = VideoScanKind::Interlaced;
+    source.pixel_format = Some(PixelFormat::Yuv420P);
+    source.color_params = SourceColorParams {
+        color_range: range.map(str::to_owned),
+        color_space: space.map(str::to_owned),
+        color_transfer: transfer.map(str::to_owned),
+        color_primaries: primaries.map(str::to_owned),
+        is_hdr: false,
+        is_bt2020_ten: false,
+    };
+    source
+}
+
+fn sd_software_pipeline_args(source: SourceVideoStream) -> String {
+    let request = PipelineRequest::new(
+        InputFile::video("/media/dvd-source.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    pipeline.command(&request.inputs).arguments.join(" ")
+}
+
+#[test]
+fn pipeline_normalizes_bt470bg_source_to_bt709_software_snapshot() {
+    // Port of `SetPixelFormat`: a bt470bg (SD) source is normalized to bt709
+    // with `colormatrix` (ErsatzTV uses colormatrix, not colorspace, for
+    // bt470bg). This is the fix for the GIF-like banding/dither on DVD footage.
+    let source = sd_source_with_colors(
+        Some("tv"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+    );
+    let args = sd_software_pipeline_args(source);
+
+    assert!(
+        args.contains("colormatrix=src=bt470bg:dst=bt709,format=yuv420p"),
+        "expected bt470bg colormatrix normalization, got: {args}"
+    );
+    assert!(
+        !args.contains("-pix_fmt"),
+        "colorspace filter already pins the format, got: {args}"
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn pipeline_normalizes_mixed_colors_source_software_snapshot() {
+    // A mixed-tag SD source (smpte170m primaries/space, bt709 transfer) gets the
+    // general `colorspace` filter with input overrides + bt709 output.
+    let source = sd_source_with_colors(
+        Some("tv"),
+        Some("smpte170m"),
+        Some("bt709"),
+        Some("smpte170m"),
+    );
+    let args = sd_software_pipeline_args(source);
+
+    assert!(
+        args.contains(
+            "colorspace=irange=tv:ispace=smpte170m:itrc=bt709:iprimaries=smpte170m:all=bt709:format=yuv420p:range=tv"
+        ),
+        "expected mixed-color colorspace normalization, got: {args}"
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn pipeline_normalizes_unknown_colors_source_software_snapshot() {
+    // A source missing space/transfer/primaries tags is normalized with
+    // `setparams` (ErsatzTV's unknown-color branch); the format is unchanged so
+    // the existing `-pix_fmt` equality logic still applies.
+    let source = sd_source_with_colors(Some("tv"), None, None, None);
+    let args = sd_software_pipeline_args(source);
+
+    assert!(
+        args.contains("setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709"),
+        "expected unknown-color setparams normalization, got: {args}"
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn pipeline_skips_colorspace_for_bt709_source_software() {
+    // An already-bt709 source needs no normalization (ErsatzTV `IsBt709` gate),
+    // so no colorspace/colormatrix/setparams node is emitted.
+    let source = sd_source_with_colors(Some("tv"), Some("bt709"), Some("bt709"), Some("bt709"));
+    let args = sd_software_pipeline_args(source);
+
+    assert!(!args.contains("colorspace="), "got: {args}");
+    assert!(!args.contains("colormatrix="), "got: {args}");
+    assert!(!args.contains("setparams="), "got: {args}");
+}
+
 #[test]
 fn pipeline_emits_tonemap_for_hdr_source_snapshot() {
     let mut source = SourceVideoStream::new(SourceVideoCodec::Hevc);

@@ -17,9 +17,9 @@ use crate::{
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
     watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_cuda_filter,
-    watermark_overlay_filter, watermark_scale_filter, yadif_cuda_filter, AudioFilter,
-    ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport,
-    FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
+    watermark_overlay_filter, watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams,
+    CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
+    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
     HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
     StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOverlay,
 };
@@ -538,7 +538,10 @@ impl DesiredVideoState {
             realtime_mode: RealtimeMode::Off,
             normalize_loudness_mode: NormalizeLoudnessMode::Off,
             target_loudness: None,
-            normalize_colors: false,
+            // Matches ErsatzTV `FFmpegProfile.New` (NormalizeColors = true) and
+            // the ErsatzRS DB seed (`db.rs`), so transcodes normalize colors to
+            // bt709 by default via the colorspace filter above.
+            normalize_colors: true,
             allow_b_frames: false,
             vaapi_device: None,
             vaapi_driver: None,
@@ -1152,6 +1155,62 @@ fn build_transcode_pipeline(
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawvg { .. }));
     let mut emit_pixel_format_output_option =
         should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
+
+    // Port of `*PipelineBuilder.SetPixelFormat` colorspace branch: normalize a
+    // non-bt709 source (SD bt601/bt470bg DVD content, or mixed/unknown color
+    // tags) to bt709 with an explicit `colorspace`/`colormatrix`/`setparams`
+    // node before the encoder. Without it, swscale performs the matrix/range/
+    // format conversion implicitly with its default ordered dither, producing
+    // the color banding and GIF-like dot pattern reported on SD footage.
+    // ErsatzTV appends this in `pixelFormatFilterSteps`, i.e. the end of the
+    // graph, which is where `filter_chain.pixel_format` is assembled
+    // (`ComplexFilter::build`).
+    //
+    // Scope: software-resident frames only. On the GPU-resident encode paths
+    // (NVENC/VAAPI/QSV) the frames reaching the encoder are a hardware surface;
+    // ErsatzTV normalizes those with an `hwdownload` → format → re-upload dance
+    // (`CudaFormatFilter`, etc.) that ErsatzRS has not ported yet. Emitting a
+    // bare `hwdownload` colorspace there (with no re-upload) would break the
+    // encode the same way an unexpected `auto_scale` does, so those paths are
+    // left untouched and tracked as ParityDebt. This still covers the pure
+    // software pipeline (the reported bug) and any hardware path that has
+    // already downloaded frames to software memory.
+    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
+        && request.desired.normalize_colors
+        && target_state.frame_data_location == crate::FrameDataLocation::Software
+    {
+        if let Some(source) = request.source_video_stream.as_ref() {
+            if !source.color_params.is_bt709() {
+                let is_qsv = effective_acceleration == HardwareAccelerationKind::Qsv;
+                let color_params = source.color_params.to_filter_color_params();
+                let filter = colorspace_filter(
+                    &target_state,
+                    &color_params,
+                    request.desired.pixel_format(),
+                    false,
+                    is_qsv,
+                );
+                if !filter.trim().is_empty() {
+                    filter_chain.pixel_format.push(filter);
+                    // Mirror `ColorspaceFilter.NextState`: a known (non-unknown)
+                    // source is pinned to the desired pixel format by the filter,
+                    // so the standalone `-pix_fmt` output option is no longer
+                    // required (and would be redundant). Unknown sources use
+                    // `setparams`, which does not change the format, so the
+                    // existing `-pix_fmt` decision is left untouched.
+                    if !color_params.is_unknown {
+                        target_state.pixel_format = request.desired.pixel_format();
+                        emit_pixel_format_output_option = should_emit_pixel_format_output_option(
+                            &request,
+                            effective_acceleration,
+                            &target_state,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     let runtime_capabilities = request.runtime_capabilities.clone();
     let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
         &request,
@@ -1242,56 +1301,6 @@ fn build_transcode_pipeline(
             "format={}",
             request.desired.pixel_format().ffmpeg_name()
         ));
-    }
-
-    // Port of `*PipelineBuilder.SetPixelFormat` colorspace branch: normalize a
-    // non-bt709 source (SD bt601/bt470bg DVD content, or mixed/unknown color
-    // tags) to bt709 with an explicit `colorspace`/`colormatrix`/`setparams`
-    // node before the encoder. Without it, swscale performs the matrix/range/
-    // format conversion implicitly with its default ordered dither, producing
-    // the color banding and GIF-like dot pattern reported on SD footage. The
-    // shared `colorspace_filter` reproduces the hardware `hwdownload` prefixes,
-    // so a single insertion mirrors ErsatzTV's per-builder behavior. ErsatzTV
-    // appends this in `pixelFormatFilterSteps`, i.e. at the end of the graph,
-    // which is exactly where `filter_chain.pixel_format` is assembled.
-    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
-        && request.desired.normalize_colors
-    {
-        if let Some(source) = request.source_video_stream.as_ref() {
-            let is_qsv = effective_acceleration == HardwareAccelerationKind::Qsv;
-            // ErsatzRS' QSV transcode path always scales/deinterlaces through
-            // `vpp_qsv`, matching ErsatzTV's `usesVppQsv`, which both widens the
-            // gate and forces input color overrides.
-            let uses_vpp_qsv = is_qsv;
-            if !source.color_params.is_bt709() || uses_vpp_qsv {
-                let color_params = source.color_params.to_filter_color_params();
-                let filter = colorspace_filter(
-                    &target_state,
-                    &color_params,
-                    request.desired.pixel_format(),
-                    uses_vpp_qsv,
-                    is_qsv,
-                );
-                if !filter.trim().is_empty() {
-                    filter_chain.pixel_format.push(filter);
-                    // Mirror `ColorspaceFilter.NextState`: a known (non-unknown)
-                    // source is downloaded to software and pinned to the desired
-                    // pixel format, so the standalone `-pix_fmt` output option is
-                    // no longer required (and would be redundant). Unknown sources
-                    // use `setparams`, which does not change the format, so the
-                    // existing `-pix_fmt` decision is left untouched.
-                    if !color_params.is_unknown {
-                        target_state.frame_data_location = crate::FrameDataLocation::Software;
-                        target_state.pixel_format = request.desired.pixel_format();
-                        emit_pixel_format_output_option = should_emit_pixel_format_output_option(
-                            &request,
-                            effective_acceleration,
-                            &target_state,
-                        );
-                    }
-                }
-            }
-        }
     }
 
     let is_intel = matches!(
