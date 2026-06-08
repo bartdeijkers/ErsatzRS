@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
 Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
@@ -67,6 +67,51 @@ the generated playlist contains the timestamped `#EXT-X-MAP`, the segment is
 timestamped `live_<generated>_*.m4s`, and `ffprobe` reads the concatenated init
 plus media segment.
 
-No HLS-specific `ParityDebt` remains. Broader Phase 7 hardening items continue
-under their own feature entries.
+Reopened audit (2026-06-08): the exposed HLS playlists, HLS-direct output
+formats, access-token middleware, session registry, playlist trimming, fMP4 init
+cache, subtitle/watermark/graphics command inputs, and stop-session surface are
+ported, but the segmenter runtime does not yet match ErsatzTV's transport
+orchestration. ErsatzTV's `StartFFmpegSessionHandler` reads
+`ffmpeg.segmenter.timeout_seconds`, disables the timeout for KeepRunning
+channels, refreshes graphics elements, starts a worker, and waits for
+`ffmpeg.segmenter.initial_segment_count` segments before returning the
+multi-variant playlist. ErsatzRS currently starts the worker from
+`/iptv/channel/{n}.m3u8?mode=segmenter` with a hard-coded 30-second idle
+timeout and returns the variant playlist immediately; the saved initial segment
+count and work-ahead settings are persisted and displayed, but not enforced by
+the worker start path.
+
+ParityDebt - HLS Segmenter worker state machine: ErsatzTV's
+`HlsSessionWorker` maintains `_transcodedUntil`, `PlaylistStart`,
+`_channelStart`, `_hasWrittenSegments`, discontinuity sequence state, slug
+duration, on-demand timeshift/checkpoint updates, and a
+Seek/Zero/Slug x WorkAhead/Realtime state machine. It decides whether to seek
+or start at zero, throttles or accelerates based on buffered duration and
+`ffmpeg.segmenter.work_ahead_limit`, inserts slug/error transcodes when needed,
+and requests playout-item processes with explicit `StartAtZero`, `HlsRealtime`,
+`ChannelStart`, and `PtsOffset` values. ErsatzRS uses a simpler loop that
+polls the active playout item at `Utc::now()`, seeks to `now - PlayoutStart`,
+spawns one FFmpeg HLS command, and repeats after process exit. This can diverge
+at item boundaries and short-content seams, which matches the reported channel
+1 symptom where HLS segmenter playback skips after about 24 seconds and the
+stream stops around 48 seconds. A parity fix needs to port the upstream
+segmenter state machine instead of only adjusting HLS flags.
+
+ParityDebt - HLS segment options and startup readiness: ErsatzTV sets
+`-hls_segment_options mpegts_flags=+initial_discontinuity` for the first MPEG-TS
+segmenter transcode when there is no PTS offset, adds `+latm` for AAC-LATM, and
+waits up to the configured initial segment count before treating session start
+as successful. ErsatzRS has command support for arbitrary `segment_options`,
+but `build_hls_command` always passes `None`; it also returns the variant
+playlist before the configured segment count exists. This should be closed with
+focused command snapshots plus a runtime segmenter smoke that proves the first
+served playlist and segment sequence across the reported 24s/48s window.
+
+HLS Direct audit: the direct branch remains mostly aligned for the current
+surface: `.m3u8?mode=hls-direct` returns a single-entry playlist, target
+container comes from `ffmpeg.hls_direct.output_format`, and the stream path uses
+copy audio/video with realtime input pacing like ErsatzTV. No HLS-direct-only
+ParityDebt was found in this audit, but it shares the direct current
+playout-item lookup/fallback limitations documented under MPEG-TS channel
+streaming.
 '''

@@ -1,8 +1,53 @@
 feature    = 'MPEG-TS channel streaming'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (ts branch), `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 summary    = '''
-Ported: `/iptv/channel/{number}.ts` resolves the active PlayoutItem through `MediaVersion`/`MediaFile`, applies provider path replacements, selects subtitles from persisted `Subtitle` rows using playout-item override values falling back to channel preferred subtitle language/mode, expands ISO language aliases (`nl`/`nld`/`dut`, etc.), honors `ffmpeg.use_embedded_subtitles`, requires extracted text embedded subtitles outside HLS-direct, and pipes a software FFmpeg MPEG-TS stream with `kill_on_drop` cleanup. Text subtitles burn through FFmpeg's `subtitles=` filter with the extracted font cache; image subtitles are scaled/padded and centered over video.
+Ported for the direct FFmpeg process path: `/iptv/channel/{number}.ts`
+resolves the active PlayoutItem through `MediaVersion`/`MediaFile`, applies
+provider path replacements, selects subtitles from persisted `Subtitle` rows
+using playout-item override values falling back to channel preferred subtitle
+language/mode, expands ISO language aliases (`nl`/`nld`/`dut`, etc.), honors
+`ffmpeg.use_embedded_subtitles`, requires extracted text embedded subtitles
+outside HLS-direct, and pipes an FFmpeg MPEG-TS stream with `kill_on_drop`
+cleanup. Text subtitles burn through FFmpeg's `subtitles=` filter with the
+extracted font cache; image subtitles are scaled/padded and centered over
+video.
+
+Reopened audit (2026-06-08): ErsatzTV exposes two different `.ts` behaviors.
+`StreamingMode.TransportStream` / `mode=ts-legacy` uses
+`GetConcatProcessByChannelNumber` and `FFmpegProcessService.ConcatChannel`.
+`StreamingMode.TransportStreamHybrid` / `mode=ts` uses
+`GetWrappedProcessByChannelNumber` and `FFmpegProcessService.WrapSegmenter`,
+which wraps the live HLS segmenter URL
+`/iptv/channel/{n}.m3u8?mode=segmenter` into an MPEG-TS output and can execute
+the configured MPEG-TS script. ErsatzRS currently strips only the `.ts` suffix
+in `dispatch_channel_request`, ignores the `mode` query, and routes both
+`ts` and `ts-legacy` to the same direct `serve_transport_stream` path. That
+means the admin-visible `MPEG-TS` mode is not the ErsatzTV hybrid wrapper, and
+`MPEG-TS (Legacy)` is not a distinct concat/legacy process.
+
+ParityDebt - MPEG-TS hybrid wrapper: port ErsatzTV's `WrapSegmenter` path so
+`StreamingMode.TransportStreamHybrid` and `mode=ts` start/touch the HLS
+segmenter, read from its live `.m3u8`, and emit a wrapped MPEG-TS stream using
+the upstream copy-all/readrate/mpegts pipe shape. This is the MPEG-TS side of
+the reported channel 1 HLS-segmenter skip/stop behavior: in ErsatzTV the modern
+MPEG-TS mode depends on the segmenter state machine, while ErsatzRS bypasses it
+entirely.
+
+ParityDebt - MPEG-TS legacy dispatch: parse the `.ts` query mode and preserve
+the ErsatzTV split where empty/mixed mode resolves the channel setting,
+`mode=ts` selects the hybrid wrapper, and `mode=ts-legacy` selects the legacy
+concat/direct branch. Add route tests proving `/iptv/channel/{n}.ts`,
+`/iptv/channel/{n}.ts?mode=ts`, and `/iptv/channel/{n}.ts?mode=ts-legacy`
+choose different process builders when the channel setting requires it.
+
+ParityDebt - default MPEG-TS script runtime: ErsatzTV's `MpegTsScriptService`
+loads scripts from the MPEG-TS script folder, renders `HlsUrl`, `ChannelName`,
+and `FFmpegPath` through Scriban, and lets the configured
+`ffmpeg.default_mpegts_script` replace the default wrapper command. ErsatzRS
+seeds and displays `ffmpeg.default_mpegts_script`, but no streaming runtime
+path loads or executes MPEG-TS scripts yet. Until this exists, the settings UI
+is cosmetic for the actual `MPEG-TS` mode.
 '''
