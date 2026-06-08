@@ -11,6 +11,11 @@ ignore = [
   # only, so the network-observable timing channel does not apply to our
   # threat model. Re-evaluate when RustCrypto ships a constant-time fix.
   "RUSTSEC-2023-0071",
+  # Transitive through Leptos 0.8 proc macros (leptos_macro,
+  # leptos_router_macro, reactive_stores_macro, rstml/syn_derive). No safe
+  # upstream upgrade is available yet; revisit when Leptos migrates away from
+  # proc-macro-error2.
+  "RUSTSEC-2026-0173",
 ]
 
 [licenses]
@@ -56,11 +61,6 @@ reason = "Current graph spans ring/rustls on 0.2, rand 0.9 on 0.3, and leptos/te
 name = "getrandom"
 version = "=0.3.4"
 reason = "Current graph spans ring/rustls on 0.2, rand 0.9 on 0.3, and leptos/tempfile/uuid on 0.4."
-
-[[bans.skip]]
-name = "hashbrown"
-version = "=0.15.5"
-reason = "sqlx 0.8 still uses hashbrown 0.15 while the Leptos/indexmap side of the graph uses 0.17."
 
 [[bans.skip]]
 name = "r-efi"
