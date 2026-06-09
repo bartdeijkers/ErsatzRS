@@ -35,11 +35,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-web-assets
-          cache-bin: "false"
+          cache-bin: "true"
       - name: Install web asset tools
         run: |
-          cargo install stylance-cli --version 0.8.2 --locked
-          cargo install cargo-leptos --version 0.3.6 --locked
+          set -euo pipefail
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
+          if ! command -v cargo-leptos >/dev/null 2>&1 || [ "$(cargo leptos --version)" != "cargo-leptos 0.3.6" ]; then
+            cargo install cargo-leptos --version 0.3.6 --locked
+          fi
       - name: Build Leptos site assets
         run: |
           set -euo pipefail
