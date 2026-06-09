@@ -11,9 +11,9 @@ use ersatzrs_domain::{
 };
 use ersatzrs_ffmpeg::{
     audio_pad_filter, audio_resample_filter, capability_report_for_tests, colorspace_filter,
-    cuda_software_fallback_upload_filter, deinterlace_filter, deinterlace_qsv_filter,
-    deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter, hardware_upload_filter,
-    lower_third_overlay, normalize_loudness_filter, song_progress_filter,
+    cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter,
+    deinterlace_qsv_filter, deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter,
+    hardware_upload_filter, lower_third_overlay, normalize_loudness_filter, song_progress_filter,
     subtitle_graphics_lavfi_input, subtitle_scale_npp_filter, tonemap_cuda_filter, tonemap_filter,
     tonemap_qsv_filter, tonemap_vaapi_filter, translate_watermark_opacity_expression,
     yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
@@ -686,6 +686,26 @@ fn nvenc_pipeline_uses_software_decode_when_cuvid_decoder_missing_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    assert!(!arguments.contains("-hwaccel_output_format cuda"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn nvenc_pipeline_uses_software_av1_decode_without_decoder_detail_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.nvidia_decoders.clear();
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::Av1))
+        .with_runtime_capabilities(report);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(arguments.contains("-c:v av1"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("-hwaccel_output_format cuda"));
     insta::assert_snapshot!(arguments);
@@ -1836,6 +1856,11 @@ fn cuda_software_fallback_upload_filter_snapshot() {
 }
 
 #[test]
+fn cuda_format_filter_snapshot() {
+    insta::assert_snapshot!(cuda_format_filter(PixelFormat::Nv12));
+}
+
+#[test]
 fn hardware_download_filter_snapshots() {
     let rendered = [
         ("software", software_state()),
@@ -1913,6 +1938,58 @@ fn sd_software_pipeline_args(source: SourceVideoStream) -> String {
     pipeline.command(&request.inputs).arguments.join(" ")
 }
 
+fn sd_hardware_pipeline_args(
+    source: SourceVideoStream,
+    acceleration: HardwareAccelerationKind,
+) -> String {
+    let request = PipelineRequest::new(
+        InputFile::video("/media/dvd-source.mkv"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source);
+
+    let pipeline = match acceleration {
+        HardwareAccelerationKind::Nvenc => NvencPipelineBuilder.build(request.clone()),
+        HardwareAccelerationKind::Vaapi => VaapiPipelineBuilder.build(request.clone()),
+        HardwareAccelerationKind::Qsv => QsvPipelineBuilder.build(request.clone()),
+        _ => unreachable!("test only covers GPU-resident hardware builders"),
+    };
+    pipeline.command(&request.inputs).arguments.join(" ")
+}
+
+fn set_pixel_format_segment(filter_complex: &str) -> &str {
+    let segment = filter_complex
+        .trim()
+        .split(';')
+        .find(|segment| segment.ends_with("[vpf]"))
+        .expect("filter graph contains SetPixelFormat segment");
+    segment
+        .strip_suffix("[vpf]")
+        .expect("SetPixelFormat segment has vpf output label")
+        .rsplit_once(']')
+        .map_or(segment, |(_, filters)| filters)
+}
+
+fn command_set_pixel_format_segment(args: &str) -> &str {
+    let filter_complex = args
+        .split(" -filter_complex ")
+        .nth(1)
+        .expect("command contains filter_complex")
+        .split(" -map ")
+        .next()
+        .expect("filter_complex is followed by maps");
+    set_pixel_format_segment(filter_complex)
+}
+
+fn assert_matches_ersatztv_set_pixel_format(args: &str, fixture: &str) {
+    let expected = set_pixel_format_segment(fixture);
+    let actual = command_set_pixel_format_segment(args);
+    assert_eq!(
+        actual, expected,
+        "expected SetPixelFormat segment from ErsatzTV fixture"
+    );
+}
+
 #[test]
 fn pipeline_normalizes_bt470bg_source_to_bt709_software_snapshot() {
     // Port of `SetPixelFormat`: a bt470bg (SD) source is normalized to bt709
@@ -1935,6 +2012,67 @@ fn pipeline_normalizes_bt470bg_source_to_bt709_software_snapshot() {
         "colorspace filter already pins the format, got: {args}"
     );
     insta::assert_snapshot!(args);
+}
+
+#[test]
+fn nvenc_pipeline_normalizes_bt470bg_source_to_bt709_hardware_snapshot() {
+    let source = sd_source_with_colors(
+        Some("tv"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+    );
+    let args = sd_hardware_pipeline_args(source, HardwareAccelerationKind::Nvenc);
+
+    assert_matches_ersatztv_set_pixel_format(
+        &args,
+        include_str!("fixtures/ersatztv/colorspace/nvenc-bt470bg-filter-complex.txt"),
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn vaapi_pipeline_normalizes_bt470bg_source_to_bt709_hardware_snapshot() {
+    let source = sd_source_with_colors(
+        Some("tv"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+        Some("bt470bg"),
+    );
+    let args = sd_hardware_pipeline_args(source, HardwareAccelerationKind::Vaapi);
+
+    assert_matches_ersatztv_set_pixel_format(
+        &args,
+        include_str!("fixtures/ersatztv/colorspace/vaapi-bt470bg-filter-complex.txt"),
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn qsv_pipeline_normalizes_mixed_source_to_bt709_snapshot() {
+    let source = sd_source_with_colors(
+        Some("tv"),
+        Some("smpte170m"),
+        Some("bt709"),
+        Some("smpte170m"),
+    );
+    let args = sd_hardware_pipeline_args(source, HardwareAccelerationKind::Qsv);
+
+    assert_matches_ersatztv_set_pixel_format(
+        &args,
+        include_str!("fixtures/ersatztv/colorspace/qsv-mixed-filter-complex.txt"),
+    );
+    insta::assert_snapshot!(args);
+}
+
+#[test]
+fn nvenc_pipeline_skips_colorspace_for_bt709_source_hardware() {
+    let source = sd_source_with_colors(Some("tv"), Some("bt709"), Some("bt709"), Some("bt709"));
+    let args = sd_hardware_pipeline_args(source, HardwareAccelerationKind::Nvenc);
+
+    assert!(!args.contains("colorspace="), "got: {args}");
+    assert!(!args.contains("colormatrix="), "got: {args}");
+    assert!(!args.contains("setparams="), "got: {args}");
 }
 
 #[test]
@@ -2001,8 +2139,13 @@ fn pipeline_emits_tonemap_for_hdr_source_snapshot() {
 
     let pipeline = NvencPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
+    let args = command.arguments.join(" ");
 
-    insta::assert_snapshot!(command.arguments.join(" "));
+    assert!(
+        !args.contains("[v]colorspace=") && !args.contains("[v]colormatrix="),
+        "tonemap already resets color params to BT.709 before SetPixelFormat, got: {args}"
+    );
+    insta::assert_snapshot!(args);
 }
 
 #[test]

@@ -1,0 +1,1 @@
+[1:1]aresample=async=1,apad[a];[0:0]vpp_qsv=w=1920:h=1080,setsar=1,hwdownload,format=nv12,setpts=PTS-STARTPTS,fps=24[v];[v]colorspace=irange=tv:ispace=smpte170m:itrc=bt709:iprimaries=smpte170m:all=bt709:format=yuv420p:range=tv[vpf]

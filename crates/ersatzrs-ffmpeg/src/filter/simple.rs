@@ -112,6 +112,7 @@ pub struct FrameState {
     pub deinterlaced: bool,
     pub frame_rate: Option<FrameRate>,
     pub is_hdr: bool,
+    pub colors_are_bt709: bool,
     pub should_deinterlace: bool,
 }
 
@@ -128,6 +129,7 @@ impl FrameState {
             deinterlaced: false,
             frame_rate: None,
             is_hdr: false,
+            colors_are_bt709: false,
             should_deinterlace: false,
         }
     }

@@ -73,6 +73,13 @@ pub fn mpegts_scripts_folder() -> PathBuf {
     scripts_folder().join("mpegts")
 }
 
+/// `<AppDataFolder>/scripts/mpegts/default` — bundled default MPEG-TS wrapper.
+/// Mirrors `FileSystemLayout.DefaultMpegTsScriptFolder`.
+#[must_use]
+pub fn default_mpegts_script_folder() -> PathBuf {
+    mpegts_scripts_folder().join("default")
+}
+
 /// `.troubleshooting` — the reserved HLS channel number used by ErsatzTV for
 /// one-off troubleshooting playback.
 pub const TRANSCODE_TROUBLESHOOTING_CHANNEL: &str = ".troubleshooting";

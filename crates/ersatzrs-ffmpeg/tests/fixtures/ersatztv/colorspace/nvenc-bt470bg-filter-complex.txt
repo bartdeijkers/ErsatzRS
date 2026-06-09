@@ -1,0 +1,1 @@
+[0:1]aresample=async=1,apad[a];[0:0]hwupload,scale_cuda=1920:1080,setsar=1[v];[v]hwdownload,format=nv12,colormatrix=src=bt470bg:dst=bt709,format=yuv420p[vpf]

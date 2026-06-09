@@ -43,14 +43,16 @@ semantics. The command snapshots prove that modern wrapper and legacy concat
 paths are observably different.
 
 The MPEG-TS script runtime now mirrors ErsatzTV's default-script hook for the
-modern wrapper path: the configured `ffmpeg.default_mpegts_script` is resolved
-against `<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`, the ErsatzTV YAML
-shape (`name`, `linux_script`, `windows_script`) is parsed with `serde_yaml`,
-`HlsUrl`, `ChannelName`, and `FFmpegPath` are rendered into the platform script,
-and the rendered script replaces the default wrapper command. Unix executes the
-rendered script through `bash`; Windows executes the rendered `.bat` path
-directly. Missing, invalid, or platform-incomplete scripts warn and fall back to
-the default wrapper command.
+modern wrapper path: packaged `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}`
+resources are seeded to `<AppDataFolder>/scripts/mpegts/default` without
+overwriting user edits, the configured `ffmpeg.default_mpegts_script` is
+resolved against `<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`, the ErsatzTV
+YAML shape (`name`, `linux_script`, `windows_script`) is parsed with
+`serde_yaml`, `HlsUrl`, `ChannelName`, and `FFmpegPath` are rendered into the
+platform script, and the rendered script replaces the default wrapper command.
+Unix executes the rendered script through `bash`; Windows executes the rendered
+`.bat` path directly. Missing, invalid, or platform-incomplete custom scripts
+warn and fall back to the default wrapper command.
 
 Runtime proof (2026-06-08): channel 1 modern MPEG-TS wrapper
 `/iptv/channel/1.ts?mode=ts` was captured for a bounded 65-second window while

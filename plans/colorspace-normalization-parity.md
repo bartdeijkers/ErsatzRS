@@ -1,12 +1,12 @@
-# Colorspace normalization parity — software (done) + GPU-resident hardware (planned)
+# Colorspace normalization parity — software + GPU-resident hardware (done)
 
 This plan has two phases:
 
 - **Phase 1 (shipped):** fix the SD "256-color GIF" banding/dither by porting
   ErsatzTV's `SetPixelFormat` colorspace branch for **software-resident** frames.
-- **Phase 2 (planned):** close the remaining `ParityDebt` — apply the same
+- **Phase 2 (shipped):** close the remaining `ParityDebt` — apply the same
   normalization on **GPU-resident hardware-encode** paths (NVENC/VAAPI/QSV),
-  mirroring ErsatzTV's per-builder download → format → re-upload dance. Tracked
+  mirroring ErsatzTV's per-builder `SetPixelFormat` sequence. Tracked
   in `docs/progress/parity/hardware-colorspace-normalization.toml`.
 
 ## Context
@@ -83,18 +83,19 @@ Added SD bt470bg/mixed/unknown software tests + a bt709 no-op test; regenerated
 
 ---
 
-# Phase 2 — GPU-resident hardware colorspace normalization (PLANNED)
+# Phase 2 — GPU-resident hardware colorspace normalization (SHIPPED)
 
 **Goal:** normalize non-bt709 sources on NVENC/VAAPI/QSV hardware-**encode**
 paths where the frame stays on the device through to the encoder — the case
 Phase 1's `Software` gate intentionally skips. Closes
 `hardware-colorspace-normalization.toml`.
 
-**Why it's deferred, not skipped:** emitting a bare `hwdownload` colorspace on a
-GPU-resident path with no re-upload breaks the encode (the `auto_scale`-style
-failure the existing NVENC `should_emit_pixel_format_output_option` guard warns
-about). ErsatzTV avoids this with a vendor-specific sequence; we must port that
-sequence, not just relax the gate.
+**Fixture correction:** the original plan assumed every GPU-resident path must
+explicitly re-upload after colorspace. Committed ErsatzTV reference fixtures from
+the C# builders show the actual upstream behavior for the 8-bit H.264 cases:
+NVENC and QSV emit the download → normalize SetPixelFormat segment without an
+extra upload, while VAAPI explicitly adds `format=nv12|p010le|vaapi,hwupload`.
+ErsatzRS now asserts its SetPixelFormat segment against those committed fixtures.
 
 **HDR / tonemap interaction — confirmed Phase 1 bug, fix is definite.** The gate
 is `!source.color_params.is_bt709()` (`mod.rs:1179`). An HDR source carries bt2020
@@ -119,20 +120,18 @@ Read these before writing code — they define the exact ordering/conditions:
 - **NVENC** — `NvidiaPipelineBuilder.SetPixelFormat`
   (`ErsatzTV.FFmpeg/Pipeline/NvidiaPipelineBuilder.cs:415-500`): adds the
   `ColorspaceFilter` (its `hwdownload` prefix brings frames to software for the
-  matrix/range conversion), then for the still-hardware / hardware-encode case
-  restores GPU residency with `CudaFormatFilter` = `scale_cuda=format={fmt}`,
-  falling back to `PixelFormatOutputOption` only in the documented branches
-  (`softwareDecoder || (noPipelineFilters && hasColorspace) ||
-  (hardwareDecoder && hardwareEncoder && noPipelineFilters)`).
+  matrix/range conversion). The committed bt470bg reference fixture emits
+  `hwdownload,format=nv12,colormatrix=src=bt470bg:dst=bt709,format=yuv420p`
+  as the final SetPixelFormat segment; do not append an ErsatzRS-only
+  `hwupload_cuda` here.
 - **VAAPI** — `VaapiPipelineBuilder.SetPixelFormat`
   (`VaapiPipelineBuilder.cs:335-380`): `ColorspaceFilter`, then a
   `HardwareDownloadFilter` (8↔10-bit aware), re-format to **NV12** (Intel VAAPI
   requires NV12 except for NUT output), and re-upload before the VAAPI encoder.
 - **QSV** — `QsvPipelineBuilder.SetPixelFormat`
-  (`QsvPipelineBuilder.cs:363-410`): same shape with `formatForDownload = NV12`,
-  the `usesVppQsv`-widened gate (`!IsBt709 || usesVppQsv`) and
-  `forceInputOverrides: usesVppQsv`. (Phase 1 already passes `is_qsv`/the
-  vpp_qsv-widened gate to `colorspace_filter`; reuse that.)
+  (`QsvPipelineBuilder.cs:363-410`): after the QSV reset-PTS download, the
+  committed mixed-color reference fixture emits the `colorspace=...format=yuv420p`
+  SetPixelFormat segment without an extra `format=nv12,hwupload=...`.
 
 ### Reusable ErsatzRS primitives (do not hand-roll)
 
@@ -144,12 +143,10 @@ Read these before writing code — they define the exact ordering/conditions:
   `hwupload=extra_hw_frames=N` (QSV) / VAAPI `format=…,hwupload`
   (`filter/hardware.rs:6`); `hardware_upload_vaapi_filter` for the VAAPI variant.
 - `upload_software_frames_for_hardware_encoder(accel, &mut FrameState, &mut FilterChain)`
-  — the **existing** re-upload step already used after pad/crop. **It is
-  VAAPI-only today** (early-returns otherwise): reuse it verbatim for the VAAPI
-  re-upload, and **generalize it to NVENC/QSV** (push `hwupload_cuda` /
-  `hwupload=extra_hw_frames=N` and set the surface pixel format) rather than
-  hand-rolling a parallel re-upload. Prefer extending this one helper so pad/crop
-  and colorspace share a single GPU re-upload path.
+  — the **existing** re-upload step already used after pad/crop. It is now
+  generalized for NVENC/QSV pad/crop re-upload paths, while colorspace only uses
+  it for VAAPI because the committed ErsatzTV NVENC/QSV SetPixelFormat fixtures
+  do not include an explicit post-colorspace upload.
 - **New, tiny:** `cuda_format_filter(pixel_format) -> "scale_cuda=format={}"`
   mirroring ErsatzTV `CudaFormatFilter` (the `scale_cuda=format=p010` shape
   already exists in `filter/tonemap.rs:58`); add it to `filter/hardware.rs` (or
@@ -164,58 +161,55 @@ Read these before writing code — they define the exact ordering/conditions:
      `filter_chain.pixel_format`, pin pixel format for non-unknown.
    - **Hardware (new):** push the `colorspace_filter` result (it already carries
      the `hwdownload` prefix → frames become software); set
-     `target_state.frame_data_location = Software`; then re-upload to the device
-     before the hardware encoder via the **generalized**
-     `upload_software_frames_for_hardware_encoder` (extend it from VAAPI-only to
-     all three accels — see primitives) so pad/crop and colorspace share one path:
-     - NVENC: `cuda_format_filter(desired_surface_fmt)` (and/or `hwupload_cuda`)
-       per the NvidiaPipelineBuilder branch conditions.
-     - VAAPI: re-format to NV12 + the existing VAAPI branch of the helper.
-     - QSV: re-format to NV12 + `hardware_upload_filter(Qsv, qsv_extra_hw_frames)`.
+     `target_state.frame_data_location = Software`; match the committed
+     ErsatzTV SetPixelFormat fixture per vendor:
+     - NVENC: no extra post-colorspace upload in the bt470bg fixture.
+     - VAAPI: re-format to NV12 + the existing VAAPI upload helper.
+     - QSV: no extra post-colorspace upload in the mixed-color fixture.
    - **Surface-format caveat:** `colorspace_filter`'s `build_hwdownload_prefix`
-     maps `Cuda → p010le` unconditionally, which is wrong for an 8-bit nv12
-     surface. Verify the `hwdownload` format matches the actual source surface
-     bit depth per accel (mirror ErsatzTV's `formatForDownload` nv12/p010le
-     selection); fix `build_hwdownload_prefix` if needed.
+     maps CUDA 10-bit surfaces to `p010le`, while the actual 8-bit CUDA state is
+     tracked as `Nv12` and downloads as `format=nv12`, matching the committed
+     ErsatzTV fixture.
    - Honor ErsatzTV's "use `PixelFormatOutputOption` instead" fallback branches
      so `emit_pixel_format_output_option` stays correct (recompute after).
-2. **Ordering:** the colorspace + re-upload must land in the video filter chain
+2. **Ordering:** the colorspace segment must land in the video filter chain
    at the same point ErsatzTV places `SetPixelFormat` (after scale/overlay,
    before encode). Confirm against `filter/complex.rs` assembly — the
-   `pixel_format` vector lands at graph end as `[vpf]`; verify the re-upload
-   ends GPU-resident so the hardware encoder accepts it (no stray `auto_scale`).
+   `pixel_format` vector lands at graph end as `[vpf]`; fixture-backed tests
+   compare the final SetPixelFormat segment.
 3. **Keep Phase 1's NextState/`-pix_fmt` suppression** for the non-unknown case.
 
 ### Tests — `tests/pipeline_snapshots.rs`
 
 - Add per-vendor full-pipeline snapshots for a **bt470bg** (and one **mixed**)
   hardware-encode source on **NVENC**, **VAAPI**, **QSV**, asserting:
-  (a) the `colormatrix`/`colorspace` node is present, and (b) the frame is
-  re-uploaded to the device (`scale_cuda=format=…` / `hwupload…`) before the
-  hardware encoder, with the correct surface format.
+  (a) the `colormatrix`/`colorspace` node is present, and (b) the final
+  SetPixelFormat segment matches the committed ErsatzTV fixture for that vendor.
 - Add a bt709 hardware case asserting no colorspace node (no-op parity).
 - Add the `cuda_format_filter` unit snapshot.
 - Regenerate the existing GPU-resident hardware snapshots that legitimately
   change (`nvenc_pipeline_snapshot`, `vaapi_pipeline_snapshot`,
   `qsv_pipeline_snapshot`, etc.) and review each diff — they must show the
-  download→normalize→re-upload sequence, **not** a dangling `hwdownload`.
+  committed ErsatzTV SetPixelFormat sequence, including the explicit VAAPI upload
+  and the lack of extra NVENC/QSV post-colorspace upload.
 
 ### Verification (no local GPU — argv parity is the oracle)
 
 1. `cargo test -p ersatzrs-ffmpeg --all-targets` + `cargo insta review`.
 2. **ErsatzTV argv parity (the oracle — make it concrete):** the GPU paths are
    runtime-untestable here, so a hand-wavy "diff against ErsatzTV" is not enough.
-   Capture ErsatzTV's generated `-filter_complex` for a bt470bg source on each
-   vendor as **committed reference fixtures** (run the C# once, or pull from
+   Capture ErsatzTV's generated `-filter_complex` for representative non-BT.709
+   hardware cases as **committed reference fixtures** (run the C# once, or pull from
    `ErsatzTV.Scanner.Tests`/`ErsatzTV.FFmpeg.Tests` transcoding cases), and
-   assert the ErsatzRS `-filter_complex` normalize + re-upload sequence matches
+   assert the ErsatzRS `-filter_complex` normalize sequence matches
    them. This makes the primary correctness check reproducible in CI rather than
    a one-off manual diff.
 3. Lint (mirror CI): `cargo clippy -p ersatzrs-ffmpeg --all-targets -- -D warnings`
    then the two-pass workspace clippy (with/without `--features mysql`) +
    `cargo fmt --all -- --check`.
 4. Regression guard: software/post-download paths and bt709/`Copy` unchanged;
-   no double `-pix_fmt`; hardware snapshots end GPU-resident.
+   no double `-pix_fmt`; hardware snapshots match the committed vendor fixture
+   segment.
 5. If GPU hardware later becomes available: transcode a bt470bg clip on each
    accel and confirm the encode succeeds and banding is gone.
 
@@ -239,25 +233,27 @@ Read these before writing code — they define the exact ordering/conditions:
 - [x] Snapshot tests (bt470bg/mixed/unknown/bt709) + 44 existing regenerated
 - [x] Verification: ffmpeg 120 tests, infra 99+ tests, clippy + fmt clean
 - [x] Parity docs updated; GPU-resident gap carved into its own tracked feature
-- [ ] **Known bug (found in review):** HDR sources get a redundant colorspace
+- [x] **Known bug (found in review):** HDR sources get a redundant colorspace
       after tonemap — port ErsatzTV's `ResetColorParams(ColorParams.Default)`
       (`SoftwarePipelineBuilder.cs:365`) + regression test. Fixable now,
       independent of Phase 2.
 
-**Phase 2 — planned (GPU-resident hardware encode):**
+**Phase 2 — complete (GPU-resident hardware encode):**
 
-- [ ] **Blocker:** land the HDR/tonemap fix above (port
+- [x] **Blocker:** land the HDR/tonemap fix above (port
       `ResetColorParams(ColorParams.Default)` after tonemap) before relaxing the
       hardware gate, so colorspace doesn't stack on hardware tonemap
-- [ ] Add `cuda_format_filter` primitive (+ unit snapshot)
-- [ ] Generalize `upload_software_frames_for_hardware_encoder` from VAAPI-only to
-      NVENC/QSV; fix `build_hwdownload_prefix` nv12/p010le surface-format mapping
-- [ ] Relax the `Software`-only gate; add per-vendor hardware branch
-      (NVENC `scale_cuda=format` / VAAPI+QSV download→NV12→re-upload)
-- [ ] Honor ErsatzTV's `PixelFormatOutputOption` fallback branches
-- [ ] Per-vendor hardware snapshots + bt709 no-op + regenerate existing HW snaps
-- [ ] Capture ErsatzTV reference argv fixtures; assert parity per vendor; clippy + fmt
-- [ ] Flip `hardware-colorspace-normalization.toml` to `Ported`; session log
+- [x] Add `cuda_format_filter` primitive (+ unit snapshot)
+- [x] Generalize `upload_software_frames_for_hardware_encoder` from VAAPI-only to
+      NVENC/QSV; verify the existing `build_hwdownload_prefix` nv12/p010le
+      mapping against the actual surface-state values (`Nv12` for 8-bit CUDA,
+      `Cuda`/`p010le` for 10-bit CUDA)
+- [x] Relax the `Software`-only gate; add per-vendor hardware branch
+      (NVENC/QSV fixture-matched colorspace; VAAPI colorspace + upload)
+- [x] Honor ErsatzTV's `PixelFormatOutputOption` fallback branches
+- [x] Per-vendor hardware snapshots + bt709 no-op + regenerate existing HW snaps
+- [x] Capture ErsatzTV reference argv fixtures; assert parity per vendor; clippy + fmt
+- [x] Flip `hardware-colorspace-normalization.toml` to `Ported`; session log
 
 ## Key files
 
@@ -267,6 +263,6 @@ Read these before writing code — they define the exact ordering/conditions:
 - `crates/ersatzrs-infra/src/playback.rs` — `derive_color_params`, stream construction
 - `crates/ersatzrs-ffmpeg/src/filter/complex.rs` — end-of-chain `pixel_format` assembly
 - `crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs` — snapshots
-- `docs/progress/parity/hardware-colorspace-normalization.toml` — Phase 2 tracked gap
+- `docs/progress/parity/hardware-colorspace-normalization.toml` — Phase 2 tracker
 - ErsatzTV refs: `ColorParams.cs`, `ColorspaceFilter.cs`, `Cuda/CudaFormatFilter.cs`,
   `{Software,Nvidia,Vaapi,Qsv}PipelineBuilder.cs` `SetPixelFormat`

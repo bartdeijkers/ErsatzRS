@@ -617,10 +617,12 @@ async fn configured_mpegts_script_command(
     }
 
     let Some(script) = find_mpegts_script(configured).await else {
-        tracing::warn!(
-            script_id = configured,
-            "unable to locate MPEG-TS script folder"
-        );
+        if should_warn_missing_mpegts_script(configured) {
+            tracing::warn!(
+                script_id = configured,
+                "unable to locate MPEG-TS script folder"
+            );
+        }
         return None;
     };
 
@@ -644,6 +646,10 @@ async fn configured_mpegts_script_command(
 
 async fn find_mpegts_script(script_id: &str) -> Option<MpegTsScript> {
     find_mpegts_script_in(&file_system_layout::mpegts_scripts_folder(), script_id).await
+}
+
+fn should_warn_missing_mpegts_script(script_id: &str) -> bool {
+    script_id != DEFAULT_MPEG_TS_SCRIPT_ID
 }
 
 async fn find_mpegts_script_in(root: &std::path::Path, script_id: &str) -> Option<MpegTsScript> {
@@ -1116,7 +1122,11 @@ fn spawn_stream_body(
                     Ok(status) if status.success() => {}
                     Ok(status) => {
                         let stderr = await_stderr_tail(stderr_task).await;
-                        tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+                        if ffmpeg_stderr_is_client_disconnect(&stderr) {
+                            tracing::debug!(%status, stderr = %stderr, "ffmpeg channel stream ended after client disconnect");
+                        } else {
+                            tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+                        }
                     }
                     Err(error) => {
                         let stderr = await_stderr_tail(stderr_task).await;
@@ -1218,6 +1228,10 @@ async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>)
             .unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}")),
         None => String::new(),
     }
+}
+
+fn ffmpeg_stderr_is_client_disconnect(stderr: &str) -> bool {
+    stderr.contains("Broken pipe")
 }
 
 #[cfg(test)]
@@ -1532,6 +1546,22 @@ mod tests {
                 .and_then(|extension| extension.to_str()),
             Some("bat")
         );
+    }
+
+    #[test]
+    fn missing_builtin_mpegts_script_falls_back_quietly() {
+        assert!(!should_warn_missing_mpegts_script("default"));
+        assert!(should_warn_missing_mpegts_script("custom"));
+    }
+
+    #[test]
+    fn ffmpeg_broken_pipe_stderr_is_client_disconnect() {
+        assert!(ffmpeg_stderr_is_client_disconnect(
+            "[out#0/mpegts @ 0x57fc78188a80] Error writing trailer: Broken pipe"
+        ));
+        assert!(!ffmpeg_stderr_is_client_disconnect(
+            "Error opening input files: Server returned 5XX Server Error reply"
+        ));
     }
 
     #[tokio::test]

@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: "cuda_format_filter(PixelFormat::Nv12)"
+---
+scale_cuda=format=nv12

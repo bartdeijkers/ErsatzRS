@@ -417,13 +417,12 @@ fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) ->
         return FfmpegCapability::Software;
     };
 
+    if nvidia_decoder_detail_required(source.codec) && report.nvidia_decoders.is_empty() {
+        return FfmpegCapability::Software;
+    }
+
     if !report.nvidia_decoders.is_empty()
-        && !report.nvidia_decoders.iter().any(|details| {
-            details.supports(
-                nvidia_decoder_codec(source.codec),
-                bit_depth(source.pixel_format),
-            )
-        })
+        && !nvidia_decoder_detail_matches(&report.nvidia_decoders, source)
     {
         return FfmpegCapability::Software;
     }
@@ -433,6 +432,22 @@ fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) ->
     } else {
         FfmpegCapability::Software
     }
+}
+
+fn nvidia_decoder_detail_required(codec: SourceVideoCodec) -> bool {
+    codec == SourceVideoCodec::Av1
+}
+
+fn nvidia_decoder_detail_matches(
+    details: &[crate::NvidiaDecoderCapability],
+    source: &SourceVideoStream,
+) -> bool {
+    details.iter().any(|details| {
+        details.supports(
+            nvidia_decoder_codec(source.codec),
+            bit_depth(source.pixel_format),
+        )
+    })
 }
 
 fn nvidia_encode(report: &FfmpegCapabilityReport, desired: &DesiredVideoState) -> FfmpegCapability {
@@ -1073,5 +1088,21 @@ mod tests {
             .for_acceleration(HardwareAccelerationKind::Nvenc);
 
         assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Hardware);
+    }
+
+    #[test]
+    fn nvidia_av1_decode_requires_decoder_detail() {
+        let mut report = capability_report_for_tests();
+        report.nvidia_decoders.clear();
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        let source = SourceVideoStream::new(SourceVideoCodec::Av1);
+        let desired = DesiredVideoState::h264_1080p();
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Software);
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Hardware
+        );
     }
 }

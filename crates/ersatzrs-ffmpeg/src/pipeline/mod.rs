@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
-    cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
+    cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
     no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
@@ -1156,60 +1156,13 @@ fn build_transcode_pipeline(
     let mut emit_pixel_format_output_option =
         should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
 
-    // Port of `*PipelineBuilder.SetPixelFormat` colorspace branch: normalize a
-    // non-bt709 source (SD bt601/bt470bg DVD content, or mixed/unknown color
-    // tags) to bt709 with an explicit `colorspace`/`colormatrix`/`setparams`
-    // node before the encoder. Without it, swscale performs the matrix/range/
-    // format conversion implicitly with its default ordered dither, producing
-    // the color banding and GIF-like dot pattern reported on SD footage.
-    // ErsatzTV appends this in `pixelFormatFilterSteps`, i.e. the end of the
-    // graph, which is where `filter_chain.pixel_format` is assembled
-    // (`ComplexFilter::build`).
-    //
-    // Scope: software-resident frames only. On the GPU-resident encode paths
-    // (NVENC/VAAPI/QSV) the frames reaching the encoder are a hardware surface;
-    // ErsatzTV normalizes those with an `hwdownload` → format → re-upload dance
-    // (`CudaFormatFilter`, etc.) that ErsatzRS has not ported yet. Emitting a
-    // bare `hwdownload` colorspace there (with no re-upload) would break the
-    // encode the same way an unexpected `auto_scale` does, so those paths are
-    // left untouched and tracked as ParityDebt. This still covers the pure
-    // software pipeline (the reported bug) and any hardware path that has
-    // already downloaded frames to software memory.
-    if request.desired.video_format != FFmpegProfileVideoFormat::Copy
-        && request.desired.normalize_colors
-        && target_state.frame_data_location == crate::FrameDataLocation::Software
-    {
-        if let Some(source) = request.source_video_stream.as_ref() {
-            if !source.color_params.is_bt709() {
-                let is_qsv = effective_acceleration == HardwareAccelerationKind::Qsv;
-                let color_params = source.color_params.to_filter_color_params();
-                let filter = colorspace_filter(
-                    &target_state,
-                    &color_params,
-                    request.desired.pixel_format(),
-                    false,
-                    is_qsv,
-                );
-                if !filter.trim().is_empty() {
-                    filter_chain.pixel_format.push(filter);
-                    // Mirror `ColorspaceFilter.NextState`: a known (non-unknown)
-                    // source is pinned to the desired pixel format by the filter,
-                    // so the standalone `-pix_fmt` output option is no longer
-                    // required (and would be redundant). Unknown sources use
-                    // `setparams`, which does not change the format, so the
-                    // existing `-pix_fmt` decision is left untouched.
-                    if !color_params.is_unknown {
-                        target_state.pixel_format = request.desired.pixel_format();
-                        emit_pixel_format_output_option = should_emit_pixel_format_output_option(
-                            &request,
-                            effective_acceleration,
-                            &target_state,
-                        );
-                    }
-                }
-            }
-        }
-    }
+    apply_colorspace_normalization(
+        &request,
+        effective_acceleration,
+        &mut target_state,
+        &mut filter_chain,
+        &mut emit_pixel_format_output_option,
+    );
 
     let runtime_capabilities = request.runtime_capabilities.clone();
     let use_nvidia_green_line_workaround = nvidia_green_line_workaround_applies(
@@ -1367,6 +1320,7 @@ fn apply_source_video_filters(
         target_state.should_deinterlace =
             source.scan_kind == VideoScanKind::Interlaced && is_transcode;
         target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
+        target_state.colors_are_bt709 = source.color_params.is_bt709();
 
         // Track the true source pixel format while the frame lives in software
         // memory so `SetPixelFormat` can decide whether an output `-pix_fmt`
@@ -1409,6 +1363,10 @@ fn apply_source_video_filters(
             tonemap_algorithm(request.desired.tonemap_algorithm),
         ));
         target_state.is_hdr = false;
+        // ErsatzTV resets the stream color params to `ColorParams.Default`
+        // after tonemap, so the later SetPixelFormat colorspace gate sees
+        // BT.709 and does not stack a second conversion on the tonemapped path.
+        target_state.colors_are_bt709 = true;
         target_state.pixel_format = request.desired.pixel_format();
         target_state.frame_data_location = tonemap_output_location(acceleration);
     }
@@ -1474,6 +1432,57 @@ fn apply_source_video_filters(
     }
 }
 
+fn apply_colorspace_normalization(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+    emit_pixel_format_output_option: &mut bool,
+) {
+    if request.desired.video_format == FFmpegProfileVideoFormat::Copy
+        || !request.desired.normalize_colors
+        || target_state.colors_are_bt709
+    {
+        return;
+    }
+
+    let Some(source) = request.source_video_stream.as_ref() else {
+        return;
+    };
+    let color_params = source.color_params.to_filter_color_params();
+    if target_state.frame_data_location == crate::FrameDataLocation::Hardware
+        && color_params.is_unknown
+    {
+        return;
+    }
+    let filter = colorspace_filter(
+        target_state,
+        &color_params,
+        request.desired.pixel_format(),
+        false,
+        acceleration == HardwareAccelerationKind::Qsv,
+    );
+    if filter.trim().is_empty() {
+        return;
+    }
+
+    filter_chain.pixel_format.push(filter);
+    if !color_params.is_unknown {
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.pixel_format = request.desired.pixel_format();
+        target_state.colors_are_bt709 = true;
+        *emit_pixel_format_output_option =
+            should_emit_pixel_format_output_option(request, acceleration, target_state);
+        if acceleration == HardwareAccelerationKind::Vaapi {
+            upload_software_frames_for_hardware_encoder_filters(
+                acceleration,
+                target_state,
+                &mut filter_chain.pixel_format,
+            );
+        }
+    }
+}
+
 fn apply_still_image_loop_filter(request: &PipelineRequest, filter_chain: &mut FilterChain) {
     if request.desired.video_format == FFmpegProfileVideoFormat::Copy {
         return;
@@ -1496,18 +1505,70 @@ fn upload_software_frames_for_hardware_encoder(
     target_state: &mut FrameState,
     filter_chain: &mut FilterChain,
 ) {
-    if acceleration != HardwareAccelerationKind::Vaapi
-        || target_state.frame_data_location != crate::FrameDataLocation::Software
-    {
+    upload_software_frames_for_hardware_encoder_filters(
+        acceleration,
+        target_state,
+        &mut filter_chain.video,
+    );
+}
+
+fn upload_software_frames_for_hardware_encoder_filters(
+    acceleration: HardwareAccelerationKind,
+    target_state: &mut FrameState,
+    filters: &mut Vec<String>,
+) {
+    if target_state.frame_data_location != crate::FrameDataLocation::Software {
         return;
     }
 
-    filter_chain.video.push(hardware_upload_filter(
-        acceleration,
-        QSV_EXTRA_HARDWARE_FRAMES,
-    ));
-    target_state.frame_data_location = crate::FrameDataLocation::Hardware;
-    target_state.pixel_format = PixelFormat::Vaapi;
+    match acceleration {
+        HardwareAccelerationKind::Nvenc => {
+            filters.push(hardware_upload_filter(
+                acceleration,
+                QSV_EXTRA_HARDWARE_FRAMES,
+            ));
+            let surface_format = cuda_surface_pixel_format_for_software_upload(target_state);
+            filters.push(cuda_format_filter(surface_format));
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            target_state.pixel_format = surface_format;
+        }
+        HardwareAccelerationKind::Qsv => {
+            filters.push(format!("format={}", PixelFormat::Nv12.ffmpeg_name()));
+            filters.push(hardware_upload_filter(
+                acceleration,
+                QSV_EXTRA_HARDWARE_FRAMES,
+            ));
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            target_state.pixel_format = request_qsv_surface_pixel_format(target_state);
+        }
+        HardwareAccelerationKind::Vaapi => {
+            filters.push(hardware_upload_filter(
+                acceleration,
+                QSV_EXTRA_HARDWARE_FRAMES,
+            ));
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+            target_state.pixel_format = PixelFormat::Vaapi;
+        }
+        HardwareAccelerationKind::None
+        | HardwareAccelerationKind::Amf
+        | HardwareAccelerationKind::VideoToolbox
+        | HardwareAccelerationKind::V4l2m2m
+        | HardwareAccelerationKind::Rkmpp => {}
+    }
+}
+
+const fn cuda_surface_pixel_format_for_software_upload(target_state: &FrameState) -> PixelFormat {
+    match target_state.pixel_format {
+        PixelFormat::Yuv420P10Le => PixelFormat::Cuda,
+        _ => PixelFormat::Nv12,
+    }
+}
+
+const fn request_qsv_surface_pixel_format(target_state: &FrameState) -> PixelFormat {
+    match target_state.pixel_format {
+        PixelFormat::Yuv420P10Le => PixelFormat::Yuv420P10Le,
+        _ => PixelFormat::Nv12,
+    }
 }
 
 fn uses_cuda_overlay(acceleration: HardwareAccelerationKind, desired: &DesiredVideoState) -> bool {

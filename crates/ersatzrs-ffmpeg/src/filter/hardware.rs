@@ -31,6 +31,11 @@ pub fn hardware_upload_vaapi_filter(set_format: bool) -> String {
 }
 
 #[must_use]
+pub fn cuda_format_filter(pixel_format: PixelFormat) -> String {
+    format!("scale_cuda=format={}", pixel_format.ffmpeg_name())
+}
+
+#[must_use]
 pub fn cuda_software_fallback_upload_filter() -> String {
     "hwupload".to_owned()
 }

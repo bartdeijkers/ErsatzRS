@@ -1,13 +1,15 @@
 feature    = 'Hardware colorspace normalization (GPU-resident SetPixelFormat)'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ColorspaceFilter.cs`, plus the per-builder `SetPixelFormat` (`NvidiaPipelineBuilder.cs`, `VaapiPipelineBuilder.cs`, `QsvPipelineBuilder.cs`)'
 rs_target  = '`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` (`build_transcode_pipeline`)'
-status     = 'In progress'
+status     = 'Ported'
 summary    = '''
-Ported (tracked in `ffmpeg-command-generation.toml`): the `SetPixelFormat` colorspace branch normalizes non-BT.709 sources to BT.709 with `colorspace`/`colormatrix`/`setparams`, but only while the frame is software-resident at the pixel-format stage — the pure software pipeline plus hardware paths that have already `hwdownload`ed (e.g. QSV after `vpp_qsv`). This fixed the SD/DVD "256-color GIF" banding/dithering.
+Ported. The earlier software-resident `SetPixelFormat` colorspace branch normalizes non-BT.709 sources to BT.709 with `colorspace`/`colormatrix`/`setparams`, fixing the SD/DVD "256-color GIF" banding/dithering caused by implicit swscale conversion.
 
-Remaining `ParityDebt`: the colorspace branch is NOT yet ported for frames that stay on the device through to a hardware encoder (NVENC/VAAPI/QSV hardware encode). ErsatzTV keeps the conversion correct there with a vendor-specific download → format-convert → re-upload dance that ErsatzRS has not ported:
-- NVENC keeps the conversion on-GPU with a `CudaFormatFilter` (`NvidiaPipelineBuilder.SetPixelFormat`), only falling back to `CudaHardwareDownloadFilter` + `PixelFormatOutputOption` for the software-encode case.
-- VAAPI and QSV insert a `HardwareDownloadFilter`, re-format to NV12, and re-upload before the hardware encoder (`VaapiPipelineBuilder.cs` / `QsvPipelineBuilder.cs` `SetPixelFormat`).
+This slice ports the GPU-resident hardware encode path for known non-BT.709 sources and pins it to committed ErsatzTV-generated `-filter_complex` fixtures:
+- NVENC appends `hwdownload,format=nv12` plus the bt709 normalization node in the end-of-graph SetPixelFormat slot, matching the upstream bt470bg fixture with no extra post-colorspace `hwupload_cuda`.
+- VAAPI appends `hwdownload,format=nv12`, the bt709 normalization node, and `format=nv12|p010le|vaapi,hwupload` before `h264_vaapi`.
+- QSV applies the normalization after the existing `vpp_qsv` reset-PTS download, matching the upstream mixed-color fixture with no extra post-colorspace `format=nv12,hwupload=...`.
+- HDR tonemap now mirrors ErsatzTV's `ResetColorParams(ColorParams.Default)` behavior by marking the current frame BT.709 after tonemap, preventing a redundant SetPixelFormat colorspace node.
 
-ErsatzRS currently gates its colorspace insertion on `target_state.frame_data_location == Software` precisely because emitting a bare `hwdownload` colorspace on a GPU-resident path (with no re-upload) would break the encode — the same `auto_scale`-style failure the existing NVENC pixel-format guard (`should_emit_pixel_format_output_option`) already warns about. Porting this requires mirroring each builder's on-GPU format filter and download/re-upload sequencing, and is runtime-untestable without the corresponding hardware. Until then, GPU-resident NVENC/VAAPI/QSV hardware-encode transcodes of non-BT.709 sources are not color-normalized (no regression vs. prior behavior; the software and post-download hardware paths are fixed).
+Unknown-color GPU-resident sources stay skipped to avoid changing hardware paths with absent ffprobe color metadata; software unknown-color behavior remains ported and fixture-covered. Hardware argv behavior is covered by ErsatzRS snapshots plus fixture-backed SetPixelFormat assertions against `crates/ersatzrs-ffmpeg/tests/fixtures/ersatztv/colorspace/`.
 '''

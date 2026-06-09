@@ -1,7 +1,10 @@
 use axum::http::StatusCode;
 use ersatzrs_core::repositories::{ConfigRepository, FfmpegProfileRepository, RepositoryError};
 use ersatzrs_domain::{HardwareAccelerationKind, VaapiDriver};
-use ersatzrs_infra::db::{DatabaseBackend, DbPool};
+use ersatzrs_infra::{
+    db::{DatabaseBackend, DbPool},
+    file_system_layout,
+};
 use std::{
     fs::{File, OpenOptions},
     io::{self, Write},
@@ -26,6 +29,20 @@ const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
 const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
+const DEFAULT_MPEGTS_SCRIPT_FILES: &[(&str, &[u8])] = &[
+    (
+        "mpegts.yml",
+        include_bytes!("../../../../assets/Scripts/MpegTs/mpegts.yml"),
+    ),
+    (
+        "run.sh",
+        include_bytes!("../../../../assets/Scripts/MpegTs/run.sh"),
+    ),
+    (
+        "run.bat",
+        include_bytes!("../../../../assets/Scripts/MpegTs/run.bat"),
+    ),
+];
 static LOG_FILTER_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 
 pub async fn run() {
@@ -34,6 +51,9 @@ pub async fn run() {
         .expect("database initialisation failed");
 
     init_logging(&startup.pool).await;
+    if let Err(error) = seed_default_mpegts_script().await {
+        tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
+    }
 
     tracing::info!(
         database_url = %startup.database_url,
@@ -249,6 +269,22 @@ impl FileAndStdoutWriter {
             .append(true)
             .open(&self.path)
     }
+}
+
+async fn seed_default_mpegts_script() -> io::Result<()> {
+    seed_default_mpegts_script_in(&file_system_layout::default_mpegts_script_folder()).await
+}
+
+async fn seed_default_mpegts_script_in(folder: &std::path::Path) -> io::Result<()> {
+    tokio::fs::create_dir_all(folder).await?;
+    for (name, contents) in DEFAULT_MPEGTS_SCRIPT_FILES {
+        let path = folder.join(name);
+        if tokio::fs::try_exists(&path).await? {
+            continue;
+        }
+        tokio::fs::write(path, contents).await?;
+    }
+    Ok(())
 }
 
 impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for FileAndStdoutWriter {
@@ -532,5 +568,40 @@ pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn seed_default_mpegts_script_creates_missing_files_without_overwriting() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("default");
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .expect("create script folder");
+        tokio::fs::write(folder.join("run.sh"), b"custom")
+            .await
+            .expect("write custom script");
+
+        seed_default_mpegts_script_in(&folder)
+            .await
+            .expect("seed scripts");
+
+        let yaml = tokio::fs::read_to_string(folder.join("mpegts.yml"))
+            .await
+            .expect("read mpegts yaml");
+        let run_sh = tokio::fs::read_to_string(folder.join("run.sh"))
+            .await
+            .expect("read shell script");
+        let run_bat = tokio::fs::read(folder.join("run.bat"))
+            .await
+            .expect("read batch script");
+
+        assert!(yaml.contains("linux_script"));
+        assert_eq!(run_sh, "custom");
+        assert!(String::from_utf8_lossy(&run_bat).contains("FFmpegPath"));
     }
 }
