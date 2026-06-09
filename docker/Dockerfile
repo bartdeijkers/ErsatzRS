@@ -183,14 +183,15 @@ RUN set -eux; \
         /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders | grep -w hevc_vaapi; \
     fi
 
-FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS rust-build
+FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS web-build
 ARG CARGO_LEPTOS_VERSION
 ARG STYLANCE_CLI_VERSION
 ARG WASM_BINDGEN_CLI_VERSION
 ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_BUILD_JOBS=1 \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
-    CARGO_PROFILE_RELEASE_LTO=false
+    CARGO_PROFILE_RELEASE_LTO=false \
+    LEPTOS_HASH_FILES=false
 WORKDIR /build
 
 RUN set -eux; \
@@ -201,7 +202,6 @@ RUN set -eux; \
         curl \
         libcairo2-dev \
         libssl-dev \
-        mold \
         pkg-config; \
     rm -rf /var/lib/apt/lists/*; \
     rustup target add wasm32-unknown-unknown; \
@@ -211,9 +211,8 @@ RUN set -eux; \
 
 COPY . .
 RUN set -eux; \
-    rustup target add wasm32-unknown-unknown; \
     cd crates/ersatzrs-web; \
-    cargo leptos build --release --bin-features ssr,mysql --lib-features hydrate; \
+    cargo leptos build --release --frontend-only --lib-features hydrate; \
     mkdir -p /build/target/site; \
     for site_root in \
         /mnt/f/ErsatzRS/target/front/site \
@@ -233,8 +232,31 @@ RUN set -eux; \
         find /mnt/f/ErsatzRS/target /build -maxdepth 5 -type d \( -name site -o -name pkg \); \
         exit 1; \
     }; \
-    cd /build; \
-    cargo build --release --features mysql --bin ersatzrs-scanner
+    test -f /build/crates/ersatzrs-web/public/bundle.css
+
+FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS rust-build
+ENV DEBIAN_FRONTEND=noninteractive \
+    CARGO_BUILD_JOBS=1 \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+    CARGO_PROFILE_RELEASE_LTO=false \
+    ERSATZRS_SKIP_STYLANCE=1
+WORKDIR /build
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        clang \
+        curl \
+        libcairo2-dev \
+        libssl-dev \
+        mold \
+        pkg-config; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY . .
+RUN set -eux; \
+    cargo build --release --features mysql --bin ersatzrs-web --bin ersatzrs-scanner
 
 FROM debian:${DEBIAN_VERSION}-slim AS runtime
 ARG TARGETARCH
@@ -307,8 +329,8 @@ RUN set -eux; \
 
 COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
-COPY --from=rust-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public
-COPY --from=rust-build /build/target/site /build/target/site
+COPY --from=web-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public
+COPY --from=web-build /build/target/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets
 COPY --from=rust-build /build/migrations /app/migrations
 
