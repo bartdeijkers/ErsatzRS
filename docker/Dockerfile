@@ -202,9 +202,8 @@ RUN set -eux; \
         pkg-config; \
     rm -rf /var/lib/apt/lists/*; \
     rustup target add wasm32-unknown-unknown; \
-    rustup toolchain install stable --profile default --target wasm32-unknown-unknown; \
-    RUSTUP_TOOLCHAIN=stable cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked; \
-    RUSTUP_TOOLCHAIN=stable cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_CLI_VERSION}" --locked; \
+    cargo install cargo-leptos --version "${CARGO_LEPTOS_VERSION}" --locked; \
+    cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_CLI_VERSION}" --locked; \
     cargo install stylance-cli --version "${STYLANCE_CLI_VERSION}" --locked
 
 COPY . .

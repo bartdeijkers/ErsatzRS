@@ -723,7 +723,7 @@ mod nvidia {
         }
 
         fn device_name(&self, device: CuDevice) -> String {
-            let mut buffer = [0_i8; 256];
+            let mut buffer = [0 as c_char; 256];
             unsafe {
                 if (self.cu_device_get_name)(buffer.as_mut_ptr(), 256, device) == CUDA_SUCCESS {
                     return CStr::from_ptr(buffer.as_ptr())
