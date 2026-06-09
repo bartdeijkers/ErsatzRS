@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
 ARG DEBIAN_VERSION=bookworm
-ARG RUST_VERSION=1.88
+ARG RUST_VERSION=1.90
 ARG FFMPEG_VERSION=8.1
 ARG FFMPEG_SHA256=b072aed6871998cce9b36e7774033105ca29e33632be5b6347f3206898e0756a
 ARG NVCODEC_VERSION=n13.0.19.0
 ARG VULKAN_HEADERS_VERSION=v1.3.299
 ARG CARGO_LEPTOS_VERSION=0.3.6
 ARG STYLANCE_CLI_VERSION=0.8.2
-ARG WASM_BINDGEN_CLI_VERSION=0.2.118
+ARG WASM_BINDGEN_CLI_VERSION=0.2.122
 
 FROM debian:${DEBIAN_VERSION}-slim AS ffmpeg-build
 ARG TARGETARCH
@@ -208,8 +208,28 @@ RUN set -eux; \
 
 COPY . .
 RUN set -eux; \
+    rustup target add wasm32-unknown-unknown; \
     cd crates/ersatzrs-web; \
     cargo leptos build --release --bin-features ssr,mysql --lib-features hydrate; \
+    mkdir -p /build/target/site; \
+    for site_root in \
+        /mnt/f/ErsatzRS/target/front/site \
+        /mnt/f/ErsatzRS/target/site \
+        /build/crates/ersatzrs-web/target/site \
+        /build/target/site \
+        target/site; \
+    do \
+        if [ -d "$site_root/pkg" ]; then \
+            if [ "$site_root" != /build/target/site ]; then \
+                cp -a "$site_root"/. /build/target/site/; \
+            fi; \
+            break; \
+        fi; \
+    done; \
+    test -d /build/target/site/pkg || { \
+        find /mnt/f/ErsatzRS/target /build -maxdepth 5 -type d \( -name site -o -name pkg \); \
+        exit 1; \
+    }; \
     cd /build; \
     cargo build --release --features mysql --bin ersatzrs-scanner
 
@@ -282,8 +302,8 @@ RUN set -eux; \
     ffprobe -version; \
     ffmpeg -hide_banner -filters | grep -w drawvg
 
-COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
-COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
+COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
 COPY --from=rust-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public
 COPY --from=rust-build /build/target/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets

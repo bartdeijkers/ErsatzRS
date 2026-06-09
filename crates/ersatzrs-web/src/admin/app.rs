@@ -109,6 +109,7 @@ fn candidate_site_roots(site_root: impl AsRef<Path>) -> Vec<PathBuf> {
     candidates
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn candidate_runtime_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
