@@ -96,19 +96,21 @@ failure the existing NVENC `should_emit_pixel_format_output_option` guard warns
 about). ErsatzTV avoids this with a vendor-specific sequence; we must port that
 sequence, not just relax the gate.
 
-**HDR / tonemap interaction (resolve first — affects Phase 1 too).** The gate is
-`!source.color_params.is_bt709()` (`mod.rs:1179`). An HDR source carries bt2020
-tags, so `is_bt709()` is false and the colorspace branch **fires even though the
-tonemap branch (`mod.rs:1369`) already produced bt709** — and on hardware tonemap
-(Vulkan/CUDA) does its own download/re-upload, so a second colorspace
-download/re-upload can double-convert or conflict. This already occurs on the
-shipped Phase 1 software path. Before Phase 2: confirm against ErsatzTV whether
-`SetPixelFormat`'s colorspace runs after tonemap for bt2020 sources and with what
-input overrides (ErsatzRS `to_filter_color_params` skips input overrides when
-`is_bt2020_ten`, matching `ColorspaceFilter`); if ErsatzTV does **not** re-apply
-colorspace after tonemap, exclude `target_state.is_hdr` from the colorspace gate
-in both phases and add a regression test. Treat this as a Phase 2 blocker and a
-Phase 1 parity audit.
+**HDR / tonemap interaction — confirmed Phase 1 bug, fix is definite.** The gate
+is `!source.color_params.is_bt709()` (`mod.rs:1179`). An HDR source carries bt2020
+tags, so `is_bt709()` is false and the colorspace branch fires **even though the
+tonemap branch (`mod.rs:1369`) already produced bt709** — redundant on software,
+and actively conflicting on hardware (tonemap via Vulkan/CUDA already manages its
+own download/re-upload). ErsatzTV avoids this: its tonemap step calls
+`videoStream.ResetColorParams(ColorParams.Default)` immediately after tonemapping
+(`SoftwarePipelineBuilder.cs:365`), so `ColorParams.IsBt709` becomes true and
+`SetPixelFormat` skips colorspace. **Port that reset:** when the tonemap branch
+runs (`mod.rs:1369`), reset the gate's color params to bt709 (set
+`source`/`target_state` color params so `is_bt709()` returns true, equivalently
+clear `is_hdr`/`is_bt2020_ten` for the gate). This is a **shipped Phase 1 parity
+bug** (fix + regression test now, independent of Phase 2) and a **Phase 2 blocker**
+(otherwise the relaxed hardware gate would stack colorspace on top of hardware
+tonemap).
 
 ### Authoritative ErsatzTV sequencing (port branch-for-branch)
 
@@ -237,12 +239,16 @@ Read these before writing code — they define the exact ordering/conditions:
 - [x] Snapshot tests (bt470bg/mixed/unknown/bt709) + 44 existing regenerated
 - [x] Verification: ffmpeg 120 tests, infra 99+ tests, clippy + fmt clean
 - [x] Parity docs updated; GPU-resident gap carved into its own tracked feature
+- [ ] **Known bug (found in review):** HDR sources get a redundant colorspace
+      after tonemap — port ErsatzTV's `ResetColorParams(ColorParams.Default)`
+      (`SoftwarePipelineBuilder.cs:365`) + regression test. Fixable now,
+      independent of Phase 2.
 
 **Phase 2 — planned (GPU-resident hardware encode):**
 
-- [ ] **Blocker:** resolve HDR/tonemap interaction (audit Phase 1 parity too;
-      exclude `is_hdr` from the colorspace gate if ErsatzTV doesn't re-apply
-      colorspace after tonemap) + regression test
+- [ ] **Blocker:** land the HDR/tonemap fix above (port
+      `ResetColorParams(ColorParams.Default)` after tonemap) before relaxing the
+      hardware gate, so colorspace doesn't stack on hardware tonemap
 - [ ] Add `cuda_format_filter` primitive (+ unit snapshot)
 - [ ] Generalize `upload_software_frames_for_hardware_encoder` from VAAPI-only to
       NVENC/QSV; fix `build_hwdownload_prefix` nv12/p010le surface-format mapping
