@@ -96,6 +96,20 @@ failure the existing NVENC `should_emit_pixel_format_output_option` guard warns
 about). ErsatzTV avoids this with a vendor-specific sequence; we must port that
 sequence, not just relax the gate.
 
+**HDR / tonemap interaction (resolve first — affects Phase 1 too).** The gate is
+`!source.color_params.is_bt709()` (`mod.rs:1179`). An HDR source carries bt2020
+tags, so `is_bt709()` is false and the colorspace branch **fires even though the
+tonemap branch (`mod.rs:1369`) already produced bt709** — and on hardware tonemap
+(Vulkan/CUDA) does its own download/re-upload, so a second colorspace
+download/re-upload can double-convert or conflict. This already occurs on the
+shipped Phase 1 software path. Before Phase 2: confirm against ErsatzTV whether
+`SetPixelFormat`'s colorspace runs after tonemap for bt2020 sources and with what
+input overrides (ErsatzRS `to_filter_color_params` skips input overrides when
+`is_bt2020_ten`, matching `ColorspaceFilter`); if ErsatzTV does **not** re-apply
+colorspace after tonemap, exclude `target_state.is_hdr` from the colorspace gate
+in both phases and add a regression test. Treat this as a Phase 2 blocker and a
+Phase 1 parity audit.
+
 ### Authoritative ErsatzTV sequencing (port branch-for-branch)
 
 Read these before writing code — they define the exact ordering/conditions:
@@ -127,6 +141,13 @@ Read these before writing code — they define the exact ordering/conditions:
 - `crate::hardware_upload_filter(accel, qsv_extra_hw_frames)` — `hwupload_cuda` /
   `hwupload=extra_hw_frames=N` (QSV) / VAAPI `format=…,hwupload`
   (`filter/hardware.rs:6`); `hardware_upload_vaapi_filter` for the VAAPI variant.
+- `upload_software_frames_for_hardware_encoder(accel, &mut FrameState, &mut FilterChain)`
+  — the **existing** re-upload step already used after pad/crop. **It is
+  VAAPI-only today** (early-returns otherwise): reuse it verbatim for the VAAPI
+  re-upload, and **generalize it to NVENC/QSV** (push `hwupload_cuda` /
+  `hwupload=extra_hw_frames=N` and set the surface pixel format) rather than
+  hand-rolling a parallel re-upload. Prefer extending this one helper so pad/crop
+  and colorspace share a single GPU re-upload path.
 - **New, tiny:** `cuda_format_filter(pixel_format) -> "scale_cuda=format={}"`
   mirroring ErsatzTV `CudaFormatFilter` (the `scale_cuda=format=p010` shape
   already exists in `filter/tonemap.rs:58`); add it to `filter/hardware.rs` (or
@@ -141,14 +162,19 @@ Read these before writing code — they define the exact ordering/conditions:
      `filter_chain.pixel_format`, pin pixel format for non-unknown.
    - **Hardware (new):** push the `colorspace_filter` result (it already carries
      the `hwdownload` prefix → frames become software); set
-     `target_state.frame_data_location = Software`; then append the vendor
-     re-upload step so frames return to the device before the hardware encoder,
-     and set `frame_data_location = Hardware`:
+     `target_state.frame_data_location = Software`; then re-upload to the device
+     before the hardware encoder via the **generalized**
+     `upload_software_frames_for_hardware_encoder` (extend it from VAAPI-only to
+     all three accels — see primitives) so pad/crop and colorspace share one path:
      - NVENC: `cuda_format_filter(desired_surface_fmt)` (and/or `hwupload_cuda`)
        per the NvidiaPipelineBuilder branch conditions.
-     - VAAPI: re-format to NV12 + `hardware_upload_vaapi_filter` /
-       `hardware_upload_filter(Vaapi, …)`.
+     - VAAPI: re-format to NV12 + the existing VAAPI branch of the helper.
      - QSV: re-format to NV12 + `hardware_upload_filter(Qsv, qsv_extra_hw_frames)`.
+   - **Surface-format caveat:** `colorspace_filter`'s `build_hwdownload_prefix`
+     maps `Cuda → p010le` unconditionally, which is wrong for an 8-bit nv12
+     surface. Verify the `hwdownload` format matches the actual source surface
+     bit depth per accel (mirror ErsatzTV's `formatForDownload` nv12/p010le
+     selection); fix `build_hwdownload_prefix` if needed.
    - Honor ErsatzTV's "use `PixelFormatOutputOption` instead" fallback branches
      so `emit_pixel_format_output_option` stays correct (recompute after).
 2. **Ordering:** the colorspace + re-upload must land in the video filter chain
@@ -175,10 +201,14 @@ Read these before writing code — they define the exact ordering/conditions:
 ### Verification (no local GPU — argv parity is the oracle)
 
 1. `cargo test -p ersatzrs-ffmpeg --all-targets` + `cargo insta review`.
-2. **ErsatzTV argv parity:** for each vendor, build the equivalent ErsatzTV
-   command for a bt470bg source and diff the `-filter_complex` against ErsatzRS;
-   they should match the normalize + re-upload sequence. This is the primary
-   correctness check since the paths are runtime-untestable here.
+2. **ErsatzTV argv parity (the oracle — make it concrete):** the GPU paths are
+   runtime-untestable here, so a hand-wavy "diff against ErsatzTV" is not enough.
+   Capture ErsatzTV's generated `-filter_complex` for a bt470bg source on each
+   vendor as **committed reference fixtures** (run the C# once, or pull from
+   `ErsatzTV.Scanner.Tests`/`ErsatzTV.FFmpeg.Tests` transcoding cases), and
+   assert the ErsatzRS `-filter_complex` normalize + re-upload sequence matches
+   them. This makes the primary correctness check reproducible in CI rather than
+   a one-off manual diff.
 3. Lint (mirror CI): `cargo clippy -p ersatzrs-ffmpeg --all-targets -- -D warnings`
    then the two-pass workspace clippy (with/without `--features mysql`) +
    `cargo fmt --all -- --check`.
@@ -210,12 +240,17 @@ Read these before writing code — they define the exact ordering/conditions:
 
 **Phase 2 — planned (GPU-resident hardware encode):**
 
+- [ ] **Blocker:** resolve HDR/tonemap interaction (audit Phase 1 parity too;
+      exclude `is_hdr` from the colorspace gate if ErsatzTV doesn't re-apply
+      colorspace after tonemap) + regression test
 - [ ] Add `cuda_format_filter` primitive (+ unit snapshot)
+- [ ] Generalize `upload_software_frames_for_hardware_encoder` from VAAPI-only to
+      NVENC/QSV; fix `build_hwdownload_prefix` nv12/p010le surface-format mapping
 - [ ] Relax the `Software`-only gate; add per-vendor hardware branch
       (NVENC `scale_cuda=format` / VAAPI+QSV download→NV12→re-upload)
 - [ ] Honor ErsatzTV's `PixelFormatOutputOption` fallback branches
 - [ ] Per-vendor hardware snapshots + bt709 no-op + regenerate existing HW snaps
-- [ ] ErsatzTV argv-parity diff per vendor; clippy + fmt
+- [ ] Capture ErsatzTV reference argv fixtures; assert parity per vendor; clippy + fmt
 - [ ] Flip `hardware-colorspace-normalization.toml` to `Ported`; session log
 
 ## Key files
