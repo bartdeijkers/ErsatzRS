@@ -43,7 +43,7 @@ jobs:
       - name: Build Leptos site assets
         run: |
           set -euo pipefail
-          (cd crates/ersatzrs-web && cargo leptos build --release --lib-features hydrate)
+          (cd crates/ersatzrs-web && cargo leptos build --release --frontend-only --lib-features hydrate)
           test -f crates/ersatzrs-web/public/bundle.css
           test -d target/site/pkg
       - name: Stage web assets
