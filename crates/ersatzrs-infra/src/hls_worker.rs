@@ -1347,13 +1347,16 @@ fn hls_transcode_decision(
     wall_clock_now: DateTime<Utc>,
     realtime: bool,
 ) -> HlsTranscodeDecision {
-    let was_seek_and_work_ahead = state == HlsSessionState::SeekAndWorkAhead;
+    let uses_wall_clock_request_time = matches!(
+        state,
+        HlsSessionState::SeekAndWorkAhead | HlsSessionState::PlayoutUpdated
+    );
     let state = if realtime {
         state.throttle()
     } else {
         state.accelerate()
     };
-    let request_time = if was_seek_and_work_ahead {
+    let request_time = if uses_wall_clock_request_time {
         wall_clock_now
     } else {
         transcoded_until
@@ -2714,6 +2717,38 @@ mod tests {
         assert!(!throttled.working_ahead);
         assert_eq!(throttled.request_time, transcoded_until);
         assert!(throttled.start_at_zero);
+    }
+
+    #[test]
+    fn hls_transcode_decision_treats_playout_updated_as_live_seek() {
+        let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let stale_buffered_until = now + chrono::Duration::minutes(10);
+
+        let working_ahead = hls_transcode_decision(
+            HlsSessionState::PlayoutUpdated,
+            stale_buffered_until,
+            now,
+            false,
+        );
+        assert_eq!(working_ahead.state, HlsSessionState::PlayoutUpdated);
+        assert!(!working_ahead.realtime);
+        assert!(working_ahead.working_ahead);
+        assert_eq!(working_ahead.request_time, now);
+        assert!(!working_ahead.start_at_zero);
+
+        let realtime = hls_transcode_decision(
+            HlsSessionState::PlayoutUpdated,
+            stale_buffered_until,
+            now,
+            true,
+        );
+        assert_eq!(realtime.state, HlsSessionState::PlayoutUpdated);
+        assert!(realtime.realtime);
+        assert!(!realtime.working_ahead);
+        assert_eq!(realtime.request_time, now);
+        assert!(!realtime.start_at_zero);
     }
 
     #[test]

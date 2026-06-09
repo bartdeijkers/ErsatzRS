@@ -80,9 +80,8 @@ segmenter timeout (default 60 seconds), disables the idle timeout for
 KeepRunning channels, starts/touches the worker from both HLS segmenter and
 MPEG-TS wrapper paths, and waits until the configured initial segment count is
 visible in the live session playlist before returning the multi-variant
-playlist. `ffmpeg.segmenter.work_ahead_limit` is still persisted and displayed
-but belongs to the worker state machine and is not yet enforced by runtime
-transcode scheduling.
+playlist. The state-machine slice now enforces `ffmpeg.segmenter.work_ahead_limit`
+while reserving accelerated work-ahead slots.
 
 The HLS command-options slice ports ErsatzTV's MPEG-TS segment option rule:
 MPEG-TS HLS output now emits
@@ -109,7 +108,10 @@ expose `playout_updated`, the concrete worker stores state outside the run-loop
 local so notifications can switch the next iteration to `PlayoutUpdated`, and
 both requested and periodic playout builds can notify active segmenter sessions
 after successful non-Continue builds when persisted playout output changed or
-the channel is OnDemand. The web host passes its live HLS registry into the
+the channel is OnDemand. The HLS worker now treats `PlayoutUpdated` as a live
+seek for request-time selection, using the current wall clock instead of a
+possibly stale buffered-ahead `transcoded_until` while preserving the ErsatzTV
+state transition table. The web host passes its live HLS registry into the
 scheduler so the notification reaches in-process workers.
 
 The on-demand runtime slice ports the segmenter-owned playout time-shift and
@@ -146,6 +148,20 @@ VLC fall behind deleted segments. After the fix, media sequence advanced from
 ffprobed as readable HEVC video plus AAC audio. HLS Direct was also reloaded
 and a bounded partial `/iptv/hls-direct/1.ts` stream ffprobed with HEVC video
 plus AAC audio.
+
+Runtime proof (2026-06-09): after the `PlayoutUpdated` request-time fix,
+channel 1 in HLS Segmenter mode again returned the multi-variant playlist and
+`/iptv/session/1/hls.m3u8` was sampled for 180 seconds across and beyond the
+reported one-to-two-minute failure range. Media sequence advanced from 81 to
+128 with a constant 10-segment playlist window and stable discontinuity
+sequence, and `live000046.ts` ffprobed as H.264 video plus AAC audio. TSDuck
+sampled `/iptv/channel/1.ts?mode=ts` for 161 seconds and reported zero invalid
+syncs, transport errors, PCR/PTS/DTS leaps, continuity discontinuities,
+duplicated packets, or invalid PES prefixes on the audio, video, PAT, PMT, and
+SDT PIDs; the only analysis errors were missing BAT/TDT/TOT tables. HLS Direct
+still returned its single-entry playlist and ffprobed as H.264 plus AAC, and
+TSDuck sampled `/iptv/channel/1.ts?mode=ts-legacy` for 173 seconds with the
+same zero continuity error profile and only missing BAT/TDT/TOT table warnings.
 
 HLS Direct audit: the direct branch remains mostly aligned for the current
 surface: `.m3u8?mode=hls-direct` returns a single-entry playlist, target

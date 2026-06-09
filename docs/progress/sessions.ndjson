@@ -1,3 +1,6 @@
+{"agent":"Codex","date":"2026-06-09","summary":"Extended HLS Segmenter channel 1 proof past two minutes: 180s playlist cadence plus 161s/173s TSDuck TS continuity samples."}
+{"agent":"Codex","date":"2026-06-09","summary":"Verified HLS Segmenter channel 1 playback cadence with 70s playlist sampling and TSDuck continuity checks for MPEG-TS paths."}
+{"agent":"Codex","date":"2026-06-09","summary":"Fixed HLS PlayoutUpdated timing so rebuilt playouts seek from live wall-clock instead of stale buffered timestamps."}
 {"agent":"Codex","date":"2026-06-09","summary":"Ported ErsatzTV default MPEG-TS script resource extraction into app-data without overwriting user-edited scripts."}
 {"agent":"Codex","date":"2026-06-09","summary":"Quieted seeded default MPEG-TS script fallback and classified FFmpeg Broken pipe stream exits as client disconnects."}
 {"agent":"Codex","date":"2026-06-09","summary":"Tightened NVENC AV1 decode fallback so unsupported AV1 CUDA decode uses software input while preserving NVENC encode."}

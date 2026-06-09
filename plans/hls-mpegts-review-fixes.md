@@ -62,6 +62,10 @@ Add focused route/middleware tests proving:
 
 ## P2 Plan - Treat PlayoutUpdated As Seek
 
+Status: implemented for the HLS decision calculation. The worker now uses
+`wall_clock_now` as the next request timestamp when the pre-transition state is
+`PlayoutUpdated`, and focused tests cover both realtime and work-ahead branches.
+
 ### Problem
 
 `playout_updated()` stores `HlsSessionState::PlayoutUpdated`, but
