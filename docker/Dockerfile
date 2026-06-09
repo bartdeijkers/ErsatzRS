@@ -258,7 +258,7 @@ COPY . .
 RUN set -eux; \
     cargo build --release --features mysql --bin ersatzrs-web --bin ersatzrs-scanner
 
-FROM debian:${DEBIAN_VERSION}-slim AS runtime
+FROM debian:${DEBIAN_VERSION}-slim AS runtime-base
 ARG TARGETARCH
 ARG TARGETVARIANT
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -327,6 +327,21 @@ RUN set -eux; \
     ffprobe -version; \
     ffmpeg -hide_banner -filters | grep -w drawvg
 
+FROM runtime-base AS runtime-release
+COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
+COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY release-web-assets/public /build/crates/ersatzrs-web/public
+COPY release-web-assets/site /build/target/site
+COPY --from=rust-build /build/assets /app/assets
+COPY --from=rust-build /build/migrations /app/migrations
+
+WORKDIR /app
+EXPOSE 8409
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD [ "curl", "-fsS", "http://127.0.0.1:8409/healthz" ]
+ENTRYPOINT [ "ersatzrs-web" ]
+
+FROM runtime-base AS runtime
 COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
 COPY --from=web-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public

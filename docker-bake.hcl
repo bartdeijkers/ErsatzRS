@@ -23,6 +23,11 @@ target "ersatzrs" {
   ]
 }
 
+target "ersatzrs-release" {
+  inherits = ["ersatzrs"]
+  target = "runtime-release"
+}
+
 target "docker-check" {
   inherits = ["ersatzrs"]
   platforms = ["linux/amd64"]

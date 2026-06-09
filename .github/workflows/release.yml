@@ -263,6 +263,7 @@ jobs:
 
   docker:
     name: Publish Docker image
+    needs: [release, web-assets]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -278,6 +279,12 @@ jobs:
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
 
+      - name: Download web assets
+        uses: actions/download-artifact@v7
+        with:
+          name: web-assets
+          path: release-web-assets
+
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -289,7 +296,7 @@ jobs:
         uses: docker/bake-action@v7
         with:
           files: docker-bake.hcl
-          targets: ersatzrs
+          targets: ersatzrs-release
           push: true
 
       - name: Verify multi-arch manifest
