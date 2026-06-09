@@ -85,6 +85,14 @@ jobs:
       # without this override the committed /mnt path would break them inside the
       # container too.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # Hosted and cross release builders are memory constrained. The workspace
+      # default release profile is tuned for maximum optimization
+      # (LTO + one codegen unit), which can get the large SSR web crate killed
+      # by the runner. Keep packaged artifacts as release builds while using a
+      # lower-memory profile shape for CI packaging.
+      CARGO_BUILD_JOBS: "1"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_LTO: "false"
       # Empty unless the signing secrets are configured. Hoisted to job env
       # because the `secrets` context is not available in step `if:` conditions;
       # the optional signing steps gate on `env.AZURE_CLIENT_ID != ''`.
