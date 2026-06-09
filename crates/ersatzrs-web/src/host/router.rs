@@ -12,14 +12,12 @@ use tower_http::{
 use crate::{
     admin::app::{shell, App},
     api,
-    host::assets::resolve_pkg_dir,
+    host::assets::{resolve_pkg_dir, resolve_public_dir},
     host::state::AppState,
     transport::{dev_stream, hdhr, iptv},
 };
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
-
-const WEB_PUBLIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/public");
 
 #[allow(clippy::too_many_lines)]
 pub fn build_app(app_state: AppState) -> Router {
@@ -27,6 +25,7 @@ pub fn build_app(app_state: AppState) -> Router {
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
     let pkg_dir = resolve_pkg_dir(&leptos_options);
+    let public_dir = resolve_public_dir();
     let output_name = leptos_options.output_name.clone();
 
     let leptos_options_clone = leptos_options.clone();
@@ -39,8 +38,16 @@ pub fn build_app(app_state: AppState) -> Router {
             move || provide_context(app_state_for_leptos.clone()),
             move || shell(leptos_options_clone.clone(), app_state_for_shell.clone()),
         )
-        .nest_service("/public", ServeDir::new(WEB_PUBLIC_DIR))
         .with_state(leptos_options);
+
+    if let Some(public_dir) = public_dir.clone() {
+        tracing::info!(public_dir = %public_dir.display(), "serving web public assets");
+        leptos_router = leptos_router.nest_service("/public", ServeDir::new(public_dir));
+    } else {
+        tracing::warn!(
+            "web public assets not found; admin styling and static images are unavailable"
+        );
+    }
 
     if let Some(pkg_dir) = pkg_dir {
         tracing::info!(pkg_dir = %pkg_dir.display(), "serving Leptos hydration assets");
@@ -318,15 +325,20 @@ pub fn build_app(app_state: AppState) -> Router {
         .route("/lineup.json", get(hdhr::get_lineup_json))
         .with_state(app_state);
 
-    Router::new()
+    let mut router = Router::new()
         .route("/dev/stream/bbb.ts", get(dev_stream::stream_big_buck_bunny))
         .merge(api_router)
         .merge(leptos_router)
-        .route_service(
+        .layer(TraceLayer::new_for_http());
+
+    if let Some(public_dir) = public_dir {
+        router = router.route_service(
             "/favicon.ico",
-            ServeFile::new(format!("{WEB_PUBLIC_DIR}/images/ersatzrs.png")),
-        )
-        .layer(TraceLayer::new_for_http())
+            ServeFile::new(public_dir.join("images").join("ersatzrs.png")),
+        );
+    }
+
+    router
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {

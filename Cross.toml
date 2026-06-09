@@ -19,7 +19,12 @@
 pre-build = []
 
 [build.env]
-passthrough = ["SQLX_OFFLINE", "RUST_BACKTRACE", "CARGO_TERM_COLOR"]
+passthrough = [
+    "SQLX_OFFLINE",
+    "RUST_BACKTRACE",
+    "CARGO_TERM_COLOR",
+    "ERSATZRS_SKIP_STYLANCE",
+]
 
 [target.aarch64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:edge"

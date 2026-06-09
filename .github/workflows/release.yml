@@ -18,12 +18,52 @@ jobs:
         with:
           generate_release_notes: true
 
+  web-assets:
+    name: Build web assets
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      LEPTOS_HASH_FILES: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-web-assets
+          cache-bin: "false"
+      - name: Install web asset tools
+        run: |
+          cargo install stylance-cli --version 0.8.2 --locked
+          cargo install cargo-leptos --version 0.3.6 --locked
+      - name: Build Leptos site assets
+        run: |
+          set -euo pipefail
+          (cd crates/ersatzrs-web && cargo leptos build --release --lib-features hydrate)
+          test -f crates/ersatzrs-web/public/bundle.css
+          test -d target/site/pkg
+      - name: Stage web assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-web-assets
+          cp -R crates/ersatzrs-web/public release-web-assets/public
+          cp -R target/site release-web-assets/site
+      - name: Upload web assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-assets
+          path: release-web-assets/
+
   binaries:
     # Build release binaries for every ErsatzTV-parity RID and attach them
     # as archives to the GitHub release. CI stays on the self-hosted
     # development checks; hosted platform builds run only for releases.
     name: Release archive (${{ matrix.rid }})
-    needs: release
+    needs: [release, web-assets]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -90,18 +130,21 @@ jobs:
           # shell, so don't let rust-cache prune cargo-leptos /
           # stylance-cli / wasm-bindgen / cross between runs.
           cache-bin: "false"
-      - name: Install stylance-cli
-        if: ${{ !matrix.cross }}
-        run: cargo install stylance-cli --version 0.8.0 --locked
       - name: Install cross
         if: ${{ matrix.cross }}
         run: cargo install cross --locked
+      - name: Download web assets
+        uses: actions/download-artifact@v7
+        with:
+          name: web-assets
+          path: release-web-assets
       - name: Build (cargo)
         if: ${{ !matrix.cross }}
         shell: bash
         env:
           RID: ${{ matrix.rid }}
           TARGET: ${{ matrix.target }}
+          ERSATZRS_SKIP_STYLANCE: "1"
         run: |
           set -euo pipefail
           # win-x64 also ships the tray launcher; build it in this single cargo
@@ -113,26 +156,9 @@ jobs:
           cargo build --release "${bins[@]}" --target "$TARGET"
       - name: Build (cross)
         if: ${{ matrix.cross }}
-        run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
-      - name: Build Leptos site assets (win-x64)
-        # The interactive admin UI needs the cargo-leptos hydration bundle. Pin
-        # cargo-leptos to the same version the Docker image uses so the assets
-        # match. Output lands in target/site (workspace-relative site-root).
-        if: ${{ matrix.rid == 'win-x64' }}
-        shell: bash
         env:
-          # Stable (un-hashed) asset names so the separately-built server exe and
-          # this bundle agree on filenames, with no runtime hash-manifest coupling.
-          LEPTOS_HASH_FILES: "false"
-        run: |
-          set -euo pipefail
-          rustup target add wasm32-unknown-unknown
-          cargo install cargo-leptos --version 0.3.6 --locked
-          (cd crates/ersatzrs-web && cargo leptos build --release --lib-features hydrate)
-          # Fail fast if the hydration bundle did not land where staging expects
-          # it (e.g. site-root resolved elsewhere) instead of silently shipping a
-          # non-interactive UI.
-          test -d target/site/pkg
+          ERSATZRS_SKIP_STYLANCE: "1"
+        run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
       - name: Bundle FFmpeg 8.1 with drawvg (win-x64)
         if: ${{ matrix.rid == 'win-x64' }}
         shell: bash
@@ -194,14 +220,15 @@ jobs:
             cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
             # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
             cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-            # Bundled FFmpeg (staged by the earlier step) + Leptos hydration assets.
+            # Bundled FFmpeg staged by the earlier step.
             cp ffmpeg.exe "$stage/"
             cp ffprobe.exe "$stage/"
-            cp -R target/site "$stage/site"
           else
             cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
           fi
+          cp -R release-web-assets/public "$stage/public"
+          cp -R release-web-assets/site "$stage/site"
           cp -R assets "$stage/assets"
           cp LICENSE "$stage/"
           cp README.md "$stage/"

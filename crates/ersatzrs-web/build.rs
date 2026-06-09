@@ -1,6 +1,10 @@
 fn main() {
     println!("cargo:rerun-if-changed=src/admin");
 
+    if std::env::var_os("ERSATZRS_SKIP_STYLANCE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        return;
+    }
+
     // Cross-compile and minimal-tooling builds (e.g. `cross build`) ship the
     // CSS bundle from the leptos host build instead of regenerating it here.
     // Warn and continue when stylance-cli is missing so those builds succeed.
