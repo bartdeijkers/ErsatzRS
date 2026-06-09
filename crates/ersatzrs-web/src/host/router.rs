@@ -325,20 +325,20 @@ pub fn build_app(app_state: AppState) -> Router {
         .route("/lineup.json", get(hdhr::get_lineup_json))
         .with_state(app_state);
 
-    let mut router = Router::new()
+    let mut root = Router::new()
         .route("/dev/stream/bbb.ts", get(dev_stream::stream_big_buck_bunny))
         .merge(api_router)
         .merge(leptos_router)
         .layer(TraceLayer::new_for_http());
 
     if let Some(public_dir) = public_dir {
-        router = router.route_service(
+        root = root.route_service(
             "/favicon.ico",
             ServeFile::new(public_dir.join("images").join("ersatzrs.png")),
         );
     }
 
-    router
+    root
 }
 
 fn build_iptv_router(app_state: &AppState) -> Router<AppState> {

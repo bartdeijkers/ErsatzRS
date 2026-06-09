@@ -1,7 +1,8 @@
+#[allow(clippy::disallowed_methods)]
 fn main() {
     println!("cargo:rerun-if-changed=src/admin");
 
-    if std::env::var_os("ERSATZRS_SKIP_STYLANCE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+    if std::env::var("ERSATZRS_SKIP_STYLANCE").as_deref() == Ok("1") {
         return;
     }
 
