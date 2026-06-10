@@ -8,7 +8,7 @@ on:
 jobs:
   release:
     name: Create GitHub release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
       contents: write
     steps:
@@ -21,7 +21,7 @@ jobs:
   web-assets:
     name: Build web assets
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
       contents: read
     env:
@@ -69,7 +69,7 @@ jobs:
     # development checks; hosted platform builds run only for releases.
     name: Release archive (${{ matrix.rid }})
     needs: [release, web-assets]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ fromJSON(matrix.runner) }}
     permissions:
       contents: write
       # Needed only for the optional Azure code-signing OIDC login below; granted
@@ -102,32 +102,22 @@ jobs:
       matrix:
         include:
           - rid: linux-x64
-            runner: ubuntu-latest
+            runner: '["self-hosted","ersatzrs-linux-release"]'
             target: x86_64-unknown-linux-gnu
             cross: false
             archive: tar.gz
           - rid: linux-arm64
-            runner: ubuntu-latest
+            runner: '["self-hosted","ersatzrs-linux-release"]'
             target: aarch64-unknown-linux-gnu
             cross: true
             archive: tar.gz
           - rid: linux-arm
-            runner: ubuntu-latest
+            runner: '["self-hosted","ersatzrs-linux-release"]'
             target: armv7-unknown-linux-gnueabihf
             cross: true
             archive: tar.gz
-          - rid: osx-arm64
-            runner: macos-latest
-            target: aarch64-apple-darwin
-            cross: false
-            archive: tar.gz
-          - rid: osx-x64
-            runner: macos-latest
-            target: x86_64-apple-darwin
-            cross: false
-            archive: tar.gz
           - rid: win-x64
-            runner: windows-latest
+            runner: '["self-hosted","ersatzrs-windows-release"]'
             target: x86_64-pc-windows-msvc
             cross: false
             archive: zip
@@ -264,7 +254,7 @@ jobs:
   docker:
     name: Publish Docker image
     needs: [release, web-assets]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
       contents: read
       packages: write
