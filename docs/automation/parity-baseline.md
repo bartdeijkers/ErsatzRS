@@ -10,10 +10,10 @@ prompt](gap-prompt-rules.md) MUST honor it.
 
 | Field | Value |
 | --- | --- |
-| **Upstream repo** | `https://github.com/ErsatzTV/ErsatzTV` |
+| **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
 | **Pinned commit** | `0d301df5e8512fdfccf3a611188d27ab1690ee31` |
 | **Commit subject** | `remove external dependencies (bugsnag, trakt) (#2840)` |
-| **Commit URL** | https://github.com/ErsatzTV/ErsatzTV/commit/0d301df5e8512fdfccf3a611188d27ab1690ee31 |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0d301df5e8512fdfccf3a611188d27ab1690ee31 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
