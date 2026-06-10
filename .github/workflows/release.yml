@@ -285,6 +285,10 @@ jobs:
       - name: Build and push multi-arch image
         uses: docker/bake-action@v7
         with:
+          # Build from the checked-out workspace instead of the default Git
+          # context: the downloaded `release-web-assets/` artifact only exists
+          # in the workspace and the Dockerfile COPYs it.
+          source: .
           files: docker-bake.hcl
           targets: ersatzrs-release
           push: true
