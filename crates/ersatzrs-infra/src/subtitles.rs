@@ -165,15 +165,17 @@ fn build_seek_subtitle_args(input_path: &str, seek_seconds: i64, out_path: &Path
 ///
 /// Returns `input_path` unchanged for zero/negative seeks and falls back to the
 /// original path on all ffmpeg/cache failures so playback remains no worse than
-/// the pre-existing behavior.
-pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String {
+/// the pre-existing behavior. Returns `None` when the seek lands past the last
+/// cue: ffmpeg then writes an empty file that libass cannot open, so the burn
+/// must be skipped entirely instead of crashing the transcode.
+pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> Option<String> {
     if seek_seconds <= 0 {
-        return input_path.to_owned();
+        return Some(input_path.to_owned());
     }
 
     let output_path = seek_subtitle_output_path(input_path, seek_seconds);
     if output_path.exists() {
-        return output_path.to_string_lossy().into_owned();
+        return non_empty_subtitle_path(&output_path).await;
     }
 
     if let Some(parent) = output_path.parent() {
@@ -184,7 +186,7 @@ pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String
                 seek_seconds,
                 "failed to create subtitle seek cache directory"
             );
-            return input_path.to_owned();
+            return Some(input_path.to_owned());
         }
     }
 
@@ -199,12 +201,12 @@ pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String
                 seek_seconds,
                 "failed to spawn ffmpeg for subtitle seek rebase"
             );
-            return input_path.to_owned();
+            return Some(input_path.to_owned());
         }
     };
 
     if output.status.success() {
-        output_path.to_string_lossy().into_owned()
+        non_empty_subtitle_path(&output_path).await
     } else {
         tracing::warn!(
             input_hash = %md5_upper_hex(input_path),
@@ -213,7 +215,24 @@ pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> String
             stderr_bytes = output.stderr.len(),
             "failed to rebase subtitle for playback seek"
         );
-        input_path.to_owned()
+        Some(input_path.to_owned())
+    }
+}
+
+/// A successfully re-based subtitle with no remaining cues is written as an
+/// empty file; report it as `None` so callers drop the burn instead of handing
+/// libass a file it cannot open. The empty file stays in the cache as a marker
+/// for subsequent requests at the same seek point.
+async fn non_empty_subtitle_path(output_path: &Path) -> Option<String> {
+    match tokio::fs::metadata(output_path).await {
+        Ok(metadata) if metadata.len() == 0 => {
+            tracing::debug!(
+                path = %output_path.display(),
+                "seeked subtitle has no remaining cues; skipping burn"
+            );
+            None
+        }
+        _ => Some(output_path.to_string_lossy().into_owned()),
     }
 }
 
@@ -230,7 +249,7 @@ pub async fn rebase_burned_text_subtitle_input(
         && !input.is_image_based_subtitle
         && seek_seconds > 0
     {
-        input.path = rebase_text_subtitle(&input.path, seek_seconds).await;
+        input.path = rebase_text_subtitle(&input.path, seek_seconds).await?;
     }
     Some(input)
 }
@@ -927,11 +946,28 @@ mod tests {
     async fn rebase_text_subtitle_skips_non_positive_seek() {
         assert_eq!(
             rebase_text_subtitle("/srv/media/show/subtitle.srt", 0).await,
-            "/srv/media/show/subtitle.srt"
+            Some("/srv/media/show/subtitle.srt".to_owned())
         );
         assert_eq!(
             rebase_text_subtitle("/srv/media/show/subtitle.srt", -1).await,
-            "/srv/media/show/subtitle.srt"
+            Some("/srv/media/show/subtitle.srt".to_owned())
+        );
+    }
+
+    #[tokio::test]
+    async fn non_empty_subtitle_path_skips_empty_seek_output() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let empty = dir.path().join("empty.srt");
+        tokio::fs::write(&empty, b"").await.expect("write empty");
+        assert_eq!(non_empty_subtitle_path(&empty).await, None);
+
+        let cues = dir.path().join("cues.srt");
+        tokio::fs::write(&cues, b"1\n00:00:00,000 --> 00:00:02,000\nHallo\n")
+            .await
+            .expect("write cues");
+        assert_eq!(
+            non_empty_subtitle_path(&cues).await,
+            Some(cues.to_string_lossy().into_owned())
         );
     }
 
