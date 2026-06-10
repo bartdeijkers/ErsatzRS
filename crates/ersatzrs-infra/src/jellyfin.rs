@@ -2909,7 +2909,7 @@ async fn ensure_media_version(
         .bind(item_id)
         .bind(&playback.r_frame_rate)
         .bind(&playback.sample_aspect_ratio)
-        .bind(encode_video_scan_kind(VideoScanKind::Progressive))
+        .bind(VideoScanKind::Progressive.db_value())
         .bind(playback.width)
         .execute(&mut **tx)
         .await?;
@@ -3114,13 +3114,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
-    match kind {
-        VideoScanKind::Progressive => 0,
-        VideoScanKind::Interlaced => 1,
-        VideoScanKind::Unknown => 2,
-    }
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]

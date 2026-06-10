@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::RepositoryError;
 use ersatzrs_domain::{
-    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink, VideoScanKind,
+    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink,
 };
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
@@ -1168,7 +1168,7 @@ pub(crate) async fn insert_media_version_with_owner(
         .bind(item_id)
         .bind(&version.r_frame_rate)
         .bind(&version.sample_aspect_ratio)
-        .bind(encode_video_scan_kind(version.video_scan_kind))
+        .bind(version.video_scan_kind.db_value())
         .bind(version.width)
         .bind(version.interlaced_ratio)
         .execute(&mut **tx)
@@ -1613,7 +1613,7 @@ pub(crate) async fn update_media_version(
     .bind(&version.name)
     .bind(&version.r_frame_rate)
     .bind(&version.sample_aspect_ratio)
-    .bind(encode_video_scan_kind(version.video_scan_kind))
+    .bind(version.video_scan_kind.db_value())
     .bind(version.width)
     .bind(version.interlaced_ratio)
     .bind(version_id)
@@ -1757,13 +1757,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
-    match kind {
-        VideoScanKind::Progressive => 0,
-        VideoScanKind::Interlaced => 1,
-        VideoScanKind::Unknown => 2,
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct LocalLibraryPath {

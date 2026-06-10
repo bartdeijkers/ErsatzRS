@@ -2044,7 +2044,7 @@ async fn ensure_media_version(
         .bind(item_id)
         .bind(&item.r_frame_rate)
         .bind(&item.sample_aspect_ratio)
-        .bind(encode_video_scan_kind(item.video_scan_kind))
+        .bind(item.video_scan_kind.db_value())
         .bind(item.width)
         .execute(&mut **tx)
         .await?;
@@ -2070,7 +2070,7 @@ async fn update_media_version(
     .bind(item.height)
     .bind(&item.r_frame_rate)
     .bind(&item.sample_aspect_ratio)
-    .bind(encode_video_scan_kind(item.video_scan_kind))
+    .bind(item.video_scan_kind.db_value())
     .bind(item.width)
     .bind(id)
     .execute(&mut **tx)
@@ -2593,13 +2593,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-fn encode_video_scan_kind(kind: VideoScanKind) -> i32 {
-    match kind {
-        VideoScanKind::Progressive => 0,
-        VideoScanKind::Interlaced => 1,
-        VideoScanKind::Unknown => 2,
-    }
-}
 
 #[derive(Debug, Deserialize)]
 struct PlexLibrariesResponse {

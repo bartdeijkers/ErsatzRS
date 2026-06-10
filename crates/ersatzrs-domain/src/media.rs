@@ -30,6 +30,21 @@ pub enum VideoScanKind {
     Interlaced,
 }
 
+impl VideoScanKind {
+    /// Database integer for `MediaVersion.VideoScanKind`, matching ErsatzTV's
+    /// `VideoScanKind` enum (`Unknown = 0, Progressive = 1, Interlaced = 2`).
+    /// Every writer must use this so scan-kind reads (deinterlace decisions,
+    /// media browser labels) agree with ErsatzTV-compatible databases.
+    #[must_use]
+    pub const fn db_value(self) -> i32 {
+        match self {
+            Self::Unknown => 0,
+            Self::Progressive => 1,
+            Self::Interlaced => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct MediaItem {
     pub id: EntityId,
