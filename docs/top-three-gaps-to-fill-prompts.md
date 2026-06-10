@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-08
-last_processed_commit: c5162a20bb60de5efc6de08094e62f2d5a1113e8
+generated: 2026-06-10
+last_processed_commit: 52e102896ce17e0b776b0a8e83763eb19d7a96db
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,15 +21,18 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `8bc6b7f..c5162a2`): real feature work landed — the
-`/channels` Stop Transcode Session button advanced `channels-admin-ui` (which
-the feature commit already marked `Ported`) and extended the HLS session
-registry/worker with cancel/stop parity. The top three are re-ranked normally:
-support-pages (health/troubleshooting explicitly called out first in
-`phase.toml` next_steps), HLS transport (still `In progress`, foundational
-backend, foundational-before-leaf-UI rule, even after the cancel/stop slice),
-then the `In progress` media route-family parity slice (alphabetical tiebreaker
-over `settings`).
+Ranking this run (window `c5162a2..52e1028`): backend/transport work dominated —
+the feature commits closed colorspace normalization (a new `Ported`
+`hardware-colorspace-normalization` slug) and advanced HLS segmenter / fMP4
+init-segment lifecycle, MPEG-TS streaming, IPTV direct-stream cancellation, and
+NVENC CUDA overlay/device init. None of those features are named in
+`phase.toml` `next_steps`, so the three picks are the **phase-focus** gaps that
+are still `In progress` and saw no commits this window:
+`support-pages` (health/troubleshooting is the explicit current focus, carried
+over from the prior run), `settings` (i18n full coverage is named in
+`next_steps`; foundational config consumed app-wide), then `multi-collections…`
+(phase-named leaf media UI, alphabetical/leaf tiebreaker, carried over). HLS
+(prior #2) re-ranks off after this window's heavy progress.
 
 ---
 
@@ -37,16 +40,17 @@ over `settings`).
 
 Fix the next ErsatzTV parity gap in ErsatzRS: Support pages — routes
 `/system/health`, `/system/logs`, `/system/troubleshooting` (slug
-`support-pages`).
+`support-pages`). *(Carried over from the prior run — no commits this window.)*
 
 Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current remaining ParityDebt (from `docs/progress/parity/support-pages.toml`):
+Current remaining ParityDebt (quoted from `docs/progress/parity/support-pages.toml`):
 "Dynamic nav badge counts and full log search/sort paging remain future parity
 work." ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
 `ErsatzTV/Pages/Troubleshooting/`. ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/system/`.
+`crates/ersatzrs-web/src/admin/pages/system/`,
+`crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`.
 
 Before editing:
 1. Read the ErsatzTV source above under `$ERSATZTV_SRC/` (at pinned commit
@@ -76,51 +80,62 @@ Report Source Map, Visual Source Map, behavior implemented, remaining
 
 ---
 
-## 2 — HLS variant playlists / segmenter (slug `hls-variant-playlists-segmenter`)
+## 2 — Settings i18n full coverage (slug `settings`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: HLS variant playlists / segmenter
-(slug `hls-variant-playlists-segmenter`). Primarily backend/transport.
+Fix the next ErsatzTV parity gap in ErsatzRS: Settings (FFmpeg / Logging /
+HDHomeRun / Scanner / Playout / UI / XMLTV) — routes
+`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` (slug `settings`).
 
 Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current parity state (from
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`): the entry surface,
-multi-variant playlist, segmenter/fMP4 worker, live playlist trim with
-discontinuity preservation, hls-direct branch, IPTV JWT authorization, and the
-shared subtitle selector are ported. The latest slice (driven by the `/channels`
-Stop Transcode Session button) added `HlsSessionHandle::cancel`,
-`HlsSessionRegistry::active_channels`/`is_active`/`stop_channel`, and worker
-`cancel`. Remaining ParityDebt quoted from the summary: "any fMP4 init-segment
-cache parity that still matters after direct mode, then the broader Phase 7
-items after HLS completion." ErsatzTV source:
-`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`,
-`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`,
-`$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`,
-`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`. ErsatzRS target:
-`crates/ersatzrs-web/src/transport/iptv/`, `crates/ersatzrs-core/src/hls.rs`,
-`crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`,
-`crates/ersatzrs-ffmpeg`.
+Current parity state (from `docs/progress/parity/settings.toml`): the settings
+routes are ported with ErsatzTV-shaped forms, raw HTML POST fallbacks backed by
+`ConfigElement`, the ported save side effects (logging filter reload, FFmpeg
+runtime/capability refresh, report-folder creation, subtitle extraction
+queueing, playout rebuild queueing, XMLTV refresh), and a `FFmpegLocator` port
+that resolves and persists the ffmpeg/ffprobe paths at startup and on save. The
+persisted `pages.language` value drives the SSR shell and typed translations
+across a large but not yet complete set of admin routes; ErsatzRS intentionally
+adds an `nl` culture beyond ErsatzTV's en/pl/pt-br (ADR 0012). Remaining
+ParityDebt quoted from the summary: "Full admin-route text coverage and
+four-language browser proof remain active i18n `ParityDebt`; see
+`plans/settings-parity-slice.md`." Also: "the FFmpeg settings inputs are still
+`required`, so empty-means-auto-detect is exercised only by startup/the server
+fn, not the form UI." ErsatzTV source: `ErsatzTV/Pages/Settings*.razor`,
+`$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs`. ErsatzRS target:
+`crates/ersatzrs-web/src/admin/pages/settings.rs`,
+`crates/ersatzrs-web/src/admin/server_fns/settings.rs`,
+`crates/ersatzrs-web/src/admin/i18n.rs`,
+`crates/ersatzrs-web/src/admin/languages/`.
 
 Before editing:
-1. Read the ErsatzTV HLS output format and session worker under `$ERSATZTV_SRC/`
-   (at pinned commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on
-   fMP4 init-segment caching/lifetime.
-2. Inspect the current ErsatzRS segmenter worker, session registry (including
-   the new cancel/stop_channel/active_channels paths), and the
-   `/iptv/session/{n}/{file}` + `#EXT-X-MAP`/`init.mp4` delivery path.
-3. Build a Source Map; identify remaining `ParityDebt`.
+1. Read the ErsatzTV `Settings*.razor` pages and `ConfigElementKey.cs` under
+   `$ERSATZTV_SRC/` (at pinned commit
+   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), enumerating every visible label,
+   helper, option, and validation message on each settings tab.
+2. Inspect the current ErsatzRS settings pages, server fns, `i18n.rs` routing
+   glue, the per-culture `languages/` modules, and `plans/settings-parity-slice.md`.
+3. Build a Source Map and a Visual Source Map for each settings route; list the
+   admin routes still missing four-language text coverage.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
 
-Implement the slice: port fMP4 init-segment cache parity (lifetime, reuse,
-cleanup) to match ErsatzTV, preserving the existing playlist-trim,
-discontinuity, and cancel/stop behavior. Add focused crate/transport tests,
-including snapshot coverage where the playlist/argv shape changes. Update the
-parity file.
+Implement the coherent end-to-end slice: close the remaining admin-route text
+coverage so every visible settings string is localized across
+`en-us`/`pl`/`pt-br`/`nl`, keep `i18n.rs` as routing/helper glue (ADR 0012's
+translation boundary, not a translation dump), and — if in scope — relax the
+`required` FFmpeg inputs so empty-means-auto-detect is exercised from the form.
+Preserve SSR/browser-safe fallbacks, follow `TEST.md` hydration rules, add
+focused tests, and update the parity file (and `plans/settings-parity-slice.md`).
 
-Verify with the focused transport/crate gates and `cargo xtask progress check`.
-If any IPTV playlist output is exercised live, capture a short runtime smoke as
-evidence. Report Source Map, behavior implemented, remaining `ParityDebt`,
-verification run, and changed files.
+Visual verification: serve via `./run.sh serve` after rebuilding Leptos assets,
+open each touched settings route in each of the four cultures, and compare
+same-viewport geometry and translated text against the ErsatzTV reference (field
+labels, option lists, helper/validation text, clipped/overflowing strings).
+
+Verify with `cargo xtask parity-check web` and `cargo xtask progress check`.
+Report Source Map, Visual Source Map, behavior implemented, remaining
+`ParityDebt`, verification run, and changed files.
 
 ---
 
@@ -130,6 +145,7 @@ Fix the next ErsatzTV parity gap in ErsatzRS: Multi-collections / Rerun
 collections / Playlists / Filler presets — routes `/media/multi-collections`,
 `/media/rerun-collections`, `/media/playlists`, and `/media/filler/presets`
 (slug `multi-collections-rerun-collections-playlists-filler-presets`).
+*(Carried over from the prior run — no commits this window.)*
 
 Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
