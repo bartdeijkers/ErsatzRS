@@ -1,8 +1,10 @@
 feature    = 'FFmpeg filter graph'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0003']
 summary    = '''
 Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass. Resource-backed dynamic graphics watermarks remain tracked under the graphics-engine plan.
+
+Remaining `ParityDebt` (runtime evidence, `ErsatzRS.log` 2026-06-10): the NVENC/CUDA filter graph produces unconvertible chains at runtime — the HLS segmenter for channel 1 loops on exit `0xffffffd8` with `Impossible to convert between the formats supported by the filter 'Parsed_scale_cuda_1' and the filter 'auto_scale_0'` and `'Parsed_loop_2' and 'auto_scale_1'` (a still-image `loop` node fed hardware frames), so playback of that channel fails with 503 after the 60s startup timeout. ErsatzTV's pipeline inserts the required hwdownload/hwupload/format steps for these transitions; the ported graph does not on this path.
 '''

@@ -1,7 +1,7 @@
 feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0010']
 summary    = '''
 Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Remaining follow-up is limited to imported-database verification in Slice 21 and rarely used schedule-item filler/group behaviors.
@@ -9,4 +9,6 @@ Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classi
 Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
 
 ParityDebt — Continue-build seam overlap: the persisted `anchor.next_start` tracks the schedule's daily hard-stop boundary while the last episode of each day overshoots it, so the following Continue build re-adds one item at the boundary that overlaps the prior overshoot item (one stray item per build, ~2 days ahead at the tail; never over the live `now` window). This matches ErsatzTV's acknowledged "expected overshoot" (`PlayoutBuilder.cs` logs the future-item warning and deliberately leaves the items). A full fix requires porting ErsatzTV's multi-day build loop with continue-anchors so `anchor.next_start` equals the last scheduled item's finish.
+
+ParityDebt — duplicate consecutive item (observed 2026-06-10): the MTV music-video channel played the same item twice in a row (No Doubt - "Don't Speak"), which ErsatzTV's shuffled collection ordering does not do (its shuffle avoids immediate repeats across reshuffle boundaries). Verify the shuffled media-collection enumerator and its persisted ordering/anchor state against `ShuffledMediaCollectionEnumerator` at the pinned baseline.
 '''
