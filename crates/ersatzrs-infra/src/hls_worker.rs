@@ -3236,6 +3236,45 @@ mod tests {
         assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity"));
     }
 
+    #[test]
+    fn build_hls_error_command_keeps_still_image_in_software_for_nvenc() {
+        let mut nvenc_profile = playback_profile();
+        nvenc_profile.profile.hardware_acceleration =
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc;
+        let command = build_hls_error_command_from_assets(HlsErrorCommandRequest {
+            background_path: Path::new("/tmp/hls/error/background.png"),
+            subtitle_path: Path::new("/tmp/hls/error/error.ass"),
+            output_format: OutputFormat::Hls,
+            is_first_transcode: true,
+            hls_realtime: false,
+            duration: Duration::from_secs(4),
+            output_ts_offset: None,
+            playback_profile: &nvenc_profile,
+            target_frame_rate: Some(FrameRate::new(30000, 1001)),
+            metadata: OutputMetadata::default(),
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+        });
+        let arguments = command.arguments.join(" ");
+
+        // The PNG background feeds software-only filters (`loop`, subtitle
+        // burn): no upfront hwupload/scale_cuda, and the RGB still image must
+        // be converted for the encoder via the pixel-format output option.
+        assert!(
+            !arguments.contains("hwupload"),
+            "still-image error pipeline must stay in software, got: {arguments}"
+        );
+        assert!(
+            !arguments.contains("scale_cuda"),
+            "software frames cannot feed scale_cuda, got: {arguments}"
+        );
+        assert!(
+            arguments.contains("-pix_fmt yuv420p"),
+            "still image needs a pixel format conversion before encode, got: {arguments}"
+        );
+        assert!(arguments.contains("loop=-1:1"));
+        assert!(arguments.contains("subtitles=/tmp/hls/error/error.ass"));
+    }
+
     #[tokio::test]
     async fn build_hls_error_command_writes_generated_assets() {
         let working_dir = tempfile::tempdir().expect("create hls temp dir");

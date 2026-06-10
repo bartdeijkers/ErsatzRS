@@ -1355,6 +1355,13 @@ fn apply_source_video_filters(
         target_state.frame_data_location = deinterlace_output_location(acceleration);
     }
 
+    // The cuda software-decode fallback uploads frames to the GPU as the
+    // first input filter step, so past the deinterlace decision the surface
+    // is hardware whether or not a deinterlace filter consumed the upload.
+    if acceleration == HardwareAccelerationKind::Nvenc && uploaded_cuda_fallback {
+        target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+    }
+
     if target_state.is_hdr && is_transcode {
         filter_chain.video.push(tonemap_filter_for(
             acceleration,
@@ -2010,9 +2017,18 @@ fn add_cuda_software_fallback_upload(
     request: &mut PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> bool {
+    // Still-image sources (song/error/slug backgrounds) stay in software:
+    // their chain starts with software-only filters (`loop`, subtitle burn),
+    // so an upfront hwupload would feed CUDA frames into filters that cannot
+    // accept them. nvenc takes the software frames directly at encode time.
+    let is_still_image = request
+        .source_video_stream
+        .as_ref()
+        .is_some_and(|source| source.is_still_image);
     if acceleration != HardwareAccelerationKind::Nvenc
         || request.desired.video_format == FFmpegProfileVideoFormat::Copy
         || request.source_video_stream.is_none()
+        || is_still_image
         || nvidia_vulkan_hdr_tonemap(request)
     {
         return false;
@@ -2331,8 +2347,19 @@ fn should_emit_pixel_format_output_option(
         return false;
     }
 
-    request.source_video_stream.is_some()
-        && target_state.pixel_format != request.desired.pixel_format()
+    let Some(source) = request.source_video_stream.as_ref() else {
+        return false;
+    };
+    // Still images decode to RGB-family frames the pixel-format enum cannot
+    // represent, so the state comparison below misses them; without the
+    // output option libx264 rejects the frames ("high profile doesn't
+    // support 4:4:4") and nvenc encodes the wrong format.
+    if source.is_still_image
+        && target_state.frame_data_location == crate::FrameDataLocation::Software
+    {
+        return true;
+    }
+    target_state.pixel_format != request.desired.pixel_format()
 }
 
 const fn software_video_encoder_name(format: FFmpegProfileVideoFormat) -> &'static str {
@@ -2566,7 +2593,15 @@ fn video_scale_filter(
             qsv_extra_hardware_frames,
         ),
         HardwareAccelerationKind::Nvenc => {
-            scale_cuda_filter(current, scaled_size, padded_size, bit_depth)
+            // `scale_cuda` only accepts CUDA surfaces. Software frames on the
+            // nvenc path (still-image pipelines that skip the upload
+            // fallback) scale with the software filter; nvenc accepts the
+            // software frames at encode time.
+            if current.frame_data_location == crate::FrameDataLocation::Hardware {
+                scale_cuda_filter(current, scaled_size, padded_size, bit_depth)
+            } else {
+                crate::scale_filter(current, scaled_size, padded_size)
+            }
         }
         HardwareAccelerationKind::Vaapi => {
             scale_vaapi_filter(current, scaled_size, padded_size, bit_depth)
