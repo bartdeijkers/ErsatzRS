@@ -171,11 +171,18 @@ mod windows_launcher {
         );
 
         // Point Leptos at the bundled hydration assets (staged under `site/`) so
-        // the admin UI is interactive.
+        // the admin UI is interactive. The release server binary is built with
+        // plain `cargo build` (no cargo-leptos), so it has no compile-time
+        // LEPTOS_OUTPUT_NAME default; without it the env-based config falls
+        // back to an empty output name and the shell never emits the
+        // hydration scripts.
         let site = exe_dir.join("site");
         if site.is_dir() {
             command.env("LEPTOS_SITE_ROOT", &site);
             command.env("LEPTOS_SITE_PKG_DIR", "pkg");
+            if std::env::var_os("LEPTOS_OUTPUT_NAME").is_none() {
+                command.env("LEPTOS_OUTPUT_NAME", "ersatzrs-web");
+            }
         }
 
         command.spawn()
