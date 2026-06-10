@@ -1397,11 +1397,14 @@ fn apply_source_video_filters(
                 FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
                 FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
             };
-        } else if acceleration == HardwareAccelerationKind::Nvenc
-            && uploaded_cuda_fallback
-            && target_state.frame_data_location == crate::FrameDataLocation::Hardware
-            && target_state.should_deinterlace
-        {
+        } else if acceleration == HardwareAccelerationKind::Nvenc && uploaded_cuda_fallback {
+            // The cuda software-decode fallback uploads frames to the GPU as
+            // the first input filter step, so after `scale_cuda` the surface
+            // is hardware even when no deinterlace filter consumed the upload.
+            // Track location and surface format so downstream software
+            // filters (pad/crop/subtitle burn) prepend the matching
+            // `hwdownload,format=…`.
+            target_state.frame_data_location = crate::FrameDataLocation::Hardware;
             target_state.pixel_format = cuda_surface_pixel_format(request.desired.bit_depth);
         }
     }
