@@ -31,8 +31,28 @@ if ((Test-Path $ffprobeBin) -and -not $env:ErsatzRS_FFPROBE__PATH) {
     $env:ErsatzRS_FFPROBE__PATH = $ffprobeBin
 }
 
+function Resolve-TargetDir {
+    if ($env:CARGO_TARGET_DIR) { return $env:CARGO_TARGET_DIR }
+
+    $configPath = '.cargo/config.toml'
+    if (Test-Path $configPath) {
+        $inBuild = $false
+        foreach ($line in Get-Content $configPath) {
+            if ($line -match '^\s*\[') {
+                $inBuild = $line -match '^\s*\[build\]'
+                continue
+            }
+            if ($inBuild -and $line -match '^\s*target-dir\s*=\s*[''"]?([^''"]+)[''"]?\s*$') {
+                return $Matches[1].Trim()
+            }
+        }
+    }
+
+    return 'target'
+}
+
 function Test-TargetSize {
-    $targetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }
+    $targetDir = Resolve-TargetDir
     if (-not (Test-Path $targetDir)) { return }
 
     $thresholdGiB = if ($env:ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB) {
