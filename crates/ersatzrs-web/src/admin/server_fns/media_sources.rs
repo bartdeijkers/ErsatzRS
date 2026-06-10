@@ -257,7 +257,7 @@ fn normalize_local_library_path(raw: &str) -> Option<String> {
     let decoded = urlencoding::decode(uri_path)
         .map_or_else(|_| uri_path.to_string(), std::borrow::Cow::into_owned);
     let path = std::path::Path::new(&decoded);
-    let normalized = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let normalized = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let text = normalized.to_string_lossy();
     let text = text.trim_end_matches(['/', '\\']);
 
@@ -1200,9 +1200,7 @@ mod tests {
         assert_eq!(paths.len(), 1);
         assert_eq!(
             paths[0].try_get::<String, _>("Path").expect("path"),
-            media_dir
-                .path()
-                .canonicalize()
+            dunce::canonicalize(media_dir.path())
                 .expect("canonical path")
                 .display()
                 .to_string()
