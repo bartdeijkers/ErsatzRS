@@ -35,7 +35,7 @@ permissions:
 jobs:
   fmt:
     name: Format
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -43,7 +43,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # clippy build on the serial self-hosted runner.
     needs: fmt
@@ -65,7 +65,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     # Gate on the fast fmt job so a formatting failure doesn't burn a full
     # test build on the serial self-hosted runner.
     needs: fmt
@@ -87,7 +87,7 @@ jobs:
 
   deny:
     name: Cargo deny
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -98,7 +98,7 @@ jobs:
 
   commitlint:
     name: Commit lint
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
@@ -113,7 +113,7 @@ jobs:
 
   docs:
     name: Documentation links
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     steps:
       - uses: actions/checkout@v6
       - name: Check Markdown files exist
