@@ -257,24 +257,26 @@ pub fn subtitle_graphics_lavfi_input(
     )
 }
 
-#[cfg(windows)]
 fn escape_subtitles_filter_path(path: &str) -> String {
-    let mut effective = path.replace('\\', r"/\");
-    if !effective.starts_with("http://") && !effective.starts_with("https://") {
-        effective = effective.replace(":/", r"\:/");
+    let mut effective = path.replace('\\', "/");
+    if looks_like_windows_absolute_path(&effective) {
+        // The drive colon passes through two ffmpeg parsers: the filtergraph
+        // parser consumes one backslash, and the filter option parser needs
+        // the remaining `\:` to keep the colon out of option splitting.
+        effective.replace_range(1..2, r"\\:");
     }
     escape_subtitles_filter_common(&effective)
 }
 
-#[cfg(not(windows))]
-fn escape_subtitles_filter_path(path: &str) -> String {
-    escape_subtitles_filter_common(path)
+fn looks_like_windows_absolute_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/'
 }
 
 fn escape_subtitles_filter_common(path: &str) -> String {
     path.replace('[', r"\[")
         .replace(']', r"\]")
-        .replace("http://localhost:", r"http\://localhost\:")
+        .replace("http://localhost:", r"http\\://localhost\\:")
 }
 
 #[derive(Debug, Clone, PartialEq)]
