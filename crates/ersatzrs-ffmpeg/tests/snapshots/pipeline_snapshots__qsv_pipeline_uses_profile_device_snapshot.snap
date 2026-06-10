@@ -1,6 +1,7 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-expression: "format!(\"env={:?}\\nargs={}\", command.environment, command.arguments.join(\" \"))"
+assertion_line: 1314
+expression: "format!(\"env={:?}\\nargs={args}\", command.environment)"
 ---
 env=[EnvironmentVariable { name: "CUDA_VISIBLE_DEVICES", value: "999" }]
-args=-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel qsv -hwaccel_output_format qsv -qsv_device /dev/dri/renderD129 -init_hw_device qsv=hw -filter_hw_device hw -c:v h264_qsv -readrate 1.05 -i /media/movie.mkv -readrate 1.05 -i /media/movie.mkv -filter_complex [0:0]vpp_qsv=format=nv12,hwdownload,format=nv12,setpts=PTS-STARTPTS,fps=30000/1001[v];[1:1]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v h264_qsv -low_power 0 -look_ahead 0 -codec:a aac -video_track_timescale 90000 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+args=-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -hwaccel qsv -hwaccel_output_format qsv -init_hw_device qsv=hw -filter_hw_device hw -c:v h264_qsv -readrate 1.05 -i /media/movie.mkv -readrate 1.05 -i /media/movie.mkv -filter_complex [0:0]vpp_qsv=format=nv12,hwdownload,format=nv12,setpts=PTS-STARTPTS,fps=30000/1001[v];[1:1]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v h264_qsv -low_power 0 -look_ahead 0 -codec:a aac -video_track_timescale 90000 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

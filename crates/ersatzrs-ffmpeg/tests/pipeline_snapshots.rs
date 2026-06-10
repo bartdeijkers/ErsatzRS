@@ -32,6 +32,31 @@ fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
         .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264))
 }
 
+/// Replace every spelling of `output_dir` (raw, forward-slash, and the
+/// filter-escaped `X\:`/`X\\:` drive forms) with `<tmp>` so snapshots taken
+/// on Linux (`/tmp/...`) and Windows (`C:\Users\...\Temp\...`) are identical.
+fn normalize_temp_paths(value: &str, output_dir: &std::path::Path) -> String {
+    let raw = output_dir.to_string_lossy().into_owned();
+    let forward = raw.replace('\\', "/");
+    // drawvg quoting doubles backslashes; subtitles paths escape the drive
+    // colon. Cover every spelling the filters emit.
+    let mut variants = vec![raw.replace('\\', r"\\"), raw, forward.clone()];
+    if forward.len() >= 2 && forward.as_bytes()[1] == b':' {
+        let (drive, rest) = forward.split_at(1);
+        let rest = &rest[1..];
+        variants.push(format!(r"{drive}\\:{rest}"));
+        variants.push(format!(r"{drive}\:{rest}"));
+    }
+    variants.sort_by_key(|variant| std::cmp::Reverse(variant.len()));
+    let mut normalized = value.to_owned();
+    for variant in variants {
+        normalized = normalized.replace(&variant, "<tmp>");
+    }
+    normalized
+        .replace(r"<tmp>\\", "<tmp>/")
+        .replace(r"<tmp>\", "<tmp>/")
+}
+
 fn source_1080p(codec: SourceVideoCodec, width: u32, height: u32) -> SourceVideoStream {
     let mut source = SourceVideoStream::new(codec);
     source.frame_size = Some(FrameSize::new(width, height));
@@ -1269,11 +1294,24 @@ fn qsv_pipeline_uses_profile_device_snapshot() {
     let pipeline = QsvPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
 
-    insta::assert_snapshot!(format!(
-        "env={:?}\nargs={}",
-        command.environment,
-        command.arguments.join(" ")
-    ));
+    let args = command.arguments.join(" ");
+
+    // `-qsv_device` is intentionally Linux-only (the VAAPI render node has no
+    // Windows/macOS equivalent), so assert it per platform and snapshot the
+    // platform-neutral remainder.
+    #[cfg(target_os = "linux")]
+    assert!(
+        args.contains("-qsv_device /dev/dri/renderD129"),
+        "Linux QSV must pass the profile device, got: {args}"
+    );
+    #[cfg(not(target_os = "linux"))]
+    assert!(
+        !args.contains("-qsv_device"),
+        "-qsv_device is a Linux render node option, got: {args}"
+    );
+    let args = args.replace("-qsv_device /dev/dri/renderD129 ", "");
+
+    insta::assert_snapshot!(format!("env={:?}\nargs={args}", command.environment));
 }
 
 #[test]
@@ -2349,7 +2387,10 @@ fn graphics_element_renderer_writes_drawvg_scripts_snapshot() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!("graphics_element_overlay_plan", overlay_plan);
+    insta::assert_snapshot!(
+        "graphics_element_overlay_plan",
+        normalize_temp_paths(&overlay_plan, &output_dir)
+    );
 
     let filters = rendered_elements
         .iter()
@@ -2361,7 +2402,10 @@ fn graphics_element_renderer_writes_drawvg_scripts_snapshot() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!("graphics_element_drawvg_filters", filters);
+    insta::assert_snapshot!(
+        "graphics_element_drawvg_filters",
+        normalize_temp_paths(&filters, &output_dir)
+    );
 
     let scripts = rendered_elements
         .iter()
@@ -2670,7 +2714,10 @@ fn graphics_element_renderer_writes_script_drawvg_snapshot() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    insta::assert_snapshot!("graphics_element_script_overlay", overlay);
+    insta::assert_snapshot!(
+        "graphics_element_script_overlay",
+        normalize_temp_paths(&overlay, &output_dir)
+    );
 
     let rendered_script = std::fs::read_to_string(output_dir.join("31-script-lower-third.vgs"))
         .expect("script drawvg renders");

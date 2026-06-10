@@ -1,5 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-expression: filters
+assertion_line: 2405
+expression: "normalize_temp_paths(&filters, &output_dir)"
 ---
-drawvg=file='/tmp/ersatzrs-ffmpeg-graphics-elements/9-now-playing.vgs'
+drawvg=file='<tmp>/9-now-playing.vgs'

@@ -1,5 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-expression: overlay
+assertion_line: 2717
+expression: "normalize_temp_paths(&overlay, &output_dir)"
 ---
-drawvg=file='/tmp/ersatzrs-ffmpeg-script-graphics/31-script-lower-third.vgs':enable='between(t,3,10.5)'
+drawvg=file='<tmp>/31-script-lower-third.vgs':enable='between(t,3,10.5)'
