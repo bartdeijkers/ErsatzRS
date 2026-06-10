@@ -1,0 +1,152 @@
+# Build and publish a local Windows release
+
+Use this guide when GitHub Actions cannot produce the release artifacts and you
+need to build the `win-x64` archive locally, push the tag, and attach the archive
+to the GitHub release.
+
+This guide assumes you are intentionally producing only the Windows archive.
+Pushing the tag still triggers `.github/workflows/release.yml`; if Actions
+minutes are unavailable, GitHub will not produce the Linux/macOS archives or the
+Docker image.
+
+For a normal release that produces all GitHub assets and the Docker image, use
+[Publish a full release](publish-release.md). Do not use `./run.ps1 build` for
+release packaging; it builds local dev assets and starts the server, but it does
+not create release archives or a `build/` directory.
+
+## Prerequisites
+
+- Rust with the `wasm32-unknown-unknown` target installed.
+- `cargo-leptos 0.3.6`.
+- `stylance-cli 0.8.2`.
+- GitHub CLI (`gh`) authenticated for this repository.
+- 7-Zip available as `7z`.
+- FFmpeg and ffprobe 8.1 or newer for Windows, with the `drawvg` and `zscale`
+  filters.
+- The repository `.cargo/config.toml` target directory in use. Do not override
+  `CARGO_TARGET_DIR`; the committed config points release output at
+  `F:\ErsatzRS\target-win` on this machine.
+
+Check the tool versions before building:
+
+```powershell
+cargo leptos --version
+stylance --version
+gh auth status
+rustup target list --installed | Select-String wasm32-unknown-unknown
+```
+
+## Build the frontend assets
+
+Build the Leptos hydration bundle from the web crate:
+
+```powershell
+Set-Location crates/ersatzrs-web
+cargo leptos build --release --frontend-only --lib-features hydrate
+Set-Location ../..
+```
+
+Confirm the expected outputs exist under the configured target directory and the
+web crate public assets:
+
+```powershell
+Test-Path F:\ErsatzRS\target-win\site\pkg
+Test-Path crates\ersatzrs-web\public\bundle.css
+```
+
+## Build the release binaries
+
+Build the Windows server, scanner, and launcher binaries:
+
+```powershell
+cargo build --release `
+  --bin ersatzrs-web `
+  --bin ersatzrs-scanner `
+  --bin ersatzrs-launcher `
+  --target x86_64-pc-windows-msvc
+```
+
+## Stage the archive
+
+Set the release tag and create the workflow-compatible stage directory:
+
+```powershell
+$Tag = "v0.0.6-alpha"
+$Stage = "ersatzrs-$Tag-win-x64"
+Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
+New-Item -ItemType Directory $Stage | Out-Null
+```
+
+Copy the binaries, naming the launcher as the user-facing entry point:
+
+```powershell
+Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-web.exe $Stage\
+Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-scanner.exe $Stage\
+Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-launcher.exe $Stage\ErsatzRS.exe
+```
+
+Copy the bundled FFmpeg binaries and verify the required filters:
+
+```powershell
+Copy-Item C:\path\to\ffmpeg.exe $Stage\
+Copy-Item C:\path\to\ffprobe.exe $Stage\
+& "$Stage\ffmpeg.exe" -hide_banner -filters | Select-String -Pattern "\bdrawvg\b"
+& "$Stage\ffmpeg.exe" -hide_banner -filters | Select-String -Pattern "\bzscale\b"
+```
+
+Copy the web assets and repository assets:
+
+```powershell
+Copy-Item -Recurse F:\ErsatzRS\target-win\site $Stage\site
+Copy-Item -Recurse crates\ersatzrs-web\public $Stage\public
+Copy-Item -Recurse assets $Stage\assets
+Copy-Item LICENSE $Stage\
+Copy-Item README.md $Stage\
+```
+
+Create the zip:
+
+```powershell
+7z a -tzip "$Stage.zip" $Stage
+```
+
+The staged layout should match [the release bundle reference](../reference/release-bundle.md).
+
+## Publish to GitHub
+
+Commit and push any release fixes before tagging. Stage only files that belong
+to the release fix:
+
+```powershell
+git status --short
+git add path\to\changed-file
+git commit -m "fix(release): prepare local Windows archive"
+git push origin HEAD
+```
+
+Create and push an annotated tag:
+
+```powershell
+git tag -a $Tag -m $Tag
+git push origin $Tag
+```
+
+The tag push starts the release workflow. If the workflow creates the release,
+upload the local archive to that release:
+
+```powershell
+gh release upload $Tag "$Stage.zip" --clobber
+```
+
+If the workflow did not create a release, create it from the pushed tag and
+attach the archive:
+
+```powershell
+gh release create $Tag "$Stage.zip" --generate-notes --verify-tag
+```
+
+Verify the published release includes the local archive:
+
+```powershell
+gh release view $Tag --json tagName,assets,url
+```

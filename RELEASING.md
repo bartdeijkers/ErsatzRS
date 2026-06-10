@@ -32,27 +32,19 @@ git push origin v0.1.0
 6. Let the release workflow create binary archives and publish the Docker image.
 7. Verify the GitHub release notes match the changelog.
 
+For the command sequence, see [Publish a full release](docs/how-to/publish-release.md).
+
 ## Windows bundle (`ersatzrs-<version>-win-x64.zip`)
 
 The win-x64 archive is self-contained: a user unzips it and double-clicks
-`ErsatzRS.exe`. The release workflow (`.github/workflows/release.yml`, `binaries`
-job) stages:
+`ErsatzRS.exe`. See [Release Bundle Reference](docs/reference/release-bundle.md)
+for the archive layout and launcher environment.
 
-| File | Source | Purpose |
-|---|---|---|
-| `ErsatzRS.exe` | `ersatzrs-launcher` (built `--bin ersatzrs-launcher`) | System-tray launcher — the entry point. Starts the server windowless; menu: Open Web UI, Show Logs, Exit. |
-| `ersatzrs-web.exe` | `ersatzrs-web` | The actual server (admin UI + IPTV/HDHR). The launcher spawns it. |
-| `ersatzrs-scanner.exe` | `ersatzrs-scanner` | One-shot library scanner. |
-| `ffmpeg.exe`, `ffprobe.exe` | Pinned BtbN win64-gpl FFmpeg 8.1 | Bundled so no system FFmpeg is needed. The launcher points the server at these via `ERSATZRS_FFMPEG__PATH` / `ERSATZRS_FFPROBE__PATH`. The workflow asserts the `drawvg` filter is present (ErsatzRS hard-requires FFmpeg 8.1). |
-| `site/` | `cargo leptos build --release` output (`target/site`) | Leptos hydration assets. Without these the admin UI renders but is not interactive. The launcher sets `LEPTOS_SITE_ROOT` to this folder. |
-| `assets/`, `LICENSE`, `README.md` | repo | SVG graphics templates, license, readme. |
+For local Windows release publishing, use
+[Build and publish a local Windows release](docs/how-to/release-locally.md).
 
-Notes:
-- The launcher delivers a console `Ctrl+C` to the server on Exit; the server's
-  `host::bootstrap::shutdown_signal` turns that into a graceful drain.
-- The bundled FFmpeg is GPL. If BtbN renames the pinned asset, update
-  `FFMPEG_ZIP_URL` in the workflow — the `drawvg` assertion is the correctness
-  guard.
+The launcher delivers a console `Ctrl+C` to the server on Exit; the server's
+`host::bootstrap::shutdown_signal` turns that into a graceful drain.
 
 ## Code signing (Windows) — optional, not yet enabled
 

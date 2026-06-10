@@ -17,6 +17,12 @@ task-oriented.
 
 Location: [how-to/](how-to/)
 
+Current how-to guides:
+
+- [Publish a full release](how-to/publish-release.md)
+- [Publish a release without GitHub-hosted minutes](how-to/publish-release-with-self-hosted-runners.md)
+- [Build and publish a local Windows release](how-to/release-locally.md)
+
 ## Reference
 
 Reference pages are lookup material. They should be complete, structured, and
@@ -29,12 +35,17 @@ Current reference pages:
 - [Configuration](reference/configuration.md)
 - [Glossary](reference/glossary.md)
 - [Parity matrix](reference/parity-matrix.md)
+- [Release bundle](reference/release-bundle.md)
 
 ## Explanation
 
 Explanation pages discuss background, tradeoffs, and reasons.
 
 Location: [explanation/](explanation/)
+
+Current explanation pages:
+
+- [Leptos runtime configuration](explanation/leptos-runtime-config.md)
 
 ## Rule of Thumb
 
