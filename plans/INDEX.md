@@ -127,6 +127,10 @@ These are intentionally deferred until code exists:
 - Docker multi-arch release flow.
 - Claude hook automation in `.claude/settings.json`; hook schema should be
   validated before enabling it.
+- Workflow improvements from the parity-progress pipeline review
+  (`workflow-review.md`): LLM-agnostic skills/contracts, summary hygiene plus
+  runtime-triage routine, evidence-gated parity status, and a
+  `cargo xtask smoke` runtime gate.
 
 ## Acceptance Checks
 
