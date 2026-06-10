@@ -215,8 +215,6 @@ RUN set -eux; \
     cargo leptos build --release --frontend-only --lib-features hydrate; \
     mkdir -p /build/target/site; \
     for site_root in \
-        /mnt/f/ErsatzRS/target/front/site \
-        /mnt/f/ErsatzRS/target/site \
         /build/crates/ersatzrs-web/target/site \
         /build/target/site \
         target/site; \
@@ -229,7 +227,7 @@ RUN set -eux; \
         fi; \
     done; \
     test -d /build/target/site/pkg || { \
-        find /mnt/f/ErsatzRS/target /build -maxdepth 5 -type d \( -name site -o -name pkg \); \
+        find /build -maxdepth 5 -type d \( -name site -o -name pkg \); \
         exit 1; \
     }; \
     test -f /build/crates/ersatzrs-web/public/bundle.css
@@ -328,8 +326,8 @@ RUN set -eux; \
     ffmpeg -hide_banner -filters | grep -w drawvg
 
 FROM runtime-base AS runtime-release
-COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
-COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
+COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
 COPY release-web-assets/public /build/crates/ersatzrs-web/public
 COPY release-web-assets/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets
@@ -342,8 +340,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 ENTRYPOINT [ "ersatzrs-web" ]
 
 FROM runtime-base AS runtime
-COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
-COPY --from=rust-build /mnt/f/ErsatzRS/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
+COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
 COPY --from=web-build /build/crates/ersatzrs-web/public /build/crates/ersatzrs-web/public
 COPY --from=web-build /build/target/site /build/target/site
 COPY --from=rust-build /build/assets /app/assets
