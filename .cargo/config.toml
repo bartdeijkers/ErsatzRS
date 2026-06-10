@@ -2,7 +2,7 @@
 SQLX_OFFLINE = "true"
 
 [build]
-target-dir = "F:\ErsatzRS\target-win"
+target-dir = "F:\\ErsatzRS\\target-win"
 
 [alias]
 xtask = "run --quiet --package xtask --"
