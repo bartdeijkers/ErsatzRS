@@ -1,5 +1,7 @@
 use ersatzrs_domain::HardwareAccelerationKind;
 
+use crate::FfmpegCapabilityReport;
+
 const ALL_DECODER_NAMES: &[&str] = &[
     "av1_cuvid",
     "h264_cuvid",
@@ -131,6 +133,7 @@ impl FfmpegKnownDecoder {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VideoDecoder {
     Explicit(&'static str),
+    ExplicitSoftware(&'static str),
     ImplicitCuda,
     ImplicitVaapi,
     ImplicitVideoToolbox,
@@ -143,6 +146,12 @@ impl VideoDecoder {
     pub fn input_options(self) -> Vec<String> {
         match self {
             Self::Explicit(name) => vec!["-c:v".to_owned(), name.to_owned()],
+            Self::ExplicitSoftware(name) => vec![
+                "-hwaccel".to_owned(),
+                "none".to_owned(),
+                "-c:v".to_owned(),
+                name.to_owned(),
+            ],
             Self::ImplicitCuda
             | Self::ImplicitVaapi
             | Self::ImplicitVideoToolbox
@@ -164,8 +173,32 @@ pub fn select_video_decoder(
         HardwareAccelerationKind::VideoToolbox => Some(VideoDecoder::ImplicitVideoToolbox),
         HardwareAccelerationKind::V4l2m2m => v4l2m2m_decoder(codec),
         HardwareAccelerationKind::Rkmpp => Some(VideoDecoder::ImplicitRkmpp),
-        HardwareAccelerationKind::None | HardwareAccelerationKind::Amf => software_decoder(codec),
+        HardwareAccelerationKind::None | HardwareAccelerationKind::Amf => {
+            software_decoder(codec, None)
+        }
     }
+}
+
+/// Select the ErsatzTV-compatible software video decoder.
+#[must_use]
+pub fn select_software_video_decoder(
+    codec: SourceVideoCodec,
+    report: Option<&FfmpegCapabilityReport>,
+) -> Option<VideoDecoder> {
+    software_decoder(codec, report)
+}
+
+/// Select a software decoder while also disabling `FFmpeg`'s automatic hardware
+/// acceleration for the input.
+#[must_use]
+pub fn select_forced_software_video_decoder(
+    codec: SourceVideoCodec,
+    report: Option<&FfmpegCapabilityReport>,
+) -> Option<VideoDecoder> {
+    software_decoder(codec, report).map(|decoder| match decoder {
+        VideoDecoder::Explicit(name) => VideoDecoder::ExplicitSoftware(name),
+        other => other,
+    })
 }
 
 fn qsv_decoder(codec: SourceVideoCodec) -> Option<VideoDecoder> {
@@ -176,7 +209,7 @@ fn qsv_decoder(codec: SourceVideoCodec) -> Option<VideoDecoder> {
         SourceVideoCodec::Vc1 => Some(VideoDecoder::Explicit("vc1_qsv")),
         SourceVideoCodec::Vp9 => Some(VideoDecoder::Explicit("vp9_qsv")),
         SourceVideoCodec::Av1 => Some(VideoDecoder::Explicit("av1_qsv")),
-        _ => software_decoder(codec),
+        _ => software_decoder(codec, None),
     }
 }
 
@@ -203,15 +236,18 @@ fn v4l2m2m_decoder(codec: SourceVideoCodec) -> Option<VideoDecoder> {
         SourceVideoCodec::Vp9 => Some(VideoDecoder::Explicit(
             FfmpegKnownDecoder::Vp9V4l2m2m.name(),
         )),
-        _ => software_decoder(codec),
+        _ => software_decoder(codec, None),
     }
 }
 
-fn software_decoder(codec: SourceVideoCodec) -> Option<VideoDecoder> {
+fn software_decoder(
+    codec: SourceVideoCodec,
+    report: Option<&FfmpegCapabilityReport>,
+) -> Option<VideoDecoder> {
     match codec {
         SourceVideoCodec::H264 => Some(VideoDecoder::Explicit("h264")),
         SourceVideoCodec::Hevc => Some(VideoDecoder::Explicit("hevc")),
-        SourceVideoCodec::Av1 => Some(VideoDecoder::Explicit("av1")),
+        SourceVideoCodec::Av1 => Some(VideoDecoder::Explicit(av1_software_decoder(report))),
         SourceVideoCodec::Mpeg1Video => Some(VideoDecoder::Explicit("mpeg1video")),
         SourceVideoCodec::Mpeg2Video => Some(VideoDecoder::Explicit("mpeg2video")),
         SourceVideoCodec::Mpeg4 => Some(VideoDecoder::Explicit("mpeg4")),
@@ -222,6 +258,16 @@ fn software_decoder(codec: SourceVideoCodec) -> Option<VideoDecoder> {
         SourceVideoCodec::Vp8 => Some(VideoDecoder::Explicit("vp8")),
         SourceVideoCodec::Vp9 => Some(VideoDecoder::Explicit("vp9")),
         SourceVideoCodec::Unknown => None,
+    }
+}
+
+fn av1_software_decoder(report: Option<&FfmpegCapabilityReport>) -> &'static str {
+    if report.is_some_and(|report| report.has_decoder("libdav1d")) {
+        "libdav1d"
+    } else if report.is_some_and(|report| report.has_decoder("libaom-av1")) {
+        "libaom-av1"
+    } else {
+        "av1"
     }
 }
 

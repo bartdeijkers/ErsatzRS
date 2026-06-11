@@ -641,6 +641,18 @@ fn nvidia_probe_output(capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport) -
         }
     }
 
+    let nvidia_denials: Vec<_> = capabilities
+        .hardware_decode_denials
+        .iter()
+        .filter(|denial| denial.acceleration == ersatzrs_domain::HardwareAccelerationKind::Nvenc)
+        .collect();
+    if !nvidia_denials.is_empty() {
+        lines.push("runtime decode denials:".to_owned());
+        for denial in nvidia_denials {
+            lines.push(format!("  {} {}-bit", denial.codec, denial.bit_depth));
+        }
+    }
+
     if !capabilities.nvidia_encoders.is_empty() {
         lines.push("encoders:".to_owned());
         for encoder in &capabilities.nvidia_encoders {
@@ -1443,6 +1455,7 @@ mod tests {
                 ersatzrs_ffmpeg::NvidiaDecoderCapability::new("h264", 8),
                 ersatzrs_ffmpeg::NvidiaDecoderCapability::new("hevc", 10),
             ],
+            hardware_decode_denials: Vec::new(),
             nvidia_encoders: vec![ersatzrs_ffmpeg::NvidiaEncoderCapability::new(
                 "h264_nvenc",
                 std::collections::BTreeSet::from(["yuv420p".to_owned()]),

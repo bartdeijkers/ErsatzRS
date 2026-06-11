@@ -15,21 +15,45 @@ size/sample-rate gates, scene-detect and GOP flags, MP4/fMP4/HLS movflags,
 timescale, frame-rate output, MPEG-TS offset, realtime input, still-image loop,
 time limits, output metadata, and platform-specific encoder options.
 
-Hardware capability parity is in place for VAAPI/QSV device rows, NVIDIA CLI and
-native CUDA/NVDEC/NVENC probes, and direct macOS VideoToolbox framework
-enumeration. Unsupported decode paths are intended to fall back to software
-input decode while preserving the selected hardware encoder. Text/image
-subtitle, watermark, native graphics, HDR tonemap, QSV/VAAPI/NVENC
-upload/download, and color-normalization branches are snapshot-covered against
-the current command/filter builders.
+Hardware capability coverage is in place for VAAPI/QSV device rows, NVIDIA CLI
+and native CUDA/NVDEC/NVENC probes, direct macOS VideoToolbox framework
+enumeration, and the HLS segmenter's runtime-learned hardware decode denial
+slice. Unsupported or denied HLS decode paths fall back to software input decode
+while preserving the selected hardware encoder. On a classified FFmpeg
+hardware-decode-unsupported stderr signature, the HLS segmenter persists a
+denial row in `ConfigElement`, updates the in-session runtime report, and retries
+once so later HLS segmenter commands select software decode up front; learned
+denials are currently reapplied after startup/settings FFmpeg runtime refresh
+and are surfaced through health/troubleshooting. Text/image subtitle, watermark,
+native graphics, HDR tonemap, QSV/VAAPI/NVENC upload/download, and
+color-normalization branches are snapshot-covered against the current
+command/filter builders.
 
-Remaining `ParityDebt` is structured below: live HLS segmenter runtime evidence
-from 2026-06-10 still shows unsupported AV1 CUDA decode reaching FFmpeg instead
-of taking the software-input fallback on the NVENC encode path.
+Live NVENC/CUDA HLS proof on 2026-06-11 closed only the HLS learned-denial slice
+of the AV1 fallback work using a temporary copy of the configured database
+because the reported channel 4 no longer existed locally. The proof shifted
+channel 2's existing AV1 item into the live window, preserved the learned denial
+row, and captured the spawned segmenter argv as `-init_hw_device cuda -hwaccel
+none -c:v libdav1d ... -codec:v h264_nvenc`; `/iptv/channel/2.m3u8?mode=segmenter`
+and `/iptv/session/2/hls.m3u8` both returned 200, with generated MPEG-TS segment
+bytes starting at sync byte `0x47`. Remaining ADR 0014 command-generation parity
+debt is tracked below.
 '''
 
 [[debt]]
-id          = 'av1-nvenc-live-fallback'
-description = 'Unsupported AV1 CUDA/NVDEC decode still reaches the live HLS segmenter instead of falling back to software input decode while preserving NVENC encode.'
-discovered  = '2026-06-10'
-evidence    = "ErsatzRS.log: channel 4 HLS segmenter exits 69 with \"Your platform doesn't support hardware accelerated AV1 decoding\", packet submit errors, CUDA_ERROR_INVALID_VALUE, and Decode error rate 1 exceeds maximum."
+id          = 'nvidia-architecture-gate'
+description = 'ADR 0014 requires porting ErsatzTVs conservative NVIDIA architecture gate as an additional AND for decode selection when GPU model information is available.'
+discovered  = '2026-06-11'
+evidence    = 'docs/adr/0014-runtime-learned-hardware-capability-fallback.md requires the upstream architecture table; the current implementation still relies on native/probed decoder rows plus learned denials.'
+
+[[debt]]
+id          = 'iptv-ts-learned-denial'
+description = 'Runtime-learned hardware decode denial is implemented for the HLS segmenter only; ADR 0014 also requires IPTV .ts FFmpeg spawns to classify decode-unsupported stderr, retry once with software input decode, and persist the denial.'
+discovered  = '2026-06-11'
+evidence    = 'crates/ersatzrs-web/src/transport/iptv/stream.rs currently logs unsuccessful direct stream FFmpeg exits without denial classification, retry, or persistence.'
+
+[[debt]]
+id          = 'denial-refresh-invalidation'
+description = 'ADR 0014 says learned denial rows are cleared when the FFmpeg capability report is explicitly refreshed by path change, settings-save refresh, or manual refresh; the current implementation reapplies persisted denials after startup/settings refresh.'
+discovered  = '2026-06-11'
+evidence    = 'crates/ersatzrs-web/src/host/bootstrap.rs and crates/ersatzrs-web/src/admin/server_fns/settings.rs apply persisted denials to fresh runtime reports.'
