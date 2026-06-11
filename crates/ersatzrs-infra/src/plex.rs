@@ -2593,7 +2593,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 struct PlexLibrariesResponse {
     #[serde(rename = "MediaContainer")]

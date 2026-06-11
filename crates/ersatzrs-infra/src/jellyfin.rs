@@ -3114,7 +3114,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct JellyfinLibraryResponse {

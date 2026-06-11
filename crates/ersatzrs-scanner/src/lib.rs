@@ -1757,7 +1757,6 @@ fn encode_stream_kind(kind: MediaStreamKind) -> i32 {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub(crate) struct LocalLibraryPath {
     pub(crate) id: i64,
