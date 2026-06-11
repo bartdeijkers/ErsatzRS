@@ -1632,6 +1632,101 @@ fn pipeline_with_multiple_watermarks_snapshot() {
     insta::assert_snapshot!(command.arguments.join(" "));
 }
 
+// `FFmpegLibraryProcessService` routing parity: a single permanent watermark
+// (here the resource-backed song-progress overlay shape — full-width scaled,
+// top-left, no margins) stays on the native ffmpeg watermark path.
+#[test]
+fn pipeline_keeps_single_permanent_resource_watermark_native_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark(
+        "/data/cache/resources/song_progress_overlay.png",
+    ));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopLeft,
+        size: WatermarkSize::Scaled,
+        width_percent: 100.0,
+        horizontal_margin_percent: 0.0,
+        vertical_margin_percent: 0.0,
+        opacity: 100,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+// `FFmpegLibraryProcessService` routing parity: when graphics elements are
+// present, even a single permanent watermark joins the graphics-engine plan and
+// composites with the elements in ascending z-index (drawvg z=5 below the
+// watermark image at z=10).
+#[test]
+fn pipeline_composites_watermark_with_graphics_elements_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawvg(
+            5,
+            DrawvgOverlay {
+                script_path: "/tmp/ErsatzRS/title.vgs".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                enable: None,
+            }
+            .filter(),
+        ));
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 12.5,
+        horizontal_margin_percent: 2.0,
+        vertical_margin_percent: 3.0,
+        opacity: 75,
+        z_index: 10,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+// Watermark inputs must sort together with their overlays: front.png (z=10,
+// 10% wide) must receive the narrow scale filter and composite below back.png
+// (z=20, 25% wide) even though back.png was attached first.
+#[test]
+fn pipeline_orders_multiple_watermarks_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/back.png"));
+    request
+        .inputs
+        .push(InputFile::watermark("/media/front.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::BottomRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 25.0,
+        z_index: 20,
+        ..WatermarkOverlay::default()
+    });
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopLeft,
+        size: WatermarkSize::Scaled,
+        width_percent: 10.0,
+        z_index: 10,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
 #[test]
 fn watermark_input_loops_still_images() {
     let input = InputFile::watermark("/media/logo.png");

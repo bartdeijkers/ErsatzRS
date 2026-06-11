@@ -27,7 +27,9 @@ use sqlx::Row;
 use crate::db::DbPool;
 use crate::ffmpeg_config::use_embedded_subtitles;
 use crate::ffprobe::FfprobeExtractor;
-use crate::file_system_layout::{data_path, fonts_cache_folder, subtitle_cache_folder};
+use crate::file_system_layout::{
+    data_path, fonts_cache_folder, resources_cache_folder, subtitle_cache_folder,
+};
 use crate::graphics_template::{
     graphics_template_variables, render_graphics_template, scalar_template_variables,
     GraphicsTemplateContext,
@@ -1976,7 +1978,30 @@ async fn resolve_watermark_image_path(
                 .map(resolve_channel_logo_path)
                 .filter(|path| path.is_file()))
         }
-        ChannelWatermarkImageSource::Resource => Ok(None),
+        // "used for song progress overlay" — `WatermarkSelector.GetWatermarkOptions`
+        // resolves the image inside the resources cache folder and ignores the
+        // watermark with a warning when the resource no longer exists.
+        ChannelWatermarkImageSource::Resource => Ok(resolve_resource_watermark_path(
+            &resources_cache_folder(),
+            watermark.image.as_deref(),
+        )),
+    }
+}
+
+fn resolve_resource_watermark_path(
+    resources_folder: &Path,
+    image: Option<&str>,
+) -> Option<PathBuf> {
+    let image = image.map(str::trim).filter(|image| !image.is_empty())?;
+    let path = resources_folder.join(image);
+    if path.is_file() {
+        Some(path)
+    } else {
+        tracing::warn!(
+            path = %path.display(),
+            "Watermark resource no longer exists and will be ignored"
+        );
+        None
     }
 }
 
@@ -2308,5 +2333,31 @@ mod tests {
         assert!(simple_expression_matches("en*", "ENG"));
         assert!(simple_expression_matches("p?r", "por"));
         assert!(!simple_expression_matches("jpn", "eng"));
+    }
+
+    #[test]
+    fn resource_watermark_resolves_inside_resources_cache_folder() {
+        let root = tempfile::tempdir().expect("temp resources root");
+        let path = root.path().join("song_progress_overlay.png");
+        std::fs::write(&path, b"png").expect("write resource");
+
+        let resolved =
+            resolve_resource_watermark_path(root.path(), Some("song_progress_overlay.png"));
+        assert_eq!(resolved, Some(path));
+    }
+
+    #[test]
+    fn missing_or_empty_resource_watermark_is_ignored() {
+        let root = tempfile::tempdir().expect("temp resources root");
+
+        assert_eq!(
+            resolve_resource_watermark_path(root.path(), Some("song_progress_overlay.png")),
+            None
+        );
+        assert_eq!(
+            resolve_resource_watermark_path(root.path(), Some("  ")),
+            None
+        );
+        assert_eq!(resolve_resource_watermark_path(root.path(), None), None);
     }
 }

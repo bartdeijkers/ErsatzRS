@@ -931,9 +931,63 @@ fn build_transcode_pipeline(
         request.watermarks.push(watermark.clone());
     }
 
-    request
-        .watermarks
-        .sort_by_key(|watermark| watermark.z_index);
+    // Pair each watermark input with its overlay in attachment order before
+    // sorting, so the z-index sort cannot mismatch an input's scale/opacity
+    // filters with another watermark's overlay.
+    let mut watermark_pairs: Vec<(InputFile, WatermarkOverlay)> = {
+        let mut watermark_inputs = Vec::new();
+        let mut remaining = Vec::with_capacity(request.inputs.len());
+        for input in request.inputs.drain(..) {
+            if input.kind == InputKind::Watermark {
+                watermark_inputs.push(input);
+            } else {
+                remaining.push(input);
+            }
+        }
+        request.inputs = remaining;
+        watermark_inputs
+            .into_iter()
+            .zip(std::mem::take(&mut request.watermarks))
+            .collect()
+    };
+    watermark_pairs.sort_by_key(|(_, overlay)| overlay.z_index);
+
+    // Port of `FFmpegLibraryProcessService`: "use ffmpeg for single permanent
+    // watermark, graphics engine for all others". A permanent watermark has no
+    // intermittent fade window and no opacity expression. Dynamic watermarks
+    // (intermittent/opacity-expression/multiple, or any combined with graphics
+    // elements — including resource-backed song-progress overlays) join the
+    // z-ordered graphics overlay plan so they composite with graphics elements
+    // the way ErsatzTV's graphics engine does; per ADR 0005 ErsatzRS composites
+    // them with native overlay/fade/opacity filters instead of a raster frame
+    // loop, and drawvg remains the vector path.
+    let single_permanent_watermark = request.graphics_overlays.is_empty()
+        && request.drawvg_filters.is_empty()
+        && watermark_pairs.len() == 1
+        && watermark_pairs.iter().all(|(_, overlay)| {
+            overlay.fade_points.is_empty()
+                && overlay
+                    .opacity_expression
+                    .as_deref()
+                    .is_none_or(|expression| expression.trim().is_empty())
+        });
+    if single_permanent_watermark {
+        for (input, overlay) in watermark_pairs {
+            request.inputs.push(input);
+            request.watermarks.push(overlay);
+        }
+    } else {
+        for (mut input, overlay) in watermark_pairs {
+            input.kind = InputKind::GraphicsImage;
+            request
+                .graphics_overlays
+                .push(GraphicsPipelineOverlay::native_image(
+                    overlay.z_index,
+                    input,
+                    overlay,
+                ));
+        }
+    }
     let has_watermark_overlay = request
         .inputs
         .iter()
