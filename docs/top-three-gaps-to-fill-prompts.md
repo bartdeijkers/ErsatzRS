@@ -38,57 +38,77 @@ and drop below the foundational pipeline/config gaps; they will resurface once
 the foundational debt closes. Alphabetical order within the foundational tier:
 `ffmpeg-command-generation`, `ffmpeg-filter-graph`, `settings`.
 
+Prompts 1 and 3 in this run are reframed per the refinement rules in the
+[rules](automation/gap-prompt-rules.md): prompt 1 is diagnosis-first (its
+2026-06-09 gate fix already failed live on 2026-06-10) and absorbs the
+hardware-bound `nvenc-cuda-live-reverification` proof from
+`ffmpeg-filter-graph`; prompt 3 leads with the two confirmed-blocking runtime
+debts and defers the mechanical i18n coverage sweep to a follow-up slice
+(tracked as open debt in `settings.toml`).
+
 ---
 
-## 1 — FFmpeg command generation: live AV1 hardware-decode fallback (slug `ffmpeg-command-generation`)
+## 1 — FFmpeg command generation: diagnose and self-heal the live AV1 hardware-decode fallback (slug `ffmpeg-command-generation`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation — the
 AV1 hardware-decode software fallback on the live HLS-segmenter path (slug
-`ffmpeg-command-generation`).
+`ffmpeg-command-generation`, debt `av1-nvenc-live-fallback`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current remaining `ParityDebt` (quoted from
-`docs/progress/parity/ffmpeg-command-generation.toml`): "despite the 2026-06-09
-AV1 decode-fallback tightening above, the channel 4 HLS segmenter still exits
-with code 69 / 'Your platform doesn't support hardware accelerated AV1
-decoding' plus repeated `Error submitting packet to decoder: Function not
-implemented`, CUDA context errors (`cuCtxPushCurrent ... CUDA_ERROR_INVALID_VALUE`),
-and `Decode error rate 1 exceeds maximum` — the software-decode fallback for
-unsupported AV1 hardware decode is not effective on the live segmenter path, so
-AV1 sources fail instead of falling back like ErsatzTV."
+**This is a repeat failure — diagnose before changing any gate.** A fix for
+this exact debt already landed on 2026-06-09 (AV1 CUDA decode now requires a
+positive native/probed NVIDIA decoder detail row), and the live failure
+persisted on 2026-06-10. Current `ParityDebt` (quoted from
+`docs/progress/parity/ffmpeg-command-generation.toml`): "the channel 4 HLS
+segmenter still exits with code 69 / 'Your platform doesn't support hardware
+accelerated AV1 decoding' plus repeated `Error submitting packet to decoder:
+Function not implemented`, CUDA context errors (`cuCtxPushCurrent ...
+CUDA_ERROR_INVALID_VALUE`), and `Decode error rate 1 exceeds maximum`". Do not
+re-tighten the gate on snapshot proof alone — that loop already failed once.
 
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs` (and the
-NVENC/CUDA pipeline builder + hardware capability checker it drives). ErsatzRS
-target: `crates/ersatzrs-ffmpeg` (decoder selection, capability gating, and the
-NVENC software-fallback `hwupload` path) plus the segmenter spawn paths in
-`crates/ersatzrs-infra`.
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs` plus the
+hardware capability checker it drives — focus on the NVIDIA GPU
+model/architecture table ErsatzTV uses to decide AV1 decode support. ErsatzRS
+target: `crates/ersatzrs-ffmpeg` (decoder selection, capability gating), the
+`ersatzrs-hwprobe` AV1 detail rows, and the supervisor/spawn paths in
+`crates/ersatzrs-infra` (`hls_worker.rs`) and
+`crates/ersatzrs-web/src/transport/iptv/stream.rs`.
 
 Before editing:
-1. Read the ErsatzTV source above under `$ERSATZTV_SRC/` (at pinned commit
-   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on how ErsatzTV decides
-   AV1 hardware decode is unsupported and how it routes those sources to a
-   software input decoder while keeping the NVENC encoder.
-2. Inspect the current ErsatzRS decoder-selection / capability-gating code, the
-   `ersatzrs-hwprobe` AV1 detail rows, and the live HLS-segmenter spawn path —
-   determine why the existing fallback is bypassed at runtime (the snapshot
-   argv may already be correct while the live segmenter command is not).
-3. Build a Source Map (decoder table, capability gate, NVENC fallback step,
-   segmenter spawn, ErsatzRS target modules, intentional deviations).
+1. Diagnose the live mismatch first: log or capture the exact spawned argv
+   *and* the capability-report AV1 rows at spawn time on the failing channel
+   (the live path reads the process-wide `ffmpeg_runtime` report). Determine
+   which it is: the native `cuvidGetDecoderCaps` row over-reports relative to
+   FFmpeg's own runtime check (profile/bit-depth/film-grain), the persisted
+   report is stale, or the gate is bypassed on this path.
+2. Read the ErsatzTV capability checker under `$ERSATZTV_SRC/` (at pinned
+   commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on how the
+   architecture table routes unsupported AV1 sources to software input decode
+   while keeping the NVENC encoder.
+3. Build a Source Map (decoder table, capability gate, architecture table,
+   supervisor restart point, ErsatzRS target modules, intentional deviations).
 4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
 
-Implement the coherent end-to-end slice: make unsupported AV1 hardware decode
-fall back to software input decode on the live segmenter path while preserving
-NVENC encode, matching ErsatzTV's gating and argv. Add `insta` snapshot
-coverage for the AV1 fallback argv on the segmenter command path, and (where
-feasible) a focused regression that exercises the fallback decision, not just
-the static snapshot. Update the parity file: keep visible any debt that cannot
-be proven without live AV1 hardware.
+Implement the coherent end-to-end slice, driven by the diagnosis: port
+ErsatzTV's conservative architecture gate as an additional AND for NVIDIA
+decode selection, fix any report staleness found, and implement the
+runtime-learned fallback per
+[ADR 0014](adr/0014-runtime-learned-hardware-capability-fallback.md) — on the
+classified decode-unsupported stderr signature, restart the session exactly
+once with software input decode while preserving NVENC encode, persist the
+denial row, and surface it through the health-check engine. Add `insta`
+snapshot coverage for the denial-driven argv and a focused regression for the
+restart/fallback decision, not just the static snapshot.
 
 Verify with focused `crates/ersatzrs-ffmpeg` tests (`cargo test -p
-ersatzrs-ffmpeg`, including the pipeline snapshot suite) and
-`cargo xtask progress check`. Report the Source Map, behavior implemented,
+ersatzrs-ffmpeg`, including the pipeline snapshot suite), `cargo xtask smoke`,
+and `cargo xtask progress check`. The live verification session on NVENC/CUDA
+hardware must also re-capture the HLS-segmenter runtime proof that closes
+`ffmpeg-filter-graph` debt `nvenc-cuda-live-reverification` (one hardware
+session, two debts) — follow `docs/automation/runtime-triage.md` for the
+evidence. Report the Source Map, diagnosis outcome, behavior implemented,
 remaining `ParityDebt`, verification run, and changed files.
 
 ---
@@ -128,9 +148,10 @@ Before editing:
 2. Inspect the current ErsatzRS filter-graph builder, the surface-location
    tracker, the existing pipeline snapshots for the still-image and CUDA paths,
    and the graphics-engine plan for dynamic watermarks.
-3. Re-verify the landed fixes against a live NVENC/CUDA HLS-segmenter run if
-   hardware is available; if not, record that the proof is snapshot-only and
-   keep the debt visible.
+3. The live NVENC/CUDA re-verification (debt `nvenc-cuda-live-reverification`)
+   is folded into prompt 1's verification session — it needs the same
+   hardware. If that session has not run yet, record that the proof is
+   snapshot-only and keep the debt visible.
 4. Build a Source Map; identify remaining `ParityDebt` (it must stay visible).
 
 Implement the coherent end-to-end slice: close the resource-backed dynamic
@@ -148,69 +169,68 @@ remaining `ParityDebt`, verification run, and changed files.
 
 ---
 
-## 3 — Settings i18n full coverage (slug `settings`)
+## 3 — Settings: blocking runtime debts — FFmpeg path empty-means-auto-detect + concurrent transcode session limit (slug `settings`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Settings (FFmpeg / Logging /
-HDHomeRun / Scanner / Playout / UI / XMLTV) — routes
-`/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` (slug `settings`).
+Fix the next ErsatzTV parity gap in ErsatzRS: Settings — the two
+confirmed-blocking runtime debts on `/settings/ffmpeg` and the streaming
+runtime (slug `settings`, debts `ffmpeg-path-empty-autodetect-form` and
+`concurrent-transcode-session-limit`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current parity state (from `docs/progress/parity/settings.toml`): the settings
-routes are ported with ErsatzTV-shaped forms, raw HTML POST fallbacks backed by
-`ConfigElement`, the ported save side effects (logging filter reload, FFmpeg
-runtime/capability refresh, report-folder creation, subtitle extraction
-queueing, playout rebuild queueing, XMLTV refresh), and a `FFmpegLocator` port
-that resolves and persists the ffmpeg/ffprobe paths at startup and on save. The
-persisted `pages.language` value drives the SSR shell and typed translations
-across a large but not-yet-complete set of admin routes; ErsatzRS intentionally
-adds an `nl` culture beyond ErsatzTV's en/pl/pt-br (ADR 0012). Remaining
-`ParityDebt` quoted from the summary: "the FFmpeg settings inputs are still
-`required`, so empty-means-auto-detect is exercised only by startup/the server
-fn, not the form UI ... confirmed blocking in real use on 2026-06-10: the
-settings page could not be saved until the FFmpeg path field was filled in
-manually, even though the runtime had already auto-detected FFmpeg 8.1.1." Also:
-"ErsatzRS started 3 concurrent transcode sessions for one viewing session, while
-ErsatzTV caps concurrent transcode sessions at 2 by default — the session-limit
-setting and its runtime enforcement are not ported." And: "Full admin-route
-text coverage and four-language browser proof remain active i18n `ParityDebt`;
-see `plans/settings-parity-slice.md`."
+Both debts are confirmed blocking in real use on 2026-06-10 (quoted from
+`docs/progress/parity/settings.toml`):
+- "the FFmpeg settings inputs are still `required`, so empty-means-auto-detect
+  is exercised only by startup/the server fn, not the form UI ... the settings
+  page could not be saved until the FFmpeg path field was filled in manually,
+  even though the runtime had already auto-detected FFmpeg 8.1.1."
+- "ErsatzRS started 3 concurrent transcode sessions for one viewing session,
+  while ErsatzTV caps concurrent transcode sessions at 2 by default — the
+  session-limit setting and its runtime enforcement are not ported." Note the
+  excess sessions plausibly aggravate the CUDA context errors tracked in
+  prompts 1–2, so this enforcement may independently reduce those failures.
 
-ErsatzTV source: `ErsatzTV/Pages/Settings*.razor`,
-`$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs`. ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/settings.rs`,
+The settings i18n full-coverage sweep and four-language browser proof are
+**explicitly deferred** to a follow-up slice: keep debt
+`settings-i18n-browser-proof` open in `settings.toml` and do not close or
+shrink it in this slice.
+
+ErsatzTV source: `ErsatzTV/Pages/Settings*.razor` (FFmpeg tab),
+`$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs`, and the runtime
+enforcement site where ErsatzTV caps concurrent transcode sessions. ErsatzRS
+target: `crates/ersatzrs-web/src/admin/pages/settings.rs`,
 `crates/ersatzrs-web/src/admin/server_fns/settings.rs`,
-`crates/ersatzrs-web/src/admin/i18n.rs`,
-`crates/ersatzrs-web/src/admin/languages/`.
+`crates/ersatzrs-web/src/admin/languages/`, and the transcode spawn/session
+paths in `crates/ersatzrs-infra` and `crates/ersatzrs-web/src/transport/`.
 
 Before editing:
-1. Read the ErsatzTV `Settings*.razor` pages and `ConfigElementKey.cs` under
+1. Read the ErsatzTV FFmpeg settings page and `ConfigElementKey.cs` under
    `$ERSATZTV_SRC/` (at pinned commit
-   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), enumerating every visible label,
-   helper, option, and validation message on each settings tab, plus the
-   session-limit config key if porting that behavior.
-2. Inspect the current ErsatzRS settings pages, server fns, `i18n.rs` routing
-   glue, the per-culture `languages/` modules, and `plans/settings-parity-slice.md`.
-3. Build a Source Map and a Visual Source Map for each settings route; list the
-   admin routes still missing four-language text coverage.
+   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), identifying the empty-path
+   auto-detect behavior, the session-limit config key with its default of 2,
+   and where ErsatzTV enforces the cap at session start.
+2. Inspect the current ErsatzRS settings form/server fn, the `FFmpegLocator`
+   startup auto-detect, and the streaming session spawn sites to determine
+   where the limit must be enforced.
+3. Build a Source Map and a Visual Source Map for `/settings/ffmpeg`.
 4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
 
-Implement the coherent end-to-end slice: close the remaining admin-route text
-coverage so every visible settings string is localized across
-`en-us`/`pl`/`pt-br`/`nl`, keep `i18n.rs` as routing/helper glue (ADR 0012's
-translation boundary, not a translation dump), relax the `required` FFmpeg
-inputs so empty-means-auto-detect is exercised from the form, and — if in scope
-— port the concurrent-transcode session-limit setting plus its runtime
-enforcement. Preserve SSR/browser-safe fallbacks, follow `TEST.md` hydration
-rules, add focused tests, and update the parity file (and
-`plans/settings-parity-slice.md`).
+Implement the coherent end-to-end slice: relax the `required` FFmpeg path
+inputs so an empty value saves and means auto-detect (matching the
+startup/server-fn behavior already ported), localize any new or changed
+strings across `en-us`/`pl`/`pt-br`/`nl` per ADR 0012's translation boundary,
+and port the concurrent-transcode session-limit `ConfigElement` plus its
+runtime enforcement so a new session beyond the cap is rejected/queued the way
+ErsatzTV does. Preserve SSR/browser-safe fallbacks, follow `TEST.md` hydration
+rules, add focused tests (including a regression for the session cap), and
+update the parity file (and `plans/settings-parity-slice.md`).
 
-Visual verification: serve via `./run.sh serve` after rebuilding Leptos assets,
-open each touched settings route in each of the four cultures, and compare
-same-viewport geometry and translated text against the ErsatzTV reference (field
-labels, option lists, helper/validation text, clipped/overflowing strings).
+Visual verification: serve via `./run.sh serve` after rebuilding Leptos
+assets, open `/settings/ffmpeg` in each of the four cultures, save with empty
+FFmpeg paths, and confirm the form saves and shows the auto-detected result.
 
-Verify with `cargo xtask parity-check web` and `cargo xtask progress check`.
-Report Source Map, Visual Source Map, behavior implemented, remaining
-`ParityDebt`, verification run, and changed files.
+Verify with `cargo xtask parity-check web`, `cargo xtask smoke` (the session
+limit is streaming-runtime behavior), and `cargo xtask progress check`. Report
+Source Map, Visual Source Map, behavior implemented, remaining `ParityDebt`,
+verification run, and changed files.

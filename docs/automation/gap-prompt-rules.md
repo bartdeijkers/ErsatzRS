@@ -72,6 +72,35 @@ The routine picks the three gaps **auto-prioritized from `docs/progress`**:
    saw **no commits** since, keep it but note it is carried over; if it *was*
    worked on, re-rank normally (it may drop off as it nears `Ported`).
 
+## Refinement rules (within a selected gap)
+
+After selection, shape each prompt by the feature's structured `[[debt]]`
+items, not only its summary prose:
+
+- **Blocking runtime debt first.** A debt item with confirmed-blocking runtime
+  evidence (a user-visible failure observed in real use: a save that cannot
+  complete, a channel that dies, a resource limit violated) outranks
+  coverage/proof/i18n debt *within the same feature*. The prompt must lead
+  with the blocking debt as its primary scope; large mechanical coverage work
+  (full i18n sweeps, multi-language browser proof) moves to a follow-up slice
+  and stays tracked as visible `ParityDebt`.
+- **No "if in scope" hedges.** Every named debt item is either inside the
+  slice or explicitly deferred with its debt entry kept open. A prompt must
+  never leave a runtime-evidenced debt behind a conditional clause.
+- **Diagnosis-first on repeat failures.** If a debt item already received a
+  landed fix and later runtime evidence shows the same failure signature, the
+  prompt must require diagnosing why the fix is bypassed at runtime
+  (instrument the live spawn/state, compare it to what tests exercise) before
+  prescribing another iteration of the same approach. Re-tightening a gate
+  that already failed once, on snapshot proof alone, is not an acceptable
+  slice.
+- **Fold hardware-bound verification.** Verification-only debt that needs
+  specific hardware (e.g. a live NVENC/CUDA re-verification) is never a
+  standalone prompt or prompt half. Fold it into the verification run of
+  another slice that needs the same hardware session, name the debt id it
+  closes, and follow the [runtime triage routine](runtime-triage.md) for
+  capturing the proof.
+
 ## Grounding rules (no invention)
 
 - **Parity baseline:** only treat behavior present in ErsatzTV at the pinned

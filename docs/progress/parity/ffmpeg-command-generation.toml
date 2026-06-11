@@ -2,7 +2,7 @@ feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
 status     = 'In progress'
-adr        = ['0003']
+adr        = ['0003', '0014']
 
 summary    = '''
 Current command-generation parity covers the software pipeline plus NVENC,
