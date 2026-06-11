@@ -69,13 +69,20 @@ For each merged change in the window, update the source-of-truth text files
   started` / `In progress` / `Ported` / `Deferred` / `Dropped`), refresh
   `summary` to reflect what is now ported vs. remaining, add structured
   `[[debt]]` entries for new open gaps, and add `adr` numbers for any deviation.
-  Follow the `update-parity` skill. Do not overstate: only mark `Ported` when
-  the change clearly closes the feature and no open structured debt remains;
-  otherwise keep `In progress` and record remaining work as visible ParityDebt.
+  Follow the canonical `skills/update-parity.md` skill. Do not overstate: only
+  mark `Ported` when the change clearly closes the feature and no open
+  structured debt remains (`cargo xtask progress check` fails that
+  combination); otherwise keep `In progress` and record remaining work as
+  structured `[[debt]]`.
   For streaming/runtime features, a passing `cargo xtask smoke` run is the
   preferred runtime evidence before a `Ported` flip.
   If the change deviates from ErsatzTV instead of porting it, explicitly decide
   whether an ADR is required before updating status.
+- **Summary hygiene:** a `summary` describes the *current* state only —
+  slice-by-slice history belongs in `sessions.ndjson` and git log. Keep every
+  summary you touch under the 4,000-character budget that
+  `cargo xtask progress check` warns on; when reconciling a feature whose
+  summary is over budget, trim it in the same pass.
 - **Runtime triage:** if the change window or maintainer report includes live
   log evidence, follow [runtime-triage.md](runtime-triage.md): cluster
   WARN/ERROR lines, map each cluster to a parity slug, add dated structured
@@ -99,16 +106,21 @@ path, or feature.
 Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
 `docs/automation/gap-prompt-rules.md` exactly:
 
-1. Get candidates: `cargo xtask progress gaps`.
+1. Get candidates: `cargo xtask progress gaps`. Candidates include individual
+   structured `[[debt]]` items, not only whole-feature slugs.
 2. Rank and pick the top three per the selection rules in the rules file.
 3. For each pick, read its `parity/<slug>.toml` (and `cargo xtask progress
    parity --feature <slug> --full`) to ground the prompt in the real
-   `etv_source`, status, and remaining-work text.
-4. Write three goal-prompts that each mirror `prompt.md`'s structure (workflow
+   `etv_source`, status, structured `[[debt]]` items, and remaining-work text.
+4. Shape each prompt per the **refinement rules** in the rules file: lead with
+   confirmed-blocking runtime debt, no "if in scope" hedges, diagnosis-first
+   when a landed fix's failure signature reappears, and fold hardware-bound
+   verification debt into another slice's verification run.
+5. Write three goal-prompts that each mirror `prompt.md`'s structure (workflow
    pointer → before editing → implement → visual verification for UI →
    verification gates → reporting). Drop the visual sections for pure
    backend/pipeline gaps.
-5. Update the front-matter: set `generated` to today's date and
+6. Update the front-matter: set `generated` to today's date and
    `last_processed_commit` to `HEAD` (`git rev-parse HEAD`).
 
 ### 4. Validate and commit
@@ -116,10 +128,14 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
 1. `cargo xtask progress check` — must pass. Fix any validation error you
    introduced before committing.
 2. Stage only `docs/` changes. Commit directly to `main`:
-   `docs(progress): daily reconcile + refresh gap prompts (<baseline>..<head>)`.
+   `docs(status): daily reconcile + refresh gap prompts (<baseline>..<head>)`.
+   The scope must come from the `scope-enum` in `commitlint.config.cjs`
+   (`progress` and `automation` are **not** valid scopes).
    End the commit message with the standard `Co-Authored-By` trailer.
-3. Push to `main`.
-4. Report: the change window, which parity files changed and how, the three
+3. Validate the commit message: `npx commitlint --from HEAD~1` — must pass.
+   Amend the message if it does not.
+4. Push to `main`.
+5. Report: the change window, which parity files changed and how, the three
    gaps selected (with the ranking reason), and the new `last_processed_commit`.
 
 If `cargo xtask progress check` cannot be made to pass from docs-only edits,
