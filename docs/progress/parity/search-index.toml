@@ -3,8 +3,15 @@ etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-web/src/admin/pages/search.rs`'
 status     = 'In progress'
 adr        = ['0009']
+
 summary    = '''
 Ported for the non-web parity target: scheduling has a core-owned Lucene-like parser/evaluator and SQL-backed search documents for title/sort/original title, year/release date, genre/tag/studio/actor/director/writer, media kind, show fields, season/episode numbers, metadata kind, provider GUID source fields, languages, codecs, dimensions, chapter counts, duration seconds/minutes, and `trakt_list`. The evaluator now lowercases and accent-folds text, consumes Lucene boost syntax, handles fuzzy terms, phrase slop, numeric exact/range queries, wildcards, and jump-letter page maps for pageable results. Show, season, and artist hits expand to playable children. `/search?query=...` resolves the same scheduling search source used by Trakt list Search actions. Elasticsearch is deliberately dropped; future Tantivy-style indexing is an optional internal optimization, not a parity requirement.
 
 Remaining `ParityDebt` (observed 2026-06-10): the smart collection 'Mtv Pruned' search query does not filter music videos in ErsatzRS while the same query works in ErsatzTV — the search evaluator does not yet reproduce ErsatzTV's results for music-video documents (suspect field coverage or query semantics for the music-video media kind). Reproduce the query against the pinned ErsatzTV search source and align the evaluator.
 '''
+
+[[debt]]
+id          = 'music-video-smart-collection-query'
+description = 'A smart collection query that filters music videos in ErsatzTV does not filter the same music-video documents in ErsatzRS.'
+discovered  = '2026-06-10'
+evidence    = 'Runtime triage: smart collection "Mtv Pruned" does not filter music videos in ErsatzRS while the same query works in ErsatzTV.'

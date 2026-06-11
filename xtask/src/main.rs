@@ -3,6 +3,7 @@ use std::process::ExitCode;
 mod hydration_lint;
 mod parity_check;
 mod progress;
+mod smoke;
 mod target_size;
 
 fn main() -> ExitCode {
@@ -15,6 +16,7 @@ fn main() -> ExitCode {
         "hydration-lint" => hydration_lint::run(args.collect()),
         "parity-check" => parity_check::run(args.collect()),
         "progress" => progress::run(args.collect()),
+        "smoke" => smoke::run(args.collect()),
         "target-size" => {
             target_size::warn_if_oversized();
             ExitCode::SUCCESS
@@ -41,5 +43,6 @@ fn print_help() {
     eprintln!("    hydration-lint    Check Leptos islands for hydration anti-patterns");
     eprintln!("    parity-check      Run the fast parity gate ladder");
     eprintln!("    progress          Query/maintain the porting progress index (docs/progress/)");
+    eprintln!("    smoke             Boot the web host and probe IPTV/HLS runtime playback");
     eprintln!("    target-size       Warn when target/ exceeds the cargo-clean threshold");
 }

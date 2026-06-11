@@ -7,6 +7,13 @@ supposed to prevent exactly that, and recommends improvements. It is a
 review with recommendations, not a contract; each recommendation becomes
 binding only when implemented in the referenced files.
 
+Implementation status: R1-R4 were implemented on 2026-06-11. The binding
+contract changes now live in `AGENTS.md`, `TEST.md`,
+`docs/automation/daily-progress-routine.md`,
+`docs/automation/gap-prompt-rules.md`, `docs/automation/runtime-triage.md`,
+`docs/progress/parity/*.toml`, `skills/`, and the `cargo xtask progress` /
+`cargo xtask smoke` implementations.
+
 ## Scope and method
 
 Reviewed surfaces:

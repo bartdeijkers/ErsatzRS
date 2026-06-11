@@ -14,7 +14,8 @@ For build commands and the dev loop, see [BUILD.md](BUILD.md).
 | Snapshot         | `insta` in `ersatzrs-ffmpeg`, `ersatzrs-infra`           | Generated FFmpeg argv, filter graphs, playout build round-trips.                |
 | Integration      | `tests/` per crate                                       | Database repositories, external clients (Plex/Jellyfin/Emby/Trakt), ffprobe.    |
 | MySQL backend    | `--features mysql-integration`                           | Same integration tests, run against MariaDB via testcontainers.                 |
-| Hydration smoke  | Manual Playwright MCP playbooks (see below).             | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
+| Hydration smoke  | Playwright specs or browser probes (see below).          | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
+| Runtime smoke    | `cargo xtask smoke`                                      | Real web host, seeded SQLite fixture, IPTV MPEG-TS and HLS startup playback.    |
 | CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, cargo-deny, commitlint, docker bake.                         |
 
 References:
@@ -33,9 +34,17 @@ References:
 - **Local dev**: layers 1–3 by default (`cargo test --workspace`). Add
   `--all-features` to include the MySQL integration locally — it pulls a
   MariaDB image so it is slow on a cold cache.
-- **Hydration smoke**: run manually via the Playwright MCP tool. Start the
-  server with `./run.sh dev`, then use the browser MCP playbook for the page
-  under test. See the per-page index below for the expected interactions.
+- **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
+  run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
+  For exploratory work, a browser probe through Playwright MCP or another
+  attached browser tool is acceptable, but it is not the only documented path.
+  See the per-page index below for expected interactions.
+- **Runtime smoke**: `cargo xtask smoke` builds `ersatzrs-web`, starts it
+  against a temporary SQLite database, seeds a tiny local media library, probes
+  `/iptv/channel/<n>.ts?mode=ts`, `/iptv/channel/<n>.m3u8?mode=segmenter`, and
+  `/iptv/session/<n>/hls.m3u8`, then scans the server log for known
+  FFmpeg/HLS failure signatures. Use `--channel N`, `--media PATH`,
+  `--skip-ts`, `--skip-hls`, and `--keep-temp` for focused runtime triage.
 
 ## Hydration rules (read before writing islands)
 
@@ -85,9 +94,11 @@ boundary diagnosis problem before refactoring.
 1. **Classify the failure first.** Decide whether the bug is SSR HTML shape,
    island hydration/runtime, server function/API, CSS/layout, or data/query
    behavior. Record the current evidence in the handoff or final response.
-2. **Create one browser probe before editing.** Use Playwright MCP to navigate
-   to the route, capture current console errors, and exercise exactly one
-   failing interaction. That probe becomes the regression target.
+2. **Create one browser probe before editing.** Use a Playwright spec when the
+   interaction is scriptable; otherwise use Playwright MCP or another attached
+   browser tool to navigate to the route, capture current console errors, and
+   exercise exactly one failing interaction. That probe becomes the regression
+   target.
 3. **Patch the narrowest stable boundary.** If a server-rendered detail page
    only needs one broken action, keep the page SSR and prefer a small explicit
    JSON endpoint for that action. Do not move the whole page into an island just
@@ -182,7 +193,9 @@ The **human** runs, before committing:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `cargo test --workspace --all-features`
 - `cargo leptos build` from `crates/ersatzrs-web` (rebuilds hydration assets).
-- Playwright MCP smoke per the playbook for the touched page.
+- A runnable Playwright spec for the touched page when one exists or is added;
+  otherwise a documented browser smoke using Playwright MCP or an equivalent
+  browser tool.
 - Flips the per-page index row from `TODO` to `✅` on success.
 
 This split keeps the porter's edit loop short — full-workspace gates and
@@ -190,14 +203,16 @@ hydration-asset rebuilds happen once at commit time, not on every iteration.
 
 ## Admin UI E2E
 
-Hydration smoke tests can be run manually via the Playwright MCP tool. Scripted
-admin parity checks live under `tests/e2e/` and run with `npm run test:e2e`.
-Point them at a running server with `E2E_BASE_URL=http://127.0.0.1:8409`.
+Scripted admin parity checks live under `tests/e2e/` and run with
+`E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test tests/e2e/<spec>.ts`.
+When no spec exists yet, use Playwright MCP or another attached browser tool
+for the immediate probe and add a `TODO` row below for durable coverage.
 
 Workflow:
 1. Start the server: `./run.sh dev` (or `cargo run --bin ersatzrs-web`).
-2. Use the Playwright MCP `browser_navigate` / `browser_snapshot` / `browser_click`
-   tools to navigate to the page and exercise interactive islands.
+2. Run or add a focused Playwright spec for the page. For exploratory manual
+   probes, use the attached browser tool to navigate, snapshot, click, and
+   inspect console output.
 3. Check browser console for `failed_to_cast_marker_node` or other hydration
    errors; any such error is a product bug in the affected island.
 
@@ -263,5 +278,6 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
    in the relevant crate, follow `docs/how-to/snapshot-tests.md`.
 3. **Repository or external client behaviour** → integration test under
    `crates/<crate>/tests/`, reuse `httpmock` patterns.
-4. **Admin UI behaviour** → verify manually with the Playwright MCP tool and
-   add/update the matching row in the per-page E2E index above.
+4. **Admin UI behaviour** → add or run a focused Playwright spec when practical;
+   otherwise document the browser probe used and add/update the matching row in
+   the per-page E2E index above.

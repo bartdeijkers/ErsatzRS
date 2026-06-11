@@ -101,6 +101,10 @@ cargo test --workspace --all-features
 # primitive changes. If a focused check misses important parity coverage, add a
 # targeted regression instead of repeatedly using the full gate as the only
 # signal.
+# For streaming/runtime parity, run `cargo xtask smoke` locally before marking
+# playback-sensitive work done. It boots the real web host against a temporary
+# SQLite database, seeds a tiny local library, probes IPTV MPEG-TS and HLS
+# endpoints, and fails on known FFmpeg/segmenter runtime signatures.
 
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
@@ -167,6 +171,7 @@ cargo xtask progress routes --unrouted    # advertised-but-404 admin routes
 cargo xtask progress sessions --limit 10  # recent session/handoff log
 cargo xtask progress adr list             # derived ADR index
 cargo xtask progress check                # validate the text sources (CI gate)
+cargo xtask smoke                         # boot temp web host and probe IPTV/HLS playback
 ```
 
 ## Language Contract
@@ -192,6 +197,10 @@ agent framework finds it:
 - `CODEX.md` → symlink to `AGENTS.md` — read by OpenAI Codex CLI.
 - `.github/copilot-instructions.md` — loaded by GitHub Copilot Chat (browser
   and VS Code). Contains a short pointer to this file plus key commands.
+- `skills/` — canonical repo-local skill contracts. Agent-specific skill
+  directories under `.claude/skills/` and `.codex/skills/` are compatibility
+  mirrors only; update `skills/` first and keep prompts pointed at canonical
+  paths such as `skills/parity-slice.md`.
 
 ## Contract Index
 
@@ -209,9 +218,9 @@ Read the relevant contract before changing that area:
   setup, or Cargo dependencies for an admin UI bug — covers the Leptos
   hydration rules (page wrapper vs `#[island]`, stable DOM shape, no
   prop-bearing islands across `Suspense`), the hydration/UI bug containment
-  playbook, the Playwright MCP playbook format, and the per-page playbook
-  index. Defers deep-dive testing conventions to `docs/how-to/testing.md` and
-  `docs/how-to/snapshot-tests.md`.
+  playbook, command-first Playwright/browser verification, and the per-page
+  playbook index. Defers deep-dive testing conventions to
+  `docs/how-to/testing.md` and `docs/how-to/snapshot-tests.md`.
 - [STYLE.md](STYLE.md) before writing Rust, SQL, or ErsatzTV-parity code —
   covers Rust (naming, errors, async, logging, public API), Rust ↔ C# parity
   (serialized contracts, option mapping), and SQL (identifier casing,

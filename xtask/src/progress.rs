@@ -34,6 +34,7 @@ const STATUSES: [&str; 5] = [
     "Dropped",
 ];
 const HYDRATION_STATUSES: [&str; 3] = ["✅", "TODO", "⏳"];
+const SUMMARY_WARN_LIMIT: usize = 4_000;
 
 pub fn run(args: Vec<String>) -> ExitCode {
     let mut it = args.into_iter();
@@ -79,12 +80,30 @@ struct ParityFile {
     status: String,
     #[serde(default)]
     adr: Vec<String>,
+    #[serde(default)]
+    debt: Vec<Debt>,
     summary: String,
 }
 
 struct ParityRow {
     slug: String,
     file: ParityFile,
+}
+
+#[derive(Deserialize)]
+struct Debt {
+    id: String,
+    description: String,
+    discovered: String,
+    evidence: String,
+    #[serde(default)]
+    resolved: bool,
+}
+
+impl ParityFile {
+    fn open_debts(&self) -> impl Iterator<Item = &Debt> {
+        self.debt.iter().filter(|debt| !debt.resolved)
+    }
 }
 
 #[derive(Deserialize)]
@@ -326,6 +345,7 @@ fn sync() -> Result<Connection> {
     conn.execute_batch(
         "CREATE TABLE parity(slug TEXT PRIMARY KEY, feature TEXT, etv_source TEXT, rs_target TEXT, status TEXT, summary TEXT);
          CREATE TABLE parity_adr(slug TEXT, adr TEXT);
+         CREATE TABLE parity_debt(slug TEXT, id TEXT, description TEXT, discovered TEXT, evidence TEXT, resolved INTEGER);
          CREATE TABLE routes(nav TEXT, backing TEXT, routed INTEGER);
          CREATE TABLE hydration(name TEXT, status TEXT, notes TEXT);
          CREATE TABLE sessions(ord INTEGER, date TEXT, agent TEXT, summary TEXT);
@@ -354,6 +374,19 @@ fn sync() -> Result<Connection> {
             tx.execute(
                 "INSERT INTO parity_adr VALUES(?1,?2)",
                 params![row.slug, adr],
+            )?;
+        }
+        for debt in &row.file.debt {
+            tx.execute(
+                "INSERT INTO parity_debt VALUES(?1,?2,?3,?4,?5,?6)",
+                params![
+                    row.slug,
+                    debt.id,
+                    debt.description,
+                    debt.discovered,
+                    debt.evidence,
+                    i32::from(debt.resolved)
+                ],
             )?;
         }
     }
@@ -489,6 +522,15 @@ fn cmd_parity(args: &[String]) -> Result<()> {
             .query_map([&slug], |r| r.get::<_, String>(0))?
             .filter_map(std::result::Result::ok)
             .collect();
+        let mut stmt = conn.prepare(
+            "SELECT id, description, discovered, evidence, resolved FROM parity_debt WHERE slug = ?1 ORDER BY resolved, discovered, id",
+        )?;
+        let debts: Vec<(String, String, String, String, i64)> = stmt
+            .query_map([&slug], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect();
         println!("{feature}  [{status}]");
         println!("  slug:   {slug}");
         println!("  source: {source}");
@@ -501,6 +543,17 @@ fn cmd_parity(args: &[String]) -> Result<()> {
                 adrs.join(", ")
             }
         );
+        if !debts.is_empty() {
+            println!("  debt:");
+            for (id, description, discovered, evidence, resolved) in debts {
+                let state = if resolved == 0 { "open" } else { "resolved" };
+                println!(
+                    "    - {id} [{state}, {discovered}]: {}",
+                    truncate(&description, 100)
+                );
+                println!("      evidence: {}", truncate(&evidence, 120));
+            }
+        }
         if full {
             println!("\n{}", summary.trim());
         }
@@ -547,6 +600,19 @@ fn cmd_gaps() -> Result<()> {
     );
     for (status, feature, slug) in rows {
         println!("  [{status:<11}] {feature}  ({slug})");
+        let mut debts = conn.prepare(
+            "SELECT id, description, discovered FROM parity_debt WHERE slug = ?1 AND resolved = 0 ORDER BY discovered, id",
+        )?;
+        let debts: Vec<(String, String, String)> = debts
+            .query_map([&slug], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        for (id, description, discovered) in debts {
+            println!(
+                "      debt {id} ({discovered}): {}",
+                truncate(&description, 120)
+            );
+        }
     }
     Ok(())
 }
@@ -701,6 +767,7 @@ fn cmd_add_session(args: &[String]) -> Result<()> {
 
 fn cmd_check() -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
 
     // Build the set of known ADR numbers from filenames for ref validation.
     let adr_numbers: std::collections::HashSet<String> = match load_adrs() {
@@ -723,6 +790,13 @@ fn cmd_check() -> Result<()> {
                         row.slug, row.file.status
                     ));
                 }
+                if row.file.summary.chars().count() > SUMMARY_WARN_LIMIT {
+                    warnings.push(format!(
+                        "{}: summary is {} characters (budget: {SUMMARY_WARN_LIMIT})",
+                        row.slug,
+                        row.file.summary.chars().count()
+                    ));
+                }
                 for adr in &row.file.adr {
                     if adr.len() != 4 || !adr.chars().all(|c| c.is_ascii_digit()) {
                         errors.push(format!(
@@ -735,6 +809,36 @@ fn cmd_check() -> Result<()> {
                             row.slug
                         ));
                     }
+                }
+                for debt in &row.file.debt {
+                    if debt.id.trim().is_empty() {
+                        errors.push(format!("{}: debt id must not be empty", row.slug));
+                    }
+                    if debt.description.trim().is_empty() {
+                        errors.push(format!(
+                            "{}: debt `{}` description must not be empty",
+                            row.slug, debt.id
+                        ));
+                    }
+                    if debt.discovered.trim().is_empty() {
+                        errors.push(format!(
+                            "{}: debt `{}` discovered must not be empty",
+                            row.slug, debt.id
+                        ));
+                    }
+                    if debt.evidence.trim().is_empty() {
+                        errors.push(format!(
+                            "{}: debt `{}` evidence must not be empty",
+                            row.slug, debt.id
+                        ));
+                    }
+                }
+                let open_debt_count = row.file.open_debts().count();
+                if row.file.status == "Ported" && open_debt_count > 0 {
+                    errors.push(format!(
+                        "{}: status is Ported but {open_debt_count} open structured debt item(s) remain",
+                        row.slug
+                    ));
                 }
             }
         }
@@ -762,6 +866,10 @@ fn cmd_check() -> Result<()> {
     }
     if let Err(e) = load_sessions() {
         errors.push(format!("sessions.ndjson: {e:#}"));
+    }
+
+    for warning in &warnings {
+        eprintln!("  ! {warning}");
     }
 
     if errors.is_empty() {

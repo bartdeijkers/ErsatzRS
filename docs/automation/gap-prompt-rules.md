@@ -16,7 +16,12 @@ root is the canonical worked example; every generated prompt must read like it.
   and require any shortfall to be recorded as visible `ParityDebt`.
 - **Self-contained but thin.** The prompt delegates process to the repo's own
   contracts rather than restating them. It must reference `AGENTS.md` and the
-  `parity-slice` skill (`.codex/skills/parity-slice.md`), not re-explain them.
+  canonical `parity-slice` skill (`skills/parity-slice.md`), not re-explain
+  them.
+- **Agnostic verification.** Required verification steps must be plain commands
+  any agent can run, such as `cargo xtask ...`, `npx playwright test ...`, or
+  `tsp ...`. MCP browser sessions may be listed as a convenience, never as the
+  only documented path.
 
 ## Required structure (in order)
 
@@ -25,20 +30,22 @@ Each generated prompt MUST contain these sections, mirroring `prompt.md`:
 1. **Title line** — `Fix the next ErsatzTV parity gap in ErsatzRS: <feature> (slug `<slug>`)`,
    naming the route(s) when the gap is UI.
 2. **Workflow pointer** — instruct use of the `AGENTS.md` workflow plus
-   `.codex/skills/parity-slice.md`; state the no-stopgap goal.
+   `skills/parity-slice.md`; state the no-stopgap goal.
 3. **Before editing** — read ErsatzTV source under `$ERSATZTV_SRC/`, inspect the
    current ErsatzRS implementation/routes/docs/tests, build a **Source Map**, and
    for admin-UI routes a **Visual Source Map**, then identify `ParityDebt`.
 4. **Implement the slice** — match ErsatzTV fields, actions, labels, validation,
    routes, persistence, side effects, and (for UI) visible layout; preserve
    SSR/browser-safe fallbacks; follow `TEST.md` hydration rules; add focused
-   tests; update parity/status docs.
+   tests; update parity/status docs; decide whether any intentional deviation
+   from ErsatzTV needs a new ADR.
 5. **Visual verification** — UI routes only: serve via `./run.sh serve` after
    rebuilding Leptos assets, capture same-viewport screenshots vs the ErsatzTV
    reference, compare geometry not just DOM presence.
 6. **Verification gates** — the narrow useful gates (normally
-   `cargo xtask parity-check web` for UI; focused crate tests otherwise) plus
-   `cargo xtask progress check`.
+   `cargo xtask parity-check web` for UI; focused crate tests otherwise), any
+   runnable Playwright spec added or updated for UI behavior
+   (`npx playwright test ...`), plus `cargo xtask progress check`.
 7. **Reporting** — report Source Map, Visual Source Map (UI), behavior
    implemented, remaining `ParityDebt`, verification run, and changed files.
 

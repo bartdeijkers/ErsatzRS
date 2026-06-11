@@ -16,6 +16,10 @@ contract.
   commit in [`parity-baseline.md`](parity-baseline.md). Upstream ErsatzTV work
   after that commit is out of scope until the pin is advanced (which the routine
   never does on its own).
+- **Schedule owner:** this routine is intended for the maintainer-owned
+  scheduled remote agent against `bartdeijkers/ErsatzRS` `main`. The repository
+  contract lives here; the external scheduler/account must point at this file
+  and commit with the `daily-progress-routine` agent name.
 
 ---
 
@@ -63,17 +67,28 @@ For each merged change in the window, update the source-of-truth text files
 - **Parity:** if a change advanced, completed, deferred, or dropped a feature,
   edit the matching `docs/progress/parity/<slug>.toml` — update `status` (`Not
   started` / `In progress` / `Ported` / `Deferred` / `Dropped`), refresh
-  `summary` to reflect what is now ported vs. remaining, and add `adr` numbers
-  for any deviation. Follow the `update-parity` skill. Do not overstate: only
-  mark `Ported` when the change clearly closes the feature; otherwise keep `In
-  progress` and record remaining work as visible ParityDebt in `summary`.
+  `summary` to reflect what is now ported vs. remaining, add structured
+  `[[debt]]` entries for new open gaps, and add `adr` numbers for any deviation.
+  Follow the `update-parity` skill. Do not overstate: only mark `Ported` when
+  the change clearly closes the feature and no open structured debt remains;
+  otherwise keep `In progress` and record remaining work as visible ParityDebt.
+  For streaming/runtime features, a passing `cargo xtask smoke` run is the
+  preferred runtime evidence before a `Ported` flip.
+  If the change deviates from ErsatzTV instead of porting it, explicitly decide
+  whether an ADR is required before updating status.
+- **Runtime triage:** if the change window or maintainer report includes live
+  log evidence, follow [runtime-triage.md](runtime-triage.md): cluster
+  WARN/ERROR lines, map each cluster to a parity slug, add dated structured
+  debt with the shortest useful evidence signature, and downgrade `Ported` when
+  the evidence contradicts it.
 - **Routes / hydration:** if a route became routed or a page gained/lost island
   hydration, update `docs/progress/routes.toml` / `hydration.toml`.
 - **Phase:** if focus or remaining work shifted, update `phase.toml`
   `current_focus` / `next_steps` and tick any newly-complete checklist item.
 - **Session log:** append one line via
   `cargo xtask progress add-session --agent "daily-progress-routine" --summary
-  "<one line covering the window>"`.
+  "<one line covering the window>"`. A session entry is required whenever a
+  parity status changes so the status flip has a dated rationale.
 
 Be conservative: when a commit is ambiguous, leave status unchanged and note the
 uncertainty in the feature `summary` rather than guessing. Never invent a slug,

@@ -3,6 +3,7 @@ etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
 status     = 'In progress'
 adr        = ['0010']
+
 summary    = '''
 Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Remaining follow-up is limited to imported-database verification in Slice 21 and rarely used schedule-item filler/group behaviors.
 
@@ -12,3 +13,15 @@ ParityDebt — Continue-build seam overlap: the persisted `anchor.next_start` tr
 
 ParityDebt — duplicate consecutive item (observed 2026-06-10): the MTV music-video channel played the same item twice in a row (No Doubt - "Don't Speak"), which ErsatzTV's shuffled collection ordering does not do (its shuffle avoids immediate repeats across reshuffle boundaries). Verify the shuffled media-collection enumerator and its persisted ordering/anchor state against `ShuffledMediaCollectionEnumerator` at the pinned baseline.
 '''
+
+[[debt]]
+id          = 'continue-build-seam-overlap'
+description = 'Continue builds can re-add one future item at a daily hard-stop boundary because anchor.next_start tracks the boundary instead of the prior item finish.'
+discovered  = '2026-06-08'
+evidence    = 'classic-scheduling summary: one stray item per build around the future seam until ErsatzTV multi-day build loop with continue-anchors is ported.'
+
+[[debt]]
+id          = 'duplicate-consecutive-shuffle-item'
+description = 'Classic shuffled music-video collection ordering can repeat the same item consecutively across reshuffle boundaries.'
+discovered  = '2026-06-10'
+evidence    = "Runtime observation: MTV music-video channel played No Doubt - \"Don't Speak\" twice in a row, unlike ErsatzTV shuffled collection ordering."

@@ -3,6 +3,25 @@ etv_source = '`ErsatzTV/Pages/Settings*.razor`, `$ERSATZTV_SRC/ErsatzTV.Core/Dom
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/settings.rs`, `crates/ersatzrs-web/src/admin/server_fns/settings.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-domain/src/config.rs`, `crates/ersatzrs-infra/src/{db,logging,xmltv}.rs`, `crates/ersatzrs-core/src/playout_builder.rs`'
 status     = 'In progress'
 adr        = ['0012']
+
 summary    = '''
 In progress for i18n: `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` remain routed with ErsatzTV-shaped forms and raw HTML POST fallbacks backed by `ConfigElement`. The UI covers FFmpeg paths/default profile/language/subtitle/report/global watermark/fallback filler/HLS/custom-resolution dialog, logging subsystem levels, HDHR UUID/tuner count, scanner refresh interval, playout build options, UI theme/language, and XMLTV days/time-zone/block behavior. The persisted `pages.language` value now drives the SSR shell language and typed translations for the shell/navigation/home/not-found, settings including optional `(none)` choices and logging level option labels, `/ffmpeg`, `/search`, `/media/libraries`, `/media/sources/{local,jellyfin,emby,plex}`, shared media-source path editor, `/watermarks`, `/system/{health,logs,troubleshooting}` including log-level table labels, `/channels` including streaming-mode and preferred-audio language display labels, `/schedules` including optional language `(none)` choices and fallback collection labels, `/blocks` including the search-query placeholder and duration hour adornment, `/templates`, `/decos`, `/deco-templates`, `/playouts`, `/media/rerun-collections`, `/media/smart-collections`, and `/media/filler/presets` route families plus media season display names in search/browser/detail surfaces, with culture strings split into one translation module per language. ErsatzRS intentionally extends ErsatzTV's English, Polski, and Português (Brasil) cultures with `nl` / Nederlands; see ADR 0012. Mediaserver bootstrap seeds upstream default settings rows, and settings saves perform the ported side effects: live logging filter reload, FFmpeg runtime/capability refresh, report-folder creation, embedded-subtitle extraction queueing, playout rebuild queueing, and XMLTV refresh queueing. The configured FFmpeg/ffprobe paths are now honored at execution time: ErsatzTV's `FFmpegLocator` is ported in `crates/ersatzrs-ffmpeg/src/locator.rs` (env override → DB config-if-it-exists → next to the running executable with a `.exe` suffix on Windows → `PATH` → bare name), resolved and persisted at startup (`crates/ersatzrs-web/src/host/bootstrap.rs`), published into a process-wide holder every spawn site reads, and refreshed on settings save so a path change takes effect without a restart; the scanner shares the same resolver. This fixes both the previously env-only resolution (a bare `ffmpeg` never searched next to the executable, so `ffmpeg.exe` beside `ErsatzRS.exe` was not found) and the cosmetic-only DB path setting. Remaining `ParityDebt`: the FFmpeg settings inputs are still `required`, so empty-means-auto-detect is exercised only by startup/the server fn, not the form UI (deferred to avoid language-file churn) — confirmed blocking in real use on 2026-06-10: the settings page could not be saved until the FFmpeg path field was filled in manually, even though the runtime had already auto-detected FFmpeg 8.1.1. Also observed 2026-06-10: ErsatzRS started 3 concurrent transcode sessions for one viewing session, while ErsatzTV caps concurrent transcode sessions at 2 by default — the session-limit setting and its runtime enforcement are not ported. The HLS segmenter idle timeout, work-ahead limit, initial segment count, and default MPEG-TS script are now consumed by streaming runtime paths; transport runtime proof is tracked in `hls-variant-playlists-segmenter.toml` and `mpeg-ts-channel-streaming.toml`. Full admin-route text coverage and four-language browser proof remain active i18n `ParityDebt`; see `plans/settings-parity-slice.md`.
 '''
+
+[[debt]]
+id          = 'ffmpeg-path-empty-autodetect-form'
+description = 'FFmpeg settings path inputs are required in the form, so empty-means-auto-detect cannot be saved through the UI.'
+discovered  = '2026-06-10'
+evidence    = 'Runtime use: settings page could not be saved until the FFmpeg path field was filled manually even though startup auto-detected FFmpeg 8.1.1.'
+
+[[debt]]
+id          = 'concurrent-transcode-session-limit'
+description = 'ErsatzTV default concurrent transcode session limit of 2 is not ported or enforced.'
+discovered  = '2026-06-10'
+evidence    = 'Runtime observation: ErsatzRS started 3 concurrent transcode sessions for one viewing session.'
+
+[[debt]]
+id          = 'settings-i18n-browser-proof'
+description = 'Full admin-route text coverage and four-language browser proof remain incomplete.'
+discovered  = '2026-06-10'
+evidence    = 'docs/progress/parity/settings.toml summary and plans/settings-parity-slice.md track active i18n ParityDebt.'

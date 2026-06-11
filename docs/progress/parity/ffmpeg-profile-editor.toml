@@ -3,6 +3,19 @@ etv_source = '`ErsatzTV/Pages/FFmpegProfile*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/`, `crates/ersatzrs-web/src/admin/languages/`'
 status     = 'In progress'
 adr        = []
+
 summary    = '''
 Ported: list at `/ffmpeg/profiles` (alias `/ffmpeg`), editor `#[island]` at `/ffmpeg/profiles/add` and `/ffmpeg/profiles/:id` with all 31 fields, hardware accordion driven by `normalize_video`, video-preset parity via `presets_for_profile`, LoudNorm parity, startup-report-backed HW acceleration list using hwaccels and encoder names, preservation of a saved unavailable HW value for edit prefill, Copy Profile via `Modal`. Visible labels and generated copy-name defaults now use the persisted-language i18n layer with per-culture translation modules. Remaining `ParityDebt`: when the `/ffmpeg` profile editor's format is `h264`, its `profile` field does not expose the upstream enum options `main`, `high`, and `high444p`; when `Nvenc` hardware acceleration is selected and the format is changed to `mpeg-2`, the format field does not show the upstream red validation line/warning that NVENC only supports `h264`, `hevc`, and `av1`.
 '''
+
+[[debt]]
+id          = 'h264-profile-options'
+description = 'The FFmpeg profile editor does not expose the upstream h264 profile options main, high, and high444p.'
+discovered  = '2026-06-10'
+evidence    = 'docs/progress/parity/ffmpeg-profile-editor.toml summary records the missing h264 profile options.'
+
+[[debt]]
+id          = 'nvenc-mpeg2-validation-warning'
+description = 'Changing format to mpeg-2 while Nvenc hardware acceleration is selected does not show the upstream unsupported-format warning.'
+discovered  = '2026-06-10'
+evidence    = 'docs/progress/parity/ffmpeg-profile-editor.toml summary records the missing red validation line for Nvenc h264/hevc/av1-only support.'

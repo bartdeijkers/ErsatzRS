@@ -46,7 +46,7 @@ Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation — the
 AV1 hardware-decode software fallback on the live HLS-segmenter path (slug
 `ffmpeg-command-generation`).
 
-Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
 Current remaining `ParityDebt` (quoted from
@@ -99,7 +99,7 @@ Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph — re-verify
 the NVENC/CUDA conversion-chain fixes on the live segmenter path and close the
 resource-backed dynamic graphics watermark gap (slug `ffmpeg-filter-graph`).
 
-Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
 Current parity state (from `docs/progress/parity/ffmpeg-filter-graph.toml`): the
@@ -154,7 +154,7 @@ Fix the next ErsatzTV parity gap in ErsatzRS: Settings (FFmpeg / Logging /
 HDHomeRun / Scanner / Playout / UI / XMLTV) — routes
 `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` (slug `settings`).
 
-Use the repo workflow from `AGENTS.md` plus `.codex/skills/parity-slice.md`.
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
 Current parity state (from `docs/progress/parity/settings.toml`): the settings
