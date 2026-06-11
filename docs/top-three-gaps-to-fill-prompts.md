@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-11
-last_processed_commit: 626783e2102890d07c779588e1133c283431e1e3
+last_processed_commit: 641b21edd86f6f91819fbb0540d15892109caced
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
 rules: docs/automation/gap-prompt-rules.md
@@ -21,30 +21,29 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `52e1028..626783e`): a backend/fix window. The
-feature commits landed snapshot-covered fixes for the 2026-06-10
-`ffmpeg-filter-graph` runtime debt (CUDA surface tracking after the
-software-decode upload, still-image pipelines kept in software on the nvenc
-path so the error screen renders instead of a bare 503, subtitle-burn
-no-cue/Windows-path double-escape) and corrected `scanner` `VideoScanKind` to
-ErsatzTV numbering; the rest was CI/release/Windows/docs. By the selection
-rules every remaining gap is phase-named and `In progress` except
-`remote-streams-browser` (`Not started`), so **foundational before leaf UI**
-decides the top three: the two FFmpeg pipeline gaps (which both got fresh
-runtime-relevant work and still carry live `ParityDebt`) plus the
-app-wide-foundational `settings` config/i18n gap. The leaf-UI picks from the
-prior run (`support-pages`, `multi-collections…`) saw no commits this window
-and drop below the foundational pipeline/config gaps; they will resurface once
-the foundational debt closes. Alphabetical order within the foundational tier:
-`ffmpeg-command-generation`, `ffmpeg-filter-graph`, `settings`.
+Ranking this run (window `626783e..641b21e`): a workflow/tooling window. The
+new commits made `docs/automation/gap-prompt-rules.md` stricter
+(blocking-debt-first, diagnosis-first, hardware-bound proof folded into a
+matching runtime slice), added `docs/automation/runtime-triage.md`, added ADR
+0014 for runtime-learned hardware capability fallback, restored canonical
+`skills/` files, expanded `cargo xtask progress` validation, and introduced
+`cargo xtask smoke`. They did not close the open structured debts on the
+currently selected gaps. By the selection rules, every remaining feature except
+`remote-streams-browser` is still `In progress`; the top tier remains the
+phase-focus foundational/runtime debt rather than leaf UI: the two FFmpeg
+pipeline gaps plus the app-wide `settings` config/runtime gap. Alphabetical
+order within that tier yields `ffmpeg-command-generation`,
+`ffmpeg-filter-graph`, `settings`.
 
-Prompts 1 and 3 in this run are reframed per the refinement rules in the
+Prompts 1 and 3 remain shaped by the refinement rules in the
 [rules](automation/gap-prompt-rules.md): prompt 1 is diagnosis-first (its
 2026-06-09 gate fix already failed live on 2026-06-10) and absorbs the
 hardware-bound `nvenc-cuda-live-reverification` proof from
 `ffmpeg-filter-graph`; prompt 3 leads with the two confirmed-blocking runtime
 debts and defers the mechanical i18n coverage sweep to a follow-up slice
-(tracked as open debt in `settings.toml`).
+(tracked as open debt in `settings.toml`). Prompt 2 keeps the
+`nvenc-cuda-live-reverification` debt visible while making the
+resource-backed dynamic watermark path the implementable slice.
 
 ---
 

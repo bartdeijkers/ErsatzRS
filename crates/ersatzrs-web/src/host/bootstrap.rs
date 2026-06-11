@@ -433,7 +433,15 @@ async fn check_startup_ffmpeg_runtime(
 ) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
     let config = ffmpeg_runtime_config_with_profile_probes(pool, ffmpeg_path, ffprobe_path).await;
     match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await {
-        Ok(report) => {
+        Ok(mut report) => {
+            if let Err(error) = ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
+                pool,
+                &mut report.capabilities,
+            )
+            .await
+            {
+                tracing::warn!(%error, "failed to apply runtime-learned hardware decode denials");
+            }
             tracing::info!(
                 ffmpeg = %report.ffmpeg.version,
                 ffprobe = %report.ffprobe.version,

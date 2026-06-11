@@ -413,6 +413,12 @@ fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) ->
         return FfmpegCapability::Software;
     }
 
+    let codec = nvidia_decoder_codec(source.codec);
+    let bit_depth = bit_depth(source.pixel_format);
+    if report.hardware_decode_denied(HardwareAccelerationKind::Nvenc, codec, bit_depth) {
+        return FfmpegCapability::Software;
+    }
+
     let Some(decoder) = cuvid_decoder_for_codec(source.codec) else {
         return FfmpegCapability::Software;
     };
@@ -867,6 +873,7 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
             ),
         ],
         nvidia_decoders: nvidia_decoders_for_tests(),
+        hardware_decode_denials: Vec::new(),
         videotoolbox_decoders: BTreeSet::from([
             "av01".to_owned(),
             "avc1".to_owned(),
@@ -1094,6 +1101,26 @@ mod tests {
     fn nvidia_av1_decode_requires_decoder_detail() {
         let mut report = capability_report_for_tests();
         report.nvidia_decoders.clear();
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        let source = SourceVideoStream::new(SourceVideoCodec::Av1);
+        let desired = DesiredVideoState::h264_1080p();
+
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Software);
+        assert_eq!(
+            capabilities.can_encode(&desired),
+            FfmpegCapability::Hardware
+        );
+    }
+
+    #[test]
+    fn nvidia_runtime_denial_overrides_positive_decoder_detail() {
+        let mut report = capability_report_for_tests();
+        report.deny_hardware_decode(crate::HardwareDecodeDenial::new(
+            HardwareAccelerationKind::Nvenc,
+            "av1",
+            8,
+        ));
         let capabilities = HardwareCapabilitiesFactory::new(&report)
             .for_acceleration(HardwareAccelerationKind::Nvenc);
         let source = SourceVideoStream::new(SourceVideoCodec::Av1);
