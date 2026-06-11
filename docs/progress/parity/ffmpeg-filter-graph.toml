@@ -13,12 +13,32 @@ the learned-denial slice: software AV1 input decode fed the CUDA/NVENC
 filter/encode chain with `-hwaccel none -c:v libdav1d` plus CUDA
 upload/scale/overlay filters and `h264_nvenc`, producing a 200 HLS playlist and
 readable MPEG-TS segments. This proof does not close direct IPTV `.ts`
-runtime-learned denial scope. Remaining `ParityDebt`: resource-backed dynamic
-graphics watermarks remain tracked under the graphics-engine plan.
+runtime-learned denial scope.
+
+The 2026-06-11 watermark-routing slice closes the resource-backed dynamic
+watermark gap: `ChannelWatermarkImageSource::Resource` now resolves inside the
+new `resources_cache_folder()` (`<AppData>/cache/resources`, warn-and-ignore on
+missing files, matching `WatermarkSelector`); the web host extracts the bundled
+streaming resources (`song_progress_overlay*.png`, song backgrounds, album
+cover) at startup with `ResourceExtractorService` overwrite semantics; and the
+pipeline ports the `FFmpegLibraryProcessService` routing rule — a single
+permanent watermark with no graphics elements keeps the native ffmpeg watermark
+input, while dynamic watermarks (intermittent/opacity-expression/multiple, or
+any combined with graphics elements) join the z-ordered graphics overlay plan
+so they composite with graphics elements like ErsatzTV's graphics engine (per
+ADR 0005 ErsatzRS composites with native overlay/fade/opacity filters plus
+drawvg for the vector path instead of a raster frame loop). Watermark inputs
+now sort together with their overlays by z-index, fixing a latent input/overlay
+zip mismatch when watermarks were attached out of z-order. Snapshot coverage:
+single-permanent resource watermark stays native, watermark+drawvg z-order
+interleave, out-of-order multi-watermark z-index pairing, and the rerouted
+multiple/intermittent/opacity-expression watermark snapshots. The
+song-with-progress watermark override itself ships with the song video
+generation feature, not this slug.
 '''
 
 [[debt]]
-id          = 'resource-backed-dynamic-watermarks'
-description = 'Resource-backed dynamic graphics watermarks are not yet fed through the ErsatzRS drawvg graphics-engine path.'
-discovered  = '2026-06-10'
-evidence    = 'docs/progress/parity/ffmpeg-filter-graph.toml summary tracks dynamic graphics watermarks under the graphics-engine plan.'
+id          = 'animated-watermark-input-probing'
+description = 'ErsatzTV probes watermark images for animation (`IsWatermarkAnimated`) and emits `-ignore_loop 0` for animated GIFs on the native watermark path; ErsatzRS always treats watermark images as still (`-loop 1`) on both the native and graphics-overlay routes.'
+discovered  = '2026-06-11'
+evidence    = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Pipeline/SoftwarePipelineBuilder.cs` adds `DoNotIgnoreLoopInputOption` when the watermark stream is not a still image, while `InputFile::watermark` in `crates/ersatzrs-ffmpeg/src/input.rs` unconditionally emits `-loop 1`.'
