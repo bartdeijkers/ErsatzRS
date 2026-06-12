@@ -420,18 +420,321 @@ pub fn watermark_alpha_format_filter() -> String {
 #[must_use]
 pub fn watermark_opacity_expression_filter(expression: &str) -> String {
     let expression = translate_watermark_opacity_expression(expression);
+    // `geq` requires a luminance (or RGB) expression — alpha alone fails at
+    // runtime with "A luminance or RGB expression is mandatory". Copy the
+    // color planes through and rewrite only alpha.
     format!(
-        "format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,geq=a='clip(255*({expression}),0,255)'"
+        "format=yuva420p|yuva444p|yuva422p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(255*({expression}),0,255)'"
     )
 }
 
+/// Translate an `ErsatzTV` (`NCalc`) watermark opacity expression into
+/// `FFmpeg` `geq` eval syntax.
+///
+/// `ErsatzTV` evaluates these expressions per frame with `NCalc`, which
+/// accepts infix `%`, comparison, and boolean operators. The `FFmpeg`
+/// expression evaluator has no infix `%`/`<`/`&&` — they must become `mod()`,
+/// `lt()`, `min()` (boolean results are exactly 0/1, so `min`/`max` are
+/// and/or). `geq` exposes the frame time as uppercase `T`. An expression that
+/// cannot be parsed is returned with symbol substitution only, preserving the
+/// previous behavior.
 #[must_use]
 pub fn translate_watermark_opacity_expression(expression: &str) -> String {
-    expression
-        .replace("time_of_day_seconds", "t")
-        .replace("content_time_seconds", "t")
-        .replace("channel_time_seconds", "t")
-        .replace("content_total_seconds", "NAN")
+    OpacityExpressionParser::translate(expression).unwrap_or_else(|| {
+        expression
+            .replace("time_of_day_seconds", "T")
+            .replace("content_total_seconds", "NAN")
+            .replace("content_seconds", "T")
+            .replace("channel_seconds", "T")
+    })
+}
+
+/// Recursive-descent parser for the `NCalc` operator subset `ErsatzTV`
+/// opacity expressions use, emitting `FFmpeg` eval syntax.
+struct OpacityExpressionParser {
+    tokens: Vec<OpacityToken>,
+    position: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum OpacityToken {
+    Number(String),
+    Identifier(String),
+    Operator(&'static str),
+    OpenParen,
+    CloseParen,
+    Comma,
+}
+
+impl OpacityExpressionParser {
+    fn translate(expression: &str) -> Option<String> {
+        let tokens = Self::tokenize(expression)?;
+        let mut parser = Self {
+            tokens,
+            position: 0,
+        };
+        let translated = parser.parse_or()?;
+        (parser.position == parser.tokens.len()).then_some(translated)
+    }
+
+    fn tokenize(expression: &str) -> Option<Vec<OpacityToken>> {
+        let mut tokens = Vec::new();
+        let chars: Vec<char> = expression.chars().collect();
+        let mut index = 0;
+        while index < chars.len() {
+            let c = chars[index];
+            match c {
+                ' ' | '\t' | '\r' | '\n' => index += 1,
+                '(' => {
+                    tokens.push(OpacityToken::OpenParen);
+                    index += 1;
+                }
+                ')' => {
+                    tokens.push(OpacityToken::CloseParen);
+                    index += 1;
+                }
+                ',' => {
+                    tokens.push(OpacityToken::Comma);
+                    index += 1;
+                }
+                '+' | '-' | '*' | '/' | '%' => {
+                    tokens.push(OpacityToken::Operator(match c {
+                        '+' => "+",
+                        '-' => "-",
+                        '*' => "*",
+                        '/' => "/",
+                        _ => "%",
+                    }));
+                    index += 1;
+                }
+                '<' | '>' | '=' | '!' | '&' | '|' => {
+                    let next = chars.get(index + 1).copied();
+                    let (operator, len) = match (c, next) {
+                        ('<', Some('=')) => ("<=", 2),
+                        ('<', _) => ("<", 1),
+                        ('>', Some('=')) => (">=", 2),
+                        ('>', _) => (">", 1),
+                        ('=', Some('=')) => ("==", 2),
+                        ('=', _) => ("==", 1),
+                        ('!', Some('=')) => ("!=", 2),
+                        ('!', _) => ("!", 1),
+                        ('&', Some('&')) => ("&&", 2),
+                        ('|', Some('|')) => ("||", 2),
+                        _ => return None,
+                    };
+                    tokens.push(OpacityToken::Operator(operator));
+                    index += len;
+                }
+                _ if c.is_ascii_digit() || c == '.' => {
+                    let start = index;
+                    while index < chars.len()
+                        && (chars[index].is_ascii_digit() || chars[index] == '.')
+                    {
+                        index += 1;
+                    }
+                    tokens.push(OpacityToken::Number(chars[start..index].iter().collect()));
+                }
+                _ if c.is_ascii_alphabetic() || c == '_' => {
+                    let start = index;
+                    while index < chars.len()
+                        && (chars[index].is_ascii_alphanumeric() || chars[index] == '_')
+                    {
+                        index += 1;
+                    }
+                    tokens.push(OpacityToken::Identifier(
+                        chars[start..index].iter().collect(),
+                    ));
+                }
+                _ => return None,
+            }
+        }
+        Some(tokens)
+    }
+
+    fn peek_operator(&self) -> Option<&'static str> {
+        match self.tokens.get(self.position) {
+            Some(OpacityToken::Operator(operator)) => Some(operator),
+            _ => None,
+        }
+    }
+
+    fn consume(&mut self) -> Option<OpacityToken> {
+        let token = self.tokens.get(self.position).cloned();
+        if token.is_some() {
+            self.position += 1;
+        }
+        token
+    }
+
+    fn parse_or(&mut self) -> Option<String> {
+        let mut left = self.parse_and()?;
+        while self.peek_operator() == Some("||") {
+            self.position += 1;
+            let right = self.parse_and()?;
+            left = format!("max({left},{right})");
+        }
+        Some(left)
+    }
+
+    fn parse_and(&mut self) -> Option<String> {
+        let mut left = self.parse_comparison()?;
+        while self.peek_operator() == Some("&&") {
+            self.position += 1;
+            let right = self.parse_comparison()?;
+            left = format!("min({left},{right})");
+        }
+        Some(left)
+    }
+
+    fn parse_comparison(&mut self) -> Option<String> {
+        let left = self.parse_additive()?;
+        let Some(operator) = self
+            .peek_operator()
+            .filter(|op| matches!(*op, "<" | "<=" | ">" | ">=" | "==" | "!="))
+        else {
+            return Some(left);
+        };
+        self.position += 1;
+        let right = self.parse_additive()?;
+        Some(match operator {
+            "<" => format!("lt({left},{right})"),
+            "<=" => format!("lte({left},{right})"),
+            ">" => format!("gt({left},{right})"),
+            ">=" => format!("gte({left},{right})"),
+            "==" => format!("eq({left},{right})"),
+            _ => format!("not(eq({left},{right}))"),
+        })
+    }
+
+    fn parse_additive(&mut self) -> Option<String> {
+        let mut left = self.parse_multiplicative()?;
+        while let Some(operator) = self.peek_operator().filter(|op| matches!(*op, "+" | "-")) {
+            self.position += 1;
+            let right = self.parse_multiplicative()?;
+            left = format!("({left}{operator}{right})");
+        }
+        Some(left)
+    }
+
+    fn parse_multiplicative(&mut self) -> Option<String> {
+        let mut left = self.parse_unary()?;
+        while let Some(operator) = self
+            .peek_operator()
+            .filter(|op| matches!(*op, "*" | "/" | "%"))
+        {
+            self.position += 1;
+            let right = self.parse_unary()?;
+            left = if operator == "%" {
+                format!("mod({left},{right})")
+            } else {
+                format!("({left}{operator}{right})")
+            };
+        }
+        Some(left)
+    }
+
+    fn parse_unary(&mut self) -> Option<String> {
+        match self.peek_operator() {
+            Some("-") => {
+                self.position += 1;
+                let operand = self.parse_unary()?;
+                Some(format!("(0-{operand})"))
+            }
+            Some("!") => {
+                self.position += 1;
+                let operand = self.parse_unary()?;
+                Some(format!("not({operand})"))
+            }
+            _ => self.parse_primary(),
+        }
+    }
+
+    fn parse_primary(&mut self) -> Option<String> {
+        match self.consume()? {
+            OpacityToken::Number(number) => Some(number),
+            OpacityToken::OpenParen => {
+                let inner = self.parse_or()?;
+                match self.consume()? {
+                    OpacityToken::CloseParen => Some(format!("({inner})")),
+                    _ => None,
+                }
+            }
+            OpacityToken::Identifier(name) => {
+                if matches!(
+                    self.tokens.get(self.position),
+                    Some(OpacityToken::OpenParen)
+                ) {
+                    self.position += 1;
+                    let mut arguments = Vec::new();
+                    if matches!(
+                        self.tokens.get(self.position),
+                        Some(OpacityToken::CloseParen)
+                    ) {
+                        self.position += 1;
+                    } else {
+                        loop {
+                            arguments.push(self.parse_or()?);
+                            match self.consume()? {
+                                OpacityToken::Comma => {}
+                                OpacityToken::CloseParen => break,
+                                _ => return None,
+                            }
+                        }
+                    }
+                    Self::translate_function_call(&name, &arguments)
+                } else {
+                    Some(Self::translate_identifier(&name))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Translate a function call, mapping `ErsatzTV`'s custom `NCalc` fade
+    /// helpers (`OpacityExpressionHelper.EvaluateFunction`) to equivalent
+    /// `FFmpeg` eval trapezoid expressions; other functions pass through
+    /// lowercased (`NCalc` built-ins like `Sin` match `FFmpeg` eval names).
+    fn translate_function_call(name: &str, arguments: &[String]) -> Option<String> {
+        if name.eq_ignore_ascii_case("LinearFadePoints") {
+            // LinearFadePoints(time, start, peakStart, peakEnd, end):
+            // 0 outside [start, end), linear ramp up to peakStart, solid
+            // until peakEnd, linear ramp down to end — a clipped trapezoid.
+            let [time, start, peak_start, peak_end, end] = arguments else {
+                return None;
+            };
+            return Some(format!(
+                "clip(min((({time})-({start}))/(({peak_start})-({start})),(({end})-({time}))/(({end})-({peak_end}))),0,1)"
+            ));
+        }
+        if name.eq_ignore_ascii_case("LinearFadeDuration") {
+            // LinearFadeDuration(time, start, fadeSeconds, peakSeconds):
+            // rectangle when fadeSeconds <= 0, otherwise the trapezoid
+            // start..start+fade..+peak..+fade.
+            let [time, start, fade, peak] = arguments else {
+                return None;
+            };
+            return Some(format!(
+                "if(lte(({fade}),0),gte(({time}),({start}))*lt(({time}),({start})+({peak})),clip(min((({time})-({start}))/({fade}),(({start})+2*({fade})+({peak})-({time}))/({fade})),0,1))"
+            ));
+        }
+        Some(format!(
+            "{}({})",
+            name.to_ascii_lowercase(),
+            arguments.join(",")
+        ))
+    }
+
+    fn translate_identifier(name: &str) -> String {
+        // `geq` exposes the frame time as uppercase `T` (lowercase `t` is an
+        // undefined constant there and fails filter initialization).
+        match name {
+            "time_of_day_seconds" | "content_seconds" | "channel_seconds" => "T".to_owned(),
+            "content_total_seconds" => "NAN".to_owned(),
+            "true" | "True" => "1".to_owned(),
+            "false" | "False" => "0".to_owned(),
+            _ => name.to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

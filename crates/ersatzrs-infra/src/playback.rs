@@ -1461,6 +1461,109 @@ pub async fn resolve_playback_watermarks_by_ids(
     resolve_playback_watermarks(pool, channel_id, watermark_ids).await
 }
 
+/// Map resolved playback watermarks to `(input, overlay)` pairs for the
+/// stream builders, applying the `SetWatermark` loop-option decision per
+/// image.
+pub async fn watermark_inputs_for_stream(
+    watermarks: Vec<ResolvedPlaybackWatermark>,
+    program_duration: Option<Duration>,
+) -> Vec<(InputFile, WatermarkOverlay)> {
+    let mut inputs = Vec::with_capacity(watermarks.len());
+    for resolved in watermarks {
+        if let Some(overlay) = watermark_overlay_for_stream(&resolved.watermark, program_duration) {
+            let path = resolved.image_path.to_string_lossy().into_owned();
+            let input = watermark_input_for_stream(&path, &overlay).await;
+            inputs.push((input, overlay));
+        }
+    }
+    inputs
+}
+
+/// Build the `FFmpeg` input for a resolved watermark image, mirroring `ErsatzTV`'s
+/// `SetWatermark` loop-option decision: an animated image (probed once via
+/// ffprobe like `IsWatermarkAnimated`) gets `-ignore_loop 0`; a still image
+/// gets `-loop 1` only when fade points require it; a plain still image gets
+/// no loop option.
+pub async fn watermark_input_for_stream(
+    image_path: &str,
+    overlay: &ersatzrs_ffmpeg::WatermarkOverlay,
+) -> InputFile {
+    if is_watermark_animated(image_path).await {
+        InputFile::watermark_animated(image_path)
+    } else if overlay.fade_points.is_empty() {
+        InputFile::watermark(image_path)
+    } else {
+        InputFile::watermark_looped(image_path)
+    }
+}
+
+/// Port of `FFmpegLibraryProcessService.IsWatermarkAnimated`: count decoded
+/// frames with ffprobe, treat more than one frame as animated, cache the
+/// answer per file name for a day, and fall back to "still" on any error.
+async fn is_watermark_animated(path: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
+
+    static CACHE: OnceLock<Mutex<HashMap<String, (bool, Instant)>>> = OnceLock::new();
+    const CACHE_TTL: std::time::Duration = std::time::Duration::from_hours(24);
+
+    let cache_key = Path::new(path).file_name().map_or_else(
+        || path.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some((animated, stored)) = guard.get(&cache_key) {
+            if stored.elapsed() < CACHE_TTL {
+                return *animated;
+            }
+        }
+    }
+
+    let output = tokio::process::Command::new(ffprobe_path())
+        .args([
+            "-loglevel",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-print_format",
+            "csv",
+            path,
+        ])
+        .output()
+        .await;
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let Ok(frame_count) = stdout.trim().replace("stream,", "").parse::<i64>() else {
+                return false;
+            };
+            let animated = frame_count > 1;
+            if let Ok(mut guard) = cache.lock() {
+                guard.insert(cache_key, (animated, Instant::now()));
+            }
+            animated
+        }
+        Ok(output) => {
+            tracing::warn!(
+                path,
+                exit_code = output.status.code(),
+                "error checking watermark frame count"
+            );
+            false
+        }
+        Err(error) => {
+            tracing::warn!(%error, path, "error checking watermark frame count");
+            false
+        }
+    }
+}
+
 #[must_use]
 pub fn watermark_overlay_for_stream(
     watermark: &ChannelWatermark,

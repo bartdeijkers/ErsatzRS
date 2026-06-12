@@ -34,7 +34,7 @@ use ersatzrs_infra::playback::{
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
     render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use serde::Deserialize;
@@ -318,21 +318,7 @@ async fn serve_channel_stream_with_channel(
     )
     .await
     {
-        Ok(watermarks) => watermarks
-            .into_iter()
-            .filter_map(|resolved| {
-                watermark_overlay_for_stream(&resolved.watermark, active.program_duration()).map(
-                    |overlay| {
-                        (
-                            InputFile::watermark(
-                                resolved.image_path.to_string_lossy().into_owned(),
-                            ),
-                            overlay,
-                        )
-                    },
-                )
-            })
-            .collect(),
+        Ok(watermarks) => watermark_inputs_for_stream(watermarks, active.program_duration()).await,
         Err(error) => {
             tracing::warn!(%error, channel_number = %channel.number, "failed to select playback watermarks");
             Vec::new()
