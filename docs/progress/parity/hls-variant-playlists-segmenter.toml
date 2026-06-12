@@ -170,4 +170,27 @@ copy audio/video with realtime input pacing like ErsatzTV. No HLS-direct-only
 ParityDebt was found in this audit, but it shares the direct current
 playout-item lookup/fallback limitations documented under MPEG-TS channel
 streaming.
+
+Runtime stability audit (2026-06-13): MTV channel 2 in HLS Segmenter mode was
+started through `./run.sh serve` and tested with TSDuck against
+`/iptv/channel/2.m3u8?mode=segmenter` while the same HLS stream was also open
+in VLC as a parallel viewer. VLC froze before the requested 10-minute window
+completed. During the freeze window the server kept one segmenter FFmpeg
+process alive for `No Doubt - Ex-Girlfriend.mp4`, and direct playlist snapshots
+showed `/iptv/session/2/hls.m3u8` advancing from media sequence 64-73 to 70-79
+in about ten seconds with no fresh server-side FFmpeg exit logged. This
+reopens the client-visible stability gap for parallel HLS playback: playlist
+production can continue while VLC stops progressing. The completed TSDuck
+analysis covered 3,491,320 packets / 656,368,160 bytes from 00:43:43 to
+00:53:44 local time and reported zero invalid syncs, transport errors,
+PCR/PTS/DTS leaps, duplicated packets, or invalid PES prefixes, but did report
+unexpected continuity discontinuities on PAT (3), SDT/BAT (4), video PID 256
+(4), audio PID 257 (3), and PMT PID 4096 (3), plus the expected missing
+BAT/TDT/TOT table warnings for this generated stream.
 '''
+
+[[debt]]
+id          = 'parallel-hls-playback-client-freeze'
+description = 'Parallel live HLS playback is not stable enough for parity: with MTV channel 2 open in VLC and TSDuck reading the same `/iptv/channel/2.m3u8?mode=segmenter` stream, VLC froze before the requested 10-minute stability window completed even though the server playlist continued to advance. The completed TSDuck run also observed unexpected continuity discontinuities on PAT, SDT/BAT, video, audio, and PMT PIDs.'
+discovered  = '2026-06-13'
+evidence    = 'User-reported VLC freeze during the live run; `curl http://127.0.0.1:8409/iptv/session/2/hls.m3u8` snapshots advanced from media sequence 64-73 to 70-79 in about ten seconds; host process list showed one active MTV segmenter FFmpeg process for `No Doubt - Ex-Girlfriend.mp4`; `/home/bart/.local/share/ErsatzRS/logs/ErsatzRS.log` had no matching fresh segmenter exit at the freeze moment; `/tmp/mtv-hls-tsduck-analysis.txt` reported 3,491,320 packets / 656,368,160 bytes over 00:43:43-00:53:44 local with continuity discontinuities on PID 0 (3), PID 17 (4), PID 256 video (4), PID 257 audio (3), and PID 4096 PMT (3).'
