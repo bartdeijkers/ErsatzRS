@@ -16,8 +16,8 @@ use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
-    Channel, ChannelSubtitleMode, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat,
-    HardwareAccelerationKind, StreamingMode, VideoScanKind,
+    Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, FFmpegProfileAudioFormat,
+    FFmpegProfileVideoFormat, HardwareAccelerationKind, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
@@ -29,7 +29,7 @@ use ersatzrs_ffmpeg::{
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
-    render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
+    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
     watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
@@ -431,12 +431,17 @@ impl HlsSessionWorker {
                 .preferred_subtitle_language_code
                 .as_deref()
                 .or(active.channel_preferred_subtitle_language_code.as_deref());
-            let subtitle = match select_playback_subtitle(
+            let channel_for_subtitles =
+                active.channel_for_runtime_subtitles(self.channel_id, self.channel_number.clone());
+            let subtitle = match select_channel_playback_subtitle(
                 &pool,
                 active.media_item_id,
                 preferred_subtitle_language,
                 subtitle_mode,
                 StreamingMode::HttpLiveStreamingSegmenter,
+                &channel_for_subtitles,
+                &playback_profile.resolution,
+                start_seconds,
             )
             .await
             {
@@ -2136,7 +2141,9 @@ async fn load_active_hls_item(
                   c."WatermarkId" AS "ChannelWatermarkId",
                   c."PreferredAudioLanguageCode" AS "ChannelPreferredAudioLanguageCode",
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
-                  c."SubtitleMode" AS "ChannelSubtitleMode"
+                  c."SubtitleMode" AS "ChannelSubtitleMode",
+                  c."MusicVideoCreditsMode" AS "ChannelMusicVideoCreditsMode",
+                  c."MusicVideoCreditsTemplate" AS "ChannelMusicVideoCreditsTemplate"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
            JOIN "Channel" c ON c."Id" = p."ChannelId"
@@ -2223,6 +2230,15 @@ async fn load_active_hls_item(
             .try_get::<Option<i64>, _>("ChannelWatermarkId")
             .ok()
             .flatten(),
+        channel_music_video_credits_mode: row
+            .try_get::<i64, _>("ChannelMusicVideoCreditsMode")
+            .ok()
+            .and_then(decode_music_video_credits_mode)
+            .unwrap_or(ChannelMusicVideoCreditsMode::None),
+        channel_music_video_credits_template: row
+            .try_get::<Option<String>, _>("ChannelMusicVideoCreditsTemplate")
+            .ok()
+            .flatten(),
     })
 }
 
@@ -2244,6 +2260,23 @@ struct ActiveHlsItem {
     channel_preferred_subtitle_language_code: Option<String>,
     channel_subtitle_mode: ChannelSubtitleMode,
     channel_watermark_id: Option<i64>,
+    channel_music_video_credits_mode: ChannelMusicVideoCreditsMode,
+    channel_music_video_credits_template: Option<String>,
+}
+
+impl ActiveHlsItem {
+    fn channel_for_runtime_subtitles(&self, id: i64, number: String) -> Channel {
+        Channel {
+            id,
+            number,
+            name: self.channel_name.clone(),
+            preferred_subtitle_language_code: self.channel_preferred_subtitle_language_code.clone(),
+            subtitle_mode: self.channel_subtitle_mode,
+            music_video_credits_mode: self.channel_music_video_credits_mode,
+            music_video_credits_template: self.channel_music_video_credits_template.clone(),
+            ..Channel::default()
+        }
+    }
 }
 
 const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
@@ -2252,6 +2285,14 @@ const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
         1 => Some(ChannelSubtitleMode::Forced),
         2 => Some(ChannelSubtitleMode::Default),
         3 => Some(ChannelSubtitleMode::Any),
+        _ => None,
+    }
+}
+
+const fn decode_music_video_credits_mode(value: i64) -> Option<ChannelMusicVideoCreditsMode> {
+    match value {
+        0 => Some(ChannelMusicVideoCreditsMode::None),
+        1 => Some(ChannelMusicVideoCreditsMode::GenerateSubtitles),
         _ => None,
     }
 }
@@ -3539,6 +3580,61 @@ mod tests {
     }
 
     #[test]
+    fn build_hls_command_burns_generated_music_video_credits_subtitle() {
+        let subtitle = PlaybackSubtitle {
+            id: 0,
+            subtitle_kind: crate::metadata::subtitle_kind::GENERATED,
+            title: Some("Music Video Credits".to_owned()),
+            stream_index: 0,
+            codec: Some("ass".to_owned()),
+            default: true,
+            forced: true,
+            sdh: false,
+            language: None,
+            is_extracted: false,
+            path: Some("/tmp/ersatzrs/music-video-credits-generated.ass".to_owned()),
+        };
+        let subtitle_input = subtitle_input_for_stream(
+            &subtitle,
+            "/media/music-video.mkv",
+            OutputFormat::Hls,
+            StreamingMode::HttpLiveStreamingSegmenter,
+        );
+        let command = build_hls_command(
+            "/media/music-video.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            0,
+            None,
+            None,
+            &playback_profile(),
+            None,
+            playback_output_metadata(None, None, None, &[], Some(&subtitle), None),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            subtitle_input,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(
+            arguments.contains("subtitles=/tmp/ersatzrs/music-video-credits-generated.ass"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("fontsdir="), "{arguments}");
+        assert!(
+            arguments.contains("-metadata:s:s:0 title=Music Video Credits"),
+            "{arguments}"
+        );
+    }
+
+    #[test]
     fn build_hls_command_seeking_dts_uses_core_only_decoder() {
         let command = build_hls_command(
             "/media/test.mkv",
@@ -4243,6 +4339,8 @@ mod tests {
             channel_preferred_subtitle_language_code: None,
             channel_subtitle_mode: ChannelSubtitleMode::None,
             channel_watermark_id: None,
+            channel_music_video_credits_mode: ChannelMusicVideoCreditsMode::None,
+            channel_music_video_credits_template: None,
         }
     }
 
