@@ -24,6 +24,15 @@ per gap, or make those PRs ready to merge in the documented order.
   completion marker, branch/PR state, and required progress docs instead of
   reimplementing closed work.
 - Implementation workers must use model gpt-5.5, reasoning effort medium.
+- Use host-provided multi-agent/forked-workspace capabilities when they are
+  available. Do not shell out to `codex exec`, `codex`, or another local CLI
+  worker from inside the repository unless the maintainer has explicitly
+  approved transmitting repository contents/prompts to that external model
+  service for this run.
+- Before creating any local worktree or branch, complete an approval preflight:
+  confirm that worker launch is actually available without extra approval, or
+  ask for the required approval first. If worker launch is blocked or denied,
+  stop with a checklist and no partial worktrees/branches.
 - Each worker owns exactly one gap and its branch. Do not let workers edit the
   same branch, the same parity TOML file, or docs/top-three-gaps-to-fill-prompts.md
   concurrently without an explicit handoff.
@@ -32,6 +41,11 @@ per gap, or make those PRs ready to merge in the documented order.
   gap before spawning parallel workers and give each worker only its own
   worktree path. Never run three implementation workers against one shared
   checkout.
+- In managed sandbox sessions, local sibling worktrees such as
+  `../ErsatzRS-gap-1` are commonly outside the writable roots. Treat creation,
+  formatting, Cargo builds, cleanup, and removal in those worktrees as
+  approval-sensitive. Ask for the worktree/write approval before creating them,
+  and record it in the checklist.
 - Tell every worker that other agents may be editing related files, that they
   must not revert other edits, and that they must report changed files,
   verification commands, remaining ParityDebt, and PR readiness state.
@@ -65,4 +79,22 @@ per gap, or make those PRs ready to merge in the documented order.
   claiming closure unless the gap prompt explicitly narrows the proof.
 - For admin UI gaps, require the visual/browser evidence described in the gap
   prompt and skills/parity-slice.md.
+
+## Blockage and Cleanup Rules
+
+- If worker launch is rejected because it can transmit repository contents or
+  prompts to an external model service, do not create worktrees as a fallback
+  preflight artifact. Report the exact approval needed and stop.
+- If local worktrees or branches were already created before a launch failure,
+  clean up empty/no-commit worktrees and their branches before reporting, unless
+  the maintainer explicitly asks to keep them.
+- If an automatic approval/review system rejects an edit or command with a
+  non-actionable denial such as model capacity, do not keep retrying the same
+  operation. Report the precise file and intended change, leave the branch in a
+  reviewable state if possible, and ask for maintainer direction.
+- If the maintainer asks to continue without subagents, this orchestrator should
+  not try to simulate the three-worker fan-out. Hand the request back as a
+  sequential main-agent workflow: one gap at a time, no PR fan-out, no local
+  worker CLI launches, and no completion markers until the normal per-gap gates
+  pass.
 '''
