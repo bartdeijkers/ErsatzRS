@@ -88,21 +88,6 @@ version = "=1.0.69"
 reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the workspace crates use thiserror 2."
 
 [[bans.skip]]
-name = "toml"
-version = "=0.8.23"
-reason = "stylance 0.8 still depends on toml 0.8 while leptos_config pulls toml 1.x."
-
-[[bans.skip]]
-name = "winnow"
-version = "=0.5.40"
-reason = "stylance 0.8 still uses the older winnow 0.5 parser stack via toml 0.8."
-
-[[bans.skip]]
-name = "winnow"
-version = "=0.7.15"
-reason = "Comes from stylance's toml 0.8 stack; the rest of the web stack uses winnow 1.x through toml 1.x/config."
-
-[[bans.skip]]
 name = "windows-sys"
 version = "=0.52.0"
 reason = "Still pulled in transitively by ring 0.17 via jsonwebtoken/rustls; the rest of the graph is on windows-sys 0.61."
