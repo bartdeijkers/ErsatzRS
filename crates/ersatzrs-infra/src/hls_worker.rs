@@ -943,7 +943,7 @@ impl HlsSessionHandle for HlsSessionWorker {
 #[must_use]
 pub fn build_hls_command(
     media_path: &str,
-    _working_dir: &Path,
+    working_dir: &Path,
     output_format: OutputFormat,
     is_first_transcode: bool,
     troubleshooting: bool,
@@ -964,7 +964,7 @@ pub fn build_hls_command(
 ) -> FfmpegCommand {
     build_hls_command_with_opacity_clock(
         media_path,
-        _working_dir,
+        working_dir,
         output_format,
         is_first_transcode,
         troubleshooting,
@@ -2302,10 +2302,12 @@ impl ActiveHlsItem {
 
     fn content_seek_seconds(&self, elapsed_seconds: i64) -> i64 {
         let elapsed = u64::try_from(elapsed_seconds).unwrap_or(0);
-        self.in_point
+        let seek_seconds = self
+            .in_point
             .as_secs()
             .saturating_add(elapsed)
-            .min(i64::MAX as u64) as i64
+            .min(i64::MAX as u64);
+        i64::try_from(seek_seconds).unwrap_or(i64::MAX)
     }
 }
 

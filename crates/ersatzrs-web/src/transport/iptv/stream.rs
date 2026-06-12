@@ -2080,7 +2080,7 @@ mod tests {
         // give up so the supervisor drops its pipe ends and the orphan gets
         // EPIPE instead of living forever.
         let never_finishes = tokio::spawn(async {
-            tokio::time::sleep(Duration::from_secs(3600)).await;
+            tokio::time::sleep(Duration::from_hours(1)).await;
             String::new()
         });
 

@@ -246,7 +246,7 @@ mod tests {
         assert!(!arguments.contains("-loop 1"));
         assert!(arguments.contains("scale=240:-1"));
         assert!(arguments.contains(
-            "geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(255*(if(lt(T,10),1,0)),0,255)'"
+            "geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(255*(if(lt(mod((0+T),86400),10),1,0)),0,255)'"
         ));
         assert!(arguments.contains("overlay=x=W-w-38:y=H-h-22:format=0"));
     }
