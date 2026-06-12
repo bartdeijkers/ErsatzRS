@@ -382,6 +382,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         None,
                         "",
                     )}
+                    <script inner_html=music_video_credits_template_dependency_script()></script>
 
                     <div class=style::field>
                         <label class=style::label for="channel-logo-file">{tr(TextKey::UploadLogo)}</label>
@@ -692,4 +693,21 @@ fn select_string_field(
             <span class=style::error></span>
         </div>
     }
+}
+
+fn music_video_credits_template_dependency_script() -> &'static str {
+    r#"
+(() => {
+  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  if (!form) return;
+  const mode = form.querySelector('[name="music_video_credits_mode"]');
+  const template = form.querySelector('[name="music_video_credits_template"]');
+  if (!mode || !template) return;
+  const sync = () => {
+    template.disabled = mode.value !== "1";
+  };
+  sync();
+  mode.addEventListener("change", sync);
+})();
+"#
 }

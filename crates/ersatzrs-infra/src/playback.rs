@@ -33,6 +33,7 @@ use crate::graphics_template::{
     GraphicsTemplateContext,
 };
 use crate::metadata::subtitle_kind;
+use crate::music_video_credits::generate_music_video_credits_subtitle;
 use crate::repositories::common::{
     decode_bool_column, decode_enum_column, decode_optional_bool_column,
     decode_optional_string_column, decode_string_column,
@@ -1145,6 +1146,49 @@ pub async fn select_playback_subtitle(
         ChannelSubtitleMode::None => None,
     };
     Ok(selected)
+}
+
+/// Select the channel playback subtitle, including generated music-video
+/// credits when the channel requests them.
+///
+/// This ports ErsatzTV's streaming path, where `GenerateSubtitles` creates a
+/// temporary forced/default ASS subtitle for music videos before `FFmpeg` command
+/// generation instead of requiring a persisted `Subtitle` row.
+///
+/// # Errors
+///
+/// Returns database or generated-subtitle file errors from music-video credits
+/// generation and persisted subtitle lookup.
+#[allow(clippy::too_many_arguments)]
+pub async fn select_channel_playback_subtitle(
+    pool: &DbPool,
+    media_item_id: i64,
+    preferred_language: Option<&str>,
+    subtitle_mode: ChannelSubtitleMode,
+    streaming_mode: StreamingMode,
+    channel: &Channel,
+    resolution: &Resolution,
+    stream_seek_seconds: i64,
+) -> Result<Option<PlaybackSubtitle>> {
+    if let Some(subtitle) = generate_music_video_credits_subtitle(
+        pool,
+        media_item_id,
+        channel,
+        resolution,
+        stream_seek_seconds,
+    )
+    .await?
+    {
+        return Ok(Some(subtitle));
+    }
+    select_playback_subtitle(
+        pool,
+        media_item_id,
+        preferred_language,
+        subtitle_mode,
+        streaming_mode,
+    )
+    .await
 }
 
 /// Select static `FFmpeg` watermarks for channel playback, porting the non-deco
