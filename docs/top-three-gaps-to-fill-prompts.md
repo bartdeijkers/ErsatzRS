@@ -44,7 +44,7 @@ its two blocking debts saw no commits.
 
 ---
 
-## 1 — FFmpeg command generation: close the four ADR 0014 hardware-decode follow-ons (slug `ffmpeg-command-generation`)
+## 1 — FFmpeg command generation: close the four ADR 0014 hardware-decode follow-ons (slug `ffmpeg-command-generation`) (completed)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation — the
 four open ADR 0014 hardware-decode debts (slug `ffmpeg-command-generation`,
@@ -117,7 +117,7 @@ verification run, and changed files.
 
 ---
 
-## 2 — FFmpeg filter graph: real clock semantics for opacity-expression time variables (slug `ffmpeg-filter-graph`)
+## 2 — FFmpeg filter graph: real clock semantics for opacity-expression time variables (slug `ffmpeg-filter-graph`) (completed)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph — give the
 watermark opacity-expression time parameters their ErsatzTV clock semantics

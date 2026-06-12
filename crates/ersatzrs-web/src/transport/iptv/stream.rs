@@ -13,7 +13,7 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, MediaSourceRepository};
@@ -25,7 +25,7 @@ use ersatzrs_ffmpeg::{
     build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
     build_pipeline_for_acceleration, ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport,
     FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat,
-    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
+    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream, WatermarkOpacityClock,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
@@ -282,7 +282,7 @@ async fn serve_channel_stream_with_channel(
         .preferred_subtitle_language_code
         .as_deref()
         .or(channel.preferred_subtitle_language_code.as_deref());
-    let start_seconds = playout_start_seconds(now, &active.playout_start);
+    let start_seconds = active.content_seek_seconds(now);
     let subtitle = match select_channel_playback_subtitle(
         &state.pool,
         active.media_item_id,
@@ -387,7 +387,14 @@ async fn serve_channel_stream_with_channel(
             Vec::new()
         }
     };
-    let command = build_stream_command(
+    let channel_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
+    let opacity_clock = watermark_opacity_clock_at_spawn(
+        now,
+        duration_from_seconds(start_seconds),
+        active.content_duration,
+        channel_start_time,
+    );
+    let command = build_stream_command_with_opacity_clock(
         &resolved,
         output_format,
         start_seconds,
@@ -401,6 +408,7 @@ async fn serve_channel_stream_with_channel(
         subtitle_input.clone(),
         watermark_inputs.clone(),
         graphics_overlays.clone(),
+        Some(opacity_clock),
     );
     let retry = StreamDenialRetry {
         pool: state.pool.clone(),
@@ -415,7 +423,7 @@ async fn serve_channel_stream_with_channel(
                     channel_number = %channel_number,
                     "rebuilding channel stream command with learned hardware decode denial"
                 );
-                build_stream_command(
+                build_stream_command_with_opacity_clock(
                     &resolved,
                     output_format,
                     start_seconds,
@@ -429,6 +437,7 @@ async fn serve_channel_stream_with_channel(
                     subtitle_input,
                     watermark_inputs,
                     graphics_overlays,
+                    Some(opacity_clock),
                 )
             })
         },
@@ -793,6 +802,8 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) media_path: String,
     pub(crate) media_item_id: i64,
     pub(crate) media_version_id: i64,
+    pub(crate) content_duration: Option<Duration>,
+    pub(crate) in_point: Duration,
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
     pub(crate) disable_watermarks: bool,
@@ -807,6 +818,12 @@ impl ActivePlayoutItem {
         let finish = parse_sqlite_utc_timestamp(&self.playout_finish)?;
         (finish - start).to_std().ok()
     }
+
+    pub(crate) fn content_seek_seconds(&self, now: DateTime<Utc>) -> i64 {
+        let elapsed = u64::try_from(playout_start_seconds(now, &self.playout_start)).unwrap_or(0);
+        let seek_seconds = self.in_point.as_secs().saturating_add(elapsed);
+        i64::try_from(seek_seconds).unwrap_or(i64::MAX)
+    }
 }
 
 pub(crate) async fn load_active_media_path(
@@ -820,6 +837,8 @@ pub(crate) async fn load_active_media_path(
                   pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
+                  mv."Duration" AS "ContentDuration",
+                  pi."InPoint" AS "InPoint",
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
@@ -855,6 +874,15 @@ pub(crate) async fn load_active_media_path(
         media_path: row.get::<String, _>("MediaPath"),
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
+        content_duration: row
+            .try_get::<Option<f64>, _>("ContentDuration")
+            .ok()
+            .flatten()
+            .and_then(duration_from_f64),
+        in_point: row
+            .try_get::<String, _>("InPoint")
+            .ok()
+            .map_or(Duration::ZERO, |value| parse_duration_text(&value)),
         playout_start: row.get::<String, _>("PlayoutStart"),
         playout_finish: row.get::<String, _>("PlayoutFinish"),
         disable_watermarks: row
@@ -963,6 +991,7 @@ pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'stat
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
@@ -978,6 +1007,41 @@ fn build_stream_command(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
+    build_stream_command_with_opacity_clock(
+        path,
+        output_format,
+        start_seconds,
+        playback_profile,
+        target_frame_rate,
+        streaming_mode,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_stream_command_with_opacity_clock(
+    path: &str,
+    output_format: OutputFormat,
+    start_seconds: i64,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    streaming_mode: ersatzrs_domain::StreamingMode,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
     let desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
@@ -988,6 +1052,9 @@ fn build_stream_command(
     );
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
+    if let Some(clock) = opacity_clock {
+        request = request.with_watermark_opacity_clock(clock);
+    }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
     }
@@ -1021,6 +1088,26 @@ fn build_stream_command(
     };
     let pipeline = build_pipeline_for_acceleration(acceleration, request.clone());
     pipeline.command(&request.inputs)
+}
+
+fn watermark_opacity_clock_at_spawn(
+    spawn_time: DateTime<Utc>,
+    content_seek: Duration,
+    content_duration: Option<Duration>,
+    channel_start_time: DateTime<Utc>,
+) -> WatermarkOpacityClock {
+    let time = spawn_time.time();
+    let time_of_day_seconds = f64::from(time.num_seconds_from_midnight())
+        + f64::from(time.nanosecond()) / 1_000_000_000.0;
+    let channel_seconds = (spawn_time - channel_start_time)
+        .to_std()
+        .map_or(0.0, |duration| duration.as_secs_f64());
+    WatermarkOpacityClock::new(
+        time_of_day_seconds,
+        content_seek.as_secs_f64(),
+        content_duration.map(|duration| duration.as_secs_f64()),
+        channel_seconds,
+    )
 }
 
 pub(crate) fn playback_output_metadata(
@@ -1095,6 +1182,55 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
     None
 }
 
+fn duration_from_seconds(seconds: i64) -> Duration {
+    u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+}
+
+fn duration_from_f64(seconds: f64) -> Option<Duration> {
+    seconds
+        .is_finite()
+        .then_some(seconds)
+        .filter(|seconds| *seconds >= 0.0)
+        .map(Duration::from_secs_f64)
+}
+
+fn parse_duration_text(value: &str) -> Duration {
+    let (day_text, time_text) = value.rsplit_once('.').map_or(("", value), |(left, right)| {
+        if left.contains(':') {
+            ("", value)
+        } else {
+            (left, right)
+        }
+    });
+    let parts: Vec<&str> = time_text.split(':').collect();
+    let [hours_text, minutes_text, seconds_text] = parts.as_slice() else {
+        return Duration::ZERO;
+    };
+    let days = day_text.parse::<u64>().unwrap_or(0);
+    let hours = hours_text.parse::<u64>().unwrap_or(0);
+    let minutes = minutes_text.parse::<u64>().unwrap_or(0);
+    let (seconds_text, fraction) = seconds_text
+        .split_once('.')
+        .map_or((*seconds_text, ""), |(whole, fraction)| (whole, fraction));
+    let seconds = seconds_text.parse::<u64>().unwrap_or(0);
+    let nanos = if fraction.is_empty() {
+        0
+    } else {
+        let mut padded = fraction.to_owned();
+        padded.truncate(9);
+        while padded.len() < 9 {
+            padded.push('0');
+        }
+        padded.parse::<u32>().unwrap_or(0)
+    };
+    Duration::from_secs(
+        days.saturating_mul(86_400)
+            .saturating_add(hours.saturating_mul(3_600))
+            .saturating_add(minutes.saturating_mul(60))
+            .saturating_add(seconds),
+    ) + Duration::from_nanos(u64::from(nanos))
+}
+
 const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
     match value {
         0 => Some(ChannelSubtitleMode::None),
@@ -1128,6 +1264,26 @@ struct StreamDenialRetry {
 }
 
 const STREAM_BODY_BUFFER_BYTES: usize = 256 * 1024;
+
+/// Ports `HttpContext.Response.RegisterForDispose(process)` from `ErsatzTV`'s
+/// `IptvController`: when the HTTP response body is dropped (client
+/// disconnected), the `FFmpeg` process is killed immediately. Without this,
+/// the supervisor only notices a gone client on the next failed pipe write,
+/// so a stalled or slow process lingers and concurrent transcode sessions
+/// stack up across player reconnects.
+struct StreamBodyDisposeGuard {
+    cancel: Arc<Notify>,
+}
+
+impl Drop for StreamBodyDisposeGuard {
+    fn drop(&mut self) {
+        tracing::debug!("channel stream response body dropped; cancelling ffmpeg supervisor");
+        // `notify_one` stores a permit, so the supervisor still observes the
+        // disposal even if it is between `notified()` awaits (for example
+        // while respawning after a learned hardware-decode denial).
+        self.cancel.notify_one();
+    }
+}
 
 enum DirectStreamOutcome {
     Completed,
@@ -1167,6 +1323,7 @@ fn spawn_stream_body(
     }
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
+    let handle_cancel = handle.cancel.clone();
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
@@ -1223,7 +1380,20 @@ fn spawn_stream_body(
         }
     });
 
-    Ok(Body::from_stream(ReaderStream::new(reader)))
+    Ok(guarded_stream_body(reader, handle_cancel))
+}
+
+/// Builds the response [`Body`], tying the `FFmpeg` process lifetime to the
+/// response: dropping the body fires [`StreamBodyDisposeGuard`], which cancels
+/// the supervisor and kills the process (`RegisterForDispose` parity).
+fn guarded_stream_body(reader: tokio::io::DuplexStream, cancel: Arc<Notify>) -> Body {
+    use futures_util::StreamExt;
+
+    let guard = StreamBodyDisposeGuard { cancel };
+    Body::from_stream(ReaderStream::new(reader).map(move |chunk| {
+        let _held_until_body_drop = &guard;
+        chunk
+    }))
 }
 
 async fn supervise_stream_process(
@@ -1251,10 +1421,12 @@ async fn supervise_stream_process(
             if result.is_err() {
                 // The body side is gone; stop the process instead of letting
                 // it block on a pipe nobody drains.
+                tracing::debug!(channel_number = %channel_number, "channel stream body writer failed; killing ffmpeg");
                 let _ = child.start_kill();
             }
         }
         () = cancel.notified() => {
+            tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
             if let Err(error) = child.kill().await {
                 tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
             }
@@ -1879,6 +2051,83 @@ mod tests {
             build_legacy_concat_url("http", "localhost:8409", "7"),
             "http://localhost:8409/ffmpeg/concat/7?mode=ts-legacy"
         );
+    }
+
+    #[tokio::test]
+    async fn dropping_stream_body_signals_supervisor_cancellation() {
+        // `RegisterForDispose` parity: the response body going away must
+        // cancel the supervisor (which kills the FFmpeg process) without
+        // waiting for the next failed pipe write.
+        let cancel = Arc::new(Notify::new());
+        let (reader, _writer) = tokio::io::duplex(64);
+        let body = guarded_stream_body(reader, cancel.clone());
+
+        drop(body);
+
+        tokio::time::timeout(Duration::from_secs(1), cancel.notified())
+            .await
+            .expect("dropping the body must signal cancellation");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg on PATH"]
+    async fn spawn_stream_body_kills_ffmpeg_when_body_is_dropped() {
+        // One viewing session must never leave a transcode process running
+        // after its HTTP response is gone: the supervisor kills the process
+        // and removes the session registration.
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let command = FfmpegCommand {
+            executable: ersatzrs_ffmpeg::ffmpeg_path(),
+            arguments: [
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-re",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=320x180:rate=30",
+                "-f",
+                "mpegts",
+                "pipe:1",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+            environment: Vec::new(),
+        };
+
+        let body = spawn_stream_body(
+            &command,
+            Vec::new(),
+            "97".to_owned(),
+            Arc::clone(&registry),
+            None,
+        )
+        .expect("spawn stream body");
+        // Wait for the fire-and-forget supervisor task to register the
+        // session before dropping the response body.
+        let registered_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !registry.is_active("97").await {
+            assert!(
+                tokio::time::Instant::now() < registered_deadline,
+                "session was never registered"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+
+        drop(body);
+
+        // The supervisor kills ffmpeg on disposal and removes the session.
+        let removed_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while registry.is_active("97").await {
+            assert!(
+                tokio::time::Instant::now() < removed_deadline,
+                "session was not torn down after the body was dropped"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 
     #[test]

@@ -10,9 +10,9 @@ use std::sync::{
 use std::time::Duration;
 
 use crate::db::DbPool;
-use crate::repositories::common::encode_datetime;
+use crate::repositories::common::{decode_duration_text, encode_datetime};
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
@@ -23,7 +23,7 @@ use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
     FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
     OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec,
-    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
+    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
 };
 
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
@@ -366,11 +366,12 @@ impl HlsSessionWorker {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
-            let start_seconds = if decision.start_at_zero {
+            let elapsed_seconds = if decision.start_at_zero {
                 0
             } else {
                 playout_start_seconds(decision.request_time, active.playout_start)
             };
+            let start_seconds = active.content_seek_seconds(elapsed_seconds);
             let duration = hls_playout_item_duration(
                 &active,
                 decision.request_time,
@@ -558,7 +559,13 @@ impl HlsSessionWorker {
             };
             let output_ts_offset = self.probe_output_ts_offset(is_first).await;
             let source_stream_for_denial = source_stream.clone();
-            let command = build_hls_command(
+            let opacity_clock = watermark_opacity_clock_at_spawn(
+                decision.request_time,
+                duration_from_seconds(start_seconds),
+                active.content_duration,
+                active.playout_start,
+            );
+            let command = build_hls_command_with_opacity_clock(
                 &active.media_path,
                 &self.working_dir,
                 self.output_format,
@@ -578,6 +585,7 @@ impl HlsSessionWorker {
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
+                Some(opacity_clock),
             );
             log_hls_av1_spawn_diagnostics(
                 &self.channel_number,
@@ -954,6 +962,54 @@ pub fn build_hls_command(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
 ) -> FfmpegCommand {
+    build_hls_command_with_opacity_clock(
+        media_path,
+        _working_dir,
+        output_format,
+        is_first_transcode,
+        troubleshooting,
+        hls_realtime,
+        start_seconds,
+        duration,
+        output_ts_offset,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        selected_audio_stream_index,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn build_hls_command_with_opacity_clock(
+    media_path: &str,
+    _working_dir: &Path,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    troubleshooting: bool,
+    hls_realtime: bool,
+    start_seconds: i64,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    selected_audio_stream_index: Option<usize>,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
     let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
@@ -967,6 +1023,9 @@ pub fn build_hls_command(
     }
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
+    if let Some(clock) = opacity_clock {
+        request = request.with_watermark_opacity_clock(clock);
+    }
     if let Some(stream_index) = selected_audio_stream_index {
         if let Some(audio_input) = request
             .inputs
@@ -1088,6 +1147,7 @@ pub fn build_hls_slug_command(
         runtime_capabilities: Some(runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
+        watermark_opacity_clock: WatermarkOpacityClock::default(),
         drawvg_filters: Vec::new(),
         graphics_overlays: Vec::new(),
         subtitle_fonts_dir: None,
@@ -1244,6 +1304,7 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
         runtime_capabilities: Some(request.runtime_capabilities),
         watermark: None,
         watermarks: Vec::new(),
+        watermark_opacity_clock: WatermarkOpacityClock::default(),
         drawvg_filters: Vec::new(),
         graphics_overlays: Vec::new(),
         subtitle_fonts_dir: Some(subtitle_fonts_dir()),
@@ -2077,6 +2138,8 @@ async fn load_active_hls_item(
                   pi."Id" AS "PlayoutItemId",
                   pi."MediaItemId" AS "MediaItemId",
                   mv."Id" AS "MediaVersionId",
+                  mv."Duration" AS "ContentDuration",
+                  pi."InPoint" AS "InPoint",
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
@@ -2137,6 +2200,17 @@ async fn load_active_hls_item(
         playout_item_id: row.get::<i64, _>("PlayoutItemId"),
         media_item_id: row.get::<i64, _>("MediaItemId"),
         media_version_id: row.get::<i64, _>("MediaVersionId"),
+        content_duration: row
+            .try_get::<Option<f64>, _>("ContentDuration")
+            .ok()
+            .flatten()
+            .and_then(duration_from_f64),
+        in_point: row
+            .try_get::<String, _>("InPoint")
+            .ok()
+            .map_or(Duration::ZERO, |value| {
+                decode_duration_text(&value).to_std().unwrap_or_default()
+            }),
         program_duration,
         playout_start,
         playout_finish,
@@ -2194,6 +2268,8 @@ struct ActiveHlsItem {
     playout_item_id: i64,
     media_item_id: i64,
     media_version_id: i64,
+    content_duration: Option<Duration>,
+    in_point: Duration,
     program_duration: Option<Duration>,
     playout_start: DateTime<Utc>,
     playout_finish: Option<DateTime<Utc>>,
@@ -2222,6 +2298,14 @@ impl ActiveHlsItem {
             music_video_credits_template: self.channel_music_video_credits_template.clone(),
             ..Channel::default()
         }
+    }
+
+    fn content_seek_seconds(&self, elapsed_seconds: i64) -> i64 {
+        let elapsed = u64::try_from(elapsed_seconds).unwrap_or(0);
+        self.in_point
+            .as_secs()
+            .saturating_add(elapsed)
+            .min(i64::MAX as u64) as i64
     }
 }
 
@@ -2260,6 +2344,38 @@ fn seconds_as_f64(seconds: i64) -> f64 {
     u64::try_from(seconds)
         .map(Duration::from_secs)
         .map_or(0.0, |duration| duration.as_secs_f64())
+}
+
+fn duration_from_seconds(seconds: i64) -> Duration {
+    u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+}
+
+fn duration_from_f64(seconds: f64) -> Option<Duration> {
+    seconds
+        .is_finite()
+        .then_some(seconds)
+        .filter(|seconds| *seconds >= 0.0)
+        .map(Duration::from_secs_f64)
+}
+
+fn watermark_opacity_clock_at_spawn(
+    spawn_time: DateTime<Utc>,
+    content_seek: Duration,
+    content_duration: Option<Duration>,
+    channel_start_time: DateTime<Utc>,
+) -> WatermarkOpacityClock {
+    let time = spawn_time.time();
+    let time_of_day_seconds = f64::from(time.num_seconds_from_midnight())
+        + f64::from(time.nanosecond()) / 1_000_000_000.0;
+    let channel_seconds = (spawn_time - channel_start_time)
+        .to_std()
+        .map_or(0.0, |duration| duration.as_secs_f64());
+    WatermarkOpacityClock::new(
+        time_of_day_seconds,
+        content_seek.as_secs_f64(),
+        content_duration.map(|duration| duration.as_secs_f64()),
+        channel_seconds,
+    )
 }
 
 fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
@@ -4275,6 +4391,8 @@ mod tests {
             playout_item_id: 1,
             media_item_id: 1,
             media_version_id: 1,
+            content_duration: (playout_finish - playout_start).to_std().ok(),
+            in_point: Duration::ZERO,
             program_duration: (playout_finish - playout_start).to_std().ok(),
             playout_start,
             playout_finish: Some(playout_finish),

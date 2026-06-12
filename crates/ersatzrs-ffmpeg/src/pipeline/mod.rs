@@ -17,12 +17,13 @@ use crate::{
     still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
-    watermark_opacity_expression_filter, watermark_opacity_filter, watermark_overlay_cuda_filter,
-    watermark_overlay_filter, watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams,
-    CommandGenerator, ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand,
-    FilterChain, FrameRate, FrameSize, FrameState, GraphicsOverlayFilter,
-    HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep, PixelFormat, SourceVideoCodec,
-    StreamKind, SubtitleMethod, TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOverlay,
+    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
+    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
+    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
+    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
+    PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
+    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -95,6 +96,7 @@ pub struct PipelineRequest {
     pub runtime_capabilities: Option<FfmpegCapabilityReport>,
     pub watermark: Option<WatermarkOverlay>,
     pub watermarks: Vec<WatermarkOverlay>,
+    pub watermark_opacity_clock: WatermarkOpacityClock,
     pub drawvg_filters: Vec<String>,
     pub graphics_overlays: Vec<GraphicsPipelineOverlay>,
     pub subtitle_fonts_dir: Option<String>,
@@ -113,6 +115,7 @@ impl PipelineRequest {
             runtime_capabilities: None,
             watermark: None,
             watermarks: Vec::new(),
+            watermark_opacity_clock: WatermarkOpacityClock::default(),
             drawvg_filters: Vec::new(),
             graphics_overlays: Vec::new(),
             subtitle_fonts_dir: None,
@@ -134,6 +137,12 @@ impl PipelineRequest {
     #[must_use]
     pub fn with_runtime_capabilities(mut self, report: FfmpegCapabilityReport) -> Self {
         self.runtime_capabilities = Some(report);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_watermark_opacity_clock(mut self, clock: WatermarkOpacityClock) -> Self {
+        self.watermark_opacity_clock = clock;
         self
     }
 
@@ -1105,7 +1114,10 @@ fn build_transcode_pipeline(
         {
             input
                 .filter_steps
-                .push(watermark_opacity_expression_filter(expression));
+                .push(watermark_opacity_expression_filter_with_clock(
+                    expression,
+                    &request.watermark_opacity_clock,
+                ));
         } else if watermark.opacity < 100 {
             input
                 .filter_steps
@@ -1278,7 +1290,10 @@ fn build_transcode_pipeline(
                 {
                     input
                         .filter_steps
-                        .push(watermark_opacity_expression_filter(expression));
+                        .push(watermark_opacity_expression_filter_with_clock(
+                            expression,
+                            &request.watermark_opacity_clock,
+                        ));
                 } else if overlay.opacity < 100 {
                     input
                         .filter_steps

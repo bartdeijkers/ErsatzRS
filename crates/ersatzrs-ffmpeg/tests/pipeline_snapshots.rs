@@ -16,15 +16,17 @@ use ersatzrs_ffmpeg::{
     hardware_upload_filter, lower_third_overlay, normalize_loudness_filter, song_progress_filter,
     subtitle_graphics_lavfi_input, subtitle_scale_npp_filter, tonemap_cuda_filter, tonemap_filter,
     tonemap_qsv_filter, tonemap_vaapi_filter, translate_watermark_opacity_expression,
-    yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
-    ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate,
-    FrameSize, FrameState, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
+    translate_watermark_opacity_expression_with_clock, yadif_cuda_filter, yadif_filter,
+    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
+    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
+    GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
     GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
     OutputMetadata, PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder,
     RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec,
     SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream, SvgTemplate,
     TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder, VaapiProfileEntrypoint,
-    VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
+    VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint, WatermarkOpacityClock,
+    WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -1681,10 +1683,14 @@ fn pipeline_with_intermittent_watermark_snapshot() {
 
 #[test]
 fn pipeline_with_opacity_expression_watermark_snapshot() {
-    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    let mut request = h264_request(DesiredVideoState::h264_1080p()).with_watermark_opacity_clock(
+        WatermarkOpacityClock::new(86_390.0, 95.0, Some(7_200.0), 3_600.0),
+    );
     request.inputs.push(InputFile::watermark("/media/logo.png"));
     request.watermarks.push(WatermarkOverlay {
-        opacity_expression: Some("if(time_of_day_seconds % 60 < 1, 1, 0.25)".to_owned()),
+        opacity_expression: Some(
+            "if(content_seconds < content_total_seconds && time_of_day_seconds % 60 < 1, 1, channel_seconds / 7200)".to_owned(),
+        ),
         ..WatermarkOverlay::default()
     });
 
@@ -1842,21 +1848,49 @@ fn opacity_expression_translation_maps_ncalc_to_ffmpeg_eval() {
         translate_watermark_opacity_expression(
             "if(time_of_day_seconds < content_seconds, content_total_seconds, channel_seconds)"
         ),
-        "if(lt(T,T),NAN,T)"
+        "if(lt(mod((0+T),86400),T),NAN,T)"
     );
     assert_eq!(
         translate_watermark_opacity_expression("if(time_of_day_seconds % 60 < 1, 1, 0.25)"),
-        "if(lt(mod(T,60),1),1,0.25)"
+        "if(lt(mod(mod((0+T),86400),60),1),1,0.25)"
     );
     assert_eq!(
         translate_watermark_opacity_expression(
             "if(time_of_day_seconds >= 10 && time_of_day_seconds <= 20, 1, 0)"
         ),
-        "if(min(gte(T,10),lte(T,20)),1,0)"
+        "if(min(gte(mod((0+T),86400),10),lte(mod((0+T),86400),20)),1,0)"
     );
     assert_eq!(
         translate_watermark_opacity_expression("1 - time_of_day_seconds / 60"),
-        "(1-(T/60))"
+        "(1-(mod((0+T),86400)/60))"
+    );
+}
+
+#[test]
+fn opacity_expression_translation_maps_ersatztv_clock_context() {
+    let clock = WatermarkOpacityClock::new(86_390.0, 45.0, Some(3_661.5), 120.0);
+    assert_eq!(
+        translate_watermark_opacity_expression_with_clock(
+            "if(time_of_day_seconds < content_seconds, content_total_seconds, channel_seconds)",
+            &clock,
+        ),
+        "if(lt(mod((86390+T),86400),(45+T)),3661.5,(120+T))"
+    );
+    assert_eq!(
+        translate_watermark_opacity_expression_with_clock(
+            "content_seconds + content_total_seconds + channel_seconds",
+            &clock,
+        ),
+        "(((45+T)+3661.5)+(120+T))"
+    );
+}
+
+#[test]
+fn opacity_expression_time_of_day_wraps_after_midnight() {
+    let clock = WatermarkOpacityClock::new(86_399.25, 0.0, Some(10.0), 0.0);
+    assert_eq!(
+        translate_watermark_opacity_expression_with_clock("time_of_day_seconds", &clock),
+        "mod((86399.25+T),86400)"
     );
 }
 
@@ -1873,6 +1907,14 @@ fn opacity_expression_translation_maps_custom_fade_functions() {
     assert_eq!(
         translate_watermark_opacity_expression("LinearFadeDuration(content_seconds, 0, 2, 6)"),
         "if(lte((2),0),gte((T),(0))*lt((T),(0)+(6)),clip(min(((T)-(0))/(2),((0)+2*(2)+(6)-(T))/(2)),0,1))"
+    );
+    let clock = WatermarkOpacityClock::new(0.0, 45.0, Some(120.0), 0.0);
+    assert_eq!(
+        translate_watermark_opacity_expression_with_clock(
+            "LinearFadePoints(content_seconds, 0, 2, 8, 10)",
+            &clock,
+        ),
+        "clip(min((((45+T))-(0))/((2)-(0)),((10)-((45+T)))/((10)-(8))),0,1)"
     );
 }
 

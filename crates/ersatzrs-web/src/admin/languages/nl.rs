@@ -1202,6 +1202,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Items => "Items",
         TextKey::Language => "Taal",
         TextKey::Languages => "Talen",
+        TextKey::LeaveEmptyToAutoDetect => "Laat leeg voor automatische detectie",
         TextKey::Libraries => "Bibliotheken",
         TextKey::LibraryRefreshInterval => "Vernieuwingsinterval bibliotheek",
         TextKey::Light => "Licht",

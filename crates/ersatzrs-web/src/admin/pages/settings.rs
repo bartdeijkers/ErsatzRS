@@ -106,15 +106,24 @@ pub fn XmltvSettingsPage() -> impl IntoView {
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let form = data.form;
     let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
+    // The path inputs are intentionally not `required`: an empty value saves
+    // and means auto-detect, matching the FFmpegLocator behavior the startup
+    // path and save server fn already implement. The locator-resolved path is
+    // surfaced as placeholder + help so an empty field still shows the
+    // detected tool.
+    let ffmpeg_autodetect_help = auto_detect_help(&data.ffmpeg_resolved);
+    let ffprobe_autodetect_help = auto_detect_help(&data.ffprobe_resolved);
     view! {
         <SettingsForm title=tr(TextKey::Ffmpeg) action="/api/settings/ffmpeg/save">
             <Field label=tr(TextKey::FfmpegPath)>
-                <input class=style::input name="ffmpeg_path" required value=form.ffmpeg_path/>
+                <input class=style::input name="ffmpeg_path" value=form.ffmpeg_path placeholder=data.ffmpeg_resolved/>
                 <p class=style::help>{tr(TextKey::FfmpegPathHelp)}</p>
+                <p class=style::help>{ffmpeg_autodetect_help}</p>
             </Field>
             <Field label=tr(TextKey::FfprobePath)>
-                <input class=style::input name="ffprobe_path" required value=form.ffprobe_path/>
+                <input class=style::input name="ffprobe_path" value=form.ffprobe_path placeholder=data.ffprobe_resolved/>
                 <p class=style::help>{tr(TextKey::FfprobePathHelp)}</p>
+                <p class=style::help>{ffprobe_autodetect_help}</p>
             </Field>
             <Field label=tr(TextKey::DefaultFfmpegProfile)>
                 <Select
@@ -268,6 +277,15 @@ fn embedded_subtitle_dependency_script() -> &'static str {
   new MutationObserver(sync).observe(document.body, { childList: true, subtree: true });
 })();
 "#
+}
+
+fn auto_detect_help(resolved: &str) -> String {
+    let label = tr(TextKey::LeaveEmptyToAutoDetect);
+    if resolved.trim().is_empty() {
+        label.to_owned()
+    } else {
+        format!("{label} ({resolved})")
+    }
 }
 
 fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOption> {
@@ -510,6 +528,29 @@ mod tests {
             .collect();
 
         assert_eq!(values, vec!["en-us", "pl", "pt-br", "nl"]);
+    }
+
+    #[test]
+    fn ffmpeg_path_inputs_allow_empty_for_auto_detect() {
+        let data = FfmpegSettingsPageData {
+            ffmpeg_resolved: "/usr/bin/ffmpeg".to_owned(),
+            ffprobe_resolved: "/usr/bin/ffprobe".to_owned(),
+            ..FfmpegSettingsPageData::default()
+        };
+
+        let html = render_ffmpeg(data).into_view().to_html();
+        let ffmpeg_input = input_html(&html, r#"name="ffmpeg_path""#);
+        let ffprobe_input = input_html(&html, r#"name="ffprobe_path""#);
+
+        // Empty means auto-detect, so the browser must not block the save.
+        assert!(!ffmpeg_input.contains("required"));
+        assert!(!ffprobe_input.contains("required"));
+        // The locator-resolved path is shown so an empty field still
+        // surfaces the auto-detected tool.
+        assert!(ffmpeg_input.contains(r#"placeholder="/usr/bin/ffmpeg""#));
+        assert!(ffprobe_input.contains(r#"placeholder="/usr/bin/ffprobe""#));
+        assert!(html.contains("(/usr/bin/ffmpeg)"));
+        assert!(html.contains("(/usr/bin/ffprobe)"));
     }
 
     #[test]

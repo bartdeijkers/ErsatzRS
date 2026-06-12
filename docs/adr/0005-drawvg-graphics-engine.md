@@ -53,6 +53,16 @@ All rendered elements are composed by ascending `ZIndex`. Script elements import
 the ErsatzTV `command`/`args` fields for fidelity, but they must not spawn an
 external graphics process.
 
+Watermark and native image opacity expressions keep ErsatzTV's clock-variable
+semantics inside FFmpeg eval by binding each identifier to a spawn-time anchor
+plus FFmpeg's per-frame `T`: `content_seconds` is the playout in-point/seek
+offset plus `T`, `channel_seconds` is channel uptime at FFmpeg spawn plus `T`,
+`time_of_day_seconds` is `mod(seconds-since-midnight-at-spawn + T, 86400)`, and
+`content_total_seconds` is the probed media duration. This is the native-filter
+counterpart to ErsatzTV's per-frame graphics engine evaluation; the wall-clock
+anchor is fixed when FFmpeg starts and advances through `T` rather than calling
+back into application code for each frame.
+
 ## Consequences
 
 Graphics become part of the FFmpeg pipeline, making command generation and

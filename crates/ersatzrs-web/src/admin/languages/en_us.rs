@@ -578,6 +578,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Items => "Items",
         TextKey::Language => "Language",
         TextKey::Languages => "Languages",
+        TextKey::LeaveEmptyToAutoDetect => "Leave empty to auto-detect",
         TextKey::Libraries => "Libraries",
         TextKey::LibraryRefreshInterval => "Library Refresh Interval",
         TextKey::Light => "Light",

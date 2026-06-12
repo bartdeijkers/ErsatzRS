@@ -51,11 +51,16 @@ produced 200 playlists and decodable h264 segments through
 watermark composited via the graphics-image route, the translated expression
 `if(lt(mod(T,60),30),1,0.5)` rendering without filter errors, and the
 `IsWatermarkAnimated` probe observed live. The single remaining open debt is
-the opacity-expression time-variable semantics below.
+live runtime proof for the opacity-expression time-variable semantics below.
+
+The 2026-06-12 clock-semantics slice snapshot-covers ErsatzTV `GetOpacity`
+bindings in FFmpeg eval: in-point/seek + `T`, channel uptime + `T`,
+midnight-wrapped wall clock + `T`, and duration. Direct `.ts` and HLS
+builders load those clocks and seek by in-point.
 '''
 
 [[debt]]
 id          = 'opacity-expression-time-variable-semantics'
-description = 'All opacity-expression time parameters translate to the FFmpeg frame timestamp `T`: `time_of_day_seconds` loses its wall-clock (seconds-since-midnight) meaning, `content_seconds` ignores the seek/in-point offset, `channel_seconds` ignores channel uptime, and `content_total_seconds` maps to `NAN`. ErsatzTV evaluates these per frame in its graphics engine with real wall-clock/content/channel clocks.'
+description = 'Snapshot-covered clock semantics are now implemented in native FFmpeg eval (`content_seconds = in-point/seek + T`, `channel_seconds = channel uptime at spawn + T`, `time_of_day_seconds = mod(seconds-since-midnight-at-spawn + T, 86400)`, `content_total_seconds = probed MediaVersion.Duration`) and threaded through direct IPTV `.ts`, HLS segmenter, and troubleshooting preview builders. Remaining parity debt: no live IPTV/HLS runtime proof has yet captured these exact wall-clock/in-point/duration bindings in an actual stream, so the feature must stay `In progress`.'
 discovered  = '2026-06-12'
-evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` binds four distinct clocks; `translate_identifier` in `crates/ersatzrs-ffmpeg/src/filter/simple.rs` maps the first three to `T` and the total to `NAN` because the filter builder has no duration/wall-clock context (ADR 0005 native-filter divergence).'
+evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` and `GraphicsEngine.cs` bind the four clocks per frame; `crates/ersatzrs-ffmpeg/src/filter/simple.rs` translates identifiers using `WatermarkOpacityClock`; `crates/ersatzrs-web/src/transport/iptv/stream.rs` and `crates/ersatzrs-infra/src/hls_worker.rs` load `PlayoutItem.InPoint` / `MediaVersion.Duration` and include in-point in `-ss`; `cargo test -p ersatzrs-ffmpeg` passed with identifier, in-point, and midnight-wrap coverage. Live runtime proof remains pending per ADR 0005 native-filter divergence.'

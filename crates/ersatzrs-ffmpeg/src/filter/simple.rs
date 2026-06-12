@@ -314,6 +314,42 @@ impl Default for WatermarkOverlay {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WatermarkOpacityClock {
+    pub time_of_day_seconds_at_spawn: f64,
+    pub content_seconds_at_spawn: f64,
+    pub content_total_seconds: Option<f64>,
+    pub channel_seconds_at_spawn: f64,
+}
+
+impl Default for WatermarkOpacityClock {
+    fn default() -> Self {
+        Self {
+            time_of_day_seconds_at_spawn: 0.0,
+            content_seconds_at_spawn: 0.0,
+            content_total_seconds: None,
+            channel_seconds_at_spawn: 0.0,
+        }
+    }
+}
+
+impl WatermarkOpacityClock {
+    #[must_use]
+    pub fn new(
+        time_of_day_seconds_at_spawn: f64,
+        content_seconds_at_spawn: f64,
+        content_total_seconds: Option<f64>,
+        channel_seconds_at_spawn: f64,
+    ) -> Self {
+        Self {
+            time_of_day_seconds_at_spawn: normalize_seconds(time_of_day_seconds_at_spawn, 86_400.0),
+            content_seconds_at_spawn: finite_non_negative(content_seconds_at_spawn),
+            content_total_seconds: content_total_seconds.map(finite_non_negative),
+            channel_seconds_at_spawn: finite_non_negative(channel_seconds_at_spawn),
+        }
+    }
+}
+
 #[must_use]
 pub fn watermark_scale_filter(watermark: &WatermarkOverlay, resolution: FrameSize) -> String {
     let width = watermark.width_percent / 100.0 * f64::from(resolution.width);
@@ -419,7 +455,15 @@ pub fn watermark_alpha_format_filter() -> String {
 
 #[must_use]
 pub fn watermark_opacity_expression_filter(expression: &str) -> String {
-    let expression = translate_watermark_opacity_expression(expression);
+    watermark_opacity_expression_filter_with_clock(expression, &WatermarkOpacityClock::default())
+}
+
+#[must_use]
+pub fn watermark_opacity_expression_filter_with_clock(
+    expression: &str,
+    clock: &WatermarkOpacityClock,
+) -> String {
+    let expression = translate_watermark_opacity_expression_with_clock(expression, clock);
     // `geq` requires a luminance (or RGB) expression — alpha alone fails at
     // runtime with "A luminance or RGB expression is mandatory". Copy the
     // color planes through and rewrite only alpha.
@@ -440,12 +484,34 @@ pub fn watermark_opacity_expression_filter(expression: &str) -> String {
 /// previous behavior.
 #[must_use]
 pub fn translate_watermark_opacity_expression(expression: &str) -> String {
-    OpacityExpressionParser::translate(expression).unwrap_or_else(|| {
+    translate_watermark_opacity_expression_with_clock(expression, &WatermarkOpacityClock::default())
+}
+
+#[must_use]
+pub fn translate_watermark_opacity_expression_with_clock(
+    expression: &str,
+    clock: &WatermarkOpacityClock,
+) -> String {
+    OpacityExpressionParser::translate(expression, clock).unwrap_or_else(|| {
         expression
-            .replace("time_of_day_seconds", "T")
-            .replace("content_total_seconds", "NAN")
-            .replace("content_seconds", "T")
-            .replace("channel_seconds", "T")
+            .replace(
+                "time_of_day_seconds",
+                &time_of_day_expression(clock.time_of_day_seconds_at_spawn),
+            )
+            .replace(
+                "content_total_seconds",
+                &clock
+                    .content_total_seconds
+                    .map_or_else(|| "NAN".to_owned(), format_eval_number),
+            )
+            .replace(
+                "content_seconds",
+                &offset_time_expression(clock.content_seconds_at_spawn),
+            )
+            .replace(
+                "channel_seconds",
+                &offset_time_expression(clock.channel_seconds_at_spawn),
+            )
     })
 }
 
@@ -467,13 +533,13 @@ enum OpacityToken {
 }
 
 impl OpacityExpressionParser {
-    fn translate(expression: &str) -> Option<String> {
+    fn translate(expression: &str, clock: &WatermarkOpacityClock) -> Option<String> {
         let tokens = Self::tokenize(expression)?;
         let mut parser = Self {
             tokens,
             position: 0,
         };
-        let translated = parser.parse_or()?;
+        let translated = parser.parse_or(clock)?;
         (parser.position == parser.tokens.len()).then_some(translated)
     }
 
@@ -566,28 +632,28 @@ impl OpacityExpressionParser {
         token
     }
 
-    fn parse_or(&mut self) -> Option<String> {
-        let mut left = self.parse_and()?;
+    fn parse_or(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
+        let mut left = self.parse_and(clock)?;
         while self.peek_operator() == Some("||") {
             self.position += 1;
-            let right = self.parse_and()?;
+            let right = self.parse_and(clock)?;
             left = format!("max({left},{right})");
         }
         Some(left)
     }
 
-    fn parse_and(&mut self) -> Option<String> {
-        let mut left = self.parse_comparison()?;
+    fn parse_and(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
+        let mut left = self.parse_comparison(clock)?;
         while self.peek_operator() == Some("&&") {
             self.position += 1;
-            let right = self.parse_comparison()?;
+            let right = self.parse_comparison(clock)?;
             left = format!("min({left},{right})");
         }
         Some(left)
     }
 
-    fn parse_comparison(&mut self) -> Option<String> {
-        let left = self.parse_additive()?;
+    fn parse_comparison(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
+        let left = self.parse_additive(clock)?;
         let Some(operator) = self
             .peek_operator()
             .filter(|op| matches!(*op, "<" | "<=" | ">" | ">=" | "==" | "!="))
@@ -595,7 +661,7 @@ impl OpacityExpressionParser {
             return Some(left);
         };
         self.position += 1;
-        let right = self.parse_additive()?;
+        let right = self.parse_additive(clock)?;
         Some(match operator {
             "<" => format!("lt({left},{right})"),
             "<=" => format!("lte({left},{right})"),
@@ -606,24 +672,24 @@ impl OpacityExpressionParser {
         })
     }
 
-    fn parse_additive(&mut self) -> Option<String> {
-        let mut left = self.parse_multiplicative()?;
+    fn parse_additive(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
+        let mut left = self.parse_multiplicative(clock)?;
         while let Some(operator) = self.peek_operator().filter(|op| matches!(*op, "+" | "-")) {
             self.position += 1;
-            let right = self.parse_multiplicative()?;
+            let right = self.parse_multiplicative(clock)?;
             left = format!("({left}{operator}{right})");
         }
         Some(left)
     }
 
-    fn parse_multiplicative(&mut self) -> Option<String> {
-        let mut left = self.parse_unary()?;
+    fn parse_multiplicative(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
+        let mut left = self.parse_unary(clock)?;
         while let Some(operator) = self
             .peek_operator()
             .filter(|op| matches!(*op, "*" | "/" | "%"))
         {
             self.position += 1;
-            let right = self.parse_unary()?;
+            let right = self.parse_unary(clock)?;
             left = if operator == "%" {
                 format!("mod({left},{right})")
             } else {
@@ -633,27 +699,27 @@ impl OpacityExpressionParser {
         Some(left)
     }
 
-    fn parse_unary(&mut self) -> Option<String> {
+    fn parse_unary(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
         match self.peek_operator() {
             Some("-") => {
                 self.position += 1;
-                let operand = self.parse_unary()?;
+                let operand = self.parse_unary(clock)?;
                 Some(format!("(0-{operand})"))
             }
             Some("!") => {
                 self.position += 1;
-                let operand = self.parse_unary()?;
+                let operand = self.parse_unary(clock)?;
                 Some(format!("not({operand})"))
             }
-            _ => self.parse_primary(),
+            _ => self.parse_primary(clock),
         }
     }
 
-    fn parse_primary(&mut self) -> Option<String> {
+    fn parse_primary(&mut self, clock: &WatermarkOpacityClock) -> Option<String> {
         match self.consume()? {
             OpacityToken::Number(number) => Some(number),
             OpacityToken::OpenParen => {
-                let inner = self.parse_or()?;
+                let inner = self.parse_or(clock)?;
                 match self.consume()? {
                     OpacityToken::CloseParen => Some(format!("({inner})")),
                     _ => None,
@@ -673,7 +739,7 @@ impl OpacityExpressionParser {
                         self.position += 1;
                     } else {
                         loop {
-                            arguments.push(self.parse_or()?);
+                            arguments.push(self.parse_or(clock)?);
                             match self.consume()? {
                                 OpacityToken::Comma => {}
                                 OpacityToken::CloseParen => break,
@@ -683,7 +749,7 @@ impl OpacityExpressionParser {
                     }
                     Self::translate_function_call(&name, &arguments)
                 } else {
-                    Some(Self::translate_identifier(&name))
+                    Some(Self::translate_identifier(&name, clock))
                 }
             }
             _ => None,
@@ -724,16 +790,51 @@ impl OpacityExpressionParser {
         ))
     }
 
-    fn translate_identifier(name: &str) -> String {
+    fn translate_identifier(name: &str, clock: &WatermarkOpacityClock) -> String {
         // `geq` exposes the frame time as uppercase `T` (lowercase `t` is an
         // undefined constant there and fails filter initialization).
         match name {
-            "time_of_day_seconds" | "content_seconds" | "channel_seconds" => "T".to_owned(),
-            "content_total_seconds" => "NAN".to_owned(),
+            "time_of_day_seconds" => time_of_day_expression(clock.time_of_day_seconds_at_spawn),
+            "content_seconds" => offset_time_expression(clock.content_seconds_at_spawn),
+            "channel_seconds" => offset_time_expression(clock.channel_seconds_at_spawn),
+            "content_total_seconds" => clock
+                .content_total_seconds
+                .map_or_else(|| "NAN".to_owned(), format_eval_number),
             "true" | "True" => "1".to_owned(),
             "false" | "False" => "0".to_owned(),
             _ => name.to_owned(),
         }
+    }
+}
+
+fn offset_time_expression(offset_seconds: f64) -> String {
+    if offset_seconds == 0.0 {
+        "T".to_owned()
+    } else {
+        format!("({}+T)", format_eval_number(offset_seconds))
+    }
+}
+
+fn time_of_day_expression(offset_seconds: f64) -> String {
+    format!(
+        "mod(({}+T),86400)",
+        format_eval_number(normalize_seconds(offset_seconds, 86_400.0))
+    )
+}
+
+fn finite_non_negative(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn normalize_seconds(value: f64, modulus: f64) -> f64 {
+    if value.is_finite() && modulus.is_finite() && modulus > 0.0 {
+        value.rem_euclid(modulus)
+    } else {
+        0.0
     }
 }
 
@@ -847,6 +948,19 @@ fn seconds(duration: Duration) -> String {
     let mut value = String::new();
     write!(&mut value, "{seconds:.3}").expect("writing to String cannot fail");
     value.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
+fn format_eval_number(value: f64) -> String {
+    if value.fract() == 0.0 {
+        return format!("{value:.0}");
+    }
+
+    let mut formatted = String::new();
+    write!(&mut formatted, "{value:.6}").expect("writing to String cannot fail");
+    formatted
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
 }
 
 fn rounded_number(value: f64) -> String {

@@ -4,15 +4,15 @@ use axum::{
     http::{header, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Timelike, Utc};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{Channel, ChannelSubtitleMode, HardwareAccelerationKind, StreamingMode};
-use ersatzrs_ffmpeg::{FfmpegCommand, FrameSize, InputFile, OutputFormat};
+use ersatzrs_ffmpeg::{FfmpegCommand, FrameSize, InputFile, OutputFormat, WatermarkOpacityClock};
 use ersatzrs_infra::{
     file_system_layout::{
         data_path, transcode_troubleshooting_folder, TRANSCODE_TROUBLESHOOTING_CHANNEL,
     },
-    hls_worker::build_hls_command,
+    hls_worker::build_hls_command_with_opacity_clock,
     playback::{
         enrich_source_video_stream_for_playback, load_channel_target_frame_rate,
         load_playback_profile, load_source_audio_streams, load_source_video_stream,
@@ -192,7 +192,14 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
         &source_audio_streams,
         no_subtitle.as_ref(),
     );
-    let command = build_hls_command(
+    let spawn_time = Utc::now();
+    let opacity_clock = watermark_opacity_clock_at_spawn(
+        spawn_time,
+        duration_from_seconds(seek_seconds),
+        Some(Duration::from_secs_f64(media.duration_seconds.max(0.0))),
+        spawn_time,
+    );
+    let command = build_hls_command_with_opacity_clock(
         &media_path,
         &working_dir,
         output_format,
@@ -212,6 +219,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
+        Some(opacity_clock),
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -274,7 +282,7 @@ async fn start_channel_playback_preview(
     } else {
         None
     };
-    let start_seconds = stream::playout_start_seconds(start_time, &active.playout_start);
+    let start_seconds = active.content_seek_seconds(start_time);
     let program_duration = active_program_duration(&active)
         .unwrap_or_else(|| Duration::from_secs_f64(preview_duration_seconds(0.0, 0)));
     let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
@@ -401,7 +409,13 @@ async fn start_channel_playback_preview(
         &source_audio_streams,
         no_subtitle.as_ref(),
     );
-    let command = build_hls_command(
+    let opacity_clock = watermark_opacity_clock_at_spawn(
+        start_time,
+        duration_from_seconds(start_seconds),
+        active.content_duration,
+        content_start_time,
+    );
+    let command = build_hls_command_with_opacity_clock(
         &media_path,
         &working_dir,
         output_format,
@@ -421,6 +435,7 @@ async fn start_channel_playback_preview(
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
+        Some(opacity_clock),
     );
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
@@ -588,6 +603,30 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
         }
     }
     None
+}
+
+fn duration_from_seconds(seconds: i64) -> Duration {
+    u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+}
+
+fn watermark_opacity_clock_at_spawn(
+    spawn_time: DateTime<Utc>,
+    content_seek: Duration,
+    content_duration: Option<Duration>,
+    channel_start_time: DateTime<Utc>,
+) -> WatermarkOpacityClock {
+    let time = spawn_time.time();
+    let time_of_day_seconds = f64::from(time.num_seconds_from_midnight())
+        + f64::from(time.nanosecond()) / 1_000_000_000.0;
+    let channel_seconds = (spawn_time - channel_start_time)
+        .to_std()
+        .map_or(0.0, |duration| duration.as_secs_f64());
+    WatermarkOpacityClock::new(
+        time_of_day_seconds,
+        content_seek.as_secs_f64(),
+        content_duration.map(|duration| duration.as_secs_f64()),
+        channel_seconds,
+    )
 }
 
 async fn prepare_troubleshooting_folder(path: &PathBuf) -> ApiResult<()> {

@@ -55,6 +55,10 @@ impl Default for FfmpegSettingsForm {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FfmpegSettingsPageData {
     pub form: FfmpegSettingsForm,
+    /// Effective tool paths the locator resolves to right now; shown in the
+    /// form so an empty (auto-detect) field still surfaces the detected path.
+    pub ffmpeg_resolved: String,
+    pub ffprobe_resolved: String,
     pub ffmpeg_profiles: Vec<SelectOption>,
     pub languages: Vec<SelectOption>,
     pub watermarks: Vec<SelectOption>,
@@ -388,8 +392,13 @@ pub async fn load_ffmpeg_settings_with_pool(
         .await?,
     };
 
+    let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
+    let ffprobe_resolved = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
+
     Ok(FfmpegSettingsPageData {
         form,
+        ffmpeg_resolved,
+        ffprobe_resolved,
         ffmpeg_profiles: select_options(
             pool,
             r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#,
