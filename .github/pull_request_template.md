@@ -15,7 +15,7 @@
 - [ ] I cited the upstream ErsatzTV source paths used for this change.
 - [ ] I added or linked an ADR if this changes architecture or deliberately diverges from ErsatzTV.
 - [ ] I updated `CHANGELOG.md`.
-- [ ] I updated the parity matrix when parity status changed.
+- [ ] I updated `docs/progress/` when parity status changed.
 
 ## Parity Review
 

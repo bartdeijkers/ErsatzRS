@@ -17,6 +17,7 @@ public open-source project.
 | Language | English throughout repository-bound content | Docs, code comments, ADRs, changelog, templates, commits, and skills use English. |
 | Contribution mode | Solo first, public OSS later | Governance exists early, but process stays lightweight. |
 | Commit style | Conventional Commits | CI can lint commits and release notes can be generated later. |
+| Changelog | Keep a Changelog in `CHANGELOG.md` | The root changelog is the main human-readable release overview and must stay current under `[Unreleased]`. |
 | Documentation model | Diataxis | Docs are split into tutorials, how-to guides, reference, and explanation. |
 | Porting rule | ErsatzTV behavior by default | Deliberate deviations require ADRs. |
 | AI workflows | Repo-local `.claude/skills/` | Skills travel with the repository and stay reviewable. |

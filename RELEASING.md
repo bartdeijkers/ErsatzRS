@@ -1,7 +1,8 @@
 # Releasing
 
-ErsatzRS has no releases yet. This policy applies once release automation is
-enabled.
+ErsatzRS publishes alpha releases while Phase 7 parity work continues. The
+release workflow builds binary archives and the Docker image from annotated
+version tags.
 
 ## Versioning
 
@@ -25,12 +26,14 @@ git push origin v0.1.0
 ## Release Checklist
 
 1. Confirm CI is green.
-2. Confirm the parity matrix reflects the release contents.
+2. Confirm `docs/progress/` reflects the release contents.
 3. Move `[Unreleased]` entries in `CHANGELOG.md` into a dated version section.
 4. Create a new empty `[Unreleased]` section.
-5. Tag the release.
-6. Let the release workflow create binary archives and publish the Docker image.
-7. Verify the GitHub release notes match the changelog.
+5. Add or update the compare links at the bottom of `CHANGELOG.md`.
+6. Tag the release.
+7. Let the release workflow create binary archives and publish the Docker image.
+8. Verify the GitHub release notes match the changelog, which is the canonical
+   release overview.
 
 For the command sequence, see [Publish a full release](docs/how-to/publish-release.md).
 

@@ -187,6 +187,31 @@ cargo xtask smoke                         # boot temp web host and probe IPTV/HL
 - When translating existing notes, preserve technical decisions and replace
   Dutch section titles with English equivalents.
 
+## Changelog Contract
+
+[CHANGELOG.md](CHANGELOG.md) is the main human-readable release overview.
+Agents must keep it current for every user-visible, parity-contract,
+runtime/build, dependency, security, release, or documented behavior change.
+
+- Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/):
+  keep `[Unreleased]` at the top, newest releases first, ISO `YYYY-MM-DD`
+  release dates, linkable release headings, and only the standard change
+  categories `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, and
+  `Security`.
+- Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+  to decide the entry shape: `feat` generally becomes `Added`, `fix` becomes
+  `Fixed`, `perf`/`refactor`/behavioral `docs` work generally becomes
+  `Changed`, dependency/tooling/release work goes under the category that best
+  describes user or maintainer impact, and breaking changes must be called out
+  explicitly in the relevant entry.
+- Write curated release notes, not a commit log dump. Combine related commits
+  into one clear entry, omit internal noise, and preserve important parity debt
+  or behavior changes in plain English.
+- Do not create a dated release section unless performing the release. During
+  normal development, add entries under `[Unreleased]`.
+- Keep release instructions, PR checklists, and repo-local changelog skills
+  aligned with this contract when they change.
+
 ## Agent Entry Points
 
 This file is the single source of truth for AI agents. Symlinks ensure every
@@ -210,6 +235,8 @@ Read the relevant contract before changing that area:
   parity, route/hydration coverage, and the session log (query via
   `cargo xtask progress …`). [STATUS.md](STATUS.md) is a slim pointer at it.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
+- [CHANGELOG.md](CHANGELOG.md) for the main release overview; keep
+  `[Unreleased]` current for notable changes.
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags, or
   `run.sh` — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
   cargo-leptos hot-reload, and compile-cost troubleshooting.

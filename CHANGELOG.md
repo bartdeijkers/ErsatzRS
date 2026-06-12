@@ -1,261 +1,200 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This project uses [Conventional Commits](https://www.conventionalcommits.org/)
-for commit messages.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
+and commit messages use
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
+Entries are curated for people, not generated from raw git logs. Keep
+`[Unreleased]` current during development, then move its entries into a dated
+release section when tagging a release.
 
 ## [Unreleased]
 
 ### Added
 
-- Dependency and CI hardening for `cargo deny`: upgraded the web CSS toolchain
-  to `stylance`/`stylance-cli` 0.8, upgraded test HTTP mocking to
-  `httpmock` 0.8, refreshed the lockfile, allowed the transitive `CC0-1.0`
-  license used by Leptos theming, and aligned duplicate-version policy skips
-  with the current Leptos/Stylance dependency graph so `cargo deny check`
-  passes cleanly again.
-
-- Phase 7 Channels admin visual parity pass: the `/channels` list now uses
-  locally served Roboto fonts, closer ErsatzTV PaletteDark tokens, MudTable-like
-  row height and pager spacing, a styled Show Disabled switch, logo/language/
-  mode columns, and icon-only row actions. Added `artwork/ersatzrs_full.png`
-  as the full-width raster ErsatzRS wordmark asset.
-
-- Phase 7 FFmpeg 8.1 runtime and Docker multi-arch image support: ErsatzRS now
-  checks both `ffmpeg` and `ffprobe` at startup, requires version 8.1 or newer,
-  records filter/encoder/decoder/hwaccel/configuration capabilities in
-  `AppState`, and reuses that report for FFmpeg profile hardware choices. The
-  in-repository Docker build now compiles FFmpeg 8.1 from the verified official
-  source tarball, includes redistributable CPU/NVENC/VAAPI/Vulkan/QSV runtime
-  capability checks where supported, publishes release scaffolding for
-  `linux/amd64`, `linux/arm64`, and CPU-only `linux/arm/v7`, and validates the
-  final runtime image with `ldd`, `ffmpeg`, `ffprobe`, `drawvg`, and container
-  `/healthz` smoke checks.
-
-- Phase 7 Slice 7 MySQL backend support: `ersatzrs-infra` can initialize
-  SQLite or MySQL from `DATABASE_URL` when built with the `mysql` feature,
-  `ersatzrs-web` and `ersatzrs-scanner` propagate the backend-aware pool, and
-  `mysql://` / `mariadb://` URLs now fail with a clear unsupported-backend
-  error when the feature is not compiled. Added ordered ErsatzTV-compatible
-  MySQL migrations under `migrations/mysql/` with named constraints and
-  `utf8mb4` collation parity, plus a feature-gated MySQL integration test
-  covering migrations, config upsert/read, channel/profile reads, playout item
-  lookup, and scanner insert-id handling.
-
-- Phase 7 Slice 4 HLS direct passthrough: `.m3u8?mode=hls-direct` now emits
-  a single-entry direct playlist that targets `/iptv/hls-direct/{channel}`
-  with output-format-aware `.ts` / `.mp4` / `.mkv` suffixes, tracks
-  per-channel `#EXT-X-MEDIA-SEQUENCE` in memory, and streams direct FFmpeg
-  output using the configured `ffmpeg.hls_direct.output_format` setting
-  (default `mpegts`).
-
-- Phase 7 Slice 3 HLS playlist trimming: the HLS session worker now filters
-  live playlists before serving them, carries forward `#EXT-X-DISCONTINUITY`
-  boundaries, deletes stale `.ts`/`.m4s`/`.mp4` segment files from the temp
-  session directory, and can emit fMP4 HLS output (`segmenter-fmp4`) with
-  `#EXT-X-MAP` / `init.mp4` support on the shared `/iptv/session/{n}/{file}`
-  route.
-
-- Phase 6.5 block scheduling UI: `/scheduling/blocks` list page with block
-  group management (add/delete groups, add/delete blocks grouped by group
-  name); `/scheduling/blocks/:id` block editor as a fully hydrated Leptos
-  `#[island]` — `RwSignal<Vec<BlockItemForm>>` local state, Up/Down index
-  reorder, per-item `ItemEditor` panel with autocomplete search for
-  Collection/TelevisionShow/TelevisionSeason/SmartCollection/SearchQuery
-  collection types, playback-order select, EPG and watermark toggles, and a
-  "Preview Playout" modal backed by `preview_block_playout`. `BlockItemForm`
-  carries `watermark_ids` and `graphics_element_ids` loaded from
-  `BlockItemWatermark`/`BlockItemGraphicsElement` via `GROUP_CONCAT` and
-  reinserted on every save, matching ErsatzTV's `ReplaceBlockItem` shape and
-  preserving overlay metadata across edits.
-- Phase 6.4 media library and browser pages: `/media/libraries` management
-  page with Scan/Deep Scan actions; `/media/movies`, `/media/shows`,
-  `/media/images` paginated card-grid browsers; `LetterBar` +
-  `FragmentLetterAnchor` sticky A–Z quick-nav primitives; manual and smart
-  collection editors (`/media/collections`, `/media/smart-collections`) with
-  autocomplete-backed member management.
-- Phase 6.2 layout and navigation wiring: CSS-checkbox drawer toggle drives
-  mobile overlay and desktop hide without JS or island hydration; full
-  NavDrawer matching ErsatzTV URL structure across all nav groups (Media
-  Sources, Media, Lists, Scheduling, Settings, Support); `PlayoutWarningBadge`
-  and `HealthBadge` Leptos islands backed by `#[server]` functions querying
-  `PlayoutBuildStatus`; `app.rs` and all layout modules migrated from Tailwind
-  strings to Stylance CSS modules.
-- Phase 6.1 channel list and editor pages: `/channels` paginated table with
-  show-disabled toggle and delete confirm dialog; `/channels/add` and
-  `/channels/:id` editor with number/name/enabled fields, streaming-mode
-  select, FFmpeg-profile select, filler select, form validation, and
-  navigate-on-save; all backed by `#[server]` functions over AppState/sqlx.
-- Phase 6.0 Leptos admin UI foundation: eight Stylance-scoped primitive
-  components (Button, Form, Icon, Badge, Table, Dialog, Toast, Card);
-  ErsatzTV PaletteDark design tokens in `globals.module.css`; stylance-cli
-  build pipeline producing `public/bundle.css`; `ServeDir` at `/public`;
-  `leptos_routes_with_context` AppState injection; component gallery at
-  `/dev/components`.
-- Phase 5 IPTV and HDHomeRun protocol surface: `/iptv/channels.m3u` M3U
-  playlist; `/iptv/xmltv.xml` 48-hour XMLTV guide via quick-xml with
-  COALESCEd titles; HDHomeRun HTTP quartet (`/discover.json`, `/device.xml`,
-  `/lineup_status.json`, `/lineup.json`) with verbatim C# field names;
-  HDHomeRun UDP discovery responder on port 65001 with TLV + CRC32;
-  `/iptv/channel/{number}.ts` resolving the active PlayoutItem through
-  `MediaVersion`/`MediaFile`, applying provider path replacements, and piping
-  a software FFmpeg MPEG-TS stream with `kill_on_drop`; device UUID seeded
-  into `ConfigElement` under `HDHR.DeviceUuid`.
-- Phase 4 media source scanning: ffprobe metadata extraction; local filesystem
-  scanner; paged Plex/Jellyfin/Emby sync with correct `Accept` headers and
-  JSON casing; Plex collections and collection-membership sync; Emby
-  `/Shows/{id}/Seasons` and `/Shows/{id}/Episodes` endpoint parity; DB-backed
-  provider credentials from `PlexServerAuthToken`/Jellyfin/Emby tables;
-  correct provider library `Key`/`ItemId` bootstrap writes; SHA256
-  `MediaFile.PathHash` for ErsatzTV database compatibility; `--dry-run`
-  short-circuit before credential loading; NVENC and VAAPI decode-path argv
-  parity in the FFmpeg pipeline builders.
-- Phase 3 end-to-end playout build: `PlayoutBuilder` orchestrator, block/YAML/
-  Lua engine dispatch, `apply_build_result` single-transaction persistence,
-  and round-trip integration tests with insta snapshots.
-- Phase 3 Lua scripted scheduling engine at full ErsatzTV API parity: 20+
-  bindings including `add_marathon` (show/season/artist/album/director
-  grouping, round-robin cycling, shuffle_groups/play_all/item_order, history
-  resume) and `create_playlist` (inline playlist from existing enumerators,
-  history resume); Reset-mode history removal; 72 snapshot tests.
-- Application artwork: SVG/PNG/ICO/ICNS logos.
-- Phase 6 implementation plan document (`plans/phase-6-admin-ui.md`).
-
-### Removed
-
-- `docs/003_ersatztv_sqlite3_schema.sql` — superseded by the normative
-  `0001_initial.sql` migration and the persistence gap matrix.
-
-### Added (continued from earlier phases)
-
-- Phase 1 playout runtime-state persistence parity for SQLite: playout anchors,
-  schedule/fill-group enumerator state rows, gaps, history, program-schedule
-  anchors, playout templates, focused in-memory integration coverage, and
-  broader env-gated real-world playout decode assertions.
-- Real-world ErsatzTV SQLite compatibility coverage gated by the
-  `ERSATZRS_REAL_WORLD_SQLITE` environment variable.
-- Persistence gap matrix for all 138 ErsatzTV SQLite tables, including current
-  Rust repository coverage, read/write coverage, env-gated real-world decode
-  coverage, compatibility risk, and recommended implementation order.
-- Phase 3 block scheduling parity slice for core effective-template derivation
-  data, ErsatzTV-style block keys, collection key/etag scheduling metadata,
-  guide windows, change-detection scaffolding, deco block-start/default filler
-  behavior, and focused insta snapshots.
-- Diataxis reference glossary for project and porting vocabulary.
-- Phase 3 SQL-backed search-query parity slice for scheduling: a core-owned
-  Lucene-like query parser/evaluator, SQLite search-document projection from
-  normalized metadata, fielded smart collection/direct search support for
-  represented title, sort/original title, year, release date, genre, tag,
-  studio, actor, media kind, show/season/episode metadata, and provider GUIDs,
-  plus show/season/artist container expansion and focused in-memory SQLite
-  integration tests.
-- Phase 3 SQL-backed scheduling content resolver repository for SQLite,
-  covering collection expansion, multi-collection union/de-duplication, smart
-  collection/search query matching, playlist child metadata (`collection_key`,
-  `playback_order`, `play_all`, and `count`), show name/GUID resolution,
-  watermark lookup, graphics path lookup, and in-memory SQLite integration
-  tests.
-- Phase 3 YAML scheduling parity for YAML imports (`import:` key merges
-  content/sequence definitions from external files with case-insensitive
-  key deduplication), expression-driven count behavior (variables `count`
-  and `random`, full arithmetic with `+`, `-`, `*`, `/`, `%`, and
-  parentheses), deterministic shuffle-groups for Marathon playout children
-  (Fisher-Yates with LCG seeded from playout-id + instruction-index +
-  day-of-year), and focused tests covering playlist batch/count and
-  play-all child enumeration semantics.
-- Phase 3 YAML scheduling parity for show-name/show-GUID content resolution,
-  show/season marathon grouping, marathon child history keys/details,
-  deterministic `play_all_items` playlist behavior, and empty-source fallback
-  coverage.
-- Phase 3 scheduling parity foundation for resolver-backed YAML content sources,
-  deterministic in-memory scheduling adapters, and history application/cleanup
-  snapshots.
-- Phase 3 YAML scheduling history parity for exact media-item detail resume,
-  structured playlist child/current-child history, reset pruning, and per-key
-  cleanup snapshots.
-- Phase 2 FFmpeg foundation with typed inputs, command generation, complex
-  filter routing, software/NVENC/VAAPI pipeline builders, drawvg SVG template
-  rendering, ffconcat v1.0 playlist writing, and snapshot coverage.
-- Repository-specific Phase 1 integration test files covering provider media
-  sources, relation-loading queries, graphics channel lookups, metadata writes,
-  and `NotFound` behavior.
-- Phase 1 persistence foundation with repository traits, SQLite migration,
-  sqlx-backed repository implementations, offline sqlx metadata, and
-  repository integration tests.
-- Phase 1 persistence design spec.
-- Phase 1 domain models for configuration, channels, playout, scheduling,
-  media, collections, libraries, media sources, FFmpeg profiles, filler,
-  graphics, and metadata.
-- Cargo workspace with initial crate stubs for domain, core, infra, app,
-  ffmpeg, web, and scanner crates.
-- FFmpeg 8.1 runtime version detection and test coverage.
-- Minimal `axum` + Leptos SSR web host with `/healthz`.
-- SQLite startup bootstrap with sqlx migrations.
-- Multi-stage Docker image with FFmpeg 8.1 and the `ersatzrs-web` binary.
-- Initial documentation contracts for long-term solo development and future
-  public open-source collaboration.
-- Diataxis documentation structure.
-- ADR process and initial architecture decisions.
-- Porting contract for translating ErsatzTV behavior into Rust.
-- GitHub issue, pull request, CI, release, and dependency-update scaffolding.
-- Repo-local Claude skills for recurring ErsatzRS workflows.
-- Rust-oriented `.gitignore`.
-- Project license.
+- AV1 hardware-decode fallback now learns unsupported CUDA/NVDEC paths at
+  runtime and falls back to software `libdav1d` decode instead of repeatedly
+  attempting a known-bad hardware path.
+- Dynamic watermark overlays now route through the graphics overlay plan,
+  including loop options and NCalc opacity-expression translation for
+  ErsatzTV-style watermark timing.
+- Music video credit templates now render in the admin UI.
+- Workflow review gates now validate parity progress, runtime smoke coverage,
+  and completed-prompt hygiene before status work is considered closed.
+- ADR 0014 now records the hardware capability fallback contract for FFmpeg
+  decode behavior.
 
 ### Changed
 
-- Phase 7 Slice 2 HLS segmenter hardening: the temp-backed `HlsSessionWorker`
-  now mirrors the MPEG-TS route's provider path-replacement handling before
-  invoking FFmpeg, uses atomic session registration to avoid duplicate
-  segmenters on concurrent requests, and treats failed FFmpeg child exits as
-  terminal cleanup instead of looping until idle timeout.
-
-- SQLite repository decoding and writes now use ErsatzTV-compatible integer
-  enum values, EF-style UTC `DateTime` text, and ErsatzTV `TimeSpan` parsing.
-- Env-gated real-world ErsatzTV SQLite compatibility coverage now exercises
-  additional repository surfaces for media sources, metadata, collections,
-  program schedules, block scheduling, deco, fillers, graphics, and config.
-- Project branding, workspace crates, binaries, Docker wiring, docs, and
-  snapshots were renamed from NasTv/`nastv-*` to ErsatzRS/`ersatzrs-*`.
-- FFmpeg 8.1 runtime detection now lives in `ersatzrs-ffmpeg` and is reused by
-  `ersatzrs-web`.
-- Phase 1 persistence now uses an expanded normalized SQLite schema derived
-  from the final ErsatzTV model instead of the earlier hybrid JSON/scalar
-  mapping, and the active infra repositories now map scalar columns and join
-  tables directly.
-- Phase 1 persistence design now documents the implemented enum mapping helper
-  approach rather than orphan-rule-impossible direct `sqlx` enum impls.
-- Cargo deny metadata and policy now cover workspace crates and accepted
-  transitive license/advisory exceptions.
-- Workspace package metadata, lints, binary declarations, and Rust version are
-  configured.
-- Expanded the README from a placeholder into an English project overview.
-- Expanded `.gitignore` for local settings, secrets, runtime databases, logs,
-  generated artifacts, and editor files.
-- SQLite migration path documentation now clarifies resolution from
-  `CARGO_MANIFEST_DIR`.
+- Top-gap automation was hardened, then removed with its agent documentation
+  once the workflow moved back to explicit curated gap prompts.
+- Dependabot updates for `chrono`, `stylance`, `uuid`, and
+  `download-artifact` were batched into one dependency-maintenance slice.
+- Progress and status documents now narrow completed work to the exact proven
+  parity scope and keep unfinished hardware-decode debt visible.
 
 ### Fixed
 
-- Admin libraries page (`/media/libraries`) `Scan` and `Deep Scan` buttons,
-  and Plex sources page (`/media/sources/plex`) `Sign out of Plex` button
-  are now wired to their click handlers. The pages were plain `#[component]`
-  views, so the click handlers declared at the top level were dropped on
-  hydration (the app uses `hydrate_islands()`); both interactive bodies are
-  now wrapped in a `#[island]` (`LibrariesIsland`, `PlexSourcesIsland`).
-  The libraries row also keeps a stable DOM (always-rendered Deep Scan/Scan
-  buttons + spinner toggled via reactive `style:display` and `disabled`)
-  so hydration cannot fall back to inert SSR markup.
-- Admin shell sidebar parity: the ErsatzRS logo now appears next to the
-  hamburger menu, the top app bar spans the full viewport width above the
-  sidebar, the sidebar uses the ErsatzTV gray surface, and sidebar groups
-  collapse by default without requiring browser hydration.
-- Template repository upsert no longer writes placeholder child rows that
+- The four ADR 0014 hardware-decode parity debts are closed in the FFmpeg
+  capability and fallback path.
+- FFmpeg fake-tool snapshot tests serialize script execution to avoid
+  `ETXTBSY` flakes.
+- Multiple parity documents were corrected from completed-looking status back
+  to `In progress` where open debt remained.
+
+## [0.0.7-alpha] - 2026-06-10
+
+### Changed
+
+- Release packaging documentation now describes the actual web asset and
+  archive paths used by the release workflow.
+
+### Fixed
+
+- Docker release builds now use the workspace context and no longer leak host
+  target-directory paths into build stages.
+- Release jobs run on the intended self-hosted runners, with Linux checks kept
+  on Linux hosts.
+- Windows target-directory configuration was removed from committed config so
+  release builders can use their own platform paths.
+- FFmpeg subtitle filter paths are escaped correctly for both parser levels,
+  including Windows paths.
+- Subtitle burn-in is skipped when a seeked subtitle has no active cues.
+- Scanner writes `VideoScanKind` values with ErsatzTV-compatible numbering.
+- NVENC and CUDA FFmpeg paths keep still images and CUDA surface tracking on
+  the correct software/hardware boundary.
+- Platform-dependent FFmpeg snapshots were made Windows-neutral.
+
+## [0.0.6-alpha] - 2026-06-10
+
+### Fixed
+
+- Windows run configuration now reads `.cargo/config.toml`, escapes
+  target-directory backslashes correctly, and strips verbatim path prefixes
+  from normalized library paths.
+- The Windows launcher sets `LEPTOS_OUTPUT_NAME` for the bundled server.
+
+## [0.0.5-alpha] - 2026-06-09
+
+### Added
+
+- FFmpeg and FFprobe path resolution now goes through the `FFmpegLocator` port.
+- FFmpeg command generation parity was extended across runtime filter
+  requirements, NVIDIA decoder probing, VideoToolbox probing, playback metadata
+  options, encoder capability probes, QSV extra frames, HLS PTS offsets, MP4
+  flags, realtime still-image filters, HDR/zscale smoke coverage, and
+  zscale/libzimg runtime requirements.
+- Channels gained a `Stop Transcode Session` action.
+- The HLS, IPTV, and streaming runtime paths gained transport-parity coverage
+  for direct stream cancellation, HLS segment lifecycle handling, playout
+  updates on live time, and FFmpeg stream-failure logging.
+- Bundled template presets were added as application assets.
+- Release packaging gained web asset reuse for Docker publishing, frontend-only
+  web asset builds, lower-memory release settings, and Docker disk-pressure
+  reductions.
+- CI gained path filtering, run cancellation, and fail-fast behavior to reduce
+  wasted runs.
+- Daily progress routines, pinned parity baselines, and gap prompt refresh
+  documents were added to the progress workflow.
+- Cargo workspace with the initial domain, core, infra, app, FFmpeg, web, and
+  scanner crates.
+- Initial documentation contracts for long-term solo development and future
+  public open-source collaboration, including Diataxis docs, ADRs, porting
+  contracts, GitHub templates, CI, release scaffolding, dependency-update
+  scaffolding, and repo-local agent skills.
+- Application artwork in SVG, PNG, ICO, and ICNS formats.
+- FFmpeg 8.1 runtime version detection and the initial `axum` plus Leptos SSR
+  web host with `/healthz`.
+- SQLite startup bootstrap, the collapsed initial schema, repository traits,
+  SQLx repository implementations, offline SQLx metadata, and integration
+  tests.
+- Domain models for configuration, channels, playout, scheduling, media,
+  collections, libraries, media sources, FFmpeg profiles, filler, graphics,
+  and metadata.
+- Persistence design documentation and a persistence gap matrix covering the
+  ErsatzTV SQLite tables.
+- Real-world ErsatzTV SQLite compatibility coverage gated by
+  `ERSATZRS_REAL_WORLD_SQLITE`.
+- FFmpeg foundation with typed inputs, command generation, complex filter
+  routing, software/NVENC/VAAPI pipeline builders, drawvg SVG template
+  rendering, ffconcat playlist writing, and snapshot coverage.
+- Scheduling engines and persistence through Phase 3, including block, YAML,
+  Lua scripted scheduling, SQL-backed content resolution, smart collection
+  search, history parity, and playout build persistence.
+- Media source scanning for local files, Plex, Jellyfin, and Emby, including
+  ffprobe metadata, provider credentials, provider library bootstrap writes,
+  Plex collections, Emby shows/seasons/episodes, and ErsatzTV-compatible media
+  file path hashing.
+- IPTV and HDHomeRun protocol surfaces, including M3U, XMLTV, HDHomeRun HTTP
+  endpoints, UDP discovery, MPEG-TS streaming, and persisted device UUIDs.
+- Leptos admin UI foundation, layout/navigation, channel editor, media library
+  and browser pages, collection editors, block scheduling UI, and Channels
+  visual parity work.
+- HLS segmenter hardening, playlist trimming, fMP4 support, direct HLS
+  passthrough, and runtime FFmpeg/Docker multi-arch support.
+- SQLite or MySQL initialization from `DATABASE_URL` when built with the
+  `mysql` feature, ErsatzTV-compatible MySQL migrations, and MySQL integration
+  coverage.
+- Dependency and CI hardening for `cargo deny`, including CSS and test HTTP
+  tooling updates, lockfile refreshes, license policy updates, and
+  duplicate-version policy alignment.
+
+### Changed
+
+- The AGPL `evalexpr` dependency was replaced with an in-tree condition
+  evaluator.
+- Cargo dependency maintenance updated `windows-sys`, `embed-resource`, and
+  related Dependabot-managed packages.
+- Snapshot review documentation now records that `cargo-insta` is already
+  installed.
+- Project branding, crates, binaries, Docker wiring, documentation, and
+  snapshots were renamed from NasTv/`nastv-*` to ErsatzRS/`ersatzrs-*`.
+- Persistence moved to an expanded normalized SQLite schema derived from the
+  final ErsatzTV model instead of the earlier hybrid JSON/scalar mapping.
+- SQLite repository decoding and writes now use ErsatzTV-compatible integer
+  enum values, EF-style UTC `DateTime` text, and ErsatzTV `TimeSpan` parsing.
+- FFmpeg runtime detection moved into `ersatzrs-ffmpeg` and is reused by
+  `ersatzrs-web`.
+- Cargo deny metadata and policy now cover workspace crates and accepted
+  transitive license/advisory exceptions.
+- Workspace package metadata, lints, binary declarations, Rust version,
+  README, `.gitignore`, and SQLite migration path documentation were expanded
+  into the current project contracts.
+
+### Removed
+
+- `docs/003_ersatztv_sqlite3_schema.sql` was removed after the normative
+  `0001_initial.sql` migration and persistence gap matrix superseded it.
+
+### Fixed
+
+- Release packaging now includes web assets for all archives, repairs packaged
+  build targets, and reuses built web assets in Docker publish jobs.
+- FFmpeg runtime parity was hardened across NVENC CUDA initialization, CUDA
+  overlay filters, required runtime filters, zscale/libzimg requirements,
+  VideoToolbox probing, NVIDIA encoder/decoder probing, HEVC options, bitrate
+  and frame-rate options, audio output options, GOP spelling, and SD
+  colorspace normalization.
+- HLS segmenter transport parity now preserves fMP4 init segments and closes
+  segmenter transport gaps.
+- Streaming now keeps HLS playout updates on live time.
+- Scheduling persists continue-build anchors.
+- Cargo deny policy was updated for `RUSTSEC-2026-0173`.
+- Web stream-seek test assertions were corrected.
+- Admin libraries and Plex source buttons are hydrated islands with stable DOM
+  structure so click handlers do not fall back to inert SSR markup.
+- Admin shell sidebar visual parity was tightened around logo placement, top
+  app bar width, sidebar surface color, and default collapsed groups.
+- Template repository upserts no longer write placeholder child rows that
   violate normalized foreign keys.
-- Docker healthcheck no longer depends on `wget`.
+- Docker health checks no longer depend on `wget`.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.7-alpha...HEAD
+[0.0.7-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.6-alpha...v0.0.7-alpha
+[0.0.6-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.5-alpha...v0.0.6-alpha
+[0.0.5-alpha]: https://github.com/bartdeijkers/ErsatzRS/releases/tag/v0.0.5-alpha

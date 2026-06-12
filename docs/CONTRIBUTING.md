@@ -13,6 +13,9 @@ code and commit messages.
 - Keep lines readable, but do not wrap tables in ways that make them harder to
   edit.
 - Prefer concrete examples over vague advice.
+- Keep [CHANGELOG.md](../CHANGELOG.md) as the main release overview. Changelog
+  entries follow Keep a Changelog categories, are curated for users and
+  maintainers, and are not raw commit-log summaries.
 
 ## Diataxis Placement
 

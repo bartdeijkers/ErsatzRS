@@ -44,7 +44,9 @@ filter. Startup code must fail fast when an older FFmpeg is detected.
    - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for documentation.
 2. For porting work, read the ErsatzTV source before writing Rust.
 3. Add or update tests at the narrowest useful level.
-4. Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]`.
+4. Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]` for every notable
+   user-visible, parity-contract, runtime/build, dependency, security, release,
+   or documented behavior change.
 5. Update the feature's `docs/progress/parity/<slug>.toml` when its parity
    status changes (see the `update-parity` skill), then run
    `cargo xtask progress check`.
@@ -95,6 +97,12 @@ feat(ffmpeg): add software pipeline argv builder
 test(scheduling): snapshot yaml duration instruction
 ```
 
+Map commit intent to changelog categories when writing the entry: `feat`
+usually belongs under `Added`, `fix` under `Fixed`, behavior changes under
+`Changed`, removals under `Removed`, deprecations under `Deprecated`, and
+vulnerability work under `Security`. Breaking changes must be called out
+explicitly in the relevant changelog entry.
+
 ## Pull Request Checklist
 
 - The change is in English.
@@ -104,7 +112,7 @@ test(scheduling): snapshot yaml duration instruction
 - `cargo fmt`, `cargo clippy`, `cargo test`, and `cargo deny check` were run
   once the workspace exists.
 - `CHANGELOG.md` was updated.
-- The parity matrix was updated for ported behavior.
+- `docs/progress/` parity files were updated for ported behavior.
 - An ADR is linked when the change affects architecture or deviates from
   ErsatzTV behavior.
 

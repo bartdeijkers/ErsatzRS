@@ -177,7 +177,7 @@ and changed files.
 
 ---
 
-## 3 — Settings: blocking runtime debts — FFmpeg path empty-means-auto-detect + concurrent transcode session limit (slug `settings`)
+## 3 — Settings: blocking runtime debts — FFmpeg path empty-means-auto-detect + concurrent transcode session limit (slug `settings`) (completed)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: Settings — the two
 confirmed-blocking runtime debts on `/settings/ffmpeg` and the streaming
