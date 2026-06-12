@@ -43,6 +43,41 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../../assets/Scripts/MpegTs/run.bat"),
     ),
 ];
+// Bundled streaming resources extracted into `<AppData>/cache/resources` at
+// startup, mirroring ErsatzTV's `ResourceExtractorService`. Extraction
+// overwrites (ErsatzTV uses `File.Create`) so shipped resources stay current;
+// `ChannelWatermarkImageSource::Resource` watermarks (the song progress
+// overlay) resolve against this folder.
+const STREAMING_RESOURCE_FILES: &[(&str, &[u8])] = &[
+    (
+        "_background.png",
+        include_bytes!("../../../../assets/_background.png"),
+    ),
+    (
+        "_song_album_cover_512.png",
+        include_bytes!("../../../../assets/_song_album_cover_512.png"),
+    ),
+    (
+        "_song_background_1.png",
+        include_bytes!("../../../../assets/_song_background_1.png"),
+    ),
+    (
+        "_song_background_2.png",
+        include_bytes!("../../../../assets/_song_background_2.png"),
+    ),
+    (
+        "_song_background_3.png",
+        include_bytes!("../../../../assets/_song_background_3.png"),
+    ),
+    (
+        "song_progress_overlay.png",
+        include_bytes!("../../../../assets/song_progress_overlay.png"),
+    ),
+    (
+        "song_progress_overlay_43.png",
+        include_bytes!("../../../../assets/song_progress_overlay_43.png"),
+    ),
+];
 static LOG_FILTER_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 
 pub async fn run() {
@@ -53,6 +88,9 @@ pub async fn run() {
     init_logging(&startup.pool).await;
     if let Err(error) = seed_default_mpegts_script().await {
         tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
+    }
+    if let Err(error) = extract_streaming_resources().await {
+        tracing::warn!(%error, "failed to extract bundled streaming resources");
     }
 
     tracing::info!(
@@ -269,6 +307,18 @@ impl FileAndStdoutWriter {
             .append(true)
             .open(&self.path)
     }
+}
+
+async fn extract_streaming_resources() -> io::Result<()> {
+    extract_streaming_resources_in(&file_system_layout::resources_cache_folder()).await
+}
+
+async fn extract_streaming_resources_in(folder: &std::path::Path) -> io::Result<()> {
+    tokio::fs::create_dir_all(folder).await?;
+    for (name, contents) in STREAMING_RESOURCE_FILES {
+        tokio::fs::write(folder.join(name), contents).await?;
+    }
+    Ok(())
 }
 
 async fn seed_default_mpegts_script() -> io::Result<()> {
@@ -582,6 +632,29 @@ pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn extract_streaming_resources_overwrites_stale_files() {
+        let root = tempfile::tempdir().expect("temp resources root");
+        let folder = root.path().join("resources");
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .expect("create resources folder");
+        tokio::fs::write(folder.join("song_progress_overlay.png"), b"stale")
+            .await
+            .expect("write stale resource");
+
+        extract_streaming_resources_in(&folder)
+            .await
+            .expect("extract resources");
+
+        for (name, contents) in STREAMING_RESOURCE_FILES {
+            let extracted = tokio::fs::read(folder.join(name))
+                .await
+                .unwrap_or_else(|error| panic!("read extracted resource {name}: {error}"));
+            assert_eq!(&extracted, contents, "resource {name} content mismatch");
+        }
+    }
 
     #[tokio::test]
     async fn seed_default_mpegts_script_creates_missing_files_without_overwriting() {

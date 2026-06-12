@@ -73,13 +73,28 @@ impl InputFile {
         Self::new(InputKind::Audio, filter, 0).with_input_options(["-f", "lavfi"])
     }
 
+    /// Still watermark image. Mirrors ErsatzTV's `SetWatermark`: a plain still
+    /// image gets no loop option — the overlay's default `eof_action=repeat`
+    /// holds the single decoded frame.
     #[must_use]
     pub fn watermark(path: impl Into<String>) -> Self {
-        let mut input = Self::new(InputKind::Watermark, path, 0);
-        input
-            .input_options
-            .extend(["-loop".to_owned(), "1".to_owned()]);
-        input
+        Self::new(InputKind::Watermark, path, 0)
+    }
+
+    /// Still watermark image with fade points. Mirrors ErsatzTV's
+    /// `InfiniteLoopInputOption` on the watermark input: "looping is required
+    /// to fade a static image in and out".
+    #[must_use]
+    pub fn watermark_looped(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Watermark, path, 0).with_input_options(["-loop", "1"])
+    }
+
+    /// Animated watermark image (multi-frame GIF/APNG/WebP). Mirrors ErsatzTV's
+    /// `DoNotIgnoreLoopInputOption` (`-ignore_loop 0`) so the animation loops
+    /// for the stream duration.
+    #[must_use]
+    pub fn watermark_animated(path: impl Into<String>) -> Self {
+        Self::new(InputKind::Watermark, path, 0).with_input_options(["-ignore_loop", "0"])
     }
 
     #[must_use]

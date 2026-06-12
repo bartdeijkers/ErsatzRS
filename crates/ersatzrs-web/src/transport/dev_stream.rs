@@ -138,7 +138,14 @@ fn dev_watermark_inputs(query: &DevStreamQuery) -> Vec<(InputFile, WatermarkOver
         }
         _ => {}
     }
-    vec![(InputFile::watermark(path.to_owned()), overlay)]
+    // Mirror the `SetWatermark` loop decision: fades on a still image need
+    // `-loop 1`; a plain still image needs no loop option.
+    let input = if overlay.fade_points.is_empty() {
+        InputFile::watermark(path.to_owned())
+    } else {
+        InputFile::watermark_looped(path.to_owned())
+    };
+    vec![(input, overlay)]
 }
 
 fn dev_fade_points(frequency_minutes: u64, duration_seconds: u64) -> Vec<WatermarkFadePoint> {
@@ -233,9 +240,14 @@ mod tests {
         );
         let arguments = command.arguments.join(" ");
 
-        assert!(arguments.contains("-loop 1 -i /media/logo.png"));
+        // A still opacity-expression watermark carries no loop option
+        // (ErsatzTV `SetWatermark` loops only for fades or animated images).
+        assert!(arguments.contains("-i /media/logo.png"));
+        assert!(!arguments.contains("-loop 1"));
         assert!(arguments.contains("scale=240:-1"));
-        assert!(arguments.contains("geq=a='clip(255*(if(t < 10, 1, 0)),0,255)'"));
+        assert!(arguments.contains(
+            "geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='clip(255*(if(lt(T,10),1,0)),0,255)'"
+        ));
         assert!(arguments.contains("overlay=x=W-w-38:y=H-h-22:format=0"));
     }
 

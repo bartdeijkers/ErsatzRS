@@ -1595,7 +1595,10 @@ fn pipeline_with_scaled_permanent_watermark_snapshot() {
 #[test]
 fn pipeline_with_intermittent_watermark_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
-    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    // Fading a still image requires `-loop 1` (ErsatzTV `InfiniteLoopInputOption`).
+    request
+        .inputs
+        .push(InputFile::watermark_looped("/media/logo.png"));
     request.watermarks.push(WatermarkOverlay {
         opacity: 80,
         fade_points: vec![
@@ -1661,19 +1664,160 @@ fn pipeline_with_multiple_watermarks_snapshot() {
     insta::assert_snapshot!(command.arguments.join(" "));
 }
 
+// `FFmpegLibraryProcessService` routing parity: a single permanent watermark
+// (here the resource-backed song-progress overlay shape — full-width scaled,
+// top-left, no margins) stays on the native ffmpeg watermark path.
 #[test]
-fn watermark_input_loops_still_images() {
-    let input = InputFile::watermark("/media/logo.png");
-    assert_eq!(input.input_options, ["-loop", "1"]);
+fn pipeline_keeps_single_permanent_resource_watermark_native_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark(
+        "/data/cache/resources/song_progress_overlay.png",
+    ));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopLeft,
+        size: WatermarkSize::Scaled,
+        width_percent: 100.0,
+        horizontal_margin_percent: 0.0,
+        vertical_margin_percent: 0.0,
+        opacity: 100,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
 }
 
+// `FFmpegLibraryProcessService` routing parity: when graphics elements are
+// present, even a single permanent watermark joins the graphics-engine plan and
+// composites with the elements in ascending z-index (drawvg z=5 below the
+// watermark image at z=10).
 #[test]
-fn opacity_expression_translation_maps_ersatztv_time_symbols() {
+fn pipeline_composites_watermark_with_graphics_elements_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawvg(
+            5,
+            DrawvgOverlay {
+                script_path: "/tmp/ErsatzRS/title.vgs".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                enable: None,
+            }
+            .filter(),
+        ));
+    request.inputs.push(InputFile::watermark("/media/logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 12.5,
+        horizontal_margin_percent: 2.0,
+        vertical_margin_percent: 3.0,
+        opacity: 75,
+        z_index: 10,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+// Watermark inputs must sort together with their overlays: front.png (z=10,
+// 10% wide) must receive the narrow scale filter and composite below back.png
+// (z=20, 25% wide) even though back.png was attached first.
+#[test]
+fn pipeline_orders_multiple_watermarks_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::watermark("/media/back.png"));
+    request
+        .inputs
+        .push(InputFile::watermark("/media/front.png"));
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::BottomRight,
+        size: WatermarkSize::Scaled,
+        width_percent: 25.0,
+        z_index: 20,
+        ..WatermarkOverlay::default()
+    });
+    request.watermarks.push(WatermarkOverlay {
+        location: WatermarkLocation::TopLeft,
+        size: WatermarkSize::Scaled,
+        width_percent: 10.0,
+        z_index: 10,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+// ErsatzTV `SetWatermark` loop-option parity: a plain still watermark gets no
+// loop option, a fading still watermark gets `-loop 1`, and an animated
+// watermark gets `-ignore_loop 0` (`DoNotIgnoreLoopInputOption`).
+#[test]
+fn watermark_inputs_carry_setwatermark_loop_options() {
+    assert!(InputFile::watermark("/media/logo.png")
+        .input_options
+        .is_empty());
+    assert_eq!(
+        InputFile::watermark_looped("/media/logo.png").input_options,
+        ["-loop", "1"]
+    );
+    assert_eq!(
+        InputFile::watermark_animated("/media/logo.gif").input_options,
+        ["-ignore_loop", "0"]
+    );
+}
+
+// ErsatzTV opacity expressions are NCalc: infix `%`, comparisons, and boolean
+// operators must become FFmpeg eval functions (`mod`, `lt`, `min`/`max`), and
+// `geq` exposes the frame time as uppercase `T`. Raw NCalc syntax fails geq
+// initialization at runtime ("Missing ')' or too many args").
+#[test]
+fn opacity_expression_translation_maps_ncalc_to_ffmpeg_eval() {
     assert_eq!(
         translate_watermark_opacity_expression(
-            "if(time_of_day_seconds < content_time_seconds, content_total_seconds, channel_time_seconds)"
+            "if(time_of_day_seconds < content_seconds, content_total_seconds, channel_seconds)"
         ),
-        "if(t < t, NAN, t)"
+        "if(lt(T,T),NAN,T)"
+    );
+    assert_eq!(
+        translate_watermark_opacity_expression("if(time_of_day_seconds % 60 < 1, 1, 0.25)"),
+        "if(lt(mod(T,60),1),1,0.25)"
+    );
+    assert_eq!(
+        translate_watermark_opacity_expression(
+            "if(time_of_day_seconds >= 10 && time_of_day_seconds <= 20, 1, 0)"
+        ),
+        "if(min(gte(T,10),lte(T,20)),1,0)"
+    );
+    assert_eq!(
+        translate_watermark_opacity_expression("1 - time_of_day_seconds / 60"),
+        "(1-(T/60))"
+    );
+}
+
+// ErsatzTV registers `LinearFadePoints` / `LinearFadeDuration` as custom NCalc
+// functions (`OpacityExpressionHelper.EvaluateFunction`); both are clipped
+// trapezoids, so they translate to FFmpeg eval `clip(min(...),0,1)` forms
+// instead of passing through as undefined function names.
+#[test]
+fn opacity_expression_translation_maps_custom_fade_functions() {
+    assert_eq!(
+        translate_watermark_opacity_expression("LinearFadePoints(content_seconds, 0, 2, 8, 10)"),
+        "clip(min(((T)-(0))/((2)-(0)),((10)-(T))/((10)-(8))),0,1)"
+    );
+    assert_eq!(
+        translate_watermark_opacity_expression("LinearFadeDuration(content_seconds, 0, 2, 6)"),
+        "if(lte((2),0),gte((T),(0))*lt((T),(0)+(6)),clip(min(((T)-(0))/(2),((0)+2*(2)+(6)-(T))/(2)),0,1))"
     );
 }
 

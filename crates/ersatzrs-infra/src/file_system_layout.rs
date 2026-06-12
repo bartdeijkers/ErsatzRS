@@ -112,6 +112,15 @@ pub fn fonts_cache_folder() -> PathBuf {
     streams_cache_folder().join("fonts")
 }
 
+/// `<AppDataFolder>/cache/resources` — bundled resources extracted at startup
+/// (song progress overlays, song backgrounds). Mirrors
+/// `FileSystemLayout.ResourcesCacheFolder`; `ChannelWatermarkImageSource::Resource`
+/// watermark images resolve against this folder.
+#[must_use]
+pub fn resources_cache_folder() -> PathBuf {
+    app_data_folder().join("cache").join("resources")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +146,16 @@ mod tests {
                     .join("seek")
             ),
             "unexpected subtitle seek cache path: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn resources_cache_folder_ends_with_cache_resources() {
+        let path = resources_cache_folder();
+        assert!(
+            path.ends_with(Path::new("cache").join("resources")),
+            "unexpected resources cache path: {}",
             path.display()
         );
     }
