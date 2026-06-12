@@ -5,40 +5,57 @@ status     = 'In progress'
 adr        = ['0003']
 
 summary    = '''
-Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass. Resource-backed dynamic graphics watermarks remain tracked under the graphics-engine plan.
+Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass.
 
-The NVENC/CUDA unconvertible-chain runtime failures recorded on 2026-06-10 now have fixes landed (window `52e1028..626783e`, snapshot-covered): the `Parsed_scale_cuda_1`/`auto_scale_0` mismatch is addressed by tracking the CUDA surface (location + format) whenever the software-decode `hwupload` fallback feeds `scale_cuda` even without a deinterlace branch, so pad/crop/subtitle-burn now emit the required `hwdownload`; and the `Parsed_loop_2`/`auto_scale_1` mismatch plus the bare-503-instead-of-error-screen behavior is addressed by keeping still-image (PNG-background error-screen/song/slug) pipelines in software on the nvenc path (skip the upfront upload, pick the software scale filter, emit the still-image software pixel-format option). Subtitle-burn robustness also improved this window: a seeked subtitle with no remaining cues now reports `None` so callers drop the burn input instead of crashing libass in a retry loop, and subtitles/fontsdir paths are double-escaped for both the filtergraph and filter-option parse levels (fixes Windows drive-colon burn-in failures).
-Live NVENC/CUDA HLS proof on 2026-06-11 re-verified the HLS segmenter path for
-the learned-denial slice: software AV1 input decode fed the CUDA/NVENC
-filter/encode chain with `-hwaccel none -c:v libdav1d` plus CUDA
-upload/scale/overlay filters and `h264_nvenc`, producing a 200 HLS playlist and
-readable MPEG-TS segments. This proof does not close direct IPTV `.ts`
-runtime-learned denial scope.
+The 2026-06-10 NVENC/CUDA unconvertible-chain fixes (window
+`52e1028..626783e`, snapshot-covered): CUDA surface tracking when the
+software-decode `hwupload` fallback feeds `scale_cuda` (so pad/crop/
+subtitle-burn emit the required `hwdownload`), still-image pipelines kept in
+software on the nvenc path (error screen instead of a bare 503), seeked
+subtitles with no remaining cues dropping the burn input instead of crashing
+libass, and subtitles/fontsdir double-escaping (Windows drive-colon burn-in).
+The 2026-06-11 AV1 learned-denial live proof fed `-hwaccel none -c:v libdav1d`
+into the CUDA/NVENC chain on the HLS segmenter; direct IPTV `.ts`
+runtime-learned denial scope stays with that slice.
 
 The 2026-06-11 watermark-routing slice closes the resource-backed dynamic
-watermark gap: `ChannelWatermarkImageSource::Resource` now resolves inside the
-new `resources_cache_folder()` (`<AppData>/cache/resources`, warn-and-ignore on
-missing files, matching `WatermarkSelector`); the web host extracts the bundled
-streaming resources (`song_progress_overlay*.png`, song backgrounds, album
-cover) at startup with `ResourceExtractorService` overwrite semantics; and the
-pipeline ports the `FFmpegLibraryProcessService` routing rule — a single
-permanent watermark with no graphics elements keeps the native ffmpeg watermark
-input, while dynamic watermarks (intermittent/opacity-expression/multiple, or
-any combined with graphics elements) join the z-ordered graphics overlay plan
-so they composite with graphics elements like ErsatzTV's graphics engine (per
-ADR 0005 ErsatzRS composites with native overlay/fade/opacity filters plus
-drawvg for the vector path instead of a raster frame loop). Watermark inputs
-now sort together with their overlays by z-index, fixing a latent input/overlay
-zip mismatch when watermarks were attached out of z-order. Snapshot coverage:
-single-permanent resource watermark stays native, watermark+drawvg z-order
-interleave, out-of-order multi-watermark z-index pairing, and the rerouted
-multiple/intermittent/opacity-expression watermark snapshots. The
-song-with-progress watermark override itself ships with the song video
-generation feature, not this slug.
+watermark gap: `ChannelWatermarkImageSource::Resource` resolves under the new
+`resources_cache_folder()` (warn-and-ignore on missing files, matching
+`WatermarkSelector`); the web host extracts the bundled streaming resources at
+startup with `ResourceExtractorService` overwrite semantics; and the pipeline
+ports the `FFmpegLibraryProcessService` routing rule — a single permanent
+watermark with no graphics elements keeps the native ffmpeg watermark input,
+while dynamic watermarks (intermittent/opacity-expression/multiple, or any
+combined with graphics elements) join the z-ordered graphics overlay plan (per
+ADR 0005, native overlay/fade/opacity filters plus drawvg instead of a raster
+frame loop). Watermark inputs sort together with their overlays by z-index,
+fixing a latent input/overlay zip mismatch. Snapshot coverage spans the
+native-stays-native case, watermark+drawvg z-order interleave, out-of-order
+multi-watermark pairing, and the rerouted dynamic watermark snapshots. The
+song-with-progress watermark override ships with song video generation, not
+this slug.
+
+The 2026-06-12 follow-up closed the loop-option and expression-runtime gaps:
+watermark inputs mirror `SetWatermark` (animated images via the ffprobe
+`IsWatermarkAnimated` port get `-ignore_loop 0`, stills with fades get
+`-loop 1`, plain stills no option), and the opacity-expression filter — whose
+old `geq=a='...'` form failed at runtime ("A luminance or RGB expression is
+mandatory"; no infix `%`/`<`/`&&` in FFmpeg eval) — now copies lum/cb/cr
+through and rewrites alpha via a recursive-descent NCalc-to-FFmpeg-eval
+translator covering ErsatzTV's expression parameters and its custom
+`LinearFadePoints`/`LinearFadeDuration` helpers as clipped trapezoids. Live
+NVENC/CUDA HLS segmenter proof re-captured 2026-06-12 (closing
+`nvenc-cuda-live-reverification`): an h264 720p source on an RTX 3080 Ti
+produced 200 playlists and decodable h264 segments through
+`hwupload -> scale_cuda -> overlay_cuda -> h264_nvenc`, with the Resource
+watermark composited via the graphics-image route, the translated expression
+`if(lt(mod(T,60),30),1,0.5)` rendering without filter errors, and the
+`IsWatermarkAnimated` probe observed live. The single remaining open debt is
+the opacity-expression time-variable semantics below.
 '''
 
 [[debt]]
-id          = 'animated-watermark-input-probing'
-description = 'ErsatzTV probes watermark images for animation (`IsWatermarkAnimated`) and emits `-ignore_loop 0` for animated GIFs on the native watermark path; ErsatzRS always treats watermark images as still (`-loop 1`) on both the native and graphics-overlay routes.'
-discovered  = '2026-06-11'
-evidence    = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Pipeline/SoftwarePipelineBuilder.cs` adds `DoNotIgnoreLoopInputOption` when the watermark stream is not a still image, while `InputFile::watermark` in `crates/ersatzrs-ffmpeg/src/input.rs` unconditionally emits `-loop 1`.'
+id          = 'opacity-expression-time-variable-semantics'
+description = 'All opacity-expression time parameters translate to the FFmpeg frame timestamp `T`: `time_of_day_seconds` loses its wall-clock (seconds-since-midnight) meaning, `content_seconds` ignores the seek/in-point offset, `channel_seconds` ignores channel uptime, and `content_total_seconds` maps to `NAN`. ErsatzTV evaluates these per frame in its graphics engine with real wall-clock/content/channel clocks.'
+discovered  = '2026-06-12'
+evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` binds four distinct clocks; `translate_identifier` in `crates/ersatzrs-ffmpeg/src/filter/simple.rs` maps the first three to `T` and the total to `NAN` because the filter builder has no duration/wall-clock context (ADR 0005 native-filter divergence).'
