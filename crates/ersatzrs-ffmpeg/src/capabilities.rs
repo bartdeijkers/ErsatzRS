@@ -409,6 +409,15 @@ fn has_vaapi_entrypoint(
 }
 
 fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) -> FfmpegCapability {
+    // Hardware NVENC decode places frames on the GPU and runs them through the
+    // CUDA filter graph (yadif_cuda/scale_cuda/overlay_cuda). If those filters
+    // aren't compiled in (encoder-only build), that graph is unrunnable, so
+    // decode in software — the pipeline then runs software filters and still
+    // NVENC-encodes the result, preserving GPU-accelerated encode.
+    if !nvenc_cuda_filters_available(report) {
+        return FfmpegCapability::Software;
+    }
+
     if is_unsupported_hardware_decode(source) {
         return FfmpegCapability::Software;
     }
@@ -417,6 +426,17 @@ fn nvidia_decode(report: &FfmpegCapabilityReport, source: &SourceVideoStream) ->
     let bit_depth = bit_depth(source.pixel_format);
     if report.hardware_decode_denied(HardwareAccelerationKind::Nvenc, codec, bit_depth) {
         return FfmpegCapability::Software;
+    }
+
+    // ErsatzTV's conservative architecture gate (ADR 0014 step 2): when GPU
+    // model information is available, the upstream table is an additional AND
+    // over the probe rows — a codec the table marks unsupported on the
+    // detected architecture must not select hardware decode regardless of
+    // what a probe row claims.
+    if let Some(gpu) = nvidia_gpu_info(report) {
+        if !nvidia_architecture_allows_decode(&gpu, source) {
+            return FfmpegCapability::Software;
+        }
     }
 
     let Some(decoder) = cuvid_decoder_for_codec(source.codec) else {
@@ -730,6 +750,123 @@ fn has_encoder_suffix(report: &FfmpegCapabilityReport, suffix: &str) -> bool {
     report.encoders.iter().any(|name| name.ends_with(suffix))
 }
 
+/// CUDA filters the NVENC *hardware-decode* path emits for scaling,
+/// deinterlacing, and overlay composition on GPU frames. A full
+/// `--enable-cuda-nvcc` `FFmpeg` build exposes all of them; encoder-only builds
+/// (NVENC encoders + `cuda` hwaccel but no CUDA filters) do not, which would
+/// make the on-GPU filter graph fail at runtime with `No such filter:
+/// 'yadif_cuda'`.
+///
+/// These gate hardware *decode* only (see [`nvidia_decode`]): when the filters
+/// are absent the source is decoded in software, and the transcode pipeline
+/// then runs software filters and still NVENC-*encodes* the result (software
+/// frames are accepted directly by the encoder). NVENC encode itself does not
+/// require the CUDA filters. ErsatzTV degrades these per-filter to software
+/// equivalents; ErsatzRS instead falls back the whole decode/filter path to
+/// software when any is missing rather than porting the finer per-filter
+/// fallback.
+pub(crate) const NVENC_REQUIRED_CUDA_FILTERS: [&str; 3] =
+    ["scale_cuda", "yadif_cuda", "overlay_cuda"];
+
+pub(crate) fn nvenc_cuda_filters_available(report: &FfmpegCapabilityReport) -> bool {
+    NVENC_REQUIRED_CUDA_FILTERS
+        .iter()
+        .all(|filter| report.has_filter(filter))
+}
+
+/// NVIDIA GPU model and SM architecture parsed from the capability report's
+/// GPU list (native CUDA probe details or `FFmpeg`'s `h264_nvenc -gpu list`
+/// fallback output).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NvidiaGpuInfo {
+    /// SM compute architecture with the dot removed, such as `52` for SM 5.2
+    /// (second-generation Maxwell) or `86` for SM 8.6 (Ampere). Mirrors
+    /// ErsatzTV's `SM\s+(\d+\.\d+)` parse.
+    pub architecture: i32,
+    /// GPU model string, such as `NVIDIA GeForce GTX 960`, or `unknown` when
+    /// the line carries no `< model >` segment.
+    pub model: String,
+}
+
+fn nvidia_gpu_info(report: &FfmpegCapabilityReport) -> Option<NvidiaGpuInfo> {
+    report
+        .nvidia_gpu_list
+        .as_deref()
+        .and_then(parse_nvidia_gpu_info)
+}
+
+/// Parse the first GPU model/architecture row from NVIDIA GPU-list output.
+///
+/// Accepts both the native probe's `GPU #0 < model > has Compute SM 8.9`
+/// lines and `FFmpeg`'s `-gpu list` variant. Like ErsatzTV, only the first
+/// detected GPU drives the architecture gate.
+#[must_use]
+pub fn parse_nvidia_gpu_info(gpu_list: &str) -> Option<NvidiaGpuInfo> {
+    for line in gpu_list.lines() {
+        let Some(architecture) = parse_sm_architecture(line) else {
+            continue;
+        };
+        let model = line
+            .split_once('<')
+            .and_then(|(_, rest)| rest.split_once('>'))
+            .map(|(model, _)| model.trim().to_owned())
+            .filter(|model| !model.is_empty())
+            .unwrap_or_else(|| "unknown".to_owned());
+        return Some(NvidiaGpuInfo {
+            architecture,
+            model,
+        });
+    }
+    None
+}
+
+fn parse_sm_architecture(line: &str) -> Option<i32> {
+    let (_, rest) = line.split_once("SM ")?;
+    let version: String = rest
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit() || *ch == '.')
+        .collect();
+    if !version.contains('.') {
+        return None;
+    }
+    // ErsatzTV strips the dot and parses the remainder: SM 5.2 -> 52.
+    version.replace('.', "").parse().ok()
+}
+
+/// Second-generation Maxwell GM206 models that can decode HEVC/VP9 even though
+/// the rest of SM 5.2 cannot. From ErsatzTV's `NvidiaHardwareCapabilities`.
+const MAXWELL_GM206_MODELS: [&str; 4] = ["GTX 750", "GTX 950", "GTX 960", "GTX 965M"];
+
+/// ErsatzTV's conservative NVIDIA decode table, keyed on SM architecture and
+/// GPU model. Ported from the pre-NvEncSharp `NvidiaHardwareCapabilities`
+/// (the static table ADR 0014 requires as the parity-faithful floor).
+fn nvidia_architecture_allows_decode(gpu: &NvidiaGpuInfo, source: &SourceVideoStream) -> bool {
+    let architecture = gpu.architecture;
+    let bit_depth = bit_depth(source.pixel_format);
+    let is_hdr = source.color_params.is_hdr;
+    let is_gm206 = MAXWELL_GM206_MODELS
+        .iter()
+        .any(|model| gpu.model.contains(model));
+    match source.codec {
+        // some second gen maxwell can decode hevc, otherwise pascal is required
+        SourceVideoCodec::Hevc => (architecture == 52 && is_gm206) || architecture >= 60,
+        // pascal is required to decode vp9 10-bit
+        SourceVideoCodec::Vp9 if bit_depth == 10 => !is_hdr && architecture >= 60,
+        // some second gen maxwell can decode vp9, otherwise pascal is required
+        SourceVideoCodec::Vp9 => {
+            !is_hdr && ((architecture == 52 && is_gm206) || architecture >= 60)
+        }
+        // no hardware decoding of 10-bit h264
+        SourceVideoCodec::H264 => bit_depth < 10,
+        SourceVideoCodec::Mpeg2Video | SourceVideoCodec::Vc1 => !is_hdr,
+        // ampere is required for av1 decoding
+        SourceVideoCodec::Av1 => architecture >= 86,
+        // mpeg4: too many issues with odd content, so use software; everything
+        // else is unknown to the upstream table and stays conservative.
+        _ => false,
+    }
+}
+
 fn is_unsupported_hardware_decode(source: &SourceVideoStream) -> bool {
     is_unsupported_h264_ten_bit(
         video_format_for_source_codec(source.codec),
@@ -794,7 +931,11 @@ pub fn capability_report_for_tests() -> FfmpegCapabilityReport {
     use std::collections::BTreeSet;
 
     FfmpegCapabilityReport {
-        filters: BTreeSet::new(),
+        filters: BTreeSet::from([
+            "scale_cuda".to_owned(),
+            "yadif_cuda".to_owned(),
+            "overlay_cuda".to_owned(),
+        ]),
         encoders: BTreeSet::from([
             "aac".to_owned(),
             "ac3".to_owned(),
@@ -913,6 +1054,140 @@ mod tests {
         assert!(factory.has_hardware_acceleration(HardwareAccelerationKind::Nvenc));
         assert!(factory.has_hardware_acceleration(HardwareAccelerationKind::Amf));
         assert!(factory.has_hardware_acceleration(HardwareAccelerationKind::V4l2m2m));
+    }
+
+    #[test]
+    fn nvenc_hardware_decode_requires_cuda_filters_but_encode_does_not() {
+        // Encoder-only build: NVENC encoders + `cuda` hwaccel but no CUDA filters
+        // (compiled without `--enable-cuda-nvcc`). NVENC *encode* must stay
+        // available — the pipeline runs software filters and still NVENC-encodes
+        // the software frames — but hardware *decode* must fall back to software,
+        // because the on-GPU CUDA filter graph (yadif_cuda/scale_cuda/
+        // overlay_cuda) is unrunnable without those filters.
+        let source = SourceVideoStream::new(SourceVideoCodec::H264);
+
+        // Baseline: a full build hardware-decodes this source.
+        let full = capability_report_for_tests();
+        assert_eq!(
+            HardwareCapabilitiesFactory::new(&full)
+                .for_acceleration(HardwareAccelerationKind::Nvenc)
+                .can_decode(&source),
+            FfmpegCapability::Hardware,
+        );
+
+        let mut report = capability_report_for_tests();
+        report.filters.remove("scale_cuda");
+        report.filters.remove("yadif_cuda");
+        report.filters.remove("overlay_cuda");
+        let factory = HardwareCapabilitiesFactory::new(&report);
+
+        // NVENC is still an available acceleration and encode stays on hardware.
+        assert!(factory.has_hardware_acceleration(HardwareAccelerationKind::Nvenc));
+        let capabilities = factory.for_acceleration(HardwareAccelerationKind::Nvenc);
+        assert_eq!(capabilities.acceleration(), HardwareAccelerationKind::Nvenc);
+        assert_eq!(
+            capabilities.can_encode(&DesiredVideoState::h264_1080p()),
+            FfmpegCapability::Hardware,
+        );
+        // Hardware decode falls back to software so no CUDA filters are emitted.
+        assert_eq!(capabilities.can_decode(&source), FfmpegCapability::Software);
+
+        // A single missing CUDA filter is enough to force software decode.
+        let mut partial = capability_report_for_tests();
+        partial.filters.remove("yadif_cuda");
+        assert_eq!(
+            HardwareCapabilitiesFactory::new(&partial)
+                .for_acceleration(HardwareAccelerationKind::Nvenc)
+                .can_decode(&source),
+            FfmpegCapability::Software,
+        );
+    }
+
+    #[test]
+    fn parses_nvidia_gpu_info_from_native_and_ffmpeg_gpu_lists() {
+        let native = "GPU #0 < NVIDIA GeForce RTX 4070 > has Compute SM 8.9\n\n  Encoding:";
+        assert_eq!(
+            parse_nvidia_gpu_info(native),
+            Some(NvidiaGpuInfo {
+                architecture: 89,
+                model: "NVIDIA GeForce RTX 4070".to_owned(),
+            }),
+        );
+
+        let ffmpeg_list = "[h264_nvenc @ 0x55] [ GPU #0 - < GeForce GTX 960 > has Compute SM 5.2 ]";
+        assert_eq!(
+            parse_nvidia_gpu_info(ffmpeg_list),
+            Some(NvidiaGpuInfo {
+                architecture: 52,
+                model: "GeForce GTX 960".to_owned(),
+            }),
+        );
+
+        assert_eq!(parse_nvidia_gpu_info("no gpu lines here"), None);
+    }
+
+    #[test]
+    fn nvidia_architecture_gate_is_additional_and_over_probe_rows() {
+        // Probe rows report AV1 decode support, but the detected architecture
+        // (Pascal, SM 6.1) predates Ampere: ErsatzTV's table wins and decode
+        // must fall back to software.
+        let mut report = capability_report_for_tests();
+        report.nvidia_gpu_list =
+            Some("GPU #0 < NVIDIA GeForce GTX 1060 > has Compute SM 6.1".to_owned());
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        let av1 = SourceVideoStream::new(SourceVideoCodec::Av1);
+        assert_eq!(capabilities.can_decode(&av1), FfmpegCapability::Software);
+
+        // The same Pascal card decodes HEVC and H.264 in hardware.
+        let hevc = SourceVideoStream::new(SourceVideoCodec::Hevc);
+        assert_eq!(capabilities.can_decode(&hevc), FfmpegCapability::Hardware);
+        let h264 = SourceVideoStream::new(SourceVideoCodec::H264);
+        assert_eq!(capabilities.can_decode(&h264), FfmpegCapability::Hardware);
+
+        // Mpeg4 is always software when the table is in play.
+        let mpeg4 = SourceVideoStream::new(SourceVideoCodec::Mpeg4);
+        assert_eq!(capabilities.can_decode(&mpeg4), FfmpegCapability::Software);
+        drop(capabilities);
+
+        // Ampere allows AV1.
+        report.nvidia_gpu_list =
+            Some("GPU #0 < NVIDIA GeForce RTX 3070 > has Compute SM 8.6".to_owned());
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        assert_eq!(capabilities.can_decode(&av1), FfmpegCapability::Hardware);
+        drop(capabilities);
+
+        // Without GPU info the gate is skipped and probe rows decide alone.
+        report.nvidia_gpu_list = None;
+        let capabilities = HardwareCapabilitiesFactory::new(&report)
+            .for_acceleration(HardwareAccelerationKind::Nvenc);
+        assert_eq!(capabilities.can_decode(&av1), FfmpegCapability::Hardware);
+    }
+
+    #[test]
+    fn nvidia_architecture_gate_allows_gm206_maxwell_hevc() {
+        // Generic SM 5.2 Maxwell cannot decode HEVC...
+        let mut report = capability_report_for_tests();
+        report.nvidia_gpu_list =
+            Some("GPU #0 < NVIDIA GeForce GTX 980 > has Compute SM 5.2".to_owned());
+        let hevc = SourceVideoStream::new(SourceVideoCodec::Hevc);
+        assert_eq!(
+            HardwareCapabilitiesFactory::new(&report)
+                .for_acceleration(HardwareAccelerationKind::Nvenc)
+                .can_decode(&hevc),
+            FfmpegCapability::Software,
+        );
+
+        // ...but the GM206 models can.
+        report.nvidia_gpu_list =
+            Some("GPU #0 < NVIDIA GeForce GTX 960 > has Compute SM 5.2".to_owned());
+        assert_eq!(
+            HardwareCapabilitiesFactory::new(&report)
+                .for_acceleration(HardwareAccelerationKind::Nvenc)
+                .can_decode(&hevc),
+            FfmpegCapability::Hardware,
+        );
     }
 
     #[test]

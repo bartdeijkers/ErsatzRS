@@ -862,6 +862,31 @@ fn build_transcode_pipeline(
     let effective_acceleration = effective_video_acceleration(&request, acceleration);
     let effective_decode_acceleration =
         effective_decode_acceleration(&request, acceleration, effective_acceleration);
+
+    // On an encoder-only FFmpeg build (NVENC encoders + `cuda` hwaccel but no
+    // CUDA filter kernels) the on-GPU filter graph is unrunnable, so when
+    // decode falls back to software the whole deinterlace/scale/subtitle/
+    // overlay graph and pixel-format conversion must run in software too —
+    // there is no `scale_cuda` to receive uploaded frames. Demote the graph
+    // acceleration to software while keeping the NVENC encoder (it accepts
+    // software frames directly), so the build still gets GPU-accelerated
+    // encode instead of dropping to libx264. Full builds keep the landed
+    // upload-fallback path: software-decoded frames are uploaded and filtered
+    // on the GPU.
+    let encoder_acceleration = effective_acceleration;
+    let cuda_filters_available = request
+        .runtime_capabilities
+        .as_ref()
+        .is_none_or(crate::capabilities::nvenc_cuda_filters_available);
+    let effective_acceleration = if effective_acceleration == HardwareAccelerationKind::Nvenc
+        && effective_decode_acceleration != HardwareAccelerationKind::Nvenc
+        && !cuda_filters_available
+    {
+        HardwareAccelerationKind::None
+    } else {
+        effective_acceleration
+    };
+
     let mut steps = vec![
         no_standard_input(),
         hide_banner(),
@@ -908,7 +933,10 @@ fn build_transcode_pipeline(
             effective_decode_acceleration,
         )));
     }
-    add_video_decoder(&request, &mut steps, effective_acceleration);
+    // The decoder is selected from the requested encoder acceleration, not the
+    // (possibly demoted) graph acceleration: under an NVENC profile a software
+    // decode is forced explicit (`-hwaccel none -c:v …`), mirroring ErsatzTV.
+    add_video_decoder(&request, &mut steps, encoder_acceleration);
     add_audio_decoder_input_options(&mut request);
     add_realtime_input_options(&mut request);
     let uploaded_cuda_fallback =
@@ -1319,7 +1347,7 @@ fn build_transcode_pipeline(
     let filter_graph = complex.filter_graph.clone();
 
     steps.push(video_encoder(
-        effective_acceleration,
+        encoder_acceleration,
         &request.desired,
         runtime_capabilities.as_ref(),
     ));

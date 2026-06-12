@@ -584,15 +584,16 @@ async fn refresh_ffmpeg_runtime(
         ffprobe_path,
     )
     .await;
-    let mut report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
+    let report = ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config)
         .await
         .map_err(|error| ServerFnError::new(error.to_string()))?;
-    ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
-        &state.pool,
-        &mut report.capabilities,
-    )
-    .await
-    .map_err(|error| ServerFnError::new(error.to_string()))?;
+    // A settings-save capability refresh is one of the explicit refresh
+    // triggers of ADR 0014: learned denial rows are cleared, not reapplied —
+    // the binary/driver may have changed, so the fresh probe report decides
+    // alone until runtime evidence says otherwise.
+    ersatzrs_infra::ffmpeg_capabilities::clear_hardware_decode_denials(&state.pool)
+        .await
+        .map_err(|error| ServerFnError::new(error.to_string()))?;
     *state.ffmpeg_runtime.write().await = report;
     Ok(())
 }

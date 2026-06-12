@@ -434,9 +434,13 @@ async fn check_startup_ffmpeg_runtime(
     let config = ffmpeg_runtime_config_with_profile_probes(pool, ffmpeg_path, ffprobe_path).await;
     match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await {
         Ok(mut report) => {
+            // Startup is not an explicit capability refresh (ADR 0014):
+            // denials learned against this same ffmpeg binary are reapplied,
+            // but a path change since the last run clears them instead.
             if let Err(error) = ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
                 pool,
                 &mut report.capabilities,
+                ffmpeg_path,
             )
             .await
             {

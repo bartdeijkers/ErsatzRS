@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed
+Accepted (2026-06-12: implemented for the HLS segmenter and direct IPTV `.ts`
+spawns, with the architecture gate, the CUDA-filter decode gate, and
+refresh-triggered denial invalidation; live proof on an encoder-only FFmpeg
+build remains open as `ParityDebt` `nvenc-filter-gate-live-proof`)
 
 ## Context
 

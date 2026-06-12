@@ -17,15 +17,16 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, FFmpegProfileAudioFormat,
-    FFmpegProfileVideoFormat, HardwareAccelerationKind, StreamingMode, VideoScanKind,
+    FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HardwareDecodeDenial, HlsOutput,
-    InputFile, InputKind, OutputFormat, OutputMetadata, PipelineRequest, PixelFormat, RealtimeMode,
-    SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
+    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
+    OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec,
+    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
 };
 
+use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
@@ -862,28 +863,6 @@ async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>)
     }
 }
 
-fn learned_hardware_decode_denial(
-    retry_already_used: bool,
-    acceleration: HardwareAccelerationKind,
-    source: Option<&SourceVideoStream>,
-    stderr: &str,
-) -> Option<HardwareDecodeDenial> {
-    if retry_already_used
-        || acceleration == HardwareAccelerationKind::None
-        || !ffmpeg_stderr_is_hardware_decode_unsupported(stderr)
-    {
-        return None;
-    }
-
-    let source = source?;
-    let codec = hardware_decode_denial_codec(source.codec)?;
-    Some(HardwareDecodeDenial::new(
-        acceleration,
-        codec,
-        hardware_decode_denial_bit_depth(source.pixel_format),
-    ))
-}
-
 fn log_hls_av1_spawn_diagnostics(
     channel_number: &str,
     command: &FfmpegCommand,
@@ -920,39 +899,6 @@ fn log_hls_av1_spawn_diagnostics(
         hardware_decode_denials = ?av1_denials,
         "spawning hls segmenter for av1 source with runtime capability rows"
     );
-}
-
-fn ffmpeg_stderr_is_hardware_decode_unsupported(stderr: &str) -> bool {
-    let lower = stderr.to_ascii_lowercase();
-    (lower.contains("doesn't support hardware accelerated") && lower.contains("decoding"))
-        || lower.contains("your platform doesn't support hardware accelerated")
-        || lower.contains("error submitting packet to decoder: function not implemented")
-}
-
-const fn hardware_decode_denial_codec(codec: SourceVideoCodec) -> Option<&'static str> {
-    match codec {
-        SourceVideoCodec::Av1 => Some("av1"),
-        SourceVideoCodec::H264 => Some("h264"),
-        SourceVideoCodec::Hevc => Some("hevc"),
-        SourceVideoCodec::Mpeg2Video => Some("mpeg2video"),
-        SourceVideoCodec::Mpeg4 => Some("mpeg4"),
-        SourceVideoCodec::Vc1 => Some("vc1"),
-        SourceVideoCodec::Vp8 => Some("vp8"),
-        SourceVideoCodec::Vp9 => Some("vp9"),
-        SourceVideoCodec::Mpeg1Video
-        | SourceVideoCodec::MsMpeg4V2
-        | SourceVideoCodec::MsMpeg4V3
-        | SourceVideoCodec::RawVideo
-        | SourceVideoCodec::Unknown => None,
-    }
-}
-
-const fn hardware_decode_denial_bit_depth(pixel_format: Option<PixelFormat>) -> u8 {
-    match pixel_format {
-        Some(PixelFormat::Yuv420P10Le) => 10,
-        Some(PixelFormat::Yuv420P | PixelFormat::Nv12 | PixelFormat::Vaapi | PixelFormat::Cuda)
-        | None => 8,
-    }
 }
 
 #[async_trait]
@@ -2754,8 +2700,10 @@ async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
     use ersatzrs_domain::{
-        FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
+        FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat,
+        HardwareAccelerationKind, Resolution,
     };
+    use ersatzrs_ffmpeg::PixelFormat;
     use std::process::Stdio;
     use tokio::time::timeout;
     use uuid::Uuid;

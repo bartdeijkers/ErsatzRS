@@ -28,6 +28,9 @@ use ersatzrs_ffmpeg::{
     OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
 };
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::ffmpeg_capabilities::{
+    learned_hardware_decode_denial, persist_hardware_decode_denial,
+};
 use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
@@ -391,19 +394,51 @@ async fn serve_channel_stream_with_channel(
         &playback_profile,
         target_frame_rate,
         effective_streaming_mode,
-        metadata,
-        runtime_capabilities,
-        source_stream,
-        source_audio_streams,
-        subtitle_input,
-        watermark_inputs,
-        graphics_overlays,
+        metadata.clone(),
+        runtime_capabilities.clone(),
+        source_stream.clone(),
+        source_audio_streams.clone(),
+        subtitle_input.clone(),
+        watermark_inputs.clone(),
+        graphics_overlays.clone(),
     );
+    let retry = StreamDenialRetry {
+        pool: state.pool.clone(),
+        runtime_capabilities,
+        acceleration: effective_acceleration,
+        source_stream: source_stream.clone(),
+        rebuild: {
+            let resolved = resolved.clone();
+            let channel_number = channel.number.clone();
+            Box::new(move |capabilities| {
+                tracing::debug!(
+                    channel_number = %channel_number,
+                    "rebuilding channel stream command with learned hardware decode denial"
+                );
+                build_stream_command(
+                    &resolved,
+                    output_format,
+                    start_seconds,
+                    &playback_profile,
+                    target_frame_rate,
+                    effective_streaming_mode,
+                    metadata,
+                    capabilities,
+                    source_stream,
+                    source_audio_streams,
+                    subtitle_input,
+                    watermark_inputs,
+                    graphics_overlays,
+                )
+            })
+        },
+    };
     match spawn_stream_body(
-        command,
+        &command,
         graphics_cleanup_dirs,
         channel.number.clone(),
         state.hls_sessions.clone(),
+        Some(retry),
     ) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -504,10 +539,11 @@ async fn serve_segmenter_wrapper_stream(
         };
 
     match spawn_stream_body(
-        command,
+        &command,
         cleanup_paths,
         channel.number.clone(),
         state.hls_sessions.clone(),
+        None,
     ) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -544,10 +580,11 @@ fn serve_legacy_concat_stream(
     let command = build_mpegts_concat_command(concat_url, &metadata);
 
     match spawn_stream_body(
-        command,
+        &command,
         Vec::new(),
         channel.number.clone(),
         state.hls_sessions.clone(),
+        None,
     ) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -1077,12 +1114,30 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
         .join(format!("request-{request_id}"))
 }
 
-fn spawn_stream_body(
-    command: FfmpegCommand,
-    cleanup_paths: Vec<PathBuf>,
-    channel_number: String,
-    session_registry: Arc<dyn HlsSessionRegistry>,
-) -> Result<Body, StreamSpawnError> {
+/// Context for the ADR 0014 runtime-learned denial loop on direct IPTV
+/// spawns: when the first `FFmpeg` process exits with a classified
+/// hardware-decode-unsupported stderr signature, the supervisor persists a
+/// denial row and restarts the stream exactly once with the rebuilt command,
+/// which selects software input decode while preserving the hardware encoder.
+struct StreamDenialRetry {
+    pool: DbPool,
+    runtime_capabilities: FfmpegCapabilityReport,
+    acceleration: ersatzrs_domain::HardwareAccelerationKind,
+    source_stream: Option<SourceVideoStream>,
+    rebuild: Box<dyn FnOnce(FfmpegCapabilityReport) -> FfmpegCommand + Send>,
+}
+
+const STREAM_BODY_BUFFER_BYTES: usize = 256 * 1024;
+
+enum DirectStreamOutcome {
+    Completed,
+    Cancelled,
+    Failed(String),
+}
+
+fn spawn_stream_process(
+    command: &FfmpegCommand,
+) -> Result<tokio::process::Child, StreamSpawnError> {
     let mut process = Command::new(&command.executable);
     process
         .args(&command.arguments)
@@ -1090,46 +1145,73 @@ fn spawn_stream_body(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    for variable in command.environment {
-        process.env(variable.name, variable.value);
+    for variable in &command.environment {
+        process.env(&variable.name, &variable.value);
     }
 
-    let mut child = process
+    process
         .spawn()
-        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))?;
-    let stdout = child.stdout.take().ok_or(StreamSpawnError::MissingStdout)?;
-    let stderr = child.stderr.take();
+        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
+}
+
+fn spawn_stream_body(
+    command: &FfmpegCommand,
+    cleanup_paths: Vec<PathBuf>,
+    channel_number: String,
+    session_registry: Arc<dyn HlsSessionRegistry>,
+    retry: Option<StreamDenialRetry>,
+) -> Result<Body, StreamSpawnError> {
+    let mut child = spawn_stream_process(command)?;
+    if child.stdout.is_none() {
+        return Err(StreamSpawnError::MissingStdout);
+    }
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
     let cancel = handle.cancel.clone();
+    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
         let registered = session_registry.try_insert(handle).await;
-        let stderr_task = stderr.map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
-        tokio::select! {
-            result = child.wait() => {
-                match result {
-                    Ok(status) if status.success() => {}
-                    Ok(status) => {
-                        let stderr = await_stderr_tail(stderr_task).await;
-                        if ffmpeg_stderr_is_client_disconnect(&stderr) {
-                            tracing::debug!(%status, stderr = %stderr, "ffmpeg channel stream ended after client disconnect");
-                        } else {
-                            tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
-                        }
-                    }
-                    Err(error) => {
-                        let stderr = await_stderr_tail(stderr_task).await;
-                        tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
-                    }
-                }
+        let mut retry = retry;
+        loop {
+            let outcome =
+                supervise_stream_process(&mut child, &mut writer, &cancel, &channel_number).await;
+            let DirectStreamOutcome::Failed(stderr) = outcome else {
+                break;
+            };
+            let denial = retry.take().and_then(|context| {
+                learned_hardware_decode_denial(
+                    false,
+                    context.acceleration,
+                    context.source_stream.as_ref(),
+                    &stderr,
+                )
+                .map(|denial| (context, denial))
+            });
+            let Some((context, denial)) = denial else {
+                break;
+            };
+            tracing::warn!(
+                channel_number = %channel_number,
+                acceleration = ?denial.acceleration,
+                codec = %denial.codec,
+                bit_depth = denial.bit_depth,
+                "retrying channel stream once with software input decode after runtime hardware decode rejection"
+            );
+            let mut capabilities = context.runtime_capabilities;
+            if let Err(error) =
+                persist_hardware_decode_denial(&context.pool, &mut capabilities, denial).await
+            {
+                tracing::warn!(
+                    %error,
+                    channel_number = %channel_number,
+                    "failed to persist runtime-learned hardware decode denial"
+                );
             }
-            () = cancel.notified() => {
-                if let Err(error) = child.kill().await {
-                    tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
-                }
-                let stderr = await_stderr_tail(stderr_task).await;
-                if !stderr.is_empty() {
-                    tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
+            match spawn_stream_process(&(context.rebuild)(capabilities)) {
+                Ok(next) => child = next,
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
+                    break;
                 }
             }
         }
@@ -1141,7 +1223,70 @@ fn spawn_stream_body(
         }
     });
 
-    Ok(Body::from_stream(ReaderStream::new(stdout)))
+    Ok(Body::from_stream(ReaderStream::new(reader)))
+}
+
+async fn supervise_stream_process(
+    child: &mut tokio::process::Child,
+    writer: &mut tokio::io::DuplexStream,
+    cancel: &Arc<Notify>,
+    channel_number: &str,
+) -> DirectStreamOutcome {
+    let mut stdout = child.stdout.take();
+    let stderr_task = child
+        .stderr
+        .take()
+        .map(|stderr| tokio::spawn(read_ffmpeg_stderr_tail(stderr)));
+
+    // Pump stdout into the response body until EOF (process exit), a body
+    // write failure (client gone), or session cancellation.
+    let pump = async {
+        match stdout.as_mut() {
+            Some(stdout) => tokio::io::copy(stdout, writer).await.map(|_| ()),
+            None => Ok(()),
+        }
+    };
+    tokio::select! {
+        result = pump => {
+            if result.is_err() {
+                // The body side is gone; stop the process instead of letting
+                // it block on a pipe nobody drains.
+                let _ = child.start_kill();
+            }
+        }
+        () = cancel.notified() => {
+            if let Err(error) = child.kill().await {
+                tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
+            }
+            let stderr = await_stderr_tail(stderr_task).await;
+            if !stderr.is_empty() {
+                tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
+            }
+            return DirectStreamOutcome::Cancelled;
+        }
+    }
+
+    match child.wait().await {
+        Ok(status) if status.success() => {
+            let _ = await_stderr_tail(stderr_task).await;
+            DirectStreamOutcome::Completed
+        }
+        Ok(status) => {
+            let stderr = await_stderr_tail(stderr_task).await;
+            if ffmpeg_stderr_is_client_disconnect(&stderr) {
+                tracing::debug!(%status, stderr = %stderr, "ffmpeg channel stream ended after client disconnect");
+                DirectStreamOutcome::Completed
+            } else {
+                tracing::warn!(%status, stderr = %stderr, "ffmpeg channel stream exited unsuccessfully");
+                DirectStreamOutcome::Failed(stderr)
+            }
+        }
+        Err(error) => {
+            let stderr = await_stderr_tail(stderr_task).await;
+            tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
+            DirectStreamOutcome::Failed(stderr)
+        }
+    }
 }
 
 async fn cleanup_stream_artifact(path: &std::path::Path) {
@@ -1267,6 +1412,59 @@ mod tests {
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
         assert!(!arguments.contains("-progress pipe:1"));
+    }
+
+    #[test]
+    fn rebuilt_stream_command_after_learned_denial_selects_software_decode() {
+        // ADR 0014 .ts retry decision: a classified decode-unsupported stderr
+        // produces a denial, and the rebuilt command (what the supervisor
+        // respawns) selects software input decode while keeping NVENC encode.
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::Nvenc;
+        let mut source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::Av1);
+        source.pixel_format = Some(ersatzrs_ffmpeg::PixelFormat::Yuv420P10Le);
+        let report = ersatzrs_ffmpeg::capability_report_for_tests();
+
+        let build = |capabilities: FfmpegCapabilityReport| {
+            build_stream_command(
+                "/media/movie.mkv",
+                OutputFormat::MpegTs,
+                0,
+                &profile,
+                None,
+                StreamingMode::TransportStream,
+                OutputMetadata::default(),
+                capabilities,
+                Some(source.clone()),
+                Vec::new(),
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+        };
+
+        // First spawn: the probe rows allow hardware AV1 decode.
+        let first = build(report.clone()).arguments.join(" ");
+        assert!(first.contains("-hwaccel cuda"), "{first}");
+        assert!(first.contains("-codec:v h264_nvenc"), "{first}");
+
+        // The supervisor classifies the failure and records the denial.
+        let stderr = "Your platform doesn't support hardware accelerated AV1 decoding.";
+        let denial = learned_hardware_decode_denial(
+            false,
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            Some(&source),
+            stderr,
+        )
+        .expect("classified decode rejection produces a denial");
+
+        // The retried spawn selects software input decode, NVENC encode stays.
+        let mut denied = report;
+        denied.deny_hardware_decode(denial);
+        let second = build(denied).arguments.join(" ");
+        assert!(second.contains("-hwaccel none -c:v libdav1d"), "{second}");
+        assert!(second.contains("-codec:v h264_nvenc"), "{second}");
+        assert!(!second.contains("-hwaccel cuda"), "{second}");
     }
 
     #[test]

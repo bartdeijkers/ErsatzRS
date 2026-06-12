@@ -789,6 +789,61 @@ fn nvenc_pipeline_uses_software_av1_decode_after_runtime_denial_snapshot() {
 }
 
 #[test]
+fn nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot() {
+    // Encoder-only FFmpeg build: NVENC encoders + `cuda` hwaccel but no CUDA
+    // filter kernels (no `--enable-cuda-nvcc`/`--enable-cuda-llvm`). Hardware
+    // decode and the software-frame CUDA upload are both gated off so no CUDA
+    // filter is emitted, while the encoder stays h264_nvenc.
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.filters.remove("scale_cuda");
+    report.filters.remove("yadif_cuda");
+    report.filters.remove("overlay_cuda");
+    let mut source = source_1080p(SourceVideoCodec::H264, 1280, 720);
+    source.scan_kind = VideoScanKind::Interlaced;
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source)
+        .with_runtime_capabilities(report);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-codec:v h264_nvenc"));
+    assert!(arguments.contains("-hwaccel none -c:v h264"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    assert!(!arguments.contains("scale_cuda"));
+    assert!(!arguments.contains("yadif_cuda"));
+    assert!(!arguments.contains("overlay_cuda"));
+    assert!(!arguments.contains("hwupload"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn nvenc_pipeline_architecture_gate_forces_software_av1_decode_snapshot() {
+    // Probe rows say AV1 decodes in hardware, but ErsatzTV's conservative
+    // architecture table (ADR 0014 step 2) says Pascal cannot: the gate is an
+    // additional AND, so decode goes software while NVENC encode stays.
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.nvidia_gpu_list =
+        Some("GPU #0 < NVIDIA GeForce GTX 1060 > has Compute SM 6.1".to_owned());
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::Av1))
+        .with_runtime_capabilities(report);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-hwaccel none -c:v libdav1d"));
+    assert!(arguments.contains("-codec:v h264_nvenc"));
+    assert!(!arguments.contains("-c:v av1_cuvid"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn nvenc_pipeline_uses_software_decode_when_decoder_detail_lacks_10bit_snapshot() {
     let mut desired = hevc_10bit_desired();
     desired.video_preset = Some("medium".to_owned());
