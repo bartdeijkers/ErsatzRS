@@ -57,3 +57,9 @@ id          = 'denial-refresh-invalidation'
 description = 'ADR 0014 says learned denial rows are cleared when the FFmpeg capability report is explicitly refreshed by path change, settings-save refresh, or manual refresh; the current implementation reapplies persisted denials after startup/settings refresh.'
 discovered  = '2026-06-11'
 evidence    = 'crates/ersatzrs-web/src/host/bootstrap.rs and crates/ersatzrs-web/src/admin/server_fns/settings.rs apply persisted denials to fresh runtime reports.'
+
+[[debt]]
+id          = 'nvenc-decode-cuda-filter-gate'
+description = 'NVENC hardware decode is not gated on the CUDA filters the GPU graph emits (`scale_cuda`/`yadif_cuda`/`overlay_cuda`) being present in the FFmpeg build. On an encoder-only build (NVENC encoders + `cuda` hwaccel, no `--enable-cuda-nvcc`/`--enable-cuda-llvm` filter kernels) the pipeline picks hardware decode and fails at runtime with "No such filter", and the ADR 0014 learned-denial stderr signatures do not match that error, so it never self-heals. Decode should fall back to software (keeping NVENC encode) when those filters are absent.'
+discovered  = '2026-06-12'
+evidence    = '`nvidia_decode` in `crates/ersatzrs-ffmpeg/src/capabilities.rs` checks denials, cuvid decoders, and decoder-detail bit depth but never `report.has_filter` for the CUDA filters; `REQUIRED_FILTERS` in `version.rs` correctly excludes them as optional. A working gate existed on the abandoned `fix/nvenc-gpu-acceleration` branch (commit `b1246b0`, recoverable from reflog) whose other changes are superseded by the landed surface-tracking approach.'
