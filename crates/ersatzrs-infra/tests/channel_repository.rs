@@ -193,6 +193,24 @@ async fn channel_editor_language_options_match_ersatztv_media_codes() {
 }
 
 #[tokio::test]
+async fn channel_editor_lists_bundled_music_video_credit_templates() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let state = repos.channel.get_editor_state(None).await.unwrap().unwrap();
+
+    assert_eq!(
+        state.options.music_video_credit_templates,
+        vec![
+            "_ArtistTitleAlbum_CenterTop".to_owned(),
+            "_ArtistTitle_LeftMiddle".to_owned(),
+            "_default.ass".to_owned(),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn channel_editor_save_validates_parity_rules() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

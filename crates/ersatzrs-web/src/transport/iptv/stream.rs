@@ -32,7 +32,7 @@ use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
-    render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
+    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
     watermark_overlay_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
@@ -279,12 +279,16 @@ async fn serve_channel_stream_with_channel(
         .preferred_subtitle_language_code
         .as_deref()
         .or(channel.preferred_subtitle_language_code.as_deref());
-    let subtitle = match select_playback_subtitle(
+    let start_seconds = playout_start_seconds(now, &active.playout_start);
+    let subtitle = match select_channel_playback_subtitle(
         &state.pool,
         active.media_item_id,
         preferred_subtitle_language,
         subtitle_mode,
         effective_streaming_mode,
+        &channel,
+        &playback_profile.resolution,
+        start_seconds,
     )
     .await
     {
@@ -294,7 +298,6 @@ async fn serve_channel_stream_with_channel(
             None
         }
     };
-    let start_seconds = playout_start_seconds(now, &active.playout_start);
     let metadata = playback_output_metadata(
         Some("ErsatzTV"),
         Some(&channel.name),
@@ -1370,6 +1373,56 @@ mod tests {
         assert!(arguments.contains("-metadata:s:a:0 language=eng"));
         assert!(arguments.contains("-metadata:s:s:0 language=nld"));
         assert!(arguments.contains("-metadata:s:s:0 title=Dutch SDH"));
+    }
+
+    #[test]
+    fn build_stream_command_burns_generated_music_video_credits_subtitle() {
+        let profile = playback_profile();
+        let subtitle = PlaybackSubtitle {
+            id: 0,
+            subtitle_kind: ersatzrs_infra::metadata::subtitle_kind::GENERATED,
+            title: Some("Music Video Credits".to_owned()),
+            stream_index: 0,
+            codec: Some("ass".to_owned()),
+            default: true,
+            forced: true,
+            sdh: false,
+            language: None,
+            is_extracted: false,
+            path: Some("/tmp/ersatzrs/music-video-credits-generated.ass".to_owned()),
+        };
+        let subtitle_input = subtitle_input_for_stream(
+            &subtitle,
+            "/media/music-video.mkv",
+            OutputFormat::MpegTs,
+            StreamingMode::TransportStream,
+        );
+        let command = build_stream_command(
+            "/media/music-video.mkv",
+            OutputFormat::MpegTs,
+            0,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            playback_output_metadata(None, None, None, &[], Some(&subtitle)),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            subtitle_input,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(
+            arguments.contains("subtitles=/tmp/ersatzrs/music-video-credits-generated.ass"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("fontsdir="), "{arguments}");
+        assert!(
+            arguments.contains("-metadata:s:s:0 title=Music Video Credits"),
+            "{arguments}"
+        );
     }
 
     #[test]

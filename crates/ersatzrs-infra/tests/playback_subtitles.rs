@@ -3,9 +3,10 @@ mod common;
 
 use ersatzrs_core::repositories::{ConfigRepository, GraphicsRepository};
 use ersatzrs_domain::{
-    Channel, ChannelSubtitleMode, ChannelWatermarkImageSource, FillerKind, GraphicsElement,
-    GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig, MotionEndBehavior,
-    MotionGraphicsConfig, StreamingMode, TextGraphicsConfig, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, ChannelWatermarkImageSource,
+    FillerKind, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig,
+    MotionEndBehavior, MotionGraphicsConfig, Resolution, StreamingMode, TextGraphicsConfig,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, PipelineBuilder,
@@ -19,9 +20,10 @@ use ersatzrs_infra::graphics_template::{
     GraphicsTemplateContext,
 };
 use ersatzrs_infra::playback::{
-    render_playback_graphics_overlays, select_playback_graphics, select_playback_subtitle,
-    select_playback_watermarks, subtitle_input_for_stream, watermark_fade_points_for_program,
-    PlaybackGraphicsRenderContext, ResolvedPlaybackGraphicsElement,
+    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
+    select_playback_subtitle, select_playback_watermarks, subtitle_input_for_stream,
+    watermark_fade_points_for_program, PlaybackGraphicsRenderContext,
+    ResolvedPlaybackGraphicsElement,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::SqlitePool;
@@ -74,6 +76,56 @@ async fn seed_movie_with_subtitles(pool: &SqlitePool) {
                 'movie.nl.forced.srt', '2026-05-31 00:00:00', '2026-05-31 00:00:00'),
                (3, 20, 0, 'Japanese PGS', 4, 'hdmv_pgs_subtitle', 0, 0, 0, 'jpn', 0,
                 NULL, '2026-05-31 00:00:00', '2026-05-31 00:00:00')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn seed_music_video(pool: &SqlitePool) {
+    common::seed_media_path(pool, 2, 2, 2).await;
+    common::seed_media_item(pool, 30, 2).await;
+    common::seed_media_item(pool, 31, 2).await;
+    sqlx::query(r#"INSERT INTO "Artist" ("Id") VALUES (31)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "ArtistMetadata" (
+               "Id", "ArtistId", "Title", "MetadataKind", "DateAdded", "DateUpdated"
+           ) VALUES (32, 31, 'Solo Artist', 0, '2026-05-31 00:00:00', '2026-05-31 00:00:00')"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (30, 31)"#)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MusicVideoMetadata" (
+               "Id", "MusicVideoId", "Title", "Album", "Plot", "ReleaseDate",
+               "Track", "MetadataKind", "DateAdded", "DateUpdated"
+           ) VALUES (
+               33, 30, 'Credit Song', 'Credit Album', 'Plot', '2026-05-31',
+               7, 0, '2026-05-31 00:00:00', '2026-05-31 00:00:00'
+           )"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MusicVideoArtist" ("Id", "Name", "MusicVideoMetadataId")
+           VALUES (34, 'Artist One', 33), (35, 'Artist Two', 33)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MediaVersion" (
+               "Id", "DateAdded", "DateUpdated", "Duration", "Height",
+               "MusicVideoId", "VideoScanKind", "Width"
+           ) VALUES (36, '2026-05-31 00:00:00', '2026-05-31 00:00:00', '00:12:00', 1080, 30, 0, 1920)"#,
     )
     .execute(pool)
     .await
@@ -158,6 +210,49 @@ async fn hls_direct_can_copy_embedded_image_subtitle_for_mkv_output() {
     assert_eq!(input.path, "/media/movie.mkv");
     assert_eq!(input.subtitle_method, Some(SubtitleMethod::Copy));
     assert_eq!(input.streams[0].index, 4);
+}
+
+#[tokio::test]
+async fn channel_music_video_credits_generate_template_subtitle() {
+    let pool = common::test_db().await;
+    seed_music_video(&pool).await;
+    let channel = Channel {
+        music_video_credits_mode: ChannelMusicVideoCreditsMode::GenerateSubtitles,
+        music_video_credits_template: Some("_ArtistTitleAlbum_CenterTop".to_owned()),
+        ..Channel::default()
+    };
+    let resolution = Resolution {
+        id: 1,
+        name: "1080p".to_owned(),
+        is_custom: false,
+        width: 1920,
+        height: 1080,
+    };
+
+    let selected = select_channel_playback_subtitle(
+        &pool,
+        30,
+        None,
+        ChannelSubtitleMode::None,
+        StreamingMode::TransportStream,
+        &channel,
+        &resolution,
+        60,
+    )
+    .await
+    .unwrap()
+    .expect("generated music-video credits subtitle");
+
+    assert_eq!(selected.subtitle_kind, 99);
+    assert!(selected.default);
+    assert!(selected.forced);
+    assert_eq!(selected.codec.as_deref(), Some("ass"));
+    let path = selected.path.as_ref().expect("generated subtitle path");
+    let rendered = std::fs::read_to_string(path).expect("generated subtitle can be read");
+    assert!(rendered.contains("PlayResX: 1920"));
+    assert!(rendered.contains("Dialogue: 0,00:01:09.00,00:01:16.00"));
+    assert!(rendered.contains(r"Artist One | Artist Two\NCredit Song\NCredit Album"));
+    cleanup_files([PathBuf::from(path)]);
 }
 
 #[test]

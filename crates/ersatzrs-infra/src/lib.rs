@@ -17,6 +17,7 @@ pub mod jellyfin;
 pub mod logging;
 pub mod maintenance;
 pub mod metadata;
+pub mod music_video_credits;
 pub mod playback;
 pub mod plex;
 pub mod repositories;

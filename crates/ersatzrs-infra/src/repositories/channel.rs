@@ -11,6 +11,8 @@ use sqlx::{Pool, Row};
 use std::{collections::HashSet, path::Path};
 use uuid::Uuid;
 
+use crate::music_video_credits::list_music_video_credit_template_names;
+
 use super::common::{
     decode_bool_column, decode_duration_text, decode_enum_column, decode_message, encode_datetime,
     encode_duration, encode_enum, load_ids, not_found,
@@ -368,13 +370,7 @@ async fn load_editor_options(pool: &Pool<crate::db::Db>) -> Result<ChannelEditor
             true,
         )
         .await?,
-        music_video_credit_templates: list_file_names(
-            &crate::file_system_layout::data_path(
-                Path::new("templates").join("music-video-credits"),
-            ),
-            false,
-        )
-        .await?,
+        music_video_credit_templates: list_music_video_credit_template_names().await?,
         default_ffmpeg_profile_id: load_default_ffmpeg_profile_id(pool).await?,
     })
 }
