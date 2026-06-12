@@ -735,6 +735,7 @@ fn nvenc_pipeline_uses_software_decode_when_cuvid_decoder_missing_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(arguments.contains("-hwaccel none -c:v h264"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("-hwaccel_output_format cuda"));
     insta::assert_snapshot!(arguments);
@@ -754,7 +755,34 @@ fn nvenc_pipeline_uses_software_av1_decode_without_decoder_detail_snapshot() {
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-init_hw_device cuda"));
-    assert!(arguments.contains("-c:v av1"));
+    assert!(arguments.contains("-hwaccel none -c:v libdav1d"));
+    assert!(!arguments.contains("-c:v av1_cuvid"));
+    assert!(!arguments.contains("-hwaccel cuda"));
+    assert!(!arguments.contains("-hwaccel_output_format cuda"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn nvenc_pipeline_uses_software_av1_decode_after_runtime_denial_snapshot() {
+    let desired = DesiredVideoState::h264_1080p();
+    let mut report = capability_report_for_tests();
+    report.deny_hardware_decode(ersatzrs_ffmpeg::HardwareDecodeDenial::new(
+        HardwareAccelerationKind::Nvenc,
+        "av1",
+        8,
+    ));
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::Av1))
+        .with_runtime_capabilities(report);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(arguments.contains("-hwaccel none -c:v libdav1d"));
+    assert!(arguments.contains("-codec:v h264_nvenc"));
+    assert!(!arguments.contains("-c:v av1_cuvid"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("-hwaccel_output_format cuda"));
     insta::assert_snapshot!(arguments);
@@ -777,6 +805,7 @@ fn nvenc_pipeline_uses_software_decode_when_decoder_detail_lacks_10bit_snapshot(
     let arguments = command.arguments.join(" ");
 
     assert!(arguments.contains("-init_hw_device cuda"));
+    assert!(arguments.contains("-hwaccel none -c:v hevc"));
     assert!(!arguments.contains("-hwaccel cuda"));
     assert!(!arguments.contains("-hwaccel_output_format cuda"));
     assert!(arguments.contains("-tag:v hvc1"));

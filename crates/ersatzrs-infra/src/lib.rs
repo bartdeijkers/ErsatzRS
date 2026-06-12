@@ -4,6 +4,7 @@ pub mod cache_cleanup;
 pub(crate) mod condition;
 pub mod db;
 pub mod emby;
+pub mod ffmpeg_capabilities;
 pub mod ffmpeg_config;
 pub mod ffprobe;
 pub mod file_system_layout;

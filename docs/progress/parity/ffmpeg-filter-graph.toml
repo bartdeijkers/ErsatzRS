@@ -8,14 +8,14 @@ summary    = '''
 Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass. Resource-backed dynamic graphics watermarks remain tracked under the graphics-engine plan.
 
 The NVENC/CUDA unconvertible-chain runtime failures recorded on 2026-06-10 now have fixes landed (window `52e1028..626783e`, snapshot-covered): the `Parsed_scale_cuda_1`/`auto_scale_0` mismatch is addressed by tracking the CUDA surface (location + format) whenever the software-decode `hwupload` fallback feeds `scale_cuda` even without a deinterlace branch, so pad/crop/subtitle-burn now emit the required `hwdownload`; and the `Parsed_loop_2`/`auto_scale_1` mismatch plus the bare-503-instead-of-error-screen behavior is addressed by keeping still-image (PNG-background error-screen/song/slug) pipelines in software on the nvenc path (skip the upfront upload, pick the software scale filter, emit the still-image software pixel-format option). Subtitle-burn robustness also improved this window: a seeked subtitle with no remaining cues now reports `None` so callers drop the burn input instead of crashing libass in a retry loop, and subtitles/fontsdir paths are double-escaped for both the filtergraph and filter-option parse levels (fixes Windows drive-colon burn-in failures).
-Remaining `ParityDebt`: these fixes are verified by pipeline snapshots only; fresh live HLS-segmenter runtime proof on the NVENC/CUDA path has not been re-captured this window, so the status stays `In progress` until re-verified. Resource-backed dynamic graphics watermarks also remain tracked under the graphics-engine plan.
+Live NVENC/CUDA HLS proof on 2026-06-11 re-verified the HLS segmenter path for
+the learned-denial slice: software AV1 input decode fed the CUDA/NVENC
+filter/encode chain with `-hwaccel none -c:v libdav1d` plus CUDA
+upload/scale/overlay filters and `h264_nvenc`, producing a 200 HLS playlist and
+readable MPEG-TS segments. This proof does not close direct IPTV `.ts`
+runtime-learned denial scope. Remaining `ParityDebt`: resource-backed dynamic
+graphics watermarks remain tracked under the graphics-engine plan.
 '''
-
-[[debt]]
-id          = 'nvenc-cuda-live-reverification'
-description = 'NVENC/CUDA conversion-chain fixes are snapshot-covered but still need fresh live HLS segmenter runtime proof before the streaming path can be called ported.'
-discovered  = '2026-06-10'
-evidence    = 'Runtime triage found unconvertible filter chains; later fixes landed with snapshots only and no fresh live HLS segmenter proof in the 52e1028..626783e window.'
 
 [[debt]]
 id          = 'resource-backed-dynamic-watermarks'

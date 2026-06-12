@@ -53,7 +53,11 @@ debts and defers the mechanical i18n coverage sweep to a follow-up slice
 
 ---
 
-## 1 — FFmpeg command generation: diagnose and self-heal the live AV1 hardware-decode fallback (slug `ffmpeg-command-generation`)
+## 1 — ✅ COMPLETED — FFmpeg command generation: diagnose and self-heal the live AV1 hardware-decode fallback (slug `ffmpeg-command-generation`)
+
+**Status: completed 2026-06-11** in commit `3661a41`
+(`feat(ffmpeg): runtime-learned AV1 hardware-decode denial with software
+libdav1d fallback`). The prompt below is kept for reference.
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation — the
 AV1 hardware-decode software fallback on the live HLS-segmenter path (slug

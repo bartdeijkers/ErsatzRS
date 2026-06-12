@@ -17,13 +17,13 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, FFmpegProfileAudioFormat,
-    FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
+    FFmpegProfileVideoFormat, HardwareAccelerationKind, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind,
-    OutputFormat, OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec,
-    SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
+    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, HardwareDecodeDenial, HlsOutput,
+    InputFile, InputKind, OutputFormat, OutputMetadata, PipelineRequest, PixelFormat, RealtimeMode,
+    SourceAudioCodec, SourceAudioStream, SourceVideoCodec, SourceVideoStream, SubtitleMethod,
 };
 
 use crate::playback::{
@@ -217,6 +217,8 @@ impl HlsSessionWorker {
 
         let mut is_first = true;
         let mut transcoded_until = Utc::now();
+        let mut runtime_capabilities = self.runtime_capabilities.clone();
+        let mut learned_decode_retry_used = false;
         let slug_duration = load_channel_slug_seconds(&pool, self.channel_id)
             .await
             .filter(|seconds| *seconds > 0.0)
@@ -327,7 +329,7 @@ impl HlsSessionWorker {
                         service_name: Some(channel_name),
                         ..OutputMetadata::default()
                     },
-                    self.runtime_capabilities.clone(),
+                    runtime_capabilities.clone(),
                 );
                 let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
                 if let Err(error) =
@@ -565,6 +567,7 @@ impl HlsSessionWorker {
                 }
             };
             let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+            let source_stream_for_denial = source_stream.clone();
             let command = build_hls_command(
                 &active.media_path,
                 &self.working_dir,
@@ -578,13 +581,19 @@ impl HlsSessionWorker {
                 &playback_profile,
                 target_frame_rate,
                 metadata,
-                self.runtime_capabilities.clone(),
+                runtime_capabilities.clone(),
                 source_stream,
                 source_audio_streams,
                 None,
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
+            );
+            log_hls_av1_spawn_diagnostics(
+                &self.channel_number,
+                &command,
+                &runtime_capabilities,
+                source_stream_for_denial.as_ref(),
             );
             let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
             if let Some(path) = graphics_cleanup_dir {
@@ -611,6 +620,36 @@ impl HlsSessionWorker {
                     }
                 }
                 HlsProcessOutcome::Failed(error_message) => {
+                    if let Some(denial) = learned_hardware_decode_denial(
+                        learned_decode_retry_used,
+                        playback_profile.profile.hardware_acceleration,
+                        source_stream_for_denial.as_ref(),
+                        &error_message,
+                    ) {
+                        learned_decode_retry_used = true;
+                        tracing::warn!(
+                            channel_number = %self.channel_number,
+                            acceleration = ?denial.acceleration,
+                            codec = %denial.codec,
+                            bit_depth = denial.bit_depth,
+                            "retrying hls segmenter once with software input decode after runtime hardware decode rejection"
+                        );
+                        if let Err(error) =
+                            crate::ffmpeg_capabilities::persist_hardware_decode_denial(
+                                &pool,
+                                &mut runtime_capabilities,
+                                denial,
+                            )
+                            .await
+                        {
+                            tracing::warn!(
+                                %error,
+                                channel_number = %self.channel_number,
+                                "failed to persist runtime-learned hardware decode denial"
+                            );
+                        }
+                        continue;
+                    }
                     let Some(duration) = duration else {
                         break;
                     };
@@ -628,7 +667,7 @@ impl HlsSessionWorker {
                             service_name: Some(active.channel_name.clone()),
                             ..OutputMetadata::default()
                         },
-                        runtime_capabilities: self.runtime_capabilities.clone(),
+                        runtime_capabilities: runtime_capabilities.clone(),
                         error_message: &error_message,
                     })
                     .await
@@ -831,6 +870,99 @@ async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>)
             .await
             .unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}")),
         None => String::new(),
+    }
+}
+
+fn learned_hardware_decode_denial(
+    retry_already_used: bool,
+    acceleration: HardwareAccelerationKind,
+    source: Option<&SourceVideoStream>,
+    stderr: &str,
+) -> Option<HardwareDecodeDenial> {
+    if retry_already_used
+        || acceleration == HardwareAccelerationKind::None
+        || !ffmpeg_stderr_is_hardware_decode_unsupported(stderr)
+    {
+        return None;
+    }
+
+    let source = source?;
+    let codec = hardware_decode_denial_codec(source.codec)?;
+    Some(HardwareDecodeDenial::new(
+        acceleration,
+        codec,
+        hardware_decode_denial_bit_depth(source.pixel_format),
+    ))
+}
+
+fn log_hls_av1_spawn_diagnostics(
+    channel_number: &str,
+    command: &FfmpegCommand,
+    runtime_capabilities: &FfmpegCapabilityReport,
+    source: Option<&SourceVideoStream>,
+) {
+    if !source.is_some_and(|source| source.codec == SourceVideoCodec::Av1) {
+        return;
+    }
+
+    let av1_decoders: Vec<String> = runtime_capabilities
+        .nvidia_decoders
+        .iter()
+        .filter(|decoder| decoder.codec.eq_ignore_ascii_case("av1"))
+        .map(|decoder| format!("{} {}-bit", decoder.codec, decoder.bit_depth))
+        .collect();
+    let av1_denials: Vec<String> = runtime_capabilities
+        .hardware_decode_denials
+        .iter()
+        .filter(|denial| denial.codec.eq_ignore_ascii_case("av1"))
+        .map(|denial| {
+            format!(
+                "{:?} {} {}-bit",
+                denial.acceleration, denial.codec, denial.bit_depth
+            )
+        })
+        .collect();
+
+    tracing::debug!(
+        channel_number = %channel_number,
+        executable = %command.executable,
+        arguments = ?command.arguments,
+        nvidia_av1_decoders = ?av1_decoders,
+        hardware_decode_denials = ?av1_denials,
+        "spawning hls segmenter for av1 source with runtime capability rows"
+    );
+}
+
+fn ffmpeg_stderr_is_hardware_decode_unsupported(stderr: &str) -> bool {
+    let lower = stderr.to_ascii_lowercase();
+    (lower.contains("doesn't support hardware accelerated") && lower.contains("decoding"))
+        || lower.contains("your platform doesn't support hardware accelerated")
+        || lower.contains("error submitting packet to decoder: function not implemented")
+}
+
+const fn hardware_decode_denial_codec(codec: SourceVideoCodec) -> Option<&'static str> {
+    match codec {
+        SourceVideoCodec::Av1 => Some("av1"),
+        SourceVideoCodec::H264 => Some("h264"),
+        SourceVideoCodec::Hevc => Some("hevc"),
+        SourceVideoCodec::Mpeg2Video => Some("mpeg2video"),
+        SourceVideoCodec::Mpeg4 => Some("mpeg4"),
+        SourceVideoCodec::Vc1 => Some("vc1"),
+        SourceVideoCodec::Vp8 => Some("vp8"),
+        SourceVideoCodec::Vp9 => Some("vp9"),
+        SourceVideoCodec::Mpeg1Video
+        | SourceVideoCodec::MsMpeg4V2
+        | SourceVideoCodec::MsMpeg4V3
+        | SourceVideoCodec::RawVideo
+        | SourceVideoCodec::Unknown => None,
+    }
+}
+
+const fn hardware_decode_denial_bit_depth(pixel_format: Option<PixelFormat>) -> u8 {
+    match pixel_format {
+        Some(PixelFormat::Yuv420P10Le) => 10,
+        Some(PixelFormat::Yuv420P | PixelFormat::Nv12 | PixelFormat::Vaapi | PixelFormat::Cuda)
+        | None => 8,
     }
 }
 
@@ -3654,6 +3786,40 @@ mod tests {
 
         assert_eq!(playout_start_seconds(now, start), 900);
         assert_eq!(playout_start_seconds(start, now), 0);
+    }
+
+    #[test]
+    fn av1_nvenc_decode_rejection_creates_retry_denial() {
+        let mut source = SourceVideoStream::new(SourceVideoCodec::Av1);
+        source.pixel_format = Some(PixelFormat::Yuv420P10Le);
+        let stderr = "Your platform doesn't support hardware accelerated AV1 decoding\n\
+                      Error submitting packet to decoder: Function not implemented";
+
+        let denial = learned_hardware_decode_denial(
+            false,
+            HardwareAccelerationKind::Nvenc,
+            Some(&source),
+            stderr,
+        )
+        .expect("denial");
+
+        assert_eq!(denial.acceleration, HardwareAccelerationKind::Nvenc);
+        assert_eq!(denial.codec, "av1");
+        assert_eq!(denial.bit_depth, 10);
+    }
+
+    #[test]
+    fn hardware_decode_rejection_does_not_retry_twice() {
+        let source = SourceVideoStream::new(SourceVideoCodec::Av1);
+        let stderr = "Your platform doesn't support hardware accelerated AV1 decoding";
+
+        assert!(learned_hardware_decode_denial(
+            true,
+            HardwareAccelerationKind::Nvenc,
+            Some(&source),
+            stderr,
+        )
+        .is_none());
     }
 
     #[test]

@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::process::ExitStatus;
 
+use ersatzrs_domain::HardwareAccelerationKind;
+
 /// Minimum required `FFmpeg` and `ffprobe` major version.
 pub const REQUIRED_MAJOR: u32 = 8;
 /// Minimum required `FFmpeg` and `ffprobe` minor version.
@@ -275,6 +277,8 @@ pub struct FfmpegCapabilityReport {
     pub nvidia_encoders: Vec<NvidiaEncoderCapability>,
     /// NVIDIA decoder details reported by the native CUDA/NVDEC device probe.
     pub nvidia_decoders: Vec<NvidiaDecoderCapability>,
+    /// Runtime-learned negative hardware decode rows.
+    pub hardware_decode_denials: Vec<HardwareDecodeDenial>,
     /// `VideoToolbox` hardware decoder `FourCC` values reported by the macOS
     /// framework probe, such as `avc1` or `hvc1`.
     pub videotoolbox_decoders: BTreeSet<String>,
@@ -312,6 +316,30 @@ impl FfmpegCapabilityReport {
     #[must_use]
     pub fn has_configuration_flag(&self, flag: &str) -> bool {
         self.configuration_flags.contains(flag)
+    }
+
+    /// Return whether runtime evidence has denied a hardware decode path.
+    #[must_use]
+    pub fn hardware_decode_denied(
+        &self,
+        acceleration: HardwareAccelerationKind,
+        codec: &str,
+        bit_depth: u8,
+    ) -> bool {
+        self.hardware_decode_denials
+            .iter()
+            .any(|denial| denial.matches(acceleration, codec, bit_depth))
+    }
+
+    /// Add a runtime-learned denial row if it is not already present.
+    pub fn deny_hardware_decode(&mut self, denial: HardwareDecodeDenial) {
+        if !self
+            .hardware_decode_denials
+            .iter()
+            .any(|existing| existing.matches(denial.acceleration, &denial.codec, denial.bit_depth))
+        {
+            self.hardware_decode_denials.push(denial);
+        }
     }
 }
 
@@ -392,6 +420,46 @@ pub struct NvidiaDecoderCapability {
     pub codec: String,
     /// Supported decoded bit depth.
     pub bit_depth: u8,
+}
+
+/// Runtime-learned negative decode support for one accelerator/codec/depth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HardwareDecodeDenial {
+    /// Hardware acceleration kind that failed at runtime.
+    pub acceleration: HardwareAccelerationKind,
+    /// Source codec name, such as `av1`.
+    pub codec: String,
+    /// Source bit depth.
+    pub bit_depth: u8,
+}
+
+impl HardwareDecodeDenial {
+    /// Create a hardware decode denial row.
+    #[must_use]
+    pub fn new(
+        acceleration: HardwareAccelerationKind,
+        codec: impl Into<String>,
+        bit_depth: u8,
+    ) -> Self {
+        Self {
+            acceleration,
+            codec: codec.into(),
+            bit_depth,
+        }
+    }
+
+    /// Return whether this denial applies to a decode request.
+    #[must_use]
+    pub fn matches(
+        &self,
+        acceleration: HardwareAccelerationKind,
+        codec: &str,
+        bit_depth: u8,
+    ) -> bool {
+        self.acceleration == acceleration
+            && self.bit_depth == bit_depth
+            && self.codec.eq_ignore_ascii_case(codec)
+    }
 }
 
 impl NvidiaDecoderCapability {
@@ -548,6 +616,7 @@ impl FfmpegRuntimeReport {
             nvidia_gpu_list: None,
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
+            hardware_decode_denials: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };
@@ -877,6 +946,7 @@ async fn collect_ffmpeg_capabilities(
         nvidia_gpu_list: None,
         nvidia_encoders: Vec::new(),
         nvidia_decoders: Vec::new(),
+        hardware_decode_denials: Vec::new(),
         videotoolbox_decoders: BTreeSet::new(),
         videotoolbox_encoders: BTreeSet::new(),
     };
@@ -2120,6 +2190,7 @@ h264_nvenc AVOptions:
             nvidia_gpu_list: None,
             nvidia_encoders: Vec::new(),
             nvidia_decoders: Vec::new(),
+            hardware_decode_denials: Vec::new(),
             videotoolbox_decoders: BTreeSet::new(),
             videotoolbox_encoders: BTreeSet::new(),
         };

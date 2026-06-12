@@ -12,7 +12,8 @@ use crate::{
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
     no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
     normalize_loudness_filter, pad_filter, pipe_output, progress_to_stdout, realtime_filter,
-    reset_pts_filter, scale_subtitle_image_filter, select_video_decoder, standard_format_flags,
+    reset_pts_filter, scale_subtitle_image_filter, select_forced_software_video_decoder,
+    select_software_video_decoder, select_video_decoder, standard_format_flags,
     still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
     subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
     tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
@@ -1904,7 +1905,20 @@ fn add_video_decoder(
             acceleration
         };
 
-    if let Some(decoder) = select_video_decoder(decode_acceleration, source.codec) {
+    let decoder = if decode_acceleration == HardwareAccelerationKind::None {
+        if acceleration == HardwareAccelerationKind::Nvenc {
+            select_forced_software_video_decoder(
+                source.codec,
+                request.runtime_capabilities.as_ref(),
+            )
+        } else {
+            select_software_video_decoder(source.codec, request.runtime_capabilities.as_ref())
+        }
+    } else {
+        select_video_decoder(decode_acceleration, source.codec)
+    };
+
+    if let Some(decoder) = decoder {
         let options = decoder.input_options();
         if !options.is_empty() {
             steps.push(PipelineStep::global("video_decoder", options));
