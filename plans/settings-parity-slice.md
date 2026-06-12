@@ -1,5 +1,75 @@
 # Settings Parity Slice
 
+## 2026-06-12 follow-up: FFmpeg path empty-means-auto-detect + concurrent transcode sessions
+
+### Source Map (this follow-up)
+
+- ErsatzTV UI/pages: `$ERSATZTV_SRC/ErsatzTV/Pages/Settings/FFmpegSettings.razor`
+  (FFmpeg/FFprobe path fields, `ValidatePathExists`, `Required="true"` — the
+  ErsatzRS empty-means-auto-detect form behavior is the documented FFmpegLocator
+  extension already recorded in `docs/progress/parity/settings.toml`).
+- ErsatzTV handlers/services: `GetFFmpegSettingsHandler` /
+  `UpdateFFmpegSettingsHandler`; streaming enforcement in
+  `ErsatzTV.Application/Streaming/Commands/StartFFmpegSessionHandler.cs`
+  (`SessionMustBeInactive` → `ChannelSessionAlreadyActive`, one HLS session
+  worker per channel), `ErsatzTV.Core/FFmpeg/FFmpegSegmenterService.cs`
+  (per-channel worker registry), `FFmpegLibraryProcessService.WrapSegmenter`
+  (wrapped `.ts` is a remux of the shared session, acceleration `None`), and
+  `ErsatzTV/Controllers/IptvController.cs`
+  (`HttpContext.Response.RegisterForDispose(process)` — process dies with the
+  response; script grandchildren die via pipe closure on dispose).
+- Session-limit audit result: ErsatzTV at pin `0d301df` has **no**
+  concurrent-transcode-session-limit `ConfigElement`
+  (`ErsatzTV.Core/Domain/ConfigElementKey.cs`); "2 by default" matches only the
+  advertised-only `hdhr.tuner_count` default (`GetHDHRTunerCountHandler`,
+  `Hdhr/Discover.cs`). No new config key was invented.
+- ErsatzRS target modules: `crates/ersatzrs-web/src/admin/pages/settings.rs`
+  (path inputs not `required`, locator-resolved placeholder + auto-detect help),
+  `crates/ersatzrs-web/src/admin/server_fns/settings.rs`
+  (`FfmpegSettingsPageData.{ffmpeg,ffprobe}_resolved`),
+  `crates/ersatzrs-web/src/admin/i18n.rs` + `admin/languages/{en_us,pl,pt_br,nl}.rs`
+  (`LeaveEmptyToAutoDetect`), and
+  `crates/ersatzrs-web/src/transport/iptv/stream.rs`
+  (`StreamBodyDisposeGuard` response-disposal kill + bounded
+  `await_stderr_tail` so dropped pipe ends reap MPEG-TS-script grandchildren).
+- Side effects: unchanged (save path already resolved empty-as-auto-detect and
+  refreshed the runtime); the disposal fix removes the leaked-remux side effect
+  that kept segmenter sessions alive after viewers disconnected.
+- Compounding bug found during browser proof: `load_ffmpeg_settings_with_pool`
+  queried a non-existent `"Watermark"` table (ErsatzTV schema name:
+  `ChannelWatermark`), so `unwrap_or_default()` silently rendered the whole
+  `/settings/ffmpeg` form with defaults — persisted paths showed as empty (a
+  second cause of the 2026-06-10 "could not save without typing the path"
+  report) and the global-watermark select never listed watermarks. Fixed with
+  a loader regression test
+  (`load_ffmpeg_settings_resolves_auto_detect_paths`).
+- Intentional deviations: ErsatzRS keeps empty-means-auto-detect in the form
+  where ErsatzTV requires an existing path — already-recorded FFmpegLocator
+  extension; no new deviation added.
+
+### Verification (this follow-up)
+
+- [x] `cargo test -p ersatzrs-web --lib --features ssr settings` /
+      `transport::iptv::stream` / `i18n` (includes the new SSR render test,
+      dispose-guard test, and bounded stderr-tail test).
+- [x] `LD_LIBRARY_PATH=… cargo test … -- --ignored
+      spawn_stream_body_kills_ffmpeg_when_body_is_dropped
+      dropping_stream_body_reaps_script_grandchild_ffmpeg` (real ffmpeg).
+- [x] `cargo xtask smoke` (MPEG-TS + HLS probes green).
+- [x] Live two-viewer experiment against a seeded temp DB: 1 transcode +
+      1 remux wrapper per `.ts` viewer; wrapper **and** orphaned script
+      grandchild reaped within ~3 s of both FIN and RST disconnects; segmenter
+      idled out afterwards; before the fix the wrapper ffmpeg survived
+      indefinitely (root cause of the 2026-06-10 "3 concurrent transcode
+      sessions" observation).
+- [x] Browser proof: `/settings/ffmpeg` saves with empty FFmpeg/FFprobe paths
+      in all four cultures (`en-us`, `pl`, `pt-br`, `nl`) via `./run.sh serve`;
+      each culture showed the localized "Leave empty to auto-detect
+      (<resolved path>)" line, the save redirected back without error, the DB
+      stored empty values, and the global-watermark select listed the seeded
+      watermark. Screenshots:
+      `plans/references/settings-ffmpeg-autodetect-{en,nl}.png`.
+
 ## Source Map
 
 - ErsatzTV UI/pages: `$ERSATZTV_SRC/ErsatzTV/Pages/Settings/FFmpegSettings.razor`, `LoggingSettings.razor`, `HDHRSettings.razor`, `ScannerSettings.razor`, `PlayoutSettings.razor`, `UISettings.razor`, `XMLTVSettings.razor`; support/admin references `$ERSATZTV_SRC/ErsatzTV/Pages/Index.razor`, `Logs.razor`, and `Pages/Troubleshooting/Troubleshooting.razor` / `PlaybackTroubleshooting.razor`; channel references `$ERSATZTV_SRC/ErsatzTV/Pages/Channels.razor` and `ChannelEditor.razor`; schedule references `$ERSATZTV_SRC/ErsatzTV/Pages/Schedules.razor`, `ScheduleEditor.razor`, `ScheduleItemsEditor.razor`, `Blocks.razor`, `BlockEditor.razor`, `Templates.razor`, `TemplateEditor.razor`, `Decos.razor`, `DecoEditor.razor`, `DecoTemplates.razor`, and `DecoTemplateEditor.razor`; playout references `$ERSATZTV_SRC/ErsatzTV/Pages/Playouts.razor`, `PlayoutEditor.razor`, and `SequentialPlayoutEditor.razor`; playlist references `$ERSATZTV_SRC/ErsatzTV/Pages/Playlists.razor` and `PlaylistEditor.razor`; Trakt references `$ERSATZTV_SRC/ErsatzTV/Pages/TraktLists.razor`, `TraktListEditor.razor`, and `Shared/AddTraktListDialog.razor`; manual/rerun/smart/filler collection references `$ERSATZTV_SRC/ErsatzTV/Pages/ManualCollections.razor`, `CollectionEditor.razor`, `CollectionItems.razor`, `RerunCollections.razor`, `RerunCollectionEditor.razor`, `SmartCollections.razor`, `SmartCollectionEditor.razor`, `FillerPresets.razor`, and `FillerPresetEditor.razor`; trash reference `$ERSATZTV_SRC/ErsatzTV/Pages/Trash.razor`; media-detail/list references `$ERSATZTV_SRC/ErsatzTV/Pages/Movie.razor`, `Artist.razor`, `OtherVideoList.razor`, `SongList.razor`, `ImageList.razor`, `MovieList.razor`, `TelevisionSeasonList.razor`, `TelevisionEpisodeList.razor`, `MultiSelectBase.cs`, `Shared/MediaCardPager.razor`, `Shared/LetterBar.razor`, and shared `MediaCard.razor`, `AddToCollectionDialog.razor`, `AddToPlaylistDialog.razor`, and `AddToScheduleDialog.razor`.

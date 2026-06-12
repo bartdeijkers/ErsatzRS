@@ -410,7 +410,10 @@ pub async fn load_ffmpeg_settings_with_pool(
             .collect(),
         watermarks: select_options(
             pool,
-            r#"SELECT "Id", "Name" FROM "Watermark" ORDER BY "Name", "Id""#,
+            // The ErsatzTV schema names this table ChannelWatermark; querying
+            // a non-existent "Watermark" table made this loader error and the
+            // whole FFmpeg settings form silently fall back to defaults.
+            r#"SELECT "Id", COALESCE("Name", '') AS "Name" FROM "ChannelWatermark" ORDER BY "Name", "Id""#,
         )
         .await?,
         fallback_fillers: select_options(
@@ -1249,6 +1252,24 @@ mod tests {
         ersatzrs_infra::db::init(&database_url)
             .await
             .expect("initialize test database")
+    }
+
+    #[tokio::test]
+    async fn load_ffmpeg_settings_resolves_auto_detect_paths() {
+        let pool = fresh_pool().await;
+        save_config_value(&pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "")
+            .await
+            .expect("save empty ffmpeg path");
+
+        let data = load_ffmpeg_settings_with_pool(&pool)
+            .await
+            .expect("load ffmpeg settings");
+
+        // An empty saved value means auto-detect; the locator must still
+        // surface the effective path (bare tool name at minimum).
+        assert!(data.form.ffmpeg_path.is_empty());
+        assert!(!data.ffmpeg_resolved.is_empty());
+        assert!(!data.ffprobe_resolved.is_empty());
     }
 
     #[tokio::test]

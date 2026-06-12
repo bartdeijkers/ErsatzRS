@@ -1527,12 +1527,32 @@ async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> Str
     String::from_utf8_lossy(&tail).trim().to_owned()
 }
 
+/// How long to wait for the stderr tail after the direct child is gone.
+///
+/// MPEG-TS script commands run `FFmpeg` as a grandchild of the spawned shell,
+/// and the grandchild inherits the stderr pipe: when only the shell has been
+/// killed, EOF never arrives. An unbounded wait here used to deadlock the
+/// supervisor, which kept the stdout pipe open and therefore kept the
+/// orphaned `FFmpeg` alive forever — one leaked remux per disconnected
+/// viewer. `ErsatzTV` reaps such processes by closing the pipes on response
+/// disposal (`FFmpegProcess` dispose), so a bounded wait plus dropping our
+/// pipe ends restores that behavior: the orphan dies on its next write.
+const STDERR_TAIL_TIMEOUT: Duration = Duration::from_secs(2);
+
 async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>) -> String {
-    match stderr_task {
-        Some(task) => task
-            .await
-            .unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}")),
-        None => String::new(),
+    let Some(mut task) = stderr_task else {
+        return String::new();
+    };
+    match tokio::time::timeout(STDERR_TAIL_TIMEOUT, &mut task).await {
+        Ok(result) => {
+            result.unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}"))
+        }
+        Err(_elapsed) => {
+            // A grandchild still holds the stderr write end open; abandon the
+            // reader so the pipe read ends drop and the orphan gets EPIPE.
+            task.abort();
+            String::new()
+        }
     }
 }
 
@@ -2051,6 +2071,83 @@ mod tests {
             build_legacy_concat_url("http", "localhost:8409", "7"),
             "http://localhost:8409/ffmpeg/concat/7?mode=ts-legacy"
         );
+    }
+
+    #[tokio::test]
+    async fn stderr_tail_wait_is_bounded_when_grandchild_holds_pipe_open() {
+        // MPEG-TS script commands leave an FFmpeg grandchild holding the
+        // inherited stderr pipe after the shell is killed; the tail wait must
+        // give up so the supervisor drops its pipe ends and the orphan gets
+        // EPIPE instead of living forever.
+        let never_finishes = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            String::new()
+        });
+
+        let started = tokio::time::Instant::now();
+        let tail = await_stderr_tail(Some(never_finishes)).await;
+
+        assert!(tail.is_empty());
+        assert!(started.elapsed() < STDERR_TAIL_TIMEOUT + Duration::from_secs(3));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg on PATH (Unix-only: exercises the sh-wrapped MPEG-TS script process tree)"]
+    async fn dropping_stream_body_reaps_script_grandchild_ffmpeg() {
+        // Regression for the leaked-session bug: the default MPEG-TS script
+        // runs FFmpeg as a grandchild of `sh`, so killing the shell alone
+        // left one orphaned remux per disconnected viewer. Dropping the body
+        // must reap the whole tree via pipe closure.
+        let marker = format!("ersatzrs-reap-test-{}", std::process::id());
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let command = FfmpegCommand {
+            executable: "/bin/sh".to_owned(),
+            arguments: vec![
+                "-c".to_owned(),
+                format!(
+                    "{} -hide_banner -loglevel error -re -f lavfi -i testsrc2=size=320x180:rate=30 -metadata service_name={marker} -f mpegts pipe:1",
+                    ersatzrs_ffmpeg::ffmpeg_path()
+                ),
+            ],
+            environment: Vec::new(),
+        };
+
+        let body = spawn_stream_body(
+            &command,
+            Vec::new(),
+            "98".to_owned(),
+            Arc::clone(&registry),
+            None,
+        )
+        .expect("spawn stream body");
+        let grandchild_running = || async {
+            tokio::process::Command::new("pgrep")
+                .args(["-f", &marker])
+                .output()
+                .await
+                .is_ok_and(|output| output.status.success())
+        };
+        let spawn_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while !grandchild_running().await {
+            assert!(
+                tokio::time::Instant::now() < spawn_deadline,
+                "grandchild ffmpeg never started"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        drop(body);
+
+        let reap_deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while grandchild_running().await {
+            assert!(
+                tokio::time::Instant::now() < reap_deadline,
+                "grandchild ffmpeg was not reaped after the body was dropped"
+            );
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
     }
 
     #[tokio::test]
