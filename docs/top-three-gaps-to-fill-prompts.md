@@ -21,160 +21,159 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `626783e..641b21e`): a docs/workflow-only window —
-**no feature behavior merged**. The five commits implemented the workflow
-review gates (the `cargo xtask smoke` harness, review-gate sections across the
-`skills/` contracts and parity files), added the gap-prompt refinement rules
-and ADR 0014 (runtime-learned hardware-capability fallback), fixed the daily
-routine's commit scope, and a `cargo fmt` whitespace cleanup whose only Rust
-touch was blank-line removal in the emby/jellyfin/plex/scanner modules. None of
-these advance, complete, defer, or drop a parity feature, so no parity status
-flips this run and every live `[[debt]]` stays open.
+Ranking this run: manual maintainer regeneration (outside the daily routine,
+which next reconciles `641b21e..HEAD`) after the 2026-06-12 merges — the
+filter-graph watermark slice (`9460f1d`: SetWatermark loop options, the
+NCalc opacity-expression translator, live NVENC/CUDA HLS proof closing
+`nvenc-cuda-live-reverification`) and the nvenc decode CUDA-filter-gate debt
+triage (`a9e957e`). The previous run had wrongly kept a completed prompt as a
+"for reference" tombstone; per the updated
+[rules](automation/gap-prompt-rules.md), completed scope is now always
+replaced so every slot stays actionable.
 
-The three selected gaps are therefore **carried over unchanged** from the
-2026-06-11 run (per the gap-prompt selection rules: a prior pick that saw no
-feature commits is kept and noted as carried over). The ranking is unchanged:
-every remaining gap is phase-named and `In progress` except
-`remote-streams-browser` (`Not started`), so **foundational before leaf UI**
-keeps the two FFmpeg pipeline gaps and the app-wide-foundational `settings`
-config/i18n gap on top; the leaf-UI candidates (`support-pages`,
-`multi-collections…`, `channels-admin-ui`, `collections-smart-collections`)
-remain below the foundational pipeline/config tier. Alphabetical order within
-the foundational tier: `ffmpeg-command-generation`, `ffmpeg-filter-graph`,
-`settings`.
-
-Prompts 1 and 3 keep the refinement framing from the
-[rules](automation/gap-prompt-rules.md): prompt 1 is diagnosis-first (its
-2026-06-09 gate fix already failed live on 2026-06-10) and absorbs the
-hardware-bound `nvenc-cuda-live-reverification` proof from
-`ffmpeg-filter-graph`; prompt 3 leads with the two confirmed-blocking runtime
-debts and defers the mechanical i18n coverage sweep to a follow-up slice
-(tracked as open debt in `settings.toml`).
+Selection is unchanged in *slugs* but rewritten in *scope*: every remaining
+gap is phase-named and `In progress` except `remote-streams-browser`
+(`Not started`), so **foundational before leaf UI** keeps the two FFmpeg
+pipeline gaps and the app-wide-foundational `settings` config/i18n gap on top.
+Prompt 1 is regenerated against `ffmpeg-command-generation`'s four open
+ADR 0014 debts (its prior `av1-nvenc-live-fallback` scope closed in
+`3661a41` with live proof on 2026-06-11). Prompt 2 is regenerated against
+`ffmpeg-filter-graph`'s single remaining debt (the watermark and live-proof
+scope merged in `9460f1d`). Prompt 3 (`settings`) is carried over unchanged —
+its two blocking debts saw no commits.
 
 ---
 
-## 1 — ✅ COMPLETED — FFmpeg command generation: diagnose and self-heal the live AV1 hardware-decode fallback (slug `ffmpeg-command-generation`)
-
-**Status: completed 2026-06-11** in commit `3661a41`
-(`feat(ffmpeg): runtime-learned AV1 hardware-decode denial with software
-libdav1d fallback`). The prompt below is kept for reference.
+## 1 — FFmpeg command generation: close the four ADR 0014 hardware-decode follow-ons (slug `ffmpeg-command-generation`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command generation — the
-AV1 hardware-decode software fallback on the live HLS-segmenter path (slug
-`ffmpeg-command-generation`, debt `av1-nvenc-live-fallback`).
+four open ADR 0014 hardware-decode debts (slug `ffmpeg-command-generation`,
+debts `nvenc-decode-cuda-filter-gate`, `iptv-ts-learned-denial`,
+`nvidia-architecture-gate`, `denial-refresh-invalidation`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-**This is a repeat failure — diagnose before changing any gate.** A fix for
-this exact debt already landed on 2026-06-09 (AV1 CUDA decode now requires a
-positive native/probed NVIDIA decoder detail row), and the live failure
-persisted on 2026-06-10. Current `ParityDebt` (quoted from
-`docs/progress/parity/ffmpeg-command-generation.toml`): "the channel 4 HLS
-segmenter still exits with code 69 / 'Your platform doesn't support hardware
-accelerated AV1 decoding' plus repeated `Error submitting packet to decoder:
-Function not implemented`, CUDA context errors (`cuCtxPushCurrent ...
-CUDA_ERROR_INVALID_VALUE`), and `Decode error rate 1 exceeds maximum`". Do not
-re-tighten the gate on snapshot proof alone — that loop already failed once.
+**Lead with the confirmed-blocking runtime debt**
+`nvenc-decode-cuda-filter-gate` (quoted from
+`docs/progress/parity/ffmpeg-command-generation.toml`): "NVENC hardware decode
+is not gated on the CUDA filters the GPU graph emits
+(`scale_cuda`/`yadif_cuda`/`overlay_cuda`) being present in the FFmpeg build.
+On an encoder-only build (NVENC encoders + `cuda` hwaccel, no
+`--enable-cuda-nvcc`/`--enable-cuda-llvm` filter kernels) the pipeline picks
+hardware decode and fails at runtime with 'No such filter', and the ADR 0014
+learned-denial stderr signatures do not match that error, so it never
+self-heals." A working gate existed on the abandoned
+`fix/nvenc-gpu-acceleration` branch (commit `b1246b0`, recoverable from
+reflog); its other changes are superseded by the landed surface-tracking
+approach — recover the gate, not the branch.
 
 ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs` plus the
-hardware capability checker it drives — focus on the NVIDIA GPU
-model/architecture table ErsatzTV uses to decide AV1 decode support. ErsatzRS
-target: `crates/ersatzrs-ffmpeg` (decoder selection, capability gating), the
-`ersatzrs-hwprobe` AV1 detail rows, and the supervisor/spawn paths in
-`crates/ersatzrs-infra` (`hls_worker.rs`) and
-`crates/ersatzrs-web/src/transport/iptv/stream.rs`.
+hardware capability checker it drives — including the conservative NVIDIA GPU
+model/architecture table for decode support. ErsatzRS target:
+`crates/ersatzrs-ffmpeg/src/capabilities.rs` (`nvidia_decode`),
+`crates/ersatzrs-web/src/transport/iptv/stream.rs` (direct `.ts` spawns), and
+the capability-report refresh sites in
+`crates/ersatzrs-web/src/host/bootstrap.rs` and
+`crates/ersatzrs-web/src/admin/server_fns/settings.rs`.
 
 Before editing:
-1. Diagnose the live mismatch first: log or capture the exact spawned argv
-   *and* the capability-report AV1 rows at spawn time on the failing channel
-   (the live path reads the process-wide `ffmpeg_runtime` report). Determine
-   which it is: the native `cuvidGetDecoderCaps` row over-reports relative to
-   FFmpeg's own runtime check (profile/bit-depth/film-grain), the persisted
-   report is stale, or the gate is bypassed on this path.
+1. Read [ADR 0014](adr/0014-runtime-learned-hardware-capability-fallback.md)
+   in full — it is the contract all four debts trace to.
 2. Read the ErsatzTV capability checker under `$ERSATZTV_SRC/` (at pinned
-   commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on how the
-   architecture table routes unsupported AV1 sources to software input decode
-   while keeping the NVENC encoder.
-3. Build a Source Map (decoder table, capability gate, architecture table,
-   supervisor restart point, ErsatzRS target modules, intentional deviations).
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+   commit `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on the
+   architecture table and how unsupported sources route to software input
+   decode while keeping the NVENC encoder.
+3. Inspect the landed HLS-segmenter learned-denial slice (classification,
+   one-shot retry, `ConfigElement` persistence) — the `.ts` port must mirror
+   it, not reinvent it.
+4. Build a Source Map; identify remaining `ParityDebt` (it must stay visible).
 
-Implement the coherent end-to-end slice, driven by the diagnosis: port
-ErsatzTV's conservative architecture gate as an additional AND for NVIDIA
-decode selection, fix any report staleness found, and implement the
-runtime-learned fallback per
-[ADR 0014](adr/0014-runtime-learned-hardware-capability-fallback.md) — on the
-classified decode-unsupported stderr signature, restart the session exactly
-once with software input decode while preserving NVENC encode, persist the
-denial row, and surface it through the health-check engine. Add `insta`
-snapshot coverage for the denial-driven argv and a focused regression for the
-restart/fallback decision, not just the static snapshot.
+Implement the coherent end-to-end slice:
+- Gate NVENC hardware decode on `report.has_filter` for the CUDA filters the
+  GPU graph will emit, falling back to software input decode while preserving
+  NVENC encode (closes `nvenc-decode-cuda-filter-gate`).
+- Port the learned-denial loop to direct IPTV `.ts` spawns: classify
+  decode-unsupported stderr, retry once with software input decode, persist
+  the denial row (closes `iptv-ts-learned-denial`).
+- Port ErsatzTV's conservative NVIDIA architecture gate as an additional AND
+  for decode selection when GPU model information is available (closes
+  `nvidia-architecture-gate`).
+- Clear learned denial rows when the capability report is explicitly
+  refreshed (FFmpeg path change, settings-save refresh, manual refresh)
+  instead of reapplying persisted denials to fresh reports (closes
+  `denial-refresh-invalidation`).
+
+Add `insta` snapshot coverage for the newly gated argv and focused regressions
+for the `.ts` retry decision and the denial-invalidation-on-refresh behavior.
 
 Verify with focused `crates/ersatzrs-ffmpeg` tests (`cargo test -p
 ersatzrs-ffmpeg`, including the pipeline snapshot suite), `cargo xtask smoke`,
-and `cargo xtask progress check`. The live verification session on NVENC/CUDA
-hardware must also re-capture the HLS-segmenter runtime proof that closes
-`ffmpeg-filter-graph` debt `nvenc-cuda-live-reverification` (one hardware
-session, two debts) — follow `docs/automation/runtime-triage.md` for the
-evidence. Report the Source Map, diagnosis outcome, behavior implemented,
-remaining `ParityDebt`, verification run, and changed files.
+and `cargo xtask progress check`. Live proof of the filter gate needs an
+encoder-only FFmpeg build; if none is available this session, keep that
+caveat as visible debt rather than flipping it closed on snapshots alone.
+Report the Source Map, behavior implemented, remaining `ParityDebt`,
+verification run, and changed files.
 
 ---
 
-## 2 — FFmpeg filter graph: live NVENC/CUDA re-verification + dynamic graphics watermarks (slug `ffmpeg-filter-graph`)
+## 2 — FFmpeg filter graph: real clock semantics for opacity-expression time variables (slug `ffmpeg-filter-graph`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph — re-verify
-the NVENC/CUDA conversion-chain fixes on the live segmenter path and close the
-resource-backed dynamic graphics watermark gap (slug `ffmpeg-filter-graph`).
+Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph — give the
+watermark opacity-expression time parameters their ErsatzTV clock semantics
+(slug `ffmpeg-filter-graph`, debt
+`opacity-expression-time-variable-semantics`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current parity state (from `docs/progress/parity/ffmpeg-filter-graph.toml`): the
-NVENC/CUDA unconvertible-chain failures recorded on 2026-06-10 now have fixes
-landed (window `52e1028..626783e`, snapshot-covered) — CUDA surface tracking
-after the software-decode `hwupload` fallback feeds `scale_cuda` (so pad/crop/
-subtitle-burn emit the required `hwdownload`), still-image pipelines kept in
-software on the nvenc path (so the error screen renders instead of a bare 503),
-and subtitle-burn no-cue / Windows-path double-escape robustness. Remaining
-`ParityDebt` quoted from the summary: "these fixes are verified by pipeline
-snapshots only; fresh live HLS-segmenter runtime proof on the NVENC/CUDA path
-has not been re-captured this window, so the status stays `In progress` until
-re-verified. Resource-backed dynamic graphics watermarks also remain tracked
-under the graphics-engine plan."
+Current `ParityDebt` (quoted from
+`docs/progress/parity/ffmpeg-filter-graph.toml`): "All opacity-expression time
+parameters translate to the FFmpeg frame timestamp `T`: `time_of_day_seconds`
+loses its wall-clock (seconds-since-midnight) meaning, `content_seconds`
+ignores the seek/in-point offset, `channel_seconds` ignores channel uptime,
+and `content_total_seconds` maps to `NAN`. ErsatzTV evaluates these per frame
+in its graphics engine with real wall-clock/content/channel clocks." The
+2026-06-12 slice already landed the NCalc-to-FFmpeg-eval translator, the
+`SetWatermark` loop options, and the live NVENC/CUDA HLS proof (debt
+`nvenc-cuda-live-reverification` is closed) — do not redo that work.
 
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs` (and the
-hardware pipeline builders that insert hwdownload/hwupload/format transitions).
-ErsatzRS target: `crates/ersatzrs-ffmpeg` (complex-filter label routing, the
-hardware surface tracker, watermark/graphics overlay chaining).
+ErsatzTV source:
+`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs`
+(`GetOpacity` binds four distinct clocks per frame). ErsatzRS target:
+`translate_identifier` in `crates/ersatzrs-ffmpeg/src/filter/simple.rs` plus
+whatever pipeline/request context must carry the seek in-point, probed content
+duration, channel start time, and spawn wall clock into the filter builder.
 
 Before editing:
-1. Read the ErsatzTV source above under `$ERSATZTV_SRC/` (at pinned commit
-   `0d301df5e8512fdfccf3a611188d27ab1690ee31`), focusing on hardware
-   download/upload/format insertion around `scale_cuda`, `loop`, and overlay
-   nodes, and on how dynamic (resource-backed) graphics watermarks are fed.
-2. Inspect the current ErsatzRS filter-graph builder, the surface-location
-   tracker, the existing pipeline snapshots for the still-image and CUDA paths,
-   and the graphics-engine plan for dynamic watermarks.
-3. The live NVENC/CUDA re-verification (debt `nvenc-cuda-live-reverification`)
-   is folded into prompt 1's verification session — it needs the same
-   hardware. If that session has not run yet, record that the proof is
-   snapshot-only and keep the debt visible.
+1. Read `GetOpacity` under `$ERSATZTV_SRC/` (at pinned commit
+   `0d301df5e8512fdfccf3a611188d27ab1690ee31`) and list exactly which clock
+   each parameter binds.
+2. Inspect the translator, the existing opacity-expression snapshots, and
+   [ADR 0005](adr/0005-drawvg-graphics-engine.md) — this debt exists
+   because ErsatzRS evaluates expressions inside native FFmpeg filters rather
+   than a per-frame graphics engine.
+3. Decide the binding per identifier: spawn-time constant offsets added to
+   `T` cover `content_seconds` (in-point + `T`), `channel_seconds` (uptime at
+   spawn + `T`), and `time_of_day_seconds`
+   (`mod(seconds-since-midnight-at-spawn + T, 86400)`); the probed duration
+   covers `content_total_seconds`. Where a binding genuinely cannot be
+   expressed in FFmpeg eval, record it as an explicit ADR 0005 deviation, not
+   a silent `NAN`.
 4. Build a Source Map; identify remaining `ParityDebt` (it must stay visible).
 
-Implement the coherent end-to-end slice: close the resource-backed dynamic
-graphics watermark path to ErsatzTV parity (emit the `drawvg` node per the
-graphics-engine divergence rule rather than an external renderer), and tighten
-any remaining hardware conversion-chain transitions the snapshots do not yet
-cover. Add `insta` snapshot coverage for the new/changed argv. Update the parity
-file: flip to `Ported` only with live runtime proof; otherwise keep `In
-progress` with the snapshot-only caveat.
+Implement the coherent end-to-end slice: thread the required clock context
+into the filter builder, translate each time identifier to its real-semantics
+expression, and update or extend ADR 0005 for any intentional residual
+deviation. Add `insta` snapshot coverage per identifier (including the
+in-point/seek case) and a focused regression for the midnight wraparound.
 
 Verify with focused `crates/ersatzrs-ffmpeg` tests (`cargo test -p
 ersatzrs-ffmpeg`, including the pipeline snapshot suite) and
-`cargo xtask progress check`. Report the Source Map, behavior implemented,
-remaining `ParityDebt`, verification run, and changed files.
+`cargo xtask progress check`. Flip the parity status only with live runtime
+proof; otherwise keep `In progress` with the snapshot-only caveat. Report the
+Source Map, behavior implemented, remaining `ParityDebt`, verification run,
+and changed files.
 
 ---
 

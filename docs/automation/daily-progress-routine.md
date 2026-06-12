@@ -109,6 +109,10 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
 1. Get candidates: `cargo xtask progress gaps`. Candidates include individual
    structured `[[debt]]` items, not only whole-feature slugs.
 2. Rank and pick the top three per the selection rules in the rules file.
+   Apply the completed-scope rule first: a prior prompt whose feature is now
+   `Ported`/`Deferred`/`Dropped`, or whose targeted debt ids are all closed,
+   is **removed and its slot refilled** — never kept as a "completed" /
+   "for reference" entry. Every published prompt must be actionable today.
 3. For each pick, read its `parity/<slug>.toml` (and `cargo xtask progress
    parity --feature <slug> --full`) to ground the prompt in the real
    `etv_source`, status, structured `[[debt]]` items, and remaining-work text.

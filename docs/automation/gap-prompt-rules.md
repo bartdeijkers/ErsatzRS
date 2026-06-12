@@ -68,9 +68,22 @@ The routine picks the three gaps **auto-prioritized from `docs/progress`**:
      gaps depend on outranks a standalone page),
    - then **slug alphabetical** as a stable tiebreaker.
 3. Take the top three. If fewer than three gaps remain, emit only that many and
-   say so. If a gap was already the subject of a prompt in the previous run and
-   saw **no commits** since, keep it but note it is carried over; if it *was*
-   worked on, re-rank normally (it may drop off as it nears `Ported`).
+   say so.
+4. **Completed scope is always replaced, never kept.** Before any carry-over,
+   check each prior prompt's scope against the reconciled parity files: if the
+   feature flipped to `Ported`/`Deferred`/`Dropped`, or every debt id the
+   prompt targeted is now closed, that prompt is dead. Remove it in the same
+   run — never keep it with a "completed" banner or a "for reference" note —
+   and refill the slot from the ranking: either a fresh prompt against the
+   same slug's *remaining open* debts (if the slug still ranks top three) or
+   the next-ranked gap. The published file must always contain three
+   actionable prompts (fewer only when fewer open gaps exist), because daily
+   agents work directly from this file.
+5. Carry-over applies only to prompts whose scope is still open. If a prior
+   pick saw **no commits** since, keep it but note it is carried over; if it
+   *was* worked on and its targeted debts are partly closed, re-rank normally
+   and rewrite the prompt against the current debt state (it may drop off as
+   it nears `Ported`).
 
 ## Refinement rules (within a selected gap)
 
