@@ -1,5 +1,5 @@
 <!--
-generated: 2026-06-11
+generated: 2026-06-12
 last_processed_commit: 641b21edd86f6f91819fbb0540d15892109caced
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md
@@ -21,29 +21,35 @@ before `Not started`, foundational before leaf UI). Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `626783e..641b21e`): a workflow/tooling window. The
-new commits made `docs/automation/gap-prompt-rules.md` stricter
-(blocking-debt-first, diagnosis-first, hardware-bound proof folded into a
-matching runtime slice), added `docs/automation/runtime-triage.md`, added ADR
-0014 for runtime-learned hardware capability fallback, restored canonical
-`skills/` files, expanded `cargo xtask progress` validation, and introduced
-`cargo xtask smoke`. They did not close the open structured debts on the
-currently selected gaps. By the selection rules, every remaining feature except
-`remote-streams-browser` is still `In progress`; the top tier remains the
-phase-focus foundational/runtime debt rather than leaf UI: the two FFmpeg
-pipeline gaps plus the app-wide `settings` config/runtime gap. Alphabetical
-order within that tier yields `ffmpeg-command-generation`,
-`ffmpeg-filter-graph`, `settings`.
+Ranking this run (window `626783e..641b21e`): a docs/workflow-only window —
+**no feature behavior merged**. The five commits implemented the workflow
+review gates (the `cargo xtask smoke` harness, review-gate sections across the
+`skills/` contracts and parity files), added the gap-prompt refinement rules
+and ADR 0014 (runtime-learned hardware-capability fallback), fixed the daily
+routine's commit scope, and a `cargo fmt` whitespace cleanup whose only Rust
+touch was blank-line removal in the emby/jellyfin/plex/scanner modules. None of
+these advance, complete, defer, or drop a parity feature, so no parity status
+flips this run and every live `[[debt]]` stays open.
 
-Prompts 1 and 3 remain shaped by the refinement rules in the
+The three selected gaps are therefore **carried over unchanged** from the
+2026-06-11 run (per the gap-prompt selection rules: a prior pick that saw no
+feature commits is kept and noted as carried over). The ranking is unchanged:
+every remaining gap is phase-named and `In progress` except
+`remote-streams-browser` (`Not started`), so **foundational before leaf UI**
+keeps the two FFmpeg pipeline gaps and the app-wide-foundational `settings`
+config/i18n gap on top; the leaf-UI candidates (`support-pages`,
+`multi-collections…`, `channels-admin-ui`, `collections-smart-collections`)
+remain below the foundational pipeline/config tier. Alphabetical order within
+the foundational tier: `ffmpeg-command-generation`, `ffmpeg-filter-graph`,
+`settings`.
+
+Prompts 1 and 3 keep the refinement framing from the
 [rules](automation/gap-prompt-rules.md): prompt 1 is diagnosis-first (its
 2026-06-09 gate fix already failed live on 2026-06-10) and absorbs the
 hardware-bound `nvenc-cuda-live-reverification` proof from
 `ffmpeg-filter-graph`; prompt 3 leads with the two confirmed-blocking runtime
 debts and defers the mechanical i18n coverage sweep to a follow-up slice
-(tracked as open debt in `settings.toml`). Prompt 2 keeps the
-`nvenc-cuda-live-reverification` debt visible while making the
-resource-backed dynamic watermark path the implementable slice.
+(tracked as open debt in `settings.toml`).
 
 ---
 
