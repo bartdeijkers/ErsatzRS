@@ -44,6 +44,8 @@ release section when tagging a release.
   relative date helpers, and nested `smart_collection` expansion used by
   smart collections, fixing the `Music Videos` profile query from 699 to the
   expected 377 results.
+- Windows release packaging now prefers Git Bash on the self-hosted runner so
+  bash-based release steps receive valid GitHub Actions temp script paths.
 - Collections and smart collections now restore the pinned ErsatzTV admin
   layout contract, including the manual add-page save path, no-JS collection
   form fallback, detail-page custom ordering, and browser parity coverage.

@@ -123,6 +123,12 @@ jobs:
             archive: zip
     steps:
       - uses: actions/checkout@v6
+      - name: Prefer Git Bash on Windows
+        if: ${{ matrix.rid == 'win-x64' }}
+        shell: pwsh
+        run: |
+          # WSL bash cannot execute GitHub Actions' Windows temp script paths.
+          "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
