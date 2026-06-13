@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [0.0.8-alpha] - 2026-06-13
+
 ### Added
 
 - AV1 hardware-decode fallback now learns unsupported CUDA/NVDEC paths at
@@ -38,6 +40,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Smart-collection search now covers the documented ErsatzTV Lucene fields,
+  relative date helpers, and nested `smart_collection` expansion used by
+  smart collections, fixing the `Music Videos` profile query from 699 to the
+  expected 377 results.
 - Collections and smart collections now restore the pinned ErsatzTV admin
   layout contract, including the manual add-page save path, no-JS collection
   form fallback, detail-page custom ordering, and browser parity coverage.
@@ -200,7 +206,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.7-alpha...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.8-alpha...HEAD
+[0.0.8-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.7-alpha...v0.0.8-alpha
 [0.0.7-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.6-alpha...v0.0.7-alpha
 [0.0.6-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.5-alpha...v0.0.6-alpha
 [0.0.5-alpha]: https://github.com/bartdeijkers/ErsatzRS/releases/tag/v0.0.5-alpha

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchExpression {
@@ -25,9 +25,12 @@ pub enum SearchField {
     OriginalTitle,
     Year,
     ReleaseDate,
+    AddedDate,
     Genre,
     Tag,
+    Collection,
     Studio,
+    Network,
     Actor,
     Director,
     Writer,
@@ -36,6 +39,8 @@ pub enum SearchField {
     SubtitleLanguage,
     SubtitleLanguageTag,
     VideoCodec,
+    VideoBitDepth,
+    VideoDynamicRange,
     AudioCodec,
     SubtitleCodec,
     Width,
@@ -44,15 +49,30 @@ pub enum SearchField {
     Minutes,
     Seconds,
     MediaKind,
+    LibraryName,
+    LibraryFolderId,
+    ContentRating,
     ShowTitle,
     ShowGenre,
     ShowTag,
     ShowStudio,
+    ShowNetwork,
+    ShowContentRating,
     SeasonNumber,
     EpisodeNumber,
     MetadataKind,
     TraktList,
+    Style,
+    Mood,
+    Album,
+    Artist,
+    AlbumArtist,
     LibraryId,
+    ReleasedOnThisDay,
+    ReleasedInTheLast,
+    ReleasedNotInTheLast,
+    AddedInTheLast,
+    AddedNotInTheLast,
     ProviderGuid(Option<String>),
 }
 
@@ -85,9 +105,12 @@ pub struct SearchDocument {
     pub original_title: Option<String>,
     pub year: Option<i32>,
     pub release_date: Option<DateTime<Utc>>,
+    pub added_date: Option<DateTime<Utc>>,
     pub genres: Vec<String>,
     pub tags: Vec<String>,
+    pub collections: Vec<String>,
     pub studios: Vec<String>,
+    pub networks: Vec<String>,
     pub actors: Vec<String>,
     pub directors: Vec<String>,
     pub writers: Vec<String>,
@@ -96,19 +119,31 @@ pub struct SearchDocument {
     pub subtitle_languages: Vec<String>,
     pub subtitle_language_tags: Vec<String>,
     pub video_codecs: Vec<String>,
+    pub video_bit_depths: Vec<i32>,
+    pub video_dynamic_ranges: Vec<String>,
     pub audio_codecs: Vec<String>,
     pub subtitle_codecs: Vec<String>,
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub chapter_counts: Vec<i32>,
     pub durations_seconds: Vec<i64>,
+    pub library_name: Option<String>,
+    pub library_folder_ids: Vec<i64>,
+    pub content_ratings: Vec<String>,
     pub show_title: Option<String>,
     pub show_genres: Vec<String>,
     pub show_tags: Vec<String>,
     pub show_studios: Vec<String>,
+    pub show_networks: Vec<String>,
+    pub show_content_ratings: Vec<String>,
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub trakt_lists: Vec<String>,
+    pub styles: Vec<String>,
+    pub moods: Vec<String>,
+    pub albums: Vec<String>,
+    pub artists: Vec<String>,
+    pub album_artists: Vec<String>,
     pub library_id: Option<i64>,
     pub provider_guids: Vec<SearchProviderGuid>,
 }
@@ -149,6 +184,10 @@ impl SearchExpression {
 impl SearchTerm {
     #[must_use]
     pub fn matches(&self, document: &SearchDocument) -> bool {
+        if let Some(matches) = self.field.relative_date_matches(document, &self.value) {
+            return matches;
+        }
+
         let values = self.field.values(document);
         match &self.value {
             SearchValue::Text(expected) => values
@@ -176,6 +215,7 @@ impl SearchTerm {
 }
 
 impl SearchField {
+    #[allow(clippy::too_many_lines)]
     fn values(&self, document: &SearchDocument) -> Vec<String> {
         match self {
             Self::Default => option_values([
@@ -197,9 +237,16 @@ impl SearchField {
                 .map(|date| format!("{:04}{:02}{:02}", date.year(), date.month(), date.day()))
                 .into_iter()
                 .collect(),
+            Self::AddedDate => document
+                .added_date
+                .map(|date| format!("{:04}{:02}{:02}", date.year(), date.month(), date.day()))
+                .into_iter()
+                .collect(),
             Self::Genre => document.genres.clone(),
             Self::Tag => document.tags.clone(),
+            Self::Collection => document.collections.clone(),
             Self::Studio => document.studios.clone(),
+            Self::Network => document.networks.clone(),
             Self::Actor => document.actors.clone(),
             Self::Director => document.directors.clone(),
             Self::Writer => document.writers.clone(),
@@ -208,6 +255,12 @@ impl SearchField {
             Self::SubtitleLanguage => document.subtitle_languages.clone(),
             Self::SubtitleLanguageTag => document.subtitle_language_tags.clone(),
             Self::VideoCodec => document.video_codecs.clone(),
+            Self::VideoBitDepth => document
+                .video_bit_depths
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            Self::VideoDynamicRange => document.video_dynamic_ranges.clone(),
             Self::AudioCodec => document.audio_codecs.clone(),
             Self::SubtitleCodec => document.subtitle_codecs.clone(),
             Self::Width => document
@@ -236,10 +289,19 @@ impl SearchField {
                 .map(ToString::to_string)
                 .collect(),
             Self::MediaKind => vec![document.media_kind.clone()],
+            Self::LibraryName => option_values([document.library_name.as_deref()]),
+            Self::LibraryFolderId => document
+                .library_folder_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            Self::ContentRating => document.content_ratings.clone(),
             Self::ShowTitle => option_values([document.show_title.as_deref()]),
             Self::ShowGenre => document.show_genres.clone(),
             Self::ShowTag => document.show_tags.clone(),
             Self::ShowStudio => document.show_studios.clone(),
+            Self::ShowNetwork => document.show_networks.clone(),
+            Self::ShowContentRating => document.show_content_ratings.clone(),
             Self::SeasonNumber => document
                 .season_number
                 .map(|number| number.to_string())
@@ -252,11 +314,21 @@ impl SearchField {
                 .collect(),
             Self::MetadataKind => vec![document.metadata_kind.clone()],
             Self::TraktList => document.trakt_lists.clone(),
+            Self::Style => document.styles.clone(),
+            Self::Mood => document.moods.clone(),
+            Self::Album => document.albums.clone(),
+            Self::Artist => document.artists.clone(),
+            Self::AlbumArtist => document.album_artists.clone(),
             Self::LibraryId => document
                 .library_id
                 .map(|id| id.to_string())
                 .into_iter()
                 .collect(),
+            Self::ReleasedOnThisDay
+            | Self::ReleasedInTheLast
+            | Self::ReleasedNotInTheLast
+            | Self::AddedInTheLast
+            | Self::AddedNotInTheLast => Vec::new(),
             Self::ProviderGuid(None) => document
                 .provider_guids
                 .iter()
@@ -283,9 +355,12 @@ impl SearchField {
             "original_title" | "originaltitle" => Self::OriginalTitle,
             "year" => Self::Year,
             "release_date" | "released" | "released_on" => Self::ReleaseDate,
+            "added_date" | "added" | "added_on" => Self::AddedDate,
             "genre" => Self::Genre,
             "tag" | "tag_full" => Self::Tag,
+            "collection" => Self::Collection,
             "studio" => Self::Studio,
+            "network" => Self::Network,
             "actor" => Self::Actor,
             "director" => Self::Director,
             "writer" => Self::Writer,
@@ -294,6 +369,8 @@ impl SearchField {
             "sub_language" | "subtitle_language" => Self::SubtitleLanguage,
             "sub_language_tag" | "subtitle_language_tag" => Self::SubtitleLanguageTag,
             "video_codec" => Self::VideoCodec,
+            "video_bit_depth" => Self::VideoBitDepth,
+            "video_dynamic_range" => Self::VideoDynamicRange,
             "audio_codec" => Self::AudioCodec,
             "subtitle_codec" | "sub_codec" => Self::SubtitleCodec,
             "chapters" => Self::Chapters,
@@ -302,15 +379,30 @@ impl SearchField {
             "width" => Self::Width,
             "height" => Self::Height,
             "type" | "kind" | "media_kind" => Self::MediaKind,
+            "library_name" | "libraryname" => Self::LibraryName,
+            "library_folder_id" | "libraryfolderid" => Self::LibraryFolderId,
+            "content_rating" => Self::ContentRating,
             "show_title" => Self::ShowTitle,
             "show_genre" => Self::ShowGenre,
             "show_tag" => Self::ShowTag,
             "show_studio" => Self::ShowStudio,
+            "show_network" => Self::ShowNetwork,
+            "show_content_rating" => Self::ShowContentRating,
             "season_number" | "season" => Self::SeasonNumber,
             "episode_number" | "episode" => Self::EpisodeNumber,
             "metadata_kind" => Self::MetadataKind,
             "trakt_list" | "traktlist" => Self::TraktList,
+            "style" => Self::Style,
+            "mood" => Self::Mood,
+            "album" => Self::Album,
+            "artist" => Self::Artist,
+            "album_artist" | "albumartist" => Self::AlbumArtist,
             "library_id" | "libraryid" => Self::LibraryId,
+            "released_onthisday" => Self::ReleasedOnThisDay,
+            "released_inthelast" => Self::ReleasedInTheLast,
+            "released_notinthelast" => Self::ReleasedNotInTheLast,
+            "added_inthelast" => Self::AddedInTheLast,
+            "added_notinthelast" => Self::AddedNotInTheLast,
             "guid" | "provider_guid" => Self::ProviderGuid(None),
             source => Self::ProviderGuid(Some(source.to_owned())),
         }
@@ -327,8 +419,14 @@ impl SearchField {
                 | Self::Seconds
                 | Self::SeasonNumber
                 | Self::EpisodeNumber
+                | Self::VideoBitDepth
                 | Self::LibraryId
+                | Self::LibraryFolderId
         )
+    }
+
+    fn is_case_sensitive(&self) -> bool {
+        matches!(self, Self::ContentRating | Self::ShowContentRating)
     }
 
     fn text_matches(&self, actual: &str, expected: &str, wildcard: bool) -> bool {
@@ -338,6 +436,14 @@ impl SearchField {
                 .ok()
                 .zip(expected.parse::<i64>().ok())
                 .is_some_and(|(actual, expected)| actual == expected);
+        }
+
+        if self.is_case_sensitive() {
+            return if wildcard || expected.contains(['*', '?']) {
+                wildcard_matches(actual, expected)
+            } else {
+                actual == expected
+            };
         }
 
         text_matches(actual, expected, wildcard)
@@ -355,6 +461,67 @@ impl SearchField {
         }
 
         range_matches(actual, start, end, inclusive)
+    }
+
+    fn relative_date_matches(
+        &self,
+        document: &SearchDocument,
+        value: &SearchValue,
+    ) -> Option<bool> {
+        let today = Utc::now().date_naive();
+        match self {
+            Self::ReleasedOnThisDay => {
+                let date = document.release_date?.date_naive();
+                Some(date.month() == today.month() && date.day() == today.day())
+            }
+            Self::ReleasedInTheLast => {
+                let start = relative_date_start(search_value_text(value), today)?;
+                let date = document.release_date?.date_naive();
+                Some(date >= start && date <= today)
+            }
+            Self::ReleasedNotInTheLast => {
+                let finish = relative_date_start(search_value_text(value), today)?;
+                let date = document.release_date?.date_naive();
+                Some(date < finish)
+            }
+            Self::AddedInTheLast => {
+                let start = relative_date_start(search_value_text(value), today)?;
+                let date = document.added_date?.date_naive();
+                Some(date >= start && date <= today)
+            }
+            Self::AddedNotInTheLast => {
+                let finish = relative_date_start(search_value_text(value), today)?;
+                let date = document.added_date?.date_naive();
+                Some(date < finish)
+            }
+            _ => None,
+        }
+    }
+}
+
+fn search_value_text(value: &SearchValue) -> &str {
+    match value {
+        SearchValue::Text(value)
+        | SearchValue::Wildcard(value)
+        | SearchValue::Fuzzy { value, .. }
+        | SearchValue::Phrase { value, .. } => value,
+        SearchValue::Range { .. } => "",
+    }
+}
+
+fn relative_date_start(text: &str, today: NaiveDate) -> Option<NaiveDate> {
+    let number = text.split_whitespace().next()?.parse::<i64>().ok()?;
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("day") {
+        today.checked_sub_signed(Duration::days(number))
+    } else if lower.contains("week") {
+        today.checked_sub_signed(Duration::weeks(number))
+    } else if lower.contains("month") {
+        today.checked_sub_months(Months::new(u32::try_from(number).ok()?))
+    } else if lower.contains("year") {
+        today.checked_sub_months(Months::new(u32::try_from(number.checked_mul(12)?).ok()?))
+    } else {
+        None
     }
 }
 
@@ -1077,6 +1244,66 @@ mod tests {
         // Documents without a library id never match the filter.
         doc.library_id = None;
         assert!(!SearchExpression::parse("library_id:7").matches(&doc));
+    }
+
+    #[test]
+    fn matches_documented_library_collection_music_and_video_fields() {
+        let mut doc = document();
+        doc.library_name = Some("Music Videos".to_owned());
+        doc.library_folder_ids = vec![3];
+        doc.collections = vec!["Pruned".to_owned()];
+        doc.content_ratings = vec!["TV-MA".to_owned()];
+        doc.networks = vec!["HBO".to_owned()];
+        doc.show_networks = vec!["AMC".to_owned()];
+        doc.show_content_ratings = vec!["TV-14".to_owned()];
+        doc.styles = vec!["Lush".to_owned()];
+        doc.moods = vec!["Melancholy".to_owned()];
+        doc.albums = vec!["Dirt".to_owned()];
+        doc.artists = vec!["Alice in Chains".to_owned()];
+        doc.album_artists = vec!["Various Artists".to_owned()];
+        doc.video_bit_depths = vec![10];
+        doc.video_dynamic_ranges = vec!["hdr".to_owned()];
+
+        assert!(SearchExpression::parse(
+            "library_name:music AND library_folder_id:3 AND collection:pruned AND \
+             network:hbo AND show_network:amc AND show_content_rating:TV-14 AND \
+             style:lush AND mood:melancholy AND album:dirt AND artist:\"Alice in Chains\" AND \
+             album_artist:various AND video_bit_depth:10 AND video_dynamic_range:hdr"
+        )
+        .matches(&doc));
+        assert!(SearchExpression::parse("content_rating:TV-MA").matches(&doc));
+        assert!(!SearchExpression::parse("content_rating:tv-ma").matches(&doc));
+        assert!(!SearchExpression::parse("NOT artist:\"Alice in Chains\"").matches(&doc));
+    }
+
+    #[test]
+    fn matches_added_and_relative_date_helpers() {
+        let today = Utc::now().date_naive();
+        let yesterday = today
+            .checked_sub_signed(Duration::days(1))
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
+        let old = today
+            .checked_sub_signed(Duration::days(14))
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
+
+        let mut recent = document();
+        recent.release_date = Some(yesterday);
+        recent.added_date = Some(yesterday);
+        assert!(SearchExpression::parse("released_inthelast:\"2 days\"").matches(&recent));
+        assert!(SearchExpression::parse("added_inthelast:\"2 days\"").matches(&recent));
+        assert!(SearchExpression::parse("added_date:[20000101 TO 29991231]").matches(&recent));
+
+        let mut older = document();
+        older.release_date = Some(old);
+        older.added_date = Some(old);
+        assert!(SearchExpression::parse("released_notinthelast:\"1 week\"").matches(&older));
+        assert!(SearchExpression::parse("added_notinthelast:\"1 week\"").matches(&older));
     }
 
     #[test]

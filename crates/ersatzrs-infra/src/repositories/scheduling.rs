@@ -1,4 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    pin::Pin,
+};
 
 use crate::db::DbRow;
 use async_trait::async_trait;
@@ -53,6 +57,19 @@ const SEARCH_NEED_SHOW_TAGS: u64 = 1 << 18;
 const SEARCH_NEED_SHOW_STUDIOS: u64 = 1 << 19;
 const SEARCH_NEED_TRAKT_LISTS: u64 = 1 << 20;
 const SEARCH_NEED_PROVIDER_GUIDS: u64 = 1 << 21;
+const SEARCH_NEED_COLLECTIONS: u64 = 1 << 22;
+const SEARCH_NEED_NETWORKS: u64 = 1 << 23;
+const SEARCH_NEED_VIDEO_BIT_DEPTHS: u64 = 1 << 24;
+const SEARCH_NEED_VIDEO_DYNAMIC_RANGES: u64 = 1 << 25;
+const SEARCH_NEED_LIBRARY_FOLDER_IDS: u64 = 1 << 26;
+const SEARCH_NEED_CONTENT_RATINGS: u64 = 1 << 27;
+const SEARCH_NEED_SHOW_NETWORKS: u64 = 1 << 28;
+const SEARCH_NEED_SHOW_CONTENT_RATINGS: u64 = 1 << 29;
+const SEARCH_NEED_STYLES: u64 = 1 << 30;
+const SEARCH_NEED_MOODS: u64 = 1 << 31;
+const SEARCH_NEED_ALBUMS: u64 = 1 << 32;
+const SEARCH_NEED_ARTISTS: u64 = 1 << 33;
+const SEARCH_NEED_ALBUM_ARTISTS: u64 = 1 << 34;
 
 const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_LANGUAGE_TAGS
@@ -64,7 +81,10 @@ const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_WIDTH
     | SEARCH_NEED_HEIGHT
     | SEARCH_NEED_CHAPTERS
-    | SEARCH_NEED_DURATIONS;
+    | SEARCH_NEED_DURATIONS
+    | SEARCH_NEED_VIDEO_BIT_DEPTHS
+    | SEARCH_NEED_VIDEO_DYNAMIC_RANGES
+    | SEARCH_NEED_LIBRARY_FOLDER_IDS;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct SearchHydrationNeeds {
@@ -107,15 +127,24 @@ impl SearchHydrationNeeds {
             | SearchField::OriginalTitle
             | SearchField::Year
             | SearchField::ReleaseDate
+            | SearchField::AddedDate
             | SearchField::MediaKind
+            | SearchField::LibraryName
             | SearchField::ShowTitle
             | SearchField::SeasonNumber
             | SearchField::EpisodeNumber
             | SearchField::MetadataKind
-            | SearchField::LibraryId => {}
+            | SearchField::LibraryId
+            | SearchField::ReleasedOnThisDay
+            | SearchField::ReleasedInTheLast
+            | SearchField::ReleasedNotInTheLast
+            | SearchField::AddedInTheLast
+            | SearchField::AddedNotInTheLast => {}
             SearchField::Genre => self.insert(SEARCH_NEED_GENRES),
             SearchField::Tag => self.insert(SEARCH_NEED_TAGS),
+            SearchField::Collection => self.insert(SEARCH_NEED_COLLECTIONS),
             SearchField::Studio => self.insert(SEARCH_NEED_STUDIOS),
+            SearchField::Network => self.insert(SEARCH_NEED_NETWORKS),
             SearchField::Actor => self.insert(SEARCH_NEED_ACTORS),
             SearchField::Director => self.insert(SEARCH_NEED_DIRECTORS),
             SearchField::Writer => self.insert(SEARCH_NEED_WRITERS),
@@ -124,16 +153,27 @@ impl SearchHydrationNeeds {
             SearchField::SubtitleLanguage => self.insert(SEARCH_NEED_SUBTITLE_LANGUAGES),
             SearchField::SubtitleLanguageTag => self.insert(SEARCH_NEED_SUBTITLE_LANGUAGE_TAGS),
             SearchField::VideoCodec => self.insert(SEARCH_NEED_VIDEO_CODECS),
+            SearchField::VideoBitDepth => self.insert(SEARCH_NEED_VIDEO_BIT_DEPTHS),
+            SearchField::VideoDynamicRange => self.insert(SEARCH_NEED_VIDEO_DYNAMIC_RANGES),
             SearchField::AudioCodec => self.insert(SEARCH_NEED_AUDIO_CODECS),
             SearchField::SubtitleCodec => self.insert(SEARCH_NEED_SUBTITLE_CODECS),
             SearchField::Width => self.insert(SEARCH_NEED_WIDTH),
             SearchField::Height => self.insert(SEARCH_NEED_HEIGHT),
             SearchField::Chapters => self.insert(SEARCH_NEED_CHAPTERS),
             SearchField::Minutes | SearchField::Seconds => self.insert(SEARCH_NEED_DURATIONS),
+            SearchField::LibraryFolderId => self.insert(SEARCH_NEED_LIBRARY_FOLDER_IDS),
+            SearchField::ContentRating => self.insert(SEARCH_NEED_CONTENT_RATINGS),
             SearchField::ShowGenre => self.insert(SEARCH_NEED_SHOW_GENRES),
             SearchField::ShowTag => self.insert(SEARCH_NEED_SHOW_TAGS),
             SearchField::ShowStudio => self.insert(SEARCH_NEED_SHOW_STUDIOS),
+            SearchField::ShowNetwork => self.insert(SEARCH_NEED_SHOW_NETWORKS),
+            SearchField::ShowContentRating => self.insert(SEARCH_NEED_SHOW_CONTENT_RATINGS),
             SearchField::TraktList => self.insert(SEARCH_NEED_TRAKT_LISTS),
+            SearchField::Style => self.insert(SEARCH_NEED_STYLES),
+            SearchField::Mood => self.insert(SEARCH_NEED_MOODS),
+            SearchField::Album => self.insert(SEARCH_NEED_ALBUMS),
+            SearchField::Artist => self.insert(SEARCH_NEED_ARTISTS),
+            SearchField::AlbumArtist => self.insert(SEARCH_NEED_ALBUM_ARTISTS),
             SearchField::ProviderGuid(_) => self.insert(SEARCH_NEED_PROVIDER_GUIDS),
         }
     }
@@ -943,7 +983,10 @@ impl SqliteSchedulingContentRepository {
         skip: usize,
         limit: usize,
     ) -> Result<(Vec<SearchDocument>, usize, Option<SearchPageMap>)> {
-        let expression = SearchExpression::parse(query);
+        let expanded_query = self
+            .expand_smart_collection_query(query, &mut Vec::new(), 0)
+            .await?;
+        let expression = SearchExpression::parse(&expanded_query);
         let hydration = SearchHydrationNeeds::for_expression(&expression);
         let documents = self.search_documents(&hydration).await?;
         let mut hits = documents
@@ -966,6 +1009,68 @@ impl SqliteSchedulingContentRepository {
         };
 
         Ok((selected, total_count, page_map))
+    }
+
+    fn expand_smart_collection_query<'a>(
+        &'a self,
+        query: &'a str,
+        stack: &'a mut Vec<String>,
+        depth: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>> {
+        Box::pin(async move {
+            if depth > 100 {
+                return Ok(query.to_owned());
+            }
+
+            let references = smart_collection_references(query);
+            if references.is_empty() {
+                return Ok(query.to_owned());
+            }
+
+            let mut result = String::with_capacity(query.len());
+            let mut cursor = 0usize;
+            for reference in references {
+                result.push_str(&query[cursor..reference.start]);
+                if stack
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(&reference.name))
+                {
+                    result.push_str("(type:bad_query)");
+                } else if let Some(child_query) =
+                    self.smart_collection_query_by_name(&reference.name).await?
+                {
+                    stack.push(reference.name.clone());
+                    let expanded = self
+                        .expand_smart_collection_query(&child_query, stack, depth + 1)
+                        .await?;
+                    let _ = stack.pop();
+                    result.push('(');
+                    result.push_str(&expanded);
+                    result.push(')');
+                } else {
+                    result.push_str("(type:bad_query)");
+                }
+                cursor = reference.end;
+            }
+            result.push_str(&query[cursor..]);
+
+            if result.contains("smart_collection:\"") && result != query {
+                self.expand_smart_collection_query(&result, stack, depth + 1)
+                    .await
+            } else {
+                Ok(result)
+            }
+        })
+    }
+
+    async fn smart_collection_query_by_name(&self, name: &str) -> Result<Option<String>> {
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT "Query" FROM "SmartCollection" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
+        )
+        .bind(name)
+        .fetch_optional(&self.0)
+        .await
+        .map_err(Into::into)
     }
 
     async fn search_documents(
@@ -996,6 +1101,11 @@ impl SqliteSchedulingContentRepository {
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("search release_date", &value))
             .transpose()?;
+        let added_date = row
+            .try_get::<Option<String>, _>("added_date")?
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| parse_datetime("search added_date", &value))
+            .transpose()?;
         let item_id = row.try_get::<EntityId, _>("item_id")?;
         let stream_fields = if hydration.contains(SEARCH_NEED_STREAM_FIELDS) {
             self.stream_search_fields(&metadata_kind, metadata_id, item_id)
@@ -1013,6 +1123,7 @@ impl SqliteSchedulingContentRepository {
             original_title: row.try_get("original_title")?,
             year: row.try_get("year")?,
             release_date,
+            added_date,
             genres: if hydration.contains(SEARCH_NEED_GENRES) {
                 self.metadata_lookup_values_fk(
                     "Genre",
@@ -1039,6 +1150,11 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            collections: if hydration.contains(SEARCH_NEED_COLLECTIONS) {
+                self.collection_values(item_id).await?
+            } else {
+                Vec::new()
+            },
             studios: if hydration.contains(SEARCH_NEED_STUDIOS) {
                 self.metadata_lookup_values_fk(
                     "Studio",
@@ -1049,6 +1165,12 @@ impl SqliteSchedulingContentRepository {
                     metadata_id,
                 )
                 .await?
+            } else {
+                Vec::new()
+            },
+            networks: if hydration.contains(SEARCH_NEED_NETWORKS) {
+                self.metadata_tag_values_by_external_type(&metadata_kind, metadata_id, "319")
+                    .await?
             } else {
                 Vec::new()
             },
@@ -1097,6 +1219,16 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            video_bit_depths: if hydration.contains(SEARCH_NEED_VIDEO_BIT_DEPTHS) {
+                stream_fields.video_bit_depths.clone()
+            } else {
+                Vec::new()
+            },
+            video_dynamic_ranges: if hydration.contains(SEARCH_NEED_VIDEO_DYNAMIC_RANGES) {
+                stream_fields.video_dynamic_ranges.clone()
+            } else {
+                Vec::new()
+            },
             audio_codecs: if hydration.contains(SEARCH_NEED_AUDIO_CODECS) {
                 stream_fields.audio_codecs.clone()
             } else {
@@ -1125,6 +1257,17 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            library_name: row.try_get("library_name")?,
+            library_folder_ids: if hydration.contains(SEARCH_NEED_LIBRARY_FOLDER_IDS) {
+                stream_fields.library_folder_ids.clone()
+            } else {
+                Vec::new()
+            },
+            content_ratings: if hydration.contains(SEARCH_NEED_CONTENT_RATINGS) {
+                split_content_ratings(row.try_get::<Option<String>, _>("content_rating")?)
+            } else {
+                Vec::new()
+            },
             show_title: row.try_get("show_title")?,
             show_genres: if hydration.contains(SEARCH_NEED_SHOW_GENRES) {
                 self.show_lookup_values("Genre", show_id).await?
@@ -1141,10 +1284,63 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            show_networks: if hydration.contains(SEARCH_NEED_SHOW_NETWORKS) {
+                self.show_tag_values_by_external_type(show_id, "319")
+                    .await?
+            } else {
+                Vec::new()
+            },
+            show_content_ratings: if hydration.contains(SEARCH_NEED_SHOW_CONTENT_RATINGS) {
+                self.show_content_rating_values(show_id).await?
+            } else {
+                Vec::new()
+            },
             season_number: row.try_get("season_number")?,
             episode_number: row.try_get("episode_number")?,
             trakt_lists: if hydration.contains(SEARCH_NEED_TRAKT_LISTS) {
                 self.trakt_list_values(item_id).await?
+            } else {
+                Vec::new()
+            },
+            styles: if hydration.contains(SEARCH_NEED_STYLES) {
+                self.metadata_lookup_values_fk(
+                    "Style",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?
+            } else {
+                Vec::new()
+            },
+            moods: if hydration.contains(SEARCH_NEED_MOODS) {
+                self.metadata_lookup_values_fk(
+                    "Mood",
+                    "MovieMetadataId",
+                    "EpisodeMetadataId",
+                    "ShowMetadataId",
+                    &metadata_kind,
+                    metadata_id,
+                )
+                .await?
+            } else {
+                Vec::new()
+            },
+            albums: if hydration.contains(SEARCH_NEED_ALBUMS) {
+                option_values_vec([row.try_get::<Option<String>, _>("album")?])
+            } else {
+                Vec::new()
+            },
+            artists: if hydration.contains(SEARCH_NEED_ARTISTS) {
+                self.music_artist_values(&metadata_kind, metadata_id, item_id)
+                    .await?
+            } else {
+                Vec::new()
+            },
+            album_artists: if hydration.contains(SEARCH_NEED_ALBUM_ARTISTS) {
+                parse_string_list(row.try_get::<Option<String>, _>("album_artists")?)
             } else {
                 Vec::new()
             },
@@ -1210,6 +1406,20 @@ impl SqliteSchedulingContentRepository {
             .collect()
     }
 
+    async fn collection_values(&self, item_id: EntityId) -> Result<Vec<String>> {
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT "c"."Name"
+               FROM "CollectionItem" AS "ci"
+               JOIN "Collection" AS "c" ON "c"."Id" = "ci"."CollectionId"
+               WHERE "ci"."MediaItemId" = ?
+               ORDER BY "c"."Name""#,
+        )
+        .bind(item_id)
+        .fetch_all(&self.0)
+        .await
+        .map_err(Into::into)
+    }
+
     async fn metadata_actor_values(
         &self,
         metadata_kind: &str,
@@ -1256,6 +1466,29 @@ impl SqliteSchedulingContentRepository {
             .map_err(Into::into)
     }
 
+    async fn metadata_tag_values_by_external_type(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+        external_type_id: &str,
+    ) -> Result<Vec<String>> {
+        let Some(fk_column) = metadata_fk(metadata_kind) else {
+            return Ok(Vec::new());
+        };
+        let sql = format!(
+            r#"SELECT "Name" FROM "Tag"
+               WHERE "{fk_column}" = ? AND "ExternalTypeId" = ?
+               ORDER BY "Name""#
+        );
+        sqlx::query_scalar::<_, String>(crate::db::assert_sql_safe(&sql))
+            .bind(metadata_id)
+            .bind(external_type_id)
+            .fetch_all(&self.0)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[allow(clippy::too_many_lines)]
     async fn stream_search_fields(
         &self,
         metadata_kind: &str,
@@ -1295,6 +1528,19 @@ impl SqliteSchedulingContentRepository {
         }
 
         for version_id in version_ids {
+            let library_folder_ids = sqlx::query_scalar::<_, Option<EntityId>>(
+                r#"SELECT "LibraryFolderId"
+                 FROM "MediaFile"
+                 WHERE "MediaVersionId" = ?
+                 ORDER BY "Id""#,
+            )
+            .bind(version_id)
+            .fetch_all(&self.0)
+            .await?;
+            for library_folder_id in library_folder_ids.into_iter().flatten() {
+                push_unique_i64(&mut result.library_folder_ids, library_folder_id);
+            }
+
             let chapter_count = sqlx::query_scalar::<_, i64>(
                 r#"SELECT COUNT(*)
                  FROM "MediaChapter"
@@ -1308,7 +1554,8 @@ impl SqliteSchedulingContentRepository {
                 .push(i32::try_from(chapter_count).unwrap_or(i32::MAX));
 
             let rows = sqlx::query(
-                r#"SELECT "MediaStreamKind", "Codec", "Language"
+                r#"SELECT "MediaStreamKind", "Codec", "Language", "PixelFormat",
+                          "BitsPerRawSample", "ColorTransfer"
                  FROM "MediaStream"
                  WHERE "MediaVersionId" = ?
                  ORDER BY "Index", "Id""#,
@@ -1321,7 +1568,16 @@ impl SqliteSchedulingContentRepository {
                 let codec = row.try_get::<Option<String>, _>("Codec")?;
                 let language = row.try_get::<Option<String>, _>("Language")?;
                 match kind.as_deref() {
-                    Some("video") => push_unique_optional(&mut result.video_codecs, codec),
+                    Some("video") => {
+                        push_unique_optional(&mut result.video_codecs, codec);
+                        if let Some(bit_depth) = video_bit_depth_from_row(&row) {
+                            push_unique_i32(&mut result.video_bit_depths, bit_depth);
+                        }
+                        push_unique(
+                            &mut result.video_dynamic_ranges,
+                            video_dynamic_range_from_row(&row).to_owned(),
+                        );
+                    }
                     Some("audio") => {
                         push_unique_optional(&mut result.audio_codecs, codec);
                         push_unique_optional(&mut result.audio_languages, language);
@@ -1412,6 +1668,95 @@ impl SqliteSchedulingContentRepository {
             metadata_id,
         )
         .await
+    }
+
+    async fn show_tag_values_by_external_type(
+        &self,
+        show_id: Option<EntityId>,
+        external_type_id: &str,
+    ) -> Result<Vec<String>> {
+        let Some(show_id) = show_id else {
+            return Ok(Vec::new());
+        };
+
+        let Some(metadata_id) = sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "Id" FROM "ShowMetadata" WHERE "ShowId" = ?"#,
+        )
+        .bind(show_id)
+        .fetch_optional(&self.0)
+        .await?
+        else {
+            return Ok(Vec::new());
+        };
+
+        self.metadata_tag_values_by_external_type("Show", metadata_id, external_type_id)
+            .await
+    }
+
+    async fn show_content_rating_values(&self, show_id: Option<EntityId>) -> Result<Vec<String>> {
+        let Some(show_id) = show_id else {
+            return Ok(Vec::new());
+        };
+
+        let rating = sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "ContentRating" FROM "ShowMetadata" WHERE "ShowId" = ? ORDER BY "Id" LIMIT 1"#,
+        )
+        .bind(show_id)
+        .fetch_optional(&self.0)
+        .await?
+        .flatten();
+        Ok(split_content_ratings(rating))
+    }
+
+    async fn music_artist_values(
+        &self,
+        metadata_kind: &str,
+        metadata_id: EntityId,
+        item_id: EntityId,
+    ) -> Result<Vec<String>> {
+        match metadata_kind {
+            "MusicVideo" => {
+                let mut values = Vec::new();
+                let linked_artists = sqlx::query_scalar::<_, String>(
+                    r#"SELECT "am"."Title"
+                       FROM "MusicVideo" AS "mv"
+                       JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "mv"."ArtistId"
+                       WHERE "mv"."Id" = ?
+                       ORDER BY "am"."Id""#,
+                )
+                .bind(item_id)
+                .fetch_all(&self.0)
+                .await?;
+                for artist in linked_artists {
+                    push_unique(&mut values, artist);
+                }
+
+                let metadata_artists = sqlx::query_scalar::<_, String>(
+                    r#"SELECT "Name"
+                       FROM "MusicVideoArtist"
+                       WHERE "MusicVideoMetadataId" = ?
+                       ORDER BY "Id""#,
+                )
+                .bind(metadata_id)
+                .fetch_all(&self.0)
+                .await?;
+                for artist in metadata_artists {
+                    push_unique(&mut values, artist);
+                }
+                Ok(values)
+            }
+            "Song" => {
+                let raw = sqlx::query_scalar::<_, Option<String>>(
+                    r#"SELECT "Artists" FROM "SongMetadata" WHERE "Id" = ?"#,
+                )
+                .bind(metadata_id)
+                .fetch_optional(&self.0)
+                .await?
+                .flatten();
+                Ok(parse_string_list(raw))
+            }
+            _ => Ok(Vec::new()),
+        }
     }
 
     async fn metadata_guids(
@@ -2092,7 +2437,8 @@ impl SqliteSchedulingContentRepository {
 const SEARCH_DOCUMENT_SQL: &str = r#"
 SELECT
     "documents".*,
-    "lp"."LibraryId" AS "library_id"
+    "lp"."LibraryId" AS "library_id",
+    "l"."Name" AS "library_name"
 FROM (
     SELECT
         "mm"."MovieId" AS "item_id",
@@ -2104,6 +2450,10 @@ FROM (
         "mm"."SortTitle" AS "sort_title",
         "mm"."Year" AS "year",
         "mm"."ReleaseDate" AS "release_date",
+        "mm"."DateAdded" AS "added_date",
+        "mm"."ContentRating" AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2120,6 +2470,10 @@ FROM (
         "sm"."SortTitle" AS "sort_title",
         "sm"."Year" AS "year",
         "sm"."ReleaseDate" AS "release_date",
+        "sm"."DateAdded" AS "added_date",
+        "sm"."ContentRating" AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         "sm"."ShowId" AS "show_id",
         "sm"."Title" AS "show_title",
         NULL AS "season_number",
@@ -2136,6 +2490,10 @@ FROM (
         "sem"."SortTitle" AS "sort_title",
         "sem"."Year" AS "year",
         "sem"."ReleaseDate" AS "release_date",
+        "sem"."DateAdded" AS "added_date",
+        "shm"."ContentRating" AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         "se"."ShowId" AS "show_id",
         "shm"."Title" AS "show_title",
         "se"."SeasonNumber" AS "season_number",
@@ -2154,6 +2512,10 @@ FROM (
         "em"."SortTitle" AS "sort_title",
         "em"."Year" AS "year",
         "em"."ReleaseDate" AS "release_date",
+        "em"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         "s"."ShowId" AS "show_id",
         "shm"."Title" AS "show_title",
         "s"."SeasonNumber" AS "season_number",
@@ -2173,6 +2535,10 @@ FROM (
         "mvm"."SortTitle" AS "sort_title",
         "mvm"."Year" AS "year",
         "mvm"."ReleaseDate" AS "release_date",
+        "mvm"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        "mvm"."Album" AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2189,6 +2555,10 @@ FROM (
         "am"."SortTitle" AS "sort_title",
         "am"."Year" AS "year",
         "am"."ReleaseDate" AS "release_date",
+        "am"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2205,6 +2575,10 @@ FROM (
         "ovm"."SortTitle" AS "sort_title",
         "ovm"."Year" AS "year",
         "ovm"."ReleaseDate" AS "release_date",
+        "ovm"."DateAdded" AS "added_date",
+        "ovm"."ContentRating" AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2221,6 +2595,10 @@ FROM (
         "som"."SortTitle" AS "sort_title",
         "som"."Year" AS "year",
         "som"."ReleaseDate" AS "release_date",
+        "som"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        "som"."Album" AS "album",
+        "som"."AlbumArtists" AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2237,6 +2615,10 @@ FROM (
         "im"."SortTitle" AS "sort_title",
         "im"."Year" AS "year",
         "im"."ReleaseDate" AS "release_date",
+        "im"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2253,6 +2635,10 @@ FROM (
         "rsm"."SortTitle" AS "sort_title",
         "rsm"."Year" AS "year",
         "rsm"."ReleaseDate" AS "release_date",
+        "rsm"."DateAdded" AS "added_date",
+        NULL AS "content_rating",
+        NULL AS "album",
+        NULL AS "album_artists",
         NULL AS "show_id",
         NULL AS "show_title",
         NULL AS "season_number",
@@ -2261,6 +2647,7 @@ FROM (
 ) AS "documents"
 LEFT JOIN "MediaItem" AS "mi" ON "mi"."Id" = "documents"."item_id"
 LEFT JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
+LEFT JOIN "Library" AS "l" ON "l"."Id" = "lp"."LibraryId"
 ORDER BY COALESCE("sort_title", "title"), "item_id""#;
 
 fn collection_key_from_row(row: &DbRow) -> Result<SchedulingCollectionKey> {
@@ -2552,8 +2939,11 @@ struct StreamSearchFields {
     audio_languages: Vec<String>,
     subtitle_languages: Vec<String>,
     video_codecs: Vec<String>,
+    video_bit_depths: Vec<i32>,
+    video_dynamic_ranges: Vec<String>,
     audio_codecs: Vec<String>,
     subtitle_codecs: Vec<String>,
+    library_folder_ids: Vec<i64>,
     width: Option<i32>,
     height: Option<i32>,
     chapter_counts: Vec<i32>,
@@ -2610,12 +3000,137 @@ fn push_unique_optional(target: &mut Vec<String>, value: Option<String>) {
     }
 }
 
+fn option_values_vec<const N: usize>(values: [Option<String>; N]) -> Vec<String> {
+    values
+        .into_iter()
+        .flatten()
+        .filter(|value| !value.trim().is_empty())
+        .collect()
+}
+
+fn split_content_ratings(value: Option<String>) -> Vec<String> {
+    value
+        .into_iter()
+        .flat_map(|value| {
+            value
+                .split('/')
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn parse_string_list(value: Option<String>) -> Vec<String> {
+    let Some(value) = value.filter(|value| !value.trim().is_empty()) else {
+        return Vec::new();
+    };
+
+    serde_json::from_str::<Vec<String>>(&value)
+        .unwrap_or_else(|_| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .into_iter()
+        .filter(|part| !part.trim().is_empty())
+        .collect()
+}
+
+#[derive(Debug, Clone)]
+struct SmartCollectionReference {
+    start: usize,
+    end: usize,
+    name: String,
+}
+
+fn smart_collection_references(query: &str) -> Vec<SmartCollectionReference> {
+    const NEEDLE: &str = "smart_collection:\"";
+
+    let mut references = Vec::new();
+    let mut offset = 0usize;
+    while let Some(relative_start) = query[offset..].find(NEEDLE) {
+        let start = offset + relative_start;
+        let name_start = start + NEEDLE.len();
+        let Some(relative_end) = query[name_start..].find('"') else {
+            break;
+        };
+        let name_end = name_start + relative_end;
+        references.push(SmartCollectionReference {
+            start,
+            end: name_end + 1,
+            name: query[name_start..name_end].to_owned(),
+        });
+        offset = name_end + 1;
+    }
+
+    references
+}
+
 fn push_unique(target: &mut Vec<String>, value: String) {
     if !target
         .iter()
         .any(|existing| existing.eq_ignore_ascii_case(&value))
     {
         target.push(value);
+    }
+}
+
+fn push_unique_i32(target: &mut Vec<i32>, value: i32) {
+    if !target.contains(&value) {
+        target.push(value);
+    }
+}
+
+fn push_unique_i64(target: &mut Vec<i64>, value: i64) {
+    if !target.contains(&value) {
+        target.push(value);
+    }
+}
+
+fn video_bit_depth_from_row(row: &DbRow) -> Option<i32> {
+    let pixel_format = row
+        .try_get::<Option<String>, _>("PixelFormat")
+        .ok()
+        .flatten();
+    if let Some(pixel_format) = pixel_format.as_deref().map(str::to_ascii_lowercase) {
+        if pixel_format.contains("10") {
+            return Some(10);
+        }
+        if pixel_format.contains("12") {
+            return Some(12);
+        }
+        if pixel_format.contains("16") {
+            return Some(16);
+        }
+        if matches!(
+            pixel_format.trim(),
+            "yuv420p" | "yuvj420p" | "nv12" | "vaapi" | "cuda"
+        ) {
+            return Some(8);
+        }
+    }
+
+    row.try_get::<i32, _>("BitsPerRawSample")
+        .ok()
+        .filter(|value| *value > 0)
+}
+
+fn video_dynamic_range_from_row(row: &DbRow) -> &'static str {
+    let transfer = row
+        .try_get::<Option<String>, _>("ColorTransfer")
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if matches!(transfer.as_str(), "arib-std-b67" | "smpte2084") {
+        "hdr"
+    } else {
+        "sdr"
     }
 }
 

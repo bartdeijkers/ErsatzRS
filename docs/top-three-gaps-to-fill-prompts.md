@@ -9,9 +9,8 @@ rules: docs/automation/gap-prompt-rules.md
 # Top three gaps to fill - goal prompts
 
 Three paste-and-run goal prompts, each closing **one** ErsatzTV parity gap.
-Auto-prioritized from `docs/progress` with this manual regeneration biased by
-the maintainer request toward **full Lucene search parity next** after the
-smart-collection admin UI fixes. Regenerated daily by the
+Auto-prioritized from `docs/progress` with this manual regeneration replacing
+the completed Lucene smart-collection search prompt. Regenerated daily by the
 [progress routine](automation/daily-progress-routine.md); see the
 [rules](automation/gap-prompt-rules.md). For the live gap list run
 `cargo xtask progress gaps`.
@@ -22,84 +21,14 @@ smart-collection admin UI fixes. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: the collections prompt is removed because the
-smart-collection admin UI fixes are already in the active collection parity
-slice; the remaining smart-collection blocker is the shared search-index
-Lucene contract. Full Lucene smart-collection query parity is now prompt 1,
-followed by `/media/remote/streams` because it is an advertised drawer route
-that still 404s. The third slot returns to the FFmpeg profile editor's
-remaining pinned-baseline option/validation debts.
+Ranking this run: the completed Lucene smart-collection search prompt is
+removed because `search-index` and `collections-smart-collections` are now
+`Ported`. The two still-actionable carry-over prompts move up, and the refill
+slot goes to the Phase 7 FFmpeg command-generation live-proof debt.
 
 ---
 
-## 1 - Full Lucene smart-collection search parity (slug `search-index`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: full documented Lucene
-smart-collection search parity (slug
-`search-index`, debt `lucene-smart-collection-query-language`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current `ParityDebt` from `docs/progress/parity/search-index.toml`: "Search
-does not yet support the full documented ErsatzTV Lucene field/query contract
-used by smart collections." The official contract is
-`https://ersatztv.org/docs/search/`; the pinned implementation source is
-`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/{LuceneSearchIndex.cs,SearchQueryParser.cs,CustomMultiFieldQueryParser.cs}`.
-Live profile proof on 2026-06-13: the `Music Videos` smart collection query
-with `library_id:3`, `type:"music_video"`, and `NOT artist:"..."` clauses
-should return 377 pruned library-3 music videos by direct SQL, but `/search`
-returned 699 and included excluded artists such as Alice in Chains.
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`,
-the search docs above, and the smart-collection query call sites. ErsatzRS
-target: `crates/ersatzrs-core/src/search.rs`,
-`crates/ersatzrs-infra/src/repositories/scheduling.rs`, search-related admin
-route/server-function paths, and focused tests for parser/evaluator/document
-hydration.
-
-Before editing:
-1. Read the official ErsatzTV search docs and pinned C# search parser/index
-   sources before changing Rust.
-2. Inspect the current ErsatzRS parser/evaluator, search document hydration,
-   scheduling repository search source, smart-collection expansion behavior,
-   provider-guid fallback handling, and tests.
-3. Build a Source Map for every documented search field and operator, marking
-   supported, unsupported, and partially hydrated fields.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
-
-Implement the coherent end-to-end slice: support all documented ErsatzTV
-fields and query helpers used by smart collections, including
-`library_name`, `library_folder_id`, `collection`, `content_rating`,
-`network`, `show_network`, `show_content_rating`, `style`, `mood`, `album`,
-`artist`, `album_artist`, `video_bit_depth`, `video_dynamic_range`,
-`added_date`, relative date helpers (`released_onthisday`,
-`released_inthelast`, `released_notinthelast`, `added_inthelast`,
-`added_notinthelast`), and nested `smart_collection:"name"` expansion/cycle
-handling. Preserve ErsatzTV's provider-guid source semantics and boolean,
-phrase, wildcard, fuzzy, numeric, and range behavior.
-
-Add focused parser/evaluator tests, document-hydration tests, smart-collection
-expansion/cycle tests, and profile-DB regression proof for `Music Videos`
-returning the expected 377 results while excluding the listed artists. Use a
-copy of the maintainer profile database for runtime proof; do not mutate the
-real profile DB.
-
-Verify with focused core/infra search tests, profile-copy runtime proof,
-Chromium and Firefox browser proof for `/media/smart-collections` Search and
-`/search?query=...`, relevant clippy passes, and `cargo xtask progress check`.
-Update `docs/progress/parity/search-index.toml` and
-`docs/progress/parity/collections-smart-collections.toml` only when the
-evidence supports the new status. Report the Source Map, behavior implemented,
-remaining `ParityDebt`, verification run, profile-result counts, and changed
-files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
----
-
-## 2 - Remote streams browser: replace the advertised 404 with the ErsatzTV admin UI (slug `remote-streams-browser`)
+## 1 - Remote streams browser: replace the advertised 404 with the ErsatzTV admin UI (slug `remote-streams-browser`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: Remote streams browser for
 `/media/remote/streams` (slug `remote-streams-browser`).
@@ -160,7 +89,7 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 3 - FFmpeg Profile editor: restore missing H.264 profile options and NVENC validation (slug `ffmpeg-profile-editor`)
+## 2 - FFmpeg Profile editor: restore missing H.264 profile options and NVENC validation (slug `ffmpeg-profile-editor`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg Profile editor for the
 remaining profile-option and validation-warning behavior (slug
@@ -213,6 +142,70 @@ Verify with focused `ersatzrs-web` FFmpeg profile tests,
 `docs/progress/parity/ffmpeg-profile-editor.toml` only when the evidence
 supports the new status. Report the Source Map, Visual Source Map, behavior
 implemented, remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 3 - FFmpeg command generation: live-proof the CUDA-filter gate and direct TS retry path (slug `ffmpeg-command-generation`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg command-generation live
+proof for the remaining hardware-decode debt (slug
+`ffmpeg-command-generation`, debt `nvenc-filter-gate-live-proof`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current `ParityDebt` from
+`docs/progress/parity/ffmpeg-command-generation.toml`: "The CUDA-filter decode
+gate and the encoder-only software-graph demotion are verified by unit tests
+and argv snapshots only; live proof requires an FFmpeg build with NVENC
+encoders + `cuda` hwaccel but no CUDA filter kernels, and no such build was
+available on 2026-06-12 (both local builds ship all three CUDA filters). The
+IPTV .ts learned-denial retry likewise has unit/snapshot coverage plus a
+passing `cargo xtask smoke` happy path, but its retry-in-response has not been
+observed live against real rejecting hardware the way the HLS slice was on
+2026-06-11."
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs` and the
+hardware capability / FFmpeg process paths it calls. ErsatzRS target:
+`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-infra/src/ffmpeg_capabilities.rs`,
+`crates/ersatzrs-web/src/transport/iptv/stream.rs`, health/troubleshooting
+surfaces that expose learned denials, and the progress debt file.
+
+Before editing:
+1. Read the pinned ErsatzTV command generator and hardware-capability sources
+   before changing Rust.
+2. Inspect the current ErsatzRS command builders, CUDA/NVENC filter gates,
+   learned-denial persistence, direct IPTV `.ts` retry path, snapshots, and
+   runtime logs from the prior HLS proof.
+3. Build a Source Map for the NVENC/CUDA capability gates and direct `.ts`
+   denial retry path, including where tests already cover behavior and where
+   live proof is still absent.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+
+Implement the coherent end-to-end slice only if live proof exposes a real
+runtime mismatch. Do not weaken the existing unit/snapshot gates just to make a
+local FFmpeg build reproduce the missing-filter path. If the local machine
+still cannot provide an FFmpeg build with NVENC encoders plus `cuda` hwaccel
+but without CUDA filters, create a documented, reproducible proof harness or
+fixture that exercises the same runtime classification path without faking
+success, and keep any hardware-only shortfall as structured `ParityDebt`.
+
+For direct IPTV `.ts`, capture the real spawned command, FFmpeg stderr
+classification, persisted denial row, retry command, HTTP response status, and
+stream bytes when hardware rejects decode at runtime. If no rejecting hardware
+is available, prove the boundary with the strongest available local command
+and leave the live-hardware gap open.
+
+Verify with focused `ersatzrs-ffmpeg` snapshots/tests, focused infra/web tests
+for denial persistence and direct `.ts` retry, `cargo xtask smoke`, any
+hardware-specific live commands used, and `cargo xtask progress check`. Update
+`docs/progress/parity/ffmpeg-command-generation.toml` only when the evidence
+supports the new status. Report the Source Map, behavior implemented, exact
+FFmpeg stderr/argv proof, remaining `ParityDebt`, verification run, and
+changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

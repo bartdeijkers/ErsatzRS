@@ -1,5 +1,5 @@
 #![cfg(not(feature = "mysql"))]
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
@@ -64,9 +64,115 @@ async fn real_world_ersatztv_sqlite_database_is_readable() {
     assert_scheduling_sources_resolve(&pool, &repos).await;
 }
 
+#[tokio::test]
+async fn real_world_music_videos_smart_collection_search_matches_profile_pruned_count() {
+    let Some(db_path) = real_world_db_path() else {
+        eprintln!("skipping real-world Music Videos search proof; set ERSATZRS_REAL_WORLD_SQLITE");
+        return;
+    };
+    if !db_path.exists() {
+        eprintln!(
+            "skipping real-world Music Videos search proof; ERSATZRS_REAL_WORLD_SQLITE does not exist"
+        );
+        return;
+    }
+
+    let options = SqliteConnectOptions::new()
+        .filename(&db_path)
+        .read_only(true)
+        .create_if_missing(false)
+        .foreign_keys(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .expect("open real-world ErsatzTV sqlite database read-only");
+    let repos = make_repositories(pool.clone());
+
+    let Some(query) = sqlx::query_scalar::<_, String>(
+        r#"SELECT "Query" FROM "SmartCollection" WHERE "Name" = 'Music Videos' LIMIT 1"#,
+    )
+    .fetch_optional(&pool)
+    .await
+    .expect("load Music Videos smart collection query") else {
+        eprintln!("skipping real-world Music Videos search proof; smart collection is absent");
+        return;
+    };
+
+    let direct_count = direct_music_video_pruned_count(&pool).await;
+    assert_eq!(direct_count, 377);
+
+    let (documents, total, _) = repos
+        .scheduling
+        .search_documents_page(&query, 0, 0)
+        .await
+        .expect("search Music Videos query");
+    assert_eq!(total, direct_count);
+    assert_eq!(documents.len(), direct_count);
+
+    let excluded = excluded_music_video_artists();
+    assert!(
+        documents
+            .iter()
+            .flat_map(|document| document.artists.iter())
+            .all(|artist| !excluded.contains(artist.as_str())),
+        "Music Videos search result should not contain excluded artists"
+    );
+}
+
 #[allow(clippy::disallowed_methods)]
 fn real_world_db_path() -> Option<PathBuf> {
     std::env::var_os("ERSATZRS_REAL_WORLD_SQLITE").map(PathBuf::from)
+}
+
+async fn direct_music_video_pruned_count(pool: &SqlitePool) -> usize {
+    sqlx::query_scalar::<_, i64>(
+        r#"WITH excluded("Name") AS (
+               VALUES ('Alice in Chains'), ('Beck'), ('Björk'), ('Metallica'),
+                      ('MTV Unplugged'), ('Sonic Youth'), ('Soundgarden'),
+                      ('Nirvana'), ('Beastie Boys')
+           )
+           SELECT COUNT(DISTINCT "mv"."Id")
+           FROM "MusicVideo" AS "mv"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "mv"."Id"
+           JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
+           LEFT JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "mv"."ArtistId"
+           WHERE "lp"."LibraryId" = 3
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM excluded AS "e"
+                 WHERE "e"."Name" = "am"."Title"
+             )
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM "MusicVideoMetadata" AS "mvm"
+                 JOIN "MusicVideoArtist" AS "mva"
+                    ON "mva"."MusicVideoMetadataId" = "mvm"."Id"
+                 JOIN excluded AS "e" ON "e"."Name" = "mva"."Name"
+                 WHERE "mvm"."MusicVideoId" = "mv"."Id"
+             )"#,
+    )
+    .fetch_one(pool)
+    .await
+    .expect("count pruned Music Videos rows")
+    .try_into()
+    .expect("direct Music Videos count should fit usize")
+}
+
+fn excluded_music_video_artists() -> BTreeSet<&'static str> {
+    [
+        "Alice in Chains",
+        "Beck",
+        "Björk",
+        "Metallica",
+        "MTV Unplugged",
+        "Sonic Youth",
+        "Soundgarden",
+        "Nirvana",
+        "Beastie Boys",
+    ]
+    .into_iter()
+    .collect()
 }
 
 async fn assert_profiles_decode(pool: &SqlitePool, repos: &Repositories) {

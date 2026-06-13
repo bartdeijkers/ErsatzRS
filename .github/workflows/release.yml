@@ -253,6 +253,8 @@ jobs:
 
   docker:
     name: Publish Docker image
+    # v0.0.8-alpha is a Windows/Linux archive-only release.
+    if: ${{ false }}
     needs: [release, web-assets]
     runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:

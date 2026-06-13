@@ -347,6 +347,82 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
 }
 
 #[tokio::test]
+async fn scheduling_repository_searches_documented_lucene_smart_collection_fields() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    let documented_fields = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "library_name:local AND library_folder_id:70 AND collection:prime AND \
+             content_rating:TV-MA AND video_bit_depth:10 AND video_dynamic_range:hdr"
+                .to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        documented_fields
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![20]
+    );
+
+    let show_documented_fields = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "show_network:Network AND show_content_rating:TV-14".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        show_documented_fields
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![13, 12]
+    );
+
+    let music_video = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:music_video AND album:hits AND artist:\"The Band\"".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        music_video.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![31]
+    );
+
+    let excluded_music_video = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:music_video AND NOT artist:\"The Band\"".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert!(excluded_music_video.is_empty());
+
+    let artist_style_mood = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "type:artist AND style:lush AND mood:melancholy".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        artist_style_mood
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![31]
+    );
+}
+
+#[tokio::test]
 async fn scheduling_repository_search_documents_page_returns_page_map() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -399,6 +475,46 @@ async fn scheduling_repository_smart_collection_uses_fielded_search_query() {
         smart.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![13, 12]
     );
+}
+
+#[tokio::test]
+async fn scheduling_repository_expands_nested_smart_collection_queries_and_breaks_cycles() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    pool.execute(
+        r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query")
+         VALUES
+            (6, 'inner-smart', 'type:movie AND title:Feature'),
+            (7, 'outer-smart', 'smart_collection:"inner-smart" OR title:Bonus'),
+            (8, 'cycle-a', 'smart_collection:"cycle-b"'),
+            (9, 'cycle-b', 'smart_collection:"cycle-a"')"#,
+    )
+    .await
+    .unwrap();
+
+    let nested = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::SmartCollection(
+            "outer-smart".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        nested.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![21, 20]
+    );
+
+    let cycle = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::SmartCollection(
+            "cycle-a".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert!(cycle.is_empty());
 }
 
 #[tokio::test]
@@ -697,10 +813,13 @@ async fn seed_media_fixture(pool: &SqlitePool) {
 async fn seed_search_enrichment(pool: &SqlitePool) {
     pool.execute(
         r#"UPDATE "MovieMetadata" SET "Year" = 2025, "SortTitle" = 'feature',
-           "OriginalTitle" = 'Original Feature' WHERE "Id" = 200"#,
+           "OriginalTitle" = 'Original Feature', "ContentRating" = 'TV-MA' WHERE "Id" = 200"#,
     )
     .await
     .unwrap();
+    pool.execute(r#"UPDATE "ShowMetadata" SET "ContentRating" = 'TV-14' WHERE "Id" = 100"#)
+        .await
+        .unwrap();
     pool.execute(r#"UPDATE "EpisodeMetadata" SET "SortTitle" = 'finale' WHERE "Id" = 130"#)
         .await
         .unwrap();
@@ -724,7 +843,8 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     .await
     .unwrap();
     pool.execute(
-        r#"INSERT INTO "Tag" ("Id", "Name", "ShowMetadataId") VALUES (2, 'Network', 100)"#,
+        r#"INSERT INTO "Tag" ("Id", "Name", "ShowMetadataId", "ExternalTypeId")
+         VALUES (2, 'Network', 100, '319')"#,
     )
     .await
     .unwrap();
@@ -766,11 +886,24 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     pool.execute(
         r#"INSERT INTO "MediaStream" (
             "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
-            "Default", "Forced", "MediaVersionId"
+            "Default", "Forced", "MediaVersionId", "PixelFormat", "BitsPerRawSample",
+            "ColorTransfer"
          ) VALUES
-            (1, 0, 'h264', 1, NULL, 0, 1, 0, 200),
-            (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200),
-            (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200)"#,
+            (1, 0, 'h264', 1, NULL, 0, 1, 0, 200, 'yuv420p10le', 0, 'smpte2084'),
+            (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200, NULL, 0, NULL),
+            (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200, NULL, 0, NULL)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "LibraryFolder" ("Id", "LibraryPathId", "Path")
+         VALUES (70, 1, '/media/movies')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MediaFile" ("Id", "LibraryFolderId", "MediaVersionId", "Path", "PathHash")
+         VALUES (70, 70, 200, '/media/movies/feature.mkv', 'feature-hash')"#,
     )
     .await
     .unwrap();
@@ -818,14 +951,30 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     )
     .await
     .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Style" ("Id", "Name", "ArtistMetadataId") VALUES (1, 'Lush', 300)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Mood" ("Id", "Name", "ArtistMetadataId") VALUES (1, 'Melancholy', 300)"#,
+    )
+    .await
+    .unwrap();
     pool.execute(r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (31, 30)"#)
         .await
         .unwrap();
     pool.execute(
         r#"INSERT INTO "MusicVideoMetadata" (
             "Id", "MusicVideoId", "MetadataKind", "Title", "SortTitle",
-            "DateAdded", "DateUpdated"
-         ) VALUES (310, 31, 0, 'The Hit', 'hit', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z')"#,
+            "DateAdded", "DateUpdated", "Album"
+         ) VALUES (310, 31, 0, 'The Hit', 'hit', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 'Hits')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MusicVideoArtist" ("Id", "Name", "MusicVideoMetadataId")
+         VALUES (1, 'The Band', 310)"#,
     )
     .await
     .unwrap();
