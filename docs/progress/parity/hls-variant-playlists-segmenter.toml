@@ -1,8 +1,8 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
-adr        = []
+status     = 'Ported'
+adr        = ['0015']
 summary    = '''
 Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
 emits the mode-aware URL suffix (`.m3u8?mode={segmenter,hls-direct}` /
@@ -187,10 +187,29 @@ PCR/PTS/DTS leaps, duplicated packets, or invalid PES prefixes, but did report
 unexpected continuity discontinuities on PAT (3), SDT/BAT (4), video PID 256
 (4), audio PID 257 (3), and PMT PID 4096 (3), plus the expected missing
 BAT/TDT/TOT table warnings for this generated stream.
-'''
 
-[[debt]]
-id          = 'parallel-hls-playback-client-freeze'
-description = 'Parallel live HLS playback is not stable enough for parity: with MTV channel 2 open in VLC and TSDuck reading the same `/iptv/channel/2.m3u8?mode=segmenter` stream, VLC froze before the requested 10-minute stability window completed even though the server playlist continued to advance. The completed TSDuck run also observed unexpected continuity discontinuities on PAT, SDT/BAT, video, audio, and PMT PIDs.'
-discovered  = '2026-06-13'
-evidence    = 'User-reported VLC freeze during the live run; `curl http://127.0.0.1:8409/iptv/session/2/hls.m3u8` snapshots advanced from media sequence 64-73 to 70-79 in about ten seconds; host process list showed one active MTV segmenter FFmpeg process for `No Doubt - Ex-Girlfriend.mp4`; `/home/bart/.local/share/ErsatzRS/logs/ErsatzRS.log` had no matching fresh segmenter exit at the freeze moment; `/tmp/mtv-hls-tsduck-analysis.txt` reported 3,491,320 packets / 656,368,160 bytes over 00:43:43-00:53:44 local with continuity discontinuities on PID 0 (3), PID 17 (4), PID 256 video (4), PID 257 audio (3), and PID 4096 PMT (3).'
+Closeout (2026-06-13): the worker now ports ErsatzTV's playlist clock behavior
+more closely by synthesizing `#EXT-X-PROGRAM-DATE-TIME` from the worker's
+playlist start plus accumulated `#EXTINF` durations before each append, so
+appended FFmpeg generations no longer expose wall-clock timestamp rollback.
+ADR 0015 records the deliberate improvement beyond ErsatzTV's raw FFmpeg
+output: before a MPEG-TS HLS playlist is returned, retained `.ts` segments are
+normalized in media-sequence order so PAT, SDT/BAT, PMT, video, and audio
+continuity counters remain stable across separate FFmpeg process boundaries.
+
+Runtime proof (2026-06-13): short two-client TSDuck proof at
+`/tmp/ersatzrs-hls-proof-continuity-20260613T090307` crossed multiple
+`#EXT-X-DISCONTINUITY` boundaries with both clients exiting 0, empty continuity
+logs, and TSDuck `discontinuities=0` on PAT, SDT/BAT, PMT, video, and audio
+PIDs. The required long parallel-client proof at
+`/tmp/ersatzrs-hls-proof-10min-20260613T090637` ran two TSDuck HLS clients
+against `/iptv/channel/2.m3u8?mode=segmenter` for 150 live segments: client A
+covered 597 seconds and client B covered 595 seconds, both exited 0, both
+continuity logs were empty, and TSDuck reported zero invalid syncs, transport
+errors, PCR/PTS/DTS leaps, duplicated packets, invalid PES prefixes, or
+continuity discontinuities on PAT, SDT/BAT, PMT, video, or audio PIDs. The 130
+captured `/iptv/session/2/hls.m3u8` snapshots also passed the monotonic
+program-date-time check. `cargo xtask smoke` passed afterward with HTTP 200
+evidence for `/iptv/channel/1.ts?mode=ts`, `/iptv/channel/1.m3u8?mode=segmenter`,
+and `/iptv/session/1/hls.m3u8`.
+'''

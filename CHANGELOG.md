@@ -38,6 +38,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS segmenter playlists now keep program-date-time and MPEG-TS continuity
+  counters stable across appended FFmpeg process boundaries, fixing the
+  parallel live HLS playback freeze debt.
 - The four ADR 0014 hardware-decode parity debts are closed in the FFmpeg
   capability and fallback path.
 - FFmpeg fake-tool snapshot tests serialize script execution to avoid

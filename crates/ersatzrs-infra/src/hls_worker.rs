@@ -12,7 +12,7 @@ use std::time::Duration;
 use crate::db::DbPool;
 use crate::repositories::common::{decode_duration_text, encode_datetime};
 use async_trait::async_trait;
-use chrono::{DateTime, FixedOffset, NaiveDateTime, Timelike, Utc};
+use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
@@ -154,6 +154,8 @@ pub struct HlsSessionWorker {
     last_access_ms: Arc<AtomicI64>,
     last_delete_ms: Arc<AtomicI64>,
     state: AtomicI32,
+    playlist_start: Mutex<DateTime<Utc>>,
+    ts_continuity: Mutex<TsContinuityState>,
     init_segment_cache: Mutex<HlsInitSegmentCache>,
     cancel: Arc<Notify>,
 }
@@ -178,6 +180,8 @@ impl HlsSessionWorker {
             last_access_ms: Arc::new(AtomicI64::new(0)),
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
+            playlist_start: Mutex::new(Utc::now()),
+            ts_continuity: Mutex::new(TsContinuityState::default()),
             init_segment_cache: Mutex::new(HlsInitSegmentCache::default()),
             cancel: Arc::new(Notify::new()),
         })
@@ -218,6 +222,7 @@ impl HlsSessionWorker {
 
         let mut is_first = true;
         let mut transcoded_until = Utc::now();
+        *self.playlist_start.lock().await = transcoded_until;
         let mut runtime_capabilities = self.runtime_capabilities.clone();
         let mut learned_decode_retry_used = false;
         let slug_duration = load_channel_slug_seconds(&pool, self.channel_id)
@@ -332,6 +337,7 @@ impl HlsSessionWorker {
                     },
                     runtime_capabilities.clone(),
                 );
+                let _ = self.trim_playlist_for_append().await;
                 let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
                 if let Err(error) =
                     update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
@@ -593,6 +599,7 @@ impl HlsSessionWorker {
                 &runtime_capabilities,
                 source_stream_for_denial.as_ref(),
             );
+            let _ = self.trim_playlist_for_append().await;
             let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
@@ -672,6 +679,12 @@ impl HlsSessionWorker {
                     else {
                         break;
                     };
+                    if self.trim_playlist_for_append().await.is_none() {
+                        tracing::debug!(
+                            channel_number = %self.channel_number,
+                            "hls playlist not ready to trim before error fallback append"
+                        );
+                    }
                     if self
                         .run_hls_process(error_command, &mut cleanup_interval)
                         .await
@@ -807,28 +820,74 @@ impl HlsSessionWorker {
     }
 
     async fn trim_playlist_inner(&self) -> Option<TrimmedPlaylist> {
+        self.trim_playlist(false, Some(PLAYLIST_MAX_SEGMENTS), false)
+            .await
+    }
+
+    async fn trim_playlist_for_append(&self) -> Option<TrimmedPlaylist> {
+        self.trim_playlist(true, None, true).await
+    }
+
+    async fn trim_playlist(
+        &self,
+        end_with_discontinuity: bool,
+        maybe_max_segments: Option<usize>,
+        write_playlist: bool,
+    ) -> Option<TrimmedPlaylist> {
         let playlist_path = self.working_dir.join("live.m3u8");
         let playlist = tokio::fs::read_to_string(playlist_path).await.ok()?;
         let filter_before = Utc::now() - chrono::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS);
+        let playlist_start = *self.playlist_start.lock().await;
         let trimmed = if self.output_format == OutputFormat::HlsMp4 {
             let mut init_cache = self.init_segment_cache.lock().await;
             let _ = refresh_init_segments(&self.working_dir, &mut init_cache).await;
             trim_playlist_contents(
                 self.output_format,
                 &playlist,
+                playlist_start,
                 filter_before,
-                Some(PLAYLIST_MAX_SEGMENTS),
+                maybe_max_segments,
+                end_with_discontinuity,
                 Some(&init_cache),
             )?
         } else {
             trim_playlist_contents(
                 self.output_format,
                 &playlist,
+                playlist_start,
                 filter_before,
-                Some(PLAYLIST_MAX_SEGMENTS),
+                maybe_max_segments,
+                end_with_discontinuity,
                 None,
             )?
         };
+
+        if write_playlist {
+            if let Err(error) =
+                tokio::fs::write(self.working_dir.join("live.m3u8"), &trimmed.playlist).await
+            {
+                tracing::warn!(
+                    %error,
+                    channel_number = %self.channel_number,
+                    "failed to write trimmed hls playlist before append"
+                );
+            } else {
+                *self.playlist_start.lock().await = trimmed.playlist_start;
+            }
+        }
+
+        if self.output_format == OutputFormat::Hls {
+            let mut continuity = self.ts_continuity.lock().await;
+            if let Err(error) =
+                normalize_hls_ts_continuity(&self.working_dir, &trimmed, &mut continuity).await
+            {
+                tracing::warn!(
+                    %error,
+                    channel_number = %self.channel_number,
+                    "failed to normalize hls mpeg-ts continuity counters"
+                );
+            }
+        }
 
         let now_ms = Utc::now().timestamp_millis();
         if now_ms - self.last_delete_ms.load(Ordering::Relaxed) >= PLAYLIST_DELETE_INTERVAL_MS {
@@ -2402,8 +2461,7 @@ enum PlaylistItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PlaylistSegment {
     extinf_line: String,
-    program_date_time_line: Option<String>,
-    program_date_time: Option<DateTime<FixedOffset>>,
+    start_time: DateTime<Utc>,
     uri: String,
     map_uri: Option<String>,
     generated_at: Option<i64>,
@@ -2423,16 +2481,25 @@ struct TrimmedPlaylist {
     referenced_files: HashSet<String>,
     sequence: u64,
     generated_at: Option<i64>,
+    playlist_start: DateTime<Utc>,
+}
+
+#[derive(Debug, Default)]
+struct TsContinuityState {
+    next_counters: HashMap<u16, u8>,
+    normalized_sequences: HashSet<u64>,
 }
 
 fn trim_playlist_contents(
     output_format: OutputFormat,
     playlist: &str,
+    playlist_start: DateTime<Utc>,
     filter_before: DateTime<Utc>,
     maybe_max_segments: Option<usize>,
+    end_with_discontinuity: bool,
     init_cache: Option<&HlsInitSegmentCache>,
 ) -> Option<TrimmedPlaylist> {
-    let parsed = parse_playlist(playlist)?;
+    let parsed = parse_playlist(playlist, playlist_start, end_with_discontinuity)?;
     let all_segments: Vec<PlaylistSegment> = parsed
         .items
         .iter()
@@ -2482,9 +2549,7 @@ fn select_retained_segments(
 }
 
 fn segment_is_after_filter(segment: &PlaylistSegment, filter_before: DateTime<Utc>) -> bool {
-    segment
-        .program_date_time
-        .is_some_and(|pdt| pdt.with_timezone(&Utc) >= filter_before)
+    segment.start_time >= filter_before
 }
 
 fn render_trimmed_playlist(
@@ -2566,10 +2631,11 @@ fn render_trimmed_playlist(
             PlaylistItem::Segment(segment) if retained_uris.contains(segment.uri.as_str()) => {
                 out.push_str(&segment.extinf_line);
                 out.push('\n');
-                if let Some(program_date_time_line) = &segment.program_date_time_line {
-                    out.push_str(program_date_time_line);
-                    out.push('\n');
-                }
+                let _ = writeln!(
+                    out,
+                    "#EXT-X-PROGRAM-DATE-TIME:{}",
+                    format_program_date_time(segment.start_time)
+                );
                 out.push_str(&segment.uri);
                 out.push('\n');
                 referenced_files.insert(segment.uri.clone());
@@ -2586,7 +2652,12 @@ fn render_trimmed_playlist(
         referenced_files,
         sequence: first_segment.sequence,
         generated_at,
+        playlist_start: first_segment.start_time,
     })
+}
+
+fn format_program_date_time(start_time: DateTime<Utc>) -> String {
+    start_time.format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string()
 }
 
 fn segment_map_uri(
@@ -2599,13 +2670,18 @@ fn segment_map_uri(
         .or_else(|| segment.map_uri.clone())
 }
 
-fn parse_playlist(playlist: &str) -> Option<ParsedPlaylist> {
+fn parse_playlist(
+    playlist: &str,
+    playlist_start: DateTime<Utc>,
+    end_with_discontinuity: bool,
+) -> Option<ParsedPlaylist> {
     let lines: Vec<&str> = playlist.lines().collect();
     let mut version = "7".to_string();
     let mut target_duration = None;
     let mut current_map_uri = None::<String>;
     let mut items = Vec::new();
     let mut index = 0;
+    let mut current_time = playlist_start;
 
     while index < lines.len() {
         let line = lines[index].trim();
@@ -2640,10 +2716,9 @@ fn parse_playlist(playlist: &str) -> Option<ParsedPlaylist> {
         }
 
         let extinf_line = line.to_string();
+        let duration = parse_extinf_duration(line)?;
         index += 1;
 
-        let mut program_date_time_line = None;
-        let mut program_date_time = None;
         while index < lines.len() {
             let next_line = lines[index].trim();
             if next_line.is_empty() {
@@ -2652,8 +2727,7 @@ fn parse_playlist(playlist: &str) -> Option<ParsedPlaylist> {
             }
 
             if let Some(value) = next_line.strip_prefix("#EXT-X-PROGRAM-DATE-TIME:") {
-                program_date_time_line = Some(next_line.to_string());
-                program_date_time = DateTime::parse_from_rfc3339(value).ok();
+                let _ = value;
                 index += 1;
                 continue;
             }
@@ -2674,16 +2748,23 @@ fn parse_playlist(playlist: &str) -> Option<ParsedPlaylist> {
             let generated_at = generated_at_from_fmp4_segment(Path::new(&uri));
             items.push(PlaylistItem::Segment(PlaylistSegment {
                 extinf_line,
-                program_date_time_line,
-                program_date_time,
+                start_time: current_time,
                 uri,
                 map_uri: current_map_uri.clone(),
                 generated_at,
                 sequence,
             }));
+            current_time += duration;
             index += 1;
             break;
         }
+    }
+
+    if end_with_discontinuity
+        && !items.is_empty()
+        && !matches!(items.last(), Some(PlaylistItem::Discontinuity))
+    {
+        items.push(PlaylistItem::Discontinuity);
     }
 
     Some(ParsedPlaylist {
@@ -2691,6 +2772,16 @@ fn parse_playlist(playlist: &str) -> Option<ParsedPlaylist> {
         target_duration: target_duration?,
         items,
     })
+}
+
+fn parse_extinf_duration(line: &str) -> Option<chrono::Duration> {
+    let seconds = line
+        .trim_end_matches(',')
+        .split_once(':')?
+        .1
+        .parse::<f64>()
+        .ok()?;
+    chrono::Duration::from_std(Duration::from_secs_f64(seconds)).ok()
 }
 
 fn parse_segment_sequence(uri: &str) -> Option<u64> {
@@ -2708,6 +2799,88 @@ fn parse_segment_sequence(uri: &str) -> Option<u64> {
     } else {
         digits.parse::<u64>().ok()
     }
+}
+
+async fn normalize_hls_ts_continuity(
+    working_dir: &Path,
+    trim_result: &TrimmedPlaylist,
+    state: &mut TsContinuityState,
+) -> io::Result<()> {
+    let mut segments: Vec<(u64, String)> = trim_result
+        .referenced_files
+        .iter()
+        .filter(|file| {
+            Path::new(file)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("ts")
+        })
+        .filter_map(|file| parse_segment_sequence(file).map(|sequence| (sequence, file.clone())))
+        .collect();
+    segments.sort_by_key(|(sequence, _)| *sequence);
+
+    for (sequence, file_name) in segments {
+        if state.normalized_sequences.contains(&sequence) {
+            continue;
+        }
+
+        let path = working_dir.join(&file_name);
+        normalize_ts_file_continuity(&path, state).await?;
+        state.normalized_sequences.insert(sequence);
+    }
+
+    Ok(())
+}
+
+async fn normalize_ts_file_continuity(
+    path: &Path,
+    state: &mut TsContinuityState,
+) -> io::Result<()> {
+    const TS_PACKET_SIZE: usize = 188;
+    const TS_SYNC_BYTE: u8 = 0x47;
+    const NULL_PID: u16 = 0x1fff;
+
+    let mut body = tokio::fs::read(path).await?;
+    if body.len() % TS_PACKET_SIZE != 0 {
+        return Ok(());
+    }
+
+    let mut changed = false;
+    for packet in body.chunks_exact_mut(TS_PACKET_SIZE) {
+        if packet[0] != TS_SYNC_BYTE {
+            return Ok(());
+        }
+
+        let pid = (u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2]);
+        if pid == NULL_PID {
+            continue;
+        }
+
+        let adaptation_field_control = (packet[3] >> 4) & 0x03;
+        let has_payload = matches!(adaptation_field_control, 0x01 | 0x03);
+        let original_counter = packet[3] & 0x0f;
+        let counter = state
+            .next_counters
+            .get(&pid)
+            .copied()
+            .unwrap_or(original_counter);
+        if counter != original_counter {
+            packet[3] = (packet[3] & 0xf0) | counter;
+            changed = true;
+        }
+
+        if has_payload {
+            state.next_counters.insert(pid, (counter + 1) & 0x0f);
+        } else {
+            state.next_counters.insert(pid, counter);
+        }
+    }
+
+    if changed {
+        tokio::fs::write(path, body).await?;
+    }
+
+    Ok(())
 }
 
 async fn delete_old_segments(
@@ -3900,10 +4073,14 @@ mod tests {
         let trimmed = trim_playlist_contents(
             OutputFormat::Hls,
             playlist,
-            DateTime::parse_from_rfc3339("2026-04-20T20:00:30.000+00:00")
+            DateTime::parse_from_rfc3339("2026-04-20T20:00:00.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
+            DateTime::parse_from_rfc3339("2026-04-20T20:00:03.000+00:00")
                 .expect("valid timestamp")
                 .with_timezone(&Utc),
             None,
+            false,
             None,
         )
         .expect("trimmed playlist");
@@ -3913,6 +4090,55 @@ mod tests {
         assert!(trimmed.playlist.contains("seg00002.ts"));
         assert!(trimmed.playlist.contains("seg00003.ts"));
         assert_eq!(trimmed.referenced_files.len(), 2);
+    }
+
+    #[test]
+    fn trim_playlist_contents_rewrites_program_date_time_across_discontinuity() {
+        let playlist = concat!(
+            "#EXTM3U\n",
+            "#EXT-X-VERSION:6\n",
+            "#EXT-X-TARGETDURATION:5\n",
+            "#EXT-X-MEDIA-SEQUENCE:41\n",
+            "#EXT-X-DISCONTINUITY-SEQUENCE:3\n",
+            "#EXT-X-INDEPENDENT-SEGMENTS\n",
+            "#EXTINF:4.800000,\n",
+            "#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:12.387+0200\n",
+            "live000041.ts\n",
+            "#EXTINF:0.320000,\n",
+            "#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:17.187+0200\n",
+            "live000042.ts\n",
+            "#EXT-X-DISCONTINUITY\n",
+            "#EXTINF:4.800000,\n",
+            "#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:11.869+0200\n",
+            "live000043.ts\n"
+        );
+        let playlist_start = DateTime::parse_from_rfc3339("2026-06-13T08:34:12.387+00:00")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+
+        let trimmed = trim_playlist_contents(
+            OutputFormat::Hls,
+            playlist,
+            playlist_start,
+            playlist_start - chrono::Duration::seconds(1),
+            Some(10),
+            false,
+            None,
+        )
+        .expect("trimmed playlist");
+
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:12.387+0000\nlive000041.ts"));
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.187+0000\nlive000042.ts"));
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.507+0000\nlive000043.ts"));
+        assert!(!trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:11.869+0200"));
     }
 
     #[test]
@@ -3937,10 +4163,14 @@ mod tests {
         let trimmed = trim_playlist_contents(
             OutputFormat::Hls,
             &playlist,
+            DateTime::parse_from_rfc3339("2026-04-20T20:00:00.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
             DateTime::parse_from_rfc3339("2026-04-20T20:13:00.000+00:00")
                 .expect("valid timestamp")
                 .with_timezone(&Utc),
             Some(10),
+            false,
             None,
         )
         .expect("trimmed playlist");
@@ -3950,6 +4180,54 @@ mod tests {
         assert!(trimmed.playlist.contains("seg00003.ts"));
         assert!(trimmed.playlist.contains("seg00012.ts"));
         assert_eq!(trimmed.referenced_files.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn normalize_hls_ts_continuity_rewrites_restart_counters() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+
+        tokio::fs::write(
+            working_dir.join("live000010.ts"),
+            [
+                ts_packet(0, 4),
+                ts_packet(0, 5),
+                ts_packet(0x0100, 8),
+                ts_packet(0x0100, 9),
+            ]
+            .concat(),
+        )
+        .await
+        .expect("write first segment");
+        tokio::fs::write(
+            working_dir.join("live000011.ts"),
+            [
+                ts_packet(0, 0),
+                ts_packet(0, 1),
+                ts_packet(0x0100, 0),
+                ts_packet(0x0100, 1),
+            ]
+            .concat(),
+        )
+        .await
+        .expect("write second segment");
+
+        let trim_result = test_trim_result(10, None, ["live000010.ts", "live000011.ts"]);
+        let mut state = TsContinuityState::default();
+        normalize_hls_ts_continuity(&working_dir, &trim_result, &mut state)
+            .await
+            .expect("normalize continuity");
+
+        let second = tokio::fs::read(working_dir.join("live000011.ts"))
+            .await
+            .expect("read second segment");
+        assert_eq!(packet_continuity_counters(&second, 0), vec![6, 7]);
+        assert_eq!(packet_continuity_counters(&second, 0x0100), vec![10, 11]);
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -4466,10 +4744,14 @@ mod tests {
         let trimmed = trim_playlist_contents(
             OutputFormat::HlsMp4,
             playlist,
+            DateTime::parse_from_rfc3339("2026-04-20T20:01:20.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
             DateTime::parse_from_rfc3339("2026-04-20T20:00:30.000+00:00")
                 .expect("valid timestamp")
                 .with_timezone(&Utc),
             Some(10),
+            false,
             None,
         )
         .expect("trimmed playlist");
@@ -4527,7 +4809,11 @@ mod tests {
             DateTime::parse_from_rfc3339("2026-04-20T20:01:00.000+00:00")
                 .expect("valid timestamp")
                 .with_timezone(&Utc),
+            DateTime::parse_from_rfc3339("2026-04-20T20:01:00.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
             Some(10),
+            false,
             Some(&init_cache),
         )
         .expect("trimmed playlist");
@@ -4598,10 +4884,14 @@ mod tests {
         let trimmed = trim_playlist_contents(
             OutputFormat::HlsMp4,
             playlist,
+            DateTime::parse_from_rfc3339("2026-04-20T20:00:40.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
             DateTime::parse_from_rfc3339("2026-04-20T20:01:00.000+00:00")
                 .expect("valid timestamp")
                 .with_timezone(&Utc),
             Some(2),
+            false,
             Some(&init_cache),
         )
         .expect("trimmed playlist");
@@ -4819,6 +5109,28 @@ mod tests {
             referenced_files: referenced_files.into_iter().map(str::to_owned).collect(),
             sequence,
             generated_at,
+            playlist_start: DateTime::parse_from_rfc3339("2026-04-20T20:00:00.000+00:00")
+                .expect("valid timestamp")
+                .with_timezone(&Utc),
         }
+    }
+
+    fn ts_packet(pid: u16, continuity_counter: u8) -> Vec<u8> {
+        let mut packet = vec![0xff; 188];
+        packet[0] = 0x47;
+        packet[1] = 0x40 | ((pid >> 8) as u8 & 0x1f);
+        packet[2] = pid as u8;
+        packet[3] = 0x10 | (continuity_counter & 0x0f);
+        packet
+    }
+
+    fn packet_continuity_counters(body: &[u8], pid: u16) -> Vec<u8> {
+        body.chunks_exact(188)
+            .filter(|packet| {
+                let packet_pid = (u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2]);
+                packet_pid == pid
+            })
+            .map(|packet| packet[3] & 0x0f)
+            .collect()
     }
 }
