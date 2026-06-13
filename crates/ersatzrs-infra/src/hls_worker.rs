@@ -5117,9 +5117,10 @@ mod tests {
 
     fn ts_packet(pid: u16, continuity_counter: u8) -> Vec<u8> {
         let mut packet = vec![0xff; 188];
+        let [pid_hi, pid_lo] = pid.to_be_bytes();
         packet[0] = 0x47;
-        packet[1] = 0x40 | ((pid >> 8) as u8 & 0x1f);
-        packet[2] = pid as u8;
+        packet[1] = 0x40 | (pid_hi & 0x1f);
+        packet[2] = pid_lo;
         packet[3] = 0x10 | (continuity_counter & 0x0f);
         packet
     }
