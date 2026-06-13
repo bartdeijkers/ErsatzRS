@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-13
-last_processed_commit: 80e9524220c6f134f05703bf49882cc4ea42eaed
+last_processed_commit: e30b6db4e3ddf1a33bd52d16031fca8f13eed0ab
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: manual maintainer regeneration from docs/automation/gap-prompt-rules.md
 rules: docs/automation/gap-prompt-rules.md
@@ -10,8 +10,8 @@ rules: docs/automation/gap-prompt-rules.md
 
 Three paste-and-run goal prompts, each closing **one** ErsatzTV parity gap.
 Auto-prioritized from `docs/progress` with this manual regeneration biased by
-the maintainer request toward **admin UI problems** after the 2026-06-13 HLS
-segmenter runtime debt was closed. Regenerated daily by the
+the maintainer request toward **full Lucene search parity next** after the
+smart-collection admin UI fixes. Regenerated daily by the
 [progress routine](automation/daily-progress-routine.md); see the
 [rules](automation/gap-prompt-rules.md). For the live gap list run
 `cargo xtask progress gaps`.
@@ -22,75 +22,79 @@ segmenter runtime debt was closed. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run: the previous HLS segmenter prompt is removed because
-`parallel-hls-playback-client-freeze` is closed by ADR 0015 and the 2026-06-13
-TSDuck proof. The next slots stay admin-focused: `/media/collections/add`
-does not create a collection successfully, `/media/remote/streams` is an
-advertised drawer route that still 404s, and the FFmpeg profile editor is
-missing two pinned-baseline option/validation behaviors.
+Ranking this run: the collections prompt is removed because the
+smart-collection admin UI fixes are already in the active collection parity
+slice; the remaining smart-collection blocker is the shared search-index
+Lucene contract. Full Lucene smart-collection query parity is now prompt 1,
+followed by `/media/remote/streams` because it is an advertised drawer route
+that still 404s. The third slot returns to the FFmpeg profile editor's
+remaining pinned-baseline option/validation debts.
 
 ---
 
-## 1 - Collections / Smart Collections: make `/media/collections/add` work and restore visual parity (slug `collections-smart-collections`)
+## 1 - Full Lucene smart-collection search parity (slug `search-index`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Collections / Smart Collections
-for `/media/collections/add` and the manual/smart collection pages (slug
-`collections-smart-collections`, debts `collections-add-page-save` and
-`collections-visual-parity`).
+Fix the next ErsatzTV parity gap in ErsatzRS: full documented Lucene
+smart-collection search parity (slug
+`search-index`, debt `lucene-smart-collection-query-language`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current `ParityDebt` from
-`docs/progress/parity/collections-smart-collections.toml`: "the
-`/media/collections/add` page does not function (creating a new collection via
-the add page fails), and the collections pages' HTML/CSS does not match
-ErsatzTV's markup/styling (no visual parity with the MudBlazor layout at the
-pinned baseline)."
+Current `ParityDebt` from `docs/progress/parity/search-index.toml`: "Search
+does not yet support the full documented ErsatzTV Lucene field/query contract
+used by smart collections." The official contract is
+`https://ersatztv.org/docs/search/`; the pinned implementation source is
+`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/{LuceneSearchIndex.cs,SearchQueryParser.cs,CustomMultiFieldQueryParser.cs}`.
+Live profile proof on 2026-06-13: the `Music Videos` smart collection query
+with `library_id:3`, `type:"music_video"`, and `NOT artist:"..."` clauses
+should return 377 pruned library-3 music videos by direct SQL, but `/search`
+returned 699 and included excluded artists such as Alice in Chains.
 
-ErsatzTV source: `ErsatzTV/Pages/Collections*.razor`,
-`ErsatzTV/Pages/SmartCollections.razor`, and
-`ErsatzTV/Pages/SmartCollectionEditor.razor`. ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/media/{collections,collection_detail,smart_collections}.rs`,
-the matching server functions/API fallbacks, and
-`crates/ersatzrs-web/src/admin/languages/`.
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`,
+the search docs above, and the smart-collection query call sites. ErsatzRS
+target: `crates/ersatzrs-core/src/search.rs`,
+`crates/ersatzrs-infra/src/repositories/scheduling.rs`, search-related admin
+route/server-function paths, and focused tests for parser/evaluator/document
+hydration.
 
 Before editing:
-1. Read the pinned ErsatzTV manual-collection list, add/edit, collection-items,
-   smart-collection list, and smart-collection editor sources.
-2. Inspect current ErsatzRS routes, server functions, raw HTML POST fallbacks,
-   translations, tests, CSS modules, and `docs/progress/routes.toml` /
-   `docs/progress/hydration.toml`.
-3. Build a Source Map and a Visual Source Map for `/media/collections`,
-   `/media/collections/add`, `/media/collections/:id`,
-   `/media/collections/:id/edit`, and `/media/smart-collections`.
+1. Read the official ErsatzTV search docs and pinned C# search parser/index
+   sources before changing Rust.
+2. Inspect the current ErsatzRS parser/evaluator, search document hydration,
+   scheduling repository search source, smart-collection expansion behavior,
+   provider-guid fallback handling, and tests.
+3. Build a Source Map for every documented search field and operator, marking
+   supported, unsupported, and partially hydrated fields.
 4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
 
-Implement the coherent end-to-end slice: make `/media/collections/add` create
-a new collection successfully through both hydrated interaction and no-JS HTML
-POST fallback, preserve ErsatzTV validation and redirect behavior, and keep
-collection mutation side effects aligned with the existing `BuildPlayout`
-refresh rules. Then bring the manual/smart collection markup and CSS back to
-the pinned MudBlazor layout: action bars, containers, headings/dividers,
-search/table/pager geometry, icon action columns, editor rows, detail-page
-bulk actions, custom playback-order controls, and responsive/mobile behavior.
-Localize any new or changed visible strings in every supported culture.
+Implement the coherent end-to-end slice: support all documented ErsatzTV
+fields and query helpers used by smart collections, including
+`library_name`, `library_folder_id`, `collection`, `content_rating`,
+`network`, `show_network`, `show_content_rating`, `style`, `mood`, `album`,
+`artist`, `album_artist`, `video_bit_depth`, `video_dynamic_range`,
+`added_date`, relative date helpers (`released_onthisday`,
+`released_inthelast`, `released_notinthelast`, `added_inthelast`,
+`added_notinthelast`), and nested `smart_collection:"name"` expansion/cycle
+handling. Preserve ErsatzTV's provider-guid source semantics and boolean,
+phrase, wildcard, fuzzy, numeric, and range behavior.
 
-Add focused server-function/API regressions for the add/save path and browser
-coverage for the add route plus at least one representative list/detail visual
-contract. Preserve SSR/browser-safe fallbacks and follow `TEST.md` hydration
-rules.
+Add focused parser/evaluator tests, document-hydration tests, smart-collection
+expansion/cycle tests, and profile-DB regression proof for `Music Videos`
+returning the expected 377 results while excluding the listed artists. Use a
+copy of the maintainer profile database for runtime proof; do not mutate the
+real profile DB.
 
-Visual verification: serve via `./run.sh serve` after rebuilding Leptos assets,
-capture same-viewport screenshots against the ErsatzTV reference for the
-listed routes, and compare geometry, action visibility, validation states, and
-mobile layout rather than DOM presence alone.
-
-Verify with focused `ersatzrs-web` collection tests, `cargo xtask hydration-lint -p ersatzrs-web`,
-the added or updated Playwright spec via `npx playwright test ...`,
-`cargo xtask parity-check web`, and `cargo xtask progress check`. Report the
-Source Map, Visual Source Map, behavior implemented, remaining `ParityDebt`,
-verification run, and changed files.
+Verify with focused core/infra search tests, profile-copy runtime proof,
+Chromium and Firefox browser proof for `/media/smart-collections` Search and
+`/search?query=...`, relevant clippy passes, and `cargo xtask progress check`.
+Update `docs/progress/parity/search-index.toml` and
+`docs/progress/parity/collections-smart-collections.toml` only when the
+evidence supports the new status. Report the Source Map, behavior implemented,
+remaining `ParityDebt`, verification run, profile-result counts, and changed
+files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
@@ -142,13 +146,16 @@ capture same-viewport screenshots against the ErsatzTV reference for list and
 editor states, and compare action-bar geometry, table/form layout, validation
 messages, empty state, and mobile behavior.
 
-Verify with focused `ersatzrs-web` remote-stream tests, `cargo xtask hydration-lint -p ersatzrs-web`,
-the added or updated Playwright spec via `npx playwright test ...`,
-`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
+Verify with focused `ersatzrs-web` remote-stream tests,
+`cargo xtask hydration-lint -p ersatzrs-web`, the added or updated Playwright
+spec via `npx playwright test ...`, `cargo xtask parity-check web`, and
+`cargo xtask progress check`. Update
 `docs/progress/parity/remote-streams-browser.toml`, `docs/progress/routes.toml`,
 and `docs/progress/hydration.toml` only when the evidence supports the new
 status. Report the Source Map, Visual Source Map, behavior implemented,
 remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
@@ -206,4 +213,6 @@ Verify with focused `ersatzrs-web` FFmpeg profile tests,
 `docs/progress/parity/ffmpeg-profile-editor.toml` only when the evidence
 supports the new status. Report the Source Map, Visual Source Map, behavior
 implemented, remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

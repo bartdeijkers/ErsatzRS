@@ -38,6 +38,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Collections and smart collections now restore the pinned ErsatzTV admin
+  layout contract, including the manual add-page save path, no-JS collection
+  form fallback, detail-page custom ordering, and browser parity coverage.
 - HLS segmenter playlists now keep program-date-time and MPEG-TS continuity
   counters stable across appended FFmpeg process boundaries, fixing the
   parallel live HLS playback freeze debt.

@@ -3,24 +3,33 @@
 //! (Lucene in `ErsatzTV`, parity-pending in `ErsatzRS`).
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, media_browser_error_message, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, media_browser_error_message, page_of, range_of, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     delete_smart_collection, get_smart_collection, list_smart_collections, save_smart_collection,
     CollectionForm, CollectionListRow,
 };
 use crate::admin::ui::primitives::{
-    button::{Button, ButtonVariant, LinkButton},
     dialog::DeleteDialog,
-    form::{TextArea, TextField},
+    form::TextField,
+    icon::{icon_style, IconName},
     toast::{use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
 
-const PAGE_SIZE: u32 = 25;
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ---------------------------------------------------------------------------
 // List page
@@ -28,16 +37,18 @@ const PAGE_SIZE: u32 = 25;
 
 #[component]
 pub fn SmartCollectionsPage() -> impl IntoView {
+    view! { <SmartCollectionsIsland/> }
+}
+
+#[island]
+fn SmartCollectionsIsland() -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let page_size = RwSignal::new(10u32);
 
     let data: Resource<(Vec<CollectionListRow>, u64)> = Resource::new(
-        move || (search.get(), page.get()),
-        move |(q, p)| async move {
-            list_smart_collections(q, p, PAGE_SIZE)
-                .await
-                .unwrap_or_default()
-        },
+        move || (search.get(), page.get(), page_size.get()),
+        move |(q, p, size)| async move { list_smart_collections(q, p, size).await.unwrap_or_default() },
     );
 
     let delete_target: RwSignal<Option<CollectionListRow>> = RwSignal::new(None);
@@ -63,81 +74,143 @@ pub fn SmartCollectionsPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
+            <section class=style::content>
                 <h1 class=style::page_title>{tr(TextKey::SmartCollections)}</h1>
-                <input
-                    class=style::search
-                    type="search"
-                    placeholder=tr(TextKey::SearchForSmartCollections)
-                    prop:value=move || search.get()
-                    on:input=move |e| search.set(event_target_value(&e))
-                />
-                <a href="/media/smart-collections/add" class=style::btn_add>{format!("+ {}", tr(TextKey::AddSmartCollection))}</a>
-            </div>
+                <div class=style::divider/>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    data.get().map(|(rows, _)| {
-                        if rows.is_empty() {
-                            return view! {
-                                <p class=style::empty>{tr(TextKey::NoItems)}</p>
-                            }
-                            .into_any();
-                        }
-                        view! {
-                            <div class=style::table_wrap>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>{tr(TextKey::Name)}</th>
-                                            <th>{tr(TextKey::SearchQuery)}</th>
-                                            <th/>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rows.into_iter().map(|row| {
-                                            let id = row.id;
-                                            let name = row.name.clone();
-                                            let query = row.query.clone().unwrap_or_default();
-                                            let row_for_delete = row.clone();
-                                            view! {
-                                                <tr>
-                                                    <td>
-                                                        <a href=format!("/media/smart-collections/{id}")>
-                                                            {name}
-                                                        </a>
-                                                    </td>
-                                                    <td>{query}</td>
-                                                    <td>
-                                                        <div class=style::row_actions>
-                                                            <a
-                                                                class=style::btn_edit
-                                                                href=format!("/media/smart-collections/{id}")
-                                                            >
-                                                                {tr(TextKey::Edit)}
-                                                            </a>
-                                                            <button
-                                                                class=style::btn_delete
-                                                                on:click=move |_| {
-                                                                    delete_target.set(Some(row_for_delete.clone()));
-                                                                    delete_open.set(true);
-                                                                }
-                                                            >
-                                                                {tr(TextKey::Delete)}
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+                    {move || {
+                        data.get().map(|(rows, total)| {
+                            let size = page_size.get().max(1);
+                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                                .unwrap_or(u32::MAX)
+                                .max(1);
+                            let current_page = page.get().min(total_pages.saturating_sub(1));
+                            let range_start = if total == 0 {
+                                0
+                            } else {
+                                u64::from(current_page) * u64::from(size) + 1
+                            };
+                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+
+                            view! {
+                                <div class=style::table_wrap>
+                                    <div class=style::table_toolbar>
+                                        <label class=style::search_field>
+                                            <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
+                                            <input
+                                                class=style::search
+                                                type="search"
+                                                placeholder=tr(TextKey::SearchForSmartCollections)
+                                                prop:value=move || search.get()
+                                                on:input=move |e| {
+                                                    search.set(event_target_value(&e));
+                                                    page.set(0);
+                                                }
+                                            />
+                                        </label>
+                                    </div>
+                                    <table class=style::smart_table>
+                                        <tbody>
+                                            {rows.into_iter().map(|row| {
+                                                let id = row.id;
+                                                let name = row.name.clone();
+                                                let query = row.query.clone().unwrap_or_default();
+                                                let search_href = format!("/search?query={}", urlencoding::encode(&query));
+                                                let row_for_delete = row.clone();
+                                                view! {
+                                                    <tr>
+                                                        <td>{name}</td>
+                                                        <td>
+                                                            <div class=style::row_actions>
+                                                                <a
+                                                                    class=style::icon_button
+                                                                    href=format!("/media/smart-collections/{id}/edit")
+                                                                    title=tr(TextKey::EditSmartCollection)
+                                                                    aria-label=tr(TextKey::EditSmartCollection)
+                                                                >
+                                                                    <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                                </a>
+                                                                <a
+                                                                    class=style::icon_button
+                                                                    href=search_href
+                                                                    title=tr(TextKey::SearchSmartCollection)
+                                                                    aria-label=tr(TextKey::SearchSmartCollection)
+                                                                >
+                                                                    <span style=icon_style(IconName::Search, "1.25rem") aria-hidden="true"></span>
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    class=style::icon_button
+                                                                    title=tr(TextKey::DeleteSmartCollection)
+                                                                    aria-label=tr(TextKey::DeleteSmartCollection)
+                                                                    on:click=move |_| {
+                                                                        delete_target.set(Some(row_for_delete.clone()));
+                                                                        delete_open.set(true);
+                                                                    }
+                                                                >
+                                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }).collect_view()}
+                                            <tr style:display=move || if total == 0 { "" } else { "none" }>
+                                                <td colspan="2" class=style::empty_cell>{tr(TextKey::NoItems)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div class=style::pager>
+                                        <span>{tr(TextKey::RowsPerPage)}</span>
+                                        <select
+                                            class=style::page_size
+                                            prop:value=move || page_size.get().to_string()
+                                            on:change=move |event| {
+                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                                    page_size.set(value.max(1));
+                                                    page.set(0);
+                                                }
                                             }
-                                        }).collect_view()}
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
+                                        >
+                                            <option value="10" selected=move || page_size.get() == 10>"10"</option>
+                                            <option value="25" selected=move || page_size.get() == 25>"25"</option>
+                                            <option value="50" selected=move || page_size.get() == 50>"50"</option>
+                                        </select>
+                                        <span class=style::pager_status>
+                                            {range_of(
+                                                u32::try_from(range_start).unwrap_or(u32::MAX),
+                                                u32::try_from(range_end).unwrap_or(u32::MAX),
+                                                total,
+                                            )}
+                                        </span>
+                                        <span class=style::pager_status>{page_of(current_page + 1, total_pages)}</span>
+                                        <div class=style::pager_buttons>
+                                            <button
+                                                type="button"
+                                                class=style::pager_btn
+                                                disabled={current_page == 0}
+                                                on:click=move |_| page.update(|p| *p = p.saturating_sub(1))
+                                            >
+                                                "‹"
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class=style::pager_btn
+                                                disabled={current_page + 1 >= total_pages}
+                                                on:click=move |_| page.update(|p| *p = (*p + 1).min(total_pages.saturating_sub(1)))
+                                            >
+                                                "›"
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            .into_any()
+                        })
+                    }}
+                </Suspense>
+            </section>
 
             <DeleteDialog
                 open=delete_open
@@ -167,33 +240,48 @@ pub fn SmartCollectionsPage() -> impl IntoView {
 #[component]
 pub fn SmartCollectionEditorPage() -> impl IntoView {
     let params = use_params_map();
-    let collection_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
+    let collection_id = params.with_untracked(|p| {
+        p.get("id")
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or_default()
+    });
+    let query = use_query_map();
+    let save_error =
+        query.with_untracked(|params| params.get("error").unwrap_or_default()) == "save";
 
-    let initial: Resource<CollectionForm> = Resource::new(collection_id, |id| async move {
-        match id {
-            Some(id) => get_smart_collection(id)
+    view! { <SmartCollectionEditorIsland collection_id save_error/> }
+}
+
+#[island]
+fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
+    let initial: Resource<CollectionForm> = Resource::new_blocking(
+        move || collection_id,
+        |id| async move {
+            get_smart_collection(id)
                 .await
                 .unwrap_or_default()
-                .unwrap_or_default(),
-            None => CollectionForm::default(),
-        }
-    });
+                .unwrap_or_default()
+        },
+    );
 
     let name = RwSignal::new(String::new());
     let query = RwSignal::new(String::new());
     let id_signal: RwSignal<i64> = RwSignal::new(0);
+    let hydrated = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(f) = initial.get() {
             id_signal.set(f.id);
             name.set(f.name);
             query.set(f.query);
+            hydrated.set(true);
         }
     });
 
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
+    if save_error {
+        name_err.set(Some(save_failed(media_browser_error_message("save"))));
+    }
     let name_err_signal: Signal<Option<String>> = name_err.into();
-    let query_err: RwSignal<Option<String>> = RwSignal::new(None);
-    let query_err_signal: Signal<Option<String>> = query_err.into();
 
     let save_action = Action::new(|form: &CollectionForm| {
         let form = form.clone();
@@ -201,18 +289,13 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
     });
 
     let toast = use_toast();
-    let navigate = use_navigate();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
             match res {
-                Ok(new_id) => {
+                Ok(_) => {
                     toast.push(tr(TextKey::SmartCollectionSaved), ToastSeverity::Success);
-                    if id_signal.get_untracked() == 0 {
-                        let target = format!("/media/smart-collections/{new_id}");
-                        navigate(&target, NavigateOptions::default());
-                    }
-                    id_signal.set(new_id);
+                    set_browser_location("/media/smart-collections");
                 }
                 Err(e) => toast.push(
                     save_failed(media_browser_error_message(e)),
@@ -225,22 +308,17 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
     let on_save = move |()| {
         let trimmed_name = name.get().trim().to_string();
         let trimmed_query = query.get().trim().to_string();
-        let mut ok = true;
         if trimmed_name.is_empty() {
             name_err.set(Some(tr(TextKey::NameRequired).into()));
-            ok = false;
-        } else {
-            name_err.set(None);
-        }
-        if trimmed_query.is_empty() {
-            query_err.set(Some(tr(TextKey::SearchQueryRequired).into()));
-            ok = false;
-        } else {
-            query_err.set(None);
-        }
-        if !ok {
             return;
         }
+        if trimmed_name.chars().count() > 50 {
+            name_err.set(Some(media_browser_error_message(
+                "Smart collection name must be 50 characters or less",
+            )));
+            return;
+        }
+        name_err.set(None);
         save_action.dispatch(CollectionForm {
             id: id_signal.get_untracked(),
             name: trimmed_name,
@@ -249,38 +327,40 @@ pub fn SmartCollectionEditorPage() -> impl IntoView {
     };
 
     view! {
-        <div class=style::page>
-            <h1 class=style::page_title>
-                {move || if id_signal.get() == 0 {
-                    tr(TextKey::NewSmartCollection).to_string()
-                } else {
-                    tr(TextKey::EditSmartCollection).to_string()
-                }}
-            </h1>
-            <div class=style::editor>
-                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
-                <TextArea
-                    label=tr(TextKey::SearchQuery)
-                    value=query
-                    placeholder=tr(TextKey::SmartCollectionQueryPlaceholder)
-                    error=Some(query_err_signal)
-                />
-
-                <div class=style::form_actions>
-                    <Button
-                        variant=ButtonVariant::Primary
-                        on_click=Some(Callback::new(on_save))
-                    >
-                        {tr(TextKey::Save)}
-                    </Button>
-                    <LinkButton
-                        href="/media/smart-collections".to_string()
-                        variant=ButtonVariant::Text
-                    >
-                        {tr(TextKey::Back)}
-                    </LinkButton>
-                </div>
+        <form
+            method="post"
+            action="/api/smart-collections/save"
+            class=style::page
+            data-smart-collection-editor-hydrated=move || if hydrated.get() { "true" } else { "false" }
+            on:submit=move |event| {
+                event.prevent_default();
+                on_save(());
+            }
+        >
+            <input type="hidden" name="id" value=move || id_signal.get().to_string()/>
+            <input type="hidden" name="query" value=move || query.get()/>
+            <div class=style::editor_action_bar>
+                <button
+                    type="submit"
+                    class=style::btn_add
+                    disabled=move || save_action.pending().get()
+                >
+                    <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
+                    {tr(TextKey::SaveSmartCollection)}
+                </button>
             </div>
-        </div>
+
+            <div class=style::editor>
+                <h1 class=style::page_title>{tr(TextKey::SmartCollection)}</h1>
+                <TextField
+                    label=tr(TextKey::Name)
+                    value=name
+                    name=Some("name")
+                    required=true
+                    max_length=Some(50)
+                    error=Some(name_err_signal)
+                />
+            </div>
+        </form>
     }
 }

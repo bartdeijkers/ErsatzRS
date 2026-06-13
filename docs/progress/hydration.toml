@@ -38,7 +38,7 @@ notes  = 'Read-only SVG island; selection is the gap (Slice F).'
 [[page]]
 name   = 'CollectionsPage'
 status = '✅'
-notes  = 'Autocomplete island.'
+notes  = 'Autocomplete island; add route hydrated save and no-JS POST fallback covered by `tests/e2e/collections.spec.ts`.'
 
 [[page]]
 name   = 'MoviesPage'
@@ -137,8 +137,8 @@ notes  = 'List/editor islands with POST fallback save/delete paths.'
 
 [[page]]
 name   = 'SmartCollectionsPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = 'List/editor island and HTML save fallback route covered by `tests/e2e/collections.spec.ts`.'
 
 [[page]]
 name   = 'TrashPage'

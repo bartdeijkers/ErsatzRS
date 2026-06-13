@@ -5,17 +5,11 @@ status     = 'In progress'
 adr        = []
 
 summary    = '''
-Ported: list + editor with `#[island]` autocomplete (debounced `suggest_media_items` over Movie ∪ Show) and member add/remove. Phase 7 Slice 23 adds manual collection detail page at `/media/collections/:id` mirroring `CollectionItems.razor` with poster grid, hover-revealed selection checkbox, multi-select removal, inline rename, and Use Custom Playback Order toggle with Move Up/Down persistence; the rename-only form is now at `/media/collections/:id/edit`. Collection add/remove/custom-order mutations enqueue `BuildPlayout(Refresh)` for playouts whose persisted program-schedule anchors reference the collection, matching `MediaCollectionRepository.PlayoutIdsUsingCollection`. `/media/collections` list/editor/member/detail visible labels, section headings, controls, validation messages, and toasts plus `/media/smart-collections` list/editor visible labels, actions, options, validation messages, toasts, and query placeholder now use the persisted-language i18n layer with per-culture translation modules. Remaining `ParityDebt`: the `/media/collections/add` page does not function (creating a new collection via the add page fails), and the collections pages' HTML/CSS does not match ErsatzTV's markup/styling (no visual parity with the MudBlazor layout at the pinned baseline).
+Ported: manual collection list/add/edit/detail and smart collection list/edit pages now follow the pinned ErsatzTV MudBlazor layout contract: 64px action bars where upstream has them, ExtraLarge-width content, h5-style headings with dividers, dense search/table/pager geometry, icon action columns, editor label/field rows, detail selection actions, section anchors, movie-only custom playback-order controls, and responsive mobile action visibility. `/media/collections/add` creates a collection through both hydrated interaction and the raw HTML POST fallback, then redirects to `/media/collections`; edit saves redirect to the detail page. Manual custom order supports native drag/drop and Move Up/Down buttons over the same persisted `update_collection_custom_order` path. Collection add/remove/custom-order mutations enqueue `BuildPlayout(Refresh)` for playouts whose persisted program-schedule anchors reference the collection, matching `MediaCollectionRepository.PlayoutIdsUsingCollection`; smart collection updates refresh search targets, smart-collection cache, and dependent playouts. The collection and smart-collection labels, validation messages, actions, toasts, and API fallback paths are localized through the persisted-language i18n layer. Browser coverage in `tests/e2e/collections.spec.ts` proves hydrated add, no-JS add fallback persistence, manual list/detail geometry, smart list/editor geometry, and mobile manual-list action usability. Full smart-collection search parity remains blocked on the search-index Lucene debt and is the next parity goal after the admin UI fixes.
 '''
 
 [[debt]]
-id          = 'collections-add-page-save'
-description = 'The /media/collections/add page does not create a new collection successfully.'
-discovered  = '2026-06-10'
-evidence    = 'docs/progress/parity/collections-smart-collections.toml summary records the add page as non-functional.'
-
-[[debt]]
-id          = 'collections-visual-parity'
-description = 'Collections pages do not yet match ErsatzTV MudBlazor markup and styling at the pinned baseline.'
-discovered  = '2026-06-10'
-evidence    = 'docs/progress/parity/collections-smart-collections.toml summary records no visual parity with the MudBlazor layout.'
+id          = 'smart-collection-lucene-search-contract'
+description = 'Smart collection creation/search is not fully parity-complete because the shared search index does not yet support the full documented ErsatzTV Lucene query language and field hydration contract.'
+discovered  = '2026-06-13'
+evidence    = 'See docs/progress/parity/search-index.toml debt lucene-smart-collection-query-language; profile-copy browser proof showed the Music Videos smart collection search returns 699 instead of the direct-SQL expected 377.'

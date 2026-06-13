@@ -1,6 +1,7 @@
 pub mod artwork;
 pub mod blocks;
 pub mod channels;
+pub mod collections;
 pub mod decos;
 pub mod ffmpeg_profiles;
 pub mod filler;

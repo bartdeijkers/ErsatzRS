@@ -29,6 +29,31 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ssr")]
+async fn inserted_id<'e, E>(
+    executor: E,
+    database_backend: ersatzrs_infra::db::DatabaseBackend,
+    result: ersatzrs_infra::db::DbQueryResult,
+) -> Result<i64, sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = ersatzrs_infra::db::Db>,
+{
+    #[cfg(not(feature = "mysql"))]
+    let _ = &result;
+
+    match database_backend {
+        #[cfg(feature = "mysql")]
+        ersatzrs_infra::db::DatabaseBackend::MySql => {
+            Ok(result.last_insert_id().unwrap_or_default())
+        }
+        ersatzrs_infra::db::DatabaseBackend::Sqlite => {
+            sqlx::query_scalar("SELECT last_insert_rowid()")
+                .fetch_one(executor)
+                .await
+        }
+    }
+}
+
 /// Row for a media-card grid (movies/shows/images share this shape).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MediaCardRow {
@@ -1581,6 +1606,16 @@ async fn enqueue_multi_collection_playout_refresh(
 }
 
 #[cfg(feature = "ssr")]
+async fn enqueue_smart_collection_playout_refresh(
+    state: &crate::host::state::AppState,
+    smart_collection_id: i64,
+) -> Result<(), ServerFnError> {
+    let playout_ids = playout_ids_using_smart_collection(&state.pool, smart_collection_id).await?;
+    enqueue_playout_refreshes(state, playout_ids);
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
 async fn enqueue_rerun_collection_playout_refresh(
     state: &crate::host::state::AppState,
     rerun_collection_id: i64,
@@ -1638,6 +1673,24 @@ async fn playout_ids_using_multi_collection(
            ORDER BY "PlayoutId""#,
     )
     .bind(multi_collection_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[cfg(feature = "ssr")]
+async fn playout_ids_using_smart_collection(
+    pool: &ersatzrs_infra::db::DbPool,
+    smart_collection_id: i64,
+) -> Result<Vec<i64>, sqlx::Error> {
+    // Mirrors `ErsatzTV.Infrastructure/Data/Repositories/
+    // MediaCollectionRepository.cs` `PlayoutIdsUsingSmartCollection`.
+    sqlx::query_scalar(
+        r#"SELECT DISTINCT "PlayoutId"
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "SmartCollectionId" = ?
+           ORDER BY "PlayoutId""#,
+    )
+    .bind(smart_collection_id)
     .fetch_all(pool)
     .await
 }
@@ -3423,28 +3476,68 @@ pub async fn save_collection(form: CollectionForm) -> Result<i64, ServerFnError>
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_collection_with_state(&state, form).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_collection_with_state(
+    state: &crate::host::state::AppState,
+    form: CollectionForm,
+) -> Result<i64, ServerFnError> {
     let name = form.name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Collection name is required"));
-    }
+    validate_collection_name(&state.pool, form.id, name).await?;
 
     if form.id == 0 {
+        let mut tx = state.pool.begin().await?;
         let result = sqlx::query(
             r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#,
         )
         .bind(name)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
-        let id = ersatzrs_infra::db::last_insert_id(result);
+        let id = inserted_id(&mut *tx, state.database_backend, result).await?;
+        tx.commit().await?;
         Ok(id)
     } else {
-        sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
+        let result = sqlx::query(r#"UPDATE "Collection" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(name)
             .bind(form.id)
             .execute(&state.pool)
             .await?;
+        if result.rows_affected() == 0 {
+            return Err(ServerFnError::new("Collection does not exist."));
+        }
         Ok(form.id)
     }
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_collection_name(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+    name: &str,
+) -> Result<(), ServerFnError> {
+    if name.is_empty() {
+        return Err(ServerFnError::new("Collection name is required"));
+    }
+    if name.chars().count() > 50 {
+        return Err(ServerFnError::new(
+            "Collection name must be 50 characters or less",
+        ));
+    }
+
+    let duplicate: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "Collection" WHERE "Name" = ? COLLATE NOCASE AND "Id" != ?"#,
+    )
+    .bind(name)
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("Collection name must be unique"));
+    }
+
+    Ok(())
 }
 
 #[server]
@@ -3469,20 +3562,29 @@ pub async fn list_smart_collections(
     page_size: u32,
 ) -> Result<(Vec<CollectionListRow>, u64), ServerFnError> {
     use crate::host::state::AppState;
-    use sqlx::Row;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-    let like = format!("%{}%", search.trim());
+    list_smart_collections_with_pool(&state.pool, search, page, page_size).await
+}
 
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "SmartCollection" sc
-           WHERE (? = '' OR sc."Name" LIKE ?)"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .fetch_one(&state.pool)
-    .await?;
+#[cfg(feature = "ssr")]
+pub async fn list_smart_collections_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    search: String,
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<CollectionListRow>, u64), ServerFnError> {
+    use sqlx::Row;
+
+    let offset = i64::from(page) * i64::from(page_size);
+    let search = search.trim().to_string();
+    let like = format!("%{search}%");
+
+    // ErsatzTV's `GetPagedSmartCollectionsHandler` counts all rows before
+    // applying the search query; keep that MudTable pager behavior.
+    let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "SmartCollection""#)
+        .fetch_one(pool)
+        .await?;
 
     let rows = sqlx::query(
         r#"SELECT sc."Id",
@@ -3493,11 +3595,11 @@ pub async fn list_smart_collections(
            ORDER BY sc."Name"
            LIMIT ? OFFSET ?"#,
     )
-    .bind(search.trim())
+    .bind(&search)
     .bind(&like)
     .bind(i64::from(page_size))
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await?;
 
     let list = rows
@@ -3539,33 +3641,76 @@ pub async fn save_smart_collection(form: CollectionForm) -> Result<i64, ServerFn
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_smart_collection_with_state(&state, form).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_smart_collection_with_state(
+    state: &crate::host::state::AppState,
+    form: CollectionForm,
+) -> Result<i64, ServerFnError> {
     let name = form.name.trim();
-    if name.is_empty() {
-        return Err(ServerFnError::new("Smart collection name is required"));
-    }
+    validate_smart_collection_name(&state.pool, form.id, name).await?;
+
     let query = form.query.trim();
     if query.is_empty() {
         return Err(ServerFnError::new("Smart collection query is required"));
     }
 
     if form.id == 0 {
+        let mut tx = state.pool.begin().await?;
         let result =
             sqlx::query(r#"INSERT INTO "SmartCollection" ("Name", "Query") VALUES (?, ?)"#)
                 .bind(name)
                 .bind(query)
-                .execute(&state.pool)
+                .execute(&mut *tx)
                 .await?;
-        let id = ersatzrs_infra::db::last_insert_id(result);
+        let id = inserted_id(&mut *tx, state.database_backend, result).await?;
+        tx.commit().await?;
         Ok(id)
     } else {
-        sqlx::query(r#"UPDATE "SmartCollection" SET "Name" = ?, "Query" = ? WHERE "Id" = ?"#)
-            .bind(name)
-            .bind(query)
-            .bind(form.id)
-            .execute(&state.pool)
-            .await?;
+        let result =
+            sqlx::query(r#"UPDATE "SmartCollection" SET "Name" = ?, "Query" = ? WHERE "Id" = ?"#)
+                .bind(name)
+                .bind(query)
+                .bind(form.id)
+                .execute(&state.pool)
+                .await?;
+        if result.rows_affected() == 0 {
+            return Err(ServerFnError::new("SmartCollection does not exist."));
+        }
+        enqueue_smart_collection_playout_refresh(state, form.id).await?;
         Ok(form.id)
     }
+}
+
+#[cfg(feature = "ssr")]
+async fn validate_smart_collection_name(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+    name: &str,
+) -> Result<(), ServerFnError> {
+    if name.is_empty() {
+        return Err(ServerFnError::new("Smart collection name is required"));
+    }
+    if name.chars().count() > 50 {
+        return Err(ServerFnError::new(
+            "Smart collection name must be 50 characters or less",
+        ));
+    }
+
+    let duplicate: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "SmartCollection" WHERE "Name" = ? COLLATE NOCASE AND "Id" != ?"#,
+    )
+    .bind(name)
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    if duplicate > 0 {
+        return Err(ServerFnError::new("SmartCollection name must be unique"));
+    }
+
+    Ok(())
 }
 
 #[server]
@@ -3778,7 +3923,7 @@ pub async fn save_multi_collection(form: MultiCollectionForm) -> Result<i64, Ser
             .bind(&name)
             .execute(&mut *tx)
             .await?;
-        ersatzrs_infra::db::last_insert_id(result)
+        inserted_id(&mut *tx, state.database_backend, result).await?
     } else {
         sqlx::query(r#"UPDATE "MultiCollection" SET "Name" = ? WHERE "Id" = ?"#)
             .bind(&name)
@@ -4306,7 +4451,7 @@ pub async fn save_rerun_collection_with_state(
         .bind(form.rerun_playback_order)
         .execute(&mut *tx)
         .await?;
-        ersatzrs_infra::db::last_insert_id(result)
+        inserted_id(&mut *tx, state.database_backend, result).await?
     } else {
         sqlx::query(
             r#"UPDATE "RerunCollection"
@@ -4713,7 +4858,7 @@ async fn add_media_item_to_schedule_impl(
     .await?;
 
     // PlayoutMode.One → a `ProgramScheduleOneItem` subtype row (TPT).
-    let item_id = ersatzrs_infra::db::last_insert_id(result);
+    let item_id = inserted_id(&mut *tx, state.database_backend, result).await?;
     sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
         .bind(item_id)
         .execute(&mut *tx)
@@ -4805,30 +4950,16 @@ pub async fn create_collection(name: String) -> Result<CollectionOption, ServerF
 
     let state = expect_context::<AppState>();
     let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err(ServerFnError::new("Collection name is required"));
-    }
-    if trimmed.chars().count() > 50 {
-        return Err(ServerFnError::new(
-            "Collection name must be 50 characters or less",
-        ));
-    }
+    validate_collection_name(&state.pool, 0, trimmed).await?;
 
-    let duplicate: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Name" = ? COLLATE NOCASE"#)
-            .bind(trimmed)
-            .fetch_one(&state.pool)
-            .await?;
-    if duplicate > 0 {
-        return Err(ServerFnError::new("Collection name must be unique"));
-    }
-
+    let mut tx = state.pool.begin().await?;
     let result =
         sqlx::query(r#"INSERT INTO "Collection" ("Name", "UseCustomPlaybackOrder") VALUES (?, 0)"#)
             .bind(trimmed)
-            .execute(&state.pool)
+            .execute(&mut *tx)
             .await?;
-    let id = ersatzrs_infra::db::last_insert_id(result);
+    let id = inserted_id(&mut *tx, state.database_backend, result).await?;
+    tx.commit().await?;
     Ok(CollectionOption {
         id,
         name: trimmed.to_string(),
@@ -4940,21 +5071,25 @@ pub async fn create_playlist_group(name: String) -> Result<PlaylistGroupRow, Ser
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    create_playlist_group_with_pool(&state.pool, name).await
+    create_playlist_group_with_pool(&state.pool, state.database_backend, name).await
 }
 
 #[cfg(feature = "ssr")]
 pub async fn create_playlist_group_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
+    database_backend: ersatzrs_infra::db::DatabaseBackend,
     name: String,
 ) -> Result<PlaylistGroupRow, ServerFnError> {
     let name = validate_playlist_group_name(&name)?;
+    let mut tx = pool.begin().await?;
     let result = sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES (?, 0)"#)
         .bind(&name)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    let id = inserted_id(&mut *tx, database_backend, result).await?;
+    tx.commit().await?;
     Ok(PlaylistGroupRow {
-        id: ersatzrs_infra::db::last_insert_id(result),
+        id,
         name,
         is_system: false,
         playlists: Vec::new(),
@@ -4969,12 +5104,13 @@ pub async fn create_playlist(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    create_playlist_with_pool(&state.pool, playlist_group_id, name).await
+    create_playlist_with_pool(&state.pool, state.database_backend, playlist_group_id, name).await
 }
 
 #[cfg(feature = "ssr")]
 pub async fn create_playlist_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
+    database_backend: ersatzrs_infra::db::DatabaseBackend,
     playlist_group_id: i64,
     name: String,
 ) -> Result<PlaylistRow, ServerFnError> {
@@ -5001,16 +5137,19 @@ pub async fn create_playlist_with_pool(
         )));
     }
 
+    let mut tx = pool.begin().await?;
     let result = sqlx::query(
         r#"INSERT INTO "Playlist" ("Name", "PlaylistGroupId", "IsSystem") VALUES (?, ?, 0)"#,
     )
     .bind(&name)
     .bind(playlist_group_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    let id = inserted_id(&mut *tx, database_backend, result).await?;
+    tx.commit().await?;
 
     Ok(PlaylistRow {
-        id: ersatzrs_infra::db::last_insert_id(result),
+        id,
         playlist_group_id,
         name,
         is_system: false,
@@ -7144,6 +7283,131 @@ mod tests {
     use crate::admin::server_fns::search::SearchAllIds;
 
     #[tokio::test]
+    async fn save_collection_with_state_creates_manual_collection() {
+        let (_database_dir, pool) = collection_test_pool("collection-create.db").await;
+        let state = collection_test_state(pool.clone());
+
+        let id = save_collection_with_state(
+            &state,
+            CollectionForm {
+                id: 0,
+                name: "  New Collection  ".to_string(),
+                query: String::new(),
+            },
+        )
+        .await
+        .expect("create collection");
+
+        let row: (String, i64) = sqlx::query_as(
+            r#"SELECT "Name", "UseCustomPlaybackOrder" FROM "Collection" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .expect("load created collection");
+
+        assert_eq!(row.0, "New Collection");
+        assert_eq!(row.1, 0);
+    }
+
+    #[tokio::test]
+    async fn save_collection_with_state_rejects_case_insensitive_duplicate_name() {
+        let (_database_dir, pool) = collection_test_pool("collection-duplicate.db").await;
+        sqlx::query(
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+               VALUES (1, 'Favorites', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed collection");
+        let state = collection_test_state(pool);
+
+        let error = save_collection_with_state(
+            &state,
+            CollectionForm {
+                id: 0,
+                name: "favorites".to_string(),
+                query: String::new(),
+            },
+        )
+        .await
+        .expect_err("duplicate collection name should fail");
+
+        assert!(error.to_string().contains("Collection name must be unique"));
+    }
+
+    #[tokio::test]
+    async fn save_collection_with_state_updates_existing_collection() {
+        let (_database_dir, pool) = collection_test_pool("collection-update.db").await;
+        sqlx::query(
+            r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+               VALUES (1, 'Old Name', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed collection");
+        let state = collection_test_state(pool.clone());
+
+        let id = save_collection_with_state(
+            &state,
+            CollectionForm {
+                id: 1,
+                name: "New Name".to_string(),
+                query: String::new(),
+            },
+        )
+        .await
+        .expect("update collection");
+
+        let name: String = sqlx::query_scalar(r#"SELECT "Name" FROM "Collection" WHERE "Id" = 1"#)
+            .fetch_one(&pool)
+            .await
+            .expect("load updated collection");
+
+        assert_eq!(id, 1);
+        assert_eq!(name, "New Name");
+    }
+
+    #[tokio::test]
+    async fn save_smart_collection_with_state_updates_and_refreshes_playouts() {
+        let (_database_dir, pool) = collection_test_pool("smart-collection-update.db").await;
+        seed_playout_refresh_fixture(&pool).await;
+        let (state, mut playout_rx) = collection_test_state_with_playout_rx(pool.clone());
+
+        let id = save_smart_collection_with_state(
+            &state,
+            CollectionForm {
+                id: 40,
+                name: "Updated Smart".to_string(),
+                query: "movie".to_string(),
+            },
+        )
+        .await
+        .expect("update smart collection");
+
+        let name: String =
+            sqlx::query_scalar(r#"SELECT "Name" FROM "SmartCollection" WHERE "Id" = 40"#)
+                .fetch_one(&pool)
+                .await
+                .expect("load updated smart collection");
+        let first_refresh = playout_rx.recv().await.expect("first playout refresh");
+        let second_refresh = playout_rx.recv().await.expect("second playout refresh");
+
+        assert_eq!(id, 40);
+        assert_eq!(name, "Updated Smart");
+        assert_eq!(first_refresh.playout_id, 100);
+        assert_eq!(second_refresh.playout_id, 101);
+        assert_eq!(
+            first_refresh.mode,
+            ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
+        );
+        assert_eq!(
+            second_refresh.mode,
+            ersatzrs_core::scheduling::PlayoutBuildMode::Refresh
+        );
+    }
+
+    #[tokio::test]
     async fn load_show_languages_resolves_episode_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
@@ -7318,6 +7582,10 @@ mod tests {
         assert_eq!(
             playout_ids_using_collection(&pool, 20).await.unwrap(),
             vec![101, 102]
+        );
+        assert_eq!(
+            playout_ids_using_smart_collection(&pool, 40).await.unwrap(),
+            vec![100, 101]
         );
         assert_eq!(
             playout_ids_using_rerun_collection(&pool, 30).await.unwrap(),
@@ -7852,6 +8120,10 @@ mod tests {
             .execute(pool)
             .await
             .expect("seed collection");
+        sqlx::query(r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query") VALUES (40, 'Smart 40', 'movie')"#)
+            .execute(pool)
+            .await
+            .expect("seed smart collection");
         sqlx::query(
             r#"INSERT INTO "RerunCollection" (
                    "Id", "Name", "CollectionType", "CollectionId",
@@ -7873,16 +8145,60 @@ mod tests {
         .expect("seed playouts");
         sqlx::query(
             r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
-                   "Id", "CollectionId", "RerunCollectionId", "CollectionType", "PlayoutId"
+                   "Id", "CollectionId", "RerunCollectionId", "SmartCollectionId", "CollectionType", "PlayoutId"
                ) VALUES
-                   (200, 20, NULL, 10, 101),
-                   (201, 20, NULL, 10, 102),
-                   (202, 20, NULL, 10, 102),
-                   (203, NULL, 30, 7, 100),
-                   (204, NULL, 30, 8, 102)"#,
+                   (200, 20, NULL, NULL, 10, 101),
+                   (201, 20, NULL, NULL, 10, 102),
+                   (202, 20, NULL, NULL, 10, 102),
+                   (203, NULL, 30, NULL, 7, 100),
+                   (204, NULL, 30, NULL, 8, 102),
+                   (205, NULL, NULL, 40, 5, 100),
+                   (206, NULL, NULL, 40, 5, 101)"#,
         )
         .execute(pool)
-        .await
-        .expect("seed playout anchors");
+            .await
+            .expect("seed playout anchors");
+    }
+
+    async fn collection_test_pool(
+        database_name: &str,
+    ) -> (tempfile::TempDir, ersatzrs_infra::db::DbPool) {
+        let database_dir = tempfile::tempdir().expect("temp database dir");
+        let database_url = format!(
+            "sqlite://{}",
+            database_dir.path().join(database_name).display()
+        );
+        let pool = ersatzrs_infra::db::init(&database_url)
+            .await
+            .expect("initialize test database");
+        (database_dir, pool)
+    }
+
+    fn collection_test_state(pool: ersatzrs_infra::db::DbPool) -> crate::host::state::AppState {
+        collection_test_state_with_playout_rx(pool).0
+    }
+
+    fn collection_test_state_with_playout_rx(
+        pool: ersatzrs_infra::db::DbPool,
+    ) -> (
+        crate::host::state::AppState,
+        tokio::sync::mpsc::Receiver<ersatzrs_core::scheduling::PlayoutBuildRequest>,
+    ) {
+        let (playout_build_tx, playout_build_rx) = tokio::sync::mpsc::channel(4);
+        let state = crate::host::state::AppState::new(
+            pool,
+            ersatzrs_infra::db::DatabaseBackend::Sqlite,
+            crate::host::state::SystemStartup {
+                database_ready: true,
+                schema_status: ersatzrs_infra::db::DatabaseSchemaStatus::default(),
+            },
+            ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
+            uuid::Uuid::nil(),
+            1,
+            crate::host::state::IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+        (state, playout_build_rx)
     }
 }

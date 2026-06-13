@@ -11,6 +11,8 @@ pub fn TextField(
     #[prop(default = "text")] input_type: &'static str,
     #[prop(default = "")] placeholder: &'static str,
     #[prop(default = false)] disabled: bool,
+    #[prop(default = false)] required: bool,
+    #[prop(default = None)] max_length: Option<u32>,
     /// Optional validation error message to display below the input.
     #[prop(default = None)]
     error: Option<Signal<Option<String>>>,
@@ -27,6 +29,8 @@ pub fn TextField(
                 class=style::input
                 value=initial_value
                 name=name
+                required=required
+                maxlength=max_length.map(|value| value.to_string())
                 prop:value=move || value.get()
                 on:input=move |e| value.set(event_target_value(&e))
             />

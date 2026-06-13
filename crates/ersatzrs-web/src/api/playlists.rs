@@ -63,7 +63,7 @@ pub async fn create_playlist_group_form(
     State(state): State<AppState>,
     Form(input): Form<PlaylistGroupCreateForm>,
 ) -> Redirect {
-    match create_playlist_group_with_pool(&state.pool, input.name).await {
+    match create_playlist_group_with_pool(&state.pool, state.database_backend, input.name).await {
         Ok(_) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, "failed to create playlist group from HTML form");
@@ -77,7 +77,14 @@ pub async fn create_playlist_form(
     Form(input): Form<PlaylistCreateForm>,
 ) -> Redirect {
     let playlist_group_id = parse_i64(Some(input.playlist_group_id)).unwrap_or_default();
-    match create_playlist_with_pool(&state.pool, playlist_group_id, input.name).await {
+    match create_playlist_with_pool(
+        &state.pool,
+        state.database_backend,
+        playlist_group_id,
+        input.name,
+    )
+    .await
+    {
         Ok(_) => Redirect::to("/media/playlists"),
         Err(error) => {
             tracing::error!(%error, playlist_group_id, "failed to create playlist from HTML form");

@@ -1030,6 +1030,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Collections => "Collecties",
         TextKey::CollectionDeleted => "Collectie verwijderd.",
         TextKey::CollectionSaved => "Collectie opgeslagen.",
+        TextKey::SaveCollection => "Collectie opslaan",
         TextKey::ComputingPreview => "Voorbeeld berekenen...",
         TextKey::Confirm => "Bevestigen",
         TextKey::ConfirmDelete => "Verwijderen bevestigen",

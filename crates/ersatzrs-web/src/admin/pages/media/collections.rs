@@ -3,25 +3,34 @@
 //! member management (maps to `ErsatzTV`'s `MudAutocomplete`).
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, media_browser_error_message, save_failed, tr, TextKey};
+use crate::admin::i18n::{
+    delete_failed, media_browser_error_message, page_of, range_of, save_failed, tr, TextKey,
+};
 use crate::admin::server_fns::media_browser::{
     add_item_to_collection, delete_collection, get_collection, list_collection_members,
     list_collections, remove_item_from_collection, save_collection, CollectionForm,
     CollectionListRow, CollectionMember,
 };
 use crate::admin::ui::primitives::{
-    button::{Button, ButtonVariant, LinkButton},
     dialog::DeleteDialog,
     form::TextField,
+    icon::{icon_style, IconName},
     toast::{use_toast, ToastSeverity},
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/media/collections.module.css");
 
-const PAGE_SIZE: u32 = 25;
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ---------------------------------------------------------------------------
 // List page
@@ -29,12 +38,18 @@ const PAGE_SIZE: u32 = 25;
 
 #[component]
 pub fn CollectionsPage() -> impl IntoView {
+    view! { <CollectionsIsland/> }
+}
+
+#[island]
+fn CollectionsIsland() -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let page_size = RwSignal::new(10u32);
 
     let data: Resource<(Vec<CollectionListRow>, u64)> = Resource::new(
-        move || (search.get(), page.get()),
-        move |(q, p)| async move { list_collections(q, p, PAGE_SIZE).await.unwrap_or_default() },
+        move || (search.get(), page.get(), page_size.get()),
+        move |(q, p, size)| async move { list_collections(q, p, size).await.unwrap_or_default() },
     );
 
     let delete_target: RwSignal<Option<CollectionListRow>> = RwSignal::new(None);
@@ -60,78 +75,144 @@ pub fn CollectionsPage() -> impl IntoView {
 
     view! {
         <div class=style::page>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>{tr(TextKey::ManualCollections)}</h1>
-                <input
-                    class=style::search
-                    type="search"
-                    placeholder=tr(TextKey::SearchForManualCollections)
-                    prop:value=move || search.get()
-                    on:input=move |e| search.set(event_target_value(&e))
-                />
-                <a href="/media/collections/add" class=style::btn_add>{tr(TextKey::AddCollection)}</a>
+            <div class=style::action_bar>
+                <a href="/media/collections/add" class=style::btn_add>
+                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddCollection)}</span>
+                </a>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    data.get().map(|(rows, _)| {
-                        if rows.is_empty() {
-                            return view! {
-                                <p class=style::empty>{tr(TextKey::NoCollections)}</p>
-                            }
-                            .into_any();
-                        }
-                        view! {
-                            <div class=style::table_wrap>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>{tr(TextKey::Name)}</th>
-                                            <th/>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rows.into_iter().map(|row| {
-                                            let id = row.id;
-                                            let name = row.name.clone();
-                                            let row_for_delete = row.clone();
-                                            view! {
-                                                <tr>
-                                                    <td>
-                                                        <a href=format!("/media/collections/{id}")>
-                                                            {name}
-                                                        </a>
-                                                    </td>
-                                                    <td>
-                                                        <div class=style::row_actions>
-                                                            <a
-                                                                class=style::btn_edit
-                                                                href=format!("/media/collections/{id}")
-                                                            >
-                                                                {tr(TextKey::Edit)}
+            <section class=style::content>
+                <h1 class=style::page_title>{tr(TextKey::ManualCollections)}</h1>
+                <div class=style::divider/>
+
+                <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+                    {move || {
+                        data.get().map(|(rows, total)| {
+                            let size = page_size.get().max(1);
+                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                                .unwrap_or(u32::MAX)
+                                .max(1);
+                            let current_page = page.get().min(total_pages.saturating_sub(1));
+                            let range_start = if total == 0 {
+                                0
+                            } else {
+                                u64::from(current_page) * u64::from(size) + 1
+                            };
+                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+
+                            view! {
+                                <div class=style::table_wrap>
+                                    <div class=style::table_toolbar>
+                                        <label class=style::search_field>
+                                            <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
+                                            <input
+                                                class=style::search
+                                                type="search"
+                                                placeholder=tr(TextKey::SearchForManualCollections)
+                                                prop:value=move || search.get()
+                                                on:input=move |e| {
+                                                    search.set(event_target_value(&e));
+                                                    page.set(0);
+                                                }
+                                            />
+                                        </label>
+                                    </div>
+                                    <table>
+                                        <tbody>
+                                            {rows.into_iter().map(|row| {
+                                                let id = row.id;
+                                                let name = row.name.clone();
+                                                let row_for_delete = row.clone();
+                                                view! {
+                                                    <tr>
+                                                        <td>
+                                                            <a href=format!("/media/collections/{id}")>
+                                                                {name}
                                                             </a>
-                                                            <button
-                                                                class=style::btn_delete
-                                                                on:click=move |_| {
-                                                                    delete_target.set(Some(row_for_delete.clone()));
-                                                                    delete_open.set(true);
-                                                                }
-                                                            >
-                                                                {tr(TextKey::Delete)}
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                        </td>
+                                                        <td>
+                                                            <div class=style::row_actions>
+                                                                <a
+                                                                    class=style::icon_button
+                                                                    href=format!("/media/collections/{id}")
+                                                                    title=tr(TextKey::EditCollection)
+                                                                    aria-label=tr(TextKey::EditCollection)
+                                                                >
+                                                                    <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    class=style::icon_button
+                                                                    title=tr(TextKey::DeleteCollection)
+                                                                    aria-label=tr(TextKey::DeleteCollection)
+                                                                    on:click=move |_| {
+                                                                        delete_target.set(Some(row_for_delete.clone()));
+                                                                        delete_open.set(true);
+                                                                    }
+                                                                >
+                                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }).collect_view()}
+                                            <tr style:display=move || if total == 0 { "" } else { "none" }>
+                                                <td colspan="2" class=style::empty_cell>{tr(TextKey::NoCollections)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div class=style::pager>
+                                        <span>{tr(TextKey::RowsPerPage)}</span>
+                                        <select
+                                            class=style::page_size
+                                            prop:value=move || page_size.get().to_string()
+                                            on:change=move |event| {
+                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                                    page_size.set(value.max(1));
+                                                    page.set(0);
+                                                }
                                             }
-                                        }).collect_view()}
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
+                                        >
+                                            <option value="10" selected=move || page_size.get() == 10>"10"</option>
+                                            <option value="25" selected=move || page_size.get() == 25>"25"</option>
+                                            <option value="50" selected=move || page_size.get() == 50>"50"</option>
+                                        </select>
+                                        <span class=style::pager_status>
+                                            {range_of(
+                                                u32::try_from(range_start).unwrap_or(u32::MAX),
+                                                u32::try_from(range_end).unwrap_or(u32::MAX),
+                                                total,
+                                            )}
+                                        </span>
+                                        <span class=style::pager_status>{page_of(current_page + 1, total_pages)}</span>
+                                        <div class=style::pager_buttons>
+                                            <button
+                                                type="button"
+                                                class=style::pager_btn
+                                                disabled={current_page == 0}
+                                                on:click=move |_| page.update(|p| *p = p.saturating_sub(1))
+                                            >
+                                                "‹"
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class=style::pager_btn
+                                                disabled={current_page + 1 >= total_pages}
+                                                on:click=move |_| page.update(|p| *p = (*p + 1).min(total_pages.saturating_sub(1)))
+                                            >
+                                                "›"
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            .into_any()
+                        })
+                    }}
+                </Suspense>
+            </section>
 
             <DeleteDialog
                 open=delete_open
@@ -161,28 +242,55 @@ pub fn CollectionsPage() -> impl IntoView {
 #[component]
 pub fn CollectionEditorPage() -> impl IntoView {
     let params = use_params_map();
-    let collection_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
-
-    let initial: Resource<CollectionForm> = Resource::new(collection_id, |id| async move {
-        match id {
-            Some(id) => get_collection(id)
-                .await
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            None => CollectionForm::default(),
-        }
+    let collection_id = params.with_untracked(|p| {
+        p.get("id")
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or_default()
     });
+    let query = use_query_map();
+    let save_error =
+        query.with_untracked(|params| params.get("error").unwrap_or_default()) == "save";
+
+    view! { <CollectionEditorIsland collection_id save_error/> }
+}
+
+#[island]
+fn CollectionEditorIsland(collection_id: i64, save_error: bool) -> impl IntoView {
+    let default_name = tr(TextKey::NewCollectionTitle).to_string();
+    let initial: Resource<CollectionForm> = Resource::new_blocking(
+        move || collection_id,
+        move |id| {
+            let default_name = default_name.clone();
+            async move {
+                match (id != 0).then_some(id) {
+                    Some(id) => get_collection(id)
+                        .await
+                        .unwrap_or_default()
+                        .unwrap_or_default(),
+                    None => CollectionForm {
+                        name: default_name,
+                        ..CollectionForm::default()
+                    },
+                }
+            }
+        },
+    );
 
     let name = RwSignal::new(String::new());
     let id_signal: RwSignal<i64> = RwSignal::new(0);
+    let hydrated = RwSignal::new(false);
     Effect::new(move |_| {
         if let Some(f) = initial.get() {
             id_signal.set(f.id);
             name.set(f.name);
+            hydrated.set(true);
         }
     });
 
     let name_err: RwSignal<Option<String>> = RwSignal::new(None);
+    if save_error {
+        name_err.set(Some(save_failed(media_browser_error_message("save"))));
+    }
     let name_err_signal: Signal<Option<String>> = name_err.into();
 
     let save_action = Action::new(|form: &CollectionForm| {
@@ -191,7 +299,6 @@ pub fn CollectionEditorPage() -> impl IntoView {
     });
 
     let toast = use_toast();
-    let navigate = use_navigate();
 
     Effect::new(move |_| {
         if let Some(res) = save_action.value().get() {
@@ -199,8 +306,9 @@ pub fn CollectionEditorPage() -> impl IntoView {
                 Ok(new_id) => {
                     toast.push(tr(TextKey::CollectionSaved), ToastSeverity::Success);
                     if id_signal.get_untracked() == 0 {
-                        let target = format!("/media/collections/{new_id}");
-                        navigate(&target, NavigateOptions::default());
+                        set_browser_location("/media/collections");
+                    } else {
+                        set_browser_location(&format!("/media/collections/{new_id}"));
                     }
                     id_signal.set(new_id);
                 }
@@ -215,7 +323,13 @@ pub fn CollectionEditorPage() -> impl IntoView {
     let on_save = move |()| {
         let trimmed = name.get().trim().to_string();
         if trimmed.is_empty() {
-            name_err.set(Some(tr(TextKey::NameRequired).into()));
+            name_err.set(Some(tr(TextKey::CollectionNameRequired).into()));
+            return;
+        }
+        if trimmed.chars().count() > 50 {
+            name_err.set(Some(media_browser_error_message(
+                "Collection name must be 50 characters or less",
+            )));
             return;
         }
         name_err.set(None);
@@ -227,31 +341,44 @@ pub fn CollectionEditorPage() -> impl IntoView {
     };
 
     view! {
-        <div class=style::page>
-            <h1 class=style::page_title>
-                {move || if id_signal.get() == 0 { tr(TextKey::NewCollectionTitle).to_string() } else { tr(TextKey::EditCollection).to_string() }}
-            </h1>
-            <div class=style::editor>
-                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
-
-                <div class=style::form_actions>
-                    <Button
-                        variant=ButtonVariant::Primary
-                        on_click=Some(Callback::new(on_save))
-                    >
-                        {tr(TextKey::Save)}
-                    </Button>
-                    <LinkButton href="/media/collections".to_string() variant=ButtonVariant::Text>
-                        {tr(TextKey::Back)}
-                    </LinkButton>
-                </div>
-
-                {move || {
-                    let cid = id_signal.get();
-                    (cid != 0).then(|| view! { <MembersSection collection_id=cid/> })
-                }}
+        <form
+            method="post"
+            action="/api/collections/save"
+            class=style::page
+            data-collection-editor-hydrated=move || if hydrated.get() { "true" } else { "false" }
+            on:submit=move |event| {
+                event.prevent_default();
+                on_save(());
+            }
+        >
+            <input type="hidden" name="id" value=move || id_signal.get().to_string()/>
+            <div class=style::editor_action_bar>
+                <button
+                    type="submit"
+                    class=style::btn_add
+                    disabled=move || save_action.pending().get()
+                >
+                    <span>{move || if id_signal.get() == 0 { "+" } else { "✓" }}</span>
+                    {move || if id_signal.get() == 0 {
+                        tr(TextKey::AddCollection).to_string()
+                    } else {
+                        tr(TextKey::SaveCollection).to_string()
+                    }}
+                </button>
             </div>
-        </div>
+
+            <div class=style::editor>
+                <h1 class=style::page_title>{tr(TextKey::Collection)}</h1>
+                <TextField
+                    label=tr(TextKey::Name)
+                    value=name
+                    name=Some("name")
+                    required=true
+                    max_length=Some(50)
+                    error=Some(name_err_signal)
+                />
+            </div>
+        </form>
     }
 }
 

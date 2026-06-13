@@ -79,6 +79,14 @@ pub fn build_app(app_state: AppState) -> Router {
             "/api/blocks/items/save",
             post(api::blocks::save_block_items_form),
         )
+        .route(
+            "/api/collections/save",
+            post(api::collections::save_collection_form),
+        )
+        .route(
+            "/api/smart-collections/save",
+            post(api::collections::save_smart_collection_form),
+        )
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
             "/api/channels/save-multipart",

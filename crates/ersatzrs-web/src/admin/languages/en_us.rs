@@ -401,6 +401,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Collections => "Collections",
         TextKey::CollectionDeleted => "Collection deleted.",
         TextKey::CollectionSaved => "Collection saved.",
+        TextKey::SaveCollection => "Save Collection",
         TextKey::ComputingPreview => "Computing preview...",
         TextKey::Confirm => "Confirm",
         TextKey::ConfirmDelete => "Confirm Delete",
