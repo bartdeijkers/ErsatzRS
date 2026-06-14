@@ -46,6 +46,11 @@ status = 'TODO'
 notes  = 'Item overflow menu wired; Playwright smoke pending.'
 
 [[page]]
+name   = 'RemoteStreamsPage'
+status = '✅'
+notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, card Add To Collection persistence, mobile action menu, and geometry screenshots covered by `tests/e2e/remote-streams.spec.ts`.'
+
+[[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'
 status = '✅'
 notes  = 'SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean.'

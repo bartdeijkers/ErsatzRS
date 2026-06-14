@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0015']
 summary    = '''
 Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
@@ -212,4 +212,28 @@ captured `/iptv/session/2/hls.m3u8` snapshots also passed the monotonic
 program-date-time check. `cargo xtask smoke` passed afterward with HTTP 200
 evidence for `/iptv/channel/1.ts?mode=ts`, `/iptv/channel/1.m3u8?mode=segmenter`,
 and `/iptv/session/1/hls.m3u8`.
+
+Reopened lifecycle audit (2026-06-13): VLC stop-on-disconnect parity is not yet
+proven for all client-facing channel paths. ErsatzTV exposes `Idle Behavior`
+with the explicit contract that `Stop On Disconnect` stops transcoding after
+all clients have disconnected; its segmenter worker uses
+`ffmpeg.segmenter.timeout_seconds` (default 60 seconds), disables that timeout
+only for `KeepRunning`, touches session access when playlist or segment files
+are served, and direct `.ts` responses register the FFmpeg process for response
+disposal. The local ErsatzRS database currently has channels 1 and 2 configured
+as `StopOnDisconnect` with a 60-second segmenter timeout. The reported VLC
+shutdown was observed before waiting that full local timeout, so it is not yet
+proof of an indefinite-session bug; the remaining parity debt is to prove that
+ErsatzRS stops after the configured timeout, and to compare against the
+configured timeout in the reference ErsatzTV instance if it is shorter. Direct
+TS response-body disposal is already covered by the
+`spawn_stream_body_kills_ffmpeg_when_body_is_dropped` regression guard; the
+open lifecycle proof needs to cover HLS segmenter and hybrid MPEG-TS wrapper
+sessions.
 '''
+
+[[debt]]
+id          = 'vlc-stop-on-disconnect-session-lifecycle'
+description = 'For channels configured with `IdleBehavior = StopOnDisconnect`, VLC playback shutdown must drain every channel transcode session after the configured segmenter idle timeout and must not leave the `/channels` active-session state or FFmpeg process tree running past that timeout. This must cover HLS segmenter playback and the MPEG-TS hybrid wrapper path that starts/touches the HLS segmenter, while preserving the already-ported direct `.ts` response-body disposal behavior.'
+discovered  = '2026-06-13'
+evidence    = 'User-observed VLC shutdown did not immediately stop the channel transcoding session, but the observation was shorter than the local configured timeout. Local DB evidence during triage: channels 1 and 2 have `IdleBehavior = 0` (`StopOnDisconnect`) and `ffmpeg.segmenter.timeout_seconds = 60`; upstream default from `GetFFmpegSettingsHandler` is also 60 seconds, while persisted ErsatzTV settings may be shorter. Upstream lifecycle evidence is `ChannelEditor.razor` Stop On Disconnect help text, `StartFFmpegSessionHandler` idle-timeout loading/KeepRunning bypass, `HlsSessionWorker` idle cancellation, static `/iptv/session` touch handling, and `IptvController` `RegisterForDispose` for direct `.ts` responses.'

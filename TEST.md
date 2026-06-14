@@ -263,6 +263,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/tv/seasons/:id` | TODO   | Detail page renders fanart/poster header plus vertical episode cards; needs manual Add-To, Show Media Info, and Troubleshoot Playback hydration smoke. |
 | `/media/movies`          | TODO   | URL-driven pager (`?query=…&page=N`) + Jellyfin/Emby artwork proxy; item overflow menu opens Add To Collection, Show Media Info, and Troubleshoot Playback. |
 | `/media/movies/:id`      | ✅     | Blocking resource details page with fanart, poster, plot, metadata.       |
+| `/media/remote/streams`  | ✅     | Dedicated `RemoteStreamList.razor` parity route; card geometry, Add To Collection persistence, no-JS SSR HTML, and mobile menu covered by `tests/e2e/remote-streams.spec.ts`. |
 | `/media/music/artists/:id` | ✅ | Detail page renders fanart/thumbnail header, linked facts, artist Add-To actions, and first 100 music videos; modal-open hydration smoke clean. |
 | `/system/troubleshooting/playback` | TODO | Media-item entry route accepts `?mediaItem=ID` and loads backend media-info context. |
 

@@ -13,6 +13,22 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Remote Streams now has an ErsatzTV-style admin browser at
+  `/media/remote/streams`, including search-index filtering, card paging,
+  letter jumps, collection/playlist add actions, no-JS list HTML, and
+  Playwright coverage.
+
+### Fixed
+
+- Windows release builds now discover bundled Leptos hydration assets from the
+  `site/pkg` directory next to the server binary even when `LEPTOS_*` runtime
+  variables are absent, restoring hydrated admin actions such as watermark
+  saves and `/channels` stop-session visibility.
+- Watermark placement previews now avoid Windows drive-letter escaping in the
+  FFmpeg `drawvg` filter, fixing preview refreshes in the Windows admin build.
+
 ## [0.0.8-alpha] - 2026-06-13
 
 ### Added

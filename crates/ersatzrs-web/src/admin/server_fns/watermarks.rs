@@ -516,9 +516,20 @@ rect {rx:.1} {ry:.1} {wm_w:.1} {wm_h:.1} fill
         .map_err(|e| ServerFnError::new(format!("temp file: {e}")))?;
     tmp.write_all(drawvg.as_bytes())
         .map_err(|e| ServerFnError::new(format!("write drawvg: {e}")))?;
-    let script_path = tmp.path().to_string_lossy().to_string();
+    let script_dir = tmp
+        .path()
+        .parent()
+        .ok_or_else(|| ServerFnError::new("drawvg temp file has no parent directory"))?
+        .to_path_buf();
+    let script_name = tmp
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| ServerFnError::new("drawvg temp file name is not valid UTF-8"))?
+        .to_owned();
 
     let out = Command::new(ersatzrs_ffmpeg::ffmpeg_path())
+        .current_dir(script_dir)
         .args([
             "-y",
             "-f",
@@ -528,7 +539,7 @@ rect {rx:.1} {ry:.1} {wm_w:.1} {wm_h:.1} fill
             "-vframes",
             "1",
             "-vf",
-            &format!("drawvg=file='{script_path}'"),
+            &format!("drawvg=file={script_name}"),
             "-f",
             "image2pipe",
             "-c:v",

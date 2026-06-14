@@ -2949,9 +2949,51 @@ pub async fn list_music_videos(
 }
 
 // ---------------------------------------------------------------------------
-// Remote streams — "See All" target for the search page's Remote Streams
-// section. Subtitle is the original title; artwork is the thumbnail.
+// Remote streams — ports `Pages/RemoteStreamList.razor`.
+//
+// ErsatzTV queries the search index with `type:remote_stream` plus the user's
+// query text, so this path must support field queries such as `library_id:7`
+// and not just title LIKE filtering.
 // ---------------------------------------------------------------------------
+
+#[cfg(feature = "ssr")]
+fn remote_stream_search_query(search: &str) -> String {
+    let trimmed = search.trim();
+    if trimmed.is_empty() {
+        "type:remote_stream".to_owned()
+    } else {
+        format!("type:remote_stream AND ({trimmed})")
+    }
+}
+
+#[server]
+pub async fn remote_stream_page_map(
+    search: String,
+    page_size: u32,
+) -> Result<LetterPageMap, ServerFnError> {
+    use crate::host::state::AppState;
+
+    if page_size == 0 {
+        return Ok(LetterPageMap { pages: vec![0; 27] });
+    }
+
+    let state = expect_context::<AppState>();
+    let (_, _, page_map) = state
+        .repositories
+        .scheduling
+        .search_documents_page(&remote_stream_search_query(&search), 0, page_size as usize)
+        .await?;
+
+    let mut pages = vec![0_u32; 27];
+    if let Some(page_map) = page_map {
+        for (letter, page) in page_map.page_map {
+            let idx = bucket_index(letter);
+            pages[idx] = u32::try_from(page).unwrap_or(u32::MAX);
+        }
+    }
+
+    Ok(LetterPageMap { pages })
+}
 
 #[server]
 pub async fn list_remote_streams(
@@ -2962,61 +3004,63 @@ pub async fn list_remote_streams(
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
     use sqlx::Row;
+    use std::collections::HashMap;
 
     let state = expect_context::<AppState>();
-    let offset = i64::from(page) * i64::from(page_size);
-    let like = format!("%{}%", search.trim());
+    let skip = page as usize * page_size as usize;
+    let (hits, total, _) = state
+        .repositories
+        .scheduling
+        .search_documents_page(
+            &remote_stream_search_query(&search),
+            skip,
+            page_size as usize,
+        )
+        .await?;
 
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM "RemoteStreamMetadata" rsm
-           WHERE (? = '' OR rsm."Title" LIKE ?)"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .fetch_one(&state.pool)
-    .await?;
+    let mut thumbs = HashMap::new();
+    let ids: Vec<i64> = hits.iter().map(|hit| hit.media_item_id).collect();
+    if !ids.is_empty() {
+        let mut query = sqlx::QueryBuilder::<ersatzrs_infra::db::Db>::new(
+            r#"SELECT rsm."RemoteStreamId" AS "ItemId", art."Path" AS "Thumb"
+               FROM "RemoteStreamMetadata" rsm
+               LEFT JOIN "Artwork" art
+                   ON art."RemoteStreamMetadataId" = rsm."Id" AND art."ArtworkKind" = 1
+               WHERE rsm."RemoteStreamId" IN ("#,
+        );
+        let mut separated = query.separated(", ");
+        for id in &ids {
+            separated.push_bind(*id);
+        }
+        separated.push_unseparated(")");
 
-    let rows = sqlx::query(
-        r#"SELECT rs."Id" AS "Id",
-                  COALESCE(rsm."Title", '') AS "Title",
-                  COALESCE(rsm."SortTitle", rsm."Title", '') AS "SortTitle",
-                  rsm."OriginalTitle" AS "Subtitle",
-                  art."Path" AS "Thumb"
-           FROM "RemoteStream" rs
-           JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
-           LEFT JOIN "Artwork" art
-               ON art."RemoteStreamMetadataId" = rsm."Id" AND art."ArtworkKind" = 1
-           WHERE (? = '' OR rsm."Title" LIKE ?)
-           ORDER BY rsm."SortTitle", rsm."Title"
-           LIMIT ? OFFSET ?"#,
-    )
-    .bind(search.trim())
-    .bind(&like)
-    .bind(i64::from(page_size))
-    .bind(offset)
-    .fetch_all(&state.pool)
-    .await?;
+        for row in query.build().fetch_all(&state.pool).await? {
+            let id: i64 = row.try_get("ItemId").unwrap_or_default();
+            if let Ok(Some(path)) = row.try_get::<Option<String>, _>("Thumb") {
+                thumbs.insert(id, path);
+            }
+        }
+    }
 
-    let cards = rows
-        .iter()
-        .map(|r| MediaCardRow {
-            id: r.try_get("Id").unwrap_or(0),
-            title: r.try_get("Title").unwrap_or_default(),
-            sort_title: r.try_get("SortTitle").unwrap_or_default(),
-            subtitle: r
-                .try_get::<Option<String>, _>("Subtitle")
-                .unwrap_or(None)
-                .filter(|s| !s.trim().is_empty()),
-            artwork_path: r
-                .try_get::<Option<String>, _>("Thumb")
-                .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
-            season_number: None,
+    let cards = hits
+        .into_iter()
+        .map(|hit| {
+            let title = hit.title.unwrap_or_default();
+            let sort_title = hit.sort_title.unwrap_or_else(|| title.clone());
+            MediaCardRow {
+                id: hit.media_item_id,
+                title,
+                sort_title,
+                subtitle: hit.original_title.filter(|s| !s.trim().is_empty()),
+                artwork_path: thumbs
+                    .get(&hit.media_item_id)
+                    .and_then(|p| artwork_url(p, ArtworkUrlKind::Poster)),
+                season_number: None,
+            }
         })
         .collect();
 
-    #[allow(clippy::cast_sign_loss)]
-    Ok((cards, total.max(0) as u64))
+    Ok((cards, total as u64))
 }
 
 // ---------------------------------------------------------------------------
@@ -6551,6 +6595,156 @@ pub async fn add_media_items_to_playlist_mixed(
 // flatten the projection into a single `Vec<CollectionItemCard>` carrying a
 // `kind` discriminant — the UI groups by kind for rendering but operates on a
 // uniform `(media_item_id, custom_index)` everywhere else.
+
+#[cfg(all(test, feature = "ssr"))]
+mod remote_stream_tests {
+    use super::{list_remote_streams, remote_stream_page_map};
+    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
+    use leptos::prelude::{provide_context, Owner};
+    use tempfile::NamedTempFile;
+    use tokio::sync::mpsc;
+    use uuid::Uuid;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn remote_stream_list_uses_search_index_query_and_projects_cards() {
+        let (_db_file, pool) = test_pool().await;
+        seed_remote_stream_fixture(&pool).await;
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let (cards, total) = list_remote_streams("library_id:7".to_owned(), 0, 100)
+            .await
+            .unwrap();
+
+        assert_eq!(total, 1);
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].id, 701);
+        assert_eq!(cards[0].title, "Nurburgring broadcast");
+        assert_eq!(cards[0].sort_title, "nurburgring broadcast");
+        assert_eq!(cards[0].subtitle.as_deref(), Some("Racing"));
+
+        let page_map = remote_stream_page_map("library_id:7".to_owned(), 100)
+            .await
+            .unwrap();
+        assert_eq!(page_map.pages[14], 1); // n
+
+        owner.cleanup();
+    }
+
+    async fn test_pool() -> (NamedTempFile, ersatzrs_infra::db::DbPool) {
+        let file = NamedTempFile::new().unwrap();
+        let database_url = format!("sqlite:{}", file.path().display());
+        let pool = db::init(&database_url).await.unwrap();
+        (file, pool)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn seed_remote_stream_fixture(pool: &ersatzrs_infra::db::DbPool) {
+        let now = "2026-06-14T00:00:00Z";
+        for (source_id, library_id, path_id, item_id, title, original_title, sort_title) in [
+            (
+                70,
+                7,
+                700,
+                701,
+                "Nurburgring broadcast",
+                "Racing",
+                "nurburgring broadcast",
+            ),
+            (80, 8, 800, 801, "Visdeurbel", "Vis", "visdeurbel"),
+        ] {
+            sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (?)"#)
+                .bind(source_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (?)"#)
+                .bind(source_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+                   VALUES (?, ?, 7, ?)"#,
+            )
+            .bind(library_id)
+            .bind(format!("Remote Streams {library_id}"))
+            .bind(source_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
+                .bind(library_id)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(path_id)
+            .bind(format!("/remote/{library_id}"))
+            .bind(library_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+                   VALUES (?, ?, 0)"#,
+            )
+            .bind(item_id)
+            .bind(path_id)
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "RemoteStream" ("Id", "Url", "Script", "IsLive")
+                   VALUES (?, ?, NULL, 1)"#,
+            )
+            .bind(item_id)
+            .bind(format!("https://example.test/{item_id}.m3u8"))
+            .execute(pool)
+            .await
+            .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "RemoteStreamMetadata" (
+                       "RemoteStreamId", "MetadataKind", "Title", "OriginalTitle",
+                       "SortTitle", "DateAdded", "DateUpdated"
+                   )
+                   VALUES (?, 0, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(item_id)
+            .bind(title)
+            .bind(original_title)
+            .bind(sort_title)
+            .bind(now)
+            .bind(now)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+}
 
 #[cfg(test)]
 mod playlist_tests {

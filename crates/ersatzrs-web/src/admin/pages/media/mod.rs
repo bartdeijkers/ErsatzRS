@@ -10,6 +10,7 @@ pub mod multi_collections;
 pub mod multi_select_browser;
 pub mod other_videos;
 pub mod playlists;
+pub mod remote_streams;
 pub mod rerun_collections;
 pub mod season_detail;
 pub mod see_all_lists;
