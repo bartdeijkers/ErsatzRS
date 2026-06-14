@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-14","summary":"Verified Linux checkout after v0.0.8-alpha delta; fixed remote-streams e2e concurrency and hydration wait."}
 {"agent":"Codex","date":"2026-06-14","summary":"Ported the ErsatzTV remote streams browser route with search-index paging, selection actions, no-JS HTML, E2E coverage, and progress docs."}
 {"agent":"Codex","date":"2026-06-14","summary":"Fixed Windows release hydration asset discovery for bundled site/pkg assets and Windows drawvg preview paths, restoring hydrated watermark saves/previews and /channels stop-session controls."}
 {"agent":"ersatzrs-daily-progress","date":"2026-06-14","summary":"Daily reconcile of window 3617358..55034bd (smart-collection search + collection admin parity now Ported, release-CI fix); refreshed gap prompts: kept remote-streams-browser and ffmpeg-profile-editor carry-overs, replaced fold-disqualified ffmpeg-command-generation with ffmpeg-filter-graph live-proof."}

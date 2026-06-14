@@ -16,71 +16,103 @@ function sqlite(sql: string): string {
     throw new Error('E2E_DB_PATH or ERSATZRS_DB_PATH is required for remote-stream seeding');
   }
   return execFileSync('sqlite3', [dbPath], {
-    input: sql,
+    input: `.timeout 10000\n${sql}`,
     encoding: 'utf8',
   }).trim();
 }
 
-function seedRemoteStreams(): void {
-  sqlite(`
-DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (90701, 90801);
-DELETE FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN (90701, 90801);
-DELETE FROM "RemoteStream" WHERE "Id" IN (90701, 90801);
-DELETE FROM "MediaItem" WHERE "Id" IN (90701, 90801);
-DELETE FROM "LibraryPath" WHERE "Id" IN (9070, 9080);
-DELETE FROM "LocalLibrary" WHERE "Id" IN (907, 908);
-DELETE FROM "Library" WHERE "Id" IN (907, 908);
-DELETE FROM "LocalMediaSource" WHERE "Id" IN (9070, 9080);
-DELETE FROM "MediaSource" WHERE "Id" IN (9070, 9080);
+type RemoteStreamSeed = {
+  libraryId: number;
+  otherLibraryId: number;
+  libraryPathId: number;
+  otherLibraryPathId: number;
+  mediaSourceId: number;
+  otherMediaSourceId: number;
+  mediaItemId: number;
+  otherMediaItemId: number;
+};
 
-INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (9070);
-INSERT OR IGNORE INTO "LocalMediaSource" ("Id") VALUES (9070);
+function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
+  const projectOffset = Array.from(testInfo.project.name).reduce(
+    (total, char) => total + char.charCodeAt(0),
+    0,
+  ) * 100;
+  const base = 90_000 + projectOffset;
+  return {
+    libraryId: base + 7,
+    otherLibraryId: base + 8,
+    libraryPathId: base + 70,
+    otherLibraryPathId: base + 80,
+    mediaSourceId: base + 700,
+    otherMediaSourceId: base + 800,
+    mediaItemId: base + 7_001,
+    otherMediaItemId: base + 8_001,
+  };
+}
+
+function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
+  const seed = seedForProject(testInfo);
+  sqlite(`
+DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "RemoteStream" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "MediaItem" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "LibraryPath" WHERE "Id" IN (${seed.libraryPathId}, ${seed.otherLibraryPathId});
+DELETE FROM "LocalLibrary" WHERE "Id" IN (${seed.libraryId}, ${seed.otherLibraryId});
+DELETE FROM "Library" WHERE "Id" IN (${seed.libraryId}, ${seed.otherLibraryId});
+DELETE FROM "LocalMediaSource" WHERE "Id" IN (${seed.mediaSourceId}, ${seed.otherMediaSourceId});
+DELETE FROM "MediaSource" WHERE "Id" IN (${seed.mediaSourceId}, ${seed.otherMediaSourceId});
+
+INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (${seed.mediaSourceId});
+INSERT OR IGNORE INTO "LocalMediaSource" ("Id") VALUES (${seed.mediaSourceId});
 INSERT OR IGNORE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
-  VALUES (907, 'E2E Remote Streams', 7, 9070);
-INSERT OR IGNORE INTO "LocalLibrary" ("Id") VALUES (907);
+  VALUES (${seed.libraryId}, 'E2E Remote Streams', 7, ${seed.mediaSourceId});
+INSERT OR IGNORE INTO "LocalLibrary" ("Id") VALUES (${seed.libraryId});
 INSERT OR IGNORE INTO "LibraryPath" ("Id", "Path", "LibraryId")
-  VALUES (9070, '/e2e/remote-streams', 907);
+  VALUES (${seed.libraryPathId}, '/e2e/remote-streams/${testInfo.project.name}', ${seed.libraryId});
 INSERT OR IGNORE INTO "MediaItem" ("Id", "LibraryPathId", "State")
-  VALUES (90701, 9070, 0);
+  VALUES (${seed.mediaItemId}, ${seed.libraryPathId}, 0);
 INSERT OR IGNORE INTO "RemoteStream" ("Id", "Url", "Script", "IsLive")
-  VALUES (90701, 'https://example.test/nurburgring.m3u8', NULL, 1);
+  VALUES (${seed.mediaItemId}, 'https://example.test/nurburgring.m3u8', NULL, 1);
 INSERT OR IGNORE INTO "RemoteStreamMetadata" (
   "RemoteStreamId", "MetadataKind", "Title", "OriginalTitle",
   "SortTitle", "DateAdded", "DateUpdated"
 ) VALUES (
-  90701, 0, 'Nurburgring broadcast', 'Racing',
+  ${seed.mediaItemId}, 0, 'Nurburgring broadcast', 'Racing',
   'nurburgring broadcast', '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z'
 );
 
-INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (9080);
-INSERT OR IGNORE INTO "LocalMediaSource" ("Id") VALUES (9080);
+INSERT OR IGNORE INTO "MediaSource" ("Id") VALUES (${seed.otherMediaSourceId});
+INSERT OR IGNORE INTO "LocalMediaSource" ("Id") VALUES (${seed.otherMediaSourceId});
 INSERT OR IGNORE INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
-  VALUES (908, 'E2E Other Remote Streams', 7, 9080);
-INSERT OR IGNORE INTO "LocalLibrary" ("Id") VALUES (908);
+  VALUES (${seed.otherLibraryId}, 'E2E Other Remote Streams', 7, ${seed.otherMediaSourceId});
+INSERT OR IGNORE INTO "LocalLibrary" ("Id") VALUES (${seed.otherLibraryId});
 INSERT OR IGNORE INTO "LibraryPath" ("Id", "Path", "LibraryId")
-  VALUES (9080, '/e2e/other-remote-streams', 908);
+  VALUES (${seed.otherLibraryPathId}, '/e2e/other-remote-streams/${testInfo.project.name}', ${seed.otherLibraryId});
 INSERT OR IGNORE INTO "MediaItem" ("Id", "LibraryPathId", "State")
-  VALUES (90801, 9080, 0);
+  VALUES (${seed.otherMediaItemId}, ${seed.otherLibraryPathId}, 0);
 INSERT OR IGNORE INTO "RemoteStream" ("Id", "Url", "Script", "IsLive")
-  VALUES (90801, 'https://example.test/visdeurbel.m3u8', NULL, 1);
+  VALUES (${seed.otherMediaItemId}, 'https://example.test/visdeurbel.m3u8', NULL, 1);
 INSERT OR IGNORE INTO "RemoteStreamMetadata" (
   "RemoteStreamId", "MetadataKind", "Title", "OriginalTitle",
   "SortTitle", "DateAdded", "DateUpdated"
 ) VALUES (
-  90801, 0, 'Visdeurbel', 'Vis',
+  ${seed.otherMediaItemId}, 0, 'Visdeurbel', 'Vis',
   'visdeurbel', '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z'
 );
 `);
+  return seed;
 }
 
 function screenshotPath(testInfo: TestInfo, name: string): string {
   return `test-results/${name}-${testInfo.project.name}.png`;
 }
 
-async function gotoRemoteStreams(page: Page): Promise<void> {
-  await page.goto('/media/remote/streams?query=library_id:907');
+async function gotoRemoteStreams(page: Page, seed: RemoteStreamSeed): Promise<void> {
+  await page.goto(`/media/remote/streams?query=library_id:${seed.libraryId}`);
   await expect(page.getByRole('heading', { name: 'Remote Streams' })).toBeVisible();
   await expect(page.getByText('Nurburgring broadcast').first()).toBeVisible();
+  await expect(page.locator('[data-remote-streams-hydrated="true"]')).toBeVisible();
 }
 
 async function clickFirstCardAddToCollection(page: Page): Promise<void> {
@@ -95,14 +127,11 @@ async function clickFirstCardAddToCollection(page: Page): Promise<void> {
 test.describe('remote streams browser parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed remote streams');
 
-  test.beforeEach(() => {
-    seedRemoteStreams();
-  });
-
   test('list route keeps the ErsatzTV action-bar and card-grid geometry', async ({ page }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
     await page.setViewportSize({ width: 2048, height: 1024 });
-    await gotoRemoteStreams(page);
-    await expect(page.getByText('library_id:907')).toBeVisible();
+    await gotoRemoteStreams(page, seed);
+    await expect(page.getByText(`library_id:${seed.libraryId}`)).toBeVisible();
     await expect(page.getByText('1 item')).toBeVisible();
     await expect(page.getByText('Visdeurbel')).toHaveCount(0);
 
@@ -119,8 +148,9 @@ test.describe('remote streams browser parity', () => {
     await page.screenshot({ path: screenshotPath(testInfo, 'remote-streams-list-desktop'), fullPage: true });
   });
 
-  test('hydrated card add-to-collection action cancels and persists', async ({ page }) => {
-    await gotoRemoteStreams(page);
+  test('hydrated card add-to-collection action cancels and persists', async ({ page }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
+    await gotoRemoteStreams(page, seed);
 
     await clickFirstCardAddToCollection(page);
     const collectionModal = page
@@ -153,15 +183,16 @@ test.describe('remote streams browser parity', () => {
 SELECT COUNT(*)
 FROM "CollectionItem" ci
 JOIN "Collection" c ON c."Id" = ci."CollectionId"
-WHERE ci."MediaItemId" = 90701 AND c."Name" = '${sqlEscape(collectionName)}';
+WHERE ci."MediaItemId" = ${seed.mediaItemId} AND c."Name" = '${sqlEscape(collectionName)}';
 `)).toBe('1');
   });
 
-  test('no-JS route still server-renders the list and pager links', async ({ browser, baseURL }) => {
+  test('no-JS route still server-renders the list and pager links', async ({ browser, baseURL }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
     const noJsPage = await context.newPage();
 
-    const response = await noJsPage.goto('/media/remote/streams?query=library_id:907');
+    const response = await noJsPage.goto(`/media/remote/streams?query=library_id:${seed.libraryId}`);
     expect(await response?.text()).toContain('Nurburgring broadcast');
     await expect(noJsPage.getByRole('heading', { name: 'Remote Streams' }).first()).toBeVisible();
     await expect(noJsPage.getByRole('link', { name: /next/i })).toHaveCount(0);
@@ -170,8 +201,9 @@ WHERE ci."MediaItemId" = 90701 AND c."Name" = '${sqlEscape(collectionName)}';
   });
 
   test('mobile action menu remains reachable', async ({ page }, testInfo) => {
+    const seed = seedRemoteStreams(testInfo);
     await page.setViewportSize({ width: 390, height: 844 });
-    await gotoRemoteStreams(page);
+    await gotoRemoteStreams(page, seed);
 
     const menu = page.getByRole('button', { name: /item actions/i }).first();
     await expect(menu).toBeVisible();

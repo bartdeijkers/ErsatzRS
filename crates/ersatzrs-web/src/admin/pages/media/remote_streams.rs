@@ -192,6 +192,11 @@ fn RemoteStreamsContent(
     rows: Vec<MediaCardRow>,
     total: u64,
 ) -> impl IntoView {
+    let hydrated = RwSignal::new(false);
+    Effect::new(move |_| {
+        hydrated.set(true);
+    });
+
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let last_selected: RwSignal<Option<i64>> = RwSignal::new(None);
     let selected_count = Signal::derive(move || selected.with(HashSet::len));
@@ -213,7 +218,10 @@ fn RemoteStreamsContent(
     });
 
     view! {
-        <div class=style::page>
+        <div
+            class=style::page
+            data-remote-streams-hydrated=move || if hydrated.get() { "true" } else { "false" }
+        >
             <div class=style::action_bar>
                 <div class=style::action_row>
                     <ActionLabel query=query.clone() total=total selected_count=selected_count/>
