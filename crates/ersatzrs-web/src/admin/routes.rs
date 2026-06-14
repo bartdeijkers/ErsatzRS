@@ -25,12 +25,13 @@ use crate::admin::pages::media::multi_collections::{
 };
 use crate::admin::pages::media::other_videos::{OtherVideoPage, OtherVideosPage};
 use crate::admin::pages::media::playlists::{PlaylistEditorPage, PlaylistsPage};
+use crate::admin::pages::media::remote_streams::RemoteStreamsPage;
 use crate::admin::pages::media::rerun_collections::{
     RerunCollectionEditorPage, RerunCollectionsPage,
 };
 use crate::admin::pages::media::season_detail::SeasonPage;
 use crate::admin::pages::media::see_all_lists::{
-    EpisodesListPage, MusicVideosListPage, RemoteStreamsListPage, SeasonsListPage,
+    EpisodesListPage, MusicVideosListPage, SeasonsListPage,
 };
 use crate::admin::pages::media::shows::{ShowPage, ShowsPage};
 use crate::admin::pages::media::smart_collections::{
@@ -359,7 +360,17 @@ pub fn AdminRoutes() -> impl IntoView {
             />
             <Route
                 path=(StaticSegment("media"), StaticSegment("remote"), StaticSegment("streams"))
-                view=RemoteStreamsListPage
+                view=RemoteStreamsPage
+            />
+            <Route
+                path=(
+                    StaticSegment("media"),
+                    StaticSegment("remote"),
+                    StaticSegment("streams"),
+                    StaticSegment("page"),
+                    ParamSegment("page"),
+                )
+                view=RemoteStreamsPage
             />
 
             <Route

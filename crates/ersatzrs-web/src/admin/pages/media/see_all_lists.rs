@@ -1,6 +1,6 @@
 //! "See All" list-route pages for the search page's per-kind sections.
 //!
-//! These four kinds (seasons, episodes, music videos, remote streams) have no
+//! These three kinds (seasons, episodes, music videos) have no
 //! dedicated `*List.razor` in `ErsatzTV` — the search page is their only entry
 //! point. Each delegates to the shared [`MultiSelectBrowserPage`], which
 //! supplies the letter-bar + paginated grid + query echo that satisfies the
@@ -24,9 +24,4 @@ pub fn EpisodesListPage() -> impl IntoView {
 #[component]
 pub fn MusicVideosListPage() -> impl IntoView {
     view! { <MultiSelectBrowserPage config=BrowserKindConfig::MUSIC_VIDEOS/> }
-}
-
-#[component]
-pub fn RemoteStreamsListPage() -> impl IntoView {
-    view! { <MultiSelectBrowserPage config=BrowserKindConfig::REMOTE_STREAMS/> }
 }

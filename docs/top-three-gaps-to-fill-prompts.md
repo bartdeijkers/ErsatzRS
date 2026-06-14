@@ -20,78 +20,67 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `3617358..55034bd`): the window merged smart-collection
-search parity and collection admin parity (`search-index` and
-`collections-smart-collections` are now `Ported`) plus a release-CI fix; none of
-those touched the prior three prompt scopes. The two carry-over prompts
-(`remote-streams-browser`, `ffmpeg-profile-editor`) are still open and unworked,
-so they are kept. The prior FFmpeg command-generation prompt is **removed**:
-its only open debt (`nvenc-filter-gate-live-proof`) is hardware-bound
-verification-only, which the gap-prompt rules forbid as a standalone prompt.
-Its verification is folded into the refill — `ffmpeg-filter-graph`, the
-top-ranked Phase 7 focus pipeline gap, whose own open debt needs the same live
-streaming runtime proof.
+Ranking this run (window `3617358..55034bd`, manually updated 2026-06-14 after
+the remote-streams slice): `remote-streams-browser` is now `Ported`, so its
+prompt was removed. `ffmpeg-profile-editor` remains a focused UI parity gap,
+and the FFmpeg command-generation live proof remains folded into
+`ffmpeg-filter-graph` because both require the same live streaming runtime
+session. The refill is `channels-admin-ui`, the highest remaining
+`cargo xtask progress gaps` entry after remote streams completed; its next task
+is to audit why the feature still reports `In progress`, either closing it with
+evidence or recording precise remaining `ParityDebt`.
 
 ---
 
-## 1 - Remote streams browser: replace the advertised 404 with the ErsatzTV admin UI (slug `remote-streams-browser`)
+## 1 - Channels admin UI: close or precisely debt the remaining in-progress status (slug `channels-admin-ui`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Remote streams browser for
-`/media/remote/streams` (slug `remote-streams-browser`).
+Fix the next ErsatzTV parity gap in ErsatzRS: Channels admin UI
+(`channels-admin-ui`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current gap from `docs/progress/parity/remote-streams-browser.toml`: "Not
-started: nav link advertised in the drawer 404s today. Remote-stream domain
-entities exist; no UI yet." `docs/progress/routes.toml` also records
-`/media/remote/streams` as `routed = false` with backing "Remote-stream
-entities exist; no UI yet."
+Current state from `docs/progress/parity/channels-admin-ui.toml`: the list,
+delete/show-disabled toggle, generated/stored logos, stop-transcode action,
+full SSR multipart add/edit form, persisted labels/options, language selector,
+and music-video credits template behavior are already described as ported, but
+the feature still reports `In progress` and has no explicit structured debt.
 
-ErsatzTV source: `ErsatzTV/Pages/RemoteStreams*.razor` at the pinned commit.
-ErsatzRS target: `crates/ersatzrs-web/src/admin/pages/media/`, the matching
-server functions/API fallbacks, route registration, route/hydration progress
-docs, and `crates/ersatzrs-web/src/admin/languages/`.
+ErsatzTV source: `ErsatzTV/Pages/Channel*.razor`,
+`ErsatzTV/ViewModels/ChannelEditViewModel.cs`,
+`ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, and
+`ErsatzTV/Locals/Pages/Channels*.resx` at the pinned commit. ErsatzRS target:
+`crates/ersatzrs-web/src/admin/pages/channels/`,
+`crates/ersatzrs-web/src/admin/languages/`,
+`crates/ersatzrs-core/src/repositories/channel.rs`, and
+`crates/ersatzrs-infra/src/repositories/channel.rs`.
 
 Before editing:
-1. Read the pinned ErsatzTV remote-stream list/editor Razor sources and any
-   handlers/validators they call for URL, name, grouping, and save/delete
-   behavior.
-2. Inspect the current ErsatzRS remote-stream domain/repository shape, media
-   scanner persistence, admin nav route registration, media-page conventions,
-   raw POST fallback patterns, translations, and tests.
-3. Build a Source Map and a Visual Source Map for ErsatzTV's remote-stream
-   list/editor routes and the local `/media/remote/streams` route family.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+1. Read the pinned ErsatzTV channel list/editor sources, validators,
+   localization resources, logo handling, stop-transcode paths, and music-video
+   credits template behavior.
+2. Inspect the current ErsatzRS channels implementation, repository save/load
+   paths, SSR multipart fallback, i18n coverage, tests, and progress docs.
+3. Build a Source Map and a Visual Source Map for `/channels`,
+   `/channels/add`, and `/channels/:id`.
+4. Identify why the feature is still `In progress`. If parity is complete,
+   collect evidence and mark it `Ported`; if not, record concrete structured
+   `ParityDebt` instead of leaving the status ambiguous.
 
-Implement the coherent end-to-end slice: route `/media/remote/streams` and the
-needed add/edit/delete surfaces, backed by real persisted remote-stream rows
-and ErsatzTV-equivalent fields, validation, labels, actions, sorting/search or
-paging behavior, and side effects. Preserve SSR/browser-safe fallbacks for
-create/save/delete, wire the route into admin navigation without 404s, and add
-translations for every supported culture. If the current domain model lacks a
-field ErsatzTV exposes, port the persistence/server-function path or record a
-structured `ParityDebt`; do not silently omit it.
+Implement only the missing behavior proven by the audit. Do not rewrite already
+ported channel surfaces. Add focused tests or browser coverage for any missing
+list/editor/save/validation/hydration behavior you change, and update
+translations for every supported culture when visible text changes.
 
-Add focused server-function/API tests plus browser coverage for list, add,
-edit, delete/cancel, validation failure, and no-JS fallback behavior.
-
-Visual verification: serve via `./run.sh serve` after rebuilding Leptos assets,
-capture same-viewport screenshots against the ErsatzTV reference for list and
-editor states, and compare action-bar geometry, table/form layout, validation
-messages, empty state, and mobile behavior.
-
-Verify with focused `ersatzrs-web` remote-stream tests,
-`cargo xtask hydration-lint -p ersatzrs-web`, the added or updated Playwright
-spec via `npx playwright test ...`, `cargo xtask parity-check web`, and
-`cargo xtask progress check`. Update
-`docs/progress/parity/remote-streams-browser.toml`, `docs/progress/routes.toml`,
-and `docs/progress/hydration.toml` only when the evidence supports the new
-status. Report the Source Map, Visual Source Map, behavior implemented,
-remaining `ParityDebt`, verification run, and changed files.
+Verify with focused `ersatzrs-web` channel tests,
+`cargo xtask hydration-lint -p ersatzrs-web`, any added or updated Playwright
+spec, `cargo xtask parity-check web`, and `cargo xtask progress check`. Update
+`docs/progress/parity/channels-admin-ui.toml`, route/hydration docs, changelog,
+and this prompt file only when the evidence supports the new status. Report the
+Source Map, Visual Source Map, behavior implemented, remaining `ParityDebt`,
+verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 

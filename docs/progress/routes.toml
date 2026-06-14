@@ -197,5 +197,5 @@ routed  = true
 
 [[route]]
 nav     = '/media/remote/streams'
-backing = 'Remote-stream entities exist; no UI yet.'
-routed  = false
+backing = 'ErsatzTV `RemoteStreamList.razor` parity route: 100-card browser, search-index query filtering, `/page/{n}` route shape, letter page-map jumps, selection actions, per-card Add To Collection, Add To Playlist, and SSR/no-JS list HTML.'
+routed  = true

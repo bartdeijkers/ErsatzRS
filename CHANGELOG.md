@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Remote Streams now has an ErsatzTV-style admin browser at
+  `/media/remote/streams`, including search-index filtering, card paging,
+  letter jumps, collection/playlist add actions, no-JS list HTML, and
+  Playwright coverage.
+
 ### Fixed
 
 - Windows release builds now discover bundled Leptos hydration assets from the
