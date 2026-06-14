@@ -831,7 +831,7 @@ pub(crate) async fn load_active_media_path(
     channel_id: i64,
     now: DateTime<Utc>,
 ) -> Result<Option<ActivePlayoutItem>, sqlx::Error> {
-    let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let now_text = encode_sql_datetime(now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
                   pi."Id" AS "PlayoutItemId",
@@ -1165,6 +1165,17 @@ fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
 
 pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
     parse_sqlite_utc_timestamp(playout_start).map_or(0, |start| (now - start).num_seconds().max(0))
+}
+
+fn encode_sql_datetime(value: DateTime<Utc>) -> String {
+    let naive = value.naive_utc();
+    let base = naive.format("%Y-%m-%d %H:%M:%S").to_string();
+    let ticks = naive.and_utc().timestamp_subsec_nanos() / 100;
+    if ticks == 0 {
+        base
+    } else {
+        format!("{base}.{ticks:07}")
+    }
 }
 
 fn seconds_as_f64(seconds: i64) -> f64 {

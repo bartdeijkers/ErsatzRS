@@ -9,9 +9,9 @@ Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classi
 
 Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
 
-ParityDebt — Continue-build seam overlap: the persisted `anchor.next_start` tracks the schedule's daily hard-stop boundary while the last episode of each day overshoots it, so the following Continue build re-adds one item at the boundary that overlaps the prior overshoot item (one stray item per build, ~2 days ahead at the tail; never over the live `now` window). This matches ErsatzTV's acknowledged "expected overshoot" (`PlayoutBuilder.cs` logs the future-item warning and deliberately leaves the items). A full fix requires porting ErsatzTV's multi-day build loop with continue-anchors so `anchor.next_start` equals the last scheduled item's finish.
+Continue-build seam fix (2026-06-14): the Classic engine now clamps the persisted continue anchor to the finish of the last generated item when an item overshoots a build hard-stop boundary. This preserves ErsatzTV's accepted future overshoot item while preventing the next Continue build from re-adding the same item at the boundary.
 
-ParityDebt — duplicate consecutive item (observed 2026-06-10): the MTV music-video channel played the same item twice in a row (No Doubt - "Don't Speak"), which ErsatzTV's shuffled collection ordering does not do (its shuffle avoids immediate repeats across reshuffle boundaries). Verify the shuffled media-collection enumerator and its persisted ordering/anchor state against `ShuffledMediaCollectionEnumerator` at the pinned baseline.
+Shuffled collection fix (2026-06-14): Classic shuffled media collections now mirror `ShuffledMediaCollectionEnumerator.MoveNext` by remembering the previous cycle's tail item and advancing the reshuffle seed until the next cycle starts with a different media item. Runtime localization with a direct cyclic calibration playout showed HLS Segmenter and the modern MPEG-TS wrapper can advance a 1->2->3 persisted timeline correctly; a separate fresh-HOME Classic HLS startup replay was tracked and fixed under `hls-variant-playlists-segmenter`.
 '''
 
 [[debt]]
@@ -19,9 +19,11 @@ id          = 'continue-build-seam-overlap'
 description = 'Continue builds can re-add one future item at a daily hard-stop boundary because anchor.next_start tracks the boundary instead of the prior item finish.'
 discovered  = '2026-06-08'
 evidence    = 'classic-scheduling summary: one stray item per build around the future seam until ErsatzTV multi-day build loop with continue-anchors is ported.'
+resolved    = true
 
 [[debt]]
 id          = 'duplicate-consecutive-shuffle-item'
 description = 'Classic shuffled music-video collection ordering can repeat the same item consecutively across reshuffle boundaries.'
 discovered  = '2026-06-10'
 evidence    = "Runtime observation: MTV music-video channel played No Doubt - \"Don't Speak\" twice in a row, unlike ErsatzTV shuffled collection ordering."
+resolved    = true

@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-14
-last_processed_commit: 55034bd1cf9c31361c9b00c3c3dd63dbf095933e
+last_processed_commit: f36244538ac4953650f37ceb9c4a281a5c2f4c50
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -20,65 +20,108 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (window `3617358..55034bd`, manually updated 2026-06-14 after
-the remote-streams slice): `remote-streams-browser` is now `Ported`, so its
-prompt was removed. `ffmpeg-profile-editor` remains a focused UI parity gap,
-and the FFmpeg command-generation live proof remains folded into
-`ffmpeg-filter-graph` because both require the same live streaming runtime
-session. The refill is `channels-admin-ui`, the highest remaining
-`cargo xtask progress gaps` entry after remote streams completed; its next task
-is to audit why the feature still reports `In progress`, either closing it with
-evidence or recording precise remaining `ParityDebt`.
+Ranking this run (manually updated 2026-06-14 after the Classic/HLS replay
+closeout, through working tree state after `f362445`): `channels-admin-ui` is
+now `Ported`, so its prompt was removed. `classic-scheduling` no longer owns a
+top-three prompt because `duplicate-consecutive-shuffle-item` and
+`continue-build-seam-overlap` are resolved, and the separate HLS startup replay
+found during calibration was fixed and resolved under
+`hls-variant-playlists-segmenter`. `ffmpeg-profile-editor` and
+`ffmpeg-filter-graph` are carried over unchanged; the FFmpeg command-generation
+live proof remains folded into `ffmpeg-filter-graph` because both require the
+same live streaming runtime session. Slot 1 is now
+`mpeg-ts-channel-streaming`: the calibration playback gate found that the
+legacy MPEG-TS concat/direct branch can keep playing the same media item past a
+short `PlayoutItem.OutPoint` while HLS Segmenter and the modern MPEG-TS wrapper
+advance correctly.
 
 ---
 
-## 1 - Channels admin UI: close or precisely debt the remaining in-progress status (slug `channels-admin-ui`)
+## 1 - MPEG-TS channel streaming: fix legacy concat outpoint boundaries (slug `mpeg-ts-channel-streaming`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Channels admin UI
-(`channels-admin-ui`).
+Fix the next ErsatzTV parity gap in ErsatzRS: the legacy MPEG-TS concat/direct
+branch can ignore short `PlayoutItem` outpoints and continue the same media item
+instead of advancing at the playout boundary (slug `mpeg-ts-channel-streaming`,
+debt `legacy-concat-outpoint-boundary`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
+Log any additional parity gap encountered immediately in the relevant
+`docs/progress/parity/*.toml` file so it does not get lost.
 
-Current state from `docs/progress/parity/channels-admin-ui.toml`: the list,
-delete/show-disabled toggle, generated/stored logos, stop-transcode action,
-full SSR multipart add/edit form, persisted labels/options, language selector,
-and music-video credits template behavior are already described as ported, but
-the feature still reports `In progress` and has no explicit structured debt.
+Runtime evidence (local calibration, 2026-06-14): the playback gate seeded
+channel 1 with a 6-second cyclic calibration timeline, 1->2->3. HLS Segmenter
+and the modern MPEG-TS hybrid wrapper advanced through the clip sequence at item
+boundaries, but `/iptv/channel/1.ts?mode=ts-legacy` stayed on clip 1 past the
+6-second outpoint and showed clip 1 frames at ABS 00:00:04.483,
+00:00:07.483, 00:00:10.483, and later. Container checks still passed, so this
+is a content-boundary parity gap in the legacy concat/direct branch rather than
+a TS integrity failure.
 
-ErsatzTV source: `ErsatzTV/Pages/Channel*.razor`,
-`ErsatzTV/ViewModels/ChannelEditViewModel.cs`,
-`ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, and
-`ErsatzTV/Locals/Pages/Channels*.resx` at the pinned commit. ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/channels/`,
-`crates/ersatzrs-web/src/admin/languages/`,
-`crates/ersatzrs-core/src/repositories/channel.rs`, and
-`crates/ersatzrs-infra/src/repositories/channel.rs`.
+Current `ParityDebt` from `docs/progress/parity/mpeg-ts-channel-streaming.toml`:
+- `legacy-concat-outpoint-boundary` (2026-06-14): "The legacy MPEG-TS
+  concat/direct branch can ignore short PlayoutItem outpoints and continue the
+  same media item instead of advancing at the playout boundary." Evidence:
+  `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames
+  --keep gate` seeded channel 1 as 1->2->3; HLS Segmenter and `mode=ts` frame
+  sheets advanced, while `mode=ts-legacy` stayed on clip 1 past 6 seconds.
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`
+(`GetConcatProcessByChannelNumber` / legacy `.ts` branch),
+`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegProcessService.cs`
+(`ConcatChannel`, `WrapSegmenter`, direct stream process shape), and
+`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs` at the pinned
+commit. ErsatzRS target:
+`crates/ersatzrs-web/src/transport/iptv/{stream,mod}.rs`,
+`crates/ersatzrs-infra/src/playback.rs`, and `crates/ersatzrs-ffmpeg` command
+builders/snapshots.
 
 Before editing:
-1. Read the pinned ErsatzTV channel list/editor sources, validators,
-   localization resources, logo handling, stop-transcode paths, and music-video
-   credits template behavior.
-2. Inspect the current ErsatzRS channels implementation, repository save/load
-   paths, SSR multipart fallback, i18n coverage, tests, and progress docs.
-3. Build a Source Map and a Visual Source Map for `/channels`,
-   `/channels/add`, and `/channels/:id`.
-4. Identify why the feature is still `In progress`. If parity is complete,
-   collect evidence and mark it `Ported`; if not, record concrete structured
-   `ParityDebt` instead of leaving the status ambiguous.
+1. Read the pinned ErsatzTV legacy MPEG-TS concat path end to end: controller
+   action, stream selector, concat playlist generation, FFmpeg process service,
+   in-point/out-point handling, realtime looping, and disposal behavior.
+2. Inspect the ErsatzRS legacy concat stack:
+   `serve_legacy_concat_stream`, `/ffmpeg/concat/{n}`, `/ffmpeg/stream/{n}`,
+   `load_active_media_path`, `ActivePlayoutItem::{content_seek_seconds,
+   remaining_duration}`, command argv generation, response body cancellation,
+   and any concat playlist or internal stream test coverage.
+3. Reproduce the gap with the calibration clips before editing. Use
+   `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames
+   --keep gate` or an equivalent fresh DB/run, then inspect the generated
+   `mode=ts-legacy`, `mode=ts`, and HLS contact sheets. A failing legacy stream
+   shows the same clip number continuing past its 6-second ABS/outpoint while
+   the other pipelines advance.
+4. Build a Source Map for the legacy MPEG-TS current-item/outpoint path and
+   compare it to ErsatzTV. Identify whether the bug lives in concat playlist
+   looping, internal stream current-item lookup, FFmpeg argv duration/seek
+   bounds, or response/session lifecycle. Keep any unrelated behavior as
+   structured `ParityDebt`.
 
-Implement only the missing behavior proven by the audit. Do not rewrite already
-ported channel surfaces. Add focused tests or browser coverage for any missing
-list/editor/save/validation/hydration behavior you change, and update
-translations for every supported culture when visible text changes.
+Implement the fix in the proven layer. The legacy concat/direct branch must
+advance at each persisted `PlayoutItem` boundary, honor `InPoint`/`OutPoint` and
+short item durations, preserve realtime playback, and keep the modern
+`mode=ts` wrapper and HLS segmenter behavior unchanged. Do not weaken existing
+streaming/session tests. Add focused regressions for the boundary behavior,
+preferably at the direct internal stream/active item selection and command argv
+level, plus a runtime-facing guard if the bug only appears through the concat
+loop.
 
-Verify with focused `ersatzrs-web` channel tests,
-`cargo xtask hydration-lint -p ersatzrs-web`, any added or updated Playwright
-spec, `cargo xtask parity-check web`, and `cargo xtask progress check`. Update
-`docs/progress/parity/channels-admin-ui.toml`, route/hydration docs, changelog,
-and this prompt file only when the evidence supports the new status. Report the
-Source Map, Visual Source Map, behavior implemented, remaining `ParityDebt`,
-verification run, and changed files.
+Runtime verification: re-seed the calibration clips and confirm the same
+1->2->3 timeline advances exactly once per item on all three relevant surfaces:
+`/iptv/channel/1.ts?mode=ts-legacy`, `/iptv/channel/1.ts?mode=ts`, and the HLS
+segmenter playlist reached from `/iptv/channels.m3u`. The visual proof must show
+no repeated clip number/timecode span across item seams. Cross-check container
+integrity across the seams with `scripts/e2e/tsduck-playback-gate.sh`
+(continuity-counter / PCR / PTS), and include `cvlc` sanity playback where
+available.
+
+Verify with focused streaming tests, `cargo xtask smoke`, the calibration-clip
+playback check above, and `cargo xtask progress check`. Update
+`docs/progress/parity/mpeg-ts-channel-streaming.toml` (close or re-scope
+`legacy-concat-outpoint-boundary`), changelog, and this prompt file only when
+the evidence supports the new status. Report the Source Map, diagnosis,
+behavior implemented, remaining `ParityDebt`, calibration playback evidence,
+TSDuck/cvlc results, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 

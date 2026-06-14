@@ -230,6 +230,25 @@ TS response-body disposal is already covered by the
 `spawn_stream_body_kills_ffmpeg_when_body_is_dropped` regression guard; the
 open lifecycle proof needs to cover HLS segmenter and hybrid MPEG-TS wrapper
 sessions.
+
+Reopened startup-seek audit (2026-06-14): with a fresh HLS HOME/temp directory
+and a Classic-scheduled calibration playout whose persisted `PlayoutItem` rows
+advanced 1->2->3 every six seconds, the HLS Segmenter capture started on clip 3
+at ABS 00:06:02.483 and then restarted clip 3 near ABS 00:06:00.333 before
+advancing to clip 1 and clip 2. The modern MPEG-TS wrapper frame sheet for the
+same Classic-built timeline advanced as expected. This localizes a
+client-visible duplicate-at-session-start gap to HLS segmenter startup/seek
+handling, separate from the Classic scheduler row order.
+
+Closeout (2026-06-14): the HLS worker and direct current-item lookup now pass
+full-precision persisted playout timestamps into SQL instead of truncating
+request time to whole seconds. Rebuilt-runtime Classic calibration proof with a
+fresh HLS HOME showed HLS Segmenter and modern MPEG-TS wrapper captures both
+advancing 2->3->1->2 with no repeated clip/timecode span; the HLS and TS URL
+TSDuck playback gates both passed with zero continuity-counter errors, zero
+PTS/DTS/PCR leaps, and zero TS sync losses. `cvlc` also played the TS URL and,
+with dummy outputs/hardware decode disabled to avoid local EGL/VA crashes, the
+channel HLS entrypoint.
 '''
 
 [[debt]]
@@ -237,3 +256,10 @@ id          = 'vlc-stop-on-disconnect-session-lifecycle'
 description = 'For channels configured with `IdleBehavior = StopOnDisconnect`, VLC playback shutdown must drain every channel transcode session after the configured segmenter idle timeout and must not leave the `/channels` active-session state or FFmpeg process tree running past that timeout. This must cover HLS segmenter playback and the MPEG-TS hybrid wrapper path that starts/touches the HLS segmenter, while preserving the already-ported direct `.ts` response-body disposal behavior.'
 discovered  = '2026-06-13'
 evidence    = 'User-observed VLC shutdown did not immediately stop the channel transcoding session, but the observation was shorter than the local configured timeout. Local DB evidence during triage: channels 1 and 2 have `IdleBehavior = 0` (`StopOnDisconnect`) and `ffmpeg.segmenter.timeout_seconds = 60`; upstream default from `GetFFmpegSettingsHandler` is also 60 seconds, while persisted ErsatzTV settings may be shorter. Upstream lifecycle evidence is `ChannelEditor.razor` Stop On Disconnect help text, `StartFFmpegSessionHandler` idle-timeout loading/KeepRunning bypass, `HlsSessionWorker` idle cancellation, static `/iptv/session` touch handling, and `IptvController` `RegisterForDispose` for direct `.ts` responses.'
+
+[[debt]]
+id          = 'segmenter-start-replays-current-item'
+description = 'HLS Segmenter session startup can emit the active playout item near the live offset and then restart the same item from the beginning before advancing.'
+discovered  = '2026-06-14'
+evidence    = 'Fresh-HOME Classic calibration proof: persisted PlayoutItem rows were 1->2->3 with 6s outpoints; /iptv/session/1/hls.m3u8 frame sheet showed clip 3 at ABS 00:06:02.483 followed by clip 3 at ABS 00:06:00.333, then clip 1/2/3. Modern mode=ts frame sheet advanced normally.'
+resolved    = true

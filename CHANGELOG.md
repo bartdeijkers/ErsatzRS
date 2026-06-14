@@ -32,6 +32,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Classic scheduling now avoids immediate repeats across shuffled collection
+  reshuffle boundaries and persists continue-build anchors at the last
+  generated item finish when a media item overshoots a build hard stop.
 - Channel music-video credit subtitles now extract the bundled ErsatzTV fonts
   before playback, so `_default.ass` renders with the matching title style, and
   the `/channels` Troubleshoot action now only appears for enabled channels

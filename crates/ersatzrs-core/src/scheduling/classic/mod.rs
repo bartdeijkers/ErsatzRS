@@ -621,7 +621,10 @@ impl ClassicContext {
 
     fn into_result(mut self) -> SchedulingResult {
         let current_item = self.schedule_items[self.current_schedule_index()].clone();
-        let next_start = self.start_time_after(&current_item, false);
+        let mut next_start = self.start_time_after(&current_item, false);
+        if let Some(last_finish) = self.result.added_items.iter().map(|item| item.finish).max() {
+            next_start = next_start.max(last_finish);
+        }
         self.result.anchor = Some(PlayoutAnchor {
             schedule_items_enumerator_state: self.state.schedule_state,
             next_start,
@@ -802,6 +805,7 @@ impl ClassicContext {
             return;
         }
         if let Some(enumerator) = self.media.get_mut(&key) {
+            let tail_media_id = enumerator.current().map(|item| item.id);
             enumerator.advance();
             let index = i32::try_from(enumerator.current_index()).unwrap_or_default();
             let should_reshuffle = enumerator.current_index() == 0
@@ -824,11 +828,10 @@ impl ClassicContext {
                 }
             }
             if let Some(seed) = next_seed {
-                prepare_enumerator_items(
-                    enumerator,
-                    playback_order,
-                    u64::try_from(seed).unwrap_or_default(),
-                );
+                let seed = prepare_next_cycle(enumerator, playback_order, seed, tail_media_id);
+                if let Some(state) = self.media_states.get_mut(&key) {
+                    state.seed = seed;
+                }
             }
         }
     }
@@ -1071,6 +1074,41 @@ fn prepare_enumerator_items(
         | PlaybackOrder::MultiEpisodeShuffle => shuffle_with_seed(&mut enumerator.items, seed),
         PlaybackOrder::None => {}
     }
+}
+
+fn prepare_next_cycle(
+    enumerator: &mut MediaEnumerator,
+    playback_order: PlaybackOrder,
+    mut seed: i32,
+    tail_media_id: Option<EntityId>,
+) -> i32 {
+    prepare_enumerator_items(
+        enumerator,
+        playback_order,
+        u64::try_from(seed).unwrap_or_default(),
+    );
+
+    if !matches!(
+        playback_order,
+        PlaybackOrder::Shuffle | PlaybackOrder::ShuffleInOrder | PlaybackOrder::MultiEpisodeShuffle
+    ) || enumerator.len() <= 1
+    {
+        return seed;
+    }
+
+    while enumerator
+        .current()
+        .is_some_and(|item| Some(item.id) == tail_media_id)
+    {
+        seed = next_i32_seed(seed);
+        prepare_enumerator_items(
+            enumerator,
+            playback_order,
+            u64::try_from(seed).unwrap_or_default(),
+        );
+    }
+
+    seed
 }
 
 fn next_i32_seed(seed: i32) -> i32 {
@@ -1333,6 +1371,92 @@ mod tests {
                 .first()
                 .map(|anchor| anchor.enumerator_state.seed),
             Some(next_i32_seed(42))
+        );
+    }
+
+    #[test]
+    fn classic_shuffle_avoids_immediate_repeat_across_reshuffle_boundary() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(10)),
+                SchedulingMediaItem::new(102, Duration::minutes(10)),
+            ],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 1,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(40),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let ids = result
+            .added_items
+            .iter()
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids.len(), 4);
+        assert!(
+            ids.windows(2).all(|window| window[0] != window[1]),
+            "shuffled collection repeated across cycle boundary: {ids:?}"
+        );
+    }
+
+    #[test]
+    fn classic_continue_anchor_uses_last_item_finish_after_hard_stop_overshoot() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 50, 0).unwrap();
+        let finish = Utc.with_ymd_and_hms(2026, 4, 27, 0, 0, 0).unwrap();
+        let schedule_item = schedule_item(1, PlayoutMode::One, 1, None);
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![SchedulingMediaItem::new(101, Duration::minutes(20))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish,
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let scheduled = result.added_items.first().expect("scheduled item");
+        assert_eq!(scheduled.start, start);
+        assert_eq!(scheduled.finish, start + Duration::minutes(20));
+        assert_eq!(
+            result.anchor.map(|anchor| anchor.next_start),
+            Some(scheduled.finish)
         );
     }
 

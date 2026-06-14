@@ -63,4 +63,20 @@ MPEG-TS sample. Channel 1 legacy MPEG-TS
 curl timed out after 66,922,924 bytes and ffprobe read HEVC video plus AAC
 audio, proving the legacy branch remains readable and observably distinct from
 the modern segmenter wrapper.
+
+ParityDebt — legacy concat outpoint boundary: the 2026-06-14 calibration
+playback gate seeded channel 1 with an explicit 6-second cyclic 1->2->3
+`PlayoutItem` timeline. HLS Segmenter and the modern MPEG-TS hybrid wrapper
+advanced through the clip sequence at item boundaries, but the legacy
+`/iptv/channel/1.ts?mode=ts-legacy` capture stayed on clip 1 past the 6-second
+`OutPoint` and showed clip 1 frames at ABS 00:00:04.483, 00:00:07.483,
+00:00:10.483, and later. Container checks still passed, so this is a
+content-boundary parity gap in the legacy concat/direct branch rather than a TS
+integrity failure.
 '''
+
+[[debt]]
+id          = 'legacy-concat-outpoint-boundary'
+description = 'The legacy MPEG-TS concat/direct branch can ignore short PlayoutItem outpoints and continue the same media item instead of advancing at the playout boundary.'
+discovered  = '2026-06-14'
+evidence    = 'scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames --keep gate seeded channel 1 as 1->2->3; HLS Segmenter and mode=ts frame sheets advanced 3->1->2->3->1, while mode=ts-legacy stayed on clip 1 past 6s with ABS 00:00:04.483, 00:00:07.483, 00:00:10.483, and later.'

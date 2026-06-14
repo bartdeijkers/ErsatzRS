@@ -2191,7 +2191,7 @@ async fn load_active_hls_item(
     path_replacements: &[PathReplacement],
     now: DateTime<Utc>,
 ) -> Option<ActiveHlsItem> {
-    let now_text = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let now_text = encode_datetime(now);
     let row = sqlx::query(
         r#"SELECT mf."Path" AS "MediaPath",
                   pi."Id" AS "PlayoutItemId",
