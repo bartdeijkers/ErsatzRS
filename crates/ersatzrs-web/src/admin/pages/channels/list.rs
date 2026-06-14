@@ -150,6 +150,12 @@ fn ChannelsListIsland() -> impl IntoView {
         let active_number = number.clone();
         let is_active =
             move || active_numbers.with(|nums| nums.iter().any(|n| n == &active_number));
+        let can_troubleshoot = can_troubleshoot_channel(ch);
+        let troubleshoot_href = if can_troubleshoot {
+            format!("/system/troubleshooting/playback?channel={id}")
+        } else {
+            String::new()
+        };
         view! {
             <div class=style::row_actions>
                 <a
@@ -174,12 +180,15 @@ fn ChannelsListIsland() -> impl IntoView {
                     title=tr(TextKey::EditChannel)
                     aria-label=tr(TextKey::EditChannel)
                 ></a>
-                <span
-                    class=format!("{} {} {}", style::row_btn_icon, style::row_btn_search, style::row_btn_disabled)
+                <a
+                    href=troubleshoot_href
+                    class=format!("{} {}", style::row_btn_icon, style::row_btn_search)
+                    style:visibility=if can_troubleshoot { "visible" } else { "hidden" }
                     title=tr(TextKey::TroubleshootChannel)
                     aria-label=tr(TextKey::TroubleshootChannel)
-                    aria-disabled="true"
-                ></span>
+                    aria-hidden=if can_troubleshoot { "false" } else { "true" }
+                    tabindex=if can_troubleshoot { "0" } else { "-1" }
+                ></a>
                 <button
                     class=format!("{} {}", style::row_btn_icon, style::row_btn_delete)
                     title=tr(TextKey::DeleteChannel)
@@ -255,5 +264,29 @@ fn ChannelsListIsland() -> impl IntoView {
                 })
             />
         </div>
+    }
+}
+
+fn can_troubleshoot_channel(channel: &ChannelListRow) -> bool {
+    channel.is_enabled && channel.playout_count > 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(is_enabled: bool, playout_count: i64) -> ChannelListRow {
+        ChannelListRow {
+            is_enabled,
+            playout_count,
+            ..ChannelListRow::default()
+        }
+    }
+
+    #[test]
+    fn troubleshoot_action_matches_ersatztv_visibility_rule() {
+        assert!(can_troubleshoot_channel(&row(true, 1)));
+        assert!(!can_troubleshoot_channel(&row(true, 0)));
+        assert!(!can_troubleshoot_channel(&row(false, 1)));
     }
 }

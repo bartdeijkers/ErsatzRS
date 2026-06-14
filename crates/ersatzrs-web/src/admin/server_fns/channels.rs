@@ -14,6 +14,7 @@ pub struct ChannelListRow {
     pub streaming_mode: i32,
     pub streaming_mode_label: String,
     pub ffmpeg_profile_name: String,
+    pub playout_count: i64,
     pub logo_url: String,
 }
 
@@ -264,6 +265,7 @@ pub async fn list_channel_rows(
         r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
                   c."IsEnabled", c."ShowInEpg",
                   c."StreamingMode", COALESCE(p."Name", '') AS "ProfileName",
+                  (SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") AS "PlayoutCount",
                   (SELECT a."Path" FROM "Artwork" a
                    WHERE a."ChannelId" = c."Id" AND a."ArtworkKind" = 2
                    ORDER BY a."Id" LIMIT 1) AS "LogoPath"
@@ -298,6 +300,7 @@ pub async fn list_channel_rows(
                 streaming_mode: mode,
                 streaming_mode_label: streaming_mode_label(mode),
                 ffmpeg_profile_name: row.try_get("ProfileName").unwrap_or_default(),
+                playout_count: row.try_get("PlayoutCount").unwrap_or_default(),
                 logo_url: channel_logo_url(
                     &row.try_get::<String, _>("Name").unwrap_or_default(),
                     row.try_get::<Option<String>, _>("LogoPath")

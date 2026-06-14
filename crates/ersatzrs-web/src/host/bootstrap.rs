@@ -78,6 +78,20 @@ const STREAMING_RESOURCE_FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../../assets/song_progress_overlay_43.png"),
     ),
 ];
+const STREAMING_FONT_FILES: &[(&str, &[u8])] = &[
+    (
+        "Sen.ttf",
+        include_bytes!("../../../../assets/fonts/Sen.ttf"),
+    ),
+    (
+        "Roboto-Regular.ttf",
+        include_bytes!("../../../../assets/fonts/Roboto-Regular.ttf"),
+    ),
+    (
+        "OPTIKabel-Heavy.otf",
+        include_bytes!("../../../../assets/fonts/OPTIKabel-Heavy.otf"),
+    ),
+];
 static LOG_FILTER_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 
 pub async fn run() {
@@ -91,6 +105,9 @@ pub async fn run() {
     }
     if let Err(error) = extract_streaming_resources().await {
         tracing::warn!(%error, "failed to extract bundled streaming resources");
+    }
+    if let Err(error) = extract_streaming_fonts().await {
+        tracing::warn!(%error, "failed to extract bundled streaming fonts");
     }
 
     tracing::info!(
@@ -316,6 +333,18 @@ async fn extract_streaming_resources() -> io::Result<()> {
 async fn extract_streaming_resources_in(folder: &std::path::Path) -> io::Result<()> {
     tokio::fs::create_dir_all(folder).await?;
     for (name, contents) in STREAMING_RESOURCE_FILES {
+        tokio::fs::write(folder.join(name), contents).await?;
+    }
+    Ok(())
+}
+
+async fn extract_streaming_fonts() -> io::Result<()> {
+    extract_streaming_fonts_in(&file_system_layout::fonts_cache_folder()).await
+}
+
+async fn extract_streaming_fonts_in(folder: &std::path::Path) -> io::Result<()> {
+    tokio::fs::create_dir_all(folder).await?;
+    for (name, contents) in STREAMING_FONT_FILES {
         tokio::fs::write(folder.join(name), contents).await?;
     }
     Ok(())
@@ -657,6 +686,29 @@ mod tests {
                 .await
                 .unwrap_or_else(|error| panic!("read extracted resource {name}: {error}"));
             assert_eq!(&extracted, contents, "resource {name} content mismatch");
+        }
+    }
+
+    #[tokio::test]
+    async fn extract_streaming_fonts_overwrites_stale_files() {
+        let root = tempfile::tempdir().expect("temp fonts root");
+        let folder = root.path().join("fonts");
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .expect("create fonts folder");
+        tokio::fs::write(folder.join("OPTIKabel-Heavy.otf"), b"stale")
+            .await
+            .expect("write stale font");
+
+        extract_streaming_fonts_in(&folder)
+            .await
+            .expect("extract fonts");
+
+        for (name, contents) in STREAMING_FONT_FILES {
+            let extracted = tokio::fs::read(folder.join(name))
+                .await
+                .unwrap_or_else(|error| panic!("read extracted font {name}: {error}"));
+            assert_eq!(&extracted, contents, "font {name} content mismatch");
         }
     }
 

@@ -189,11 +189,6 @@
     visibility: hidden;
 }
 
-.row-btn-disabled {
-    opacity: 0.4;
-    pointer-events: none;
-}
-
 .logo-img {
     display: block;
     max-width: 9rem;
