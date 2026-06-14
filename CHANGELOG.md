@@ -19,9 +19,23 @@ release section when tagging a release.
   `/media/remote/streams`, including search-index filtering, card paging,
   letter jumps, collection/playlist add actions, no-JS list HTML, and
   Playwright coverage.
+- Playback calibration and verification tooling for streaming work.
+  `scripts/calibration/` generates three 1080p60 clips (per-clip background
+  colour, large clip number, millisecond ABS/per-clip timecodes, frame
+  counters, a per-second sweep bar, a centred geometry square, and a per-second
+  audio pip) as MKV sources plus MPEG-TS, for visually tracking playout order
+  and spotting jitter/skips. `scripts/e2e/` adds a TSDuck end-to-end playback
+  gate that validates served streams — continuity-counter/PCR/PTS integrity,
+  PSI structure, and audio/video PIDs — across the MPEG-TS (legacy and hybrid)
+  and HLS (segmenter and direct) pipelines. The gate is a required manual check,
+  not part of CI; the generated clips are gitignored and regenerated on demand.
 
 ### Fixed
 
+- Channel music-video credit subtitles now extract the bundled ErsatzTV fonts
+  before playback, so `_default.ass` renders with the matching title style, and
+  the `/channels` Troubleshoot action now only appears for enabled channels
+  with playouts.
 - Windows release builds now discover bundled Leptos hydration assets from the
   `site/pkg` directory next to the server binary even when `LEPTOS_*` runtime
   variables are absent, restoring hydrated admin actions such as watermark

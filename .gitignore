@@ -88,3 +88,6 @@ Thumbs.db
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Calibration test clips (generated)
+/calibration-clips/

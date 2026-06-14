@@ -106,6 +106,17 @@ cargo test --workspace --all-features
 # SQLite database, seeds a tiny local library, probes IPTV MPEG-TS and HLS
 # endpoints, and fails on known FFmpeg/segmenter runtime signatures.
 
+# For deeper playback-correctness confirmation, run the TSDuck end-to-end
+# playback gate (a required manual gate, NOT part of CI; pairs with `smoke`):
+#   scripts/e2e/tsduck-playback-gate.sh gate
+# It boots ersatzrs-web on a throwaway DB, seeds the calibration clips
+# (scripts/calibration/, auto-generated on first run and gitignored) as a cyclic
+# playout, then captures and TSDuck-validates the served streams — continuity-
+# counter/PCR/PTS integrity, PSI structure, audio/video PIDs — across the
+# MPEG-TS (legacy/hybrid) and HLS (segmenter/direct) pipelines, and exits
+# non-zero on any failure. `baseline` validates the static clips and `url
+# <stream>` validates an already-running channel. See scripts/e2e/README.md.
+
 # Run the full mediaserver (web UI + IPTV/HDHomeRun endpoints) on SQLite.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
 # FFmpeg 8.1+ must be available on PATH; pending migrations run automatically.
