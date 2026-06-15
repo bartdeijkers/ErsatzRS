@@ -1,7 +1,6 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -58,7 +57,7 @@ fn write_fake_scanner(
     dir: &std::path::Path,
     record_path: &std::path::Path,
     exit_code: i32,
-) -> PathBuf {
+) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let script = dir.join("fake-ersatzrs-scanner");
     let body = format!(

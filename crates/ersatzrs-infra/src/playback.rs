@@ -151,7 +151,8 @@ pub async fn load_source_video_stream(
     media_version_id: i64,
 ) -> Option<SourceVideoStream> {
     let row = sqlx::query(
-        r#"SELECT ms."Codec" AS "Codec",
+        r#"SELECT ms."Index" AS "Index",
+                  ms."Codec" AS "Codec",
                   ms."PixelFormat" AS "PixelFormat",
                   ms."ColorRange" AS "ColorRange",
                   ms."ColorTransfer" AS "ColorTransfer",
@@ -177,6 +178,11 @@ pub async fn load_source_video_stream(
     .ok()??;
 
     let codec: String = row.try_get("Codec").ok()?;
+    let index = row
+        .try_get::<i64, _>("Index")
+        .ok()
+        .and_then(|index| usize::try_from(index).ok())
+        .unwrap_or_default();
     let pixel_format: Option<String> = row.try_get("PixelFormat").ok().flatten();
     let color_range: Option<String> = row.try_get("ColorRange").ok().flatten();
     let color_transfer: Option<String> = row.try_get("ColorTransfer").ok().flatten();
@@ -190,7 +196,8 @@ pub async fn load_source_video_stream(
         .ok()
         .map_or(VideoScanKind::Unknown, scan_kind_from_db);
 
-    let mut stream = SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(&codec));
+    let mut stream =
+        SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(&codec)).with_index(index);
     stream.pixel_format = pixel_format
         .as_deref()
         .and_then(PixelFormat::from_ffmpeg_name);

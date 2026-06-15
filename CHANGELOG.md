@@ -36,6 +36,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- FFmpeg playback now uses persisted media stream indexes for video and audio
+  inputs, fixing watermarked channels whose files store audio before video,
+  such as the MTV channel stream failing with a filtergraph stream-specifier
+  error.
 - HLS Segmenter `StopOnDisconnect` sessions now stop after the configured idle
   timeout even while FFmpeg is still running, segment-file requests refresh the
   session like ErsatzTV, and the MPEG-TS hybrid wrapper waits for initial HLS

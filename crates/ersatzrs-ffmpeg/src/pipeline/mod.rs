@@ -194,6 +194,7 @@ impl GraphicsPipelineOverlay {
 /// Source video stream metadata used for ErsatzTV-style decoder dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceVideoStream {
+    pub index: usize,
     pub codec: SourceVideoCodec,
     pub profile: Option<String>,
     pub pixel_format: Option<PixelFormat>,
@@ -211,6 +212,7 @@ impl SourceVideoStream {
     #[must_use]
     pub const fn new(codec: SourceVideoCodec) -> Self {
         Self {
+            index: 0,
             codec,
             profile: None,
             pixel_format: None,
@@ -230,6 +232,12 @@ impl SourceVideoStream {
             sample_aspect_ratio: None,
             display_aspect_ratio: None,
         }
+    }
+
+    #[must_use]
+    pub const fn with_index(mut self, index: usize) -> Self {
+        self.index = index;
+        self
     }
 
     #[must_use]
@@ -868,6 +876,8 @@ fn build_transcode_pipeline(
     mut request: PipelineRequest,
     acceleration: HardwareAccelerationKind,
 ) -> FFmpegPipeline {
+    apply_source_stream_indexes(&mut request);
+
     let effective_acceleration = effective_video_acceleration(&request, acceleration);
     let effective_decode_acceleration =
         effective_decode_acceleration(&request, acceleration, effective_acceleration);
@@ -1402,6 +1412,39 @@ fn build_transcode_pipeline(
         inputs: request.inputs,
         is_intel_vaapi_or_qsv: is_intel,
         filter_graph,
+    }
+}
+
+fn apply_source_stream_indexes(request: &mut PipelineRequest) {
+    if let Some(source_video_stream) = &request.source_video_stream {
+        if let Some(video_input) = request
+            .inputs
+            .iter_mut()
+            .find(|input| input.kind == InputKind::Video)
+        {
+            video_input.streams = vec![crate::MediaStream::new(source_video_stream.index)];
+        }
+    }
+
+    let Some(audio_input) = request
+        .inputs
+        .iter_mut()
+        .find(|input| input.kind == InputKind::Audio)
+    else {
+        return;
+    };
+
+    let selected_audio_index = audio_input.streams.first().map(|stream| stream.index);
+    let selected_audio_exists = selected_audio_index.is_some_and(|index| {
+        request
+            .source_audio_streams
+            .iter()
+            .any(|stream| stream.index == index)
+    });
+    if !selected_audio_exists {
+        if let Some(source_audio_stream) = request.source_audio_streams.first() {
+            audio_input.streams = vec![crate::MediaStream::new(source_audio_stream.index)];
+        }
     }
 }
 

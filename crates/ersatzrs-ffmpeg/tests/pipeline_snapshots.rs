@@ -103,6 +103,51 @@ fn software_pipeline_single_video_mpegts_snapshot() {
 }
 
 #[test]
+fn pipeline_uses_persisted_stream_indexes_when_audio_precedes_video() {
+    let mut source_video = SourceVideoStream::new(SourceVideoCodec::H264).with_index(1);
+    source_video.frame_size = Some(FrameSize::new(1920, 1080));
+    source_video.pixel_format = Some(PixelFormat::Yuv420P);
+    source_video.color_params = SourceColorParams {
+        color_range: Some("tv".to_owned()),
+        color_space: Some("bt709".to_owned()),
+        color_transfer: Some("bt709".to_owned()),
+        color_primaries: Some("bt709".to_owned()),
+        is_hdr: false,
+        is_bt2020_ten: false,
+    };
+
+    let mut request = PipelineRequest::new(
+        InputFile::video("/media/music-video.mp4"),
+        DesiredVideoState::h264_1080p(),
+    )
+    .with_source_video_stream(source_video)
+    .with_source_audio_streams(vec![
+        SourceAudioStream::new(SourceAudioCodec::Aac).with_index(0)
+    ]);
+    request
+        .inputs
+        .push(InputFile::watermark("/media/mtv-logo.png"));
+    request.watermarks.push(WatermarkOverlay {
+        opacity: 30,
+        ..WatermarkOverlay::default()
+    });
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        args.contains("[0:1][wm0]overlay=x=W-w-38:y=H-h-22:format=0[vwm0]"),
+        "{args}"
+    );
+    assert!(args.contains("[0:0]aresample=async=1,apad[a]"), "{args}");
+    assert!(
+        args.contains("[1:0]scale=192:-1,format=yuva420p|yuva444p|yuva422p|rgba|abgr|bgra|gbrap|ya8,colorchannelmixer=aa=0.30[wm0]"),
+        "{args}"
+    );
+    assert!(!args.contains("[0:0]setparams="), "{args}");
+}
+
+#[test]
 fn software_pipeline_emits_output_metadata_snapshot() {
     let desired = DesiredVideoState::h264_1080p();
     let mut request = h264_request(desired);

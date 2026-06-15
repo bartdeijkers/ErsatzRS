@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-15","summary":"Fixed FFmpeg stream-index selection for MTV-style audio-first media with watermarks"}
 {"agent":"Codex","date":"2026-06-15","summary":"Closed settings i18n parity with generated language registration and browser proof."}
 {"agent":"codex","date":"2026-06-15","summary":"Closed HLS Segmenter StopOnDisconnect lifecycle parity: segment-file touches, active FFmpeg idle cancellation/reap, wrapper startup wait, lifecycle smoke proof."}
 {"agent":"codex","date":"2026-06-15","summary":"Closed FFmpeg profile editor H.264 profile options and NVENC MPEG-2 validation parity with focused tests and browser coverage."}
