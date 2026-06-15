@@ -388,6 +388,11 @@ async fn serve_channel_stream_with_channel(
         }
     };
     let channel_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
+    let stream_duration = if effective_streaming_mode == StreamingMode::TransportStream {
+        active.remaining_duration(now)
+    } else {
+        None
+    };
     let opacity_clock = watermark_opacity_clock_at_spawn(
         now,
         duration_from_seconds(start_seconds),
@@ -398,6 +403,7 @@ async fn serve_channel_stream_with_channel(
         &resolved,
         output_format,
         start_seconds,
+        stream_duration,
         &playback_profile,
         target_frame_rate,
         effective_streaming_mode,
@@ -427,6 +433,7 @@ async fn serve_channel_stream_with_channel(
                     &resolved,
                     output_format,
                     start_seconds,
+                    stream_duration,
                     &playback_profile,
                     target_frame_rate,
                     effective_streaming_mode,
@@ -804,6 +811,7 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) media_version_id: i64,
     pub(crate) content_duration: Option<Duration>,
     pub(crate) in_point: Duration,
+    pub(crate) out_point: Duration,
     pub(crate) playout_start: String,
     pub(crate) playout_finish: String,
     pub(crate) disable_watermarks: bool,
@@ -819,10 +827,35 @@ impl ActivePlayoutItem {
         (finish - start).to_std().ok()
     }
 
+    fn elapsed_since_start(&self, now: DateTime<Utc>) -> Duration {
+        parse_sqlite_utc_timestamp(&self.playout_start)
+            .and_then(|start| (now - start).to_std().ok())
+            .unwrap_or(Duration::ZERO)
+    }
+
     pub(crate) fn content_seek_seconds(&self, now: DateTime<Utc>) -> i64 {
-        let elapsed = u64::try_from(playout_start_seconds(now, &self.playout_start)).unwrap_or(0);
-        let seek_seconds = self.in_point.as_secs().saturating_add(elapsed);
+        let seek_seconds = self
+            .in_point
+            .saturating_add(self.elapsed_since_start(now))
+            .as_secs();
         i64::try_from(seek_seconds).unwrap_or(i64::MAX)
+    }
+
+    fn remaining_duration(&self, now: DateTime<Utc>) -> Option<Duration> {
+        let finish_remaining = parse_sqlite_utc_timestamp(&self.playout_finish)
+            .and_then(|finish| (finish - now).to_std().ok());
+        let current_content_position = self.in_point.saturating_add(self.elapsed_since_start(now));
+        let out_point_remaining = if self.out_point > current_content_position {
+            self.out_point.checked_sub(current_content_position)
+        } else {
+            None
+        };
+
+        [finish_remaining, out_point_remaining]
+            .into_iter()
+            .flatten()
+            .filter(|duration| !duration.is_zero())
+            .min()
     }
 }
 
@@ -839,6 +872,7 @@ pub(crate) async fn load_active_media_path(
                   mv."Id" AS "MediaVersionId",
                   mv."Duration" AS "ContentDuration",
                   pi."InPoint" AS "InPoint",
+                  pi."OutPoint" AS "OutPoint",
                   pi."Start" AS "PlayoutStart",
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
@@ -881,6 +915,10 @@ pub(crate) async fn load_active_media_path(
             .and_then(duration_from_f64),
         in_point: row
             .try_get::<String, _>("InPoint")
+            .ok()
+            .map_or(Duration::ZERO, |value| parse_duration_text(&value)),
+        out_point: row
+            .try_get::<String, _>("OutPoint")
             .ok()
             .map_or(Duration::ZERO, |value| parse_duration_text(&value)),
         playout_start: row.get::<String, _>("PlayoutStart"),
@@ -1011,6 +1049,7 @@ fn build_stream_command(
         path,
         output_format,
         start_seconds,
+        None,
         playback_profile,
         target_frame_rate,
         streaming_mode,
@@ -1030,6 +1069,7 @@ fn build_stream_command_with_opacity_clock(
     path: &str,
     output_format: OutputFormat,
     start_seconds: i64,
+    duration: Option<Duration>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     streaming_mode: ersatzrs_domain::StreamingMode,
@@ -1072,6 +1112,7 @@ fn build_stream_command_with_opacity_clock(
     if start_seconds > 0 {
         request.state.start_seconds = Some(start_seconds);
     }
+    request.state.duration = duration;
     request.state.metadata = metadata;
     request.state.report_progress = false;
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
@@ -1163,6 +1204,7 @@ fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
     )
 }
 
+#[cfg(test)]
 pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
     parse_sqlite_utc_timestamp(playout_start).map_or(0, |start| (now - start).num_seconds().max(0))
 }
@@ -1839,6 +1881,96 @@ mod tests {
         assert!(
             arguments.contains("drawvg=file=/tmp/iptv-graphics/title.vgs"),
             "{arguments}"
+        );
+    }
+
+    fn active_playout_item(
+        playout_start: &str,
+        playout_finish: &str,
+        in_point: Duration,
+        out_point: Duration,
+    ) -> ActivePlayoutItem {
+        ActivePlayoutItem {
+            playout_item_id: 1,
+            media_path: "/media/calibration-1.mp4".to_owned(),
+            media_item_id: 10,
+            media_version_id: 20,
+            content_duration: Some(Duration::from_secs(15)),
+            in_point,
+            out_point,
+            playout_start: playout_start.to_owned(),
+            playout_finish: playout_finish.to_owned(),
+            disable_watermarks: false,
+            preferred_audio_language_code: None,
+            preferred_subtitle_language_code: None,
+            subtitle_mode: None,
+        }
+    }
+
+    #[test]
+    fn active_playout_item_remaining_duration_uses_playout_finish() {
+        let now = DateTime::parse_from_rfc3339("2026-06-15T12:00:04.250Z")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+        let active = active_playout_item(
+            "2026-06-15 12:00:00",
+            "2026-06-15 12:00:06",
+            Duration::ZERO,
+            Duration::from_secs(15),
+        );
+
+        assert_eq!(
+            active.remaining_duration(now),
+            Some(Duration::from_millis(1750))
+        );
+    }
+
+    #[test]
+    fn active_playout_item_remaining_duration_caps_at_out_point() {
+        let now = DateTime::parse_from_rfc3339("2026-06-15T12:00:04.250Z")
+            .expect("valid timestamp")
+            .with_timezone(&Utc);
+        let active = active_playout_item(
+            "2026-06-15 12:00:00",
+            "2026-06-15 12:00:20",
+            Duration::ZERO,
+            Duration::from_secs(6),
+        );
+
+        assert_eq!(
+            active.remaining_duration(now),
+            Some(Duration::from_millis(1750))
+        );
+    }
+
+    #[test]
+    fn build_stream_command_limits_output_to_remaining_playout_item() {
+        let profile = playback_profile();
+        let command = build_stream_command_with_opacity_clock(
+            "/media/calibration-1.mp4",
+            OutputFormat::MpegTs,
+            4,
+            Some(Duration::from_millis(1750)),
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            Vec::new(),
+            Vec::new(),
+            None,
+        );
+
+        assert!(
+            command
+                .arguments
+                .windows(2)
+                .any(|pair| pair == ["-t", "00:00:01.7500000"]),
+            "{:?}",
+            command.arguments
         );
     }
 

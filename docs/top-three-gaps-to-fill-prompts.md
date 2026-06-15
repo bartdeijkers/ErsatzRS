@@ -20,116 +20,19 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (2026-06-15, window `f362445..9e0d59e`): the single new commit
-`9e0d59e` ("prevent duplicated playout items at seams") resolved the Classic
-scheduling debts `continue-build-seam-overlap` and
-`duplicate-consecutive-shuffle-item`, added and resolved the HLS startup debt
-`segmenter-start-replays-current-item` (full-precision persisted timestamps are
-now passed to SQL instead of whole-second truncation), and recorded the new
-**open** MPEG-TS debt `legacy-concat-outpoint-boundary`. None of the three
-carried prompts flipped to `Ported`/`Deferred`/`Dropped`, so all three carry
-over. Slot 1 stays `mpeg-ts-channel-streaming`: the legacy MPEG-TS concat/direct
-branch can still ignore short `PlayoutItem.OutPoint` boundaries and continue the
-same media item while HLS Segmenter and the modern MPEG-TS wrapper advance — a
-confirmed-blocking runtime gap, so it outranks the phase-focus leaf gaps.
-`ffmpeg-profile-editor` (slot 2) and `ffmpeg-filter-graph` (slot 3) carry over
-unchanged with no commits in the window; the `ffmpeg-command-generation` NVENC
-live-proof debt remains folded into `ffmpeg-filter-graph` because both require
-the same live streaming runtime session.
+Manual closeout refresh (2026-06-15): the previous slot 1,
+`mpeg-ts-channel-streaming` debt `legacy-concat-outpoint-boundary`, was closed
+with focused stream tests and the calibration playback gate. `cargo xtask
+progress gaps` now lists 10 remaining features and no longer lists MPEG-TS
+channel streaming, so the completed prompt was removed per
+`docs/automation/gap-prompt-rules.md`. `ffmpeg-profile-editor` and
+`ffmpeg-filter-graph` carry over as slots 1 and 2. Slot 3 is refilled from the
+current gap list with `hls-variant-playlists-segmenter`, debt
+`vlc-stop-on-disconnect-session-lifecycle`.
 
 ---
 
-## 1 - MPEG-TS channel streaming: fix legacy concat outpoint boundaries (slug `mpeg-ts-channel-streaming`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: the legacy MPEG-TS concat/direct
-branch can ignore short `PlayoutItem` outpoints and continue the same media item
-instead of advancing at the playout boundary (slug `mpeg-ts-channel-streaming`,
-debt `legacy-concat-outpoint-boundary`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-Log any additional parity gap encountered immediately in the relevant
-`docs/progress/parity/*.toml` file so it does not get lost.
-
-Runtime evidence (local calibration, 2026-06-14): the playback gate seeded
-channel 1 with a 6-second cyclic calibration timeline, 1->2->3. HLS Segmenter
-and the modern MPEG-TS hybrid wrapper advanced through the clip sequence at item
-boundaries, but `/iptv/channel/1.ts?mode=ts-legacy` stayed on clip 1 past the
-6-second outpoint and showed clip 1 frames at ABS 00:00:04.483,
-00:00:07.483, 00:00:10.483, and later. Container checks still passed, so this
-is a content-boundary parity gap in the legacy concat/direct branch rather than
-a TS integrity failure.
-
-Current `ParityDebt` from `docs/progress/parity/mpeg-ts-channel-streaming.toml`:
-- `legacy-concat-outpoint-boundary` (2026-06-14): "The legacy MPEG-TS
-  concat/direct branch can ignore short PlayoutItem outpoints and continue the
-  same media item instead of advancing at the playout boundary." Evidence:
-  `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames
-  --keep gate` seeded channel 1 as 1->2->3; HLS Segmenter and `mode=ts` frame
-  sheets advanced, while `mode=ts-legacy` stayed on clip 1 past 6 seconds.
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`
-(`GetConcatProcessByChannelNumber` / legacy `.ts` branch),
-`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegProcessService.cs`
-(`ConcatChannel`, `WrapSegmenter`, direct stream process shape), and
-`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs` at the pinned
-commit. ErsatzRS target:
-`crates/ersatzrs-web/src/transport/iptv/{stream,mod}.rs`,
-`crates/ersatzrs-infra/src/playback.rs`, and `crates/ersatzrs-ffmpeg` command
-builders/snapshots.
-
-Before editing:
-1. Read the pinned ErsatzTV legacy MPEG-TS concat path end to end: controller
-   action, stream selector, concat playlist generation, FFmpeg process service,
-   in-point/out-point handling, realtime looping, and disposal behavior.
-2. Inspect the ErsatzRS legacy concat stack:
-   `serve_legacy_concat_stream`, `/ffmpeg/concat/{n}`, `/ffmpeg/stream/{n}`,
-   `load_active_media_path`, `ActivePlayoutItem::{content_seek_seconds,
-   remaining_duration}`, command argv generation, response body cancellation,
-   and any concat playlist or internal stream test coverage.
-3. Reproduce the gap with the calibration clips before editing. Use
-   `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames
-   --keep gate` or an equivalent fresh DB/run, then inspect the generated
-   `mode=ts-legacy`, `mode=ts`, and HLS contact sheets. A failing legacy stream
-   shows the same clip number continuing past its 6-second ABS/outpoint while
-   the other pipelines advance.
-4. Build a Source Map for the legacy MPEG-TS current-item/outpoint path and
-   compare it to ErsatzTV. Identify whether the bug lives in concat playlist
-   looping, internal stream current-item lookup, FFmpeg argv duration/seek
-   bounds, or response/session lifecycle. Keep any unrelated behavior as
-   structured `ParityDebt`.
-
-Implement the fix in the proven layer. The legacy concat/direct branch must
-advance at each persisted `PlayoutItem` boundary, honor `InPoint`/`OutPoint` and
-short item durations, preserve realtime playback, and keep the modern
-`mode=ts` wrapper and HLS segmenter behavior unchanged. Do not weaken existing
-streaming/session tests. Add focused regressions for the boundary behavior,
-preferably at the direct internal stream/active item selection and command argv
-level, plus a runtime-facing guard if the bug only appears through the concat
-loop.
-
-Runtime verification: re-seed the calibration clips and confirm the same
-1->2->3 timeline advances exactly once per item on all three relevant surfaces:
-`/iptv/channel/1.ts?mode=ts-legacy`, `/iptv/channel/1.ts?mode=ts`, and the HLS
-segmenter playlist reached from `/iptv/channels.m3u`. The visual proof must show
-no repeated clip number/timecode span across item seams. Cross-check container
-integrity across the seams with `scripts/e2e/tsduck-playback-gate.sh`
-(continuity-counter / PCR / PTS), and include `cvlc` sanity playback where
-available.
-
-Verify with focused streaming tests, `cargo xtask smoke`, the calibration-clip
-playback check above, and `cargo xtask progress check`. Update
-`docs/progress/parity/mpeg-ts-channel-streaming.toml` (close or re-scope
-`legacy-concat-outpoint-boundary`), changelog, and this prompt file only when
-the evidence supports the new status. Report the Source Map, diagnosis,
-behavior implemented, remaining `ParityDebt`, calibration playback evidence,
-TSDuck/cvlc results, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-
----
-
-## 2 - FFmpeg Profile editor: restore missing H.264 profile options and NVENC validation (slug `ffmpeg-profile-editor`)
+## 1 - FFmpeg Profile editor: restore missing H.264 profile options and NVENC validation (slug `ffmpeg-profile-editor`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg Profile editor for the
 remaining profile-option and validation-warning behavior (slug
@@ -188,7 +91,7 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 3 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
+## 2 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph live proof for
 the watermark opacity-expression clock semantics (slug `ffmpeg-filter-graph`,
@@ -259,6 +162,81 @@ changed, `docs/progress/parity/ffmpeg-command-generation.toml`) only when the
 evidence supports the new status. Report the Source Map, behavior implemented,
 exact FFmpeg argv / resolved-expression proof, remaining `ParityDebt`,
 verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 3 - HLS variant playlists / segmenter: prove StopOnDisconnect session lifecycle (slug `hls-variant-playlists-segmenter`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: HLS Segmenter stop-on-disconnect
+session lifecycle proof and any required fixes (slug
+`hls-variant-playlists-segmenter`, debt
+`vlc-stop-on-disconnect-session-lifecycle`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current `ParityDebt` from
+`docs/progress/parity/hls-variant-playlists-segmenter.toml`: "For channels
+configured with `IdleBehavior = StopOnDisconnect`, VLC playback shutdown must
+drain every channel transcode session after the configured segmenter idle
+timeout and must not leave the `/channels` active-session state or FFmpeg
+process tree running past that timeout. This must cover HLS segmenter playback
+and the MPEG-TS hybrid wrapper path that starts/touches the HLS segmenter,
+while preserving the already-ported direct `.ts` response-body disposal
+behavior."
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`,
+`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`,
+`$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, and
+`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs` at the pinned
+commit. ErsatzRS target:
+`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`,
+`crates/ersatzrs-core/src/hls.rs`,
+`crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, and
+`crates/ersatzrs-ffmpeg`.
+
+Before editing:
+1. Read the pinned ErsatzTV HLS lifecycle path end to end: channel idle
+   behavior settings, `StartFFmpegSessionHandler` timeout loading /
+   KeepRunning bypass, worker touch/cancel behavior, playlist and segment file
+   serving, and direct `.ts` response disposal.
+2. Inspect the ErsatzRS HLS registry/worker timeout loop, `touch` calls for
+   `/iptv/channel/{n}.m3u8?mode=segmenter`, `/iptv/session/{n}/hls.m3u8`,
+   segment file serving, the MPEG-TS hybrid wrapper path, `/channels`
+   active-session state, and existing response-body disposal tests.
+3. Build a Source Map for session creation, touch, idle timeout, cancellation,
+   FFmpeg process cleanup, registry removal, and `/channels` active-session UI
+   state. Identify whether the gap is missing proof, missing touch semantics,
+   stale registry state, or a leaked FFmpeg process tree.
+4. Reproduce with a `StopOnDisconnect` channel and the configured
+   `ffmpeg.segmenter.timeout_seconds` value. Include HLS segmenter playback and
+   the modern MPEG-TS wrapper (`/iptv/channel/{n}.ts?mode=ts`) because it
+   starts/touches the HLS segmenter.
+
+Implement only the lifecycle behavior needed to match ErsatzTV. A disconnected
+client must stop touching the session, the worker must cancel after the
+configured timeout for `StopOnDisconnect`, `KeepRunning` must still bypass that
+timeout, FFmpeg children must be reaped, the registry must remove the channel,
+and `/channels` must stop reporting the session active. Preserve the already
+covered direct `.ts` response-body disposal behavior and do not weaken
+continuity or playlist-window tests.
+
+Add focused regressions around worker idle timeout/touch behavior, registry
+removal, and `/channels` active-session state where practical. If live VLC
+proof is environment-sensitive, add a deterministic local client harness that
+opens the same playlist/segment paths, disconnects, waits the configured
+timeout plus a small grace window, and checks registry/process cleanup.
+
+Verify with focused HLS/session tests, `cargo xtask smoke`, a live
+StopOnDisconnect playback/disconnect run for HLS Segmenter and `mode=ts`, and
+`cargo xtask progress check`. Update
+`docs/progress/parity/hls-variant-playlists-segmenter.toml`, changelog, and
+this prompt file only when the evidence supports the new status. Report the
+Source Map, behavior implemented, timeout value used, process/session cleanup
+evidence, remaining `ParityDebt`, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

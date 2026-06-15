@@ -32,6 +32,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Legacy MPEG-TS concat streams now stop each internal stream at the active
+  `PlayoutItem` boundary, honoring short `InPoint`/`OutPoint` durations so
+  `mode=ts-legacy` advances through cyclic playout items instead of continuing
+  the same media file past the seam.
 - Classic scheduling now avoids immediate repeats across shuffled collection
   reshuffle boundaries and persists continue-build anchors at the last
   generated item finish when a media item overshoots a build hard stop.

@@ -1,7 +1,7 @@
 feature    = 'MPEG-TS channel streaming'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs` (ts branch), `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegLibraryProcessService.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-infra/src/playback.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
 Ported for the direct FFmpeg process path: `/iptv/channel/{number}.ts`
@@ -60,16 +60,16 @@ wrapper (`mode=ts`) and the legacy concat (`mode=ts-legacy`) branches on channel
 legacy branch remains readable and observably distinct from the modern segmenter
 wrapper.
 
-ParityDebt — legacy concat outpoint boundary (2026-06-14, see structured
-`[[debt]]` `legacy-concat-outpoint-boundary`): the calibration playback gate
-showed the legacy `mode=ts-legacy` branch staying on clip 1 past its 6-second
-`OutPoint` while HLS Segmenter and the modern `mode=ts` wrapper advanced at item
-boundaries. Container checks still pass, so this is a content-boundary parity
-gap in the legacy concat/direct branch, not a TS integrity failure.
+Runtime proof (2026-06-15): the legacy concat/internal stream now bounds
+`StreamingMode.TransportStream` FFmpeg processes to the selected
+`PlayoutItem`'s remaining duration, capped by both persisted `Finish` and
+`OutPoint`. `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6
+--frames --keep gate` seeded channel 1 as a 1->2->3 cyclic calibration timeline
+and passed all 85 TSDuck/container checks across `mode=ts-legacy`, `mode=ts`,
+HLS Segmenter, and HLS Direct. The kept legacy frame sheet in
+`/tmp/tsduck-gate.zj8xKb` showed `mode=ts-legacy` advancing from clip 1 to clip
+2 and clip 3 at the 6-second item boundaries (for example
+`frame_tslegacy_t7.png` = `CLIP 2/3`, `frame_tslegacy_t10.png` = `CLIP 3/3`),
+closing the content-boundary gap without changing the modern wrapper or HLS
+paths.
 '''
-
-[[debt]]
-id          = 'legacy-concat-outpoint-boundary'
-description = 'The legacy MPEG-TS concat/direct branch can ignore short PlayoutItem outpoints and continue the same media item instead of advancing at the playout boundary.'
-discovered  = '2026-06-14'
-evidence    = 'scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6 --frames --keep gate seeded channel 1 as 1->2->3; HLS Segmenter and mode=ts frame sheets advanced 3->1->2->3->1, while mode=ts-legacy stayed on clip 1 past 6s with ABS 00:00:04.483, 00:00:07.483, 00:00:10.483, and later.'
