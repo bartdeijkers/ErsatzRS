@@ -522,6 +522,25 @@ async fn serve_segmenter_wrapper_stream(
     )
     .await;
 
+    let initial_segment_count = hls::load_initial_segment_count(state).await;
+    let startup_timeout = hls::load_segmenter_startup_timeout(state).await;
+    if !hls::wait_for_initial_segments(
+        state,
+        &channel.number,
+        initial_segment_count,
+        startup_timeout,
+    )
+    .await
+    {
+        tracing::warn!(
+            channel_number = %channel.number,
+            initial_segment_count,
+            startup_timeout_seconds = startup_timeout.as_secs(),
+            "hls segmenter did not produce initial playlist segments before wrapper startup timeout"
+        );
+        return (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response();
+    }
+
     let aac_latm_audio = match load_channel_playback_profile(&state.pool, channel.id).await {
         Ok(Some(profile)) => profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm,
         Ok(None) => {

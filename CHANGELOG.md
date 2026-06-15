@@ -32,6 +32,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS Segmenter `StopOnDisconnect` sessions now stop after the configured idle
+  timeout even while FFmpeg is still running, segment-file requests refresh the
+  session like ErsatzTV, and the MPEG-TS hybrid wrapper waits for initial HLS
+  segments before wrapping a restarted session.
 - FFmpeg profile editing now exposes ErsatzTV-style H.264 profile choices,
   persists NVENC `high444p`, and shows the unsupported-format warning when
   NVENC is paired with MPEG-2.

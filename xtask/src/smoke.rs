@@ -21,7 +21,11 @@ use rusqlite::{params, Connection};
 const LISTEN_ADDR: &str = "127.0.0.1:8409";
 const DEFAULT_TIMEOUT_SECONDS: u64 = 90;
 const DEFAULT_CHANNEL: &str = "1";
-const SMOKE_MEDIA_SECONDS: i64 = 24;
+const DEFAULT_SMOKE_MEDIA_SECONDS: i64 = 24;
+const LIFECYCLE_SMOKE_MEDIA_SECONDS: i64 = 120;
+const DEFAULT_SEGMENTER_TIMEOUT_SECONDS: u64 = 30;
+const LIFECYCLE_SEGMENTER_TIMEOUT_SECONDS: u64 = 20;
+const HLS_IDLE_GRACE_SECONDS: u64 = 8;
 const MIN_STREAM_BODY_BYTES: usize = 188;
 
 const FAILURE_SIGNATURES: &[&str] = &[
@@ -52,11 +56,13 @@ fn run_inner(opts: Opts) -> Result<()> {
 
     let root = SmokeRoot::new(opts.keep_temp)?;
     let db_path = root.path.join("ErsatzRS-smoke.db");
+    let segmenter_timeout_seconds = opts.segmenter_timeout_seconds();
+    let media_seconds = opts.media_seconds();
     let media_path = match opts.media_path {
         Some(path) => path,
         None => {
             let path = root.path.join("smoke-source.mp4");
-            generate_fixture_media(&path)?;
+            generate_fixture_media(&path, media_seconds)?;
             path
         }
     };
@@ -69,11 +75,16 @@ fn run_inner(opts: Opts) -> Result<()> {
     let mut server = ServerProcess::start(&database_url, &root.path, &log_path)?;
 
     wait_for_health(&opts.timeout)?;
-    seed_streaming_fixture(&db_path, &media_path)?;
+    seed_streaming_fixture(
+        &db_path,
+        &media_path,
+        segmenter_timeout_seconds,
+        media_seconds,
+    )?;
 
     let deadline = Deadline::from_now(opts.timeout);
     for channel in &opts.channels {
-        if opts.check_ts {
+        if opts.check_ts && !opts.check_hls_lifecycle {
             let path = format!("/iptv/channel/{channel}.ts?mode=ts");
             let response = http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
                 .with_context(|| format!("probing MPEG-TS endpoint {path}"))?;
@@ -110,6 +121,41 @@ fn run_inner(opts: Opts) -> Result<()> {
                 "smoke evidence: {session_path} -> HTTP {} playlist with initial segments",
                 session.status
             );
+            if opts.check_hls_lifecycle {
+                fetch_first_hls_segment(channel, &session_body, deadline.remaining()?)?;
+            }
+        }
+    }
+
+    if opts.check_hls_lifecycle {
+        for channel in &opts.channels {
+            if opts.check_hls {
+                wait_for_hls_working_dir_removed(
+                    channel,
+                    Duration::from_secs(segmenter_timeout_seconds + HLS_IDLE_GRACE_SECONDS),
+                    "HLS segmenter",
+                )?;
+            }
+
+            if opts.check_ts {
+                let path = format!("/iptv/channel/{channel}.ts?mode=ts");
+                let response =
+                    http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
+                        .with_context(|| {
+                            format!("probing MPEG-TS wrapper endpoint for lifecycle proof {path}")
+                        })?;
+                response.ensure_success_with_body(&path)?;
+                println!(
+                    "smoke evidence: {path} -> HTTP {} wrapper restart with {} body bytes",
+                    response.status,
+                    response.body.len()
+                );
+                wait_for_hls_working_dir_removed(
+                    channel,
+                    Duration::from_secs(segmenter_timeout_seconds + HLS_IDLE_GRACE_SECONDS),
+                    "MPEG-TS wrapper",
+                )?;
+            }
         }
     }
 
@@ -127,6 +173,7 @@ struct Opts {
     keep_temp: bool,
     check_ts: bool,
     check_hls: bool,
+    check_hls_lifecycle: bool,
 }
 
 impl Opts {
@@ -137,6 +184,7 @@ impl Opts {
         let mut keep_temp = false;
         let mut check_ts = true;
         let mut check_hls = true;
+        let mut check_hls_lifecycle = false;
 
         let mut i = 0;
         while i < args.len() {
@@ -171,6 +219,7 @@ impl Opts {
                     media_path = Some(PathBuf::from(value));
                 }
                 "--keep-temp" => keep_temp = true,
+                "--hls-lifecycle" => check_hls_lifecycle = true,
                 "--skip-ts" => check_ts = false,
                 "--skip-hls" => check_hls = false,
                 other if other.starts_with('-') => bail!("unknown smoke flag `{other}`"),
@@ -193,7 +242,24 @@ impl Opts {
             keep_temp,
             check_ts,
             check_hls,
+            check_hls_lifecycle,
         })
+    }
+
+    const fn segmenter_timeout_seconds(&self) -> u64 {
+        if self.check_hls_lifecycle {
+            LIFECYCLE_SEGMENTER_TIMEOUT_SECONDS
+        } else {
+            DEFAULT_SEGMENTER_TIMEOUT_SECONDS
+        }
+    }
+
+    const fn media_seconds(&self) -> i64 {
+        if self.check_hls_lifecycle {
+            LIFECYCLE_SMOKE_MEDIA_SECONDS
+        } else {
+            DEFAULT_SMOKE_MEDIA_SECONDS
+        }
     }
 }
 
@@ -334,10 +400,10 @@ fn ensure_port_free() -> Result<()> {
     Ok(())
 }
 
-fn generate_fixture_media(path: &Path) -> Result<()> {
+fn generate_fixture_media(path: &Path, media_seconds: i64) -> Result<()> {
     let configured = configured_ffmpeg_path().or_else(|| find_on_path("ffmpeg"));
     let ffmpeg = configured.as_deref().unwrap_or("ffmpeg");
-    let seconds = SMOKE_MEDIA_SECONDS.to_string();
+    let seconds = media_seconds.to_string();
     let mut command = Command::new(ffmpeg);
     apply_ffmpeg_library_path(&mut command, configured.as_deref());
     let status = command
@@ -460,7 +526,12 @@ fn wait_for_health(timeout: &Duration) -> Result<()> {
     }
 }
 
-fn seed_streaming_fixture(db_path: &Path, media_path: &Path) -> Result<()> {
+fn seed_streaming_fixture(
+    db_path: &Path,
+    media_path: &Path,
+    segmenter_timeout_seconds: u64,
+    media_seconds: i64,
+) -> Result<()> {
     let conn =
         Connection::open(db_path).with_context(|| format!("opening {}", db_path.display()))?;
     let channel_id: i64 = conn.query_row(
@@ -476,17 +547,19 @@ fn seed_streaming_fixture(db_path: &Path, media_path: &Path) -> Result<()> {
     let now = unix_now()?.as_secs() as i64;
     let date_added = format_timestamp(now);
     let playout_start = format_timestamp(now - 2);
-    let playout_finish = format_timestamp(now + SMOKE_MEDIA_SECONDS - 2);
+    let playout_finish = format_timestamp(now + media_seconds - 2);
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result = seed_streaming_fixture_inner(
-        &conn,
+    let result = seed_streaming_fixture_inner(SeedFixture {
+        conn: &conn,
         channel_id,
-        &media_path,
-        &date_added,
-        &playout_start,
-        &playout_finish,
-    );
+        media_path: &media_path,
+        date_added: &date_added,
+        playout_start: &playout_start,
+        playout_finish: &playout_finish,
+        segmenter_timeout_seconds,
+        media_seconds,
+    });
     match result {
         Ok(()) => {
             conn.execute_batch("COMMIT")?;
@@ -499,14 +572,28 @@ fn seed_streaming_fixture(db_path: &Path, media_path: &Path) -> Result<()> {
     }
 }
 
-fn seed_streaming_fixture_inner(
-    conn: &Connection,
+struct SeedFixture<'a> {
+    conn: &'a Connection,
     channel_id: i64,
-    media_path: &str,
-    date_added: &str,
-    playout_start: &str,
-    playout_finish: &str,
-) -> Result<()> {
+    media_path: &'a str,
+    date_added: &'a str,
+    playout_start: &'a str,
+    playout_finish: &'a str,
+    segmenter_timeout_seconds: u64,
+    media_seconds: i64,
+}
+
+fn seed_streaming_fixture_inner(input: SeedFixture<'_>) -> Result<()> {
+    let SeedFixture {
+        conn,
+        channel_id,
+        media_path,
+        date_added,
+        playout_start,
+        playout_finish,
+        segmenter_timeout_seconds,
+        media_seconds,
+    } = input;
     conn.execute(r#"DELETE FROM "PlayoutItem""#, [])?;
     conn.execute(r#"DELETE FROM "Playout""#, [])?;
     conn.execute(r#"DELETE FROM "MediaStream""#, [])?;
@@ -528,8 +615,8 @@ fn seed_streaming_fixture_inner(
     )?;
     conn.execute(
         r#"INSERT INTO "ConfigElement" ("Key", "Value")
-           VALUES ('ffmpeg.segmenter.timeout_seconds', '30')"#,
-        [],
+           VALUES ('ffmpeg.segmenter.timeout_seconds', ?)"#,
+        [segmenter_timeout_seconds.to_string()],
     )?;
     conn.execute(
         r#"INSERT INTO "ConfigElement" ("Key", "Value")
@@ -567,8 +654,8 @@ fn seed_streaming_fixture_inner(
         r#"INSERT INTO "MediaVersion" (
                "Id", "DateAdded", "DateUpdated", "Duration", "Height", "MovieId",
                "Name", "RFrameRate", "VideoScanKind", "Width"
-           ) VALUES (1, ?, ?, '00:00:24', 180, 1, 'Smoke', '30/1', 1, 320)"#,
-        params![date_added, date_added],
+           ) VALUES (1, ?, ?, ?, 180, 1, 'Smoke', '30/1', 1, 320)"#,
+        params![date_added, date_added, format_duration_hms(media_seconds)],
     )?;
     conn.execute(
         r#"INSERT INTO "MediaFile" ("Id", "MediaVersionId", "Path", "PathHash")
@@ -599,8 +686,12 @@ fn seed_streaming_fixture_inner(
         r#"INSERT INTO "PlayoutItem" (
                "Id", "DisableWatermarks", "FillerKind", "Finish", "GuideGroup",
                "InPoint", "MediaItemId", "OutPoint", "PlayoutId", "Start"
-           ) VALUES (1, 0, 0, ?, 0, '00:00:00', 1, '00:00:24', 1, ?)"#,
-        params![playout_finish, playout_start],
+           ) VALUES (1, 0, 0, ?, 0, '00:00:00', 1, ?, 1, ?)"#,
+        params![
+            playout_finish,
+            format_duration_hms(media_seconds),
+            playout_start
+        ],
     )?;
     conn.execute(
         r#"UPDATE "Channel"
@@ -612,6 +703,72 @@ fn seed_streaming_fixture_inner(
         [channel_id],
     )?;
     Ok(())
+}
+
+fn fetch_first_hls_segment(channel: &str, playlist: &str, timeout: Duration) -> Result<()> {
+    let uri = playlist
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .ok_or_else(|| anyhow!("/iptv/session/{channel}/hls.m3u8: no segment URI found"))?;
+    let path = hls_segment_uri_to_path(channel, uri)?;
+    let response = http_get_until_body(&path, 1, timeout)
+        .with_context(|| format!("probing HLS segment endpoint {path}"))?;
+    response.ensure_success_with_body(&path)?;
+    println!(
+        "smoke evidence: {path} -> HTTP {} segment with {} body bytes",
+        response.status,
+        response.body.len()
+    );
+    Ok(())
+}
+
+fn hls_segment_uri_to_path(channel: &str, uri: &str) -> Result<String> {
+    if uri.starts_with('/') {
+        return Ok(uri.to_owned());
+    }
+
+    if let Some(path_start) = uri.find("/iptv/") {
+        return Ok(uri[path_start..].to_owned());
+    }
+
+    if uri.contains("://") {
+        bail!("unsupported absolute HLS segment URI: {uri}");
+    }
+
+    Ok(format!("/iptv/session/{channel}/{uri}"))
+}
+
+fn wait_for_hls_working_dir_removed(channel: &str, timeout: Duration, label: &str) -> Result<()> {
+    let path = env::temp_dir().join("ersatzrs-hls").join(channel);
+    let deadline = Deadline::from_now(timeout);
+    let mut saw_session_dir = path.exists();
+    loop {
+        if path.exists() {
+            saw_session_dir = true;
+        } else if saw_session_dir {
+            println!(
+                "smoke evidence: {label} session {} removed after idle timeout",
+                path.display()
+            );
+            return Ok(());
+        } else {
+            println!(
+                "smoke evidence: {label} session {} was already removed after disconnect",
+                path.display()
+            );
+            return Ok(());
+        }
+
+        if deadline.expired() {
+            bail!(
+                "{label} session {} remained active after {timeout:?}",
+                path.display()
+            );
+        }
+
+        thread::sleep(Duration::from_millis(250));
+    }
 }
 
 struct HttpResponse {
@@ -762,6 +919,14 @@ fn format_timestamp(secs: i64) -> String {
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
 }
 
+fn format_duration_hms(seconds: i64) -> String {
+    let seconds = seconds.max(0);
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    format!("{hours:02}:{minutes:02}:{seconds:02}")
+}
+
 fn civil_from_days(z: i64) -> (i64, i64, i64) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 }.div_euclid(146_097);
@@ -785,6 +950,7 @@ fn print_help() {
     eprintln!("    --channel N       Channel number to probe (default: 1)");
     eprintln!("    --timeout S       Overall startup/probe timeout seconds (default: 90)");
     eprintln!("    --media PATH      Use an existing media file instead of generating one");
+    eprintln!("    --hls-lifecycle  Also prove StopOnDisconnect HLS and mode=ts sessions drain");
     eprintln!("    --skip-ts         Skip /iptv/channel/<n>.ts?mode=ts probe");
     eprintln!("    --skip-hls        Skip HLS segmenter playlist probes");
     eprintln!("    --keep-temp       Keep temporary DB/media/log directory for debugging");

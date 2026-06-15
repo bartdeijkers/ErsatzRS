@@ -38,7 +38,7 @@ use crate::subtitles::rebase_burned_text_subtitle_input;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, Notify};
 use tokio::time::MissedTickBehavior;
 
@@ -250,10 +250,7 @@ impl HlsSessionWorker {
         cleanup_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             if let Some(timeout) = idle_timeout {
-                let timeout_ms = i64::try_from(timeout.as_millis()).unwrap_or(i64::MAX);
-                let idle_for_ms =
-                    Utc::now().timestamp_millis() - self.last_access_ms.load(Ordering::Relaxed);
-                if idle_for_ms > timeout_ms {
+                if self.idle_for_duration() >= timeout {
                     break;
                 }
             }
@@ -338,7 +335,9 @@ impl HlsSessionWorker {
                     runtime_capabilities.clone(),
                 );
                 let _ = self.trim_playlist_for_append().await;
-                let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
+                let outcome = self
+                    .run_hls_process(command, &mut cleanup_interval, idle_timeout)
+                    .await;
                 if let Err(error) =
                     update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
                 {
@@ -600,7 +599,9 @@ impl HlsSessionWorker {
                 source_stream_for_denial.as_ref(),
             );
             let _ = self.trim_playlist_for_append().await;
-            let outcome = self.run_hls_process(command, &mut cleanup_interval).await;
+            let outcome = self
+                .run_hls_process(command, &mut cleanup_interval, idle_timeout)
+                .await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }
@@ -686,7 +687,7 @@ impl HlsSessionWorker {
                         );
                     }
                     if self
-                        .run_hls_process(error_command, &mut cleanup_interval)
+                        .run_hls_process(error_command, &mut cleanup_interval, idle_timeout)
                         .await
                         == HlsProcessOutcome::Success
                     {
@@ -714,6 +715,7 @@ impl HlsSessionWorker {
         &self,
         command: FfmpegCommand,
         cleanup_interval: &mut tokio::time::Interval,
+        idle_timeout: Option<Duration>,
     ) -> HlsProcessOutcome {
         let mut process = Command::new(&command.executable);
         process
@@ -775,13 +777,76 @@ impl HlsSessionWorker {
                     }
                 }
                 () = self.cancel.notified() => {
-                    let _ = child.start_kill();
+                    self
+                        .terminate_hls_child(&mut child, stderr_task.take(), "channel stream cancelled")
+                        .await;
+                    return HlsProcessOutcome::Cancelled;
+                }
+                () = self.wait_for_idle_timeout(idle_timeout) => {
+                    tracing::info!(
+                        channel_number = %self.channel_number,
+                        "stopping idle HLS session while ffmpeg is running"
+                    );
+                    self
+                        .terminate_hls_child(&mut child, stderr_task.take(), "channel stream idle timeout")
+                        .await;
                     return HlsProcessOutcome::Cancelled;
                 }
                 _ = cleanup_interval.tick() => {
                     let _ = self.trim_playlist_inner().await;
                 }
             }
+        }
+    }
+
+    async fn wait_for_idle_timeout(&self, idle_timeout: Option<Duration>) {
+        let Some(timeout) = idle_timeout else {
+            std::future::pending::<()>().await;
+            return;
+        };
+
+        loop {
+            let idle_for = self.idle_for_duration();
+            if idle_for >= timeout {
+                return;
+            }
+
+            tokio::time::sleep(timeout.saturating_sub(idle_for)).await;
+        }
+    }
+
+    fn idle_for_duration(&self) -> Duration {
+        let last_access_ms = self.last_access_ms.load(Ordering::Relaxed);
+        let idle_ms = Utc::now()
+            .timestamp_millis()
+            .saturating_sub(last_access_ms)
+            .max(0);
+        Duration::from_millis(u64::try_from(idle_ms).unwrap_or(u64::MAX))
+    }
+
+    async fn terminate_hls_child(
+        &self,
+        child: &mut Child,
+        stderr_task: Option<tokio::task::JoinHandle<String>>,
+        reason: &str,
+    ) {
+        if let Err(error) = child.kill().await {
+            tracing::warn!(
+                %error,
+                channel_number = %self.channel_number,
+                reason,
+                "failed to kill ffmpeg hls segmenter"
+            );
+        }
+
+        let stderr = await_stderr_tail(stderr_task).await;
+        if !stderr.is_empty() {
+            tracing::debug!(
+                stderr = %stderr,
+                channel_number = %self.channel_number,
+                reason,
+                "ffmpeg hls segmenter stderr after termination"
+            );
         }
     }
 
@@ -3017,6 +3082,45 @@ mod tests {
         timeout(Duration::from_millis(250), worker.cancel.notified())
             .await
             .expect("worker run loop observes the cancellation signal");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn idle_timeout_cancels_running_hls_process() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-idle-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create hls working dir");
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            working_dir.clone(),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+        worker.touch();
+        let command = FfmpegCommand {
+            executable: "/bin/sleep".to_string(),
+            arguments: vec!["30".to_string()],
+            environment: Vec::new(),
+        };
+        let mut cleanup_interval = tokio::time::interval(Duration::from_secs(59));
+
+        let outcome = timeout(
+            Duration::from_secs(2),
+            worker.run_hls_process(
+                command,
+                &mut cleanup_interval,
+                Some(Duration::from_millis(50)),
+            ),
+        )
+        .await
+        .expect("idle timeout should cancel the running process");
+
+        assert_eq!(outcome, HlsProcessOutcome::Cancelled);
+        let _ = cleanup_working_dir(&working_dir).await;
     }
 
     #[test]

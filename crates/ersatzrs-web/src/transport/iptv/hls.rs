@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
+use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::{Channel, ChannelIdleBehavior, StreamingMode};
 use ersatzrs_ffmpeg::OutputFormat;
@@ -132,7 +133,7 @@ fn segmenter_idle_timeout_for(
     }
 }
 
-async fn load_segmenter_startup_timeout(state: &AppState) -> Duration {
+pub(crate) async fn load_segmenter_startup_timeout(state: &AppState) -> Duration {
     let seconds = load_config_usize(
         state,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
@@ -142,7 +143,7 @@ async fn load_segmenter_startup_timeout(state: &AppState) -> Duration {
     Duration::from_secs(seconds as u64)
 }
 
-async fn load_initial_segment_count(state: &AppState) -> usize {
+pub(crate) async fn load_initial_segment_count(state: &AppState) -> usize {
     load_config_usize(
         state,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
@@ -172,7 +173,7 @@ fn parse_positive_usize(value: &str) -> Option<usize> {
         .filter(|value| *value > 0)
 }
 
-async fn wait_for_initial_segments(
+pub(crate) async fn wait_for_initial_segments(
     state: &AppState,
     channel_number: &str,
     segment_count: usize,
@@ -500,7 +501,7 @@ pub async fn get_session_playlist(
 }
 
 pub async fn get_session_segment(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path((channel_number, filename)): Path<(String, String)>,
 ) -> Response {
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
@@ -510,6 +511,8 @@ pub async fn get_session_segment(
     if channel_number == TRANSCODE_TROUBLESHOOTING_CHANNEL {
         return serve_troubleshooting_hls_file(&filename).await;
     }
+
+    touch_session_segment(&*state.hls_sessions, &channel_number).await;
 
     let path = std::env::temp_dir()
         .join("ersatzrs-hls")
@@ -555,6 +558,12 @@ pub async fn get_session_segment(
             tracing::warn!(%error, channel_number, filename, "failed to read hls segment");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+async fn touch_session_segment(registry: &dyn HlsSessionRegistry, channel_number: &str) {
+    if let Some(handle) = registry.try_get(channel_number).await {
+        handle.touch();
     }
 }
 
@@ -624,6 +633,42 @@ pub async fn get_hls_direct_stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use ersatzrs_core::hls::HlsSessionHandle;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct FakeHandle {
+        channel: String,
+        touched: AtomicUsize,
+    }
+
+    impl FakeHandle {
+        fn new(channel: &str) -> Arc<Self> {
+            Arc::new(Self {
+                channel: channel.to_string(),
+                touched: AtomicUsize::new(0),
+            })
+        }
+    }
+
+    #[async_trait]
+    impl HlsSessionHandle for FakeHandle {
+        fn channel_number(&self) -> &str {
+            &self.channel
+        }
+
+        fn touch(&self) {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+        }
+
+        async fn trim_playlist(&self) -> Option<String> {
+            None
+        }
+
+        async fn cancel(&self) {}
+
+        fn playout_updated(&self) {}
+    }
 
     #[test]
     fn build_hls_direct_playlist_matches_expected_shape() {
@@ -715,6 +760,17 @@ mod tests {
             segmenter_idle_timeout_for(ChannelIdleBehavior::KeepRunning, 45),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn session_segment_access_touches_registered_worker() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        let handle = FakeHandle::new("12");
+        registry.insert(handle.clone()).await;
+
+        touch_session_segment(&registry, "12").await;
+
+        assert_eq!(handle.touched.load(Ordering::SeqCst), 1);
     }
 
     #[test]

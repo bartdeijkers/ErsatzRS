@@ -45,6 +45,9 @@ References:
   `/iptv/session/<n>/hls.m3u8`, then scans the server log for known
   FFmpeg/HLS failure signatures. Use `--channel N`, `--media PATH`,
   `--skip-ts`, `--skip-hls`, and `--keep-temp` for focused runtime triage.
+  Add `--hls-lifecycle` when changing HLS StopOnDisconnect behavior; it seeds a
+  short segmenter idle timeout, fetches a real HLS segment, waits for session
+  cleanup, then repeats the cleanup proof through the `mode=ts` wrapper.
 
 ## Hydration rules (read before writing islands)
 

@@ -20,15 +20,16 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Manual closeout refresh (2026-06-15): the previous slot 1,
-`ffmpeg-profile-editor` debts `h264-profile-options` and
-`nvenc-mpeg2-validation-warning`, was closed with focused web tests and
-browser coverage. `cargo xtask progress gaps` now lists 9 remaining features
-and no longer lists FFmpeg Profile editor, so the completed prompt was removed
-per `docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` and
-`hls-variant-playlists-segmenter` carry over as slots 1 and 2. Slot 3 is
-refilled from the current phase-focus gap list with `settings`, debt
-`settings-i18n-browser-proof`.
+Manual closeout refresh (2026-06-15): the previous HLS slot,
+`hls-variant-playlists-segmenter` debt
+`vlc-stop-on-disconnect-session-lifecycle`, was closed with focused tests and
+`cargo xtask smoke --hls-lifecycle --timeout 240`. `cargo xtask progress gaps`
+now lists 8 remaining features and no longer lists HLS variant playlists /
+segmenter, so the completed prompt was removed per
+`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` carries over as
+slot 1, `settings` moves to slot 2, and slot 3 is refilled from the current
+phase-focus gap list with
+`multi-collections-rerun-collections-playlists-filler-presets`.
 
 ---
 
@@ -109,82 +110,7 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 2 - HLS variant playlists / segmenter: prove StopOnDisconnect session lifecycle (slug `hls-variant-playlists-segmenter`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: HLS Segmenter stop-on-disconnect
-session lifecycle proof and any required fixes (slug
-`hls-variant-playlists-segmenter`, debt
-`vlc-stop-on-disconnect-session-lifecycle`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current `ParityDebt` from
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`: "For channels
-configured with `IdleBehavior = StopOnDisconnect`, VLC playback shutdown must
-drain every channel transcode session after the configured segmenter idle
-timeout and must not leave the `/channels` active-session state or FFmpeg
-process tree running past that timeout. This must cover HLS segmenter playback
-and the MPEG-TS hybrid wrapper path that starts/touches the HLS segmenter,
-while preserving the already-ported direct `.ts` response-body disposal
-behavior."
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`,
-`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`,
-`$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, and
-`$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs` at the pinned
-commit. ErsatzRS target:
-`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`,
-`crates/ersatzrs-core/src/hls.rs`,
-`crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, and
-`crates/ersatzrs-ffmpeg`.
-
-Before editing:
-1. Read the pinned ErsatzTV HLS lifecycle path end to end: channel idle
-   behavior settings, `StartFFmpegSessionHandler` timeout loading /
-   KeepRunning bypass, worker touch/cancel behavior, playlist and segment file
-   serving, and direct `.ts` response disposal.
-2. Inspect the ErsatzRS HLS registry/worker timeout loop, `touch` calls for
-   `/iptv/channel/{n}.m3u8?mode=segmenter`, `/iptv/session/{n}/hls.m3u8`,
-   segment file serving, the MPEG-TS hybrid wrapper path, `/channels`
-   active-session state, and existing response-body disposal tests.
-3. Build a Source Map for session creation, touch, idle timeout, cancellation,
-   FFmpeg process cleanup, registry removal, and `/channels` active-session UI
-   state. Identify whether the gap is missing proof, missing touch semantics,
-   stale registry state, or a leaked FFmpeg process tree.
-4. Reproduce with a `StopOnDisconnect` channel and the configured
-   `ffmpeg.segmenter.timeout_seconds` value. Include HLS segmenter playback and
-   the modern MPEG-TS wrapper (`/iptv/channel/{n}.ts?mode=ts`) because it
-   starts/touches the HLS segmenter.
-
-Implement only the lifecycle behavior needed to match ErsatzTV. A disconnected
-client must stop touching the session, the worker must cancel after the
-configured timeout for `StopOnDisconnect`, `KeepRunning` must still bypass that
-timeout, FFmpeg children must be reaped, the registry must remove the channel,
-and `/channels` must stop reporting the session active. Preserve the already
-covered direct `.ts` response-body disposal behavior and do not weaken
-continuity or playlist-window tests.
-
-Add focused regressions around worker idle timeout/touch behavior, registry
-removal, and `/channels` active-session state where practical. If live VLC
-proof is environment-sensitive, add a deterministic local client harness that
-opens the same playlist/segment paths, disconnects, waits the configured
-timeout plus a small grace window, and checks registry/process cleanup.
-
-Verify with focused HLS/session tests, `cargo xtask smoke`, a live
-StopOnDisconnect playback/disconnect run for HLS Segmenter and `mode=ts`, and
-`cargo xtask progress check`. Update
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`, changelog, and
-this prompt file only when the evidence supports the new status. Report the
-Source Map, behavior implemented, timeout value used, process/session cleanup
-evidence, remaining `ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
----
-
-## 3 - Settings: finish admin text coverage and four-language browser proof (slug `settings`)
+## 2 - Settings: finish admin text coverage and four-language browser proof (slug `settings`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: Settings admin i18n coverage and
 browser proof across the settings route family (slug `settings`, debt
@@ -245,6 +171,78 @@ Verify with focused `ersatzrs-web` settings/i18n tests,
 `docs/progress/parity/settings.toml`, `plans/settings-parity-slice.md`,
 changelog, and this prompt file only when the evidence supports the new status.
 Report the Source Map, Visual Source Map, text coverage closed, remaining
+`ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 3 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
+collection route-family parity closeout for `/media/multi-collections`,
+`/media/rerun-collections`, `/media/playlists`, and `/media/filler/presets`
+(slug `multi-collections-rerun-collections-playlists-filler-presets`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current status from
+`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`:
+"In progress: `/media/multi-collections` now ports the ErsatzTV
+multi-collection list plus add/edit/delete editor surface ... `/media/playlists`
+now ports the playlist group/tree and playlist editor route ... Generated/system
+playlists intentionally diverge from ErsatzTV's disabled-editor presentation:
+ADR 0011 keeps scheduling semantics but renders generated rows as read-only
+projections with clearer Count and Play All labels."
+
+ErsatzTV source: `ErsatzTV/Pages/MultiCollections*.razor`,
+`ErsatzTV/Pages/RerunCollections.razor`,
+`ErsatzTV/Pages/RerunCollectionEditor.razor`,
+`ErsatzTV/Pages/Playlists.razor`, `ErsatzTV/Pages/PlaylistEditor.razor`,
+`ErsatzTV/Pages/FillerPresets.razor`, and
+`ErsatzTV/Pages/FillerPresetEditor.razor` at the pinned commit. ErsatzRS
+target: `crates/ersatzrs-web/src/admin/pages/media/`,
+`crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`,
+`crates/ersatzrs-web/src/admin/server_fns/filler.rs`,
+`crates/ersatzrs-web/src/api/{collections,playlists,rerun_collections,filler}.rs`,
+and `crates/ersatzrs-web/src/admin/languages/`.
+
+Before editing:
+1. Read the pinned ErsatzTV Razor pages, editor models, validation/save
+   handlers, delete/copy actions, and localization resources for all four
+   route families.
+2. Inspect the current ErsatzRS pages, server functions, raw HTML POST
+   fallbacks, API handlers, language modules, existing browser smoke notes, and
+   ADR 0011 generated-playlist deviation.
+3. Build a Source Map and Visual Source Map for the list and editor routes,
+   including add/delete/copy actions, page-size persistence, validation,
+   generated/system playlist behavior, smart-collection preview, and playout
+   refresh side effects.
+4. Identify remaining `ParityDebt`; if the route family is already complete,
+   prove it and close the tracker instead of inventing new scope.
+
+Implement only the coherent closeout slice: fix any mismatch found in source
+review or browser proof, preserve existing SSR/raw POST fallbacks and
+localized text, keep ADR 0011's intentional generated-playlist deviation
+explicit, and avoid unrelated media-browser refactors. Add focused tests for
+any fixed persistence, validation, preview, delete/copy, or playout-refresh
+behavior.
+
+Add browser coverage that exercises the high-risk workflows across the route
+family: create/edit/delete multi-collections, rerun collections, playlists and
+playlist groups/items, and filler presets; verify visible geometry, hydrated
+actions or fallback forms, localized labels, and no console errors. If one route
+still cannot be proven, keep the exact missing workflow as structured
+`ParityDebt`.
+
+Verify with focused `ersatzrs-web` tests, `cargo xtask hydration-lint -p
+ersatzrs-web`, the added browser spec or documented Playwright run,
+`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
+`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`,
+changelog, and this prompt file only when the evidence supports the new status.
+Report the Source Map, Visual Source Map, behavior closed, remaining
 `ParityDebt`, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
