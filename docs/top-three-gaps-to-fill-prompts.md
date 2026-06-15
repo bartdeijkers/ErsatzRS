@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-14
-last_processed_commit: f36244538ac4953650f37ceb9c4a281a5c2f4c50
+generated: 2026-06-15
+last_processed_commit: 9e0d59e6bf32c5d19aeee35b215fece5813f3ea5
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -20,20 +20,22 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Ranking this run (manually updated 2026-06-14 after the Classic/HLS replay
-closeout, through working tree state after `f362445`): `channels-admin-ui` is
-now `Ported`, so its prompt was removed. `classic-scheduling` no longer owns a
-top-three prompt because `duplicate-consecutive-shuffle-item` and
-`continue-build-seam-overlap` are resolved, and the separate HLS startup replay
-found during calibration was fixed and resolved under
-`hls-variant-playlists-segmenter`. `ffmpeg-profile-editor` and
-`ffmpeg-filter-graph` are carried over unchanged; the FFmpeg command-generation
-live proof remains folded into `ffmpeg-filter-graph` because both require the
-same live streaming runtime session. Slot 1 is now
-`mpeg-ts-channel-streaming`: the calibration playback gate found that the
-legacy MPEG-TS concat/direct branch can keep playing the same media item past a
-short `PlayoutItem.OutPoint` while HLS Segmenter and the modern MPEG-TS wrapper
-advance correctly.
+Ranking this run (2026-06-15, window `f362445..9e0d59e`): the single new commit
+`9e0d59e` ("prevent duplicated playout items at seams") resolved the Classic
+scheduling debts `continue-build-seam-overlap` and
+`duplicate-consecutive-shuffle-item`, added and resolved the HLS startup debt
+`segmenter-start-replays-current-item` (full-precision persisted timestamps are
+now passed to SQL instead of whole-second truncation), and recorded the new
+**open** MPEG-TS debt `legacy-concat-outpoint-boundary`. None of the three
+carried prompts flipped to `Ported`/`Deferred`/`Dropped`, so all three carry
+over. Slot 1 stays `mpeg-ts-channel-streaming`: the legacy MPEG-TS concat/direct
+branch can still ignore short `PlayoutItem.OutPoint` boundaries and continue the
+same media item while HLS Segmenter and the modern MPEG-TS wrapper advance — a
+confirmed-blocking runtime gap, so it outranks the phase-focus leaf gaps.
+`ffmpeg-profile-editor` (slot 2) and `ffmpeg-filter-graph` (slot 3) carry over
+unchanged with no commits in the window; the `ffmpeg-command-generation` NVENC
+live-proof debt remains folded into `ffmpeg-filter-graph` because both require
+the same live streaming runtime session.
 
 ---
 

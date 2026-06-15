@@ -28,8 +28,8 @@ channels redirect back to `.m3u8`, `mode=ts` selects the modern wrapper, and
 `mode=ts-legacy` selects the legacy direct branch. The default hybrid wrapper
 starts/touches the HLS segmenter, reads
 `/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, and emits the
-upstream copy-all/readrate/mpegts stdout pipe shape, including AAC-LATM decoder
-selection when the playback profile requires it.
+upstream copy-all/readrate/mpegts stdout pipe shape, with AAC-LATM decoder
+selection when the profile needs it.
 
 The legacy concat slice ports ErsatzTV's `ConcatChannel` process model:
 `StreamingMode.TransportStream` and `mode=ts-legacy` now spawn a concat-demuxer
@@ -39,8 +39,8 @@ upstream initial-discontinuity output shape. ErsatzRS now exposes internal
 `/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes; the concat playlist
 repeats `/ffmpeg/stream/{n}?mode=ts-legacy`, and the internal stream route uses
 the existing direct playout-item process with `StreamingMode.TransportStream`
-semantics. The command snapshots prove that modern wrapper and legacy concat
-paths are observably different.
+semantics. Command snapshots prove the modern wrapper and legacy concat paths
+are observably different.
 
 The MPEG-TS script runtime now mirrors ErsatzTV's default-script hook for the
 modern wrapper path: packaged `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}`
@@ -54,25 +54,18 @@ Unix executes the rendered script through `bash`; Windows executes the rendered
 `.bat` path directly. Missing, invalid, or platform-incomplete custom scripts
 warn and fall back to the default wrapper command.
 
-Runtime proof (2026-06-08): channel 1 modern MPEG-TS wrapper
-`/iptv/channel/1.ts?mode=ts` was captured for a bounded 65-second window while
-the HLS segmenter remained active; curl timed out at the expected bound after
-68,410,380 bytes and ffprobe read HEVC video plus AAC audio from the captured
-MPEG-TS sample. Channel 1 legacy MPEG-TS
-`/iptv/channel/1.ts?mode=ts-legacy` was captured with the same 65-second bound;
-curl timed out after 66,922,924 bytes and ffprobe read HEVC video plus AAC
-audio, proving the legacy branch remains readable and observably distinct from
-the modern segmenter wrapper.
+Runtime proof (2026-06-08): bounded 65-second captures of both the modern
+wrapper (`mode=ts`) and the legacy concat (`mode=ts-legacy`) branches on channel
+1 each yielded readable HEVC video plus AAC audio under ffprobe, proving the
+legacy branch remains readable and observably distinct from the modern segmenter
+wrapper.
 
-ParityDebt — legacy concat outpoint boundary: the 2026-06-14 calibration
-playback gate seeded channel 1 with an explicit 6-second cyclic 1->2->3
-`PlayoutItem` timeline. HLS Segmenter and the modern MPEG-TS hybrid wrapper
-advanced through the clip sequence at item boundaries, but the legacy
-`/iptv/channel/1.ts?mode=ts-legacy` capture stayed on clip 1 past the 6-second
-`OutPoint` and showed clip 1 frames at ABS 00:00:04.483, 00:00:07.483,
-00:00:10.483, and later. Container checks still passed, so this is a
-content-boundary parity gap in the legacy concat/direct branch rather than a TS
-integrity failure.
+ParityDebt — legacy concat outpoint boundary (2026-06-14, see structured
+`[[debt]]` `legacy-concat-outpoint-boundary`): the calibration playback gate
+showed the legacy `mode=ts-legacy` branch staying on clip 1 past its 6-second
+`OutPoint` while HLS Segmenter and the modern `mode=ts` wrapper advanced at item
+boundaries. Container checks still pass, so this is a content-boundary parity
+gap in the legacy concat/direct branch, not a TS integrity failure.
 '''
 
 [[debt]]
