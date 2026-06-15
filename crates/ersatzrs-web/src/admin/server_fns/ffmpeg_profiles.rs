@@ -134,6 +134,101 @@ pub fn presets_for_profile(hw: i32, vf: i32, bd: i32) -> Vec<&'static str> {
     }
 }
 
+pub const VIDEO_PROFILE_MAIN: &str = "main";
+pub const VIDEO_PROFILE_HIGH: &str = "high";
+pub const VIDEO_PROFILE_HIGH10: &str = "high10";
+pub const VIDEO_PROFILE_HIGH444P: &str = "high444p";
+
+pub const NVENC_FORMATS_ERROR: &str = "NVENC supports formats (h264, hevc, av1)";
+
+fn hardware_accel_supports_h264_profile(hw: i32) -> bool {
+    matches!(hw, 0..=4)
+}
+
+#[must_use]
+pub fn video_profile_options(hw: i32, vf: i32) -> Vec<&'static str> {
+    if vf != 1 || !hardware_accel_supports_h264_profile(hw) {
+        return vec![];
+    }
+
+    let mut options = vec![VIDEO_PROFILE_MAIN, VIDEO_PROFILE_HIGH];
+    if hw == 2 {
+        options.push(VIDEO_PROFILE_HIGH444P);
+    } else {
+        options.push(VIDEO_PROFILE_HIGH10);
+    }
+    options
+}
+
+#[must_use]
+pub fn video_format_validation_error(hw: i32, vf: i32) -> Option<&'static str> {
+    match hw {
+        1 if !matches!(vf, 1..=4) => Some("QSV supports formats (h264, hevc, mpeg2video)"),
+        2 if !matches!(vf, 1 | 2 | 4) => Some(NVENC_FORMATS_ERROR),
+        3 if !matches!(vf, 1..=4) => Some("VAAPI supports formats (h264, hevc, av1, mpeg2video)"),
+        4 if !matches!(vf, 1 | 2) => Some("VideoToolbox supports formats (h264, hevc)"),
+        5 if !matches!(vf, 1 | 2) => Some("Amf supports formats (h264, hevc)"),
+        6 if !matches!(vf, 1 | 2) => Some("V4L2 M2M supports formats (h264, hevc)"),
+        7 if !matches!(vf, 1 | 2) => Some("Rkmpp supports formats (h264, hevc)"),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn normalized_video_profile_for_persist(
+    hw: i32,
+    vf: i32,
+    bit_depth: i32,
+    requested: &str,
+) -> Option<String> {
+    if vf != 1 {
+        return None;
+    }
+
+    if hw == 2 && bit_depth == 1 {
+        return Some(VIDEO_PROFILE_HIGH444P.to_owned());
+    }
+
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return None;
+    }
+
+    video_profile_options(hw, vf)
+        .contains(&requested)
+        .then(|| requested.to_owned())
+}
+
+#[cfg(feature = "ssr")]
+fn validate_profile_options(
+    hw: i32,
+    vf: i32,
+    bit_depth: i32,
+    video_profile: &str,
+) -> Result<(), &'static str> {
+    if let Some(error) = video_format_validation_error(hw, vf) {
+        return Err(error);
+    }
+
+    if vf == 3 && bit_depth == 1 {
+        return Err("Mpeg2Video does not support 10-bit content");
+    }
+
+    if vf == 1 && bit_depth == 1 && hw == 2 && video_profile.trim() != VIDEO_PROFILE_HIGH444P {
+        return Err("VideoProfile must be high444p with NVIDIA 10-bit h264");
+    }
+
+    if vf == 1 && bit_depth == 1 && hw != 2 && video_profile.trim() != VIDEO_PROFILE_HIGH10 {
+        return Err("VideoProfile must be high10 with 10-bit h264");
+    }
+
+    if vf == 1 && bit_depth == 0 && video_profile.trim() == VIDEO_PROFILE_HIGH10 {
+        return Err("VideoProfile cannot be high10 with 8-bit h264");
+    }
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Server functions
 // ---------------------------------------------------------------------------
@@ -469,6 +564,9 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
         form.bit_depth
     };
 
+    validate_profile_options(hw_accel, video_format, form.bit_depth, &form.video_profile)
+        .map_err(ServerFnError::new)?;
+
     let target_loudness: Option<f64> = if form.normalize_loudness_mode == 1 {
         form.target_loudness.trim().parse::<f64>().ok()
     } else {
@@ -485,11 +583,13 @@ pub async fn save_ffmpeg_profile(form: FfmpegProfileForm) -> Result<i64, ServerF
     } else {
         Some(&form.vaapi_display)
     };
-    let video_profile: Option<&str> = if form.video_profile.is_empty() {
-        None
-    } else {
-        Some(&form.video_profile)
-    };
+    let profile_str = normalized_video_profile_for_persist(
+        hw_accel,
+        video_format,
+        bit_depth,
+        &form.video_profile,
+    );
+    let video_profile = profile_str.as_deref();
     // Clear preset if it is not valid for the resolved hw/format/depth combination,
     // mirroring the server-side clearing in UpdateFFmpegProfileHandler.cs.
     let valid_presets = presets_for_profile(hw_accel, video_format, bit_depth);
@@ -711,6 +811,54 @@ mod tests {
                 "hw_accel {hw_accel} must not persist QsvExtraHardwareFrames"
             );
         }
+    }
+
+    #[test]
+    fn h264_video_profile_options_follow_ersatztv_hardware_rules() {
+        assert_eq!(
+            video_profile_options(0, 1),
+            vec![VIDEO_PROFILE_MAIN, VIDEO_PROFILE_HIGH, VIDEO_PROFILE_HIGH10]
+        );
+        assert_eq!(
+            video_profile_options(2, 1),
+            vec![
+                VIDEO_PROFILE_MAIN,
+                VIDEO_PROFILE_HIGH,
+                VIDEO_PROFILE_HIGH444P
+            ]
+        );
+        assert!(video_profile_options(5, 1).is_empty());
+        assert!(video_profile_options(2, 2).is_empty());
+    }
+
+    #[test]
+    fn nvenc_mpeg2_validation_matches_upstream_warning() {
+        assert_eq!(
+            video_format_validation_error(2, 3),
+            Some(NVENC_FORMATS_ERROR)
+        );
+        assert!(validate_profile_options(2, 3, 0, VIDEO_PROFILE_HIGH).is_err());
+        assert!(validate_profile_options(2, 1, 0, VIDEO_PROFILE_HIGH444P).is_ok());
+    }
+
+    #[test]
+    fn video_profile_persist_normalizes_to_h264_profile_contract() {
+        assert_eq!(
+            normalized_video_profile_for_persist(2, 1, 1, VIDEO_PROFILE_HIGH),
+            Some(VIDEO_PROFILE_HIGH444P.to_string())
+        );
+        assert_eq!(
+            normalized_video_profile_for_persist(0, 1, 0, VIDEO_PROFILE_MAIN),
+            Some(VIDEO_PROFILE_MAIN.to_string())
+        );
+        assert_eq!(
+            normalized_video_profile_for_persist(0, 2, 0, VIDEO_PROFILE_HIGH),
+            None
+        );
+        assert_eq!(
+            normalized_video_profile_for_persist(5, 1, 0, VIDEO_PROFILE_HIGH),
+            None
+        );
     }
 
     #[test]

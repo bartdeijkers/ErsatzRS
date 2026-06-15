@@ -84,6 +84,7 @@ pub fn SelectField<T>(
     label: &'static str,
     value: RwSignal<T>,
     items: Vec<(T, String)>,
+    #[prop(default = None)] name: Option<&'static str>,
     #[prop(default = false)] disabled: bool,
     #[prop(default = None)] error: Option<Signal<Option<String>>>,
 ) -> impl IntoView
@@ -107,6 +108,7 @@ where
             <label class=style::label>{label}</label>
             <select
                 disabled=disabled
+                name=name
                 class=cls
                 prop:value=move || value.get().to_string()
                 on:change=move |e| {

@@ -21,77 +21,18 @@ commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
 Manual closeout refresh (2026-06-15): the previous slot 1,
-`mpeg-ts-channel-streaming` debt `legacy-concat-outpoint-boundary`, was closed
-with focused stream tests and the calibration playback gate. `cargo xtask
-progress gaps` now lists 10 remaining features and no longer lists MPEG-TS
-channel streaming, so the completed prompt was removed per
-`docs/automation/gap-prompt-rules.md`. `ffmpeg-profile-editor` and
-`ffmpeg-filter-graph` carry over as slots 1 and 2. Slot 3 is refilled from the
-current gap list with `hls-variant-playlists-segmenter`, debt
-`vlc-stop-on-disconnect-session-lifecycle`.
+`ffmpeg-profile-editor` debts `h264-profile-options` and
+`nvenc-mpeg2-validation-warning`, was closed with focused web tests and
+browser coverage. `cargo xtask progress gaps` now lists 9 remaining features
+and no longer lists FFmpeg Profile editor, so the completed prompt was removed
+per `docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` and
+`hls-variant-playlists-segmenter` carry over as slots 1 and 2. Slot 3 is
+refilled from the current phase-focus gap list with `settings`, debt
+`settings-i18n-browser-proof`.
 
 ---
 
-## 1 - FFmpeg Profile editor: restore missing H.264 profile options and NVENC validation (slug `ffmpeg-profile-editor`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg Profile editor for the
-remaining profile-option and validation-warning behavior (slug
-`ffmpeg-profile-editor`, debts `h264-profile-options` and
-`nvenc-mpeg2-validation-warning`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current `ParityDebt` from
-`docs/progress/parity/ffmpeg-profile-editor.toml`: "when the `/ffmpeg` profile
-editor's format is `h264`, its `profile` field does not expose the upstream
-enum options `main`, `high`, and `high444p`; when `Nvenc` hardware
-acceleration is selected and the format is changed to `mpeg-2`, the format
-field does not show the upstream red validation line/warning that NVENC only
-supports `h264`, `hevc`, and `av1`."
-
-ErsatzTV source: `ErsatzTV/Pages/FFmpegProfile*.razor` at the pinned commit,
-the matching profile view models, validators, and localization resources.
-ErsatzRS target: `crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/`,
-`crates/ersatzrs-web/src/admin/languages/`, and the profile persistence/server
-function paths touched by editor save/validation.
-
-Before editing:
-1. Read the pinned ErsatzTV FFmpeg profile list/editor Razor sources, view
-   model, validator, enum option sources, and localization text for profile
-   format/hardware validation.
-2. Inspect the current ErsatzRS FFmpeg profile editor islands, SSR fallback,
-   option lists, translations, tests, and profile repository save path.
-3. Build a Source Map and a Visual Source Map for `/ffmpeg`,
-   `/ffmpeg/profiles/add`, and `/ffmpeg/profiles/:id`.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
-
-Implement the coherent end-to-end slice: expose ErsatzTV's `h264` profile
-options `main`, `high`, and `high444p` in the editor when the selected video
-format is H.264, persist/load the selected value correctly, and show the
-upstream unsupported-format validation warning when `Nvenc` is selected with
-`mpeg-2`. Preserve hydrated and no-JS fallback behavior, localize any changed
-visible strings in every supported culture, and keep existing startup-report
-hardware availability behavior intact.
-
-Add focused unit/server-function regressions for option generation,
-validation, save/load, and any raw HTML fallback path affected by the change.
-Add browser coverage for the editor state transitions that show the H.264
-profile options and the NVENC MPEG-2 validation message.
-
-Verify with focused `ersatzrs-web` FFmpeg profile tests,
-`cargo xtask hydration-lint -p ersatzrs-web`, the added browser spec, and
-`cargo xtask progress check`. Update
-`docs/progress/parity/ffmpeg-profile-editor.toml` only when the evidence
-supports the new status. Report the Source Map, Visual Source Map, behavior
-implemented, remaining `ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
----
-
-## 2 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
+## 1 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph live proof for
 the watermark opacity-expression clock semantics (slug `ffmpeg-filter-graph`,
@@ -168,7 +109,7 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 3 - HLS variant playlists / segmenter: prove StopOnDisconnect session lifecycle (slug `hls-variant-playlists-segmenter`)
+## 2 - HLS variant playlists / segmenter: prove StopOnDisconnect session lifecycle (slug `hls-variant-playlists-segmenter`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: HLS Segmenter stop-on-disconnect
 session lifecycle proof and any required fixes (slug
@@ -237,6 +178,74 @@ StopOnDisconnect playback/disconnect run for HLS Segmenter and `mode=ts`, and
 this prompt file only when the evidence supports the new status. Report the
 Source Map, behavior implemented, timeout value used, process/session cleanup
 evidence, remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 3 - Settings: finish admin text coverage and four-language browser proof (slug `settings`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: Settings admin i18n coverage and
+browser proof across the settings route family (slug `settings`, debt
+`settings-i18n-browser-proof`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current `ParityDebt` from `docs/progress/parity/settings.toml`: "Full
+admin-route text coverage and four-language browser proof remain incomplete."
+The current summary says `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`
+are routed with ErsatzTV-shaped forms and raw HTML POST fallbacks backed by
+`ConfigElement`; the persisted `pages.language` value drives the SSR shell
+language and many route families, but settings still needs full text coverage
+and four-language browser proof. See `plans/settings-parity-slice.md`.
+
+ErsatzTV source: `ErsatzTV/Pages/Settings*.razor` and
+`$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs` at the pinned commit.
+ErsatzRS target:
+`crates/ersatzrs-web/src/admin/pages/settings.rs`,
+`crates/ersatzrs-web/src/admin/server_fns/settings.rs`,
+`crates/ersatzrs-web/src/admin/i18n.rs`,
+`crates/ersatzrs-web/src/admin/languages/`,
+`crates/ersatzrs-domain/src/config.rs`,
+`crates/ersatzrs-infra/src/{db,logging,xmltv}.rs`, and
+`crates/ersatzrs-core/src/playout_builder.rs`.
+
+Before editing:
+1. Read the pinned ErsatzTV settings Razor sources, config keys, validators /
+   save handlers, and localization resources for each settings route.
+2. Inspect the current ErsatzRS settings page, server functions, language
+   modules, fallback POST paths, existing settings tests, and
+   `plans/settings-parity-slice.md`.
+3. Build a Source Map and Visual Source Map for `/settings/ffmpeg`,
+   `/settings/logging`, `/settings/hdhr`, `/settings/scanner`,
+   `/settings/playout`, `/settings/ui`, and `/settings/xmltv`.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+
+Implement only the coherent i18n/browser-proof slice: replace any remaining
+hard-coded visible settings text with typed translations in every supported
+culture (`en-US`, `pl`, `pt-BR`, `nl`), keep `i18n.rs` as routing/helper glue,
+preserve the existing raw HTML POST fallbacks and settings save side effects,
+and keep ADR 0012's intentional Dutch-extension deviation intact. Do not
+change config persistence semantics unless source review proves a real
+ErsatzTV parity mismatch; if it does, document the behavior and decide whether
+an ADR update is required.
+
+Add focused tests for missing translation keys, fallback POST paths touched by
+the change, and language-specific rendering where practical. Add browser
+coverage that switches `pages.language` through every supported culture and
+proves the settings route family renders translated labels/help/errors without
+hydration errors or English fallback leakage outside intentional values such as
+FFmpeg option names.
+
+Verify with focused `ersatzrs-web` settings/i18n tests,
+`cargo xtask hydration-lint -p ersatzrs-web`, the added browser spec,
+`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
+`docs/progress/parity/settings.toml`, `plans/settings-parity-slice.md`,
+changelog, and this prompt file only when the evidence supports the new status.
+Report the Source Map, Visual Source Map, text coverage closed, remaining
+`ParityDebt`, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

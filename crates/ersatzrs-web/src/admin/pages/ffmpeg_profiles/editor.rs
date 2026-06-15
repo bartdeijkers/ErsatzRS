@@ -18,8 +18,9 @@ use crate::admin::i18n::{
 };
 use crate::admin::server_fns::ffmpeg_profiles::{
     copy_ffmpeg_profile, get_ffmpeg_profile_form, list_resolutions_for_select,
-    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile, FfmpegProfileForm,
-    HardwareAccelerationOption,
+    list_supported_hw_accelerations, presets_for_profile, save_ffmpeg_profile,
+    video_format_validation_error, video_profile_options, FfmpegProfileForm,
+    HardwareAccelerationOption, VIDEO_PROFILE_HIGH10, VIDEO_PROFILE_HIGH444P,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::form::{CheckBox, NumberField, SelectField, TextField};
@@ -52,7 +53,109 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
 
     // Pass `0` for the "add" route, otherwise the actual id. The island owns
     // the blocking resource and the inner #[component] renders the editor body.
-    view! { <FfmpegProfileEditorIsland profile_id=profile_id().unwrap_or(0)/> }
+    view! {
+        <FfmpegProfileEditorIsland profile_id=profile_id().unwrap_or(0)/>
+        <FfmpegProfileEditorNoScriptFallback profile_id=profile_id().unwrap_or(0)/>
+    }
+}
+
+#[component]
+fn FfmpegProfileEditorNoScriptFallback(profile_id: i64) -> impl IntoView {
+    let data: Resource<Option<FfmpegProfileForm>> = Resource::new_blocking(
+        move || profile_id,
+        move |id| async move {
+            if id == 0 {
+                Some(FfmpegProfileForm::new_defaults())
+            } else {
+                get_ffmpeg_profile_form(id).await.unwrap_or(None)
+            }
+        },
+    );
+
+    view! {
+        <noscript>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+                {move || {
+                    data.get().map(|maybe| match maybe {
+                        Some(form) => view! { <FfmpegProfileNoScriptForm form=form/> }.into_any(),
+                        None => view! { <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p> }.into_any(),
+                    })
+                }}
+            </Suspense>
+        </noscript>
+    }
+}
+
+#[component]
+fn FfmpegProfileNoScriptForm(form: FfmpegProfileForm) -> impl IntoView {
+    let profile_items = video_profile_options(form.hardware_acceleration, form.video_format);
+    let save_label = if form.id == 0 {
+        tr(TextKey::AddProfile)
+    } else {
+        tr(TextKey::SaveProfile)
+    };
+
+    view! {
+        <form method="post" action="/api/ffmpeg/save" class=style::page>
+            <input type="hidden" name="id" value=form.id.to_string()/>
+            <div class=style::breadcrumb>
+                <a href="/ffmpeg" class=style::back_link>{format!("← {}", tr(TextKey::FfmpegProfiles))}</a>
+                <h1 class=style::page_title>{tr(TextKey::EditFfmpegProfile)}</h1>
+            </div>
+            <div class=style::action_bar>
+                <button class=style::btn_primary type="submit">{save_label}</button>
+                <a href="/ffmpeg" class=style::cancel_link>{tr(TextKey::Cancel)}</a>
+            </div>
+            <div class=style::section>
+                <h2 class=style::section_title>{tr(TextKey::Video)}</h2>
+                <div class=style::form_row>
+                    <div class=style::fallback_field>
+                        <label>{tr(TextKey::Name)}</label>
+                        <input name="name" value=form.name.clone()/>
+                    </div>
+                    <div class=style::fallback_field>
+                        <label>{tr(TextKey::AccelerationKind)}</label>
+                        <select name="hardware_acceleration">
+                            <option value="0" selected=form.hardware_acceleration == 0>{tr(TextKey::NoneOption)}</option>
+                            <option value="1" selected=form.hardware_acceleration == 1>"QSV"</option>
+                            <option value="2" selected=form.hardware_acceleration == 2>"NVENC"</option>
+                            <option value="3" selected=form.hardware_acceleration == 3>"VAAPI"</option>
+                            <option value="4" selected=form.hardware_acceleration == 4>"VideoToolbox"</option>
+                            <option value="5" selected=form.hardware_acceleration == 5>"AMF"</option>
+                            <option value="7" selected=form.hardware_acceleration == 7>"RKMPP"</option>
+                        </select>
+                    </div>
+                    <div class=style::fallback_field>
+                        <label>{tr(TextKey::VideoFormat)}</label>
+                        <select name="video_format">
+                            <option value="1" selected=form.video_format == 1>"H264"</option>
+                            <option value="2" selected=form.video_format == 2>"H265 (HEVC)"</option>
+                            <option value="3" selected=form.video_format == 3>"MPEG-2"</option>
+                            <option value="4" selected=form.video_format == 4>"AV1"</option>
+                            <option value="99" selected=form.video_format == 99>{tr(TextKey::Copy)}</option>
+                        </select>
+                    </div>
+                    <div class=style::fallback_field>
+                        <label>{tr(TextKey::VideoProfile)}</label>
+                        <select name="video_profile">
+                            <option value="" selected=form.video_profile.is_empty()>{tr(TextKey::NoneOption)}</option>
+                            {profile_items.into_iter().map(|profile| {
+                                let selected = form.video_profile == profile;
+                                view! { <option value=profile selected=selected>{profile}</option> }
+                            }).collect_view()}
+                        </select>
+                    </div>
+                    <div class=style::fallback_field>
+                        <label>{tr(TextKey::BitDepth)}</label>
+                        <select name="bit_depth">
+                            <option value="0" selected=form.bit_depth == 0>"8-bit"</option>
+                            <option value="1" selected=form.bit_depth == 1>"10-bit"</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </form>
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +290,13 @@ fn FfmpegProfileEditorForm(
         Signal::derive(move || normalize_video.get() && hardware_acceleration.get() == 3);
     // Target-loudness field: loudness mode == 1 (LoudNorm).
     let show_loudness_target = Signal::derive(move || normalize_loudness_mode.get() == 1);
+    let video_format_error = Signal::derive(move || {
+        normalize_video
+            .get()
+            .then(|| video_format_validation_error(hardware_acceleration.get(), video_format.get()))
+            .flatten()
+            .map(ffmpeg_profile_error_message)
+    });
 
     // ── Actions ──────────────────────────────────────────────────────────
     let save_action = Action::new(move |form: &FfmpegProfileForm| {
@@ -266,6 +376,36 @@ fn FfmpegProfileEditorForm(
         let current = video_preset.get_untracked();
         if !current.is_empty() && !valid.contains(&current) {
             video_preset.set(String::new());
+        }
+    });
+
+    // FFmpegProfileEditViewModel.cs exposes a real select for h264 profiles and
+    // derives the required 10-bit profile by hardware acceleration.
+    Effect::new(move |_| {
+        let hw = hardware_acceleration.get();
+        let vf = video_format.get();
+        let bd = bit_depth.get();
+        let options = video_profile_options(hw, vf);
+        let current = video_profile.get_untracked();
+
+        if options.is_empty() {
+            if !current.is_empty() {
+                video_profile.set(String::new());
+            }
+            return;
+        }
+
+        if bd == 1 {
+            let required = if hw == 2 {
+                VIDEO_PROFILE_HIGH444P
+            } else {
+                VIDEO_PROFILE_HIGH10
+            };
+            if current != required {
+                video_profile.set(required.to_string());
+            }
+        } else if !current.is_empty() && !options.contains(&current.as_str()) {
+            video_profile.set(String::new());
         }
     });
 
@@ -360,7 +500,12 @@ fn FfmpegProfileEditorForm(
 
     // ── View ─────────────────────────────────────────────────────────────
     view! {
-        <form method="post" action="/api/ffmpeg/save" class=style::page>
+        <form
+            method="post"
+            action="/api/ffmpeg/save"
+            class=style::page
+            data-ffmpeg-profile-editor-hydrated="true"
+        >
             <input type="hidden" name="id" value=profile_id.to_string()/>
             // ── Breadcrumb ────────────────────────────────────────────
             <div class=style::breadcrumb>
@@ -439,6 +584,8 @@ fn FfmpegProfileEditorForm(
                         label=tr(TextKey::VideoFormat)
                         value=video_format
                         items=mk_video_format_items()
+                        name=Some("video_format")
+                        error=Some(video_format_error)
                     />
 
                     // Hardware acceleration sub-panel.
@@ -448,6 +595,7 @@ fn FfmpegProfileEditorForm(
                             label=tr(TextKey::AccelerationKind)
                             value=hardware_acceleration
                             items=mk_hw_accel_items()
+                            name=Some("hardware_acceleration")
                         />
                         // QSV extra frames — always rendered; hidden for non-QSV accelerators.
                         <div style:display=move || if show_qsv_frames.get() { "" } else { "none" }>
@@ -479,7 +627,26 @@ fn FfmpegProfileEditorForm(
                         <NumberField label=tr(TextKey::VideoBufferSize) value=video_buffer_size min=Some(0)/>
                     </div>
                     <div class=style::form_row>
-                        <TextField label=tr(TextKey::VideoProfile) value=video_profile/>
+                        {move || {
+                            let hw = hardware_acceleration.get();
+                            let vf = video_format.get();
+                            let options = video_profile_options(hw, vf);
+                            let disabled = options.is_empty();
+                            let mut items: Vec<(String, String)> =
+                                vec![(String::new(), tr(TextKey::NoneOption).to_string())];
+                            for profile in options {
+                                items.push((profile.to_string(), profile.to_string()));
+                            }
+                            view! {
+                                <SelectField<String>
+                                    label=tr(TextKey::VideoProfile)
+                                    value=video_profile
+                                    items=items
+                                    name=Some("video_profile")
+                                    disabled=disabled
+                                />
+                            }
+                        }}
                         // Preset options vary by hw/format/depth (AvailablePresets.ForAccelAndFormat).
                         // Re-rendered reactively; the Effect above clears a stale preset value.
                         {move || {
@@ -504,6 +671,7 @@ fn FfmpegProfileEditorForm(
                         <SelectField<i32>
                             label=tr(TextKey::BitDepth)
                             value=bit_depth
+                            name=Some("bit_depth")
                             items=vec![
                                 (0i32, "8-bit".to_string()),
                                 (1i32, "10-bit".to_string()),

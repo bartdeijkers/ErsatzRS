@@ -98,6 +98,28 @@
     gap: 1rem;
 }
 
+.fallback-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.fallback-field label {
+    color: var(--color-gray-400);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.fallback-field input,
+.fallback-field select {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-gray-100);
+    padding: 0.375rem 0.5rem;
+}
+
 .hw-section {
     display: flex;
     flex-direction: column;

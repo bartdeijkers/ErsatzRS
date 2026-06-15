@@ -689,6 +689,39 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
         "Thread count must be 0 or greater." => {
             "A contagem de threads deve ser 0 ou maior.".to_owned()
         }
+        "QSV supports formats (h264, hevc, mpeg2video)" => {
+            "QSV oferece suporte aos formatos (h264, hevc, mpeg2video).".to_owned()
+        }
+        "NVENC supports formats (h264, hevc, av1)" => {
+            "NVENC oferece suporte aos formatos (h264, hevc, av1).".to_owned()
+        }
+        "VAAPI supports formats (h264, hevc, av1, mpeg2video)" => {
+            "VAAPI oferece suporte aos formatos (h264, hevc, av1, mpeg2video).".to_owned()
+        }
+        "VideoToolbox supports formats (h264, hevc)" => {
+            "VideoToolbox oferece suporte aos formatos (h264, hevc).".to_owned()
+        }
+        "Amf supports formats (h264, hevc)" => {
+            "Amf oferece suporte aos formatos (h264, hevc).".to_owned()
+        }
+        "V4L2 M2M supports formats (h264, hevc)" => {
+            "V4L2 M2M oferece suporte aos formatos (h264, hevc).".to_owned()
+        }
+        "Rkmpp supports formats (h264, hevc)" => {
+            "Rkmpp oferece suporte aos formatos (h264, hevc).".to_owned()
+        }
+        "Mpeg2Video does not support 10-bit content" => {
+            "Mpeg2Video não oferece suporte a conteúdo de 10 bits.".to_owned()
+        }
+        "VideoProfile must be high10 with 10-bit h264" => {
+            "O perfil de vídeo deve ser high10 com h264 de 10 bits.".to_owned()
+        }
+        "VideoProfile must be high444p with NVIDIA 10-bit h264" => {
+            "O perfil de vídeo deve ser high444p com h264 de 10 bits da NVIDIA.".to_owned()
+        }
+        "VideoProfile cannot be high10 with 8-bit h264" => {
+            "O perfil de vídeo não pode ser high10 com h264 de 8 bits.".to_owned()
+        }
         "Source profile not found." => "Perfil de origem não encontrado.".to_owned(),
         "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
             "Nenhuma resolução FFmpeg está disponível; o bootstrap do banco de dados está incompleto"

@@ -32,6 +32,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- FFmpeg profile editing now exposes ErsatzTV-style H.264 profile choices,
+  persists NVENC `high444p`, and shows the unsupported-format warning when
+  NVENC is paired with MPEG-2.
 - Legacy MPEG-TS concat streams now stop each internal stream at the active
   `PlayoutItem` boundary, honoring short `InPoint`/`OutPoint` durations so
   `mode=ts-legacy` advances through cyclic playout items instead of continuing

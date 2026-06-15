@@ -2065,6 +2065,35 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
             "Profile name must be 50 characters or fewer.".to_owned()
         }
         "Thread count must be 0 or greater." => "Thread count must be 0 or greater.".to_owned(),
+        "QSV supports formats (h264, hevc, mpeg2video)" => {
+            "QSV supports formats (h264, hevc, mpeg2video).".to_owned()
+        }
+        "NVENC supports formats (h264, hevc, av1)" => {
+            "NVENC supports formats (h264, hevc, av1).".to_owned()
+        }
+        "VAAPI supports formats (h264, hevc, av1, mpeg2video)" => {
+            "VAAPI supports formats (h264, hevc, av1, mpeg2video).".to_owned()
+        }
+        "VideoToolbox supports formats (h264, hevc)" => {
+            "VideoToolbox supports formats (h264, hevc).".to_owned()
+        }
+        "Amf supports formats (h264, hevc)" => "Amf supports formats (h264, hevc).".to_owned(),
+        "V4L2 M2M supports formats (h264, hevc)" => {
+            "V4L2 M2M supports formats (h264, hevc).".to_owned()
+        }
+        "Rkmpp supports formats (h264, hevc)" => "Rkmpp supports formats (h264, hevc).".to_owned(),
+        "Mpeg2Video does not support 10-bit content" => {
+            "Mpeg2Video does not support 10-bit content.".to_owned()
+        }
+        "VideoProfile must be high10 with 10-bit h264" => {
+            "Video Profile must be high10 with 10-bit h264.".to_owned()
+        }
+        "VideoProfile must be high444p with NVIDIA 10-bit h264" => {
+            "Video Profile must be high444p with NVIDIA 10-bit h264.".to_owned()
+        }
+        "VideoProfile cannot be high10 with 8-bit h264" => {
+            "Video Profile cannot be high10 with 8-bit h264.".to_owned()
+        }
         "Source profile not found." => "Source profile not found.".to_owned(),
         "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
             "No FFmpeg resolutions are available; database bootstrap is incomplete".to_owned()

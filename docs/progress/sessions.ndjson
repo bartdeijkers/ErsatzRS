@@ -1,3 +1,4 @@
+{"agent":"codex","date":"2026-06-15","summary":"Closed FFmpeg profile editor H.264 profile options and NVENC MPEG-2 validation parity with focused tests and browser coverage."}
 {"agent":"codex","date":"2026-06-15","summary":"Closed MPEG-TS legacy concat outpoint boundary parity with duration-bounded internal streams and runtime calibration proof."}
 {"agent":"ersatzrs-daily-progress","date":"2026-06-15","summary":"Daily reconcile (f362445..9e0d59e): commit 9e0d59e resolved classic-scheduling continue-build-seam-overlap + duplicate-consecutive-shuffle-item and hls segmenter-start-replays-current-item; recorded open mpeg-ts legacy-concat-outpoint-boundary. Refreshed gap prompts; top three carry over (mpeg-ts-channel-streaming, ffmpeg-profile-editor, ffmpeg-filter-graph)."}
 {"agent":"Codex","date":"2026-06-14","summary":"Verified Linux checkout after v0.0.8-alpha delta; fixed remote-streams e2e concurrency and hydration wait."}

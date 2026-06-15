@@ -679,6 +679,37 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
             "Profielnaam mag maximaal 50 tekens bevatten.".to_owned()
         }
         "Thread count must be 0 or greater." => "Aantal threads moet 0 of hoger zijn.".to_owned(),
+        "QSV supports formats (h264, hevc, mpeg2video)" => {
+            "QSV ondersteunt formaten (h264, hevc, mpeg2video).".to_owned()
+        }
+        "NVENC supports formats (h264, hevc, av1)" => {
+            "NVENC ondersteunt formaten (h264, hevc, av1).".to_owned()
+        }
+        "VAAPI supports formats (h264, hevc, av1, mpeg2video)" => {
+            "VAAPI ondersteunt formaten (h264, hevc, av1, mpeg2video).".to_owned()
+        }
+        "VideoToolbox supports formats (h264, hevc)" => {
+            "VideoToolbox ondersteunt formaten (h264, hevc).".to_owned()
+        }
+        "Amf supports formats (h264, hevc)" => "Amf ondersteunt formaten (h264, hevc).".to_owned(),
+        "V4L2 M2M supports formats (h264, hevc)" => {
+            "V4L2 M2M ondersteunt formaten (h264, hevc).".to_owned()
+        }
+        "Rkmpp supports formats (h264, hevc)" => {
+            "Rkmpp ondersteunt formaten (h264, hevc).".to_owned()
+        }
+        "Mpeg2Video does not support 10-bit content" => {
+            "Mpeg2Video ondersteunt geen 10-bit-content.".to_owned()
+        }
+        "VideoProfile must be high10 with 10-bit h264" => {
+            "Videoprofiel moet high10 zijn bij 10-bit h264.".to_owned()
+        }
+        "VideoProfile must be high444p with NVIDIA 10-bit h264" => {
+            "Videoprofiel moet high444p zijn bij NVIDIA 10-bit h264.".to_owned()
+        }
+        "VideoProfile cannot be high10 with 8-bit h264" => {
+            "Videoprofiel mag niet high10 zijn bij 8-bit h264.".to_owned()
+        }
         "Source profile not found." => "Bronprofiel niet gevonden.".to_owned(),
         "No FFmpeg resolutions are available; database bootstrap is incomplete" => {
             "Er zijn geen FFmpeg-resoluties beschikbaar; database-bootstrap is onvolledig"
