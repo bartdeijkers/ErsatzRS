@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- HLS Segmenter parity tracking now documents the open calibration playback
+  deviation debt: structurally clean HLS captures can still drift at decoded
+  content boundaries, so TSDuck transport checks alone are no longer treated as
+  sufficient proof of playout continuity.
+
 ### Added
 
 - Admin UI languages are now registered from the language files themselves, so
