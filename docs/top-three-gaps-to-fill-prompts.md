@@ -116,6 +116,11 @@ Fix the next ErsatzTV parity gap in ErsatzRS: Settings admin i18n coverage and
 browser proof across the settings route family (slug `settings`, debt
 `settings-i18n-browser-proof`).
 
+we want to be able to add new languages in a simple way; make sure that we only have to add
+a new language .rs file in `crates/ersatzrs-web/src/admin/languages` to add the new 
+language to the admin ui. the language files should all have the same composition to make 
+it easier to diff and translate for both humans and a.i. agents.
+
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
