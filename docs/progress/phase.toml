@@ -16,9 +16,10 @@ the non-web health-check engine in ersatzrs-core::health / ersatzrs-infra::healt
 next_steps = '''
 Broaden health / troubleshooting coverage and the remaining Phase 7 hardening
 items. Active in-progress / not-started feature work (see `cargo xtask progress
-gaps`): FFmpeg command generation and filter graph depth, settings i18n full
-coverage, multi-collections / rerun / playlists / filler presets, support pages
-(health/logs/troubleshooting), and the remote-streams browser UI.
+gaps`): FFmpeg command generation and filter graph depth, multi-collections /
+rerun / playlists / filler presets, scanner hardening, support pages
+(health/logs/troubleshooting), and the remaining scheduling/admin route-family
+closeouts.
 '''
 
 # Phase 0 checklist (all complete).

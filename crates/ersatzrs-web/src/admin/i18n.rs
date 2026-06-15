@@ -3,39 +3,49 @@ use leptos::prelude::*;
 use crate::admin::server_fns::settings::SelectOption;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UiLanguage {
-    English,
-    Polish,
-    PortugueseBrazil,
-    Dutch,
+pub struct UiLanguage {
+    code: &'static str,
+}
+
+pub struct LanguageDefinition {
+    pub code: &'static str,
+    pub label: &'static str,
+    pub aliases: &'static [&'static str],
+    pub strings: &'static dyn LanguageStrings,
 }
 
 impl UiLanguage {
+    #[allow(non_upper_case_globals)]
+    pub const English: Self = Self { code: "en-us" };
+    #[allow(non_upper_case_globals)]
+    pub const Polish: Self = Self { code: "pl" };
+    #[allow(non_upper_case_globals)]
+    pub const PortugueseBrazil: Self = Self { code: "pt-br" };
+    #[allow(non_upper_case_globals)]
+    pub const Dutch: Self = Self { code: "nl" };
+
     pub const fn code(self) -> &'static str {
-        match self {
-            Self::English => "en-us",
-            Self::Polish => "pl",
-            Self::PortugueseBrazil => "pt-br",
-            Self::Dutch => "nl",
-        }
+        self.code
     }
 
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::English => "English",
-            Self::Polish => "Polski",
-            Self::PortugueseBrazil => "Português (Brasil)",
-            Self::Dutch => "Nederlands",
-        }
+    pub fn label(self) -> &'static str {
+        language_definition_for(self).label
     }
 
     pub fn from_config(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "pl" => Self::Polish,
-            "pt-br" | "pt_br" => Self::PortugueseBrazil,
-            "nl" | "nl-nl" | "nl_nl" => Self::Dutch,
-            _ => Self::English,
-        }
+        let normalized = normalize_language_input(value);
+        crate::admin::languages::LANGUAGES
+            .iter()
+            .find(|language| language.matches(&normalized))
+            .map_or(Self::English, |language| Self {
+                code: language.code,
+            })
+    }
+}
+
+impl LanguageDefinition {
+    fn matches(&self, value: &str) -> bool {
+        value == self.code || self.aliases.contains(&value)
     }
 }
 
@@ -44,18 +54,17 @@ pub fn normalize_ui_language(value: &str) -> String {
 }
 
 pub fn supported_ui_language_options() -> Vec<SelectOption> {
-    [
-        UiLanguage::English,
-        UiLanguage::Polish,
-        UiLanguage::PortugueseBrazil,
-        UiLanguage::Dutch,
-    ]
-    .into_iter()
-    .map(|language| SelectOption {
-        value: language.code().to_owned(),
-        label: language.label().to_owned(),
-    })
-    .collect()
+    crate::admin::languages::LANGUAGES
+        .iter()
+        .map(|language| SelectOption {
+            value: language.code.to_owned(),
+            label: language.label.to_owned(),
+        })
+        .collect()
+}
+
+fn normalize_language_input(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2522,12 +2531,14 @@ pub fn text(language: UiLanguage, key: TextKey) -> &'static str {
 }
 
 fn languages_for(language: UiLanguage) -> &'static dyn LanguageStrings {
-    match language {
-        UiLanguage::English => &crate::admin::languages::en_us::STRINGS,
-        UiLanguage::Polish => &crate::admin::languages::pl::STRINGS,
-        UiLanguage::PortugueseBrazil => &crate::admin::languages::pt_br::STRINGS,
-        UiLanguage::Dutch => &crate::admin::languages::nl::STRINGS,
-    }
+    language_definition_for(language).strings
+}
+
+fn language_definition_for(language: UiLanguage) -> &'static LanguageDefinition {
+    crate::admin::languages::LANGUAGES
+        .iter()
+        .find(|definition| definition.code == language.code())
+        .unwrap_or(&crate::admin::languages::LANGUAGES[0])
 }
 
 pub trait LanguageStrings: Sync {

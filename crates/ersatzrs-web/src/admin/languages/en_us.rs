@@ -1,6 +1,9 @@
-#![allow(clippy::match_same_arms, clippy::too_many_lines)]
-
 use crate::admin::i18n::{LanguageStrings, TextKey};
+
+pub const SORT_ORDER: u16 = 10;
+pub const CODE: &str = "en-us";
+pub const LABEL: &str = "English";
+pub const ALIASES: &[&str] = &["en", "en_us", "en-us"];
 
 pub struct EnglishStrings;
 

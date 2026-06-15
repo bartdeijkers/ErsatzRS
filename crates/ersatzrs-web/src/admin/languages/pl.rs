@@ -1,6 +1,9 @@
-#![allow(clippy::match_same_arms, clippy::too_many_lines)]
-
 use crate::admin::i18n::{LanguageStrings, TextKey};
+
+pub const SORT_ORDER: u16 = 20;
+pub const CODE: &str = "pl";
+pub const LABEL: &str = "Polski";
+pub const ALIASES: &[&str] = &["pl"];
 
 pub struct PolishStrings;
 

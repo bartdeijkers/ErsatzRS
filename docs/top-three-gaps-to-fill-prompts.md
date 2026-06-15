@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-15
-last_processed_commit: 9e0d59e6bf32c5d19aeee35b215fece5813f3ea5
+last_processed_commit: ec6d14c1c6e716bfe01c124ce011502345c60be2
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -26,10 +26,19 @@ Manual closeout refresh (2026-06-15): the previous HLS slot,
 `cargo xtask smoke --hls-lifecycle --timeout 240`. `cargo xtask progress gaps`
 now lists 8 remaining features and no longer lists HLS variant playlists /
 segmenter, so the completed prompt was removed per
-`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` carries over as
-slot 1, `settings` moves to slot 2, and slot 3 is refilled from the current
-phase-focus gap list with
+`docs/automation/gap-prompt-rules.md`. That refresh initially carried
+`ffmpeg-filter-graph` and `settings` forward and refilled slot 3 with
 `multi-collections-rerun-collections-playlists-filler-presets`.
+
+Manual closeout refresh (2026-06-15): the Settings slot,
+`settings-i18n-browser-proof`, was closed with generated language-module
+registration, focused `ersatzrs-web` i18n/settings tests, and
+`npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`.
+`cargo xtask progress gaps` now lists 7 remaining features and no longer lists
+`settings`, so the completed prompt was removed per
+`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` carries over as
+slot 1, `multi-collections-rerun-collections-playlists-filler-presets` moves
+to slot 2, and slot 3 is refilled with the structured Scanner runtime debts.
 
 ---
 
@@ -108,82 +117,7 @@ Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
----
-
-## 2 - Settings: finish admin text coverage and four-language browser proof (slug `settings`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: Settings admin i18n coverage and
-browser proof across the settings route family (slug `settings`, debt
-`settings-i18n-browser-proof`).
-
-we want to be able to add new languages in a simple way; make sure that we only have to add
-a new language .rs file in `crates/ersatzrs-web/src/admin/languages` to add the new 
-language to the admin ui. the language files should all have the same composition to make 
-it easier to diff and translate for both humans and a.i. agents.
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current `ParityDebt` from `docs/progress/parity/settings.toml`: "Full
-admin-route text coverage and four-language browser proof remain incomplete."
-The current summary says `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}`
-are routed with ErsatzTV-shaped forms and raw HTML POST fallbacks backed by
-`ConfigElement`; the persisted `pages.language` value drives the SSR shell
-language and many route families, but settings still needs full text coverage
-and four-language browser proof. See `plans/settings-parity-slice.md`.
-
-ErsatzTV source: `ErsatzTV/Pages/Settings*.razor` and
-`$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs` at the pinned commit.
-ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/settings.rs`,
-`crates/ersatzrs-web/src/admin/server_fns/settings.rs`,
-`crates/ersatzrs-web/src/admin/i18n.rs`,
-`crates/ersatzrs-web/src/admin/languages/`,
-`crates/ersatzrs-domain/src/config.rs`,
-`crates/ersatzrs-infra/src/{db,logging,xmltv}.rs`, and
-`crates/ersatzrs-core/src/playout_builder.rs`.
-
-Before editing:
-1. Read the pinned ErsatzTV settings Razor sources, config keys, validators /
-   save handlers, and localization resources for each settings route.
-2. Inspect the current ErsatzRS settings page, server functions, language
-   modules, fallback POST paths, existing settings tests, and
-   `plans/settings-parity-slice.md`.
-3. Build a Source Map and Visual Source Map for `/settings/ffmpeg`,
-   `/settings/logging`, `/settings/hdhr`, `/settings/scanner`,
-   `/settings/playout`, `/settings/ui`, and `/settings/xmltv`.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
-
-Implement only the coherent i18n/browser-proof slice: replace any remaining
-hard-coded visible settings text with typed translations in every supported
-culture (`en-US`, `pl`, `pt-BR`, `nl`), keep `i18n.rs` as routing/helper glue,
-preserve the existing raw HTML POST fallbacks and settings save side effects,
-and keep ADR 0012's intentional Dutch-extension deviation intact. Do not
-change config persistence semantics unless source review proves a real
-ErsatzTV parity mismatch; if it does, document the behavior and decide whether
-an ADR update is required.
-
-Add focused tests for missing translation keys, fallback POST paths touched by
-the change, and language-specific rendering where practical. Add browser
-coverage that switches `pages.language` through every supported culture and
-proves the settings route family renders translated labels/help/errors without
-hydration errors or English fallback leakage outside intentional values such as
-FFmpeg option names.
-
-Verify with focused `ersatzrs-web` settings/i18n tests,
-`cargo xtask hydration-lint -p ersatzrs-web`, the added browser spec,
-`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
-`docs/progress/parity/settings.toml`, `plans/settings-parity-slice.md`,
-changelog, and this prompt file only when the evidence supports the new status.
-Report the Source Map, Visual Source Map, text coverage closed, remaining
-`ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
----
-
-## 3 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 2 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
 collection route-family parity closeout for `/media/multi-collections`,
@@ -249,6 +183,70 @@ ersatzrs-web`, the added browser spec or documented Playwright run,
 changelog, and this prompt file only when the evidence supports the new status.
 Report the Source Map, Visual Source Map, behavior closed, remaining
 `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 3 - Scanner: close real-world music-video NFO and SQLite scan-locking parity debts (slug `scanner`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
+music-video NFO leniency and concurrent SQLite scan locking (slug `scanner`,
+debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current `ParityDebt` from `docs/progress/parity/scanner.toml`:
+`music-video-nfo-fragment-leniency` says "Local music-video NFO parsing rejects
+real-world files that ErsatzTV accepts, falling back to filename metadata."
+Evidence: "ErsatzRS.log: hundreds of NFO did not contain a <musicvideo> root
+element errors during music-video scans." `sqlite-scan-locking` says
+"Concurrent scan and web activity can abort library scans with SQLite database
+locked errors instead of serializing work like ErsatzTV." Evidence:
+"ErsatzRS.log: library scan failed library_id=3/5 with SQLite code 5 database
+is locked."
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Scanner/` at the pinned commit,
+especially the local music-video scanner/NFO parsing path and the scan
+coordination behavior around library scans. ErsatzRS target:
+`crates/ersatzrs-scanner`, `crates/ersatzrs-infra/src/repositories/`, scanner
+tests under `crates/ersatzrs-scanner/tests/`, and the scanner parity file.
+
+Before editing:
+1. Read the pinned ErsatzTV scanner source for local music-video NFO parsing,
+   fallback behavior, scan transaction boundaries, and scan concurrency /
+   serialization.
+2. Inspect the current ErsatzRS local music-video scanner, NFO parser, provider
+   sync write paths, SQLite pool/transaction usage, existing scanner tests, and
+   any logs or fixtures referenced by the debt evidence.
+3. Build a Source Map for music-video scan input -> NFO parse -> metadata row
+   writes -> fallback metadata, and a second Source Map for web/scanner
+   concurrent database access and lock handling.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+
+Implement only the coherent scanner hardening slice: make local music-video NFO
+parsing accept the real-world fragments ErsatzTV accepts while preserving the
+existing strict row-shape and fallback semantics, and make concurrent scan plus
+web activity serialize/retry consistently enough to avoid aborting with SQLite
+database-locked errors. Do not weaken scanner metadata parity, path hashing, or
+provider enum values to make fixtures pass. If a production log sample is
+needed but unavailable, create a minimal fixture from the observed failure
+shape and keep any unproven runtime breadth as structured `ParityDebt`.
+
+Add focused scanner/infra regressions for the accepted NFO fragment shape, the
+metadata written from that NFO, the fallback behavior for truly invalid NFO,
+and the SQLite locking scenario. If the locking fix changes shared DB behavior,
+add the narrow repository or integration coverage that proves it does not hide
+real errors or break MySQL feature builds.
+
+Verify with focused `ersatzrs-scanner` and affected `ersatzrs-infra` tests,
+`cargo test --workspace --all-features` if shared DB behavior changed broadly,
+`cargo xtask progress check`, and `cargo xtask progress gaps`. Update
+`docs/progress/parity/scanner.toml`, changelog, and this prompt file only when
+the evidence supports the new status. Report the Source Map, behavior closed,
+remaining `ParityDebt`, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

@@ -1,4 +1,1 @@
-pub mod en_us;
-pub mod nl;
-pub mod pl;
-pub mod pt_br;
+include!(concat!(env!("OUT_DIR"), "/admin_languages.rs"));

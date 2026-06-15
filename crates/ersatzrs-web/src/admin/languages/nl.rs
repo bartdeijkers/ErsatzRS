@@ -1,6 +1,9 @@
-#![allow(clippy::match_same_arms, clippy::too_many_lines)]
-
 use crate::admin::i18n::{LanguageStrings, TextKey};
+
+pub const SORT_ORDER: u16 = 40;
+pub const CODE: &str = "nl";
+pub const LABEL: &str = "Nederlands";
+pub const ALIASES: &[&str] = &["nl", "nl-nl", "nl_nl"];
 
 pub struct DutchStrings;
 

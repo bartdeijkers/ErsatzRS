@@ -1,5 +1,46 @@
 # Settings Parity Slice
 
+## 2026-06-15 follow-up: settings i18n browser proof + file-driven language registry
+
+### Source Map (this follow-up)
+
+- ErsatzTV UI/pages: `$ERSATZTV_SRC/ErsatzTV/Pages/Settings/FFmpegSettings.razor`,
+  `LoggingSettings.razor`, `HDHRSettings.razor`, `ScannerSettings.razor`,
+  `PlayoutSettings.razor`, `UISettings.razor`, and `XMLTVSettings.razor`.
+- ErsatzTV localization: `Localization.SupportedLanguages` and
+  `DatabaseRequestCultureProvider` keep settings UI language server-driven from
+  persisted `pages.language`; ErsatzRS keeps the ADR 0012 Dutch extension.
+- ErsatzRS target modules:
+  `crates/ersatzrs-web/src/admin/pages/settings.rs` already renders visible
+  settings labels/actions/help through `TextKey`; `crates/ersatzrs-web/src/admin/i18n.rs`
+  now resolves languages through a generated registry; each
+  `crates/ersatzrs-web/src/admin/languages/*.rs` file carries the same metadata
+  block (`SORT_ORDER`, `CODE`, `LABEL`, `ALIASES`) plus its `LanguageStrings`.
+- Side effects: unchanged; `/settings/ui` continues to persist `pages.language`
+  and the SSR shell reads it into `<html lang>`.
+- Intentional deviations: `nl` / Nederlands remains the ADR 0012 extension
+  beyond ErsatzTV's upstream `en-us`, `pl`, and `pt-br`.
+
+### Visual Source Map (this follow-up)
+
+- ErsatzTV layout containers and action bars remain the previously mapped
+  settings form shell: 64px action bar, primary Save Settings action, ExtraLarge
+  content container, h5 heading, divider, and row-stacked label/input fields.
+- Browser proof used the existing ErsatzRS settings shell at 1440x900 via
+  Playwright, switching the persisted language through `en-us`, `pl`, `pt-br`,
+  and `nl`, then visiting `/settings/ffmpeg`, `/settings/logging`,
+  `/settings/hdhr`, `/settings/scanner`, `/settings/playout`, `/settings/ui`,
+  and `/settings/xmltv`.
+- The spec asserts translated headings, labels, and save actions, checks
+  `<html lang>`, verifies no role-alert errors, and fails on console/page errors
+  that would include hydration failures.
+
+### Verification (this follow-up)
+
+- [x] `cargo test -p ersatzrs-web --lib --features ssr i18n`
+- [x] `cargo test -p ersatzrs-web --lib --features ssr settings`
+- [x] `npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`
+
 ## 2026-06-12 follow-up: FFmpeg path empty-means-auto-detect + concurrent transcode sessions
 
 ### Source Map (this follow-up)
@@ -126,11 +167,7 @@
 
 ## ParityDebt
 
-- Full admin UI i18n coverage:
-  - Status: next-slice required
-  - Evidence: the current implementation persists and reads `pages.language`, adds `nl`, and translates the app shell/navigation/home/not-found, settings route labels/help/actions including optional `(none)` choices and visible logging level option labels, `/ffmpeg` profile list/editor route family including copy-name defaults, `/search` page including bulk/action fallback messages, `/media/libraries`, `/media/sources/{local,jellyfin,emby,plex}` visible source/library/path pages, Plex sign-in status text, the shared media-source path editor strings, `/watermarks` list/editor labels/options/actions, `/system/{health,logs,troubleshooting}` plus playback troubleshooting visible labels/statuses and visible log-level table labels, `/channels` list/editor labels/actions/options plus channel streaming-mode and preferred-audio language display labels, `/schedules` list/editor/item-editor labels/actions/options including no-JS item fallback text, copy-name defaults, optional language `(none)` choices, and visible fallback collection labels, `/blocks` list/editor labels/actions/dialogs/toasts/no-JS fallback labels, search-query placeholder, duration hour adornment, and copy-name defaults, `/templates` list/editor labels/actions/dialogs/toasts and copy-name defaults, `/decos` and `/deco-templates` list/editor labels/actions/options/toasts/no-JS fallback labels, `/playouts` list/timeline labels/actions/help text, `/playouts/sequential/:id` YAML editor labels/actions/confirm/toasts, `/media/rerun-collections` list/editor labels/actions/options/pager text, `/media/smart-collections` list/editor labels/actions/options/toasts, `/media/filler/presets` list/editor labels/actions/options/help text, `/media/playlists` list/editor labels/actions/options/toasts/preview text, `/media/trakt/lists` list/editor/dialog/action/toast/pager labels, `/media/trash` headings/actions/section links/confirmation/toast text, `/media/multi-collections` list/editor labels/actions/options/validation/toasts/pager text, `/media/collections` list/editor/member/detail labels/actions/section headings/validation/toasts, `/media/tv/shows/:id` loading/not-found/action/scan/file-state/fact-row/localized season card/actor labels, `/media/other/videos/:id` loading/not-found/action/media-info/file-state/fact-row/actor labels, `/media/tv/seasons/:id` loading/not-found/actions/media-info/file-state/metadata labels, `/media/movies/:id` loading/not-found/action/media-info/file-state/fact-row labels, `/media/music/artists/:id` loading/not-found/action/fact-row/music-video labels and thumbnail alt suffixes, and shared media browser titles/search/loading/empty/selection/action/modal/pager labels plus media-browser season display names through per-culture modules in `admin/languages/`, but many other admin page/component strings still render as literals.
-  - Owner/follow-up: continue replacing visible admin UI text with `TextKey` lookups and add browser proof for `en-us`, `pl`, `pt-br`, and `nl`.
-  - ADR/deviation link: [ADR 0012](../docs/adr/0012-admin-ui-nl-localization.md)
+- None for the settings route family.
 
 ## Verification
 
@@ -143,4 +180,9 @@
 - [x] Follow-up browser smoke at 1440x1000: `/settings/ui` exposes English, Polski, and Português (Brasil); saving `Light` + `pt-br` through the real form persists and reloads with `data-theme="light"`, `--color-bg: #F5F5F5`, `--color-appbar: #ECEFF1`, no horizontal overflow, and zero console/page errors. Screenshot: `plans/references/settings-ui-light-2026-05-27.png`.
 - [x] Follow-up custom-resolution regression: `/settings/ffmpeg` now renders Add Custom Resolution as a normal POST form instead of a hydration-only dialog; `cargo test -p ersatzrs-web create_custom_resolution --features ssr`, `cargo check -p ersatzrs-web --features ssr`, `cargo fmt --all -- --check`, and browser POST smoke at 1440x1000 verified that a `1357x579` custom resolution persisted and appeared after redirect.
 - [x] Review follow-up: `/settings/ui` language choices now match `Localization.SupportedLanguages` exactly (`en-us`, `pl`, `pt-br`), `pages.language` defaults/normalizes to ErsatzTV's `en-us`, and the app shell server-renders the persisted `pages.is_dark_mode` value so Light does not depend on the client theme fetch.
-- [ ] i18n extension follow-up: `/settings/ui` now exposes `nl` as `Nederlands` per ADR 0012, the SSR shell reads persisted `pages.language` into `<html lang>`, and the app shell/navigation/home/not-found plus settings including optional `(none)` choices and logging level option labels, `/ffmpeg` profile route-family including copy-name defaults, `/search`, `/media/libraries`, `/media/sources/{local,jellyfin,emby,plex}`, shared media-source path-editor text, `/watermarks` list/editor labels/options/actions, `/system/{health,logs,troubleshooting}` labels/statuses including log-level table labels, `/channels` list/editor labels/actions/options plus channel streaming-mode and preferred-audio language display labels, `/schedules` list/editor/item-editor labels/actions/options including copy-name defaults, optional language `(none)` choices, and fallback collection labels, `/blocks` list/editor labels/actions/dialogs/toasts/no-JS fallback labels, search-query placeholder, duration hour adornment, and copy-name defaults, `/templates` list/editor labels/actions/dialogs/toasts and copy-name defaults, `/decos` and `/deco-templates` list/editor labels/actions/options/toasts/no-JS fallback labels, `/playouts` list/timeline labels/actions/help text, `/playouts/sequential/:id` YAML editor labels/actions/confirm/toasts, `/media/rerun-collections` list/editor labels/actions/options/pager text, `/media/smart-collections` list/editor labels/actions/options/toasts, `/media/filler/presets` list/editor labels/actions/options/help text, `/media/playlists` list/editor labels/actions/options/toasts/preview text, `/media/trakt/lists` list/editor/dialog/action/toast/pager labels, `/media/trash` headings/actions/section links/confirmation/toast text, `/media/multi-collections` list/editor labels/actions/options/validation/toasts, `/media/collections` list/editor/member/detail labels/actions/section headings/validation/toasts, `/media/tv/shows/:id` loading/not-found/action/scan/file-state/fact-row/localized season card/actor labels, `/media/other/videos/:id` loading/not-found/action/media-info/file-state/fact-row/actor labels, `/media/tv/seasons/:id` loading/not-found/actions/media-info/file-state/metadata labels, `/media/movies/:id` loading/not-found/actions/media-info/file-state/fact-row labels, `/media/music/artists/:id` loading/not-found/action/fact-row/music-video labels and thumbnail alt suffixes, and shared media browser titles/search/loading/empty/selection/action/modal/pager labels plus media-browser season display names use typed translations from `admin/languages/`. Full route/component coverage and browser screenshots for all four cultures remain open.
+- [x] i18n extension follow-up: `/settings/ui` exposes `nl` as
+      `Nederlands` per ADR 0012, the SSR shell reads persisted
+      `pages.language` into `<html lang>`, settings labels/actions/help text
+      render from typed per-culture modules, and
+      `tests/e2e/settings-i18n.spec.ts` proves the seven settings routes in
+      `en-us`, `pl`, `pt-br`, and `nl`.

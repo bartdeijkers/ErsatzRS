@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Added
 
+- Admin UI languages are now registered from the language files themselves, so
+  adding a supported admin language only requires adding a new module under
+  `crates/ersatzrs-web/src/admin/languages/` with the standard metadata block
+  and translations.
 - Remote Streams now has an ErsatzTV-style admin browser at
   `/media/remote/streams`, including search-index filtering, card paging,
   letter jumps, collection/playlist add actions, no-JS list HTML, and
@@ -36,6 +40,11 @@ release section when tagging a release.
   timeout even while FFmpeg is still running, segment-file requests refresh the
   session like ErsatzTV, and the MPEG-TS hybrid wrapper waits for initial HLS
   segments before wrapping a restarted session.
+- Settings route-family i18n parity is now browser-proven across `en-us`, `pl`,
+  `pt-br`, and `nl` for `/settings/ffmpeg`, `/settings/logging`,
+  `/settings/hdhr`, `/settings/scanner`, `/settings/playout`, `/settings/ui`,
+  and `/settings/xmltv`, with translated headings, labels, save actions, and
+  no English fallback leakage outside intentional technical values.
 - FFmpeg profile editing now exposes ErsatzTV-style H.264 profile choices,
   persists NVENC `high444p`, and shows the unsupported-format warning when
   NVENC is paired with MPEG-2.
