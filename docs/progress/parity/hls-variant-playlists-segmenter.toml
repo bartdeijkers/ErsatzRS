@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0015']
 summary    = '''
 Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
@@ -285,6 +285,29 @@ decoded second 117. Root-cause note:
 `docs/explanation/hls-segmenter-playback-deviation-root-cause.md`. The source
 calibration clips are not the cause; each MKV has exactly 10,800 video frames
 at 60 fps, with the 180.021 s container duration coming from AAC packetization.
+
+Closeout (2026-06-16): HLS Segmenter seek propagation now preserves
+sub-second request-time and in-point offsets as `Duration` through active-item
+selection, worker FFmpeg command construction, the shared FFmpeg `StreamSeek`
+pipeline step, the direct IPTV `.ts` stream path, and troubleshooting previews.
+The generated FFmpeg seek argv changed from whole-second forms such as
+`-ss 900` / `-ss 120` to TimeSpan-shaped values such as
+`-ss 00:15:00.0000000`, `-ss 00:02:00.0000000`, and fractional
+`-ss 00:00:00.5170000`, matching ErsatzTV's full `TimeSpan` representation
+instead of flooring away milliseconds before process spawn. The TSDuck gate now
+also isolates the server temp directory per run across platforms, writes
+host-native SQLite/media paths when the shell path format differs from the
+server process path format, waits for transient bootstrap SQLite locks, and
+decodes the HLS Segmenter capture to verify one-second calibration audio pip
+cadence. Rebuilt runtime proof using the copied `E:\calibrate` clips passed
+`scripts/e2e/tsduck-playback-gate.sh --keep --frames gate` with 86 checks and
+0 failures: HLS Segmenter captured 54.208 seconds, 36,045 TS packets, zero
+transport errors, sync losses, continuity-counter errors, PTS/DTS/PCR leaps, or
+scrambling faults, and 54 detected audio pips with gap range 1.000-1.030 s
+(`max_gap_deviation=30.0ms`). Manual frame probes around the first real
+playout rollover showed `CLIP 1/3` at `ABS 00:00:07.783` immediately followed
+by `CLIP 2/3` at `ABS 00:03:00.017` / `CLIP 00:00:00.017`, so the previous
+early incoming-item `ABS 00:00:00.517` behavior was not reproduced.
 '''
 
 [[debt]]
@@ -306,3 +329,4 @@ id          = 'segmenter-content-timeline-deviations'
 description = 'HLS Segmenter appends independently spawned FFmpeg generations by scheduled playout time and output PTS continuity, but does not preserve or verify decoded content-time continuity across work-ahead respawns and real PlayoutItem seams. This can start the incoming item early or move audio pip phase while TSDuck transport checks remain clean.'
 discovered  = '2026-06-15'
 evidence    = 'Channel 5 calibration capture from /iptv/channel/5.m3u8?mode=segmenter: TSDuck reported zero TS continuity/timestamp/container faults, but audio pips moved +32 ms near a respawn, -488 ms at the clip 3 -> clip 1 rollover, and +32 ms at the clip 1 -> clip 2 rollover. Decoded frame 18,000 showed ABS 00:03:03.517 instead of expected ABS 00:03:03.000, and rollover probes showed clip 1 already at ABS 00:00:00.517 by decoded second 117. Root-cause note: docs/explanation/hls-segmenter-playback-deviation-root-cause.md.'
+resolved    = true

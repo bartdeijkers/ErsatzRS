@@ -7605,7 +7605,7 @@ mod tests {
     async fn load_show_languages_resolves_episode_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("show-languages.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)
@@ -7625,7 +7625,7 @@ mod tests {
     async fn load_movie_languages_resolves_head_version_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("movie-languages.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)
@@ -7645,7 +7645,7 @@ mod tests {
     async fn load_movie_metadata_facts_resolves_studios_genres_and_tags() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("movie-facts.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)
@@ -7679,7 +7679,7 @@ mod tests {
     async fn load_artist_languages_resolves_music_video_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("artist-languages.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)
@@ -7699,7 +7699,7 @@ mod tests {
     async fn load_other_video_languages_resolves_head_version_audio_stream_codes() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir
                 .path()
                 .join("other-video-languages.db")
@@ -7722,7 +7722,7 @@ mod tests {
     async fn media_item_info_json_supports_other_videos() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("other-video-info.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)
@@ -7757,7 +7757,7 @@ mod tests {
     async fn playout_refresh_lookups_match_schedule_and_collection_contracts() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir
                 .path()
                 .join("playout-refresh-lookups.db")
@@ -8359,7 +8359,7 @@ mod tests {
     ) -> (tempfile::TempDir, ersatzrs_infra::db::DbPool) {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join(database_name).display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)

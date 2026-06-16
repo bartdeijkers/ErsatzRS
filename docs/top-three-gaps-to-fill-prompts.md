@@ -45,94 +45,20 @@ This user-visible playback gap takes slot 1. The previous FFmpeg filter graph
 prompt moves to slot 2, the multi-collections route-family prompt moves to
 slot 3, and the Scanner prompt is deferred out of the top three.
 
+Manual closeout refresh (2026-06-16): the HLS slot,
+`hls-variant-playlists-segmenter` debt
+`segmenter-content-timeline-deviations`, was closed with sub-second seek
+propagation through the worker and FFmpeg command builders plus an updated
+TSDuck gate that checks decoded audio-pip cadence. `cargo xtask progress gaps`
+now lists 7 remaining features and no longer lists HLS variant playlists /
+segmenter, so the completed prompt was removed per
+`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` moves back to
+slot 1, `multi-collections-rerun-collections-playlists-filler-presets` moves
+to slot 2, and slot 3 is refilled with the structured Scanner runtime debts.
+
 ---
 
-## 1 - HLS Segmenter: fix unplanned playback deviations at respawn and playout seams (slug `hls-variant-playlists-segmenter`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: HLS Segmenter decoded-content
-continuity across work-ahead/realtime FFmpeg respawns and real `PlayoutItem`
-seams (slug `hls-variant-playlists-segmenter`, debt
-`segmenter-content-timeline-deviations`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current `ParityDebt` from
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`: "HLS Segmenter
-appends independently spawned FFmpeg generations by scheduled playout time and
-output PTS continuity, but does not preserve or verify decoded content-time
-continuity across work-ahead respawns and real PlayoutItem seams. This can
-start the incoming item early or move audio pip phase while TSDuck transport
-checks remain clean."
-
-Root-cause / reproduction note:
-[`docs/explanation/hls-segmenter-playback-deviation-root-cause.md`](explanation/hls-segmenter-playback-deviation-root-cause.md).
-Observed evidence from channel 5 `calibration` on 2026-06-15:
-`/iptv/channel/5.m3u8?mode=segmenter` produced zero TSDuck transport errors,
-sync losses, continuity-counter discontinuities, PTS/DTS/PCR leaps, missing
-video/audio PIDs, or scrambling errors, but audio pips moved +32 ms near a
-segmenter respawn, -488 ms at the clip 3 -> clip 1 rollover, and +32 ms at the
-clip 1 -> clip 2 rollover. Decoded frame 18,000 showed
-`ABS 00:03:03.517` instead of expected `ABS 00:03:03.000`; rollover probes
-showed clip 1 already at `ABS 00:00:00.517` by decoded second 117. The server
-log had no WARN/ERROR/FFmpeg failure/no-active-playout lines during capture.
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/
-HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.FFmpeg/
-FFmpegLibraryProcessService.cs`, `$ERSATZTV_SRC/ErsatzTV.FFmpeg/
-CommandGenerator.cs`, and `$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/
-OutputFormatHls.cs` at the pinned commit. ErsatzRS target:
-`crates/ersatzrs-infra/src/hls_worker.rs`,
-`crates/ersatzrs-ffmpeg/src/{pipeline,command,options}.rs`,
-`crates/ersatzrs-web/src/transport/iptv/{hls,stream,variant}.rs`,
-`scripts/e2e/tsduck-playback-gate.sh`, and the HLS parity file.
-
-Before editing:
-1. Read the pinned ErsatzTV segmenter worker and FFmpeg command/HLS output
-   sources for how request time, seek, segment duration, append-list state, and
-   item transitions are represented.
-2. Inspect the current ErsatzRS HLS worker state machine, especially
-   `hls_transcode_decision`, `hls_playout_item_duration`,
-   `content_seek_seconds`, `probe_output_ts_offset`, playlist trimming, and the
-   generated FFmpeg argv for HLS Segmenter.
-3. Build a Source Map from persisted `PlayoutItem.Start` / `Finish` ->
-   `ActiveHlsItem` -> FFmpeg `-ss` / `-t` / `-output_ts_offset` ->
-   appended HLS segments -> served playlist, marking where sub-second precision
-   is lost and where output PTS continuity is currently treated as content
-   continuity.
-4. Reproduce the channel 5 calibration evidence from the root-cause note, or
-   create an equivalent temporary calibration channel if the local database
-   changed. Keep the resulting audio-pip and ABS/frame-counter evidence.
-
-Implement only the coherent playback-continuity fix: preserve sub-second
-request/seek positions through the worker and command builders where needed,
-reconcile appended generation boundaries against decoded media time rather than
-only scheduled finish or PTS offset, and make the segmenter avoid early
-incoming-item starts, outgoing-item truncation, and audio-pip phase jumps at
-work-ahead respawns and playout seams. Do not weaken MPEG-TS continuity
-normalization, fMP4 init-cache behavior, StopOnDisconnect lifecycle handling,
-or the existing TSDuck structural checks.
-
-Add focused tests or a deterministic harness that catches this class of bug:
-one-second audio pip cadence and visible ABS/frame-counter continuity must be
-checked across at least one HLS respawn and at least one real `PlayoutItem`
-rollover. TSDuck zero-error results are necessary but not sufficient; the test
-must fail if content advances or skips by hundreds of milliseconds while the TS
-container remains clean.
-
-Verify with focused `ersatzrs-infra` / `ersatzrs-ffmpeg` tests,
-`cargo xtask smoke`, the TSDuck playback gate, the calibration reproduction
-steps in the root-cause note, and `cargo xtask progress check`. Update
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`, changelog, and
-this prompt file only when the evidence supports the new status. Report the
-Source Map, root cause fixed, exact FFmpeg argv before/after if it changed,
-audio-pip offsets, ABS/frame-counter evidence at the five-minute mark and
-rollovers, remaining `ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
-## 2 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
+## 1 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph live proof for
 the watermark opacity-expression clock semantics (slug `ffmpeg-filter-graph`,
@@ -207,7 +133,7 @@ Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
-## 3 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 2 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
 collection route-family parity closeout for `/media/multi-collections`,
@@ -278,3 +204,65 @@ better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
+
+## 3 - Scanner: close real-world music-video NFO and SQLite scan-locking parity debts (slug `scanner`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
+music-video NFO leniency and concurrent SQLite scan locking (slug `scanner`,
+debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
+
+Current `ParityDebt` from `docs/progress/parity/scanner.toml`:
+`music-video-nfo-fragment-leniency` says "Local music-video NFO parsing rejects
+real-world files that ErsatzTV accepts, falling back to filename metadata."
+Evidence: "ErsatzRS.log: hundreds of NFO did not contain a <musicvideo> root
+element errors during music-video scans." `sqlite-scan-locking` says
+"Concurrent scan and web activity can abort library scans with SQLite database
+locked errors instead of serializing work like ErsatzTV." Evidence:
+"ErsatzRS.log: library scan failed library_id=3/5 with SQLite code 5 database
+is locked."
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Scanner/` at the pinned commit,
+especially the local music-video scanner/NFO parsing path and the scan
+coordination behavior around library scans. ErsatzRS target:
+`crates/ersatzrs-scanner`, `crates/ersatzrs-infra/src/repositories/`, scanner
+tests under `crates/ersatzrs-scanner/tests/`, and the scanner parity file.
+
+Before editing:
+1. Read the pinned ErsatzTV scanner source for local music-video NFO parsing,
+   fallback behavior, scan transaction boundaries, and scan concurrency /
+   serialization.
+2. Inspect the current ErsatzRS local music-video scanner, NFO parser, provider
+   sync write paths, SQLite pool/transaction usage, existing scanner tests, and
+   any logs or fixtures referenced by the debt evidence.
+3. Build a Source Map for music-video scan input -> NFO parse -> metadata row
+   writes -> fallback metadata, and a second Source Map for web/scanner
+   concurrent database access and lock handling.
+4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+
+Implement only the coherent scanner hardening slice: make local music-video NFO
+parsing accept the real-world fragments ErsatzTV accepts while preserving the
+existing strict row-shape and fallback semantics, and make concurrent scan plus
+web activity serialize/retry consistently enough to avoid aborting with SQLite
+database-locked errors. Do not weaken scanner metadata parity, path hashing, or
+provider enum values to make fixtures pass. If a production log sample is
+needed but unavailable, create a minimal fixture from the observed failure
+shape and keep any unproven runtime breadth as structured `ParityDebt`.
+
+Add focused scanner/infra regressions for the accepted NFO fragment shape, the
+metadata written from that NFO, the fallback behavior for truly invalid NFO,
+and the SQLite locking scenario. If the locking fix changes shared DB behavior,
+add the narrow repository or integration coverage that proves it does not hide
+real errors or break MySQL feature builds.
+
+Verify with focused `ersatzrs-scanner` and affected `ersatzrs-infra` tests,
+`cargo test --workspace --all-features` if shared DB behavior changed broadly,
+`cargo xtask progress check`, and `cargo xtask progress gaps`. Update
+`docs/progress/parity/scanner.toml`, changelog, and this prompt file only when
+the evidence supports the new status. Report the Source Map, behavior closed,
+remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

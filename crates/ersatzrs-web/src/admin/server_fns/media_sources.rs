@@ -1161,7 +1161,7 @@ mod tests {
     async fn local_library_save_normalizes_and_persists_existing_paths() {
         let database_dir = tempfile::tempdir().expect("temp database dir");
         let database_url = format!(
-            "sqlite://{}",
+            "sqlite:{}",
             database_dir.path().join("local-library.db").display()
         );
         let pool = ersatzrs_infra::db::init(&database_url)

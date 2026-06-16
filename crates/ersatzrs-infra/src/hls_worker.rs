@@ -371,12 +371,13 @@ impl HlsSessionWorker {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             };
-            let elapsed_seconds = if decision.start_at_zero {
-                0
+            let elapsed = if decision.start_at_zero {
+                Duration::ZERO
             } else {
-                playout_start_seconds(decision.request_time, active.playout_start)
+                playout_start_duration(decision.request_time, active.playout_start)
             };
-            let start_seconds = active.content_seek_seconds(elapsed_seconds);
+            let start_position = active.content_seek_position(elapsed);
+            let start_seconds = duration_as_i64_seconds(start_position);
             let duration = hls_playout_item_duration(
                 &active,
                 decision.request_time,
@@ -532,7 +533,7 @@ impl HlsSessionWorker {
                             media_path: active.media_path.clone(),
                             channel_start_time: active.playout_start,
                             content_start_time: active.playout_start,
-                            stream_seek_seconds: seconds_as_f64(start_seconds),
+                            stream_seek_seconds: start_position.as_secs_f64(),
                             duration_seconds: active
                                 .program_duration
                                 .map_or(0.0, |duration| duration.as_secs_f64()),
@@ -566,7 +567,7 @@ impl HlsSessionWorker {
             let source_stream_for_denial = source_stream.clone();
             let opacity_clock = watermark_opacity_clock_at_spawn(
                 decision.request_time,
-                duration_from_seconds(start_seconds),
+                start_position,
                 active.content_duration,
                 active.playout_start,
             );
@@ -577,7 +578,7 @@ impl HlsSessionWorker {
                 is_first,
                 false,
                 decision.realtime,
-                start_seconds,
+                start_position,
                 duration,
                 output_ts_offset,
                 &playback_profile,
@@ -1072,7 +1073,7 @@ pub fn build_hls_command(
     is_first_transcode: bool,
     troubleshooting: bool,
     hls_realtime: bool,
-    start_seconds: i64,
+    start_position: Duration,
     duration: Option<Duration>,
     output_ts_offset: Option<Duration>,
     playback_profile: &PlaybackProfile,
@@ -1093,7 +1094,7 @@ pub fn build_hls_command(
         is_first_transcode,
         troubleshooting,
         hls_realtime,
-        start_seconds,
+        start_position,
         duration,
         output_ts_offset,
         playback_profile,
@@ -1119,7 +1120,7 @@ pub fn build_hls_command_with_opacity_clock(
     is_first_transcode: bool,
     troubleshooting: bool,
     hls_realtime: bool,
-    start_seconds: i64,
+    start_position: Duration,
     duration: Option<Duration>,
     output_ts_offset: Option<Duration>,
     playback_profile: &PlaybackProfile,
@@ -1173,8 +1174,8 @@ pub fn build_hls_command_with_opacity_clock(
     }
     request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
-    if start_seconds > 0 {
-        request.state.start_seconds = Some(start_seconds);
+    if !start_position.is_zero() {
+        request.state.start = Some(start_position);
     }
     request.state.duration = duration;
     request.state.output_ts_offset = output_ts_offset;
@@ -2424,14 +2425,8 @@ impl ActiveHlsItem {
         }
     }
 
-    fn content_seek_seconds(&self, elapsed_seconds: i64) -> i64 {
-        let elapsed = u64::try_from(elapsed_seconds).unwrap_or(0);
-        let seek_seconds = self
-            .in_point
-            .as_secs()
-            .saturating_add(elapsed)
-            .min(i64::MAX as u64);
-        i64::try_from(seek_seconds).unwrap_or(i64::MAX)
+    fn content_seek_position(&self, elapsed: Duration) -> Duration {
+        self.in_point.saturating_add(elapsed)
     }
 }
 
@@ -2462,18 +2457,12 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
     None
 }
 
-fn playout_start_seconds(now: DateTime<Utc>, playout_start: DateTime<Utc>) -> i64 {
-    (now - playout_start).num_seconds().max(0)
+fn playout_start_duration(now: DateTime<Utc>, playout_start: DateTime<Utc>) -> Duration {
+    (now - playout_start).to_std().unwrap_or(Duration::ZERO)
 }
 
-fn seconds_as_f64(seconds: i64) -> f64 {
-    u64::try_from(seconds)
-        .map(Duration::from_secs)
-        .map_or(0.0, |duration| duration.as_secs_f64())
-}
-
-fn duration_from_seconds(seconds: i64) -> Duration {
-    u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+fn duration_as_i64_seconds(duration: Duration) -> i64 {
+    i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
 }
 
 fn duration_from_f64(seconds: f64) -> Option<Duration> {
@@ -2890,6 +2879,11 @@ async fn normalize_hls_ts_continuity(
         }
 
         let path = working_dir.join(&file_name);
+        match tokio::fs::try_exists(&path).await {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(error) => return Err(error),
+        }
         normalize_ts_file_continuity(&path, state).await?;
         state.normalized_sequences.insert(sequence);
     }
@@ -3298,6 +3292,29 @@ mod tests {
     }
 
     #[test]
+    fn hls_content_seek_and_remaining_duration_preserve_fractional_offsets() {
+        let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
+            .expect("timestamp")
+            .with_timezone(&Utc);
+        let request_time = start + chrono::Duration::milliseconds(517);
+        let mut active =
+            active_hls_item_for_window(start, start + chrono::Duration::milliseconds(44_000));
+        active.in_point = Duration::from_millis(250);
+
+        let elapsed = playout_start_duration(request_time, active.playout_start);
+
+        assert_eq!(elapsed, Duration::from_millis(517));
+        assert_eq!(
+            active.content_seek_position(elapsed),
+            Duration::from_millis(767)
+        );
+        assert_eq!(
+            hls_playout_item_duration(&active, request_time, false, true),
+            Some(Duration::from_millis(43_483))
+        );
+    }
+
+    #[test]
     fn hls_playout_item_duration_caps_work_ahead_to_ersatztv_limit() {
         let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
@@ -3498,7 +3515,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -3556,7 +3573,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -3584,7 +3601,7 @@ mod tests {
             false,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             Some(Duration::from_millis(12_500)),
             &playback_profile(),
@@ -3615,7 +3632,7 @@ mod tests {
             true,
             false,
             true,
-            0,
+            Duration::ZERO,
             Some(Duration::from_secs(30)),
             None,
             &playback_profile(),
@@ -3645,7 +3662,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile,
@@ -3842,7 +3859,7 @@ mod tests {
             true,
             true,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -3899,7 +3916,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -3950,7 +3967,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -3986,7 +4003,7 @@ mod tests {
             true,
             true,
             false,
-            120,
+            Duration::from_mins(2),
             None,
             None,
             &playback_profile(),
@@ -4006,7 +4023,7 @@ mod tests {
         let arguments = command.arguments.join(" ");
 
         assert!(
-            arguments.contains("-ss 120 -c:a dts -core_only true -i /media/test.mkv"),
+            arguments.contains("-ss 00:02:00.0000000 -c:a dts -core_only true -i /media/test.mkv"),
             "{arguments}"
         );
     }
@@ -4020,7 +4037,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -4051,7 +4068,7 @@ mod tests {
             true,
             false,
             false,
-            900,
+            Duration::from_mins(15),
             None,
             None,
             &playback_profile(),
@@ -4069,7 +4086,39 @@ mod tests {
         assert!(command
             .arguments
             .join(" ")
-            .contains("-ss 900 -i /media/test.mkv"));
+            .contains("-ss 00:15:00.0000000 -i /media/test.mkv"));
+    }
+
+    #[test]
+    fn build_hls_command_preserves_fractional_playout_seek() {
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            Duration::from_millis(517),
+            Some(Duration::from_millis(43_483)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+
+        let arguments = command.arguments.join(" ");
+        assert!(
+            arguments.contains("-ss 00:00:00.5170000 -i /media/test.mkv"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-t 00:00:43.4830000"), "{arguments}");
     }
 
     #[test]
@@ -4081,7 +4130,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -4108,16 +4157,19 @@ mod tests {
     }
 
     #[test]
-    fn playout_start_seconds_matches_mid_item_offset() {
-        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00.000+00:00")
+    fn playout_start_duration_matches_mid_item_offset() {
+        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00.517+00:00")
             .expect("valid timestamp")
             .with_timezone(&Utc);
         let start = DateTime::parse_from_rfc3339("2026-05-31T21:30:00.000+00:00")
             .expect("valid timestamp")
             .with_timezone(&Utc);
 
-        assert_eq!(playout_start_seconds(now, start), 900);
-        assert_eq!(playout_start_seconds(start, now), 0);
+        assert_eq!(
+            playout_start_duration(now, start),
+            Duration::from_millis(900_517)
+        );
+        assert_eq!(playout_start_duration(start, now), Duration::ZERO);
     }
 
     #[test]
@@ -4334,6 +4386,25 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }
 
+    #[tokio::test]
+    async fn normalize_hls_ts_continuity_skips_missing_referenced_segments() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+
+        let trim_result = test_trim_result(12, None, ["live000012.ts"]);
+        let mut state = TsContinuityState::default();
+        normalize_hls_ts_continuity(&working_dir, &trim_result, &mut state)
+            .await
+            .expect("missing segment is a normal playlist race");
+
+        assert!(!state.normalized_sequences.contains(&12));
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg, ffprobe, and the Big Buck Bunny fixture under testdata/"]
     async fn hls_segmenter_output_is_ffprobe_readable() {
@@ -4372,7 +4443,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),
@@ -4457,7 +4528,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             Some(Duration::from_secs(5)),
             None,
             &playback_profile(),
@@ -4671,7 +4742,7 @@ mod tests {
             true,
             false,
             false,
-            0,
+            Duration::ZERO,
             None,
             None,
             &playback_profile(),

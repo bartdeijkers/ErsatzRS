@@ -60,7 +60,7 @@ pub struct OutputMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegState {
     pub output_format: OutputFormat,
-    pub start_seconds: Option<i64>,
+    pub start: Option<Duration>,
     pub duration: Option<Duration>,
     pub output_ts_offset: Option<Duration>,
     pub thread_count: Option<u32>,
@@ -74,7 +74,7 @@ impl Default for FfmpegState {
     fn default() -> Self {
         Self {
             output_format: OutputFormat::MpegTs,
-            start_seconds: None,
+            start: None,
             duration: None,
             output_ts_offset: None,
             thread_count: None,
@@ -927,8 +927,8 @@ fn build_transcode_pipeline(
         );
     }
 
-    if let Some(start_seconds) = request.state.start_seconds {
-        steps.push(PipelineStep::stream_seek(start_seconds));
+    if let Some(start) = request.state.start {
+        steps.push(PipelineStep::stream_seek(start));
     }
 
     let is_video_copy = request.desired.video_format == FFmpegProfileVideoFormat::Copy;
@@ -2013,8 +2013,8 @@ fn qsv_multiple_profile_decode_workaround(
         && source.has_multiple_profiles
         && request
             .state
-            .start_seconds
-            .is_none_or(|seconds| seconds <= 0)
+            .start
+            .is_none_or(|position| position.is_zero())
 }
 
 fn add_video_decoder(
@@ -2116,8 +2116,8 @@ fn add_audio_decoder_input_options(request: &mut PipelineRequest) {
 
         if request
             .state
-            .start_seconds
-            .is_some_and(|seconds| seconds > 0)
+            .start
+            .is_some_and(|position| !position.is_zero())
             && stream.codec == SourceAudioCodec::Dts
         {
             input.input_options.extend([

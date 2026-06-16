@@ -488,7 +488,7 @@ fn software_pipeline_seeking_dts_uses_core_only_decoder_snapshot() {
             .with_source_audio_streams(vec![
                 SourceAudioStream::new(SourceAudioCodec::Dts).with_index(1)
             ]);
-    request.state.start_seconds = Some(120);
+    request.state.start = Some(Duration::from_mins(2));
 
     let pipeline = SoftwarePipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);
@@ -1538,7 +1538,7 @@ fn qsv_pipeline_keeps_hardware_decode_for_multiple_h264_profiles_with_seek_snaps
     let mut request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
         .with_source_video_stream(source)
         .with_runtime_capabilities(capability_report_for_tests());
-    request.state.start_seconds = Some(12);
+    request.state.start = Some(Duration::from_secs(12));
 
     let pipeline = QsvPipelineBuilder.build(request.clone());
     let command = pipeline.command(&request.inputs);

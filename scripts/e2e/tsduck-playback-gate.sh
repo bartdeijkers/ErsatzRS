@@ -9,9 +9,10 @@
 # playout-item boundaries (the concat seams where ErsatzTV-style stitching is
 # most likely to break).
 #
-# It pairs with the calibration clips from scripts/calibration: those give a
-# millisecond timer + per-frame counter so a human can *visually* confirm order
-# and smoothness, while TSDuck proves the *container* is intact.
+# It pairs with the calibration clips from scripts/calibration: those give
+# one-second audio pips plus a millisecond timer and per-frame counter. The
+# gate checks pip cadence automatically and can write frame evidence for visual
+# order/smoothness review, while TSDuck proves the *container* is intact.
 #
 # MODES
 #   baseline [DIR]            Validate the static calibration *.ts files
@@ -41,6 +42,7 @@ BASE_URL="http://${LISTEN_ADDR}"
 CALIB_DIR="$REPO_ROOT/calibration-clips"
 CAPTURE_SECONDS="${CAPTURE_SECONDS:-20}"   # per-pipeline live capture window
 ITEM_SECONDS="${ITEM_SECONDS:-8}"          # seconds of each clip the gate playout uses
+MAX_AUDIO_PIP_GAP_DEVIATION_MS="${MAX_AUDIO_PIP_GAP_DEVIATION_MS:-150}"
 KEEP=0
 FRAMES=0
 
@@ -76,6 +78,13 @@ wait_http() { # URL TIMEOUT_S → 0 when the URL returns HTTP 200 (body may be e
     sleep 1
   done
   return 1
+}
+
+host_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1" 2>/dev/null && return 0
+  fi
+  printf '%s\n' "$1"
 }
 
 wait_for() { # URL CONTAINS TIMEOUT_S  → 0 when body matches CONTAINS
@@ -118,6 +127,106 @@ grab_frames() { # TSFILE PREFIX  — visual evidence so a human can confirm 1→
     ffmpeg -hide_banner -loglevel error -y -ss "$i" -i "$ts" -frames:v 1 "${prefix}_t${i}.png" 2>/dev/null || true
   done
   info "frame evidence: ${prefix}_t*.png"
+}
+
+python_cmd() {
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' python
+  elif command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' python3
+  else
+    return 1
+  fi
+}
+
+check_audio_pip_cadence() { # TSFILE LABEL
+  local ts="$1" label="$2"
+  command -v ffmpeg >/dev/null 2>&1 || { fail "$label · audio pip cadence" "ffmpeg not found"; return 1; }
+  local py; py="$(python_cmd)" || { fail "$label · audio pip cadence" "python not found"; return 1; }
+  local safe="${label//[^A-Za-z0-9]/_}"
+  local wav="${WORKDIR:-/tmp}/${safe}_mono48.wav"
+  if ! ffmpeg -hide_banner -loglevel error -y -i "$ts" -map 0:a:0 -vn -ac 1 -ar 48000 -c:a pcm_s16le "$wav" >/dev/null 2>&1; then
+    fail "$label · audio pip cadence" "could not decode mono PCM"
+    return 1
+  fi
+  local output
+  if output="$("$py" - "$wav" "$MAX_AUDIO_PIP_GAP_DEVIATION_MS" <<'PY'
+import math
+import statistics
+import struct
+import sys
+import wave
+
+wav_path = sys.argv[1]
+allowed_ms = float(sys.argv[2])
+
+with wave.open(wav_path, "rb") as w:
+    rate = w.getframerate()
+    frames = w.getnframes()
+    raw = w.readframes(frames)
+
+win = max(1, rate // 100)
+values = []
+for i in range(0, frames - win + 1, win):
+    chunk = raw[i * 2:(i + win) * 2]
+    samples = struct.unpack("<" + "h" * win, chunk)
+    values.append(math.sqrt(sum(s * s for s in samples) / win))
+
+if not values:
+    print("no audio samples")
+    sys.exit(1)
+
+median = statistics.median(values)
+peak = max(values)
+threshold = max(median * 8, peak * 0.35, 500)
+clusters = []
+active = False
+start = 0
+for idx, value in enumerate(values):
+    if value >= threshold and not active:
+        active = True
+        start = idx
+    elif value < threshold and active:
+        clusters.append((start, idx, max(values[start:idx])))
+        active = False
+if active:
+    clusters.append((start, len(values), max(values[start:])))
+
+merged = []
+for cluster in clusters:
+    if merged and cluster[0] - merged[-1][1] <= 8:
+        merged[-1] = (merged[-1][0], cluster[1], max(merged[-1][2], cluster[2]))
+    else:
+        merged.append(cluster)
+
+pips = []
+for start, end, _ in merged:
+    duration = (end - start) / 100.0
+    if 0.02 <= duration <= 0.20:
+        pips.append(start / 100.0)
+
+duration = frames / rate
+min_pips = max(3, int(duration) - 2)
+if len(pips) < min_pips:
+    print(f"pips={len(pips)} duration={duration:.3f}s expected>={min_pips}")
+    sys.exit(1)
+
+gaps = [pips[i + 1] - pips[i] for i in range(len(pips) - 1)]
+max_deviation = max(abs(gap - 1.0) for gap in gaps) * 1000 if gaps else 0.0
+print(
+    f"pips={len(pips)} duration={duration:.3f}s "
+    f"gap_min={min(gaps):.3f}s gap_max={max(gaps):.3f}s "
+    f"gap_mean={statistics.mean(gaps):.3f}s max_gap_deviation={max_deviation:.1f}ms"
+)
+if max_deviation > allowed_ms:
+    sys.exit(1)
+PY
+  )"; then
+    info "$label — $output"
+    pass "$label · audio pip cadence"
+  else
+    fail "$label · audio pip cadence" "$output"
+  fi
 }
 
 # The clips are gitignored (regenerated, never committed). Generate them on
@@ -183,8 +292,10 @@ seed_db() { # DBPATH CHANNEL
   local chid
   chid=$(sqlite3 "$db" "SELECT \"Id\" FROM \"Channel\" WHERE \"Number\"='$channel' ORDER BY \"Id\" LIMIT 1;")
   [ -n "$chid" ] || die "no Channel with Number=$channel in seeded DB (bootstrap should have created it)"
+  local calib_db_path; calib_db_path="$(host_path "$CALIB_DIR")"
 
   {
+    echo '.timeout 30000'
     echo 'BEGIN IMMEDIATE;'
     for t in PlayoutItem Playout MediaStream MediaFile MediaVersion MovieMetadata Movie MediaItem LibraryPath LocalLibrary Library LocalMediaSource MediaSource; do
       echo "DELETE FROM \"$t\";"
@@ -196,19 +307,20 @@ INSERT INTO "ConfigElement" ("Key","Value") VALUES ('ffmpeg.segmenter.initial_se
 INSERT INTO "MediaSource" ("Id") VALUES (1);
 INSERT INTO "LocalMediaSource" ("Id") VALUES (1);
 INSERT INTO "Library" ("Id","Name","MediaKind","MediaSourceId") VALUES (1,'Calibration Movies',1,1);
-INSERT INTO "LibraryPath" ("Id","Path","LibraryId","LastScan") VALUES (1,'$CALIB_DIR','1','$da');
+INSERT INTO "LibraryPath" ("Id","Path","LibraryId","LastScan") VALUES (1,'$calib_db_path','1','$da');
 INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","Seed","OnDemandCheckpoint") VALUES (1,$chid,0,1,'$(date -u -d "@$t0" '+%Y-%m-%d %H:%M:%S')');
 SQL
     # 3 media items (one per calibration clip)
     local n src
     for n in 1 2 3; do
       src="$CALIB_DIR/cal_${n}.mkv"; [ -f "$src" ] || src="$CALIB_DIR/cal_${n}.ts"
+      local src_db_path; src_db_path="$(host_path "$src")"
       cat <<SQL
 INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES ($n,1,0);
 INSERT INTO "Movie" ("Id") VALUES ($n);
 INSERT INTO "MovieMetadata" ("DateAdded","DateUpdated","MetadataKind","MovieId","Title") VALUES ('$da','$da',0,$n,'Calibration $n');
 INSERT INTO "MediaVersion" ("Id","DateAdded","DateUpdated","Duration","Height","MovieId","Name","RFrameRate","VideoScanKind","Width") VALUES ($n,'$da','$da','00:03:00',1080,$n,'Calibration $n','60/1',1,1920);
-INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES ($n,$n,'$src','calib-hash-$n');
+INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash") VALUES ($n,$n,'$src_db_path','calib-hash-$n');
 INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Channels","Default","Forced","MediaVersionId","PixelFormat") VALUES (0,'h264',1,0,1,0,$n,'yuv420p');
 INSERT INTO "MediaStream" ("Index","Codec","MediaStreamKind","Language","Channels","Default","Forced","MediaVersionId") VALUES (1,'aac',2,'eng',2,1,0,$n);
 SQL
@@ -258,8 +370,12 @@ mode_gate() {
   local bin; bin="$(resolve_target_dir)/debug/ersatzrs-web"
   [ -x "$bin" ] || die "server binary not found at $bin"
 
-  info "booting server (db=$db)…"
-  DATABASE_URL="sqlite:$db" HOME="$WORKDIR" \
+  local server_db server_home
+  server_db="$(host_path "$db")"
+  server_home="$(host_path "$WORKDIR")"
+
+  info "booting server (db=$server_db)…"
+  DATABASE_URL="sqlite:$server_db" HOME="$server_home" TEMP="$server_home" TMP="$server_home" TMPDIR="$server_home" \
     RUST_LOG="${RUST_LOG:-info,ersatzrs_infra::hls_worker=debug,ersatzrs_web::transport::iptv=debug}" \
     "$bin" >"$log" 2>&1 &
   SERVER_PID=$!
@@ -292,6 +408,8 @@ mode_gate() {
     cap="$WORKDIR/hls_segmenter.ts"
     if capture_stream hls "$seg_pl" "$CAPTURE_SECONDS" "$cap"; then
       validate_ts "$cap" "hls-segmenter"
+      check_audio_pip_cadence "$cap" "hls-segmenter"
+      grab_frames "$cap" "$WORKDIR/frame_hls_segmenter"
     else
       fail "hls-segmenter · capture" "tsp -I hls produced no data"
     fi

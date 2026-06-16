@@ -206,7 +206,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
         true,
         true,
         false,
-        seek_seconds,
+        duration_from_seconds(seek_seconds),
         Some(program_duration),
         None,
         &playback_profile,
@@ -282,7 +282,8 @@ async fn start_channel_playback_preview(
     } else {
         None
     };
-    let start_seconds = active.content_seek_seconds(start_time);
+    let start_position = active.content_seek_position(start_time);
+    let start_seconds = duration_as_i64_seconds(start_position);
     let program_duration = active_program_duration(&active)
         .unwrap_or_else(|| Duration::from_secs_f64(preview_duration_seconds(0.0, 0)));
     let subtitle_mode = active.subtitle_mode.unwrap_or(channel.subtitle_mode);
@@ -394,7 +395,7 @@ async fn start_channel_playback_preview(
         playback_profile: &playback_profile,
         target_frame_rate,
         source_stream: source_stream.clone(),
-        start_seconds,
+        start_position,
         program_duration,
         start_time,
         working_dir: &working_dir,
@@ -411,7 +412,7 @@ async fn start_channel_playback_preview(
     );
     let opacity_clock = watermark_opacity_clock_at_spawn(
         start_time,
-        duration_from_seconds(start_seconds),
+        start_position,
         active.content_duration,
         content_start_time,
     );
@@ -422,7 +423,7 @@ async fn start_channel_playback_preview(
         true,
         true,
         false,
-        start_seconds,
+        start_position,
         Some(program_duration),
         None,
         &playback_profile,
@@ -607,6 +608,10 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
 
 fn duration_from_seconds(seconds: i64) -> Duration {
     u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+}
+
+fn duration_as_i64_seconds(duration: Duration) -> i64 {
+    i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
 }
 
 fn watermark_opacity_clock_at_spawn(
@@ -1235,7 +1240,7 @@ struct PreviewChannelGraphicsRequest<'a> {
     playback_profile: &'a PlaybackProfile,
     target_frame_rate: Option<ersatzrs_ffmpeg::FrameRate>,
     source_stream: Option<ersatzrs_ffmpeg::SourceVideoStream>,
-    start_seconds: i64,
+    start_position: Duration,
     program_duration: Duration,
     start_time: DateTime<Utc>,
     working_dir: &'a FsPath,
@@ -1252,7 +1257,7 @@ async fn preview_channel_graphics_overlays(
         playback_profile,
         target_frame_rate,
         source_stream,
-        start_seconds,
+        start_position,
         program_duration,
         start_time,
         working_dir,
@@ -1285,7 +1290,7 @@ async fn preview_channel_graphics_overlays(
             channel_start_time: start_time,
             content_start_time: parse_sqlite_utc_timestamp(&active.playout_start)
                 .unwrap_or(start_time),
-            stream_seek_seconds: seconds_i64_as_f64(start_seconds),
+            stream_seek_seconds: start_position.as_secs_f64(),
             duration_seconds: program_duration.as_secs_f64(),
             frame_size,
             square_pixel_frame_size,

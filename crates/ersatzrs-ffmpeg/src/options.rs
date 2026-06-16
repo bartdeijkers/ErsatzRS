@@ -40,7 +40,7 @@ pub enum PipelineStep {
         options: Vec<String>,
     },
     StreamSeek {
-        seconds: i64,
+        position: Duration,
     },
 }
 
@@ -120,8 +120,8 @@ impl PipelineStep {
     }
 
     #[must_use]
-    pub fn stream_seek(seconds: i64) -> Self {
-        Self::StreamSeek { seconds }
+    pub fn stream_seek(position: Duration) -> Self {
+        Self::StreamSeek { position }
     }
 
     #[must_use]

@@ -1,8 +1,8 @@
 use crate::{
-    closed_gop, copy_all_streams, fast_start, hide_banner, loglevel_error, map_all_streams,
-    mpegts_output, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
-    pipe_output, standard_format_flags, EnvironmentVariable, InputFile, InputKind, OutputMetadata,
-    PipelineStep,
+    closed_gop, copy_all_streams, fast_start, format_time_limit, hide_banner, loglevel_error,
+    map_all_streams, mpegts_output, no_demux_decode_delay, no_scene_detect, no_standard_input,
+    no_stats, pipe_output, standard_format_flags, EnvironmentVariable, InputFile, InputKind,
+    OutputMetadata, PipelineStep,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,8 +162,8 @@ impl CommandGenerator {
         }
 
         for step in pipeline_steps {
-            if let PipelineStep::StreamSeek { seconds } = step {
-                arguments.extend(["-ss".to_owned(), seconds.to_string()]);
+            if let PipelineStep::StreamSeek { position } = step {
+                arguments.extend(["-ss".to_owned(), format_time_limit(*position)]);
             }
         }
 

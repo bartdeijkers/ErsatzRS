@@ -146,7 +146,7 @@ mod windows_launcher {
     }
 
     /// Spawn `ersatzrs-web.exe` with no console window, pointing it at the
-    /// bundled FFmpeg binaries and Leptos hydration assets when present so the
+    /// bundled `FFmpeg` binaries and `Leptos` hydration assets when present so the
     /// server is fully self-contained (no reliance on system PATH).
     fn spawn_server(exe_dir: &Path) -> io::Result<Child> {
         let server = exe_dir.join(SERVER_EXE);
@@ -180,6 +180,7 @@ mod windows_launcher {
         if site.is_dir() {
             command.env("LEPTOS_SITE_ROOT", &site);
             command.env("LEPTOS_SITE_PKG_DIR", "pkg");
+            #[allow(clippy::disallowed_methods)]
             if std::env::var_os("LEPTOS_OUTPUT_NAME").is_none() {
                 command.env("LEPTOS_OUTPUT_NAME", "ersatzrs-web");
             }

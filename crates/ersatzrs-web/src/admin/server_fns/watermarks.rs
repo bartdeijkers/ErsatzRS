@@ -566,7 +566,7 @@ mod tests {
 
     async fn fresh_pool() -> ersatzrs_infra::db::DbPool {
         let dir = tempfile::tempdir().expect("temp db dir");
-        let database_url = format!("sqlite://{}", dir.path().join("watermarks.db").display());
+        let database_url = format!("sqlite:{}", dir.path().join("watermarks.db").display());
         std::mem::forget(dir);
         ersatzrs_infra::db::init(&database_url)
             .await

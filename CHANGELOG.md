@@ -43,6 +43,16 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS Segmenter FFmpeg seeks now preserve sub-second playout and in-point
+  offsets through the worker, command builders, direct IPTV stream path, and
+  troubleshooting previews instead of flooring to whole seconds before `-ss`.
+- The TSDuck playback gate now converts shell paths to host-native paths when
+  needed, isolates the server temp directory per run across platforms, waits
+  for transient SQLite bootstrap locks, and checks HLS Segmenter audio-pip
+  cadence in the decoded capture.
+- The Windows launcher build script now consumes the `embed_resource`
+  compilation result so the workspace clippy gate stays clean with
+  `-D warnings`.
 - FFmpeg playback now uses persisted media stream indexes for video and audio
   inputs, fixing watermarked channels whose files store audio before video,
   such as the MTV channel stream failing with a filtergraph stream-specifier

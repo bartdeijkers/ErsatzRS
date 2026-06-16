@@ -5,7 +5,7 @@ fn main() {
     // builds cleanly on non-Windows hosts.
     #[cfg(windows)]
     {
-        embed_resource::compile("ersatzrs_launcher.rc", embed_resource::NONE);
+        let _ = embed_resource::compile("ersatzrs_launcher.rc", embed_resource::NONE);
         static_vcruntime::metabuild();
     }
 }

@@ -282,7 +282,8 @@ async fn serve_channel_stream_with_channel(
         .preferred_subtitle_language_code
         .as_deref()
         .or(channel.preferred_subtitle_language_code.as_deref());
-    let start_seconds = active.content_seek_seconds(now);
+    let start_position = active.content_seek_position(now);
+    let start_seconds = duration_as_i64_seconds(start_position);
     let subtitle = match select_channel_playback_subtitle(
         &state.pool,
         active.media_item_id,
@@ -358,7 +359,7 @@ async fn serve_channel_stream_with_channel(
                     media_path: resolved.clone(),
                     channel_start_time: start_time,
                     content_start_time: start_time,
-                    stream_seek_seconds: seconds_as_f64(start_seconds),
+                    stream_seek_seconds: start_position.as_secs_f64(),
                     duration_seconds: active
                         .program_duration()
                         .map_or(0.0, |duration| duration.as_secs_f64()),
@@ -395,14 +396,14 @@ async fn serve_channel_stream_with_channel(
     };
     let opacity_clock = watermark_opacity_clock_at_spawn(
         now,
-        duration_from_seconds(start_seconds),
+        start_position,
         active.content_duration,
         channel_start_time,
     );
     let command = build_stream_command_with_opacity_clock(
         &resolved,
         output_format,
-        start_seconds,
+        start_position,
         stream_duration,
         &playback_profile,
         target_frame_rate,
@@ -432,7 +433,7 @@ async fn serve_channel_stream_with_channel(
                 build_stream_command_with_opacity_clock(
                     &resolved,
                     output_format,
-                    start_seconds,
+                    start_position,
                     stream_duration,
                     &playback_profile,
                     target_frame_rate,
@@ -852,12 +853,8 @@ impl ActivePlayoutItem {
             .unwrap_or(Duration::ZERO)
     }
 
-    pub(crate) fn content_seek_seconds(&self, now: DateTime<Utc>) -> i64 {
-        let seek_seconds = self
-            .in_point
-            .saturating_add(self.elapsed_since_start(now))
-            .as_secs();
-        i64::try_from(seek_seconds).unwrap_or(i64::MAX)
+    pub(crate) fn content_seek_position(&self, now: DateTime<Utc>) -> Duration {
+        self.in_point.saturating_add(self.elapsed_since_start(now))
     }
 
     fn remaining_duration(&self, now: DateTime<Utc>) -> Option<Duration> {
@@ -1052,7 +1049,7 @@ pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'stat
 fn build_stream_command(
     path: &str,
     output_format: OutputFormat,
-    start_seconds: i64,
+    start_position: Duration,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     streaming_mode: ersatzrs_domain::StreamingMode,
@@ -1067,7 +1064,7 @@ fn build_stream_command(
     build_stream_command_with_opacity_clock(
         path,
         output_format,
-        start_seconds,
+        start_position,
         None,
         playback_profile,
         target_frame_rate,
@@ -1087,7 +1084,7 @@ fn build_stream_command(
 fn build_stream_command_with_opacity_clock(
     path: &str,
     output_format: OutputFormat,
-    start_seconds: i64,
+    start_position: Duration,
     duration: Option<Duration>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
@@ -1128,8 +1125,8 @@ fn build_stream_command_with_opacity_clock(
     }
     request.graphics_overlays.extend(graphics_overlays);
     request.state.output_format = output_format;
-    if start_seconds > 0 {
-        request.state.start_seconds = Some(start_seconds);
+    if !start_position.is_zero() {
+        request.state.start = Some(start_position);
     }
     request.state.duration = duration;
     request.state.metadata = metadata;
@@ -1224,8 +1221,10 @@ fn playback_frame_size(playback_profile: &PlaybackProfile) -> FrameSize {
 }
 
 #[cfg(test)]
-pub(crate) fn playout_start_seconds(now: DateTime<Utc>, playout_start: &str) -> i64 {
-    parse_sqlite_utc_timestamp(playout_start).map_or(0, |start| (now - start).num_seconds().max(0))
+pub(crate) fn playout_start_duration(now: DateTime<Utc>, playout_start: &str) -> Duration {
+    parse_sqlite_utc_timestamp(playout_start)
+        .and_then(|start| (now - start).to_std().ok())
+        .unwrap_or(Duration::ZERO)
 }
 
 fn encode_sql_datetime(value: DateTime<Utc>) -> String {
@@ -1239,12 +1238,6 @@ fn encode_sql_datetime(value: DateTime<Utc>) -> String {
     }
 }
 
-fn seconds_as_f64(seconds: i64) -> f64 {
-    u64::try_from(seconds)
-        .map(Duration::from_secs)
-        .map_or(0.0, |duration| duration.as_secs_f64())
-}
-
 fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
     for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
         if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
@@ -1254,8 +1247,8 @@ fn parse_sqlite_utc_timestamp(value: &str) -> Option<DateTime<Utc>> {
     None
 }
 
-fn duration_from_seconds(seconds: i64) -> Duration {
-    u64::try_from(seconds).map_or(Duration::ZERO, Duration::from_secs)
+fn duration_as_i64_seconds(duration: Duration) -> i64 {
+    i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
 }
 
 fn duration_from_f64(seconds: f64) -> Option<Duration> {
@@ -1660,7 +1653,7 @@ mod tests {
         let command = build_stream_command(
             "/media/movie.mkv",
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &profile,
             None,
             StreamingMode::TransportStream,
@@ -1693,7 +1686,7 @@ mod tests {
             build_stream_command(
                 "/media/movie.mkv",
                 OutputFormat::MpegTs,
-                0,
+                Duration::ZERO,
                 &profile,
                 None,
                 StreamingMode::TransportStream,
@@ -1737,7 +1730,7 @@ mod tests {
         let command = build_stream_command(
             "/media/movie.mkv",
             OutputFormat::Mp4,
-            0,
+            Duration::ZERO,
             &profile,
             None,
             StreamingMode::HttpLiveStreamingDirect,
@@ -1760,7 +1753,7 @@ mod tests {
         let command = build_stream_command(
             "/media/movie.mkv",
             OutputFormat::MpegTs,
-            900,
+            Duration::from_mins(15),
             &profile,
             None,
             StreamingMode::TransportStream,
@@ -1774,12 +1767,12 @@ mod tests {
         );
         let arguments = command.arguments.join(" ");
         // ErsatzTV emits the seek as an input-side option (`StreamSeekInputOption`,
-        // added before the decoder in `PipelineBuilderBase`), so `-ss 900` precedes
+        // added before the decoder in `PipelineBuilderBase`), so the seek precedes
         // the `-i` input with the source decoder option in between. Assert the
         // input-side seek contract by position rather than hard-coding the decoder
         // string (that argv is covered by the pipeline snapshot suite).
         let seek = arguments
-            .find("-ss 900")
+            .find("-ss 00:15:00.0000000")
             .unwrap_or_else(|| panic!("expected stream seek in arguments: {arguments}"));
         let input = arguments
             .find("-i /media/movie.mkv")
@@ -1796,7 +1789,7 @@ mod tests {
         let command = build_stream_command(
             "/media/movie.mkv",
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &profile,
             None,
             StreamingMode::TransportStream,
@@ -1848,7 +1841,7 @@ mod tests {
         let command = build_stream_command(
             "/media/music-video.mkv",
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &profile,
             None,
             StreamingMode::TransportStream,
@@ -1879,7 +1872,7 @@ mod tests {
         let command = build_stream_command(
             "/media/movie.mkv",
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &profile,
             None,
             StreamingMode::TransportStream,
@@ -1968,7 +1961,7 @@ mod tests {
         let command = build_stream_command_with_opacity_clock(
             "/media/calibration-1.mp4",
             OutputFormat::MpegTs,
-            4,
+            Duration::from_secs(4),
             Some(Duration::from_millis(1750)),
             &profile,
             None,
@@ -2008,13 +2001,22 @@ mod tests {
     }
 
     #[test]
-    fn playout_start_seconds_matches_mid_item_offset() {
-        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00Z")
+    fn playout_start_duration_matches_mid_item_offset() {
+        let now = DateTime::parse_from_rfc3339("2026-05-31T21:45:00.517Z")
             .expect("valid timestamp")
             .with_timezone(&Utc);
-        assert_eq!(playout_start_seconds(now, "2026-05-31 21:30:00"), 900);
-        assert_eq!(playout_start_seconds(now, "2026-05-31 21:45:00"), 0);
-        assert_eq!(playout_start_seconds(now, "not a timestamp"), 0);
+        assert_eq!(
+            playout_start_duration(now, "2026-05-31 21:30:00"),
+            Duration::from_millis(900_517)
+        );
+        assert_eq!(
+            playout_start_duration(now, "2026-05-31 21:45:00"),
+            Duration::from_millis(517)
+        );
+        assert_eq!(
+            playout_start_duration(now, "not a timestamp"),
+            Duration::ZERO
+        );
     }
 
     #[test]
@@ -2424,7 +2426,7 @@ mod tests {
         let command = build_stream_command(
             fixture.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
@@ -2489,7 +2491,7 @@ mod tests {
         let command = build_stream_command(
             fixture.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
@@ -2637,7 +2639,7 @@ mod tests {
         let command = build_stream_command(
             input.to_string_lossy().as_ref(),
             OutputFormat::MpegTs,
-            0,
+            Duration::ZERO,
             &playback_profile(),
             None,
             StreamingMode::TransportStream,
