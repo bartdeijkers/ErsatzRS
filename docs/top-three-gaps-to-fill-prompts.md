@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-15
-last_processed_commit: ec6d14c1c6e716bfe01c124ce011502345c60be2
+generated: 2026-06-16
+last_processed_commit: 5787fba2be790da6dc0f544b0f80ff7af5653e14
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -20,25 +20,20 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Manual closeout refresh (2026-06-15): the previous HLS slot,
-`hls-variant-playlists-segmenter` debt
-`vlc-stop-on-disconnect-session-lifecycle`, was closed with focused tests and
-`cargo xtask smoke --hls-lifecycle --timeout 240`. `cargo xtask progress gaps`
-now lists 8 remaining features and no longer lists HLS variant playlists /
-segmenter, so the completed prompt was removed per
-`docs/automation/gap-prompt-rules.md`. That refresh initially carried
-`ffmpeg-filter-graph` and `settings` forward and refilled slot 3 with
-`multi-collections-rerun-collections-playlists-filler-presets`.
-
-Manual closeout refresh (2026-06-15): the Settings slot,
-`settings-i18n-browser-proof`, was closed with generated language-module
-registration, focused `ersatzrs-web` i18n/settings tests, and
-`npx playwright test tests/e2e/settings-i18n.spec.ts --project=chromium`.
-`cargo xtask progress gaps` now lists 7 remaining features and no longer lists
-`settings`, so the completed prompt was removed per
-`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` carries over as
-slot 1, `multi-collections-rerun-collections-playlists-filler-presets` moves
-to slot 2, and slot 3 is refilled with the structured Scanner runtime debts.
+Daily reconcile (2026-06-16, window `ec6d14c..5787fba`): two commits merged.
+`feat(web): prove settings i18n parity` (9914a76) already flipped `settings`
+to `Ported` and removed it from the gap list; `fix(ffmpeg): use persisted
+playback stream indexes` (5787fba) was recorded in
+`ffmpeg-command-generation.toml` (still `In progress` — its sole open debt
+`nvenc-filter-gate-live-proof` is hardware-verification-only and stays folded
+into slot 1 rather than getting its own prompt). `cargo xtask progress gaps`
+now lists 7 remaining features, all `In progress`. No prior pick saw scope-
+closing work this window, so all three prompts carry over unchanged: slot 1
+`ffmpeg-filter-graph` (phase-focus, foundational pipeline, carries the folded
+`nvenc-filter-gate-live-proof` hardware proof), slot 2
+`multi-collections-rerun-collections-playlists-filler-presets` (phase-focus
+route-family closeout), slot 3 `scanner` (phase-focus hardening, two blocking
+runtime debts).
 
 ---
 

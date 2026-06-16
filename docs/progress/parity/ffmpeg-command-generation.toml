@@ -54,6 +54,15 @@ exactly once with software input decode into the same response body); and
 persisted denial rows now store the `ffmpeg` path they were learned against —
 startup reapplies them only for the same binary, while an FFmpeg path change
 or a settings-save capability refresh clears them instead of reapplying.
+
+The 2026-06-16 slice carries `SourceVideoStream.index` and the selected audio
+stream through `PipelineRequest` so transcode input maps use the persisted
+MediaStream indexes (falling back to the first source audio stream when the
+selected one is absent) instead of assuming `0:0`/`0:1`. This fixes watermarked
+channels whose files store audio before video, which previously failed with a
+filtergraph stream-specifier error (observed live on the MTV channel);
+covered by the `pipeline_uses_persisted_stream_indexes_when_audio_precedes_video`
+snapshot.
 '''
 
 [[debt]]
