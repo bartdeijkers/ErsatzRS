@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-16","summary":"Added ADR-backed active HLS transcode limit with /settings/ffmpeg control and viewer-priority enforcement."}
 {"agent":"Codex","date":"2026-06-16","summary":"Closed HLS Segmenter content-timeline debt with sub-second seek propagation and decoded audio-pip TSDuck proof."}
 {"agent":"ersatzrs-daily-progress","date":"2026-06-16","summary":"Daily reconcile (ec6d14c..5787fba): settings i18n already Ported via 9914a76; recorded FFmpeg persisted stream-index input mapping fix under ffmpeg-command-generation; refreshed gap prompts."}
 {"agent":"Codex","date":"2026-06-15","summary":"Implemented sub-second HLS seek propagation; TSDuck gate reached server boot but did not complete before handoff."}

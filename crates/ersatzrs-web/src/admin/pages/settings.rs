@@ -191,6 +191,10 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
                 <input class=style::input name="work_ahead_segmenter_limit" type="number" min="0" required value=form.work_ahead_segmenter_limit/>
                 <p class=style::help>{tr(TextKey::WorkAheadSegmenterLimitHelp)}</p>
             </Field>
+            <Field label=tr(TextKey::ActiveTranscodeLimit)>
+                <input class=style::input name="active_transcode_limit" type="number" min="1" required value=form.active_transcode_limit/>
+                <p class=style::help>{tr(TextKey::ActiveTranscodeLimitHelp)}</p>
+            </Field>
             <Field label=tr(TextKey::HlsSegmenterInitialSegmentCount)>
                 <input class=style::input name="initial_segment_count" type="number" min="1" required value=form.initial_segment_count/>
                 <p class=style::help>{tr(TextKey::HlsSegmenterInitialSegmentCountHelp)}</p>
@@ -577,6 +581,19 @@ mod tests {
 
         assert!(!input.contains("disabled"));
         assert!(input.contains("checked"));
+    }
+
+    #[test]
+    fn ffmpeg_active_transcode_limit_is_rendered() {
+        let mut data = FfmpegSettingsPageData::default();
+        data.form.active_transcode_limit = 2;
+
+        let html = render_ffmpeg(data).into_view().to_html();
+        let input = input_html(&html, r#"name="active_transcode_limit""#);
+
+        assert!(input.contains(r#"type="number""#));
+        assert!(input.contains(r#"min="1""#));
+        assert!(input.contains(r#"value="2""#));
     }
 
     fn input_html<'a>(html: &'a str, needle: &str) -> &'a str {

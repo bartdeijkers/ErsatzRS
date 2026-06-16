@@ -769,6 +769,9 @@ fn settings_error_message(error: &str) -> String {
         "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
             "Limit wyprzedzającego segmentera HLS musi być większy lub równy 0.".to_owned()
         }
+        "Active HLS transcode limit must be greater than or equal to 1" => {
+            "Limit aktywnych transkodowań HLS musi być większy lub równy 1.".to_owned()
+        }
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "Początkowa liczba segmentów segmentera HLS musi być większa lub równa 1.".to_owned()
         }
@@ -1691,6 +1694,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Używaj osadzonych napisów",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Element bez tytułu",
+        TextKey::ActiveTranscodeLimit => "Limit aktywnych transkodowań HLS",
+        TextKey::ActiveTranscodeLimitHelp => {
+            "Maksymalna liczba transkodowań FFmpeg segmentera HLS, które mogą działać jednocześnie. Aktywni widzowie mogą tymczasowo dostać priorytet, aby przełączanie kanałów pozostało szybkie."
+        },
         TextKey::Watermarks => "Znaki wodne",
         TextKey::Width => "Szerokość",
         TextKey::WorkAheadSegmenterLimit => "Limit segmenterów HLS z wyprzedzeniem",

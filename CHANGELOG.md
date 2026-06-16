@@ -43,6 +43,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS Segmenter now enforces a configurable active transcode limit
+  (`ffmpeg.segmenter.active_transcode_limit`, default 2) in addition to the
+  existing work-ahead limit, so rapid channel switching does not leave many old
+  idle sessions spawning FFmpeg processes while the current viewer keeps
+  priority.
 - HLS Segmenter FFmpeg seeks now preserve sub-second playout and in-point
   offsets through the worker, command builders, direct IPTV stream path, and
   troubleshooting previews instead of flooring to whole seconds before `-ss`.

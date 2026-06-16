@@ -8,15 +8,16 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use ersatzrs_domain::{
-    CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
-    CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
-    CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, CONFIG_KEY_FFMPEG_SAVE_REPORTS,
-    CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
-    CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL, CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING, CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
-    CONFIG_KEY_PAGES_IS_DARK_MODE, CONFIG_KEY_PAGES_LANGUAGE, CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
+    CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT, CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES,
+    CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT, CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+    CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE, CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
+    CONFIG_KEY_FFMPEG_SAVE_REPORTS, CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
+    CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
+    CONFIG_KEY_LIBRARY_REFRESH_INTERVAL, CONFIG_KEY_MINIMUM_LOG_LEVEL,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING, CONFIG_KEY_PAGES_IS_DARK_MODE,
+    CONFIG_KEY_PAGES_LANGUAGE, CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
     CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
     CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE,
 };
@@ -501,6 +502,7 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Err
         (CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, "False"),
         (CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, "60"),
         (CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, "1"),
+        (CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT, "2"),
         (CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, "1"),
         (CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT, "2"),
         (CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT, "default"),
@@ -853,6 +855,7 @@ mod tests {
                    'ffmpeg.probe_for_interlaced_frames',
                    'ffmpeg.segmenter.timeout_seconds',
                    'ffmpeg.segmenter.work_ahead_limit',
+                   'ffmpeg.segmenter.active_transcode_limit',
                    'ffmpeg.segmenter.initial_segment_count',
                    'ffmpeg.hls_direct.output_format',
                    'ffmpeg.default_mpegts_script',
@@ -888,13 +891,14 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(config_rows.len(), 27);
+        assert_eq!(config_rows.len(), 28);
         assert_eq!(config_rows["ffmpeg.preferred_language_code"], "eng");
         assert_eq!(config_rows["ffmpeg.use_embedded_subtitles"], "True");
         assert_eq!(config_rows["ffmpeg.extract_embedded_subtitles"], "False");
         assert_eq!(config_rows["ffmpeg.probe_for_interlaced_frames"], "False");
         assert_eq!(config_rows["ffmpeg.segmenter.timeout_seconds"], "60");
         assert_eq!(config_rows["ffmpeg.segmenter.work_ahead_limit"], "1");
+        assert_eq!(config_rows["ffmpeg.segmenter.active_transcode_limit"], "2");
         assert_eq!(config_rows["ffmpeg.segmenter.initial_segment_count"], "1");
         assert_eq!(config_rows["ffmpeg.hls_direct.output_format"], "2");
         assert_eq!(config_rows["ffmpeg.default_mpegts_script"], "default");

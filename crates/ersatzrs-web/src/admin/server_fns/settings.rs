@@ -25,6 +25,7 @@ pub struct FfmpegSettingsForm {
     pub global_fallback_filler_id: Option<i64>,
     pub hls_segmenter_idle_timeout: i32,
     pub work_ahead_segmenter_limit: i32,
+    pub active_transcode_limit: i32,
     pub initial_segment_count: i32,
     pub hls_direct_output_format: i32,
     pub default_mpeg_ts_script: String,
@@ -45,6 +46,7 @@ impl Default for FfmpegSettingsForm {
             global_fallback_filler_id: None,
             hls_segmenter_idle_timeout: 60,
             work_ahead_segmenter_limit: 1,
+            active_transcode_limit: 2,
             initial_segment_count: 1,
             hls_direct_output_format: 2,
             default_mpeg_ts_script: "default".to_owned(),
@@ -372,6 +374,12 @@ pub async fn load_ffmpeg_settings_with_pool(
             1,
         )
         .await?,
+        active_transcode_limit: load_i32(
+            pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+            2,
+        )
+        .await?,
         initial_segment_count: load_i32(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
@@ -524,6 +532,12 @@ pub async fn save_ffmpeg_settings_with_state(
         &state.pool,
         ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
         &form.work_ahead_segmenter_limit.to_string(),
+    )
+    .await?;
+    save_config_value(
+        &state.pool,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+        &form.active_transcode_limit.to_string(),
     )
     .await?;
     save_config_value(
@@ -1025,6 +1039,11 @@ async fn validate_ffmpeg_settings(form: &FfmpegSettingsForm) -> Result<(), Serve
     if form.work_ahead_segmenter_limit < 0 {
         return Err(ServerFnError::new(
             "Work-Ahead HLS Segmenter limit must be greater than or equal to 0",
+        ));
+    }
+    if form.active_transcode_limit < 1 {
+        return Err(ServerFnError::new(
+            "Active HLS transcode limit must be greater than or equal to 1",
         ));
     }
     if form.initial_segment_count < 1 {

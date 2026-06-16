@@ -767,6 +767,9 @@ fn settings_error_message(error: &str) -> String {
         "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
             "Work-ahead-limiet van HLS-segmenter moet groter dan of gelijk aan 0 zijn.".to_owned()
         }
+        "Active HLS transcode limit must be greater than or equal to 1" => {
+            "Limiet voor actieve HLS-transcodes moet groter dan of gelijk aan 1 zijn.".to_owned()
+        }
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "Initieel segmentaantal van HLS-segmenter moet groter dan of gelijk aan 1 zijn.".to_owned()
         }
@@ -1681,6 +1684,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Ingesloten ondertitels gebruiken",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item zonder titel",
+        TextKey::ActiveTranscodeLimit => "Limiet voor actieve HLS-transcodes",
+        TextKey::ActiveTranscodeLimitHelp => {
+            "Het maximale aantal FFmpeg-transcodes van HLS-segmenters dat tegelijk mag draaien. Actieve kijkers kunnen tijdelijk voorrang krijgen zodat zappen snel blijft."
+        },
         TextKey::Watermarks => "Watermerken",
         TextKey::Width => "Breedte",
         TextKey::WorkAheadSegmenterLimit => "Limiet voor vooruitwerkende HLS-segmenters",

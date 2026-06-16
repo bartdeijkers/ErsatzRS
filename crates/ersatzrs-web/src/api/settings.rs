@@ -50,6 +50,7 @@ pub async fn save_ffmpeg_settings_form(State(state): State<AppState>, body: Byte
         global_fallback_filler_id: parse_optional_i64(&fields, "global_fallback_filler_id"),
         hls_segmenter_idle_timeout: parse_i32(&fields, "hls_segmenter_idle_timeout"),
         work_ahead_segmenter_limit: parse_i32(&fields, "work_ahead_segmenter_limit"),
+        active_transcode_limit: parse_i32(&fields, "active_transcode_limit"),
         initial_segment_count: parse_i32(&fields, "initial_segment_count"),
         hls_direct_output_format: parse_i32(&fields, "hls_direct_output_format"),
         default_mpeg_ts_script: field(&fields, "default_mpeg_ts_script"),

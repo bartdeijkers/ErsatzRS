@@ -50,9 +50,12 @@ const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const HLS_WORK_AHEAD_BUFFER_SECONDS: i64 = 60;
 const HLS_REALTIME_BUFFER_SECONDS: i64 = 30;
 const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
+const HLS_ACTIVE_VIEWER_GRACE: Duration = Duration::from_secs(30);
 const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
+const DEFAULT_ACTIVE_TRANSCODE_LIMIT: i32 = 2;
 
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
+static HLS_ACTIVE_TRANSCODE_COUNT: AtomicI32 = AtomicI32::new(0);
 
 const ERROR_BACKGROUND_PNG: &[u8] = include_bytes!("../../../assets/_background.png");
 
@@ -263,6 +266,20 @@ impl HlsSessionWorker {
             }
 
             let realtime_by_buffer = should_use_realtime(transcoded_until, now);
+            let recently_accessed = self.was_recently_accessed();
+            let active_limit = load_hls_active_transcode_limit(&pool).await;
+            let active_transcode_reservation = match try_reserve_active_transcode(active_limit) {
+                Some(reservation) => Some(reservation),
+                None if recently_accessed => Some(force_reserve_active_transcode()),
+                None => None,
+            };
+            let Some(active_transcode_reservation) = active_transcode_reservation else {
+                self.set_session_state(self.session_state().throttle());
+                let _ = self.trim_playlist_inner().await;
+                tokio::time::sleep(SEGMENT_CLEANUP_INTERVAL).await;
+                continue;
+            };
+
             let work_ahead_reservation = if realtime_by_buffer {
                 None
             } else {
@@ -270,6 +287,8 @@ impl HlsSessionWorker {
                 try_reserve_work_ahead(work_ahead_limit)
             };
             let realtime = realtime_by_buffer || work_ahead_reservation.is_none();
+            let priority_idle_timeout =
+                priority_transcode_idle_timeout(active_transcode_reservation.is_forced());
             let decision =
                 hls_transcode_decision(self.session_state(), transcoded_until, now, realtime);
             self.set_session_state(decision.state);
@@ -336,7 +355,12 @@ impl HlsSessionWorker {
                 );
                 let _ = self.trim_playlist_for_append().await;
                 let outcome = self
-                    .run_hls_process(command, &mut cleanup_interval, idle_timeout)
+                    .run_hls_process(
+                        command,
+                        &mut cleanup_interval,
+                        idle_timeout,
+                        priority_idle_timeout,
+                    )
                     .await;
                 if let Err(error) =
                     update_on_demand_checkpoint(&pool, self.channel_id, Utc::now()).await
@@ -601,7 +625,12 @@ impl HlsSessionWorker {
             );
             let _ = self.trim_playlist_for_append().await;
             let outcome = self
-                .run_hls_process(command, &mut cleanup_interval, idle_timeout)
+                .run_hls_process(
+                    command,
+                    &mut cleanup_interval,
+                    idle_timeout,
+                    priority_idle_timeout,
+                )
                 .await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
@@ -688,7 +717,12 @@ impl HlsSessionWorker {
                         );
                     }
                     if self
-                        .run_hls_process(error_command, &mut cleanup_interval, idle_timeout)
+                        .run_hls_process(
+                            error_command,
+                            &mut cleanup_interval,
+                            idle_timeout,
+                            priority_idle_timeout,
+                        )
                         .await
                         == HlsProcessOutcome::Success
                     {
@@ -717,6 +751,7 @@ impl HlsSessionWorker {
         command: FfmpegCommand,
         cleanup_interval: &mut tokio::time::Interval,
         idle_timeout: Option<Duration>,
+        priority_idle_timeout: Option<Duration>,
     ) -> HlsProcessOutcome {
         let mut process = Command::new(&command.executable);
         process
@@ -793,6 +828,16 @@ impl HlsSessionWorker {
                         .await;
                     return HlsProcessOutcome::Cancelled;
                 }
+                () = self.wait_for_idle_timeout(priority_idle_timeout) => {
+                    tracing::info!(
+                        channel_number = %self.channel_number,
+                        "stopping priority HLS transcode because the session is no longer active"
+                    );
+                    self
+                        .terminate_hls_child(&mut child, stderr_task.take(), "priority channel stream inactive")
+                        .await;
+                    return HlsProcessOutcome::Cancelled;
+                }
                 _ = cleanup_interval.tick() => {
                     let _ = self.trim_playlist_inner().await;
                 }
@@ -823,6 +868,10 @@ impl HlsSessionWorker {
             .saturating_sub(last_access_ms)
             .max(0);
         Duration::from_millis(u64::try_from(idle_ms).unwrap_or(u64::MAX))
+    }
+
+    fn was_recently_accessed(&self) -> bool {
+        self.idle_for_duration() < HLS_ACTIVE_VIEWER_GRACE
     }
 
     async fn terminate_hls_child(
@@ -1705,6 +1754,65 @@ fn release_work_ahead() {
         .ok();
 }
 
+struct ActiveTranscodeReservation {
+    forced: bool,
+}
+
+impl ActiveTranscodeReservation {
+    const fn new(forced: bool) -> Self {
+        Self { forced }
+    }
+
+    const fn is_forced(&self) -> bool {
+        self.forced
+    }
+}
+
+impl Drop for ActiveTranscodeReservation {
+    fn drop(&mut self) {
+        release_active_transcode();
+    }
+}
+
+fn try_reserve_active_transcode(limit: i32) -> Option<ActiveTranscodeReservation> {
+    if limit <= 0 {
+        return None;
+    }
+
+    let mut current = HLS_ACTIVE_TRANSCODE_COUNT.load(Ordering::Relaxed);
+    loop {
+        if current >= limit {
+            return None;
+        }
+        match HLS_ACTIVE_TRANSCODE_COUNT.compare_exchange_weak(
+            current,
+            current + 1,
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return Some(ActiveTranscodeReservation::new(false)),
+            Err(next) => current = next,
+        }
+    }
+}
+
+fn force_reserve_active_transcode() -> ActiveTranscodeReservation {
+    HLS_ACTIVE_TRANSCODE_COUNT.fetch_add(1, Ordering::AcqRel);
+    ActiveTranscodeReservation::new(true)
+}
+
+fn release_active_transcode() {
+    HLS_ACTIVE_TRANSCODE_COUNT
+        .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
+            (current > 0).then_some(current - 1)
+        })
+        .ok();
+}
+
+fn priority_transcode_idle_timeout(is_priority_bypass: bool) -> Option<Duration> {
+    is_priority_bypass.then_some(HLS_ACTIVE_VIEWER_GRACE)
+}
+
 async fn load_hls_work_ahead_limit(pool: &DbPool) -> i32 {
     sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
         .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS)
@@ -1715,6 +1823,18 @@ async fn load_hls_work_ahead_limit(pool: &DbPool) -> i32 {
         .and_then(|value| value.trim().parse::<i32>().ok())
         .unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT)
         .max(0)
+}
+
+async fn load_hls_active_transcode_limit(pool: &DbPool) -> i32 {
+    sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT)
+        .max(1)
 }
 
 async fn load_channel_slug_seconds(pool: &DbPool, channel_id: i64) -> Option<f64> {
@@ -3108,10 +3228,53 @@ mod tests {
                 command,
                 &mut cleanup_interval,
                 Some(Duration::from_millis(50)),
+                None,
             ),
         )
         .await
         .expect("idle timeout should cancel the running process");
+
+        assert_eq!(outcome, HlsProcessOutcome::Cancelled);
+        let _ = cleanup_working_dir(&working_dir).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn priority_idle_timeout_cancels_running_hls_process() {
+        let working_dir = std::env::temp_dir().join(format!(
+            "ersatzrs-hls-test-priority-idle-{}",
+            Uuid::new_v4()
+        ));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create hls working dir");
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            working_dir.clone(),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+        worker.touch();
+        let command = FfmpegCommand {
+            executable: "/bin/sleep".to_string(),
+            arguments: vec!["30".to_string()],
+            environment: Vec::new(),
+        };
+        let mut cleanup_interval = tokio::time::interval(Duration::from_secs(59));
+
+        let outcome = timeout(
+            Duration::from_secs(2),
+            worker.run_hls_process(
+                command,
+                &mut cleanup_interval,
+                None,
+                Some(Duration::from_millis(50)),
+            ),
+        )
+        .await
+        .expect("priority idle timeout should cancel the running process");
 
         assert_eq!(outcome, HlsProcessOutcome::Cancelled);
         let _ = cleanup_working_dir(&working_dir).await;
@@ -3272,6 +3435,33 @@ mod tests {
             now + chrono::Duration::seconds(30),
             now
         ));
+    }
+
+    #[test]
+    fn active_transcode_reservation_respects_configured_limit() {
+        HLS_ACTIVE_TRANSCODE_COUNT.store(0, Ordering::Relaxed);
+        let first = try_reserve_active_transcode(2);
+        let second = try_reserve_active_transcode(2);
+        assert!(first.is_some());
+        assert!(second.is_some());
+        assert!(try_reserve_active_transcode(2).is_none());
+        let priority = force_reserve_active_transcode();
+        assert!(priority.is_forced());
+        assert_eq!(HLS_ACTIVE_TRANSCODE_COUNT.load(Ordering::Relaxed), 3);
+        drop(priority);
+        drop(second);
+        drop(first);
+        assert_eq!(HLS_ACTIVE_TRANSCODE_COUNT.load(Ordering::Relaxed), 0);
+        assert!(try_reserve_active_transcode(0).is_none());
+    }
+
+    #[test]
+    fn priority_transcode_idle_timeout_only_applies_to_bypassed_slots() {
+        assert_eq!(
+            priority_transcode_idle_timeout(true),
+            Some(HLS_ACTIVE_VIEWER_GRACE)
+        );
+        assert_eq!(priority_transcode_idle_timeout(false), None);
     }
 
     #[test]

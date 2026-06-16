@@ -305,6 +305,7 @@ struct FfmpegSettingsSummary {
     preferred_audio_language_code: String,
     hls_segmenter_idle_timeout: i32,
     work_ahead_segmenter_limit: i32,
+    active_transcode_limit: i32,
     initial_segment_count: i32,
     hls_direct_output_format: i32,
     default_mpeg_ts_script: String,
@@ -379,6 +380,12 @@ async fn load_ffmpeg_settings(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
             1,
+        )
+        .await?,
+        active_transcode_limit: load_i32(
+            pool,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+            2,
         )
         .await?,
         initial_segment_count: load_i32(
@@ -1564,6 +1571,7 @@ mod tests {
                 preferred_audio_language_code: "eng".to_owned(),
                 hls_segmenter_idle_timeout: 60,
                 work_ahead_segmenter_limit: 1,
+                active_transcode_limit: 2,
                 initial_segment_count: 1,
                 hls_direct_output_format: 2,
                 default_mpeg_ts_script: "default".to_owned(),

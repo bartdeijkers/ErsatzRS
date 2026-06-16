@@ -2,7 +2,7 @@ feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
-adr        = ['0015']
+adr        = ['0015', '0016']
 summary    = '''
 Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
 emits the mode-aware URL suffix (`.m3u8?mode={segmenter,hls-direct}` /
@@ -82,6 +82,13 @@ MPEG-TS wrapper paths, and waits until the configured initial segment count is
 visible in the live session playlist before returning the multi-variant
 playlist. The state-machine slice now enforces `ffmpeg.segmenter.work_ahead_limit`
 while reserving accelerated work-ahead slots.
+
+ADR 0016 adds an ErsatzRS-specific active HLS transcode limit
+(`ffmpeg.segmenter.active_transcode_limit`, default 2) beside ErsatzTV's
+work-ahead limit. The active limit caps concurrent HLS Segmenter FFmpeg
+generations to protect smaller systems from heat/load during rapid channel
+switching, while recently touched sessions can temporarily take priority so the
+currently viewed channel stays responsive.
 
 The HLS command-options slice ports ErsatzTV's MPEG-TS segment option rule:
 MPEG-TS HLS output now emits

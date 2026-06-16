@@ -21,6 +21,8 @@ pub const CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID: &str = "ffmpeg.global_watermark
 pub const CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID: &str = "ffmpeg.global_fallback_filler_id";
 pub const CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT: &str = "ffmpeg.segmenter.timeout_seconds";
 pub const CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS: &str = "ffmpeg.segmenter.work_ahead_limit";
+pub const CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT: &str =
+    "ffmpeg.segmenter.active_transcode_limit";
 pub const CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT: &str = "ffmpeg.segmenter.initial_segment_count";
 pub const CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_format";
 pub const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";

@@ -1028,6 +1028,10 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Use Embedded Subtitles",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Untitled item",
+        TextKey::ActiveTranscodeLimit => "Active HLS Transcode Limit",
+        TextKey::ActiveTranscodeLimitHelp => {
+            "The maximum number of HLS segmenter FFmpeg transcodes that may run at the same time. Active viewers can temporarily take priority so channel changes stay responsive."
+        },
         TextKey::Watermarks => "Watermarks",
         TextKey::Width => "Width",
         TextKey::WorkAheadSegmenterLimit => "Work-Ahead HLS Segmenter Limit",
@@ -1838,6 +1842,9 @@ fn settings_error_message(error: &str) -> String {
         }
         "Work-Ahead HLS Segmenter limit must be greater than or equal to 0" => {
             "Work-Ahead HLS Segmenter limit must be greater than or equal to 0".to_owned()
+        }
+        "Active HLS transcode limit must be greater than or equal to 1" => {
+            "Active HLS transcode limit must be greater than or equal to 1".to_owned()
         }
         "HLS Segmenter initial segment count must be greater than or equal to 1" => {
             "HLS Segmenter initial segment count must be greater than or equal to 1".to_owned()
