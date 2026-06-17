@@ -43,6 +43,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Opacity-expression watermarks now loop still image inputs so FFmpeg evaluates
+  ErsatzTV clock variables over live direct `.ts` and HLS segment timelines
+  instead of freezing the expression at the first image frame.
 - HLS Segmenter now enforces a configurable active transcode limit
   (`ffmpeg.segmenter.active_transcode_limit`, default 2) in addition to the
   existing work-ahead limit, so rapid channel switching does not leave many old

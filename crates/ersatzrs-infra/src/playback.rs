@@ -1533,18 +1533,23 @@ pub async fn watermark_inputs_for_stream(
 /// Build the `FFmpeg` input for a resolved watermark image, mirroring `ErsatzTV`'s
 /// `SetWatermark` loop-option decision: an animated image (probed once via
 /// ffprobe like `IsWatermarkAnimated`) gets `-ignore_loop 0`; a still image
-/// gets `-loop 1` only when fade points require it; a plain still image gets
-/// no loop option.
+/// gets `-loop 1` when fade points or an opacity expression require the image
+/// timeline to advance; a plain still image gets no loop option.
 pub async fn watermark_input_for_stream(
     image_path: &str,
     overlay: &ersatzrs_ffmpeg::WatermarkOverlay,
 ) -> InputFile {
     if is_watermark_animated(image_path).await {
         InputFile::watermark_animated(image_path)
-    } else if overlay.fade_points.is_empty() {
-        InputFile::watermark(image_path)
-    } else {
+    } else if !overlay.fade_points.is_empty()
+        || overlay
+            .opacity_expression
+            .as_deref()
+            .is_some_and(|expression| !expression.trim().is_empty())
+    {
         InputFile::watermark_looped(image_path)
+    } else {
+        InputFile::watermark(image_path)
     }
 }
 
@@ -2513,5 +2518,27 @@ mod tests {
             None
         );
         assert_eq!(resolve_resource_watermark_path(root.path(), None), None);
+    }
+
+    #[tokio::test]
+    async fn opacity_expression_still_watermark_uses_looped_input() {
+        let input = watermark_input_for_stream(
+            "/media/logo.png",
+            &WatermarkOverlay {
+                opacity_expression: Some("content_seconds < 5".to_owned()),
+                ..WatermarkOverlay::default()
+            },
+        )
+        .await;
+
+        assert_eq!(input.input_options, vec!["-loop", "1"]);
+    }
+
+    #[tokio::test]
+    async fn plain_still_watermark_keeps_non_looped_input() {
+        let input =
+            watermark_input_for_stream("/media/logo.png", &WatermarkOverlay::default()).await;
+
+        assert!(input.input_options.is_empty());
     }
 }

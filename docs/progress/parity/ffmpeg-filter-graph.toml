@@ -1,66 +1,42 @@
 feature    = 'FFmpeg filter graph'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0003']
 
 summary    = '''
-Ported for static watermark streaming: complex-filter label routing, subtitle/song-progress filters, and ffconcat v1.0 playlist writing are in place with snapshot coverage. Static watermark inputs loop still images, scale by `WidthPercent`, apply opacity/fade/expression filters, and chain multiple overlays by `ZIndex`; IPTV `.ts`, HLS segmenter, and dev-stream commands attach resolved watermarks; selection covers active deco-template, playout-deco, playout-item, channel, and global precedence with `DisableWatermarks` and playout-template date filter parity. Workspace/mysql gates and an ignored FFmpeg MPEG-TS frame-composition proof pass.
+Ported: complex-filter label routing, subtitle/song-progress filters, ffconcat
+v1.0 playlist writing, static/dynamic watermark input routing, resource-backed
+watermarks, z-index-safe multi-overlay pairing, graphics-image/drawvg
+composition, NVENC/CUDA overlay/download edge cases, and native opacity/fade
+filter emission are implemented with snapshot coverage and runtime smoke
+coverage. Dynamic watermarks (intermittent/opacity-expression/multiple, or any
+combined with graphics elements) join the z-ordered graphics overlay plan per
+ADR 0005, while a single permanent watermark can stay on the native ffmpeg
+watermark path.
 
-The 2026-06-10 NVENC/CUDA unconvertible-chain fixes (window
-`52e1028..626783e`, snapshot-covered): CUDA surface tracking when the
-software-decode `hwupload` fallback feeds `scale_cuda` (so pad/crop/
-subtitle-burn emit the required `hwdownload`), still-image pipelines kept in
-software on the nvenc path (error screen instead of a bare 503), seeked
-subtitles with no remaining cues dropping the burn input instead of crashing
-libass, and subtitles/fontsdir double-escaping (Windows drive-colon burn-in).
-The 2026-06-11 AV1 learned-denial live proof fed `-hwaccel none -c:v libdav1d`
-into the CUDA/NVENC chain on the HLS segmenter; direct IPTV `.ts`
-runtime-learned denial scope stays with that slice.
+Opacity-expression parity now covers both expression syntax and live clock
+semantics. The translator rewrites ErsatzTV/NCalc operators and
+`LinearFadePoints` / `LinearFadeDuration` helpers into FFmpeg eval syntax,
+copies lum/cb/cr through `geq`, and rewrites alpha safely. The 2026-06-17
+closeout fixed still opacity-expression inputs to loop like other dynamic still
+watermarks, so FFmpeg evaluates `T` over an advancing image timeline instead of
+freezing at the first image frame. Focused live proofs run the real direct IPTV
+`.ts` and HLS segmenter builders against generated calibration media, capture
+spawned FFmpeg argv with `-loop 1`, `-ss 00:00:05.0000000`, `(5+T)`,
+`(30+T)`, `mod((86399.5+T),86400)`, and `lt((5+T),12)`, then decode output
+pixels at three frames to observe black -> red -> black opacity behavior across
+the midnight wrap.
 
-The 2026-06-11 watermark-routing slice closes the resource-backed dynamic
-watermark gap: `ChannelWatermarkImageSource::Resource` resolves under the new
-`resources_cache_folder()` (warn-and-ignore on missing files, matching
-`WatermarkSelector`); the web host extracts the bundled streaming resources at
-startup with `ResourceExtractorService` overwrite semantics; and the pipeline
-ports the `FFmpegLibraryProcessService` routing rule — a single permanent
-watermark with no graphics elements keeps the native ffmpeg watermark input,
-while dynamic watermarks (intermittent/opacity-expression/multiple, or any
-combined with graphics elements) join the z-ordered graphics overlay plan (per
-ADR 0005, native overlay/fade/opacity filters plus drawvg instead of a raster
-frame loop). Watermark inputs sort together with their overlays by z-index,
-fixing a latent input/overlay zip mismatch. Snapshot coverage spans the
-native-stays-native case, watermark+drawvg z-order interleave, out-of-order
-multi-watermark pairing, and the rerouted dynamic watermark snapshots. The
-song-with-progress watermark override ships with song video generation, not
-this slug.
-
-The 2026-06-12 follow-up closed the loop-option and expression-runtime gaps:
-watermark inputs mirror `SetWatermark` (animated images via the ffprobe
-`IsWatermarkAnimated` port get `-ignore_loop 0`, stills with fades get
-`-loop 1`, plain stills no option), and the opacity-expression filter — whose
-old `geq=a='...'` form failed at runtime ("A luminance or RGB expression is
-mandatory"; no infix `%`/`<`/`&&` in FFmpeg eval) — now copies lum/cb/cr
-through and rewrites alpha via a recursive-descent NCalc-to-FFmpeg-eval
-translator covering ErsatzTV's expression parameters and its custom
-`LinearFadePoints`/`LinearFadeDuration` helpers as clipped trapezoids. Live
-NVENC/CUDA HLS segmenter proof re-captured 2026-06-12 (closing
-`nvenc-cuda-live-reverification`): an h264 720p source on an RTX 3080 Ti
-produced 200 playlists and decodable h264 segments through
-`hwupload -> scale_cuda -> overlay_cuda -> h264_nvenc`, with the Resource
-watermark composited via the graphics-image route, the translated expression
-`if(lt(mod(T,60),30),1,0.5)` rendering without filter errors, and the
-`IsWatermarkAnimated` probe observed live. The single remaining open debt is
-live runtime proof for the opacity-expression time-variable semantics below.
-
-The 2026-06-12 clock-semantics slice snapshot-covers ErsatzTV `GetOpacity`
-bindings in FFmpeg eval: in-point/seek + `T`, channel uptime + `T`,
-midnight-wrapped wall clock + `T`, and duration. Direct `.ts` and HLS
-builders load those clocks and seek by in-point.
+The hardware-only `ffmpeg-command-generation` `nvenc-filter-gate-live-proof`
+debt remains open in that feature because this machine still has
+CUDA-filter-capable FFmpeg builds rather than the required encoder-only /
+no-CUDA-filter build.
 '''
 
 [[debt]]
 id          = 'opacity-expression-time-variable-semantics'
 description = 'Snapshot-covered clock semantics are now implemented in native FFmpeg eval (`content_seconds = in-point/seek + T`, `channel_seconds = channel uptime at spawn + T`, `time_of_day_seconds = mod(seconds-since-midnight-at-spawn + T, 86400)`, `content_total_seconds = probed MediaVersion.Duration`) and threaded through direct IPTV `.ts`, HLS segmenter, and troubleshooting preview builders. Remaining parity debt: no live IPTV/HLS runtime proof has yet captured these exact wall-clock/in-point/duration bindings in an actual stream, so the feature must stay `In progress`.'
 discovered  = '2026-06-12'
-evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` and `GraphicsEngine.cs` bind the four clocks per frame; `crates/ersatzrs-ffmpeg/src/filter/simple.rs` translates identifiers using `WatermarkOpacityClock`; `crates/ersatzrs-web/src/transport/iptv/stream.rs` and `crates/ersatzrs-infra/src/hls_worker.rs` load `PlayoutItem.InPoint` / `MediaVersion.Duration` and include in-point in `-ss`; `cargo test -p ersatzrs-ffmpeg` passed with identifier, in-point, and midnight-wrap coverage. Live runtime proof remains pending per ADR 0005 native-filter divergence.'
+evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` and `GraphicsEngine.cs` bind the four clocks per frame. ErsatzRS translates the same variables through `WatermarkOpacityClock`; `watermark_input_for_stream` now loops still opacity-expression inputs so `T` advances at runtime. Live direct `.ts` proof `cargo test -p ersatzrs-web transport::iptv::stream::tests::stream_body_live_proves_opacity_expression_clock_bindings -- --ignored --nocapture` captured `-loop 1`, `-ss 00:00:05.0000000`, `(5+T)`, `(30+T)`, `mod((86399.5+T),86400)`, and `lt((5+T),12)`, then decoded black -> red -> black samples. Live HLS proof `cargo test -p ersatzrs-infra hls_segmenter_live_proves_opacity_expression_clock_bindings -- --ignored --nocapture` captured the same bindings and decoded the first generated segment with the same opacity transition.'
+resolved    = true

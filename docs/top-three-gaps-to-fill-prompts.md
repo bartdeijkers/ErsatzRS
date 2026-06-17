@@ -38,15 +38,11 @@ feature changed.
 `cargo xtask progress gaps` listed 7 remaining features at `cfc5024`, all `In
 progress` (8 after the 2026-06-17 addendum below). None of the three
 carried-over picks saw any commits this window, so per the carry-over rule they
-are kept unchanged: slot 1 `ffmpeg-filter-graph`
-(phase-focus, foundational pipeline, carries the folded hardware-only
-`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof`; that feature's
-other open debts are the plan-tracked ADR 0017 items in the addendum, so it
-still gets no standalone parity prompt), slot 2
-`multi-collections-rerun-collections-playlists-filler-presets` (phase-focus
-route-family closeout), slot 3 `scanner` (phase-focus hardening, two blocking
-runtime debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
-The root-cause note for the now-closed HLS deviation remains at
+were kept unchanged in the daily reconcile: slot 1 `ffmpeg-filter-graph`
+(phase-focus, foundational pipeline), slot 2
+`multi-collections-rerun-collections-playlists-filler-presets`, slot 3
+`scanner`. The manual closeout addendum below replaces the now-completed slot
+1. The root-cause note for the now-closed HLS deviation remains at
 [`explanation/hls-segmenter-playback-deviation-root-cause.md`](explanation/hls-segmenter-playback-deviation-root-cause.md).
 
 **2026-06-17 addendum (manual reconcile; design work not yet committed).** Two
@@ -68,78 +64,71 @@ rule they do not consume a goal-prompt slot; the three parity picks below are
 unchanged. The next routine run will fold this addendum into the regenerated
 narrative.
 
+**2026-06-17 closeout addendum (manual gap #1).** The
+`ffmpeg-filter-graph` prompt was completed in this pass: opacity-expression
+still images now use looped inputs, direct `.ts` and HLS segmenter live proofs
+captured the resolved clock expressions and decoded black -> red -> black
+opacity transitions, and `ffmpeg-filter-graph` is now `Ported`. The hardware
+`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof` remains open
+because this machine still lacks an encoder-only/no-CUDA-filter FFmpeg build.
+Per the completed-scope replacement rule, slot 1 is refilled with
+`classic-scheduling`; slots 2 and 3 carry over. `cargo xtask progress gaps`
+now lists **7** features after this closeout.
+
 ---
 
-## 1 - FFmpeg filter graph: live-prove the opacity-expression clock bindings in a real stream (slug `ffmpeg-filter-graph`)
+## 1 - Classic scheduling: finish imported-database and rare schedule-item parity proof (slug `classic-scheduling`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg filter graph live proof for
-the watermark opacity-expression clock semantics (slug `ffmpeg-filter-graph`,
-debt `opacity-expression-time-variable-semantics`).
+Fix the next ErsatzTV parity gap in ErsatzRS: Classic scheduling imported
+database verification and rare schedule-item filler/group parity proof (slug
+`classic-scheduling`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current `ParityDebt` from
-`docs/progress/parity/ffmpeg-filter-graph.toml`: "Snapshot-covered clock
-semantics are now implemented in native FFmpeg eval (`content_seconds =
-in-point/seek + T`, `channel_seconds = channel uptime at spawn + T`,
-`time_of_day_seconds = mod(seconds-since-midnight-at-spawn + T, 86400)`,
-`content_total_seconds = probed MediaVersion.Duration`) and threaded through
-direct IPTV `.ts`, HLS segmenter, and troubleshooting preview builders.
-Remaining parity debt: no live IPTV/HLS runtime proof has yet captured these
-exact wall-clock/in-point/duration bindings in an actual stream, so the feature
-must stay `In progress`."
+Current status from `docs/progress/parity/classic-scheduling.toml`: "Ported for
+the current non-web parity target: `PlayoutBuilder` dispatches Classic
+schedules to `ClassicSchedulingEngine`; SQL reference loading covers program
+schedules, alternates, typed One/Multiple/Duration/Flood schedule items,
+collection media, existing playout state, program schedule anchors, fill-group
+indices, and Classic scheduling context JSON. Remaining follow-up is limited
+to imported-database verification in Slice 21 and rarely used schedule-item
+filler/group behaviors."
 
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs` at the
-pinned commit, plus `ErsatzTV.Infrastructure/Streaming/Graphics/
-OpacityExpressionHelper.cs` `GetOpacity` and `GraphicsEngine.cs` (the four
-per-frame clock bindings). ErsatzRS target: `crates/ersatzrs-ffmpeg/src/filter/
-simple.rs` (`WatermarkOpacityClock` identifier translation),
-`crates/ersatzrs-web/src/transport/iptv/stream.rs`,
-`crates/ersatzrs-infra/src/hls_worker.rs`, and the filter-graph debt file.
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` at the pinned commit,
+especially Classic schedule item enumeration, fill-group handling, filler
+selection, anchor continuation, and playout build side effects. ErsatzRS
+target: `crates/ersatzrs-core/src/scheduling/`,
+`crates/ersatzrs-infra/src/playback.rs`, scheduling repository loaders, and
+the Classic scheduling parity file.
 
 Before editing:
-1. Read the pinned ErsatzTV opacity-expression helper, graphics engine, and
-   complex-filter sources for how the four clocks are bound per frame before
-   touching Rust.
-2. Inspect the current ErsatzRS opacity-expression translation, the in-point /
-   `MediaVersion.Duration` wiring in the IPTV `.ts` and HLS builders, existing
-   `cargo test -p ersatzrs-ffmpeg` identifier/in-point/midnight-wrap coverage,
-   and the prior live HLS proof captured on 2026-06-11.
-3. Build a Source Map for the opacity-expression clock path across the IPTV
-   `.ts`, HLS segmenter, and troubleshooting preview builders, marking where
-   tests already cover behavior and where live runtime proof is absent.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
+1. Read the pinned ErsatzTV Classic scheduling engine, schedule item models,
+   fill-group/filler handling, playout builder, and repository query paths.
+2. Inspect the current ErsatzRS Classic engine, SQL reference loading, anchor
+   persistence, imported-database fixtures if available, and existing
+   scheduling snapshots/tests for One/Multiple/Duration/Flood items.
+3. Build a Source Map for imported database rows -> scheduling references ->
+   Classic item enumerators -> playout items -> anchors/build side effects,
+   marking where tests already cover behavior and where imported-runtime proof
+   is absent.
+4. Identify remaining `ParityDebt`; if the remaining Slice 21 and rare
+   filler/group behavior is already proven, close the tracker instead of
+   inventing new scope.
 
-Implement only what closing the debt requires: do not weaken the existing
-snapshot/unit gates. Capture live runtime proof that an actual IPTV `.ts` and
-HLS stream binds `content_seconds` (in-point/seek + T), `channel_seconds`
-(channel uptime at spawn + T), `time_of_day_seconds` (midnight-wrapped), and
-`content_total_seconds` (probed duration) to the watermark opacity expression —
-record the real spawned FFmpeg argv, the resolved expression, and observed
-opacity behavior over time. If a binding diverges from ErsatzTV at runtime,
-fix it; if the runtime cannot be exercised on this machine, build a documented,
-reproducible proof harness that drives the same path without faking success and
-keep any shortfall as structured `ParityDebt`. Decide whether any intentional
-divergence from ErsatzTV (see ADR 0005 native-filter divergence) needs an ADR
-update.
+Implement only the coherent closeout slice: prove or fix imported-database
+Classic scheduling behavior and the rarely used schedule-item filler/group
+paths, preserving the already-fixed continue-anchor and shuffled-collection
+semantics. Do not broaden into unrelated scheduling/admin UI work. Add focused
+tests or fixtures for any imported row shape, filler/group path, or anchor
+side effect that was previously unproven.
 
-Fold the hardware-bound `ffmpeg-command-generation` debt
-`nvenc-filter-gate-live-proof` into this same live streaming session: while a
-real `.ts`/HLS transcode is running, attempt to reproduce the NVENC
-encoder-with-`cuda`-hwaccel-but-no-CUDA-filter decode gate and the direct `.ts`
-learned-denial retry-in-response. If no rejecting / filter-less FFmpeg build is
-available, capture the strongest available local command and leave
-`nvenc-filter-gate-live-proof` open as structured `ParityDebt` — never weaken
-the gate to make a local build reproduce it.
-
-Verify with focused `ersatzrs-ffmpeg` snapshots/tests, `cargo xtask smoke`, any
-live IPTV/HLS commands used to capture the clock bindings, and
-`cargo xtask progress check`. Update
-`docs/progress/parity/ffmpeg-filter-graph.toml` (and, if its debt state
-changed, `docs/progress/parity/ffmpeg-command-generation.toml`) only when the
-evidence supports the new status. Report the Source Map, behavior implemented,
-exact FFmpeg argv / resolved-expression proof, remaining `ParityDebt`,
+Verify with focused `ersatzrs-core` scheduling tests/snapshots, affected
+`ersatzrs-infra` repository tests, any imported-database proof command or
+fixture added for Slice 21, `cargo xtask progress check`, and `cargo xtask
+progress gaps`. Update `docs/progress/parity/classic-scheduling.toml`,
+changelog, and this prompt file only when the evidence supports the new
+status. Report the Source Map, behavior closed, remaining `ParityDebt`,
 verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.

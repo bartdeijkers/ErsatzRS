@@ -3171,9 +3171,9 @@ mod tests {
     use super::*;
     use ersatzrs_domain::{
         FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat,
-        HardwareAccelerationKind, Resolution,
+        HardwareAccelerationKind, Resolution, WatermarkLocation, WatermarkSize,
     };
-    use ersatzrs_ffmpeg::PixelFormat;
+    use ersatzrs_ffmpeg::{PixelFormat, WatermarkOverlay};
     use std::process::Stdio;
     use tokio::time::timeout;
     use uuid::Uuid;
@@ -4832,6 +4832,83 @@ mod tests {
         assert_hls_segment_has_green_graphics(&ffmpeg, &segment).await;
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg on PATH"]
+    async fn hls_segmenter_live_proves_opacity_expression_clock_bindings() {
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
+        if !ffmpeg_is_available().await {
+            eprintln!("skipping: ffmpeg not on PATH");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let input = temp.path().join("black.mp4");
+        let logo = temp.path().join("logo.ppm");
+        let working_dir = temp.path().join("hls");
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create hls dir");
+        generate_hls_opacity_input(&ffmpeg, &input).await;
+        std::fs::write(&logo, red_ppm(64, 32)).expect("write watermark fixture");
+
+        let clock = WatermarkOpacityClock::new(86_399.5, 5.0, Some(12.0), 30.0);
+        let expression = concat!(
+            "if(content_seconds >= 5.5 && content_seconds < content_total_seconds && ",
+            "channel_seconds >= 30.5 && channel_seconds < 31.5 && ",
+            "time_of_day_seconds < 1, 1, 0)"
+        );
+        let command = build_hls_command_with_opacity_clock(
+            input.to_string_lossy().as_ref(),
+            &working_dir,
+            OutputFormat::Hls,
+            true,
+            false,
+            false,
+            Duration::from_secs(5),
+            Some(Duration::from_secs(3)),
+            None,
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(source_320p()),
+            Vec::new(),
+            None,
+            None,
+            vec![(
+                InputFile::watermark_looped(logo.to_string_lossy().into_owned()),
+                opacity_clock_watermark(expression),
+            )],
+            Vec::new(),
+            Some(clock),
+        );
+        let arguments = command.arguments.join(" ");
+        eprintln!("HLS opacity clock proof argv: {arguments}");
+        assert!(arguments.contains("format=yuva420p|yuva444p|yuva422p,geq="));
+        assert!(arguments.contains("(5+T)"), "{arguments}");
+        assert!(arguments.contains("(30+T)"), "{arguments}");
+        assert!(arguments.contains("mod((86399.5+T),86400)"), "{arguments}");
+        assert!(arguments.contains("lt((5+T),12)"), "{arguments}");
+
+        run_hls_command(command, &working_dir).await;
+        let playlist = working_dir.join("live.m3u8");
+        let segment = working_dir.join("live000000.ts");
+        assert!(
+            playlist.is_file(),
+            "expected playlist at {}",
+            playlist.display()
+        );
+        assert!(
+            segment.is_file(),
+            "expected first segment at {}",
+            segment.display()
+        );
+        let samples = decode_opacity_samples(&ffmpeg, &segment).await;
+        assert_black(samples[0], "before midnight wrap and threshold");
+        assert_red(samples[1], "after content/channel/time thresholds");
+        assert_black(samples[2], "after one-second clock window");
+    }
+
     async fn ffmpeg_has_drawvg(ffmpeg: &str) -> bool {
         Command::new(ffmpeg)
             .args(["-hide_banner", "-filters"])
@@ -5001,6 +5078,130 @@ mod tests {
             decoded.stdout[1] > 180 && decoded.stdout[0] < 80 && decoded.stdout[2] < 80,
             "expected green graphics crop, got rgb={:?}",
             decoded.stdout
+        );
+    }
+
+    async fn generate_hls_opacity_input(ffmpeg: &str, input: &Path) {
+        let mut command = Command::new(ffmpeg);
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x180:r=25:d=8",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-t",
+            "8",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            input.to_string_lossy().as_ref(),
+        ]);
+        apply_ffmpeg_library_path(&mut command);
+        let generated = command.output().await.expect("generate opacity input");
+        assert!(
+            generated.status.success(),
+            "ffmpeg input generation failed: {}",
+            String::from_utf8_lossy(&generated.stderr)
+        );
+    }
+
+    async fn run_hls_command(command: FfmpegCommand, working_dir: &Path) {
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .current_dir(working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        apply_ffmpeg_library_path(&mut process);
+        let output = timeout(Duration::from_secs(30), process.output())
+            .await
+            .expect("timed out running hls opacity segmenter")
+            .expect("run hls opacity segmenter");
+        assert!(
+            output.status.success(),
+            "ffmpeg hls failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    async fn decode_opacity_samples(ffmpeg: &str, stream: &Path) -> Vec<[u8; 3]> {
+        let mut command = Command::new(ffmpeg);
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            stream.to_string_lossy().as_ref(),
+            "-vf",
+            "select=eq(n\\,5)+eq(n\\,20)+eq(n\\,45),crop=80:80:0:0,scale=1:1,format=rgb24",
+            "-vsync",
+            "0",
+            "-frames:v",
+            "3",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+        apply_ffmpeg_library_path(&mut command);
+        let decoded = command.output().await.expect("decode opacity samples");
+        assert!(
+            decoded.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 9, "expected three RGB samples");
+        decoded
+            .stdout
+            .chunks_exact(3)
+            .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+            .collect()
+    }
+
+    fn opacity_clock_watermark(expression: &str) -> WatermarkOverlay {
+        WatermarkOverlay {
+            location: WatermarkLocation::TopLeft,
+            size: WatermarkSize::Scaled,
+            width_percent: 10.0,
+            horizontal_margin_percent: 0.0,
+            vertical_margin_percent: 0.0,
+            opacity: 100,
+            opacity_expression: Some(expression.to_owned()),
+            ..WatermarkOverlay::default()
+        }
+    }
+
+    fn red_ppm(width: usize, height: usize) -> Vec<u8> {
+        let mut ppm = format!("P6\n{width} {height}\n255\n").into_bytes();
+        ppm.extend(std::iter::repeat_n([255, 0, 0], width * height).flatten());
+        ppm
+    }
+
+    fn assert_red(rgb: [u8; 3], context: &str) {
+        assert!(
+            rgb[0] > 180 && rgb[1] < 80 && rgb[2] < 80,
+            "expected red sample for {context}, got rgb={rgb:?}"
+        );
+    }
+
+    fn assert_black(rgb: [u8; 3], context: &str) {
+        assert!(
+            rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40,
+            "expected black sample for {context}, got rgb={rgb:?}"
         );
     }
 

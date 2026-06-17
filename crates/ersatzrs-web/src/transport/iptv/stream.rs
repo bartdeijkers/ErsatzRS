@@ -2570,6 +2570,70 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "requires ffmpeg on PATH"]
+    async fn stream_body_live_proves_opacity_expression_clock_bindings() {
+        let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
+        let mut version = tokio::process::Command::new(&ffmpeg);
+        version
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        apply_ffmpeg_library_path(&mut version);
+        if version.status().await.is_err() {
+            eprintln!("skipping: ffmpeg not on PATH");
+            return;
+        }
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let input = temp.path().join("black.mp4");
+        let logo = temp.path().join("logo.ppm");
+        let stream = temp.path().join("opacity-clock.ts");
+        generate_opacity_input(&ffmpeg, &input).await;
+        std::fs::write(&logo, red_ppm(64, 32)).expect("write watermark fixture");
+
+        let clock = WatermarkOpacityClock::new(86_399.5, 5.0, Some(12.0), 30.0);
+        let expression = concat!(
+            "if(content_seconds >= 5.5 && content_seconds < content_total_seconds && ",
+            "channel_seconds >= 30.5 && channel_seconds < 31.5 && ",
+            "time_of_day_seconds < 1, 1, 0)"
+        );
+        let command = build_stream_command_with_opacity_clock(
+            input.to_string_lossy().as_ref(),
+            OutputFormat::MpegTs,
+            Duration::from_secs(5),
+            Some(Duration::from_secs(3)),
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(source_320p()),
+            Vec::new(),
+            None,
+            vec![(
+                InputFile::watermark_looped(logo.to_string_lossy().into_owned()),
+                opacity_clock_watermark(expression),
+            )],
+            Vec::new(),
+            Some(clock),
+        );
+        let arguments = command.arguments.join(" ");
+        eprintln!("IPTV opacity clock proof argv: {arguments}");
+        assert!(arguments.contains("format=yuva420p|yuva444p|yuva422p,geq="));
+        assert!(arguments.contains("(5+T)"), "{arguments}");
+        assert!(arguments.contains("(30+T)"), "{arguments}");
+        assert!(arguments.contains("mod((86399.5+T),86400)"), "{arguments}");
+        assert!(arguments.contains("lt((5+T),12)"), "{arguments}");
+
+        let output = run_ffmpeg_to_output(command).await;
+        std::fs::write(&stream, &output.stdout).expect("write mpegts sample");
+        let samples = decode_opacity_samples(&ffmpeg, &stream).await;
+        assert_black(samples[0], "before midnight wrap and threshold");
+        assert_red(samples[1], "after content/channel/time thresholds");
+        assert_black(samples[2], "after one-second clock window");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg with drawvg on PATH"]
     async fn stream_body_composites_drawvg_graphics_from_generated_input() {
         let ffmpeg = ersatzrs_ffmpeg::ffmpeg_path();
@@ -2672,6 +2736,136 @@ mod tests {
         output.stdout
     }
 
+    async fn run_ffmpeg_to_output(command: FfmpegCommand) -> std::process::Output {
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+        apply_ffmpeg_library_path(&mut process);
+        let output = process.output().await.expect("run ffmpeg stream");
+        assert!(
+            output.status.success(),
+            "ffmpeg stream failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!output.stdout.is_empty(), "expected stream bytes");
+        output
+    }
+
+    async fn generate_opacity_input(ffmpeg: &str, input: &Path) {
+        let mut command = tokio::process::Command::new(ffmpeg);
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x180:r=25:d=8",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-t",
+            "8",
+            "-shortest",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            input.to_string_lossy().as_ref(),
+        ]);
+        apply_ffmpeg_library_path(&mut command);
+        let generated = command.output().await.expect("generate opacity input");
+        assert!(
+            generated.status.success(),
+            "ffmpeg input generation failed: {}",
+            String::from_utf8_lossy(&generated.stderr)
+        );
+    }
+
+    async fn decode_opacity_samples(ffmpeg: &str, stream: &Path) -> Vec<[u8; 3]> {
+        let mut command = tokio::process::Command::new(ffmpeg);
+        command.args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            stream.to_string_lossy().as_ref(),
+            "-vf",
+            "select=eq(n\\,5)+eq(n\\,20)+eq(n\\,45),crop=80:80:0:0,scale=1:1,format=rgb24",
+            "-vsync",
+            "0",
+            "-frames:v",
+            "3",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+        apply_ffmpeg_library_path(&mut command);
+        let decoded = command.output().await.expect("decode opacity samples");
+        assert!(
+            decoded.status.success(),
+            "ffmpeg decode failed: {}",
+            String::from_utf8_lossy(&decoded.stderr)
+        );
+        assert_eq!(decoded.stdout.len(), 9, "expected three RGB samples");
+        decoded
+            .stdout
+            .chunks_exact(3)
+            .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+            .collect()
+    }
+
+    fn opacity_clock_watermark(expression: &str) -> WatermarkOverlay {
+        WatermarkOverlay {
+            location: WatermarkLocation::TopLeft,
+            size: WatermarkSize::Scaled,
+            width_percent: 10.0,
+            horizontal_margin_percent: 0.0,
+            vertical_margin_percent: 0.0,
+            opacity: 100,
+            opacity_expression: Some(expression.to_owned()),
+            ..WatermarkOverlay::default()
+        }
+    }
+
+    fn assert_red(rgb: [u8; 3], context: &str) {
+        assert!(
+            rgb[0] > 180 && rgb[1] < 80 && rgb[2] < 80,
+            "expected red sample for {context}, got rgb={rgb:?}"
+        );
+    }
+
+    fn assert_black(rgb: [u8; 3], context: &str) {
+        assert!(
+            rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40,
+            "expected black sample for {context}, got rgb={rgb:?}"
+        );
+    }
+
+    fn apply_ffmpeg_library_path(command: &mut Command) {
+        let ffmpeg_path = ersatzrs_ffmpeg::ffmpeg_path();
+        let Some(bin_dir) = Path::new(&ffmpeg_path).parent() else {
+            return;
+        };
+        let Some(root_dir) = bin_dir.parent() else {
+            return;
+        };
+        let lib_dir = root_dir.join("lib");
+        if lib_dir.is_dir() {
+            command.env("LD_LIBRARY_PATH", lib_dir);
+        }
+    }
+
     async fn assert_stream_has_green_graphics(ffmpeg: &str, stream: &Path) {
         let decoded = tokio::process::Command::new(ffmpeg)
             .args([
@@ -2708,6 +2902,15 @@ mod tests {
         let mut ppm = format!("P6\n{width} {height}\n255\n").into_bytes();
         ppm.extend(std::iter::repeat_n([255, 0, 0], width * height).flatten());
         ppm
+    }
+
+    fn source_320p() -> SourceVideoStream {
+        let mut source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264);
+        source.frame_size = Some(ersatzrs_ffmpeg::FrameSize::new(320, 180));
+        source.sample_aspect_ratio = Some("1:1".to_owned());
+        source.display_aspect_ratio = Some("16:9".to_owned());
+        source.pixel_format = Some(ersatzrs_ffmpeg::PixelFormat::Yuv420P);
+        source
     }
 
     fn green_drawvg_script() -> &'static str {
