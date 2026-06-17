@@ -24,7 +24,10 @@ fn LogsIsland() -> impl IntoView {
     );
     Effect::new(move |_| {
         if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved.max(1));
+            let saved = saved.max(1);
+            if page_size.get_untracked() != saved {
+                page_size.set(saved);
+            }
         }
     });
 
@@ -213,7 +216,7 @@ fn render_snapshot(
                     <button
                         type="button"
                         aria-label=tr(TextKey::NextPage)
-                        disabled=move || u64::from(page.get()) >= last_page
+                        disabled=move || { u64::from(page.get()) >= last_page }
                         on:click=move |_| {
                             page.update(|value| {
                                 *value = (*value + 1).min(u32::try_from(last_page).unwrap_or(u32::MAX));
@@ -226,7 +229,7 @@ fn render_snapshot(
                     <button
                         type="button"
                         aria-label=tr(TextKey::LastPage)
-                        disabled=move || u64::from(page.get()) >= last_page
+                        disabled=move || { u64::from(page.get()) >= last_page }
                         on:click=move |_| page.set(u32::try_from(last_page).unwrap_or(u32::MAX))
                         style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default)"
                     >

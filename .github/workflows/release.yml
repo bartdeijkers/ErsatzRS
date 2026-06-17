@@ -100,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # v0.0.9-alpha is a Windows-only release: only the win-x64 archive is
+        # v1.0.10-alpha is a Windows-only hotfix release: only the win-x64 archive is
         # produced (Linux, macOS, and Docker are intentionally omitted). Restore
         # the Linux/macOS entries before the next full release.
         include:

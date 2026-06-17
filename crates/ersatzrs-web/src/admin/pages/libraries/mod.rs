@@ -11,7 +11,7 @@ use crate::admin::server_fns::libraries::{
     list_locked_collections, list_locked_libraries, list_scan_progress,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
-use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
+use crate::admin::ui::primitives::toast::{use_toast, ToastContainer, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
 
@@ -325,6 +325,7 @@ fn LibrariesIsland() -> impl IntoView {
                     })
                 }}
             </Suspense>
+            <ToastContainer/>
         </div>
     }
 }

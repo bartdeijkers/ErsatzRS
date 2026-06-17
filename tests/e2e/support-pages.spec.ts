@@ -57,6 +57,8 @@ test.describe('support route-family parity', () => {
     await expect(page.getByRole('button', { name: 'Previous page' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Next page' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Last page' })).toBeVisible();
+    await expect(page.locator('body')).not.toContainText('last_page on');
+    await expect(page.locator('body')).not.toContainText('u32::try_from');
     await page.screenshot({ path: screenshotPath(testInfo, 'support-logs'), fullPage: true });
 
     await page.goto('/system/troubleshooting');

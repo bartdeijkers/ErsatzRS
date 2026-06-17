@@ -13,6 +13,16 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.10-alpha] - 2026-06-17
+
+### Fixed
+
+- Windows release UI interactions are restored for the `/media/libraries` scan
+  button, `/system/logs` pager controls, and TV season episode **Show Media
+  Info** actions. The libraries page now renders its toast container inside the
+  hydrated island, and the Logs pager no longer leaks Leptos macro text into the
+  DOM or loops log-page reloads after loading the saved page size.
+
 ## [0.0.9-alpha] - 2026-06-17
 
 ### Fixed
