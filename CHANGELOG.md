@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [0.0.9-alpha] - 2026-06-17
+
 ### Fixed
 
 - Missing library items are now detected during scans. Previously nothing ever
