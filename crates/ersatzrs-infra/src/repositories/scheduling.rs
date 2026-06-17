@@ -13,7 +13,7 @@ use ersatzrs_core::scheduling::{
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveBreakContent,
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem, SchedulingCollectionKey,
     SchedulingContentRepository, SchedulingContentSource, SchedulingFallbackPreset,
-    SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
+    SchedulingFillerPreset, SchedulingMediaItem, SchedulingPlaylistItem, SchedulingReferenceData,
 };
 use ersatzrs_core::search::{
     search_page_map, SearchDocument, SearchExpression, SearchField, SearchPageMap,
@@ -29,7 +29,7 @@ use sqlx::{Pool, Row};
 
 use super::common::{
     decode_bool_column, decode_datetime, decode_duration_text, decode_enum_column, decode_message,
-    decode_optional_datetime, decode_optional_enum_column, load_ids,
+    decode_optional_datetime, decode_optional_duration_text, decode_optional_enum_column, load_ids,
 };
 
 #[derive(Clone)]
@@ -243,6 +243,16 @@ impl SqliteSchedulingContentRepository {
                 self.items_for_program_schedule_item(item).await?,
             );
         }
+        let mut classic_filler_presets = BTreeMap::new();
+        for filler_id in schedule_items
+            .iter()
+            .flat_map(program_schedule_item_filler_ids)
+            .collect::<BTreeSet<_>>()
+        {
+            if let Some(preset) = self.scheduling_filler_preset(filler_id).await? {
+                classic_filler_presets.insert(filler_id, preset);
+            }
+        }
 
         self.with_configured_playout_options(SchedulingReferenceData {
             media_by_key,
@@ -257,6 +267,7 @@ impl SqliteSchedulingContentRepository {
             existing_items: self.playout_items(playout_id).await?,
             existing_history: self.playout_history(playout_id).await?,
             max_playout_offset,
+            classic_filler_presets,
             ..SchedulingReferenceData::default()
         })
         .await
@@ -425,6 +436,48 @@ impl SqliteSchedulingContentRepository {
         let media_items = self.items_for_collection_key(&collection_key, 0).await?;
         Ok(Some(SchedulingFallbackPreset {
             id: filler_id,
+            allow_watermarks: row.try_get("AllowWatermarks")?,
+            media_items,
+        }))
+    }
+
+    async fn scheduling_filler_preset(
+        &self,
+        filler_id: EntityId,
+    ) -> Result<Option<SchedulingFillerPreset>> {
+        let row = sqlx::query(r#"SELECT * FROM "FillerPreset" WHERE "Id" = ?"#)
+            .bind(filler_id)
+            .fetch_optional(&self.0)
+            .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let collection_key = SchedulingCollectionKey {
+            collection_type: decode_enum_column(
+                "schedule item filler collection_type",
+                &row,
+                "CollectionType",
+            )?,
+            collection_id: row.try_get("CollectionId")?,
+            media_item_id: row.try_get("MediaItemId")?,
+            multi_collection_id: row.try_get("MultiCollectionId")?,
+            smart_collection_id: row.try_get("SmartCollectionId")?,
+            playlist_id: row.try_get("PlaylistId")?,
+            ..SchedulingCollectionKey::default()
+        };
+        let media_items = self.items_for_collection_key(&collection_key, 0).await?;
+
+        Ok(Some(SchedulingFillerPreset {
+            id: filler_id,
+            filler_kind: decode_enum_column("schedule item filler kind", &row, "FillerKind")?,
+            filler_mode: decode_enum_column("schedule item filler mode", &row, "FillerMode")?,
+            duration: decode_optional_duration_text(
+                row.try_get::<Option<String>, _>("Duration")?.as_deref(),
+            ),
+            count: row.try_get("Count")?,
+            pad_to_nearest_minute: row.try_get("PadToNearestMinute")?,
             allow_watermarks: row.try_get("AllowWatermarks")?,
             media_items,
         }))
@@ -2432,6 +2485,18 @@ impl SqliteSchedulingContentRepository {
             })
             .collect()
     }
+}
+
+fn program_schedule_item_filler_ids(item: &ProgramScheduleItem) -> impl Iterator<Item = EntityId> {
+    [
+        item.pre_roll_filler_id,
+        item.mid_roll_filler_id,
+        item.post_roll_filler_id,
+        item.tail_filler_id,
+        item.fallback_filler_id,
+    ]
+    .into_iter()
+    .flatten()
 }
 
 const SEARCH_DOCUMENT_SQL: &str = r#"

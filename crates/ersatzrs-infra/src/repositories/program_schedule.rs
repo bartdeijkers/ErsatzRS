@@ -282,11 +282,11 @@ async fn upsert_program_schedule_item(
                "SearchTitle" = NULL,
                "FakeCollectionKey" = NULL,
                "MarathonBatchSize" = NULL,
-               "PreRollFillerId" = NULL,
-               "MidRollFillerId" = NULL,
-               "PostRollFillerId" = NULL,
-               "TailFillerId" = NULL,
-               "FallbackFillerId" = NULL
+               "PreRollFillerId" = ?,
+               "MidRollFillerId" = ?,
+               "PostRollFillerId" = ?,
+               "TailFillerId" = ?,
+               "FallbackFillerId" = ?
            WHERE "Id" = ?"#,
     )
     .bind(item.program_schedule_id)
@@ -312,6 +312,11 @@ async fn upsert_program_schedule_item(
     .bind(item.preferred_audio_title.as_deref())
     .bind(item.preferred_subtitle_language_code.as_deref())
     .bind(item.subtitle_mode.map(encode_enum))
+    .bind(item.pre_roll_filler_id)
+    .bind(item.mid_roll_filler_id)
+    .bind(item.post_roll_filler_id)
+    .bind(item.tail_filler_id)
+    .bind(item.fallback_filler_id)
     .bind(item.id)
     .execute(&mut **tx)
     .await?;
@@ -326,8 +331,9 @@ async fn upsert_program_schedule_item(
                 "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
                 "Index", "StartTime", "FixedStartTimeBehavior", "CustomTitle",
                 "PreferredAudioLanguageCode", "PreferredAudioTitle",
-                "PreferredSubtitleLanguageCode", "SubtitleMode"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "PreferredSubtitleLanguageCode", "SubtitleMode", "PreRollFillerId",
+                "MidRollFillerId", "PostRollFillerId", "TailFillerId", "FallbackFillerId"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.program_schedule_id)
@@ -353,6 +359,11 @@ async fn upsert_program_schedule_item(
         .bind(item.preferred_audio_title.as_deref())
         .bind(item.preferred_subtitle_language_code.as_deref())
         .bind(item.subtitle_mode.map(encode_enum))
+        .bind(item.pre_roll_filler_id)
+        .bind(item.mid_roll_filler_id)
+        .bind(item.post_roll_filler_id)
+        .bind(item.tail_filler_id)
+        .bind(item.fallback_filler_id)
         .execute(&mut **tx)
         .await?;
     }
@@ -474,6 +485,7 @@ fn map_program_schedule(row: &DbRow) -> Result<ProgramSchedule> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn map_program_schedule_item(
     pool: &Pool<crate::db::Db>,
     row: &DbRow,
@@ -527,6 +539,11 @@ async fn map_program_schedule_item(
         rerun_collection_id: row.try_get("RerunCollectionId")?,
         playlist_id: row.try_get("PlaylistId")?,
         search_query: row.try_get("SearchQuery")?,
+        pre_roll_filler_id: row.try_get("PreRollFillerId")?,
+        mid_roll_filler_id: row.try_get("MidRollFillerId")?,
+        post_roll_filler_id: row.try_get("PostRollFillerId")?,
+        tail_filler_id: row.try_get("TailFillerId")?,
+        fallback_filler_id: row.try_get("FallbackFillerId")?,
         playout_mode,
         playback_order: decode_enum_column("program schedule item playback_order", row, "PlaybackOrder")?,
         multiple_mode: decode_optional_enum_column("program schedule item multiple_mode", row, "MultipleMode")?

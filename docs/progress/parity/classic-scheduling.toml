@@ -1,11 +1,11 @@
 feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0010']
 
 summary    = '''
-Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Remaining follow-up is limited to imported-database verification in Slice 21 and rarely used schedule-item filler/group behaviors.
+Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, imported schedule-item filler preset IDs, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Imported database coverage now proves per-item PreRoll/MidRoll/PostRoll/Tail/Fallback filler IDs survive repository loading and saving, schedule-item filler media wraps primary Classic content, tail filler advances whole items until the next fixed item, fallback filler fills the remaining gap, and fill-group indices continue to persist and advance.
 
 Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
 

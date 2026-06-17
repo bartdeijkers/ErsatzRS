@@ -2,9 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
-    CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind, FixedStartTimeBehavior,
-    GuideMode, MultipleMode, PlaybackOrder, PlayoutAnchor, PlayoutProgramScheduleAnchor,
-    PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem, StartType, TailMode,
+    CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind, FillerMode,
+    FixedStartTimeBehavior, GuideMode, MultipleMode, PlaybackOrder, PlayoutAnchor, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
+    StartType, TailMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -103,6 +104,7 @@ struct ClassicContext {
     media: BTreeMap<String, MediaEnumerator>,
     playlists: BTreeMap<String, PlaylistEnumerator>,
     media_states: BTreeMap<String, CollectionEnumeratorState>,
+    filler_media: BTreeMap<EntityId, MediaEnumerator>,
     fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
     result: SchedulingResult,
     next_anchor_id: EntityId,
@@ -154,6 +156,21 @@ impl ClassicContext {
             }
             media.insert(key, enumerator);
         }
+        let filler_media = request
+            .reference_data
+            .classic_filler_presets
+            .iter()
+            .map(|(id, preset)| {
+                (
+                    *id,
+                    MediaEnumerator::new(
+                        format!("classic-filler:{id}"),
+                        preset.media_items.clone(),
+                    )
+                    .with_playback_order(PlaybackOrder::Chronological),
+                )
+            })
+            .collect();
 
         // Mirror ErsatzTV `PlayoutBuilder.BuildPlayoutItems`:
         // `trimBefore = playoutStart.AddHours(-4)`, i.e. `now - 4h`. This trims
@@ -185,6 +202,7 @@ impl ClassicContext {
             media,
             playlists,
             media_states,
+            filler_media,
             fill_group_states,
             result: SchedulingResult {
                 remove_before: Some(remove_before),
@@ -299,6 +317,7 @@ impl ClassicContext {
                 .added_items
                 .last()
                 .map_or(item_start_time, |item| item.finish);
+            self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
             self.state.current_time = self
                 .state
                 .current_time
@@ -357,6 +376,7 @@ impl ClassicContext {
             self.advance_fill_group(schedule_item);
         }
 
+        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
         self.state.current_time = self
             .state
             .current_time
@@ -445,6 +465,11 @@ impl ClassicContext {
             TailMode::Offline | TailMode::Filler
         ) {
             if let Some(until) = duration_until {
+                match schedule_item.tail_mode {
+                    TailMode::Filler => self.add_tail_and_fallback(schedule_item, until),
+                    TailMode::Offline => self.add_fallback(schedule_item, until),
+                    TailMode::None | TailMode::Slate => {}
+                }
                 self.state.current_time = until;
             }
         }
@@ -523,6 +548,7 @@ impl ClassicContext {
             self.advance_fill_group(schedule_item);
         }
         self.decrement_guide_group_if_multi_item_group(start_len);
+        self.add_tail_and_fallback(schedule_item, self.filler_start_after(next_schedule_item));
         self.state.next_guide_group += 1;
     }
 
@@ -554,6 +580,151 @@ impl ClassicContext {
         if start >= self.request.finish {
             return false;
         }
+        let Some(mut items) =
+            self.build_media_item_block(schedule_item, media_item, start, guide_finish, scheduler)
+        else {
+            return false;
+        };
+        let key = item_key(schedule_item);
+        for item in items.drain(..) {
+            let history_key = item
+                .scheduling_context
+                .as_deref()
+                .and_then(filler_id_from_context)
+                .map_or_else(|| key.clone(), |id| format!("classic-filler:{id}"));
+            let history_media = if item.media_item_id == media_item.id {
+                media_item.clone()
+            } else {
+                SchedulingMediaItem::new(item.media_item_id, item.finish - item.start)
+            };
+            self.result.added_history.push(history(
+                self.request.playout.id,
+                history_key,
+                &item,
+                None,
+                item.scheduling_context
+                    .as_deref()
+                    .and_then(index_from_context)
+                    .unwrap_or_default(),
+                history_details_for_media_item(&history_media),
+                false,
+            ));
+            self.result.added_items.push(item);
+        }
+        true
+    }
+
+    fn build_media_item_block(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        media_item: &SchedulingMediaItem,
+        start: DateTime<Utc>,
+        guide_finish: Option<DateTime<Utc>>,
+        scheduler: &'static str,
+    ) -> Option<Vec<PlayoutItem>> {
+        let before_filler_media = self.filler_media.clone();
+        let mut items = Vec::new();
+        let mut current = start;
+        if let Some(pre_roll_id) = schedule_item.pre_roll_filler_id {
+            let filler = self.add_count_or_duration_filler(
+                schedule_item,
+                pre_roll_id,
+                current,
+                FillerKind::PreRoll,
+            );
+            current = filler.last().map_or(current, |item| item.finish);
+            items.extend(filler);
+        }
+
+        let mut item = self.primary_playout_item(schedule_item, media_item, current, scheduler);
+        item.guide_finish = guide_finish;
+        current = item.finish;
+        items.push(item);
+
+        for filler_id in [
+            schedule_item.mid_roll_filler_id,
+            schedule_item.post_roll_filler_id,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let filler = self.add_count_or_duration_filler(
+                schedule_item,
+                filler_id,
+                current,
+                FillerKind::PostRoll,
+            );
+            current = filler.last().map_or(current, |item| item.finish);
+            items.extend(filler);
+        }
+
+        if self.pad_filler_count(schedule_item) > 1 {
+            self.filler_media = before_filler_media;
+            self.result.warnings.push(format!(
+                "classic schedule item {} skipped filler because multiple pad fillers are configured",
+                schedule_item.id
+            ));
+            return Some(vec![self.primary_playout_item(
+                schedule_item,
+                media_item,
+                start,
+                scheduler,
+            )]);
+        }
+        if let Some(pad_filler_id) = self.pad_filler_id(schedule_item) {
+            let pad = self.add_pad_filler(schedule_item, pad_filler_id, start, current);
+            let Some(insert_after_primary) = items.iter().rposition(|item| {
+                item.scheduling_context
+                    .as_deref()
+                    .and_then(filler_id_from_context)
+                    .is_none()
+            }) else {
+                items.extend(pad);
+                current = items.last().map_or(current, |item| item.finish);
+                if guide_finish.is_some_and(|finish| current > finish) {
+                    self.filler_media = before_filler_media;
+                    return None;
+                }
+                return Some(items);
+            };
+            if self
+                .request
+                .reference_data
+                .classic_filler_presets
+                .get(&pad_filler_id)
+                .is_some_and(|preset| preset.filler_kind == FillerKind::PreRoll)
+            {
+                items.splice(0..0, pad);
+            } else {
+                let insert_at = insert_after_primary + 1;
+                items.splice(insert_at..insert_at, pad);
+            }
+            current = start;
+            for item in &mut items {
+                let duration = item.finish - item.start;
+                item.start = current;
+                item.finish = current + duration;
+                item.in_point = Duration::zero();
+                item.out_point = duration;
+                current = item.finish;
+            }
+        }
+
+        if guide_finish.is_some_and(|finish| current > finish) {
+            self.filler_media = before_filler_media;
+            return None;
+        }
+
+        Some(items)
+    }
+
+    fn primary_playout_item(
+        &self,
+        schedule_item: &ProgramScheduleItem,
+        media_item: &SchedulingMediaItem,
+        start: DateTime<Utc>,
+        scheduler: &'static str,
+    ) -> PlayoutItem {
         let key = item_key(schedule_item);
         let (enumerator_name, enumerator_seed, enumerator_index) =
             self.media
@@ -569,17 +740,14 @@ impl ClassicContext {
                         i32::try_from(enumerator.current_index()).unwrap_or_default(),
                     )
                 });
-        let scheduling_context = serde_json::to_string(&ClassicSchedulingContext {
+        let scheduling_context = Self::scheduling_context(
+            schedule_item,
+            None,
             scheduler,
-            schedule_id: schedule_item.program_schedule_id,
-            item_id: schedule_item.id,
-            filler_preset_id: None,
-            enumerator: enumerator_name,
-            seed: enumerator_seed,
-            index: enumerator_index,
-        })
-        .ok();
-
+            enumerator_name,
+            enumerator_seed,
+            enumerator_index,
+        );
         let mut item = playout_item(
             self.request.playout.id,
             media_item,
@@ -597,7 +765,6 @@ impl ClassicContext {
             schedule_item.graphics_element_ids.clone(),
             scheduling_context,
         );
-        item.guide_finish = guide_finish;
         item.preferred_audio_language_code
             .clone_from(&schedule_item.preferred_audio_language_code);
         item.preferred_audio_title
@@ -605,18 +772,372 @@ impl ClassicContext {
         item.preferred_subtitle_language_code
             .clone_from(&schedule_item.preferred_subtitle_language_code);
         item.subtitle_mode = schedule_item.subtitle_mode;
+        item
+    }
 
-        self.result.added_history.push(history(
+    fn scheduling_context(
+        schedule_item: &ProgramScheduleItem,
+        filler_preset_id: Option<EntityId>,
+        scheduler: &'static str,
+        enumerator_name: &'static str,
+        enumerator_seed: i32,
+        enumerator_index: i32,
+    ) -> Option<String> {
+        serde_json::to_string(&ClassicSchedulingContext {
+            scheduler,
+            schedule_id: schedule_item.program_schedule_id,
+            item_id: schedule_item.id,
+            filler_preset_id,
+            enumerator: enumerator_name,
+            seed: enumerator_seed,
+            index: enumerator_index,
+        })
+        .ok()
+    }
+
+    fn add_count_or_duration_filler(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        filler_id: EntityId,
+        start: DateTime<Utc>,
+        no_chapter_kind: FillerKind,
+    ) -> Vec<PlayoutItem> {
+        let Some(preset) = self
+            .request
+            .reference_data
+            .classic_filler_presets
+            .get(&filler_id)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let filler_kind = Self::effective_filler_kind(schedule_item, no_chapter_kind);
+        match preset.filler_mode {
+            FillerMode::Count => self.add_count_filler(
+                schedule_item,
+                filler_id,
+                start,
+                filler_kind,
+                preset.count.unwrap_or_default().max(0),
+                preset.allow_watermarks,
+            ),
+            FillerMode::RandomCount => {
+                let max = preset.count.unwrap_or_default().max(0);
+                let count = if max == 0 {
+                    0
+                } else {
+                    let filler_seed = i32::try_from(filler_id).unwrap_or_default();
+                    next_i32_seed(self.request.playout.seed.wrapping_add(filler_seed))
+                        .unsigned_abs()
+                        % u32::try_from(max + 1).unwrap_or(1)
+                };
+                self.add_count_filler(
+                    schedule_item,
+                    filler_id,
+                    start,
+                    filler_kind,
+                    i32::try_from(count).unwrap_or_default(),
+                    preset.allow_watermarks,
+                )
+            }
+            FillerMode::Duration => self.add_duration_filler(
+                schedule_item,
+                filler_id,
+                start,
+                filler_kind,
+                preset.duration.unwrap_or_else(Duration::zero),
+                preset.allow_watermarks,
+            ),
+            FillerMode::Pad | FillerMode::None => Vec::new(),
+        }
+    }
+
+    fn add_count_filler(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        filler_id: EntityId,
+        start: DateTime<Utc>,
+        filler_kind: FillerKind,
+        count: i32,
+        allow_watermarks: bool,
+    ) -> Vec<PlayoutItem> {
+        let mut items = Vec::new();
+        let mut current = start;
+        for _ in 0..count {
+            let Some(item) = self.current_filler_item(
+                schedule_item,
+                filler_id,
+                current,
+                filler_kind,
+                allow_watermarks,
+            ) else {
+                break;
+            };
+            current = item.finish;
+            items.push(item);
+            self.advance_filler(filler_id);
+        }
+        items
+    }
+
+    fn add_duration_filler(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        filler_id: EntityId,
+        start: DateTime<Utc>,
+        filler_kind: FillerKind,
+        duration: Duration,
+        allow_watermarks: bool,
+    ) -> Vec<PlayoutItem> {
+        let mut items = Vec::new();
+        let mut current = start;
+        let mut remaining = duration;
+        let mut attempts = 0usize;
+        while remaining > Duration::zero() {
+            attempts += 1;
+            if attempts > 64 {
+                self.result.warnings.push(format!(
+                    "classic schedule item {} stopped filler {} after repeated skips",
+                    schedule_item.id, filler_id
+                ));
+                break;
+            }
+            let Some(media_item) = self
+                .filler_media
+                .get(&filler_id)
+                .and_then(MediaEnumerator::current)
+                .cloned()
+            else {
+                break;
+            };
+            if media_item.duration <= Duration::zero() || media_item.duration > remaining {
+                self.advance_filler(filler_id);
+                continue;
+            }
+            let Some(item) = self.current_filler_item(
+                schedule_item,
+                filler_id,
+                current,
+                filler_kind,
+                allow_watermarks,
+            ) else {
+                break;
+            };
+            remaining -= item.finish - item.start;
+            current = item.finish;
+            items.push(item);
+            self.advance_filler(filler_id);
+        }
+        items
+    }
+
+    fn add_pad_filler(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        filler_id: EntityId,
+        block_start: DateTime<Utc>,
+        block_finish: DateTime<Utc>,
+    ) -> Vec<PlayoutItem> {
+        let Some(preset) = self
+            .request
+            .reference_data
+            .classic_filler_presets
+            .get(&filler_id)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let Some(nearest_minute) = preset.pad_to_nearest_minute.filter(|value| *value > 0) else {
+            self.result.warnings.push(format!(
+                "classic schedule item {} skipped pad filler {} without pad target",
+                schedule_item.id, filler_id
+            ));
+            return Vec::new();
+        };
+        let elapsed = block_finish - block_start;
+        let elapsed_minutes = elapsed.num_minutes();
+        let target_minutes = ((elapsed_minutes + i64::from(nearest_minute))
+            / i64::from(nearest_minute))
+            * i64::from(nearest_minute);
+        let target = block_start + Duration::minutes(target_minutes);
+        let remaining = target - block_finish;
+        if remaining <= Duration::zero() {
+            return Vec::new();
+        }
+        self.add_duration_filler(
+            schedule_item,
+            filler_id,
+            block_finish,
+            Self::effective_filler_kind(schedule_item, preset.filler_kind),
+            remaining,
+            preset.allow_watermarks,
+        )
+    }
+
+    fn current_filler_item(
+        &self,
+        schedule_item: &ProgramScheduleItem,
+        filler_id: EntityId,
+        start: DateTime<Utc>,
+        filler_kind: FillerKind,
+        allow_watermarks: bool,
+    ) -> Option<PlayoutItem> {
+        let enumerator = self.filler_media.get(&filler_id)?;
+        let media_item = enumerator.current()?;
+        let scheduling_context = Self::scheduling_context(
+            schedule_item,
+            Some(filler_id),
+            "Filler",
+            enumerator.scheduling_context_name(),
+            self.request.playout.seed,
+            i32::try_from(enumerator.current_index()).unwrap_or_default(),
+        );
+        Some(playout_item(
             self.request.playout.id,
-            key,
-            &item,
+            media_item,
+            start,
+            media_item.duration,
+            self.state.next_guide_group,
+            filler_kind,
             None,
-            usize::try_from(enumerator_index).unwrap_or_default(),
-            history_details_for_media_item(media_item),
-            false,
-        ));
-        self.result.added_items.push(item);
-        true
+            !allow_watermarks,
+            Vec::new(),
+            Vec::new(),
+            scheduling_context,
+        ))
+    }
+
+    fn add_tail_and_fallback(&mut self, schedule_item: &ProgramScheduleItem, until: DateTime<Utc>) {
+        if let Some(tail_filler_id) = schedule_item.tail_filler_id {
+            let filler = self.add_duration_filler(
+                schedule_item,
+                tail_filler_id,
+                self.state.current_time,
+                Self::effective_filler_kind(schedule_item, FillerKind::Tail),
+                until - self.state.current_time,
+                self.request
+                    .reference_data
+                    .classic_filler_presets
+                    .get(&tail_filler_id)
+                    .is_none_or(|preset| preset.allow_watermarks),
+            );
+            self.append_filler_items(schedule_item, filler);
+        }
+        self.add_fallback(schedule_item, until);
+    }
+
+    fn add_fallback(&mut self, schedule_item: &ProgramScheduleItem, until: DateTime<Utc>) {
+        if self.state.current_time >= until {
+            return;
+        }
+        let Some(fallback_filler_id) = schedule_item.fallback_filler_id else {
+            return;
+        };
+        let allow_watermarks = self
+            .request
+            .reference_data
+            .classic_filler_presets
+            .get(&fallback_filler_id)
+            .is_none_or(|preset| preset.allow_watermarks);
+        let Some(mut item) = self.current_filler_item(
+            schedule_item,
+            fallback_filler_id,
+            self.state.current_time,
+            FillerKind::Fallback,
+            allow_watermarks,
+        ) else {
+            return;
+        };
+        item.finish = until;
+        item.out_point = Duration::zero();
+        self.advance_filler(fallback_filler_id);
+        self.append_filler_items(schedule_item, vec![item]);
+    }
+
+    fn append_filler_items(
+        &mut self,
+        schedule_item: &ProgramScheduleItem,
+        items: Vec<PlayoutItem>,
+    ) {
+        for item in items {
+            let media_item = SchedulingMediaItem::new(item.media_item_id, item.finish - item.start);
+            let history_key = item
+                .scheduling_context
+                .as_deref()
+                .and_then(filler_id_from_context)
+                .map_or_else(
+                    || item_key(schedule_item),
+                    |id| format!("classic-filler:{id}"),
+                );
+            self.state.current_time = item.finish;
+            self.result.added_history.push(history(
+                self.request.playout.id,
+                history_key,
+                &item,
+                None,
+                item.scheduling_context
+                    .as_deref()
+                    .and_then(index_from_context)
+                    .unwrap_or_default(),
+                history_details_for_media_item(&media_item),
+                false,
+            ));
+            self.result.added_items.push(item);
+        }
+    }
+
+    fn advance_filler(&mut self, filler_id: EntityId) {
+        if let Some(enumerator) = self.filler_media.get_mut(&filler_id) {
+            enumerator.advance();
+        }
+    }
+
+    fn effective_filler_kind(
+        schedule_item: &ProgramScheduleItem,
+        filler_kind: FillerKind,
+    ) -> FillerKind {
+        if schedule_item.guide_mode == GuideMode::Filler {
+            FillerKind::GuideMode
+        } else if filler_kind == FillerKind::MidRoll {
+            FillerKind::PostRoll
+        } else {
+            filler_kind
+        }
+    }
+
+    fn pad_filler_count(&self, schedule_item: &ProgramScheduleItem) -> usize {
+        [
+            schedule_item.pre_roll_filler_id,
+            schedule_item.mid_roll_filler_id,
+            schedule_item.post_roll_filler_id,
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|id| {
+            self.request
+                .reference_data
+                .classic_filler_presets
+                .get(id)
+                .is_some_and(|preset| preset.filler_mode == FillerMode::Pad)
+        })
+        .count()
+    }
+
+    fn pad_filler_id(&self, schedule_item: &ProgramScheduleItem) -> Option<EntityId> {
+        [
+            schedule_item.pre_roll_filler_id,
+            schedule_item.mid_roll_filler_id,
+            schedule_item.post_roll_filler_id,
+        ]
+        .into_iter()
+        .flatten()
+        .find(|id| {
+            self.request
+                .reference_data
+                .classic_filler_presets
+                .get(id)
+                .is_some_and(|preset| preset.filler_mode == FillerMode::Pad)
+        })
     }
 
     fn into_result(mut self) -> SchedulingResult {
@@ -1046,6 +1567,23 @@ fn anchor_matches_key(
         && anchor.fake_collection_key == key.fake_collection_key
 }
 
+fn filler_id_from_context(context: &str) -> Option<EntityId> {
+    serde_json::from_str::<serde_json::Value>(context)
+        .ok()
+        .and_then(|context| {
+            context
+                .get("FillerPresetId")
+                .and_then(serde_json::Value::as_i64)
+        })
+}
+
+fn index_from_context(context: &str) -> Option<usize> {
+    serde_json::from_str::<serde_json::Value>(context)
+        .ok()
+        .and_then(|context| context.get("Index").and_then(serde_json::Value::as_i64))
+        .and_then(|index| usize::try_from(index).ok())
+}
+
 fn prepare_enumerator_items(
     enumerator: &mut MediaEnumerator,
     playback_order: PlaybackOrder,
@@ -1144,7 +1682,9 @@ mod tests {
     use insta::assert_json_snapshot;
 
     use super::*;
-    use crate::scheduling::{PlayoutBuildMode, SchedulingPlaylistItem, SchedulingReferenceData};
+    use crate::scheduling::{
+        PlayoutBuildMode, SchedulingFillerPreset, SchedulingPlaylistItem, SchedulingReferenceData,
+    };
 
     #[test]
     fn classic_one_and_multiple_schedule_items_snapshot() {
@@ -1507,6 +2047,154 @@ mod tests {
         assert_ne!(state.seed, 11);
     }
 
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn classic_schedule_item_filler_presets_wrap_content_and_tail_gap() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let first_item = ProgramScheduleItem {
+            start_type: StartType::Fixed,
+            start_time: Some(Duration::hours(6)),
+            pre_roll_filler_id: Some(91),
+            post_roll_filler_id: Some(92),
+            tail_filler_id: Some(93),
+            fallback_filler_id: Some(94),
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let fixed_next = ProgramScheduleItem {
+            start_type: StartType::Fixed,
+            start_time: Some(Duration::hours(7)),
+            ..schedule_item(2, PlayoutMode::One, 2, None)
+        };
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![first_item, fixed_next],
+            classic_filler_presets: BTreeMap::from([
+                (
+                    91,
+                    filler_preset(91, FillerKind::PreRoll, FillerMode::Count, Some(1), None),
+                ),
+                (
+                    92,
+                    filler_preset(92, FillerKind::PostRoll, FillerMode::Count, Some(1), None),
+                ),
+                (
+                    93,
+                    filler_preset(
+                        93,
+                        FillerKind::Tail,
+                        FillerMode::Duration,
+                        None,
+                        Some(Duration::minutes(15)),
+                    ),
+                ),
+                (
+                    94,
+                    filler_preset(94, FillerKind::Fallback, FillerMode::Count, Some(1), None),
+                ),
+            ]),
+            ..SchedulingReferenceData::default()
+        };
+        for item in &reference_data.classic_schedule_items {
+            reference_data.media_by_key.insert(
+                item_key(item),
+                vec![SchedulingMediaItem::new(
+                    if item.collection_id == Some(1) {
+                        101
+                    } else {
+                        201
+                    },
+                    Duration::minutes(if item.collection_id == Some(1) {
+                        20
+                    } else {
+                        10
+                    }),
+                )],
+            );
+        }
+        for (id, duration) in [
+            (91, Duration::minutes(5)),
+            (92, Duration::minutes(5)),
+            (93, Duration::minutes(25)),
+            (94, Duration::minutes(30)),
+        ] {
+            reference_data
+                .classic_filler_presets
+                .get_mut(&id)
+                .expect("filler preset")
+                .media_items
+                .push(SchedulingMediaItem::new(800 + id, duration));
+        }
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(1) + Duration::minutes(10),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| (
+                    item.media_item_id,
+                    item.start,
+                    item.finish,
+                    item.filler_kind
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    891,
+                    start,
+                    start + Duration::minutes(5),
+                    FillerKind::PreRoll,
+                ),
+                (
+                    101,
+                    start + Duration::minutes(5),
+                    start + Duration::minutes(25),
+                    FillerKind::None,
+                ),
+                (
+                    892,
+                    start + Duration::minutes(25),
+                    start + Duration::minutes(30),
+                    FillerKind::PostRoll,
+                ),
+                (
+                    893,
+                    start + Duration::minutes(30),
+                    start + Duration::minutes(55),
+                    FillerKind::Tail,
+                ),
+                (
+                    894,
+                    start + Duration::minutes(55),
+                    start + Duration::hours(1),
+                    FillerKind::Fallback,
+                ),
+                (
+                    201,
+                    start + Duration::hours(1),
+                    start + Duration::hours(1) + Duration::minutes(10),
+                    FillerKind::None,
+                ),
+            ]
+        );
+        assert!(result.added_items[0]
+            .scheduling_context
+            .as_deref()
+            .is_some_and(|context| context.contains("\"FillerPresetId\":91")));
+    }
+
     fn schedule_item(
         id: EntityId,
         mode: PlayoutMode,
@@ -1523,6 +2211,25 @@ mod tests {
             multiple_count: multiple_count.map(str::to_owned),
             sort_order: i32::try_from(id).unwrap_or_default(),
             ..ProgramScheduleItem::default()
+        }
+    }
+
+    fn filler_preset(
+        id: EntityId,
+        filler_kind: FillerKind,
+        filler_mode: FillerMode,
+        count: Option<i32>,
+        duration: Option<Duration>,
+    ) -> SchedulingFillerPreset {
+        SchedulingFillerPreset {
+            id,
+            filler_kind,
+            filler_mode,
+            duration,
+            count,
+            pad_to_nearest_minute: None,
+            allow_watermarks: true,
+            media_items: Vec::new(),
         }
     }
 

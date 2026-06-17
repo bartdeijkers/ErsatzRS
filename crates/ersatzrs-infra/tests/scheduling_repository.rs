@@ -9,8 +9,8 @@ use ersatzrs_core::scheduling::{
     SchedulingContentSource, SchedulingRequest,
 };
 use ersatzrs_domain::{
-    CollectionType, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind, ProgramSchedule,
-    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind,
+    ProgramSchedule, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
     CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_infra::repositories::make_repositories;
@@ -708,6 +708,103 @@ async fn scheduling_repository_loads_classic_reference_data_from_sql() {
             .map(|item| item.media_item_id)
             .collect::<Vec<_>>(),
         vec![20]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_loads_imported_classic_item_filler_from_sql() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    common::seed_profile_and_channel(&repos, 902).await;
+
+    pool.execute(
+        r#"INSERT INTO "FillerPreset" (
+               "Id", "Name", "FillerMode", "FillerKind", "CollectionType",
+               "CollectionId", "Count", "AllowWatermarks", "UseChaptersAsMediaItems"
+           ) VALUES (77, 'Imported Pre Roll', 'Count', 'PreRoll', 'Collection', 1, 1, 0, 0)"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "ProgramSchedule" (
+               "Id", "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
+               "ShuffleScheduleItems", "RandomStartPoint", "FixedStartTimeBehavior"
+           ) VALUES (302, 'Imported Classic', 1, 0, 0, 0, 'Strict')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "ProgramScheduleItem" (
+               "Id", "ProgramScheduleId", "CollectionType", "CollectionId",
+               "PlaybackOrder", "FillWithGroupMode", "GuideMode", "MarathonGroupBy",
+               "MarathonShuffleGroups", "MarathonShuffleItems", "Index", "PreRollFillerId"
+           ) VALUES (
+               402, 302, 'Collection', 1, 'Chronological', 'None', 'Normal',
+               'None', 0, 0, 0, 77
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (402)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (902, 902, 302, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+
+    let item = reference_data
+        .classic_schedule_items
+        .first()
+        .expect("classic schedule item");
+    assert_eq!(item.pre_roll_filler_id, Some(77));
+    let filler = reference_data
+        .classic_filler_presets
+        .get(&77)
+        .expect("filler preset");
+    assert_eq!(filler.count, Some(1));
+    assert!(!filler.allow_watermarks);
+
+    let result = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 902,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 123,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .take(2)
+            .map(|item| (
+                item.media_item_id,
+                item.filler_kind,
+                item.disable_watermarks
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (12, FillerKind::PreRoll, true),
+            (20, FillerKind::None, false)
+        ]
     );
 }
 

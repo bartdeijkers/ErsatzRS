@@ -75,61 +75,92 @@ Per the completed-scope replacement rule, slot 1 is refilled with
 `classic-scheduling`; slots 2 and 3 carry over. `cargo xtask progress gaps`
 now lists **7** features after this closeout.
 
+**2026-06-17 closeout addendum (manual gap #1 Classic).** The
+`classic-scheduling` prompt was completed in this pass: imported
+`ProgramScheduleItem` PreRoll/MidRoll/PostRoll/Tail/Fallback filler IDs now
+round-trip through the repository, Classic SQL reference loading resolves those
+filler presets and media, and the Classic engine schedules per-item pre/post
+filler, no-chapter mid-roll as post-roll, tail filler up to the next fixed item,
+fallback filler for the remaining gap, and existing fill-group state. Focused
+core and infra tests prove the imported SQL and scheduling paths, and
+`classic-scheduling` is now `Ported`. Per the completed-scope replacement rule,
+slot 1 is refilled with
+`schedules-templates-decorations-deco-templates`; slots 2 and 3 carry over.
+`cargo xtask progress gaps` now lists **6** features after this closeout.
+
 ---
 
-## 1 - Classic scheduling: finish imported-database and rare schedule-item parity proof (slug `classic-scheduling`)
+## 1 - Schedules / Templates / Decorations / Deco templates: close scheduling admin route-family parity (slug `schedules-templates-decorations-deco-templates`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Classic scheduling imported
-database verification and rare schedule-item filler/group parity proof (slug
-`classic-scheduling`).
+Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the scheduling
+admin route-family parity closeout for schedules, blocks, templates, decos, and
+deco templates (slug `schedules-templates-decorations-deco-templates`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current status from `docs/progress/parity/classic-scheduling.toml`: "Ported for
-the current non-web parity target: `PlayoutBuilder` dispatches Classic
-schedules to `ClassicSchedulingEngine`; SQL reference loading covers program
-schedules, alternates, typed One/Multiple/Duration/Flood schedule items,
-collection media, existing playout state, program schedule anchors, fill-group
-indices, and Classic scheduling context JSON. Remaining follow-up is limited
-to imported-database verification in Slice 21 and rarely used schedule-item
-filler/group behaviors."
+Current status from
+`docs/progress/parity/schedules-templates-decorations-deco-templates.toml`:
+"`/schedules`, `/schedules/add`, `/schedules/:id`, and
+`/schedules/:id/items` are ported ... `/blocks` and `/blocks/:id` now port
+block group/block add/copy/delete ... `/templates` and `/templates/:id` now
+port template group/template add/copy/delete ... `/decos`, `/decos/:id`,
+`/deco-templates`, and `/deco-templates/:id` now port deco/deco-template group
+and item CRUD ...". The feature remains `In progress`, so the closeout must
+identify whether any route-family behavior, browser proof, or structured debt
+is still missing before changing status.
 
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` at the pinned commit,
-especially Classic schedule item enumeration, fill-group handling, filler
-selection, anchor continuation, and playout build side effects. ErsatzRS
-target: `crates/ersatzrs-core/src/scheduling/`,
-`crates/ersatzrs-infra/src/playback.rs`, scheduling repository loaders, and
-the Classic scheduling parity file.
+ErsatzTV source:
+`ErsatzTV/Pages/Schedules*.razor`, `ErsatzTV/Pages/Blocks.razor`,
+`ErsatzTV/Pages/BlockEditor.razor`, `ErsatzTV/Pages/Templates.razor`,
+`ErsatzTV/Pages/TemplateEditor.razor`, `ErsatzTV/Pages/Decos.razor`,
+`ErsatzTV/Pages/DecoEditor.razor`, `ErsatzTV/Pages/DecoTemplates.razor`, and
+`ErsatzTV/Pages/DecoTemplateEditor.razor` at the pinned commit. ErsatzRS
+target: `crates/ersatzrs-web/src/admin/pages/scheduling/`,
+`crates/ersatzrs-web/src/admin/server_fns/schedules.rs`,
+`crates/ersatzrs-web/src/admin/server_fns/playouts.rs`,
+`crates/ersatzrs-web/src/api/{schedules,playouts}.rs`, scheduling API/server
+helpers used by these pages, `crates/ersatzrs-web/src/admin/languages/`, and
+the scheduling route-family parity file.
 
 Before editing:
-1. Read the pinned ErsatzTV Classic scheduling engine, schedule item models,
-   fill-group/filler handling, playout builder, and repository query paths.
-2. Inspect the current ErsatzRS Classic engine, SQL reference loading, anchor
-   persistence, imported-database fixtures if available, and existing
-   scheduling snapshots/tests for One/Multiple/Duration/Flood items.
-3. Build a Source Map for imported database rows -> scheduling references ->
-   Classic item enumerators -> playout items -> anchors/build side effects,
-   marking where tests already cover behavior and where imported-runtime proof
-   is absent.
-4. Identify remaining `ParityDebt`; if the remaining Slice 21 and rare
-   filler/group behavior is already proven, close the tracker instead of
+1. Read the pinned ErsatzTV Razor pages, dialog/editor models, validators,
+   save/delete/copy handlers, localization resources, and any playout refresh
+   side effects for schedules, blocks, templates, decos, and deco templates.
+2. Inspect the current ErsatzRS scheduling pages, route handlers, server
+   functions, no-JS POST fallbacks, API handlers, language modules, existing
+   Playwright/browser evidence under `plans/references/`, and active plans
+   (`plans/templates-parity-slice.md`, `plans/decos-parity-slice.md`).
+3. Build a Source Map and Visual Source Map for each list/editor/detail route,
+   including add/copy/delete actions, reorder/drag behavior, preview modals,
+   schedule item validation and dependency normalization, page-size
+   persistence, fallback forms, localized labels, and playout refresh side
+   effects.
+4. Identify remaining `ParityDebt`; if the route family is already complete,
+   prove it with browser/runtime evidence and close the tracker instead of
    inventing new scope.
 
-Implement only the coherent closeout slice: prove or fix imported-database
-Classic scheduling behavior and the rarely used schedule-item filler/group
-paths, preserving the already-fixed continue-anchor and shuffled-collection
-semantics. Do not broaden into unrelated scheduling/admin UI work. Add focused
-tests or fixtures for any imported row shape, filler/group path, or anchor
-side effect that was previously unproven.
+Implement only the coherent closeout slice: fix any mismatch found in source
+review or browser proof, preserve existing SSR/raw POST fallbacks and localized
+text, keep route-family work within scheduling admin boundaries, and avoid
+unrelated media/scheduling engine refactors. Add focused tests for any fixed
+persistence, validation, add/copy/delete/reorder, preview, fallback, or playout
+refresh behavior.
 
-Verify with focused `ersatzrs-core` scheduling tests/snapshots, affected
-`ersatzrs-infra` repository tests, any imported-database proof command or
-fixture added for Slice 21, `cargo xtask progress check`, and `cargo xtask
-progress gaps`. Update `docs/progress/parity/classic-scheduling.toml`,
-changelog, and this prompt file only when the evidence supports the new
-status. Report the Source Map, behavior closed, remaining `ParityDebt`,
-verification run, and changed files.
+Add browser coverage that exercises the high-risk workflows across the route
+family: schedules and schedule items, blocks and block items, templates and
+template items, decos and deco break-content/default filler fields, and deco
+templates/timeline behavior; verify visible geometry, hydrated actions or
+fallback forms, localized labels, and no console errors. If one route still
+cannot be proven, keep the exact missing workflow as structured `ParityDebt`.
+
+Verify with focused `ersatzrs-web` tests, `cargo xtask hydration-lint -p
+ersatzrs-web`, the added browser spec or documented Playwright run,
+`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
+`docs/progress/parity/schedules-templates-decorations-deco-templates.toml`,
+changelog, and this prompt file only when the evidence supports the new status.
+Report the Source Map, Visual Source Map, behavior closed, remaining
+`ParityDebt`, verification run, and changed files.
 Remember that ErsatzTV could have a less than optimal solution. If you have a
 better way, please create an ADR, but only after careful review in depth.
 update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.

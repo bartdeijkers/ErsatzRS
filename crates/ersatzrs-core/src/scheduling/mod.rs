@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
-    CollectionType, EntityId, FixedStartTimeBehavior, PlaybackOrder, Playout, PlayoutAnchor,
-    PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
+    CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior, PlaybackOrder,
+    Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
     PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind, ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
@@ -213,12 +213,26 @@ pub struct SchedulingReferenceData {
     pub max_playout_offset: Duration,
     pub global_watermark_id: Option<EntityId>,
     pub global_fallback: Option<SchedulingFallbackPreset>,
+    pub classic_filler_presets: BTreeMap<EntityId, SchedulingFillerPreset>,
 }
 
 /// Configured fallback filler media available to the playout post-processor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchedulingFallbackPreset {
     pub id: EntityId,
+    pub allow_watermarks: bool,
+    pub media_items: Vec<SchedulingMediaItem>,
+}
+
+/// Schedule-item filler preset resolved from an imported `FillerPreset` row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulingFillerPreset {
+    pub id: EntityId,
+    pub filler_kind: FillerKind,
+    pub filler_mode: FillerMode,
+    pub duration: Option<Duration>,
+    pub count: Option<i32>,
+    pub pad_to_nearest_minute: Option<i32>,
     pub allow_watermarks: bool,
     pub media_items: Vec<SchedulingMediaItem>,
 }

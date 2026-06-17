@@ -64,6 +64,7 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
         .await
         .unwrap();
     seed_overlay_targets(&pool).await;
+    seed_filler_targets(&pool).await;
 
     let item = ProgramScheduleItem {
         id: 30,
@@ -82,6 +83,11 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
         sort_order: 7,
         watermark_ids: vec![501],
         graphics_element_ids: vec![601],
+        pre_roll_filler_id: Some(701),
+        mid_roll_filler_id: Some(702),
+        post_roll_filler_id: Some(703),
+        tail_filler_id: Some(704),
+        fallback_filler_id: Some(705),
         ..ProgramScheduleItem::default()
     };
     repos.program_schedule.upsert_item(&item).await.unwrap();
@@ -93,6 +99,11 @@ async fn program_schedule_repository_round_trips_typed_items_and_overlays() {
     assert_eq!(loaded.search_query, Some("genre:comedy".to_owned()));
     assert_eq!(loaded.watermark_ids, vec![501]);
     assert_eq!(loaded.graphics_element_ids, vec![601]);
+    assert_eq!(loaded.pre_roll_filler_id, Some(701));
+    assert_eq!(loaded.mid_roll_filler_id, Some(702));
+    assert_eq!(loaded.post_roll_filler_id, Some(703));
+    assert_eq!(loaded.tail_filler_id, Some(704));
+    assert_eq!(loaded.fallback_filler_id, Some(705));
 
     let duration = ProgramScheduleItem {
         id: 31,
@@ -257,4 +268,27 @@ async fn seed_overlay_targets(pool: &sqlx::SqlitePool) {
     pool.execute(r#"INSERT INTO "GraphicsElement" ("Id", "Kind", "Name") VALUES (601, 1, 'ge')"#)
         .await
         .unwrap();
+}
+
+async fn seed_filler_targets(pool: &sqlx::SqlitePool) {
+    for (id, kind) in [
+        (701, "PreRoll"),
+        (702, "MidRoll"),
+        (703, "PostRoll"),
+        (704, "Tail"),
+        (705, "Fallback"),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO "FillerPreset" (
+                "Id", "Name", "FillerKind", "FillerMode", "CollectionType",
+                "AllowWatermarks", "UseChaptersAsMediaItems"
+            ) VALUES (?, ?, ?, 'Count', 'Collection', 1, 0)"#,
+        )
+        .bind(id)
+        .bind(format!("filler {id}"))
+        .bind(kind)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
 }
