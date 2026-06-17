@@ -99,90 +99,23 @@ completed-scope replacement rule, slot 1 is refilled with `support-pages`;
 slots 2 and 3 carry over. `cargo xtask progress gaps` now lists **5** features
 after this closeout.
 
+**2026-06-17 closeout addendum (manual gap #1 Support pages).** The
+`support-pages` prompt was completed in this pass: the closeout Source Map and
+Visual Source Map were recorded in
+`plans/support-pages-parity-closeout.md`, hydrated Support nav badges now fetch
+and render warning/error counts, `/system/logs` now carries search, Timestamp /
+Level sort, persisted page size, and pager state through the server function,
+and durable Chromium coverage in `tests/e2e/support-pages.spec.ts` proves the
+health, logs, troubleshooting, sequential schedule validation, block playout,
+and playback fallback surfaces without console/runtime errors. The
+`support-pages` tracker is now `Ported`. `cargo xtask progress gaps` now lists
+**4** features after this closeout; the remaining FFmpeg/HLS items are
+ErsatzRS-specific hardening/deviation work from the addendum above, so only two
+actionable pinned-baseline ErsatzTV parity prompts remain below.
+
 ---
 
-## 1 - Support pages (Health / Logs / Troubleshooting): close support route-family parity (slug `support-pages`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the support
-route-family parity closeout for health checks, logs, troubleshooting tools,
-sequential schedule validation, block playout troubleshooting, and media-item
-playback troubleshooting (slug `support-pages`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
-
-Current status from `docs/progress/parity/support-pages.toml`:
-"In progress: `/system/health` renders an ErsatzTV-style two-column health
-table ... `/system/logs` reads the newest OS-local app-data log file ...
-`/system/troubleshooting` exposes the ErsatzTV-visible Tools tab plus General
-and OS-specific hardware report tabs ... Phase 7 Slice 22 adds media-specific
-troubleshooting context at `/system/troubleshooting/playback?mediaItem=ID` ...
-Dynamic nav badge counts and full log search/sort paging remain future parity
-work." The closeout must identify whether those two remaining behaviors are
-real pinned-baseline parity gaps, implemented-but-unproven behavior, or
-structured `ParityDebt` that keeps the feature below `Ported`.
-
-ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
-and `ErsatzTV/Pages/Troubleshooting/` at the pinned commit, including related
-handlers, view models, validators, localization resources, log paging/sorting,
-health result projection, troubleshooting report/archive/sample generation,
-hardware capability tabs, sequential schedule validation, block playout
-history, and playback troubleshooting HLS side effects. ErsatzRS target:
-`crates/ersatzrs-web/src/admin/pages/system/`,
-`crates/ersatzrs-web/src/admin/server_fns/{health,logs,troubleshooting}.rs`,
-`crates/ersatzrs-web/src/api/troubleshooting.rs`,
-`crates/ersatzrs-core/src/health/`, `crates/ersatzrs-infra/src/health.rs`,
-`crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`,
-and the support-pages parity file.
-
-Before editing:
-1. Read the pinned ErsatzTV support pages, report builders, query handlers,
-   validators, log table behavior, dynamic badge behavior, hardware tabs,
-   troubleshooting archive/sample handlers, and localization resources.
-2. Inspect the current ErsatzRS support pages, health/log/troubleshooting
-   server functions, API routes, no-JS or direct-link fallbacks, language
-   modules, existing browser evidence, and generated troubleshooting artifacts.
-3. Build a Source Map and Visual Source Map for `/system/health`,
-   `/system/logs`, `/system/troubleshooting`,
-   `/system/troubleshooting/sequential-schedule`,
-   `/system/troubleshooting/block-playout`, and
-   `/system/troubleshooting/playback?mediaItem=ID`, including health row
-   filtering, log search/sort/page-size behavior, report tabs, hardware
-   capability projection, download/sample/HLS side effects, localized labels,
-   dynamic badge counts, and fallback/direct-link behavior.
-4. Identify remaining `ParityDebt`; if the route family is already complete,
-   prove it with browser/runtime evidence and close the tracker instead of
-   inventing new scope.
-
-Implement only the coherent closeout slice: fix any mismatch found in source
-review or browser proof, preserve existing support/admin route boundaries,
-localized text, direct-link/download behavior, and generated troubleshooting
-artifact shapes, and avoid unrelated FFmpeg, scheduling, or scanner refactors.
-Add focused tests for any fixed health projection, log paging/sort/search,
-badge count, report rendering, validation, archive/sample download, or HLS
-troubleshooting behavior.
-
-Add browser coverage that exercises the high-risk workflows across the support
-route family: health table filtering/status labels, logs search/sort/page-size
-surface, troubleshooting Tools/General/hardware tabs, sequential schedule
-validation, block playout history, and playback troubleshooting report/download
-controls; verify visible geometry, localized labels, hydrated actions or
-direct-link fallbacks, downloadable side effects where practical, and no console
-errors. If one route still cannot be proven, keep the exact missing workflow as
-structured `ParityDebt`.
-
-Verify with focused `ersatzrs-web` tests, `cargo xtask hydration-lint -p
-ersatzrs-web`, the added browser spec or documented Playwright run,
-`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
-`docs/progress/parity/support-pages.toml`, changelog, and this prompt file only
-when the evidence supports the new status. Report the Source Map, Visual Source
-Map, behavior closed, remaining `ParityDebt`, verification run, and changed
-files. Remember that ErsatzTV could have a less than optimal solution. If you
-have a better way, please create an ADR, but only after careful review in
-depth. update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when
-done.
-
-## 2 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 1 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
 collection route-family parity closeout for `/media/multi-collections`,
@@ -254,7 +187,7 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 3 - Scanner: close real-world music-video NFO and SQLite scan-locking parity debts (slug `scanner`)
+## 2 - Scanner: close real-world music-video NFO and SQLite scan-locking parity debts (slug `scanner`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
 music-video NFO leniency and concurrent SQLite scan locking (slug `scanner`,

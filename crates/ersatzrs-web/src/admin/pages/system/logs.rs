@@ -1,7 +1,9 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{log_level_label, range_of, rows_per_page, tr, TextKey};
-use crate::admin::server_fns::logs::{load_recent_log_entries, AdminLogEntry, AdminLogSnapshot};
+use crate::admin::i18n::{log_level_label, range_of, tr, TextKey};
+use crate::admin::server_fns::logs::{
+    get_logs_page_size, load_recent_log_entries, AdminLogEntry, AdminLogSnapshot, AdminLogSortField,
+};
 
 #[component]
 pub fn LogsPage() -> impl IntoView {
@@ -11,10 +13,36 @@ pub fn LogsPage() -> impl IntoView {
 #[island]
 fn LogsIsland() -> impl IntoView {
     let search = RwSignal::new(String::new());
+    let page = RwSignal::new(0u32);
+    let page_size = RwSignal::new(10u32);
+    let sort_field = RwSignal::new(AdminLogSortField::Timestamp);
+    let sort_descending = RwSignal::new(None::<bool>);
 
-    let logs = Resource::new(
-        move || search.get(),
-        |filter| async move { load_recent_log_entries(filter).await.unwrap_or_default() },
+    let saved_page_size = Resource::new_blocking(
+        || (),
+        |()| async { get_logs_page_size().await.unwrap_or(10) },
+    );
+    Effect::new(move |_| {
+        if let Some(saved) = saved_page_size.get() {
+            page_size.set(saved.max(1));
+        }
+    });
+
+    let logs = Resource::new_blocking(
+        move || {
+            (
+                search.get(),
+                page.get(),
+                page_size.get(),
+                sort_field.get(),
+                sort_descending.get(),
+            )
+        },
+        |(filter, page, page_size, sort_field, sort_descending)| async move {
+            load_recent_log_entries(filter, page, page_size, sort_field, sort_descending)
+                .await
+                .unwrap_or_default()
+        },
     );
 
     view! {
@@ -34,27 +62,56 @@ fn LogsIsland() -> impl IntoView {
                     id="support-log-search"
                     type="text"
                     prop:value=move || search.get()
-                    on:input=move |event| search.set(event_target_value(&event))
+                    on:input=move |event| {
+                        search.set(event_target_value(&event));
+                        page.set(0);
+                    }
                     style="width:100%;border:1px solid var(--color-border);border-radius:var(--radius);background:var(--color-surface);color:var(--color-gray-100);font:inherit;font-size:0.875rem;padding:0.5rem 0.75rem"
                 />
             </div>
 
-            <Suspense fallback=move || view! { {render_snapshot(AdminLogSnapshot::default())} }>
-                {move || logs.get().map(render_snapshot)}
+            <Suspense fallback=move || view! {
+                {render_snapshot(AdminLogSnapshot::default(), page, page_size, sort_field, sort_descending)}
+            }>
+                {move || {
+                    logs.get().map(move |snapshot| {
+                        render_snapshot(snapshot, page, page_size, sort_field, sort_descending)
+                    })
+                }}
             </Suspense>
         </div>
     }
 }
 
-fn render_snapshot(snapshot: AdminLogSnapshot) -> impl IntoView {
+#[allow(clippy::too_many_lines)]
+fn render_snapshot(
+    snapshot: AdminLogSnapshot,
+    page: RwSignal<u32>,
+    page_size: RwSignal<u32>,
+    sort_field: RwSignal<AdminLogSortField>,
+    sort_descending: RwSignal<Option<bool>>,
+) -> impl IntoView {
+    let total_count = u64::try_from(snapshot.total_count).unwrap_or(u64::MAX);
+    let page_size_value = u64::try_from(snapshot.page_size.max(1)).unwrap_or(1);
+    let current_page = u64::from(snapshot.page);
+    let last_page = total_count
+        .saturating_sub(1)
+        .checked_div(page_size_value)
+        .unwrap_or(0);
     let range = if snapshot.total_count == 0 {
         range_of(0, 0, 0)
     } else {
-        let end = snapshot.entries.len().min(snapshot.total_count);
+        let start = current_page
+            .saturating_mul(page_size_value)
+            .saturating_add(1);
+        let end = start
+            .saturating_add(u64::try_from(snapshot.entries.len()).unwrap_or(0))
+            .saturating_sub(1)
+            .min(total_count);
         range_of(
-            1,
+            u32::try_from(start).unwrap_or(u32::MAX),
             u32::try_from(end).unwrap_or(u32::MAX),
-            u64::try_from(snapshot.total_count).unwrap_or(u64::MAX),
+            total_count,
         )
     };
 
@@ -65,13 +122,25 @@ fn render_snapshot(snapshot: AdminLogSnapshot) -> impl IntoView {
                     <thead style="background:var(--color-appbar)">
                         <tr>
                             <th scope="col" style="height:3.5rem;padding:0 1rem;font-weight:700">
-                                <button type="button" aria-label=tr(TextKey::SortByTimestamp) style="color:inherit;font:inherit;font-weight:700">
+                                <button
+                                    type="button"
+                                    aria-label=tr(TextKey::SortByTimestamp)
+                                    on:click=move |_| toggle_sort(AdminLogSortField::Timestamp, sort_field, sort_descending, page)
+                                    style="color:inherit;font:inherit;font-weight:700;display:inline-flex;align-items:center;gap:0.25rem"
+                                >
                                     {tr(TextKey::Timestamp)}
+                                    <span>{move || sort_indicator(sort_field.get(), sort_descending.get(), AdminLogSortField::Timestamp)}</span>
                                 </button>
                             </th>
                             <th scope="col" style="height:3.5rem;padding:0 1rem;font-weight:700">
-                                <button type="button" aria-label=tr(TextKey::SortByLevel) style="color:inherit;font:inherit;font-weight:700">
+                                <button
+                                    type="button"
+                                    aria-label=tr(TextKey::SortByLevel)
+                                    on:click=move |_| toggle_sort(AdminLogSortField::Level, sort_field, sort_descending, page)
+                                    style="color:inherit;font:inherit;font-weight:700;display:inline-flex;align-items:center;gap:0.25rem"
+                                >
                                     {tr(TextKey::Level)}
+                                    <span>{move || sort_indicator(sort_field.get(), sort_descending.get(), AdminLogSortField::Level)}</span>
                                 </button>
                             </th>
                             <th scope="col" style="height:3.5rem;padding:0 1rem;font-weight:700">
@@ -102,24 +171,105 @@ fn render_snapshot(snapshot: AdminLogSnapshot) -> impl IntoView {
             </div>
 
             <div style="min-height:3.25rem;padding:0 1rem;border-top:1px solid var(--color-table-line);display:flex;justify-content:flex-end;align-items:center;gap:2rem;font-size:0.875rem;color:var(--color-gray-200)">
-                <span>{rows_per_page(u32::try_from(snapshot.page_size.max(10)).unwrap_or(10))}</span>
+                <label style="display:inline-flex;align-items:center;gap:0.5rem">
+                    <span>{tr(TextKey::RowsPerPage)}</span>
+                    <select
+                        aria-label=tr(TextKey::RowsPerPage)
+                        prop:value=move || page_size.get().to_string()
+                        on:change=move |event| {
+                            if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                page_size.set(value.max(1));
+                                page.set(0);
+                            }
+                        }
+                        style="border:1px solid var(--color-border);border-radius:var(--radius);background:var(--color-surface);color:var(--color-gray-100);font:inherit;font-size:0.875rem;padding:0.25rem 0.5rem"
+                    >
+                        <option value="10">"10"</option>
+                        <option value="25">"25"</option>
+                        <option value="50">"50"</option>
+                        <option value="100">"100"</option>
+                    </select>
+                </label>
                 <span>{range}</span>
                 <div style="display:inline-flex;align-items:center;gap:0.5rem">
-                    <button type="button" aria-label=tr(TextKey::FirstPage) disabled=true style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default);opacity:0.4">
+                    <button
+                        type="button"
+                        aria-label=tr(TextKey::FirstPage)
+                        disabled=move || page.get() == 0
+                        on:click=move |_| page.set(0)
+                        style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default)"
+                    >
                         "«"
                     </button>
-                    <button type="button" aria-label=tr(TextKey::PreviousPage) disabled=true style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default);opacity:0.4">
+                    <button
+                        type="button"
+                        aria-label=tr(TextKey::PreviousPage)
+                        disabled=move || page.get() == 0
+                        on:click=move |_| page.update(|value| *value = value.saturating_sub(1))
+                        style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default)"
+                    >
                         "‹"
                     </button>
-                    <button type="button" aria-label=tr(TextKey::NextPage) disabled=true style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default);opacity:0.4">
+                    <button
+                        type="button"
+                        aria-label=tr(TextKey::NextPage)
+                        disabled=move || u64::from(page.get()) >= last_page
+                        on:click=move |_| {
+                            page.update(|value| {
+                                *value = (*value + 1).min(u32::try_from(last_page).unwrap_or(u32::MAX));
+                            });
+                        }
+                        style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default)"
+                    >
                         "›"
                     </button>
-                    <button type="button" aria-label=tr(TextKey::LastPage) disabled=true style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default);opacity:0.4">
+                    <button
+                        type="button"
+                        aria-label=tr(TextKey::LastPage)
+                        disabled=move || u64::from(page.get()) >= last_page
+                        on:click=move |_| page.set(u32::try_from(last_page).unwrap_or(u32::MAX))
+                        style="min-width:2rem;height:2rem;border-radius:999px;color:var(--color-action-default)"
+                    >
                         "»"
                     </button>
                 </div>
             </div>
         </section>
+    }
+}
+
+fn toggle_sort(
+    field: AdminLogSortField,
+    sort_field: RwSignal<AdminLogSortField>,
+    sort_descending: RwSignal<Option<bool>>,
+    page: RwSignal<u32>,
+) {
+    let next = if sort_field.get_untracked() == field {
+        match sort_descending.get_untracked() {
+            None => Some(false),
+            Some(false) => Some(true),
+            Some(true) => None,
+        }
+    } else {
+        Some(false)
+    };
+    sort_field.set(field);
+    sort_descending.set(next);
+    page.set(0);
+}
+
+fn sort_indicator(
+    active_field: AdminLogSortField,
+    direction: Option<bool>,
+    field: AdminLogSortField,
+) -> &'static str {
+    if active_field != field {
+        return "";
+    }
+    match direction {
+        Some(false) => "^",
+        Some(true) => "v",
+        None => "",
     }
 }
 

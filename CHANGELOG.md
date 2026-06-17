@@ -43,6 +43,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Support pages parity is now closed for Health, Logs, and Troubleshooting:
+  dynamic Support health badges render hydrated warning/error counts, Logs
+  supports ErsatzTV-style search, Timestamp/Level sorting, persisted page size,
+  and pager navigation, and durable browser coverage exercises the support
+  route-family fallbacks.
 - Scheduling admin route-family parity is now closed for schedules, blocks,
   templates, decos, and deco templates, with durable browser coverage for the
   hydrated route workflows, editor fallback forms, localized labels, and

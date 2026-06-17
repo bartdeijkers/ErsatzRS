@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+const LOGS_PAGE_SIZE_KEY: &str = "pages.logs.page_size";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminLogEntry {
     pub timestamp: String,
@@ -8,25 +10,50 @@ pub struct AdminLogEntry {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AdminLogSortField {
+    #[default]
+    Timestamp,
+    Level,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AdminLogSnapshot {
     pub total_count: usize,
+    pub page: u32,
     pub page_size: usize,
     pub entries: Vec<AdminLogEntry>,
 }
 
 #[server]
-#[allow(clippy::unused_async, clippy::too_many_lines)]
-pub async fn load_recent_log_entries(filter: String) -> Result<AdminLogSnapshot, ServerFnError> {
-    use chrono::{DateTime, Local};
-    use std::path::PathBuf;
+pub async fn get_logs_page_size() -> Result<u32, ServerFnError> {
+    use crate::host::state::AppState;
 
-    #[derive(Debug)]
-    struct ParsedEntry {
-        timestamp: DateTime<Local>,
-        level: &'static str,
-        message: String,
-    }
+    let state = expect_context::<AppState>();
+    let saved =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
+            .bind(LOGS_PAGE_SIZE_KEY)
+            .fetch_optional(&state.pool)
+            .await?;
+
+    Ok(saved
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(10))
+}
+
+#[server]
+#[allow(clippy::unused_async, clippy::too_many_lines)]
+pub async fn load_recent_log_entries(
+    filter: String,
+    page: u32,
+    page_size: u32,
+    sort_field: AdminLogSortField,
+    sort_descending: Option<bool>,
+) -> Result<AdminLogSnapshot, ServerFnError> {
+    use crate::host::state::AppState;
+    use chrono::Local;
+    use std::path::PathBuf;
 
     fn newest_log_file() -> Option<PathBuf> {
         let log_dir = ersatzrs_infra::logging::default_log_dir();
@@ -87,32 +114,39 @@ pub async fn load_recent_log_entries(filter: String) -> Result<AdminLogSnapshot,
         })
     }
 
+    let page_size = page_size.max(1);
+    let state = expect_context::<AppState>();
+    crate::admin::server_fns::settings::save_config_value(
+        &state.pool,
+        LOGS_PAGE_SIZE_KEY,
+        &page_size.to_string(),
+    )
+    .await?;
+
     let Some(log_file) = newest_log_file() else {
         return Ok(AdminLogSnapshot {
-            page_size: 10,
+            page,
+            page_size: usize::try_from(page_size).unwrap_or(usize::MAX),
             ..AdminLogSnapshot::default()
         });
     };
 
-    let filter = filter.trim().to_lowercase();
-    let mut entries = std::fs::read_to_string(log_file)
+    let entries = std::fs::read_to_string(log_file)
         .unwrap_or_default()
         .lines()
         .filter_map(|line| parse_serilog_line(line).or_else(|| parse_tracing_line(line)))
-        .filter(|entry| {
-            if filter.is_empty() {
-                return true;
-            }
-            entry.level.to_lowercase().contains(&filter)
-                || entry.message.to_lowercase().contains(&filter)
-        })
         .collect::<Vec<_>>();
-    entries.sort_by_key(|entry| std::cmp::Reverse(entry.timestamp));
+    let (total_count, entries) = sort_filter_page_entries(
+        entries,
+        &filter,
+        page,
+        page_size,
+        sort_field,
+        sort_descending,
+    );
 
-    let total_count = entries.len();
     let entries = entries
         .into_iter()
-        .take(10)
         .map(|entry| AdminLogEntry {
             timestamp: entry
                 .timestamp
@@ -125,7 +159,154 @@ pub async fn load_recent_log_entries(filter: String) -> Result<AdminLogSnapshot,
 
     Ok(AdminLogSnapshot {
         total_count,
-        page_size: 10,
+        page,
+        page_size: usize::try_from(page_size).unwrap_or(usize::MAX),
         entries,
     })
+}
+
+#[derive(Debug, Clone)]
+struct ParsedEntry {
+    timestamp: chrono::DateTime<chrono::Local>,
+    level: &'static str,
+    message: String,
+}
+
+fn sort_filter_page_entries(
+    mut entries: Vec<ParsedEntry>,
+    filter: &str,
+    page: u32,
+    page_size: u32,
+    sort_field: AdminLogSortField,
+    sort_descending: Option<bool>,
+) -> (usize, Vec<ParsedEntry>) {
+    let filter = filter.trim().to_lowercase();
+    entries.retain(|entry| {
+        if filter.is_empty() {
+            return true;
+        }
+        entry.level.to_lowercase().contains(&filter)
+            || entry.message.to_lowercase().contains(&filter)
+    });
+
+    match sort_descending {
+        Some(descending) => match sort_field {
+            AdminLogSortField::Timestamp => {
+                if descending {
+                    entries.sort_by_key(|entry| std::cmp::Reverse(entry.timestamp));
+                } else {
+                    entries.sort_by_key(|entry| entry.timestamp);
+                }
+            }
+            AdminLogSortField::Level => {
+                entries.sort_by(|left, right| {
+                    let level_order = level_rank(left.level).cmp(&level_rank(right.level));
+                    let ordering = if descending {
+                        level_order.reverse()
+                    } else {
+                        level_order
+                    };
+                    ordering.then_with(|| right.timestamp.cmp(&left.timestamp))
+                });
+            }
+        },
+        None => entries.sort_by_key(|entry| std::cmp::Reverse(entry.timestamp)),
+    }
+
+    let total_count = entries.len();
+    let start = usize::try_from(page.saturating_mul(page_size)).unwrap_or(usize::MAX);
+    let page_size = usize::try_from(page_size).unwrap_or(usize::MAX);
+    let page = entries.into_iter().skip(start).take(page_size).collect();
+    (total_count, page)
+}
+
+fn level_rank(level: &str) -> u8 {
+    match level {
+        "Verbose" | "Trace" => 0,
+        "Debug" => 1,
+        "Information" => 2,
+        "Warning" => 3,
+        "Error" => 4,
+        "Fatal" => 5,
+        _ => 6,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Local, TimeZone};
+
+    fn entry(second: u32, level: &'static str, message: &str) -> ParsedEntry {
+        ParsedEntry {
+            timestamp: Local.with_ymd_and_hms(2026, 6, 17, 12, 0, second).unwrap(),
+            level,
+            message: message.to_owned(),
+        }
+    }
+
+    #[test]
+    fn logs_default_to_timestamp_descending() {
+        let (_, page) = sort_filter_page_entries(
+            vec![
+                entry(1, "Information", "first"),
+                entry(3, "Warning", "third"),
+                entry(2, "Error", "second"),
+            ],
+            "",
+            0,
+            10,
+            AdminLogSortField::Timestamp,
+            None,
+        );
+
+        let messages = page
+            .into_iter()
+            .map(|entry| entry.message)
+            .collect::<Vec<_>>();
+        assert_eq!(messages, ["third", "second", "first"]);
+    }
+
+    #[test]
+    fn logs_sort_level_with_timestamp_tiebreaker_and_page() {
+        let (total, page) = sort_filter_page_entries(
+            vec![
+                entry(1, "Information", "info-old"),
+                entry(4, "Information", "info-new"),
+                entry(3, "Error", "error"),
+                entry(2, "Debug", "debug"),
+            ],
+            "",
+            1,
+            2,
+            AdminLogSortField::Level,
+            Some(false),
+        );
+
+        let messages = page
+            .into_iter()
+            .map(|entry| entry.message)
+            .collect::<Vec<_>>();
+        assert_eq!(total, 4);
+        assert_eq!(messages, ["info-old", "error"]);
+    }
+
+    #[test]
+    fn logs_filter_level_and_message_case_insensitive() {
+        let (total, page) = sort_filter_page_entries(
+            vec![
+                entry(1, "Information", "started"),
+                entry(2, "Warning", "Missing file"),
+                entry(3, "Error", "failed"),
+            ],
+            "warn",
+            0,
+            10,
+            AdminLogSortField::Timestamp,
+            None,
+        );
+
+        assert_eq!(total, 1);
+        assert_eq!(page[0].message, "Missing file");
+    }
 }

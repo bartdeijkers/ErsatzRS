@@ -1,0 +1,10 @@
+content:
+  - show:
+    key: sitcoms
+    guids:
+      - source: plex
+        value: tvdb://1234
+    order: chronological
+playout:
+  - all:
+    content: sitcoms
