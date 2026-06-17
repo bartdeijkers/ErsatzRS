@@ -13,6 +13,23 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Release builds now serve every Leptos server function again, fixing the
+  Windows release-build failures where **Scan Library** (`/media/libraries`) and
+  **Show Media Info** for TV episodes reported
+  `error deserializing server function results: Invalid format: missing delimiter in ""`.
+  Root cause: `server_fn` derives each `/api/<fn><hash>` route from
+  `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`, so the absolute build path
+  leaked into the URL. The release pipeline builds the hydration WASM on a Linux
+  runner and the per-RID server binary on its own runner, so the two halves
+  computed different hashes; the hydrated client POSTed to routes the server
+  never registered and every server-function call returned an empty `404`. The
+  build now pins `SERVER_FN_OVERRIDE_KEY` (in `.cargo/config.toml`) so paths are
+  identical regardless of where each half is compiled. This supersedes the
+  1.0.11-alpha attempt, which changed the scan return type but did not address
+  the path mismatch.
+
 ### Changed
 
 - Revised the default FFmpeg profile decision (ADR 0017). New installations will

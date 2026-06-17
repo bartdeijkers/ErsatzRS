@@ -3,6 +3,18 @@ target-dir = "/mnt/f/ErsatzRS/target"
 
 [env]
 SQLX_OFFLINE = "true"
+# Pin the Leptos/server_fn URL hash key so server-function paths are identical
+# regardless of where the crate is built. Without this, server_fn derives each
+# `/api/<fn><hash>` path from `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`, so
+# the absolute checkout path leaks into the URL. The release pipeline builds the
+# hydration WASM on a Linux runner and the per-RID server binary on its own
+# runner (see .github/workflows/release.yml): different checkout paths produced
+# different hashes, the client POSTed to routes the server never registered, and
+# every server-function call 404'd ("error deserializing server function
+# results: Invalid format: missing delimiter in \"\""). `force = true` so the
+# value wins even if a runner exports its own. Must stay set for BOTH the
+# frontend (`cargo leptos build`) and server (`cargo build`) compiles.
+SERVER_FN_OVERRIDE_KEY = { value = "ersatzrs", force = true }
 
 [alias]
 xtask = "run --quiet --package xtask --"

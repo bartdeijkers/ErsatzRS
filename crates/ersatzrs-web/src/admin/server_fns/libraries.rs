@@ -507,3 +507,31 @@ pub async fn list_locked_collections() -> Result<Vec<(String, i64)>, ServerFnErr
         })
         .collect())
 }
+
+#[cfg(test)]
+mod server_fn_path_stability {
+    //! Regression guard for the `SERVER_FN_OVERRIDE_KEY` pin in
+    //! `.cargo/config.toml`. `server_fn` derives each `/api/<fn><hash>` route from
+    //! `xxh64(CARGO_MANIFEST_DIR + ":" + module_path)`. Without the override key
+    //! the absolute build directory leaks into the URL, so the hydration WASM and
+    //! the server binary — built on different release runners — disagree on every
+    //! route and all server-function calls 404 with the empty-body error
+    //! `Invalid format: missing delimiter in ""`. Re-deriving the hash with the
+    //! pinned key fails fast if the pin is dropped, changed, or the module moves.
+    use leptos::server_fn::{xxhash_rust::const_xxh64::xxh64, ServerFn};
+
+    fn pinned_route(fn_name: &str, module_path: &str) -> String {
+        let hash = xxh64(format!("ersatzrs:{module_path}").as_bytes(), 0);
+        format!("/api/{fn_name}{hash}")
+    }
+
+    #[test]
+    fn server_fn_routes_are_build_dir_independent() {
+        assert_eq!(
+            super::ScanLibrary::PATH,
+            pinned_route("scan_library", "ersatzrs_web::admin::server_fns::libraries"),
+            "server_fn routes must hash the pinned SERVER_FN_OVERRIDE_KEY, not \
+             CARGO_MANIFEST_DIR; see .cargo/config.toml",
+        );
+    }
+}
