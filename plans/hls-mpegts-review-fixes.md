@@ -1,5 +1,8 @@
 # HLS/MPEG-TS Review Fixes
 
+> **Status: Completed / historical.** Review fixes shipped
+> (`mpeg-ts-channel-streaming` is `Ported`). Kept for context.
+
 ## Scope
 
 Address the two review findings against commit `a081685` without widening into

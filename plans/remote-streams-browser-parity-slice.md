@@ -1,5 +1,8 @@
 # Remote Streams Browser Parity Slice
 
+> **Status: Completed / historical.** Shipped (`remote-streams-browser` is
+> `Ported`). Kept for context; live state lives in `docs/progress/`.
+
 ## Source Map
 
 - ErsatzTV UI/pages: `$ERSATZTV_SRC/ErsatzTV/Pages/RemoteStreamList.razor` at `0d301df5e8512fdfccf3a611188d27ab1690ee31` exposes `/media/remote/streams` and `/media/remote/streams/page/{PageNumber:int}`.

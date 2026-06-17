@@ -1,5 +1,11 @@
 # Goal prompt - HLS segmenter state machine and MPEG-TS wrapper parity
 
+> **Status (2026-06-17): mostly shipped.** The original skip/stop symptoms and the
+> structured segmenter debts are resolved; `mpeg-ts-channel-streaming` is `Ported`.
+> `hls-variant-playlists-segmenter` remains `In progress` only for the
+> ErsatzRS-specific capacity/admission work (ADR 0016, see
+> `hls-transcode-capacity-and-admission.md`). Live state in `docs/progress/`.
+
 Standing brief to close the transport-orchestration parity gaps found after the
 channel 1 report: HLS Segmenter skips after about 24 seconds and the stream
 stops around 48 seconds. This is a parity implementation goal, not a workaround.

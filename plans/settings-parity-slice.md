@@ -1,5 +1,8 @@
 # Settings Parity Slice
 
+> **Status: Completed / historical.** Shipped (`settings` is `Ported`). Kept for
+> context; live state lives in `docs/progress/`.
+
 ## 2026-06-15 follow-up: settings i18n browser proof + file-driven language registry
 
 ### Source Map (this follow-up)

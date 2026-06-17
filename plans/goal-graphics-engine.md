@@ -1,5 +1,9 @@
 # Goal prompt — Graphics engine to completion
 
+> **Status: Completed / historical.** The drawvg graphics engine shipped
+> (`drawvg-graphics-engine` is `Ported`). Kept for context; live state lives in
+> `docs/progress/`.
+
 Standing prompt to continue graphics-engine work until done. The detailed,
 code-grounded plan is **`plans/graphics-engine-parity-slice.md`** (9 phases) —
 read it first; it is authoritative. This is the resumable brief on top.

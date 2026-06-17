@@ -1,5 +1,8 @@
 # Graphics-Engine Streaming Parity (drawvg)
 
+> **Status: Completed / historical.** Shipped (`drawvg-graphics-engine` is
+> `Ported`). Kept for context; live state lives in `docs/progress/`.
+
 ## Context
 
 ErsatzTV's **graphics engine** overlays custom graphics elements on top of the primary
@@ -36,9 +39,10 @@ In **ErsatzRS** the scaffolding largely exists but is **never wired into streami
 - Runtime template variables (channel/content time, EPG metadata, `MediaItem_Duration`) and
   the per-item `Variables` overrides are not resolved or substituted at stream-build time.
 
-**This plan was split out of `watermark-parity-slice.md`** so the watermark fix (channel-logo
-display) can ship independently. Watermarks use native FFmpeg overlay filters and are tracked
-there; this plan owns the general graphics-element engine.
+**This plan was split out of the original `watermark-parity-slice.md`** (since
+shipped and removed; watermarks are `watermark-editor`, Ported) so the watermark
+fix (channel-logo display) could ship independently. Watermarks use native FFmpeg
+overlay filters; this plan owns the general graphics-element engine.
 
 **Outcome:** image/text/subtitle/motion graphics elements render in the final video output
 for IPTV (`.ts`/MPEG-TS), HLS, and the dev stream, attached through every schedule type,

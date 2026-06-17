@@ -1,5 +1,8 @@
 # Plan: Windows tray launcher for ErsatzRS (+ graceful shutdown, win release bundle)
 
+> **Status: Mostly shipped.** The tray launcher and graceful shutdown shipped
+> (`ersatzrs-launcher`); code signing is researched but deferred (Part D).
+
 ## Context
 
 ErsatzTV ships a tiny `ErsatzTV-Windows.exe` in every Windows release. It puts an

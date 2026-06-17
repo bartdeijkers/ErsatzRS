@@ -1,5 +1,8 @@
 # MPEG-TS troubleshooting with TSDuck
 
+> **Status: Completed / historical.** Shipped as ADR 0013 plus the TSDuck
+> playback gate (`scripts/e2e/tsduck-playback-gate.sh`). Kept for context.
+
 ## Summary
 
 Add an optional MPEG-TS diagnostic path that uses

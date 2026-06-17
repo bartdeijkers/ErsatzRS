@@ -1,5 +1,8 @@
 # FFmpeg/ffprobe invocation: investigation + locator parity
 
+> **Status: Historical.** Investigation concluded; the FFmpeg/ffprobe locator and
+> DB-path resolution shipped. Kept for context.
+
 ## Context
 
 Two suspicions raised by the maintainer:

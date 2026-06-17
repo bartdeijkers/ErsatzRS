@@ -103,24 +103,52 @@ public open-source project.
 
 ## Plan Documents
 
-Feature-level porting plans live alongside this index.
+Feature-level plans live alongside this index. Completed plans are kept for
+historical context; the authoritative live state is always `docs/progress/`
+(query with `cargo xtask progress …`), not these files.
 
-- `watermark-parity-slice.md` — wire watermarks (all modes) into the streaming pipeline;
-  native FFmpeg overlay/fade for dynamic opacity. Fixes channel-logo watermarks not showing.
-- `graphics-engine-parity-slice.md` — wire the general graphics-element engine
-  (image/text/subtitle/motion) into streaming via drawvg + FFmpeg overlays; ports ErsatzTV's
-  graphics engine within ADR 0005 (no external graphics process).
-- `release-self-built-ffmpeg.md` — replace public FFmpeg downloads in the
-  release workflow with first-party FFmpeg 8.1 builds and bundled runtime
-  payloads for every release RID.
-- `ffmpeg-zscale-runtime-remediation.md` — ensure the self-built and release
-  FFmpeg runtimes include `zscale` (via `--enable-libzimg`) alongside `drawvg`,
-  and document diagnosis/remediation for the fail-fast startup capability check.
-- `hls-transcode-capacity-and-admission.md` — implements the revised ADR 0016:
-  turn `ffmpeg.segmenter.active_transcode_limit` into a true hard ceiling with an
-  admission/preemption ladder, decoupled watch/retention windows, slate-on-full,
-  a tuner-model configuration + live usage readout, and a segmenter-smoothness
-  preset for the dual-1080p60 AC-3 6ch target.
+### Active
+
+- `hls-transcode-capacity-and-admission.md` — implements ADR 0016 (hard transcode
+  capacity ceiling + admission/preemption ladder) and ADR 0017 (default 1080p60 /
+  AC-3 6ch FFmpeg profile + `-max_delay`). Open debts on
+  `hls-variant-playlists-segmenter` and `ffmpeg-command-generation`.
+- `goal-nvenc-pipeline-parity.md` — close the remaining NVENC/CUDA pipeline gaps
+  (`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof`).
+- `goal-hls-segmenter-mpegts-wrapper-parity.md` — HLS segmenter state machine and
+  MPEG-TS wrapper orchestration (`hls-variant-playlists-segmenter`, In progress).
+- `release-self-built-ffmpeg.md` — replace public FFmpeg downloads in the release
+  workflow with first-party FFmpeg 8.1 builds and bundled runtimes per RID.
+- `ffmpeg-zscale-runtime-remediation.md` — ensure self-built/release FFmpeg ship
+  `zscale` (`--enable-libzimg`) for the fail-fast startup capability check.
+- `module-split-survey.md` — standing refactoring backlog: large files to split,
+  with ready-to-run prompts (lift items one at a time).
+- `workflow-review.md` — review of the parity-progress pipeline; its
+  recommendations are tracked under Deferred Contract Work below.
+
+### Completed / historical
+
+These slices shipped (target feature is `Ported`) or their investigation
+concluded; kept for context, with live state in `docs/progress/`.
+
+- `graphics-engine-parity-slice.md` + `goal-graphics-engine.md` — drawvg graphics
+  engine within ADR 0005, no external process (`drawvg-graphics-engine`, Ported).
+- `colorspace-normalization-parity.md` — software + GPU-resident colorspace
+  normalization (`hardware-colorspace-normalization`, Ported).
+- `settings-parity-slice.md` — settings route family + file-driven i18n
+  (`settings`, Ported).
+- `remote-streams-browser-parity-slice.md` — remote-streams browser
+  (`remote-streams-browser`, Ported).
+- `media-sources-hydration-anomaly.md` — Emby/Plex media-source hydration
+  investigation (`media-source-configuration`, Ported).
+- `hls-mpegts-review-fixes.md` — HLS/MPEG-TS review fixes
+  (`mpeg-ts-channel-streaming`, Ported).
+- `mpeg-troubleshooting-tsduck.md` — TSDuck MPEG-TS diagnostics (ADR 0013;
+  `scripts/e2e/tsduck-playback-gate.sh`).
+- `ffmpeg-path-parity.md` — FFmpeg/ffprobe locator + DB-path resolution
+  investigation (shipped).
+- `launcher-releasing.md` — Windows tray launcher + graceful shutdown
+  (`ersatzrs-launcher`, shipped; code signing researched but deferred).
 
 ## Deferred Contract Work
 

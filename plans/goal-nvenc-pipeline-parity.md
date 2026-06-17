@@ -1,5 +1,9 @@
 # Goal prompt — NVENC/CUDA pipeline parity to completion
 
+> **Status (2026-06-17): mostly shipped.** NVENC/CUDA pipeline parity is in place;
+> the only open item is the hardware-only `nvenc-filter-gate-live-proof` debt on
+> `ffmpeg-command-generation` (In progress). Live state in `docs/progress/`.
+
 Standing brief to close the remaining parity gaps between ErsatzTV's
 `NvidiaPipelineBuilder` and the ErsatzRS NVENC path in
 `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`. Authoritative reference is

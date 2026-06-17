@@ -1,5 +1,8 @@
 # Emby/Plex Media-Source Pages Hydration Anomaly
 
+> **Status: Historical.** Investigation concluded and the fix shipped
+> (`media-source-configuration` is `Ported`). Kept for context.
+
 ## Summary
 
 Several Emby and Plex media-source admin pages declare interactive handlers
