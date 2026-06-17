@@ -49,7 +49,7 @@ fn LibrariesIsland() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(res) = scan_action.value().get() {
             match res {
-                Ok(()) => toast.push(tr(TextKey::ScanQueued).to_owned(), ToastSeverity::Success),
+                Ok(_) => toast.push(tr(TextKey::ScanQueued).to_owned(), ToastSeverity::Success),
                 Err(e) => toast.push(
                     format!("{}: {e}", tr(TextKey::ScanFailed)),
                     ToastSeverity::Error,
@@ -60,7 +60,7 @@ fn LibrariesIsland() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(res) = collections_action.value().get() {
             match res {
-                Ok(()) => toast.push(
+                Ok(_) => toast.push(
                     tr(TextKey::CollectionsScanQueued).to_owned(),
                     ToastSeverity::Success,
                 ),

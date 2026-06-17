@@ -110,7 +110,7 @@ pub async fn scan_library(
     library_id: i64,
     kind: String,
     deep_scan: bool,
-) -> Result<(), ServerFnError> {
+) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -122,7 +122,7 @@ pub async fn scan_library(
 
     let Some(lock_guard) = locker.try_lock_library(library_id) else {
         tracing::info!(library_id, "scan_library: already locked, no-op");
-        return Ok(());
+        return Ok(false);
     };
 
     tokio::task::spawn(async move {
@@ -194,7 +194,7 @@ pub async fn scan_library(
         );
     });
 
-    Ok(())
+    Ok(true)
 }
 
 /// Fires a background scan for a single show.
@@ -210,7 +210,7 @@ pub async fn scan_show(
     show_id: i64,
     kind: String,
     deep_scan: bool,
-) -> Result<(), ServerFnError> {
+) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
     if kind != "Plex" && kind != "Jellyfin" && kind != "Emby" {
@@ -232,7 +232,7 @@ pub async fn scan_show(
 
     let Some(lock_guard) = locker.try_lock_library(library_id) else {
         tracing::info!(library_id, show_id, "scan_show: already locked, no-op");
-        return Ok(());
+        return Ok(false);
     };
 
     tokio::task::spawn(async move {
@@ -315,7 +315,7 @@ pub async fn scan_show(
         );
     });
 
-    Ok(())
+    Ok(true)
 }
 
 /// Returns the ids of libraries currently being scanned. Polled by the
@@ -424,7 +424,7 @@ pub async fn scan_external_collections(
     media_source_id: i64,
     kind: String,
     deep_scan: bool,
-) -> Result<(), ServerFnError> {
+) -> Result<bool, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
@@ -436,7 +436,7 @@ pub async fn scan_external_collections(
 
     if !locker.lock_key(key.clone()) {
         tracing::info!(media_source_id, kind = %kind, "scan_external_collections: already locked, no-op");
-        return Ok(());
+        return Ok(false);
     }
 
     tokio::task::spawn(async move {
@@ -484,7 +484,7 @@ pub async fn scan_external_collections(
         );
     });
 
-    Ok(())
+    Ok(true)
 }
 
 /// Returns the `(kind, media_source_id)` pairs whose collections sync is

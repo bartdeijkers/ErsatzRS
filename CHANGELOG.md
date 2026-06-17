@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.11-alpha] - 2026-06-17
+
+### Fixed
+
+- Library and TV show scan actions now return a non-empty server-function
+  payload, fixing the release-build scan toast failure
+  `error deserializing server function results: Invalid format: missing delimiter in ""`.
+
 ## [1.0.10-alpha] - 2026-06-17
 
 ### Fixed

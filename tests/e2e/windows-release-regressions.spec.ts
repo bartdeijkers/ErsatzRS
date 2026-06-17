@@ -182,6 +182,7 @@ test.describe('Windows release interaction regressions', () => {
     await expect(libraryRow).toBeVisible();
     await libraryRow.getByRole('button', { name: 'Scan Library' }).click();
     await expect(page.getByText('Scan queued')).toBeVisible();
+    await expect(page.locator('body')).not.toContainText('Scan failed');
 
     await page.goto('/system/logs');
     await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('25');
