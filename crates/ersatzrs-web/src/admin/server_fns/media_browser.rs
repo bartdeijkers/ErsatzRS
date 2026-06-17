@@ -5949,7 +5949,7 @@ async fn media_ids_for_smart_collection(
         return Ok(Vec::new());
     };
 
-    let repository = SqliteSchedulingContentRepository(pool.clone());
+    let repository = SqliteSchedulingContentRepository::new(pool.clone());
     let (hits, _, _) = repository.search_documents_page(&query, 0, 0).await?;
     let mut ids = Vec::new();
     let mut seen = BTreeSet::new();

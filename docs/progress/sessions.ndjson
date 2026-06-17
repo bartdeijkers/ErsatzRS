@@ -1,3 +1,4 @@
+{"agent":"Claude (Opus 4.8)","date":"2026-06-17","summary":"Port missing-item state machine: local+media-server FileNotFound/RemoteOnly flagging, playout skip-missing consumer; regression tests + full gate green"}
 {"agent":"Codex","date":"2026-06-17","summary":"Closed support pages parity with dynamic badges and logs paging"}
 {"agent":"Codex","date":"2026-06-17","summary":"Closed Classic scheduling imported filler parity and refreshed top-three gap prompt"}
 {"agent":"Codex","date":"2026-06-17","summary":"ffmpeg-filter-graph: fixed still opacity-expression watermark looping, live-proved direct TS/HLS clock bindings, and closed the filter graph parity debt"}

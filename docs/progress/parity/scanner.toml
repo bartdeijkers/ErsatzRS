@@ -22,6 +22,21 @@ genres, tags, and people. Scan-kind persistence is centralized through
 `VideoScanKind::db_value()` to match ErsatzTV numbering
 Unknown=0/Progressive=1/Interlaced=2.
 
+Missing-item state transitions are now ported on both scanner families
+(previously the `MediaItemState` producer side was entirely absent, so deleted
+items stayed `Normal` and never reached `/media/trash` or the File Not Found /
+Unavailable health checks). Local scans run a trailing pass per library path
+that flags items whose backing file disappeared as `FileNotFound`
+(`MovieFolderScanner.FindMoviePaths` + `FlagFileNotFound`). Media-server scans
+(Plex/Jellyfin/Emby, movies and TV) diff the set of server item ids against the
+database to trash items no longer present (`FlagFileNotFound`), and flag items
+still on the server whose resolved local file is missing as `RemoteOnly`
+(all scanned kinds support remote streaming; the `Unavailable` branch is wired
+for kinds that do not). The consumer side is wired too: scheduling reference
+data drops `FileNotFound`/`Unavailable` items when `playout.skip_missing_items`
+is enabled, mirroring `PlayoutBuilder`'s `PlayoutSkipMissingItems` gate
+(default off; `RemoteOnly` stays eligible).
+
 Remaining `ParityDebt` is structured below: runtime log evidence from
 2026-06-10 shows real-world music-video NFO files rejected where ErsatzTV is
 lenient, and concurrent scan plus web activity can still abort with SQLite
@@ -39,3 +54,9 @@ id          = 'sqlite-scan-locking'
 description = 'Concurrent scan and web activity can abort library scans with SQLite database locked errors instead of serializing work like ErsatzTV.'
 discovered  = '2026-06-10'
 evidence    = 'ErsatzRS.log: library scan failed library_id=3/5 with SQLite code 5 database is locked.'
+
+[[debt]]
+id          = 'media-server-unavailable-branch-unexercised'
+description = 'The media-server Unavailable (State=2) flag path is wired but never taken in practice: only movies and TV are synced from Plex/Jellyfin/Emby, and all three servers report ServerSupportsRemoteStreaming=true for those kinds, so a missing local file always resolves to RemoteOnly (State=3). Kinds that lack remote streaming (e.g. Plex other-video) are not yet synced from media servers, so Unavailable cannot be produced.'
+discovered  = '2026-06-17'
+evidence    = 'crates/ersatzrs-infra/src/{plex,jellyfin,emby}.rs flag_unavailable_media_server_items callers pass supports_remote_streaming=true for every synced kind.'

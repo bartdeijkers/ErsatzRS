@@ -75,7 +75,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         graphics: SqliteGraphicsRepository(pool.clone()),
         metadata: SqliteMetadataRepository(pool.clone()),
         config: SqliteConfigRepository(pool.clone()),
-        scheduling: SqliteSchedulingContentRepository(pool.clone()),
+        scheduling: SqliteSchedulingContentRepository::new(pool.clone()),
         television: SqliteTelevisionRepository(pool),
     }
 }

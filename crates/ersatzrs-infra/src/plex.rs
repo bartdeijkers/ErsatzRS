@@ -762,6 +762,7 @@ pub async fn sync_plex_movie_library_with_progress(
 ) -> Result<usize> {
     let mut synced = 0;
     let mut start_index = 0;
+    let mut present_item_ids = std::collections::HashSet::new();
     let mut page = service
         .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
         .await?;
@@ -773,6 +774,7 @@ pub async fn sync_plex_movie_library_with_progress(
 
     while start_index < total_size {
         for item in &page.items {
+            present_item_ids.insert(item.key.clone());
             if !deep_scan
                 && item_etag_matches(
                     pool,
@@ -803,6 +805,36 @@ pub async fn sync_plex_movie_library_with_progress(
             .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
             .await?;
     }
+
+    // Trash movies no longer present on the server, then flag those still on
+    // the server whose local file is missing (RemoteOnly — Plex supports
+    // remote streaming).
+    crate::media_server::flag_missing_media_server_items(
+        pool,
+        "PlexMovie",
+        "Key",
+        library_id,
+        &present_item_ids,
+    )
+    .await?;
+    let replacements = crate::media_server::load_media_server_path_replacements(
+        pool,
+        "PlexPathReplacement",
+        "PlexPath",
+        "PlexMediaSourceId",
+        media_source_id,
+    )
+    .await?;
+    crate::media_server::flag_unavailable_media_server_items(
+        pool,
+        "PlexMovie",
+        "Key",
+        library_id,
+        &present_item_ids,
+        &replacements,
+        true,
+    )
+    .await?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -864,6 +896,9 @@ pub async fn sync_plex_show_library_with_progress(
     let mut synced = 0;
     let mut shows_completed: usize = 0;
     let mut show_start_index = 0;
+    let mut present_shows = std::collections::HashSet::new();
+    let mut present_seasons = std::collections::HashSet::new();
+    let mut present_episodes = std::collections::HashSet::new();
     let mut shows = service
         .fetch_show_page(config, library_key, show_start_index, PLEX_PAGE_SIZE)
         .await?;
@@ -875,6 +910,7 @@ pub async fn sync_plex_show_library_with_progress(
 
     while show_start_index < show_total_size {
         for show in &shows.items {
+            present_shows.insert(show.key.clone());
             synced += sync_one_plex_show(
                 pool,
                 service,
@@ -884,6 +920,8 @@ pub async fn sync_plex_show_library_with_progress(
                 library_key,
                 show,
                 deep_scan,
+                &mut present_seasons,
+                &mut present_episodes,
             )
             .await?;
             shows_completed += 1;
@@ -902,6 +940,38 @@ pub async fn sync_plex_show_library_with_progress(
             .await?;
     }
 
+    // Trash shows/seasons/episodes no longer present on the server.
+    for (table, present) in [
+        ("PlexShow", &present_shows),
+        ("PlexSeason", &present_seasons),
+        ("PlexEpisode", &present_episodes),
+    ] {
+        crate::media_server::flag_missing_media_server_items(
+            pool, table, "Key", library_id, present,
+        )
+        .await?;
+    }
+    // Flag episodes still on the server whose local file is missing
+    // (RemoteOnly — Plex supports remote streaming).
+    let replacements = crate::media_server::load_media_server_path_replacements(
+        pool,
+        "PlexPathReplacement",
+        "PlexPath",
+        "PlexMediaSourceId",
+        media_source_id,
+    )
+    .await?;
+    crate::media_server::flag_unavailable_media_server_items(
+        pool,
+        "PlexEpisode",
+        "Key",
+        library_id,
+        &present_episodes,
+        &replacements,
+        true,
+    )
+    .await?;
+
     if let Some(sink) = progress {
         sink.report(1.0);
     }
@@ -918,6 +988,8 @@ async fn sync_one_plex_show(
     library_key: &str,
     show: &PlexShowItem,
     deep_scan: bool,
+    present_seasons: &mut std::collections::HashSet<String>,
+    present_episodes: &mut std::collections::HashSet<String>,
 ) -> Result<usize> {
     // Ports the body of
     // `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs::ScanSingleShowInternal`.
@@ -931,6 +1003,7 @@ async fn sync_one_plex_show(
 
     while season_start_index < season_total_size {
         for season in &seasons.items {
+            present_seasons.insert(season.key.clone());
             let season_id = upsert_plex_season(
                 pool,
                 media_source_id,
@@ -948,6 +1021,7 @@ async fn sync_one_plex_show(
 
             while episode_start_index < episode_total_size {
                 for episode in &episodes.items {
+                    present_episodes.insert(episode.key.clone());
                     if !deep_scan
                         && item_etag_matches(
                             pool,
@@ -2339,6 +2413,8 @@ pub async fn sync_plex_show_by_id(
         "Starting targeted Plex show scan"
     );
 
+    // Targeted single-show scan does no library-level cleanup (matching
+    // ErsatzTV), so the present-id collectors are discarded here.
     let synced = sync_one_plex_show(
         pool,
         &service,
@@ -2348,6 +2424,8 @@ pub async fn sync_plex_show_by_id(
         &target.library_key,
         &show,
         deep_scan,
+        &mut std::collections::HashSet::new(),
+        &mut std::collections::HashSet::new(),
     )
     .await?;
 

@@ -11,10 +11,55 @@ use ersatzrs_core::scheduling::{
 use ersatzrs_domain::{
     CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind,
     ProgramSchedule, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, SqlitePool};
+
+#[tokio::test]
+async fn scheduling_repository_skips_missing_items_when_configured() {
+    let pool = common::test_db().await;
+    seed_scheduling_fixture(&pool).await;
+
+    // Flag the "prime" collection's movie (id 20) as FileNotFound.
+    sqlx::query(r#"UPDATE "MediaItem" SET "State" = 1 WHERE "Id" = 20"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Default (no config row): missing items remain in scheduling, matching
+    // ErsatzTV's PlayoutSkipMissingItems defaulting to false.
+    let included = make_repositories(pool.clone())
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Collection("prime".to_owned()))
+        .await
+        .unwrap();
+    assert!(
+        included.iter().any(|item| item.id == 20),
+        "missing item is kept when skip-missing is off"
+    );
+
+    // Enable skip-missing: a fresh repository re-reads the flag and drops the
+    // FileNotFound item while keeping the present ones.
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, 'True')"#)
+        .bind(CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let filtered = make_repositories(pool.clone())
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Collection("prime".to_owned()))
+        .await
+        .unwrap();
+    assert!(
+        !filtered.iter().any(|item| item.id == 20),
+        "missing item is skipped when skip-missing is on"
+    );
+    assert!(
+        filtered.iter().any(|item| item.id == 12),
+        "present items are kept"
+    );
+}
 
 #[tokio::test]
 async fn scheduling_repository_resolves_sql_content_sources() {

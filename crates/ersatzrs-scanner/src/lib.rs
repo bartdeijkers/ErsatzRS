@@ -233,6 +233,9 @@ pub async fn scan_local_library_with_progress(
                 processed = processed.saturating_add(expected_episodes.max(scanned));
             }
         }
+        // Trailing pass: flag items whose backing file disappeared since the
+        // last scan, mirroring ErsatzTV's per-FolderScanner FlagFileNotFound.
+        flag_missing_local_files(pool, library_path.id).await?;
         let now = Utc::now();
         update_library_path_scan(pool, library_path.id, now).await?;
     }
@@ -1706,6 +1709,62 @@ async fn update_library_path_scan(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Flag library-path items whose backing file no longer exists on disk as
+/// `MediaItemState::FileNotFound` (`State = 1`).
+///
+/// Port of the trailing pass every `ErsatzTV` `*FolderScanner` runs after the
+/// add/update pass (e.g. `MovieFolderScanner.FindMoviePaths` →
+/// `File.Exists` → `MediaItemRepository.FlagFileNotFound`). The add/update
+/// pass already restores re-found items to `Normal` (`State = 0`), so this is
+/// the only place the forward `Normal → FileNotFound` transition happens for
+/// local libraries. Without it, deleted/moved source files keep playing,
+/// never appear in `/media/trash`, and never trip the File Not Found health
+/// check.
+///
+/// Scoped to a single `LibraryPathId`; because a `LibraryPath` belongs to a
+/// `Library` with one media kind, every joined item shares that kind. The
+/// `COALESCE` over the per-kind owner columns mirrors ErsatzTV's join in
+/// `MediaItemRepository.FlagFileNotFound`.
+async fn flag_missing_local_files(pool: &DbPool, library_path_id: i64) -> Result<usize> {
+    let rows = sqlx::query(
+        r#"SELECT "mi"."Id" AS "Id", "mf"."Path" AS "Path"
+           FROM "MediaItem" AS "mi"
+           JOIN "MediaVersion" AS "mv"
+             ON "mi"."Id" = COALESCE("mv"."MovieId", "mv"."MusicVideoId",
+                                     "mv"."OtherVideoId", "mv"."SongId",
+                                     "mv"."ImageId", "mv"."RemoteStreamId",
+                                     "mv"."EpisodeId")
+           JOIN "MediaFile" AS "mf" ON "mv"."Id" = "mf"."MediaVersionId"
+           WHERE "mi"."LibraryPathId" = ? AND "mi"."State" <> 1"#,
+    )
+    .bind(library_path_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut missing_ids: Vec<i64> = Vec::new();
+    for row in &rows {
+        let path: String = row.get("Path");
+        if !Path::new(&path).exists() {
+            tracing::info!(%path, "flagging missing file");
+            missing_ids.push(row.get("Id"));
+        }
+    }
+
+    if missing_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let placeholders = vec!["?"; missing_ids.len()].join(", ");
+    let sql = format!(r#"UPDATE "MediaItem" SET "State" = 1 WHERE "Id" IN ({placeholders})"#);
+    let mut query = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql));
+    for id in &missing_ids {
+        query = query.bind(id);
+    }
+    query.execute(pool).await?;
+
+    Ok(missing_ids.len())
 }
 
 async fn update_library_scan(pool: &DbPool, library_id: i64, when: DateTime<Utc>) -> Result<()> {

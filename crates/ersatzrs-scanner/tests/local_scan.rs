@@ -190,6 +190,87 @@ async fn local_movie_scan_enriches_sidecars_artwork_and_is_idempotent() {
     assert_eq!(count(&pool, "MovieMetadata").await, 3);
 }
 
+/// Regression: the local scanner's trailing pass flags items whose backing
+/// file disappeared as `FileNotFound` (`State = 1`) while leaving present items
+/// `Normal` (`State = 0`). `ffprobe` is never invoked because the library
+/// folder is empty — only the seeded database paths are checked for existence.
+#[tokio::test]
+async fn local_scan_flags_missing_files_and_keeps_present_ones() {
+    let temp = TempDir::new("ersatzrs-local-missing");
+    let library = temp.path().join("library");
+    std::fs::create_dir_all(&library).unwrap();
+
+    // A real file outside the (empty) library folder stays Normal; a path that
+    // was never created is flagged FileNotFound.
+    let present = temp.path().join("present-real.mkv");
+    std::fs::write(&present, b"present").unwrap();
+    let gone = library.join("gone.mkv");
+
+    let pool = test_db().await;
+    seed_local_library(&pool, &library, 1).await; // movies
+
+    let present_id = seed_movie_with_file(&pool, present.to_str().unwrap()).await;
+    let gone_id = seed_movie_with_file(&pool, gone.to_str().unwrap()).await;
+
+    let config = LocalScanConfig {
+        library_id: 1,
+        ffprobe_path: "ffprobe".to_string(),
+    };
+    scan_local_library(&pool, &config).await.unwrap();
+
+    assert_eq!(
+        item_state(&pool, present_id).await,
+        0,
+        "present item normal"
+    );
+    assert_eq!(item_state(&pool, gone_id).await, 1, "missing item flagged");
+}
+
+/// Insert a minimal `Movie` media item (`State` 0) with one `MediaVersion` and
+/// a `MediaFile` at `path`, returning the `MediaItem` id.
+async fn seed_movie_with_file(pool: &SqlitePool, path: &str) -> i64 {
+    let item_id: i64 =
+        sqlx::query(r#"INSERT INTO "MediaItem" ("LibraryPathId", "State") VALUES (1, 0)"#)
+            .execute(pool)
+            .await
+            .unwrap()
+            .last_insert_rowid();
+    sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (?)"#)
+        .bind(item_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    let version_id: i64 = sqlx::query(
+        r#"INSERT INTO "MediaVersion"
+           ("DateAdded", "DateUpdated", "Duration", "Height", "VideoScanKind", "Width", "MovieId")
+           VALUES ('2024-01-01 00:00:00', '2024-01-01 00:00:00', '00:30:00', 1080, 1, 1920, ?)"#,
+    )
+    .bind(item_id)
+    .execute(pool)
+    .await
+    .unwrap()
+    .last_insert_rowid();
+    sqlx::query(
+        r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash") VALUES (?, ?, ?)"#,
+    )
+    .bind(version_id)
+    .bind(path)
+    .bind(path)
+    .execute(pool)
+    .await
+    .unwrap();
+    item_id
+}
+
+async fn item_state(pool: &SqlitePool, id: i64) -> i64 {
+    sqlx::query(r#"SELECT "State" FROM "MediaItem" WHERE "Id" = ?"#)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("State")
+}
+
 async fn test_db() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

@@ -16,6 +16,7 @@ pub mod hls_worker;
 pub mod jellyfin;
 pub mod logging;
 pub mod maintenance;
+pub mod media_server;
 pub mod metadata;
 pub mod music_video_credits;
 pub mod playback;

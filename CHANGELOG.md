@@ -13,6 +13,19 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Missing library items are now detected during scans. Previously nothing ever
+  flagged moved/deleted media, so such items stayed `Normal` forever and never
+  appeared in `/media/trash`, the **File Not Found** / **Unavailable** health
+  checks, or anywhere else. Local scans now flag items whose file disappeared as
+  `FileNotFound`; media-server scans (Plex/Jellyfin/Emby, movies and TV) trash
+  items no longer present on the server and flag items whose local file is
+  missing as `RemoteOnly`. The `Skip Missing Items` setting
+  (`playout.skip_missing_items`) is now honored: when enabled, `FileNotFound`
+  and `Unavailable` items are excluded from playout scheduling, matching
+  ErsatzTV's `PlayoutBuilder`.
+
 ### Changed
 
 - HLS Segmenter parity tracking now documents the open calibration playback

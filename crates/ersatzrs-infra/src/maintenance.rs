@@ -443,7 +443,7 @@ async fn build_playout(
     hls_sessions: Option<&dyn HlsSessionRegistry>,
 ) -> Result<()> {
     let repository = SqlitePlayoutRepository(pool.clone());
-    let scheduling = SqliteSchedulingContentRepository(pool.clone());
+    let scheduling = SqliteSchedulingContentRepository::new(pool.clone());
     let playout = repository.get_with_anchor(playout_id).await?;
     let days = load_playout_days_to_build(pool).await?;
     let window = Duration::days(days);

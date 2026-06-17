@@ -33,7 +33,42 @@ use super::common::{
 };
 
 #[derive(Clone)]
-pub struct SqliteSchedulingContentRepository(pub Pool<crate::db::Db>);
+pub struct SqliteSchedulingContentRepository(
+    pub Pool<crate::db::Db>,
+    /// Memoized `playout.skip_missing_items` config flag, resolved on first use.
+    tokio::sync::OnceCell<bool>,
+);
+
+impl SqliteSchedulingContentRepository {
+    /// Construct the repository over a database pool.
+    #[must_use]
+    pub fn new(pool: Pool<crate::db::Db>) -> Self {
+        Self(pool, tokio::sync::OnceCell::new())
+    }
+
+    /// Resolve and memoize the `playout.skip_missing_items` config flag
+    /// (default `false`). Mirrors ErsatzTV's `PlayoutSkipMissingItems` gate in
+    /// `PlayoutBuilder`: when enabled, media items flagged `FileNotFound` or
+    /// `Unavailable` are excluded from scheduling reference data.
+    async fn skip_missing_items(&self) -> Result<bool> {
+        let flag = self
+            .1
+            .get_or_try_init(|| async {
+                let value = sqlx::query_scalar::<_, String>(
+                    r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+                )
+                .bind(ersatzrs_domain::CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS)
+                .fetch_optional(&self.0)
+                .await?;
+                Ok::<bool, ersatzrs_core::repositories::RepositoryError>(matches!(
+                    value.as_deref().map(str::trim),
+                    Some("True" | "true" | "1" | "on")
+                ))
+            })
+            .await?;
+        Ok(*flag)
+    }
+}
 
 const SEARCH_NEED_GENRES: u64 = 1 << 0;
 const SEARCH_NEED_TAGS: u64 = 1 << 1;
@@ -1896,7 +1931,8 @@ impl SqliteSchedulingContentRepository {
                     (SELECT "em"."ReleaseDate" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1),
                     (SELECT "mm"."ReleaseDate" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
                     (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1)
-                ) AS "release_date"
+                ) AS "release_date",
+                "mi"."State" AS "state"
              FROM "MediaItem" AS "mi"
              WHERE "mi"."Id" = ?"#,
         )
@@ -1904,7 +1940,21 @@ impl SqliteSchedulingContentRepository {
         .fetch_optional(&self.0)
         .await?;
 
-        row.map(|row| map_scheduling_media_item(&row)).transpose()
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        // ErsatzTV's PlayoutBuilder drops FileNotFound/Unavailable items when
+        // `playout.skip_missing_items` is enabled. RemoteOnly (3) stays
+        // eligible because it remains playable via the media server.
+        if self.skip_missing_items().await? {
+            let state: i64 = row.try_get("state").unwrap_or(0);
+            if state == 1 || state == 2 {
+                return Ok(None);
+            }
+        }
+
+        map_scheduling_media_item(&row).map(Some)
     }
 
     async fn block_template_schedules(

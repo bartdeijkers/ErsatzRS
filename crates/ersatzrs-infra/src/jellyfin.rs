@@ -413,6 +413,7 @@ where
     let mut synced = 0;
     let mut start_index = 0;
     let mut reported_initial = false;
+    let mut present_item_ids = std::collections::HashSet::new();
 
     loop {
         let page = service
@@ -427,6 +428,7 @@ where
             reported_initial = true;
         }
         for item in &page.items {
+            present_item_ids.insert(item.item_id.clone());
             if !deep_scan
                 && item_etag_matches(
                     pool,
@@ -463,6 +465,36 @@ where
             break;
         }
     }
+
+    // Trash movies no longer present on the server, then flag those still on
+    // the server whose local file is missing (RemoteOnly — Jellyfin supports
+    // remote streaming).
+    crate::media_server::flag_missing_media_server_items(
+        pool,
+        "JellyfinMovie",
+        "ItemId",
+        library_id,
+        &present_item_ids,
+    )
+    .await?;
+    let replacements = crate::media_server::load_media_server_path_replacements(
+        pool,
+        "JellyfinPathReplacement",
+        "JellyfinPath",
+        "JellyfinMediaSourceId",
+        media_source_id,
+    )
+    .await?;
+    crate::media_server::flag_unavailable_media_server_items(
+        pool,
+        "JellyfinMovie",
+        "ItemId",
+        library_id,
+        &present_item_ids,
+        &replacements,
+        true,
+    )
+    .await?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -530,6 +562,9 @@ where
     let mut shows_completed: usize = 0;
     let mut show_start_index = 0;
     let mut reported_initial = false;
+    let mut present_shows = std::collections::HashSet::new();
+    let mut present_seasons = std::collections::HashSet::new();
+    let mut present_episodes = std::collections::HashSet::new();
 
     loop {
         let shows = service
@@ -549,6 +584,7 @@ where
             reported_initial = true;
         }
         for show in &shows.items {
+            present_shows.insert(show.item_id.clone());
             synced += sync_one_jellyfin_show(
                 pool,
                 service,
@@ -558,6 +594,8 @@ where
                 library_item_id,
                 show,
                 deep_scan,
+                &mut present_seasons,
+                &mut present_episodes,
             )
             .await?;
             shows_completed += 1;
@@ -573,6 +611,38 @@ where
             break;
         }
     }
+
+    // Trash shows/seasons/episodes no longer present on the server.
+    for (table, present) in [
+        ("JellyfinShow", &present_shows),
+        ("JellyfinSeason", &present_seasons),
+        ("JellyfinEpisode", &present_episodes),
+    ] {
+        crate::media_server::flag_missing_media_server_items(
+            pool, table, "ItemId", library_id, present,
+        )
+        .await?;
+    }
+    // Flag episodes still on the server whose local file is missing
+    // (RemoteOnly — Jellyfin supports remote streaming).
+    let replacements = crate::media_server::load_media_server_path_replacements(
+        pool,
+        "JellyfinPathReplacement",
+        "JellyfinPath",
+        "JellyfinMediaSourceId",
+        media_source_id,
+    )
+    .await?;
+    crate::media_server::flag_unavailable_media_server_items(
+        pool,
+        "JellyfinEpisode",
+        "ItemId",
+        library_id,
+        &present_episodes,
+        &replacements,
+        true,
+    )
+    .await?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -595,6 +665,8 @@ async fn sync_one_jellyfin_show<S>(
     library_item_id: &str,
     show: &JellyfinShowItem,
     deep_scan: bool,
+    present_seasons: &mut std::collections::HashSet<String>,
+    present_episodes: &mut std::collections::HashSet<String>,
 ) -> Result<usize>
 where
     S: JellyfinServiceTrait,
@@ -615,6 +687,7 @@ where
         let season_total_count = seasons.total_record_count;
         let season_page_len = i32::try_from(seasons.items.len()).unwrap_or(i32::MAX);
         for season in &seasons.items {
+            present_seasons.insert(season.item_id.clone());
             let season_id = upsert_jellyfin_season(
                 pool,
                 media_source_id,
@@ -637,6 +710,7 @@ where
                 let episode_total_count = episodes.total_record_count;
                 let episode_page_len = i32::try_from(episodes.items.len()).unwrap_or(i32::MAX);
                 for episode in &episodes.items {
+                    present_episodes.insert(episode.item_id.clone());
                     if !deep_scan
                         && item_etag_matches(
                             pool,
@@ -745,6 +819,8 @@ pub async fn sync_jellyfin_show_by_id(
         "Starting targeted Jellyfin show scan"
     );
 
+    // Targeted single-show scan does no library-level cleanup (matching
+    // ErsatzTV), so the present-id collectors are discarded here.
     let synced = sync_one_jellyfin_show(
         pool,
         &service,
@@ -754,6 +830,8 @@ pub async fn sync_jellyfin_show_by_id(
         &target.library_item_id,
         &show,
         deep_scan,
+        &mut std::collections::HashSet::new(),
+        &mut std::collections::HashSet::new(),
     )
     .await?;
 
