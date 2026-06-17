@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-16
-last_processed_commit: 5787fba2be790da6dc0f544b0f80ff7af5653e14
+generated: 2026-06-17
+last_processed_commit: cfc502479b32b6b968d8cb237cfa05073e075cc4
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -20,41 +20,31 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Daily reconcile (2026-06-16, window `ec6d14c..5787fba`): two commits merged.
-`feat(web): prove settings i18n parity` (9914a76) already flipped `settings`
-to `Ported` and removed it from the gap list; `fix(ffmpeg): use persisted
-playback stream indexes` (5787fba) was recorded in
-`ffmpeg-command-generation.toml` (still `In progress` — its sole open debt
-`nvenc-filter-gate-live-proof` is hardware-verification-only and stays folded
-into slot 1 rather than getting its own prompt). `cargo xtask progress gaps`
-now lists 7 remaining features, all `In progress`. No prior pick saw scope-
-closing work this window, so all three prompts carry over unchanged: slot 1
-`ffmpeg-filter-graph` (phase-focus, foundational pipeline, carries the folded
-`nvenc-filter-gate-live-proof` hardware proof), slot 2
+Daily reconcile (2026-06-17, window `5787fba..cfc5024`): four commits merged,
+all in the HLS variant playlists / segmenter family. `fix(hls): preserve
+sub-second segmenter seeks` (6694ceb) propagated full-precision request-time /
+in-point seek offsets as `Duration` through active-item selection, the worker
+FFmpeg command, the shared `StreamSeek` step, direct `.ts`, and troubleshooting
+previews, closing the last open content-timeline debt; `fix: limit active hls
+transcodes` (cfc5024) added the ErsatzRS-specific
+`ffmpeg.segmenter.active_transcode_limit` (ADR 0016, default 2). With every
+structured debt now `resolved`, `hls-variant-playlists-segmenter` is `Ported`
+and no longer appears in `cargo xtask progress gaps`; its over-budget summary
+was trimmed to current-state-only in this pass. The two docs commits
+(f67a502, 2b98cb0) recorded that work and the prior reconcile. No other parity
+feature changed.
+
+`cargo xtask progress gaps` now lists 7 remaining features, all `In progress`.
+None of the three carried-over picks saw any commits this window, so per the
+carry-over rule they are kept unchanged: slot 1 `ffmpeg-filter-graph`
+(phase-focus, foundational pipeline, carries the folded hardware-only
+`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof` rather than
+giving it a standalone prompt), slot 2
 `multi-collections-rerun-collections-playlists-filler-presets` (phase-focus
 route-family closeout), slot 3 `scanner` (phase-focus hardening, two blocking
-runtime debts).
-
-Manual playback-continuity refresh (2026-06-15): channel 5 `calibration`
-proved an open HLS Segmenter content-timeline deviation even though TSDuck
-transport checks were clean. The HLS parity tracker is reopened with debt
-`segmenter-content-timeline-deviations`, and the root-cause / reproduction
-note lives at
+runtime debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
+The root-cause note for the now-closed HLS deviation remains at
 [`explanation/hls-segmenter-playback-deviation-root-cause.md`](explanation/hls-segmenter-playback-deviation-root-cause.md).
-This user-visible playback gap takes slot 1. The previous FFmpeg filter graph
-prompt moves to slot 2, the multi-collections route-family prompt moves to
-slot 3, and the Scanner prompt is deferred out of the top three.
-
-Manual closeout refresh (2026-06-16): the HLS slot,
-`hls-variant-playlists-segmenter` debt
-`segmenter-content-timeline-deviations`, was closed with sub-second seek
-propagation through the worker and FFmpeg command builders plus an updated
-TSDuck gate that checks decoded audio-pip cadence. `cargo xtask progress gaps`
-now lists 7 remaining features and no longer lists HLS variant playlists /
-segmenter, so the completed prompt was removed per
-`docs/automation/gap-prompt-rules.md`. `ffmpeg-filter-graph` moves back to
-slot 1, `multi-collections-rerun-collections-playlists-filler-presets` moves
-to slot 2, and slot 3 is refilled with the structured Scanner runtime debts.
 
 ---
 

@@ -4,317 +4,67 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_spe
 status     = 'Ported'
 adr        = ['0015', '0016']
 summary    = '''
-Ported (Phase 7). Slice 1 landed the HLS entry surface: `/iptv/channels.m3u`
-emits the mode-aware URL suffix (`.m3u8?mode={segmenter,hls-direct}` /
-`.ts[?mode=ts-legacy]`), Kodi `#KODIPROP` headers on `kodi*` User-Agents,
-short base64 unique ids, `ChannelIdentifier.FromNumber` tvg-id, and
-`tvc-stream-{v,a}codec` tags. `/iptv/channel/{n}.m3u8` resolves mode
-(segmenter -> multi-variant playlist, TS modes redirect to `.ts`,
-`hls-direct` no longer 501s), and `build_multi_variant_playlist` emits
-`#EXTM3U` + `#EXT-X-STREAM-INF:BANDWIDTH=...,RESOLUTION=...,CODECS="..."`
-using the ErsatzTV `(VideoBitrate + AudioBitrate) * 1000 * 1.2` formula.
+Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs:
+`/iptv/channels.m3u` emits `.m3u8?mode={segmenter,hls-direct}` /
+`.ts[?mode=ts-legacy]` suffixes with Kodi `#KODIPROP` headers, short base64
+ids, `ChannelIdentifier.FromNumber` tvg-id, and `tvc-stream-{v,a}codec` tags. `/iptv/channel/{n}.m3u8?mode=segmenter` returns a
+multi-variant playlist (`#EXT-X-STREAM-INF` bandwidth from ErsatzTV's
+`(VideoBitrate + AudioBitrate) * 1000 * 1.2`); TS modes redirect to `.ts`;
+`hls-direct` returns a single-entry playlist with per-channel media-sequence /
+`#EXT-X-DISCONTINUITY` tracking and `/iptv/hls-direct/{n}[.ts|.mp4|.mkv]`
+targets driven by `ffmpeg.hls_direct.output_format` (copy audio/video, realtime
+pacing like ErsatzTV).
 
-Slice 2 landed the first concrete worker: `HlsSessionRegistry` now owns
-`try_get`/`try_insert`/`insert`/`remove`, `HlsSessionHandle` exposes async
-`trim_playlist`, `HlsSessionWorker` in infra spawns FFmpeg via
-`tokio::process::Command` into temp-backed HLS output, mirrors the MPEG-TS
-route's provider path-replacement resolution before invoking FFmpeg, uses
-atomic registration to prevent duplicate session workers under concurrent
-requests, `/iptv/channel/{n}.m3u8?mode=segmenter` starts or touches the worker,
-and `/iptv/session/{n}/hls.m3u8` plus `/iptv/session/{n}/{file}` serve the live
-playlist and relative segment files from disk.
+The segmenter worker (`HlsSessionWorker` in infra, with
+`HlsSessionRegistry`/`HlsSessionHandle`) spawns FFmpeg via
+`tokio::process::Command` into temp-backed output, mirrors the MPEG-TS provider
+path replacement, registers atomically to avoid duplicate workers, trims live
+playlists while preserving `#EXT-X-DISCONTINUITY`, deletes stale segments, and
+supports fMP4 output with a hash-keyed init-segment cache and `#EXT-X-MAP`
+rewriting. It ports ErsatzTV's deterministic
+`HlsSessionState` transition table and worker loop: work-ahead limit with a
+44-second cap, 60s buffered-output gate, realtime switch at 30s buffered,
+initial-segment-count gating, `PlayoutUpdated` notification from scheduler
+builds, OnDemand playout time-shift / `OnDemandCheckpoint`, slug black-video +
+silent-audio generation, and failed-transcode error-ASS fallback. MPEG-TS HLS
+output emits `-hls_segment_options mpegts_flags=+initial_discontinuity` for the
+first / zero PTS-offset transcode (`+latm` for AAC-LATM); fMP4 omits MPEG-TS
+segment options. Synthesized `#EXT-X-PROGRAM-DATE-TIME` and media-sequence-order
+continuity-counter normalization keep timestamps and PSI/PID continuity stable
+across separate FFmpeg process boundaries (ADR 0015).
 
-Slice 3 trims live playlists before serving them, preserves
-`#EXT-X-DISCONTINUITY` boundaries across retained segments, deletes stale
-temp-backed `.ts` / `.m4s` / `.mp4` files, and supports fMP4 worker output
-(`segmenter-fmp4`) with `#EXT-X-MAP` / init-segment delivery through the shared
-session file route. Slice 4 ports the direct branch: `.m3u8?mode=hls-direct`
-now emits a single-entry playlist with per-channel media-sequence tracking,
-`#EXT-X-DISCONTINUITY`, and `/iptv/hls-direct/{n}[.ts|.mp4|.mkv]` targets
-driven by `ffmpeg.hls_direct.output_format` (default `mpegts`); the direct
-stream route reuses the shared FFmpeg process streaming path and emits
-output-format-aware content types.
+Access control ports `ConditionalIptvAuthorizeFilter`: `/iptv/*` is protected by
+route-scoped middleware active only when `JWT:IssuerSigningKey` is configured,
+validating HS256 + `exp` from `?access_token=` or `Authorization: Bearer`, with
+the `/iptv/logos` exemption. Subtitles burn/overlay for the segmenter and copy
+compatible embedded image subtitles for HLS-direct MKV/MP4 (text ignored like
+ErsatzTV). The stop-session surface (`/channels` Stop Transcode) ports
+`IsActive`/`StopChannel`/`Cancel`.
 
-Slice 5 ports `ConditionalIptvAuthorizeFilter` parity: `/iptv/*` routes are
-protected by a route-scoped middleware that activates only when
-`JWT__IssuerSigningKey` / `JWT:IssuerSigningKey` is configured, extracts the
-token from `?access_token=` or `Authorization: Bearer`, validates HS256
-signatures plus `exp`, and preserves the `/iptv/logos` exemption. The subtitle
-slice wires the segmenter worker and HLS-direct stream path into the shared
-subtitle selector: segmenter burns selected text subtitles or overlays image
-subtitles; HLS-direct copies compatible embedded image subtitles for MKV/MP4
-outputs and intentionally ignores text subtitles like ErsatzTV.
-
-The stop-session slice (driven by the `/channels` Stop Transcode Session
-button) extended the session layer with `HlsSessionHandle::cancel`,
-`HlsSessionRegistry::active_channels`/`is_active`/`stop_channel`, and worker
-`cancel`, porting `IFFmpegSegmenterService.IsActive`/`StopChannel` and
-`IHlsSessionWorker.Cancel`: canceling wakes the worker run loop so it kills
-FFmpeg, cleans the working dir, and deregisters, and `active_channels` exposes
-the live-session set for client polling.
-
-The final init-cache slice ports ErsatzTV's fMP4 init-segment lifetime model:
-fMP4 workers now generate upstream-shaped `live_<generated>_%06d.m4s` segments
-and `<generated>_init.mp4` init files, cache init files by hash, rewrite served
-`#EXT-X-MAP` lines to the earliest cached init with the same hash, preserve that
-earliest init while any later equivalent generation still needs it, delete only
-segments before the served playlist window so work-ahead output remains
-servable, delete stale non-earliest init files only after their generation is no
-longer represented on disk or in the trim generation, and use the retained init
-plus latest `.m4s` for fMP4 PTS probing between transcodes. The closeout
-includes a real FFmpeg fMP4 runtime smoke against the Big Buck Bunny fixture:
-the generated playlist contains the timestamped `#EXT-X-MAP`, the segment is
-timestamped `live_<generated>_*.m4s`, and `ffprobe` reads the concatenated init
-plus media segment.
-
-Reopened audit (2026-06-08): the exposed HLS playlists, HLS-direct output
-formats, access-token middleware, session registry, playlist trimming, fMP4 init
-cache, subtitle/watermark/graphics command inputs, and stop-session surface are
-ported, but the segmenter runtime does not yet match ErsatzTV's transport
-orchestration. ErsatzTV's `StartFFmpegSessionHandler` reads
-`ffmpeg.segmenter.timeout_seconds`, disables the timeout for KeepRunning
-channels, refreshes graphics elements, starts a worker, and waits for
-`ffmpeg.segmenter.initial_segment_count` segments before returning the
-multi-variant playlist. The startup-settings slice now reads the persisted
-segmenter timeout (default 60 seconds), disables the idle timeout for
-KeepRunning channels, starts/touches the worker from both HLS segmenter and
-MPEG-TS wrapper paths, and waits until the configured initial segment count is
-visible in the live session playlist before returning the multi-variant
-playlist. The state-machine slice now enforces `ffmpeg.segmenter.work_ahead_limit`
-while reserving accelerated work-ahead slots.
+StopOnDisconnect lifecycle parity is implemented and live-proven for both the
+segmenter and MPEG-TS hybrid wrapper paths: segment serving touches the worker
+(`TouchChannel`), active FFmpeg generations observe the configured idle timeout,
+cancellation waits for child exit before deregistering and removing the temp
+dir, and the wrapper waits for the initial segment count before wrapping. Direct
+`.ts` response-body disposal is guarded by
+`spawn_stream_body_kills_ffmpeg_when_body_is_dropped`. Sub-second request-time /
+in-point seek offsets are preserved as `Duration` end-to-end (TimeSpan-shaped
+`-ss 00:HH:MM:SS.fffffff` argv) through active-item selection, the worker
+command, `StreamSeek`, direct `.ts`, and troubleshooting previews, matching
+ErsatzTV instead of flooring to seconds.
 
 ADR 0016 adds an ErsatzRS-specific active HLS transcode limit
 (`ffmpeg.segmenter.active_transcode_limit`, default 2) beside ErsatzTV's
-work-ahead limit. The active limit caps concurrent HLS Segmenter FFmpeg
-generations to protect smaller systems from heat/load during rapid channel
-switching, while recently touched sessions can temporarily take priority so the
-currently viewed channel stays responsive.
+work-ahead limit, capping concurrent segmenter FFmpeg generations to protect
+smaller systems during rapid channel switching while recently touched sessions
+keep priority.
 
-The HLS command-options slice ports ErsatzTV's MPEG-TS segment option rule:
-MPEG-TS HLS output now emits
-`-hls_segment_options mpegts_flags=+initial_discontinuity` for the first
-transcode or any transcode with zero PTS offset, adds `+latm` when the playback
-profile uses AAC-LATM, skips the initial-discontinuity flag when a non-zero PTS
-offset is applied, and leaves fMP4 HLS output without MPEG-TS segment options.
-
-The first state-machine slice ports the deterministic `HlsSessionState`
-transition table and the core worker-loop scheduling rules from ErsatzTV:
-Rust now tracks `SeekAndWorkAhead`, `ZeroAndWorkAhead`, `SeekAndRealtime`,
-`ZeroAndRealtime`, slug states, and `PlayoutUpdated`; gates transcoding on the
-same 60-second buffered-output threshold; switches to realtime once at least
-30 seconds are buffered; reads `ffmpeg.segmenter.work_ahead_limit`; reserves a
-global work-ahead slot while accelerated transcodes are running; chooses the
-request timestamp and start-at-zero behavior from the current state; and bounds
-each work-ahead segmenter FFmpeg command to ErsatzTV's 44-second cap before
-switching to realtime-paced input, instead of running the full remaining media
-path open-ended.
-
-The playout-update notification slice wires the modeled `PlayoutUpdated` state
-into the scheduler-owned build path: active HLS handles and registries now
-expose `playout_updated`, the concrete worker stores state outside the run-loop
-local so notifications can switch the next iteration to `PlayoutUpdated`, and
-both requested and periodic playout builds can notify active segmenter sessions
-after successful non-Continue builds when persisted playout output changed or
-the channel is OnDemand. The HLS worker now treats `PlayoutUpdated` as a live
-seek for request-time selection, using the current wall clock instead of a
-possibly stale buffered-ahead `transcoded_until` while preserving the ErsatzTV
-state transition table. The web host passes its live HLS registry into the
-scheduler so the notification reaches in-process workers.
-
-The on-demand runtime slice ports the segmenter-owned playout time-shift and
-checkpoint behavior: HLS worker startup now time-shifts OnDemand playout item
-windows, guide windows, history, program-schedule anchors, and playout anchors
-to the worker start time when needed; successful and failed transcode attempts
-refresh `Playout.OnDemandCheckpoint` for OnDemand channels; and the worker now
-loads `Channel.SlugSeconds` so the already-ported slug states can be selected
-when a channel has slug seconds configured.
-
-The slug-generation slice wires those slug states to runtime output: when the
-state machine enters `SlugAndWorkAhead` or `SlugAndRealtime`, the worker now
-bypasses playout-item lookup and emits an ErsatzTV-shaped generated black-video
-plus silent-audio HLS command for the configured `Channel.SlugSeconds`
-duration, preserving profile/resolution metadata, HLS segment options, PTS
-offset continuity, and the normal worker cancellation/trim loop before
-returning to the zero-start playout state.
-
-The error-fallback slice ports ErsatzTV's failed-transcode replacement process:
-when an item FFmpeg segmenter exits unsuccessfully, the worker captures the
-stderr tail or fallback exit-code text, writes a generated error ASS subtitle
-over the bundled background image, pairs it with null audio, preserves the same
-duration, output PTS offset, metadata, HLS segment options, and trim/cancel
-loop, then advances with the ErsatzTV-equivalent `NextState(_state, null)`
-transition so playlist continuity is maintained after the failed item attempt.
-
-Runtime proof (2026-06-08): with channel 1 in HLS Segmenter mode, the rebuilt
-worker returned the multi-variant playlist, then `/iptv/session/1/hls.m3u8`
-was sampled for about 70 seconds across the reported 24-second skip and
-48-second stop window. Before the work-ahead cap fix, the same proof showed the
-playlist media sequence racing from 63 to 228 in about 71 seconds, which let
-VLC fall behind deleted segments. After the fix, media sequence advanced from
-3 to 22 over the same wall-clock window, and each sampled newest segment
-ffprobed as readable HEVC video plus AAC audio. HLS Direct was also reloaded
-and a bounded partial `/iptv/hls-direct/1.ts` stream ffprobed with HEVC video
-plus AAC audio.
-
-Runtime proof (2026-06-09): after the `PlayoutUpdated` request-time fix,
-channel 1 in HLS Segmenter mode again returned the multi-variant playlist and
-`/iptv/session/1/hls.m3u8` was sampled for 180 seconds across and beyond the
-reported one-to-two-minute failure range. Media sequence advanced from 81 to
-128 with a constant 10-segment playlist window and stable discontinuity
-sequence, and `live000046.ts` ffprobed as H.264 video plus AAC audio. TSDuck
-sampled `/iptv/channel/1.ts?mode=ts` for 161 seconds and reported zero invalid
-syncs, transport errors, PCR/PTS/DTS leaps, continuity discontinuities,
-duplicated packets, or invalid PES prefixes on the audio, video, PAT, PMT, and
-SDT PIDs; the only analysis errors were missing BAT/TDT/TOT tables. HLS Direct
-still returned its single-entry playlist and ffprobed as H.264 plus AAC, and
-TSDuck sampled `/iptv/channel/1.ts?mode=ts-legacy` for 173 seconds with the
-same zero continuity error profile and only missing BAT/TDT/TOT table warnings.
-
-HLS Direct audit: the direct branch remains mostly aligned for the current
-surface: `.m3u8?mode=hls-direct` returns a single-entry playlist, target
-container comes from `ffmpeg.hls_direct.output_format`, and the stream path uses
-copy audio/video with realtime input pacing like ErsatzTV. No HLS-direct-only
-ParityDebt was found in this audit, but it shares the direct current
-playout-item lookup/fallback limitations documented under MPEG-TS channel
-streaming.
-
-Runtime stability audit (2026-06-13): MTV channel 2 in HLS Segmenter mode was
-started through `./run.sh serve` and tested with TSDuck against
-`/iptv/channel/2.m3u8?mode=segmenter` while the same HLS stream was also open
-in VLC as a parallel viewer. VLC froze before the requested 10-minute window
-completed. During the freeze window the server kept one segmenter FFmpeg
-process alive for `No Doubt - Ex-Girlfriend.mp4`, and direct playlist snapshots
-showed `/iptv/session/2/hls.m3u8` advancing from media sequence 64-73 to 70-79
-in about ten seconds with no fresh server-side FFmpeg exit logged. This
-reopens the client-visible stability gap for parallel HLS playback: playlist
-production can continue while VLC stops progressing. The completed TSDuck
-analysis covered 3,491,320 packets / 656,368,160 bytes from 00:43:43 to
-00:53:44 local time and reported zero invalid syncs, transport errors,
-PCR/PTS/DTS leaps, duplicated packets, or invalid PES prefixes, but did report
-unexpected continuity discontinuities on PAT (3), SDT/BAT (4), video PID 256
-(4), audio PID 257 (3), and PMT PID 4096 (3), plus the expected missing
-BAT/TDT/TOT table warnings for this generated stream.
-
-Closeout (2026-06-13): the worker now ports ErsatzTV's playlist clock behavior
-more closely by synthesizing `#EXT-X-PROGRAM-DATE-TIME` from the worker's
-playlist start plus accumulated `#EXTINF` durations before each append, so
-appended FFmpeg generations no longer expose wall-clock timestamp rollback.
-ADR 0015 records the deliberate improvement beyond ErsatzTV's raw FFmpeg
-output: before a MPEG-TS HLS playlist is returned, retained `.ts` segments are
-normalized in media-sequence order so PAT, SDT/BAT, PMT, video, and audio
-continuity counters remain stable across separate FFmpeg process boundaries.
-
-Runtime proof (2026-06-13): short two-client TSDuck proof at
-`/tmp/ersatzrs-hls-proof-continuity-20260613T090307` crossed multiple
-`#EXT-X-DISCONTINUITY` boundaries with both clients exiting 0, empty continuity
-logs, and TSDuck `discontinuities=0` on PAT, SDT/BAT, PMT, video, and audio
-PIDs. The required long parallel-client proof at
-`/tmp/ersatzrs-hls-proof-10min-20260613T090637` ran two TSDuck HLS clients
-against `/iptv/channel/2.m3u8?mode=segmenter` for 150 live segments: client A
-covered 597 seconds and client B covered 595 seconds, both exited 0, both
-continuity logs were empty, and TSDuck reported zero invalid syncs, transport
-errors, PCR/PTS/DTS leaps, duplicated packets, invalid PES prefixes, or
-continuity discontinuities on PAT, SDT/BAT, PMT, video, or audio PIDs. The 130
-captured `/iptv/session/2/hls.m3u8` snapshots also passed the monotonic
-program-date-time check. `cargo xtask smoke` passed afterward with HTTP 200
-evidence for `/iptv/channel/1.ts?mode=ts`, `/iptv/channel/1.m3u8?mode=segmenter`,
-and `/iptv/session/1/hls.m3u8`.
-
-Reopened lifecycle audit (2026-06-13): VLC stop-on-disconnect parity is not yet
-proven for all client-facing channel paths. ErsatzTV exposes `Idle Behavior`
-with the explicit contract that `Stop On Disconnect` stops transcoding after
-all clients have disconnected; its segmenter worker uses
-`ffmpeg.segmenter.timeout_seconds` (default 60 seconds), disables that timeout
-only for `KeepRunning`, touches session access when playlist or segment files
-are served, and direct `.ts` responses register the FFmpeg process for response
-disposal. The local ErsatzRS database currently has channels 1 and 2 configured
-as `StopOnDisconnect` with a 60-second segmenter timeout. The reported VLC
-shutdown was observed before waiting that full local timeout, so it is not yet
-proof of an indefinite-session bug; the remaining parity debt is to prove that
-ErsatzRS stops after the configured timeout, and to compare against the
-configured timeout in the reference ErsatzTV instance if it is shorter. Direct
-TS response-body disposal is already covered by the
-`spawn_stream_body_kills_ffmpeg_when_body_is_dropped` regression guard; the
-open lifecycle proof needs to cover HLS segmenter and hybrid MPEG-TS wrapper
-sessions.
-
-Reopened startup-seek audit (2026-06-14): with a fresh HLS HOME/temp directory
-and a Classic-scheduled calibration playout whose persisted `PlayoutItem` rows
-advanced 1->2->3 every six seconds, the HLS Segmenter capture started on clip 3
-at ABS 00:06:02.483 and then restarted clip 3 near ABS 00:06:00.333 before
-advancing to clip 1 and clip 2. The modern MPEG-TS wrapper frame sheet for the
-same Classic-built timeline advanced as expected. This localizes a
-client-visible duplicate-at-session-start gap to HLS segmenter startup/seek
-handling, separate from the Classic scheduler row order.
-
-Closeout (2026-06-14): the HLS worker and direct current-item lookup now pass
-full-precision persisted playout timestamps into SQL instead of truncating
-request time to whole seconds. Rebuilt-runtime Classic calibration proof with a
-fresh HLS HOME showed HLS Segmenter and modern MPEG-TS wrapper captures both
-advancing 2->3->1->2 with no repeated clip/timecode span; the HLS and TS URL
-TSDuck playback gates both passed with zero continuity-counter errors, zero
-PTS/DTS/PCR leaps, and zero TS sync losses. `cvlc` also played the TS URL and,
-with dummy outputs/hardware decode disabled to avoid local EGL/VA crashes, the
-channel HLS entrypoint.
-
-Closeout (2026-06-15): StopOnDisconnect lifecycle parity is now implemented and
-live-proven for both client-facing segmenter paths. HLS segment file serving now
-touches the worker like ErsatzTV's `TouchChannel` static-file path, active HLS
-FFmpeg generations observe the configured idle timeout while the process is
-still running, cancellation waits for the child process to exit before the
-worker removes its registry entry and temp directory, and the MPEG-TS hybrid
-wrapper waits for the configured initial segment count before wrapping a newly
-started segmenter session. `cargo xtask smoke --hls-lifecycle --timeout 240`
-seeded `IdleBehavior = StopOnDisconnect` with
-`ffmpeg.segmenter.timeout_seconds = 20`, fetched
-`/iptv/channel/1.m3u8?mode=segmenter`, `/iptv/session/1/hls.m3u8`, and a real
-`/iptv/session/1/live000000.ts` segment, then observed
-`/tmp/ersatzrs-hls/1` removed after idle timeout. The same run restarted through
-`/iptv/channel/1.ts?mode=ts`, read 8192 bytes from the wrapper response, and
-again observed `/tmp/ersatzrs-hls/1` removed after idle timeout. Direct `.ts`
-response-body disposal remains covered by
-`spawn_stream_body_kills_ffmpeg_when_body_is_dropped`.
-
-Reopened playback-continuity audit (2026-06-15): a five-minute TSDuck capture
-of the running Windows build on channel 5 `calibration`
-(`/iptv/channel/5.m3u8?mode=segmenter`) proved that the HLS Segmenter can emit a
-structurally valid MPEG-TS stream while the decoded content timeline deviates.
-TSDuck reported zero transport errors, sync losses, continuity-counter
-discontinuities, PTS/DTS/PCR leaps, missing video/audio PIDs, or scrambling
-errors, and the server log contained no WARN/ERROR/FFmpeg failure/no-active
-playout lines during capture. The calibration audio pips, however, showed
-phase jumps of +32 ms near a segmenter respawn, -488 ms at the clip 3 to clip 1
-playout rollover, and +32 ms at the later clip 1 to clip 2 rollover. Decoded
-video frame 18,000 (exactly 300 seconds at 60 fps from the first captured
-frame) showed `ABS 00:03:03.517` where `ABS 00:03:03.000` was expected, and
-rollover probes showed the incoming item already at `ABS 00:00:00.517` by
-decoded second 117. Root-cause note:
-`docs/explanation/hls-segmenter-playback-deviation-root-cause.md`. The source
-calibration clips are not the cause; each MKV has exactly 10,800 video frames
-at 60 fps, with the 180.021 s container duration coming from AAC packetization.
-
-Closeout (2026-06-16): HLS Segmenter seek propagation now preserves
-sub-second request-time and in-point offsets as `Duration` through active-item
-selection, worker FFmpeg command construction, the shared FFmpeg `StreamSeek`
-pipeline step, the direct IPTV `.ts` stream path, and troubleshooting previews.
-The generated FFmpeg seek argv changed from whole-second forms such as
-`-ss 900` / `-ss 120` to TimeSpan-shaped values such as
-`-ss 00:15:00.0000000`, `-ss 00:02:00.0000000`, and fractional
-`-ss 00:00:00.5170000`, matching ErsatzTV's full `TimeSpan` representation
-instead of flooring away milliseconds before process spawn. The TSDuck gate now
-also isolates the server temp directory per run across platforms, writes
-host-native SQLite/media paths when the shell path format differs from the
-server process path format, waits for transient bootstrap SQLite locks, and
-decodes the HLS Segmenter capture to verify one-second calibration audio pip
-cadence. Rebuilt runtime proof using the copied `E:\calibrate` clips passed
-`scripts/e2e/tsduck-playback-gate.sh --keep --frames gate` with 86 checks and
-0 failures: HLS Segmenter captured 54.208 seconds, 36,045 TS packets, zero
-transport errors, sync losses, continuity-counter errors, PTS/DTS/PCR leaps, or
-scrambling faults, and 54 detected audio pips with gap range 1.000-1.030 s
-(`max_gap_deviation=30.0ms`). Manual frame probes around the first real
-playout rollover showed `CLIP 1/3` at `ABS 00:00:07.783` immediately followed
-by `CLIP 2/3` at `ABS 00:03:00.017` / `CLIP 00:00:00.017`, so the previous
-early incoming-item `ABS 00:00:00.517` behavior was not reproduced.
+Runtime proof: repeated TSDuck / `cargo xtask smoke` captures (2026-06-08
+through 2026-06-16) showed zero transport, sync-loss, continuity-counter, or
+PTS/DTS/PCR faults across MPEG-TS and HLS segmenter paths; the 2026-06-16
+`tsduck-playback-gate.sh gate` passed 86 checks with audio-pip cadence
+1.000-1.030 s and the earlier clip-rollover deviation gone. Slice-by-slice
+history lives in `sessions.ndjson` and git log.
 '''
 
 [[debt]]
