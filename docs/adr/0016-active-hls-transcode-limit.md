@@ -46,8 +46,8 @@ different costs:
 | Work-ahead burst (racing past realtime) | Most expensive per stream | Yes, freely (realtime still serves) |
 
 The target deployment that motivates the capacity number is **two stable
-1080p60 streams (AC-3 6ch) over a 100 Mbps LAN** (see
-[`docs/hls-segmenter-ffmpeg-profile-recommendations.md`](../hls-segmenter-ffmpeg-profile-recommendations.md)):
+1080p60 streams (AC-3 6ch) over a 100 Mbps LAN** (the default profile for this
+target is [ADR 0017](0017-default-ffmpeg-profile-1080p60.md)):
 ~19 Mbps muxed per stream, ~38 Mbps for two, well under the network ceiling,
 which makes `N = 2` the correct default for that hardware class. The ceiling is
 primarily CPU/GPU-bound; the network/segmenter profile is a complementary
@@ -163,7 +163,7 @@ everything else is opportunistic and reclaimable.*
 - [ADR 0014: Runtime-learned hardware capability fallback](0014-runtime-learned-hardware-capability-fallback.md)
 - [ADR 0015: HLS / MPEG-TS continuity normalization](0015-hls-mpeg-ts-continuity-normalization.md)
 - [Implementation plan](../../plans/hls-transcode-capacity-and-admission.md)
-- [HLS segmenter FFmpeg profile recommendations](../hls-segmenter-ffmpeg-profile-recommendations.md)
+- [ADR 0017: Default FFmpeg profile tuned for smooth 1080p60 streaming](0017-default-ffmpeg-profile-1080p60.md)
 - [`crates/ersatzrs-infra/src/hls_worker.rs`](../../crates/ersatzrs-infra/src/hls_worker.rs)
 - [`docs/progress/parity/hls-variant-playlists-segmenter.toml`](../progress/parity/hls-variant-playlists-segmenter.toml)
 

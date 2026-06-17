@@ -28,23 +28,45 @@ FFmpeg command, the shared `StreamSeek` step, direct `.ts`, and troubleshooting
 previews, closing the last open content-timeline debt; `fix: limit active hls
 transcodes` (cfc5024) added the ErsatzRS-specific
 `ffmpeg.segmenter.active_transcode_limit` (ADR 0016, default 2). With every
-structured debt now `resolved`, `hls-variant-playlists-segmenter` is `Ported`
-and no longer appears in `cargo xtask progress gaps`; its over-budget summary
-was trimmed to current-state-only in this pass. The two docs commits
+structured debt `resolved` at `cfc5024`, `hls-variant-playlists-segmenter` was
+`Ported` and dropped out of `cargo xtask progress gaps`; its over-budget summary
+was trimmed to current-state-only in this pass. (It was reopened the same day by
+the ADR 0016 revision — see the 2026-06-17 addendum below.) The two docs commits
 (f67a502, 2b98cb0) recorded that work and the prior reconcile. No other parity
 feature changed.
 
-`cargo xtask progress gaps` now lists 7 remaining features, all `In progress`.
-None of the three carried-over picks saw any commits this window, so per the
-carry-over rule they are kept unchanged: slot 1 `ffmpeg-filter-graph`
+`cargo xtask progress gaps` listed 7 remaining features at `cfc5024`, all `In
+progress` (8 after the 2026-06-17 addendum below). None of the three
+carried-over picks saw any commits this window, so per the carry-over rule they
+are kept unchanged: slot 1 `ffmpeg-filter-graph`
 (phase-focus, foundational pipeline, carries the folded hardware-only
-`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof` rather than
-giving it a standalone prompt), slot 2
+`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof`; that feature's
+other open debts are the plan-tracked ADR 0017 items in the addendum, so it
+still gets no standalone parity prompt), slot 2
 `multi-collections-rerun-collections-playlists-filler-presets` (phase-focus
 route-family closeout), slot 3 `scanner` (phase-focus hardening, two blocking
 runtime debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
 The root-cause note for the now-closed HLS deviation remains at
 [`explanation/hls-segmenter-playback-deviation-root-cause.md`](explanation/hls-segmenter-playback-deviation-root-cause.md).
+
+**2026-06-17 addendum (manual reconcile; design work not yet committed).** Two
+ErsatzRS-specific streaming decisions were recorded, both tracked through
+[`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md):
+
+- **ADR 0016 revised** from a soft `active_transcode_limit` cap (whose
+  recently-accessed bypass was unbounded) into a hard capacity ceiling plus an
+  admission/preemption ladder. This reopened `hls-variant-playlists-segmenter`
+  (`In progress`) with debt `active-transcode-limit-not-a-real-ceiling`.
+- **ADR 0017 added** — the default FFmpeg profile tuned for smooth 1080p60 /
+  AC-3 6ch streaming on CPU — adding debts `default-profile-1080p60-retune` and
+  `ac3-segmenter-max-delay` to `ffmpeg-command-generation`.
+
+`cargo xtask progress gaps` now lists **8** features. These three debts are
+ErsatzRS hardening/deviations carrying their own ADRs and a dedicated plan, not
+gaps against the pinned ErsatzTV baseline, so per the one-ErsatzTV-parity-gap
+rule they do not consume a goal-prompt slot; the three parity picks below are
+unchanged. The next routine run will fold this addendum into the regenerated
+narrative.
 
 ---
 

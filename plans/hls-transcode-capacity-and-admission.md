@@ -126,45 +126,35 @@ The smallest change that stops the unbounded bypass and the false labeling.
 - **Acceptance:** counter increments for MPEG-TS transcode spawns; smoke +
   TSDuck gate across all four streaming modes.
 
-## Workstream B — segmenter smoothness for the dual-1080p60-AC3 target
+## Workstream B — segmenter smoothness + default profile (ADR 0017)
 
-Source of intent:
-[`docs/hls-segmenter-ffmpeg-profile-recommendations.md`](../docs/hls-segmenter-ffmpeg-profile-recommendations.md).
-Rate-control/GOP/segment alignment are already implemented (see Current state),
-so this workstream is small.
+Specified by [ADR 0017](../docs/adr/0017-default-ffmpeg-profile-1080p60.md)
+(default FFmpeg profile tuned for 1080p60 / AC-3 6ch on CPU). Rate-control, GOP,
+scene-cut, and segment alignment are already implemented (see Current state), so
+this workstream is small: seed the new default values and add one interleaving
+flag.
 
 ### Stage B1 — AC-3 interleaving (`-max_delay`)
-- Add `-max_delay 500000` (0.5 s) to the segmenter output for heavy multichannel
-  audio so 6ch AC-3 interleaves tightly with video and does not pop/drift at
-  segment boundaries. Gate it to AC-3 / multichannel output; snapshot the argv.
-- This is an ErsatzRS addition (not in ErsatzTV); if it changes generated argv
-  semantics broadly, record it in the parity file and consider a short ADR.
+- Add `-max_delay 500000` (0.5 s) to the segmenter output for multichannel AC-3
+  (ADR 0017 §2) so 6ch audio interleaves tightly with video and does not
+  pop/drift at segment boundaries. Gate it to AC-3 / multichannel output.
+- ErsatzRS addition (not in ErsatzTV); recorded by ADR 0017.
 - **Acceptance:** `insta` argv snapshot for an AC-3 6ch segmenter command;
   TSDuck gate shows no audio-PID timestamp regressions; manual A/V-sync check at
   segment seams.
 
-### Stage B2 — Recommended profile preset (documentation + optional seed)
-Document a concrete, copy-pasteable FFmpeg profile for the target deployment and
-optionally seed it as a named preset. Values from the recommendations doc,
-expressed in ErsatzRS `FFmpegProfile` fields:
+### Stage B2 — Seed the new default profile
+- Update `ensure_default_ffmpeg_profile` (and its seed assertions) in
+  `crates/ersatzrs-infra/src/db.rs` to the ADR 0017 §1 values: rename to
+  `1920x1080 x264 ac3 6ch`, preset `veryfast`, video 15000/15000 kbit, AC-3
+  640/640 kbit, 6 channels. Fresh-DB only; existing profiles are not overwritten
+  (ADR 0017 §4).
+- **Acceptance:** seed test asserts the new values; `cargo xtask smoke`; manual
+  two-stream 1080p60 soak over the LAN stays stutter-free.
 
-| Field | Recommended (1080p60, AC-3 6ch, 100 Mbps LAN) | Note |
-| --- | --- | --- |
-| `video_format` | H.264 | HEVC ~6–8 Mbps if clients support it |
-| `video_bitrate` | `15000` (12000–15000) | target ≈ maxrate (CBR-ish) |
-| `video_buffer_size` | `15000` (1× target; ≤ 2×) | **not** the 4000 default — too small for 15 Mbps; avoid huge buffers |
-| GOP / segment | 2 s GOP, 4 s segment | already emitted; no profile field |
-| `audio_format` | AC-3 | passthrough/encode 6ch |
-| `audio_bitrate` | `640` | AC-3 6ch max |
-| `audio_buffer_size` | `640` (1×) – `960` (1.5×) | match video buffer window |
-| Capacity `N` | `2` | two such streams ≈ 38 Mbps muxed; CPU/GPU-bound |
-
-- **Acceptance:** doc section added; if seeded, a migration/seed test asserts the
-  preset values; manual two-stream soak over the LAN stays stutter-free.
-
-> `-muxrate`/CBR null-padding from the doc applies to UDP push to an external
-> segmenter; ErsatzRS *is* the `-f hls` segmenter, so muxrate is out of scope
-> here. The relevant levers are bufsize (done) + `-max_delay` (B1).
+> `-muxrate` / `pkt_size` are out of scope (ADR 0017 §3): they belong to constant
+> UDP push, not the `-f hls`-over-HTTP segmenter. The relevant levers are bufsize
+> (done) and `-max_delay` (B1).
 
 ## Gates before "done"
 
