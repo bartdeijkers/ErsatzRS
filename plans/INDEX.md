@@ -116,6 +116,11 @@ Feature-level porting plans live alongside this index.
 - `ffmpeg-zscale-runtime-remediation.md` — ensure the self-built and release
   FFmpeg runtimes include `zscale` (via `--enable-libzimg`) alongside `drawvg`,
   and document diagnosis/remediation for the fail-fast startup capability check.
+- `hls-transcode-capacity-and-admission.md` — implements the revised ADR 0016:
+  turn `ffmpeg.segmenter.active_transcode_limit` into a true hard ceiling with an
+  admission/preemption ladder, decoupled watch/retention windows, slate-on-full,
+  a tuner-model configuration + live usage readout, and a segmenter-smoothness
+  preset for the dual-1080p60 AC-3 6ch target.
 
 ## Deferred Contract Work
 

@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0015', '0016']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs:
@@ -53,18 +53,17 @@ in-point seek offsets are preserved as `Duration` end-to-end (TimeSpan-shaped
 command, `StreamSeek`, direct `.ts`, and troubleshooting previews, matching
 ErsatzTV instead of flooring to seconds.
 
-ADR 0016 adds an ErsatzRS-specific active HLS transcode limit
+ADR 0016 adds an active HLS transcode limit
 (`ffmpeg.segmenter.active_transcode_limit`, default 2) beside ErsatzTV's
-work-ahead limit, capping concurrent segmenter FFmpeg generations to protect
-smaller systems during rapid channel switching while recently touched sessions
-keep priority.
+work-ahead limit. The shipped first cut is a soft cap whose priority bypass is
+unbounded, so it is not a true ceiling; ADR 0016 was revised to a hard capacity
+ceiling plus an admission/preemption ladder (see the open debt below).
 
 Runtime proof: repeated TSDuck / `cargo xtask smoke` captures (2026-06-08
 through 2026-06-16) showed zero transport, sync-loss, continuity-counter, or
 PTS/DTS/PCR faults across MPEG-TS and HLS segmenter paths; the 2026-06-16
 `tsduck-playback-gate.sh gate` passed 86 checks with audio-pip cadence
-1.000-1.030 s and the earlier clip-rollover deviation gone. Slice-by-slice
-history lives in `sessions.ndjson` and git log.
+1.000-1.030 s. Slice-by-slice history lives in `sessions.ndjson` and git log.
 '''
 
 [[debt]]
@@ -87,3 +86,10 @@ description = 'HLS Segmenter appends independently spawned FFmpeg generations by
 discovered  = '2026-06-15'
 evidence    = 'Channel 5 calibration capture from /iptv/channel/5.m3u8?mode=segmenter: TSDuck reported zero TS continuity/timestamp/container faults, but audio pips moved +32 ms near a respawn, -488 ms at the clip 3 -> clip 1 rollover, and +32 ms at the clip 1 -> clip 2 rollover. Decoded frame 18,000 showed ABS 00:03:03.517 instead of expected ABS 00:03:03.000, and rollover probes showed clip 1 already at ABS 00:00:00.517 by decoded second 117. Root-cause note: docs/explanation/hls-segmenter-playback-deviation-root-cause.md.'
 resolved    = true
+
+[[debt]]
+id          = 'active-transcode-limit-not-a-real-ceiling'
+description = 'ffmpeg.segmenter.active_transcode_limit (ADR 0016) does not bound concurrent transcodes for actively-watched channels. The priority bypass (force_reserve_active_transcode in crates/ersatzrs-infra/src/hls_worker.rs) increments the counter without an upper bound whenever a session is recently accessed (idle < 30s), and every playlist/segment request calls touch(), so each live viewer permanently bypasses the cap. With K viewers on K channels and limit N, K-N sessions force-reserve, yielding K concurrent transcodes regardless of N. The single 30s constant also conflates "is anyone watching?" with the priority-slot lifetime. The revised ADR 0016 replaces this with a hard capacity ceiling plus an admission/preemption ladder (stop work-ahead, reclaim cooling, preempt stalest watched, else serve an "all streams in use" slate that holds no slot), decoupled watch (~30s) vs retention (= idle timeout) windows, a tuner-model configuration ("Maximum simultaneous transcodes" + reframed work-ahead), a live "Streams in use: X / N" readout, a hardware-aware suggested default, and eventual pipeline-agnostic (MPEG-TS) counting.'
+discovered  = '2026-06-17'
+evidence    = 'Code review of commit cfc5024 (ADR 0016 implementation). hls_worker.rs force_reserve_active_transcode does an unconditional fetch_add; was_recently_accessed() uses idle < HLS_ACTIVE_VIEWER_GRACE (30s); touch() is called on every playlist poll (crates/ersatzrs-web/src/transport/iptv/hls.rs:493) and segment fetch (:566). Plan: plans/hls-transcode-capacity-and-admission.md.'
+resolved    = false
