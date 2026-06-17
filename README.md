@@ -64,8 +64,11 @@ Documentation follows the Diataxis structure under [docs/](docs/README.md):
 - SQLite as the default database backend (created at `~/.ersatzrs/ErsatzRS.db`).
 - MySQL 8/MariaDB support behind the `mysql` Cargo feature; set
   `DATABASE_URL='mysql://user:pass@host/ersatzrs'` to use it.
-- For interactive UI development: `cargo install cargo-leptos --locked` and run
-  `cargo leptos build` in `crates/ersatzrs-web/` to generate WASM hydration assets.
+- For interactive UI development: `cargo install cargo-leptos --locked`, then use
+  the `./run.sh` dev entry point (`./run.sh dev` for hot-reload, `./run.sh build`
+  for a CI-parity one-shot build that generates the WASM hydration assets). On
+  Windows use the [`run.cmd`](run.cmd) shim. See [BUILD.md](BUILD.md) for the full
+  command reference.
 
 ## Credits
 
