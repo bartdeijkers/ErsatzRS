@@ -43,6 +43,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Scheduling admin route-family parity is now closed for schedules, blocks,
+  templates, decos, and deco templates, with durable browser coverage for the
+  hydrated route workflows, editor fallback forms, localized labels, and
+  console-clean visual geometry.
 - Classic scheduling now preserves imported schedule-item filler preset IDs and
   schedules ErsatzTV-style per-item pre-roll, post-roll, tail, and fallback
   filler around Classic playout items while keeping fill-group state intact.

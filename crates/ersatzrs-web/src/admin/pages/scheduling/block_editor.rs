@@ -29,8 +29,18 @@ pub fn BlockEditorPage() -> impl IntoView {
     let params = use_params_map();
     let block_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let no_script_data = load_block_editor_no_script_data(block_id());
 
-    view! { <BlockEditorIsland block_id=block_id()/> }
+    view! {
+        <style>".block-editor-noscript { display: none; }"</style>
+        <noscript>
+            <style>".block-editor-noscript { display: block; } .block-editor-js { display: none; }"</style>
+            <div class="block-editor-noscript" inner_html=block_editor_no_script_html(no_script_data)></div>
+        </noscript>
+        <div class="block-editor-js">
+            <BlockEditorIsland block_id=block_id()/>
+        </div>
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -593,6 +603,40 @@ fn block_editor_fallback_html(
         rows = rows,
         new_collection = option_select_html("new_collection_id", None, &options.collections),
     )
+}
+
+fn block_editor_no_script_html(
+    data: Option<(BlockForm, Vec<BlockItemForm>, BlockEditorOptions)>,
+) -> String {
+    match data {
+        Some((block, items, options)) => block_editor_fallback_html(&block, &items, &options),
+        None => format!(
+            r#"<p class="{}">{}</p>"#,
+            style::empty,
+            escape_html(tr(TextKey::BlockNotFound))
+        ),
+    }
+}
+
+fn load_block_editor_no_script_data(
+    block_id: i64,
+) -> Option<(BlockForm, Vec<BlockItemForm>, BlockEditorOptions)> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let block = get_block(block_id).await.ok().flatten()?;
+                let items = get_block_items(block_id).await.ok()?;
+                let options = load_block_editor_options().await.ok()?;
+                Some((block, items, options))
+            })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = block_id;
+        None
+    }
 }
 
 fn block_item_fallback_row_html(

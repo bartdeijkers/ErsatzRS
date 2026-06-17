@@ -957,7 +957,7 @@ fn DecoTemplatesIsland() -> impl IntoView {
                                 }
                             }
                         >
-                            {tr(TextKey::AddDecoToTemplate)}
+                            {tr(TextKey::AddDecoTemplate)}
                         </button>
                     </form>
                 </section>

@@ -88,82 +88,99 @@ slot 1 is refilled with
 `schedules-templates-decorations-deco-templates`; slots 2 and 3 carry over.
 `cargo xtask progress gaps` now lists **6** features after this closeout.
 
+**2026-06-17 closeout addendum (manual gap #1 Scheduling admin).** The
+`schedules-templates-decorations-deco-templates` prompt was completed in this
+pass: the closeout Source Map and Visual Source Map were recorded in
+`plans/scheduling-route-family-parity-closeout.md`, durable Chromium browser
+coverage now creates and inspects schedules, blocks, templates, decos, and deco
+templates through `tests/e2e/scheduling-route-family.spec.ts`, and the tracker
+now records no remaining `ParityDebt` for this route family. Per the
+completed-scope replacement rule, slot 1 is refilled with `support-pages`;
+slots 2 and 3 carry over. `cargo xtask progress gaps` now lists **5** features
+after this closeout.
+
 ---
 
-## 1 - Schedules / Templates / Decorations / Deco templates: close scheduling admin route-family parity (slug `schedules-templates-decorations-deco-templates`)
+## 1 - Support pages (Health / Logs / Troubleshooting): close support route-family parity (slug `support-pages`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the scheduling
-admin route-family parity closeout for schedules, blocks, templates, decos, and
-deco templates (slug `schedules-templates-decorations-deco-templates`).
+Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the support
+route-family parity closeout for health checks, logs, troubleshooting tools,
+sequential schedule validation, block playout troubleshooting, and media-item
+playback troubleshooting (slug `support-pages`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
 The goal is fully functional ErsatzTV parity without stopgaps.
 
-Current status from
-`docs/progress/parity/schedules-templates-decorations-deco-templates.toml`:
-"`/schedules`, `/schedules/add`, `/schedules/:id`, and
-`/schedules/:id/items` are ported ... `/blocks` and `/blocks/:id` now port
-block group/block add/copy/delete ... `/templates` and `/templates/:id` now
-port template group/template add/copy/delete ... `/decos`, `/decos/:id`,
-`/deco-templates`, and `/deco-templates/:id` now port deco/deco-template group
-and item CRUD ...". The feature remains `In progress`, so the closeout must
-identify whether any route-family behavior, browser proof, or structured debt
-is still missing before changing status.
+Current status from `docs/progress/parity/support-pages.toml`:
+"In progress: `/system/health` renders an ErsatzTV-style two-column health
+table ... `/system/logs` reads the newest OS-local app-data log file ...
+`/system/troubleshooting` exposes the ErsatzTV-visible Tools tab plus General
+and OS-specific hardware report tabs ... Phase 7 Slice 22 adds media-specific
+troubleshooting context at `/system/troubleshooting/playback?mediaItem=ID` ...
+Dynamic nav badge counts and full log search/sort paging remain future parity
+work." The closeout must identify whether those two remaining behaviors are
+real pinned-baseline parity gaps, implemented-but-unproven behavior, or
+structured `ParityDebt` that keeps the feature below `Ported`.
 
-ErsatzTV source:
-`ErsatzTV/Pages/Schedules*.razor`, `ErsatzTV/Pages/Blocks.razor`,
-`ErsatzTV/Pages/BlockEditor.razor`, `ErsatzTV/Pages/Templates.razor`,
-`ErsatzTV/Pages/TemplateEditor.razor`, `ErsatzTV/Pages/Decos.razor`,
-`ErsatzTV/Pages/DecoEditor.razor`, `ErsatzTV/Pages/DecoTemplates.razor`, and
-`ErsatzTV/Pages/DecoTemplateEditor.razor` at the pinned commit. ErsatzRS
-target: `crates/ersatzrs-web/src/admin/pages/scheduling/`,
-`crates/ersatzrs-web/src/admin/server_fns/schedules.rs`,
-`crates/ersatzrs-web/src/admin/server_fns/playouts.rs`,
-`crates/ersatzrs-web/src/api/{schedules,playouts}.rs`, scheduling API/server
-helpers used by these pages, `crates/ersatzrs-web/src/admin/languages/`, and
-the scheduling route-family parity file.
+ErsatzTV source: `ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`,
+and `ErsatzTV/Pages/Troubleshooting/` at the pinned commit, including related
+handlers, view models, validators, localization resources, log paging/sorting,
+health result projection, troubleshooting report/archive/sample generation,
+hardware capability tabs, sequential schedule validation, block playout
+history, and playback troubleshooting HLS side effects. ErsatzRS target:
+`crates/ersatzrs-web/src/admin/pages/system/`,
+`crates/ersatzrs-web/src/admin/server_fns/{health,logs,troubleshooting}.rs`,
+`crates/ersatzrs-web/src/api/troubleshooting.rs`,
+`crates/ersatzrs-core/src/health/`, `crates/ersatzrs-infra/src/health.rs`,
+`crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`,
+and the support-pages parity file.
 
 Before editing:
-1. Read the pinned ErsatzTV Razor pages, dialog/editor models, validators,
-   save/delete/copy handlers, localization resources, and any playout refresh
-   side effects for schedules, blocks, templates, decos, and deco templates.
-2. Inspect the current ErsatzRS scheduling pages, route handlers, server
-   functions, no-JS POST fallbacks, API handlers, language modules, existing
-   Playwright/browser evidence under `plans/references/`, and active plans
-   (`plans/templates-parity-slice.md`, `plans/decos-parity-slice.md`).
-3. Build a Source Map and Visual Source Map for each list/editor/detail route,
-   including add/copy/delete actions, reorder/drag behavior, preview modals,
-   schedule item validation and dependency normalization, page-size
-   persistence, fallback forms, localized labels, and playout refresh side
-   effects.
+1. Read the pinned ErsatzTV support pages, report builders, query handlers,
+   validators, log table behavior, dynamic badge behavior, hardware tabs,
+   troubleshooting archive/sample handlers, and localization resources.
+2. Inspect the current ErsatzRS support pages, health/log/troubleshooting
+   server functions, API routes, no-JS or direct-link fallbacks, language
+   modules, existing browser evidence, and generated troubleshooting artifacts.
+3. Build a Source Map and Visual Source Map for `/system/health`,
+   `/system/logs`, `/system/troubleshooting`,
+   `/system/troubleshooting/sequential-schedule`,
+   `/system/troubleshooting/block-playout`, and
+   `/system/troubleshooting/playback?mediaItem=ID`, including health row
+   filtering, log search/sort/page-size behavior, report tabs, hardware
+   capability projection, download/sample/HLS side effects, localized labels,
+   dynamic badge counts, and fallback/direct-link behavior.
 4. Identify remaining `ParityDebt`; if the route family is already complete,
    prove it with browser/runtime evidence and close the tracker instead of
    inventing new scope.
 
 Implement only the coherent closeout slice: fix any mismatch found in source
-review or browser proof, preserve existing SSR/raw POST fallbacks and localized
-text, keep route-family work within scheduling admin boundaries, and avoid
-unrelated media/scheduling engine refactors. Add focused tests for any fixed
-persistence, validation, add/copy/delete/reorder, preview, fallback, or playout
-refresh behavior.
+review or browser proof, preserve existing support/admin route boundaries,
+localized text, direct-link/download behavior, and generated troubleshooting
+artifact shapes, and avoid unrelated FFmpeg, scheduling, or scanner refactors.
+Add focused tests for any fixed health projection, log paging/sort/search,
+badge count, report rendering, validation, archive/sample download, or HLS
+troubleshooting behavior.
 
-Add browser coverage that exercises the high-risk workflows across the route
-family: schedules and schedule items, blocks and block items, templates and
-template items, decos and deco break-content/default filler fields, and deco
-templates/timeline behavior; verify visible geometry, hydrated actions or
-fallback forms, localized labels, and no console errors. If one route still
-cannot be proven, keep the exact missing workflow as structured `ParityDebt`.
+Add browser coverage that exercises the high-risk workflows across the support
+route family: health table filtering/status labels, logs search/sort/page-size
+surface, troubleshooting Tools/General/hardware tabs, sequential schedule
+validation, block playout history, and playback troubleshooting report/download
+controls; verify visible geometry, localized labels, hydrated actions or
+direct-link fallbacks, downloadable side effects where practical, and no console
+errors. If one route still cannot be proven, keep the exact missing workflow as
+structured `ParityDebt`.
 
 Verify with focused `ersatzrs-web` tests, `cargo xtask hydration-lint -p
 ersatzrs-web`, the added browser spec or documented Playwright run,
 `cargo xtask parity-check web`, and `cargo xtask progress check`. Update
-`docs/progress/parity/schedules-templates-decorations-deco-templates.toml`,
-changelog, and this prompt file only when the evidence supports the new status.
-Report the Source Map, Visual Source Map, behavior closed, remaining
-`ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+`docs/progress/parity/support-pages.toml`, changelog, and this prompt file only
+when the evidence supports the new status. Report the Source Map, Visual Source
+Map, behavior closed, remaining `ParityDebt`, verification run, and changed
+files. Remember that ErsatzTV could have a less than optimal solution. If you
+have a better way, please create an ADR, but only after careful review in
+depth. update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when
+done.
 
 ## 2 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 

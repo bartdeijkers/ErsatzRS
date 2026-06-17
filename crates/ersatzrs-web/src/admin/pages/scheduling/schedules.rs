@@ -558,17 +558,19 @@ pub fn ScheduleItemsPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let initial_error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let fallback_data = Resource::new_blocking(
-        move || id,
-        |id| async move { get_schedule_items_page(id).await.ok().flatten() },
-    );
+    let fallback_data = load_schedule_items_no_script_data(id);
     view! {
-        <Suspense fallback=move || view! { <noscript><p class=style::empty>{tr(TextKey::Loading)}</p></noscript> }>
-            {move || fallback_data.get().map(|data| view! {
-                <noscript inner_html=schedule_items_fallback_html(id, data, &initial_error)></noscript>
-            })}
-        </Suspense>
-        <ScheduleItemsIsland id/>
+        <style>".schedule-items-noscript { display: none; }"</style>
+        <noscript>
+            <style>".schedule-items-noscript { display: block; } .schedule-items-js { display: none; }"</style>
+            <div
+                class="schedule-items-noscript"
+                inner_html=schedule_items_fallback_html(id, fallback_data, &initial_error)
+            ></div>
+        </noscript>
+        <div class="schedule-items-js">
+            <ScheduleItemsIsland id/>
+        </div>
     }
 }
 
@@ -628,6 +630,40 @@ fn schedule_items_fallback_html(
         editor_form = style::editor_form,
         add_fields = schedule_item_add_fields_html(&data.options),
     )
+}
+
+fn load_schedule_items_no_script_data(id: i64) -> Option<ScheduleItemsPageData> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::admin::server_fns::schedules::{
+            get_schedule_form_with_pool, list_schedule_items_with_pool,
+            load_schedule_item_options_with_pool,
+        };
+
+        let state = expect_context::<crate::host::state::AppState>();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let schedule = get_schedule_form_with_pool(&state.pool, id)
+                    .await
+                    .ok()
+                    .flatten()?;
+                let items = list_schedule_items_with_pool(&state.pool, id).await.ok()?;
+                let options = load_schedule_item_options_with_pool(&state.pool)
+                    .await
+                    .ok()?;
+                Some(ScheduleItemsPageData {
+                    schedule,
+                    items,
+                    options,
+                })
+            })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
+    }
 }
 
 fn schedule_item_fallback_row_html(

@@ -122,7 +122,7 @@ routed  = true
 
 [[route]]
 nav     = '/blocks'
-backing = 'aliased to `/scheduling/blocks`; list + `:id` editor ported with hydrated and no-JS fallback evidence in `plans/blocks-parity-slice.md`'
+backing = 'aliased to `/scheduling/blocks`; list + `:id` editor ported with hydrated and no-JS fallback evidence in `tests/e2e/scheduling-route-family.spec.ts`'
 routed  = true
 
 [[route]]
@@ -132,22 +132,22 @@ routed  = true
 
 [[route]]
 nav     = '/schedules'
-backing = 'list + add/`:id` editor + `:id/items` hydrated add/edit/reorder/delete surface with no-JS save/action form fallbacks'
+backing = 'list + add/`:id` editor + `:id/items` hydrated add/edit/reorder/delete surface with no-JS save/action form fallbacks; closeout evidence in `tests/e2e/scheduling-route-family.spec.ts`'
 routed  = true
 
 [[route]]
 nav     = '/templates'
-backing = 'template group/template list + `:id` editor with hydrated add/copy/delete/save and HTML POST form fallbacks'
+backing = 'template group/template list + `:id` editor with hydrated add/copy/delete/save and HTML POST form fallbacks; closeout evidence in `tests/e2e/scheduling-route-family.spec.ts`'
 routed  = true
 
 [[route]]
 nav     = '/decos'
-backing = 'deco group/deco list, add/delete routes, and `/decos/:id` editor with hydrated save plus HTML POST fallback'
+backing = 'deco group/deco list, add/delete routes, and `/decos/:id` editor with hydrated save plus HTML POST fallback; closeout evidence in `tests/e2e/scheduling-route-family.spec.ts`'
 routed  = true
 
 [[route]]
 nav     = '/deco-templates'
-backing = 'deco-template group/template list, add/delete routes, and `/deco-templates/:id` item editor with hydrated save plus HTML POST fallback'
+backing = 'deco-template group/template list, add/delete routes, and `/deco-templates/:id` item editor with hydrated save plus HTML POST fallback; closeout evidence in `tests/e2e/scheduling-route-family.spec.ts`'
 routed  = true
 
 [[route]]

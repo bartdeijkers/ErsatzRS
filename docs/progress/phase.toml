@@ -18,8 +18,7 @@ Broaden health / troubleshooting coverage and the remaining Phase 7 hardening
 items. Active in-progress / not-started feature work (see `cargo xtask progress
 gaps`): FFmpeg command generation, multi-collections / rerun / playlists /
 filler presets, scanner hardening, support pages
-(health/logs/troubleshooting), and the remaining scheduling/admin route-family
-closeouts.
+(health/logs/troubleshooting).
 '''
 
 # Phase 0 checklist (all complete).

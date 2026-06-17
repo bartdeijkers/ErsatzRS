@@ -102,18 +102,38 @@ notes  = 'Slice F — lift selection to URL query param.'
 
 [[page]]
 name   = 'BlocksPage'
-status = '⏳'
-notes  = 'Group add/delete buttons.'
+status = '✅'
+notes  = 'Hydrated group/block add flow and editor route covered by `tests/e2e/scheduling-route-family.spec.ts`; HTML save fallback remains visible on the editor.'
 
 [[page]]
 name   = 'TemplatesPage'
-status = 'TODO'
-notes  = 'Hydrated list actions, delete confirmations, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened.'
+status = '✅'
+notes  = 'Hydrated group/template add flow and route-family console check covered by `tests/e2e/scheduling-route-family.spec.ts`; HTML POST fallbacks remain visible.'
 
 [[page]]
 name   = 'TemplateEditorPage'
-status = 'TODO'
-notes  = 'Hydrated add/remove/drag, browser-navigation edit link, save POST fallback, visual smoke, and console check covered in `plans/templates-parity-slice.md`; add durable E2E spec when automated admin coverage is broadened.'
+status = '✅'
+notes  = 'Editor geometry, add/remove/content sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`.'
+
+[[page]]
+name   = 'DecosPage'
+status = '✅'
+notes  = 'Hydrated group/deco add flow and editor route covered by `tests/e2e/scheduling-route-family.spec.ts`; no-JS list and save fallbacks remain in the rendered route.'
+
+[[page]]
+name   = 'DecoEditorPage'
+status = '✅'
+notes  = 'Break Content, Default Filler, Dead Air Fallback, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`.'
+
+[[page]]
+name   = 'DecoTemplatesPage'
+status = '✅'
+notes  = 'Hydrated group/template add flow and route-family console check covered by `tests/e2e/scheduling-route-family.spec.ts`; no-JS list fallback remains rendered.'
+
+[[page]]
+name   = 'DecoTemplateEditorPage'
+status = '✅'
+notes  = 'Editor geometry, Decos/Content timeline sections, and save fallback form covered by `tests/e2e/scheduling-route-family.spec.ts`.'
 
 [[page]]
 name   = 'WatermarksListPage'
