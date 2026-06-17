@@ -4,6 +4,10 @@
 
 Proposed
 
+## Implementation
+
+Partial — the FFmpeg 8.1 runtime requirement is detected and enforced at startup; multi-arch container images are not yet produced.
+
 ## Context
 
 ErsatzRS requires FFmpeg 8.1 for the `drawvg` filter and uses `ffprobe` for

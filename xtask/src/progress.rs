@@ -98,6 +98,10 @@ struct Debt {
     evidence: String,
     #[serde(default)]
     resolved: bool,
+    /// Optional 4-digit ADR number this debt is the open part of. Lets
+    /// `check` flag an ADR that claims `Implemented` while this debt is open.
+    #[serde(default)]
+    adr: Option<String>,
 }
 
 impl ParityFile {
@@ -167,9 +171,17 @@ struct Session {
 struct Adr {
     number: String,
     title: String,
+    /// Decision lifecycle (Proposed/Accepted/Superseded/Deprecated).
     status: String,
+    /// Implementation lifecycle, independent of `status`. See `adr_impl`.
+    implementation: String,
     path: String,
 }
+
+/// Recognized leading tokens for an ADR's `## Implementation` section. The
+/// first matching token classifies the ADR; `Implemented` is the only one the
+/// contradiction lint treats as "the code exists".
+const IMPL_TOKENS: [&str; 4] = ["Not implemented", "Partial", "Implemented", "N/A"];
 
 // ------------------------------------------------------------- text load
 
@@ -260,30 +272,47 @@ fn load_adrs() -> Result<Vec<Adr>> {
             .find_map(|l| l.strip_prefix("# ADR "))
             .map(|t| t.split_once(':').map_or(t, |x| x.1).trim().to_owned())
             .unwrap_or_default();
-        let status = adr_status(&text);
+        let status = adr_section(&text, "## Status").unwrap_or_else(|| "Unknown".to_owned());
+        let implementation =
+            adr_section(&text, "## Implementation").unwrap_or_else(|| "Unspecified".to_owned());
         out.push(Adr {
             number,
             title,
             status,
+            implementation,
             path: path.display().to_string(),
         });
     }
     Ok(out)
 }
 
-fn adr_status(text: &str) -> String {
+/// First non-empty, non-comment line of the named `## Heading` section.
+fn adr_section(text: &str, heading: &str) -> Option<String> {
     let mut lines = text.lines();
     while let Some(l) = lines.next() {
-        if l.trim() == "## Status" {
+        if l.trim() == heading {
             for next in lines.by_ref() {
                 let t = next.trim();
-                if !t.is_empty() {
-                    return t.to_owned();
+                if t.is_empty() || t.starts_with("<!--") || t.starts_with("- `") {
+                    continue;
                 }
+                if t.starts_with("##") {
+                    break;
+                }
+                return Some(t.to_owned());
             }
         }
     }
-    "Unknown".to_owned()
+    None
+}
+
+/// Short classification token for an implementation line (e.g. `Partial — …`
+/// → `Partial`). Returns `Unspecified` when the line matches no known token.
+fn impl_tag(implementation: &str) -> &'static str {
+    IMPL_TOKENS
+        .into_iter()
+        .find(|tok| implementation.starts_with(tok))
+        .unwrap_or("Unspecified")
 }
 
 // -------------------------------------------------------------- staleness
@@ -345,11 +374,11 @@ fn sync() -> Result<Connection> {
     conn.execute_batch(
         "CREATE TABLE parity(slug TEXT PRIMARY KEY, feature TEXT, etv_source TEXT, rs_target TEXT, status TEXT, summary TEXT);
          CREATE TABLE parity_adr(slug TEXT, adr TEXT);
-         CREATE TABLE parity_debt(slug TEXT, id TEXT, description TEXT, discovered TEXT, evidence TEXT, resolved INTEGER);
+         CREATE TABLE parity_debt(slug TEXT, id TEXT, description TEXT, discovered TEXT, evidence TEXT, resolved INTEGER, adr TEXT);
          CREATE TABLE routes(nav TEXT, backing TEXT, routed INTEGER);
          CREATE TABLE hydration(name TEXT, status TEXT, notes TEXT);
          CREATE TABLE sessions(ord INTEGER, date TEXT, agent TEXT, summary TEXT);
-         CREATE TABLE adrs(number TEXT, title TEXT, status TEXT, path TEXT);
+         CREATE TABLE adrs(number TEXT, title TEXT, status TEXT, implementation TEXT, path TEXT);
          CREATE TABLE phase(key TEXT, value TEXT);
          CREATE TABLE phase_checklist(item TEXT, done INTEGER);
          CREATE TABLE phase_todo(note TEXT);
@@ -378,14 +407,15 @@ fn sync() -> Result<Connection> {
         }
         for debt in &row.file.debt {
             tx.execute(
-                "INSERT INTO parity_debt VALUES(?1,?2,?3,?4,?5,?6)",
+                "INSERT INTO parity_debt VALUES(?1,?2,?3,?4,?5,?6,?7)",
                 params![
                     row.slug,
                     debt.id,
                     debt.description,
                     debt.discovered,
                     debt.evidence,
-                    i32::from(debt.resolved)
+                    i32::from(debt.resolved),
+                    debt.adr
                 ],
             )?;
         }
@@ -410,8 +440,8 @@ fn sync() -> Result<Connection> {
     }
     for a in &adrs {
         tx.execute(
-            "INSERT INTO adrs VALUES(?1,?2,?3,?4)",
-            params![a.number, a.title, a.status, a.path],
+            "INSERT INTO adrs VALUES(?1,?2,?3,?4,?5)",
+            params![a.number, a.title, a.status, a.implementation, a.path],
         )?;
     }
     for (key, value) in [
@@ -523,11 +553,18 @@ fn cmd_parity(args: &[String]) -> Result<()> {
             .filter_map(std::result::Result::ok)
             .collect();
         let mut stmt = conn.prepare(
-            "SELECT id, description, discovered, evidence, resolved FROM parity_debt WHERE slug = ?1 ORDER BY resolved, discovered, id",
+            "SELECT id, description, discovered, evidence, resolved, adr FROM parity_debt WHERE slug = ?1 ORDER BY resolved, discovered, id",
         )?;
-        let debts: Vec<(String, String, String, String, i64)> = stmt
+        let debts: Vec<(String, String, String, String, i64, Option<String>)> = stmt
             .query_map([&slug], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
             })?
             .filter_map(std::result::Result::ok)
             .collect();
@@ -545,10 +582,11 @@ fn cmd_parity(args: &[String]) -> Result<()> {
         );
         if !debts.is_empty() {
             println!("  debt:");
-            for (id, description, discovered, evidence, resolved) in debts {
+            for (id, description, discovered, evidence, resolved, adr) in debts {
                 let state = if resolved == 0 { "open" } else { "resolved" };
+                let adr = adr.map_or(String::new(), |a| format!(", ADR {a}"));
                 println!(
-                    "    - {id} [{state}, {discovered}]: {}",
+                    "    - {id} [{state}, {discovered}{adr}]: {}",
                     truncate(&description, 100)
                 );
                 println!("      evidence: {}", truncate(&evidence, 120));
@@ -693,17 +731,19 @@ fn cmd_adr(args: &[String]) -> Result<()> {
                 bail!("usage: cargo xtask progress adr show <number>");
             };
             let number = format!("{:0>4}", number.trim_start_matches('0'));
-            let row: Option<(String, String, String)> = conn
+            let row: Option<(String, String, String, String)> = conn
                 .query_row(
-                    "SELECT title, status, path FROM adrs WHERE number = ?1",
+                    "SELECT title, status, implementation, path FROM adrs WHERE number = ?1",
                     [&number],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                 )
                 .ok();
-            let Some((title, status, path)) = row else {
+            let Some((title, status, implementation, path)) = row else {
                 bail!("no ADR {number}");
             };
-            println!("ADR {number}: {title}\n  status: {status}\n  file:   {path}");
+            println!(
+                "ADR {number}: {title}\n  status:   {status}\n  built:    {implementation}\n  file:     {path}"
+            );
             let mut stmt = conn.prepare(
                 "SELECT p.feature FROM parity p JOIN parity_adr a ON a.slug = p.slug WHERE a.adr = ?1 ORDER BY p.feature",
             )?;
@@ -716,18 +756,26 @@ fn cmd_adr(args: &[String]) -> Result<()> {
             }
         }
         _ => {
-            let mut stmt =
-                conn.prepare("SELECT number, status, title FROM adrs ORDER BY number")?;
+            let mut stmt = conn.prepare(
+                "SELECT number, status, implementation, title FROM adrs ORDER BY number",
+            )?;
             let rows = stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
                     r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
                 ))
             })?;
+            // Two independent axes: decision Status and whether code exists.
+            println!("{:<5} {:<11} {:<16} Title", "ADR", "Status", "Built");
             for row in rows {
-                let (number, status, title) = row?;
-                println!("{number}  {status:<10} {title}");
+                let (number, status, implementation, title) = row?;
+                let status = status.split_once(" (").map_or(status.as_str(), |(s, _)| s);
+                println!(
+                    "{number:<5} {status:<11} {:<16} {title}",
+                    impl_tag(&implementation)
+                );
             }
         }
     }
@@ -769,14 +817,28 @@ fn cmd_check() -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    // Build the set of known ADR numbers from filenames for ref validation.
-    let adr_numbers: std::collections::HashSet<String> = match load_adrs() {
-        Ok(adrs) => adrs.into_iter().map(|a| a.number).collect(),
+    // Known ADRs, keyed by number, for ref validation and the
+    // Status-vs-Implementation contradiction lint below.
+    let adrs_by_number: std::collections::HashMap<String, Adr> = match load_adrs() {
+        Ok(adrs) => {
+            for adr in &adrs {
+                // Every ADR must declare a recognized Implementation token so
+                // "Accepted {date}" can never be mistaken for "code exists".
+                if impl_tag(&adr.implementation) == "Unspecified" {
+                    errors.push(format!(
+                        "ADR {}: `## Implementation` is missing or unrecognized (got {:?}; expected one of {IMPL_TOKENS:?})",
+                        adr.number, adr.implementation
+                    ));
+                }
+            }
+            adrs.into_iter().map(|a| (a.number.clone(), a)).collect()
+        }
         Err(e) => {
             errors.push(format!("docs/adr: {e:#}"));
-            std::collections::HashSet::new()
+            std::collections::HashMap::new()
         }
     };
+    let adr_numbers: std::collections::HashSet<String> = adrs_by_number.keys().cloned().collect();
 
     match load_parity() {
         Ok(rows) => {
@@ -831,6 +893,28 @@ fn cmd_check() -> Result<()> {
                             "{}: debt `{}` evidence must not be empty",
                             row.slug, debt.id
                         ));
+                    }
+                    if let Some(adr) = &debt.adr {
+                        if adr.len() != 4 || !adr.chars().all(|c| c.is_ascii_digit()) {
+                            errors.push(format!(
+                                "{}: debt `{}` adr `{adr}` is not a 4-digit number",
+                                row.slug, debt.id
+                            ));
+                        } else if let Some(linked) = adrs_by_number.get(adr) {
+                            // The core guard: an ADR may not claim its code is
+                            // built while a debt it is linked to is still open.
+                            if !debt.resolved && impl_tag(&linked.implementation) == "Implemented" {
+                                errors.push(format!(
+                                    "ADR {adr} declares Implementation `Implemented` but linked debt `{}` ({}) is still open — downgrade the ADR to `Partial` or resolve the debt",
+                                    debt.id, row.slug
+                                ));
+                            }
+                        } else if !adr_numbers.is_empty() {
+                            errors.push(format!(
+                                "{}: debt `{}` adr `{adr}` does not resolve to docs/adr/",
+                                row.slug, debt.id
+                            ));
+                        }
                     }
                 }
                 let open_debt_count = row.file.open_debts().count();

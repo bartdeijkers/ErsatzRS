@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — the Classic scheduling engine is ported (feature `classic-scheduling`).
+
 ## Context
 
 ErsatzTV's Classic scheduling engine remains part of the non-web parity target

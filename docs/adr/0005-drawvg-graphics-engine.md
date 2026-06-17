@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — in-stream graphics emit `drawvg` filter nodes (feature `drawvg-graphics-engine`).
+
 ## Context
 
 ErsatzTV uses an external graphics-renderer pipeline for scripted graphics.

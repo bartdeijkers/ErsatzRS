@@ -1,3 +1,4 @@
+{"agent":"Claude (Opus 4.8)","date":"2026-06-17","summary":"Split ADR decision-state from implementation-state: added ## Implementation section + template/0001 docs, migrated all 17 ADRs, linked debts via adr=NNNN, and added a progress-check lint that fails when an ADR claims Implemented while a linked debt is open (Built column in progress adr)."}
 {"agent":"Claude (Opus 4.8)","date":"2026-06-17","summary":"Port missing-item state machine: local+media-server FileNotFound/RemoteOnly flagging, playout skip-missing consumer; regression tests + full gate green"}
 {"agent":"Codex","date":"2026-06-17","summary":"Closed support pages parity with dynamic badges and logs paging"}
 {"agent":"Codex","date":"2026-06-17","summary":"Closed Classic scheduling imported filler parity and refreshed top-three gap prompt"}

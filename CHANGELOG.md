@@ -13,6 +13,17 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- ADRs now track decision state and implementation state as two independent
+  sections. `## Status` records only the decision lifecycle
+  (Proposed/Accepted/Superseded); a new `## Implementation` section records
+  whether the code exists (`Not implemented` / `Partial` / `Implemented` /
+  `N/A`), so an `Accepted {date}` ADR can no longer be mistaken for shipped
+  code. `cargo xtask progress adr` surfaces a "Built" column, and
+  `cargo xtask progress check` fails if an ADR is missing the section or claims
+  `Implemented` while a parity debt linked to it (`adr = "NNNN"`) is still open.
+
 ## [1.0.11-alpha] - 2026-06-17
 
 ### Fixed

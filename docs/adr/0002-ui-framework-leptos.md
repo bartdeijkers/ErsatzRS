@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — the admin UI is Leptos SSR + islands.
+
 ## Context
 
 ErsatzRS needs a Rust-native web UI that can start server-rendered and gain

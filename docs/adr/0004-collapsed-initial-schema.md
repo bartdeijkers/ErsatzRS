@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — the schema ships as a single collapsed initial migration.
+
 ## Context
 
 ErsatzTV has hundreds of Entity Framework migrations. ErsatzRS starts from an empty

@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+N/A — meta decision: this is the ADR process itself.
+
 ## Context
 
 ErsatzRS is a long-running port of ErsatzTV. Without written decisions, crate
@@ -22,6 +26,20 @@ An ADR is required when a change affects:
 - Public APIs.
 - External dependencies used across multiple crates.
 - Behavior that deliberately diverges from ErsatzTV.
+
+Each ADR tracks two **independent** lifecycles in separate sections:
+
+- `## Status` — the decision: `Proposed` → `Accepted` → `Superseded by ADR
+  NNNN` / `Deprecated`. It says whether we agreed, never whether code exists.
+- `## Implementation` — whether the code exists: one of `Not implemented`,
+  `Partial — …`, `Implemented (<ref>, <date>)`, or `N/A — …`. An accepted
+  decision can be entirely unbuilt, so `Accepted {date}` must never be read as
+  "done".
+
+`cargo xtask progress check` enforces this: every ADR must carry a recognized
+`## Implementation` token, and an ADR may not claim `Implemented` while a
+parity debt linked to it (`adr = "NNNN"` in
+`docs/progress/parity/<slug>.toml`) is still open.
 
 ## Consequences
 

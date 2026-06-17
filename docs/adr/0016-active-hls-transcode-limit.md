@@ -4,6 +4,10 @@
 
 Accepted (2026-06-17; revised — see Revision history).
 
+## Implementation
+
+Partial — admission control is accepted and revised, but `ffmpeg.segmenter.active_transcode_limit` does not yet bound concurrent transcodes for actively-watched channels (`ParityDebt active-transcode-limit-not-a-real-ceiling`).
+
 ## Context
 
 ErsatzTV exposes `ffmpeg.segmenter.work_ahead_limit`, which limits how many HLS

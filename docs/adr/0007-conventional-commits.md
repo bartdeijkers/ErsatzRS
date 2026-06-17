@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+N/A — process convention, enforced by commitlint.
+
 ## Context
 
 ErsatzRS needs a changelog and release process that can scale from solo development

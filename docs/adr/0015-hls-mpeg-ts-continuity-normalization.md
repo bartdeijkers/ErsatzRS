@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted (2026-06-13: implemented for MPEG-TS HLS segmenter output)
+Accepted (2026-06-13).
+
+## Implementation
+
+Implemented — MPEG-TS HLS segmenter continuity normalization (2026-06-13).
 
 ## Context
 

@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — the playlist editor and read-only generated-playlist UI are in place.
+
 ## Context
 
 ErsatzTV generated Trakt playlists are system playlists. The scheduler behavior

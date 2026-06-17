@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — Dutch translations live under `crates/ersatzrs-web/src/admin/languages/`.
+
 ## Context
 
 ErsatzTV persists the admin UI culture in `ConfigElement` under

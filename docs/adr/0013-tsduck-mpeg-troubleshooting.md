@@ -4,6 +4,10 @@
 
 Proposed
 
+## Implementation
+
+Not implemented — proposed only; in-app TSDuck troubleshooting is not built (the manual `scripts/e2e/tsduck-playback-gate.sh` gate is separate tooling).
+
 ## Context
 
 ErsatzRS already owns the FFmpeg streaming path, IPTV/HLS/HDHomeRun endpoints,

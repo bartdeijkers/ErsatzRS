@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — persistence is `sqlx` (SQLite default, MySQL behind a feature flag).
+
 ## Context
 
 ErsatzRS needs SQLite first and MySQL later. The project also wants explicit SQL

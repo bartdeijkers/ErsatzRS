@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — the FFmpeg pipeline spawns the CLI via `tokio::process::Command`.
+
 ## Context
 
 ErsatzTV builds FFmpeg command lines and runs FFmpeg as a child process. ErsatzRS

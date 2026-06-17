@@ -67,12 +67,14 @@ snapshot.
 
 [[debt]]
 id          = 'nvenc-filter-gate-live-proof'
+adr         = '0014'
 description = 'The CUDA-filter decode gate and the encoder-only software-graph demotion are verified by unit tests and argv snapshots only; live proof requires an FFmpeg build with NVENC encoders + `cuda` hwaccel but no CUDA filter kernels, and no such build was available on 2026-06-12 (both local builds ship all three CUDA filters). The IPTV .ts learned-denial retry likewise has unit/snapshot coverage plus a passing `cargo xtask smoke` happy path, but its retry-in-response has not been observed live against real rejecting hardware the way the HLS slice was on 2026-06-11.'
 discovered  = '2026-06-12'
 evidence    = '`which -a ffmpeg` builds (`/usr/bin/ffmpeg`, `~/.local/ffmpeg-8.1`) each report scale_cuda/yadif_cuda/overlay_cuda present, so the "No such filter" runtime path could not be reproduced live this session.'
 
 [[debt]]
 id          = 'default-profile-1080p60-retune'
+adr         = '0017'
 description = 'The seeded default FFmpeg profile (ensure_default_ffmpeg_profile in crates/ersatzrs-infra/src/db.rs, "1920x1080 x264 aac") still uses the conservative ErsatzTV baseline: H.264 High, video preset unset (libx264 medium), no B-frames, video 2000 kbps / 4000 kbit buffer, AAC 192 kbps stereo. ADR 0017 retunes the default to the 1080p60 / AC-3 6ch / 2-stream / 100 Mbps target: rename to "1920x1080 x264 ac3 6ch", preset veryfast, video 15000/15000 kbit (about 1 s VBV), AC-3 640/640 kbit, 6 channels. The pipeline fallback defaults in crates/ersatzrs-ffmpeg DesiredVideoState should align. Fresh-DB seed only; existing saved profiles are not overwritten.'
 discovered  = '2026-06-17'
 evidence    = 'Current seed values read from db.rs ensure_default_ffmpeg_profile: preset NULL => libx264 medium (cannot sustain two 1080p60 software encodes in realtime) and a 4000 kbit buffer too small to let -maxrate bind at higher bitrates. Decision recorded in ADR 0017.'
@@ -80,6 +82,7 @@ resolved    = false
 
 [[debt]]
 id          = 'ac3-segmenter-max-delay'
+adr         = '0017'
 description = 'The HLS segmenter output does not emit -max_delay for multichannel AC-3, so 6-channel AC-3 can pop or drift at segment boundaries when audio is not interleaved tightly with video. ADR 0017 (section 2) adds -max_delay 500000 (0.5 s) gated to multichannel AC-3 output.'
 discovered  = '2026-06-17'
 evidence    = 'hls_output / add_output_options in crates/ersatzrs-ffmpeg/src/pipeline/mod.rs emit b:a/maxrate:a + bufsize:a but no -max_delay. Not present in the ErsatzTV baseline either, so this is an ErsatzRS addition.'

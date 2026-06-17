@@ -4,6 +4,10 @@
 
 Accepted (2026-06-17).
 
+## Implementation
+
+Not implemented — decision accepted, but the default-profile retune and AC-3 `-max_delay` are not yet in code (`ParityDebt default-profile-1080p60-retune`, `ac3-segmenter-max-delay`).
+
 ## Context
 
 ErsatzRS inherited ErsatzTV's conservative default FFmpeg profile

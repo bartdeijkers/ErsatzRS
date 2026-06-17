@@ -4,6 +4,10 @@
 
 Accepted
 
+## Implementation
+
+Implemented — search is SQL-backed (feature `search-index`); no Elasticsearch backend exists.
+
 ## Context
 
 ErsatzTV supports a Lucene search index and previously carried an experimental
