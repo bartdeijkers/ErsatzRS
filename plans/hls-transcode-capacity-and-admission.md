@@ -129,7 +129,8 @@ The smallest change that stops the unbounded bypass and the false labeling.
 ## Workstream B — segmenter smoothness + default profile (ADR 0017)
 
 Specified by [ADR 0017](../docs/adr/0017-default-ffmpeg-profile-1080p60.md)
-(default FFmpeg profile tuned for 1080p60 / AC-3 6ch on CPU). Rate-control, GOP,
+(five default FFmpeg profiles, 720p→4K + HDR, AC-3 6ch, HW accel auto-enabled,
+bitrates tuned for 25 fps over 1 Gbps unicast). Rate-control, GOP,
 scene-cut, and segment alignment are already implemented (see Current state), so
 this workstream is small: seed the new default values and add one interleaving
 flag.

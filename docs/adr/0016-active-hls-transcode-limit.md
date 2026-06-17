@@ -49,13 +49,14 @@ different costs:
 | Segments retained on disk | Cheap (disk + cleanup timer) | Yes, freely |
 | Work-ahead burst (racing past realtime) | Most expensive per stream | Yes, freely (realtime still serves) |
 
-The target deployment that motivates the capacity number is **two stable
-1080p60 streams (AC-3 6ch) over a 100 Mbps LAN** (the default profile for this
-target is [ADR 0017](0017-default-ffmpeg-profile-1080p60.md)):
-~19 Mbps muxed per stream, ~38 Mbps for two, well under the network ceiling,
-which makes `N = 2` the correct default for that hardware class. The ceiling is
-primarily CPU/GPU-bound; the network/segmenter profile is a complementary
-concern handled by the FFmpeg profile, not by this ADR.
+The target deployment that motivates the capacity number is **two concurrent
+streams (AC-3 6ch) over 1 Gbps HTTP unicast** (the default profiles for this
+target are [ADR 0017](0017-default-ffmpeg-profile-1080p60.md)): per-stream muxed
+payload runs from ~8 Mbps (720p) to ~61 Mbps (4K HDR), so even the worst case —
+two 4K HDR streams — is ~130 Mbps, only ~14 % of the link. The network is never
+the binding constraint, which makes `N = 2` a CPU/GPU decision: it is the right
+default for a single-GPU / capable-CPU box. The network/segmenter profile is a
+complementary concern handled by the FFmpeg profile, not by this ADR.
 
 ## Decision
 
@@ -167,7 +168,7 @@ everything else is opportunistic and reclaimable.*
 - [ADR 0014: Runtime-learned hardware capability fallback](0014-runtime-learned-hardware-capability-fallback.md)
 - [ADR 0015: HLS / MPEG-TS continuity normalization](0015-hls-mpeg-ts-continuity-normalization.md)
 - [Implementation plan](../../plans/hls-transcode-capacity-and-admission.md)
-- [ADR 0017: Default FFmpeg profile tuned for smooth 1080p60 streaming](0017-default-ffmpeg-profile-1080p60.md)
+- [ADR 0017: Default FFmpeg profiles for multi-resolution streaming](0017-default-ffmpeg-profile-1080p60.md)
 - [`crates/ersatzrs-infra/src/hls_worker.rs`](../../crates/ersatzrs-infra/src/hls_worker.rs)
 - [`docs/progress/parity/hls-variant-playlists-segmenter.toml`](../progress/parity/hls-variant-playlists-segmenter.toml)
 
@@ -180,3 +181,8 @@ everything else is opportunistic and reclaimable.*
   capacity ceiling + admission/preemption ladder, decoupled watch/retention
   windows, slate-on-full, the tuner-model configuration, a live usage readout,
   and a hardware-aware suggested default.
+- 2026-06-17: Refreshed the worked capacity example to match the revised
+  [ADR 0017](0017-default-ffmpeg-profile-1080p60.md) target (two concurrent
+  streams, AC-3 6ch, 25 fps, 720p→4K HDR, over 1 Gbps HTTP unicast). The
+  `N = 2` decision is unchanged; the example now reflects the higher link and
+  the multi-resolution profiles, reinforcing that the ceiling is CPU/GPU-bound.
