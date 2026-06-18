@@ -2,6 +2,8 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{library_kind_label, media_kind_label, tr, TextKey};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::libraries::{
     list_external_collections, list_libraries, scan_external_collections, scan_library,
     ExternalCollectionRow, LibraryRow,
@@ -11,7 +13,6 @@ use crate::admin::server_fns::libraries::{
     list_locked_collections, list_locked_libraries, list_scan_progress,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
-use crate::admin::ui::primitives::toast::{use_toast, ToastContainer, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
 
@@ -22,9 +23,10 @@ pub fn LibrariesPage() -> impl IntoView {
 
 #[island]
 fn LibrariesIsland() -> impl IntoView {
+    let media_revision = RwSignal::new(String::new());
     let libs: Resource<Vec<LibraryRow>> = Resource::new(
-        || (),
-        |()| async move { list_libraries().await.unwrap_or_default() },
+        move || media_revision.get(),
+        |_| async move { list_libraries().await.unwrap_or_default() },
     );
     let scan_action = Action::new(|(id, kind, deep_scan): &(i64, String, bool)| {
         let id = *id;
@@ -34,8 +36,8 @@ fn LibrariesIsland() -> impl IntoView {
     });
 
     let externals: Resource<Vec<ExternalCollectionRow>> = Resource::new(
-        || (),
-        |()| async move { list_external_collections().await.unwrap_or_default() },
+        move || media_revision.get(),
+        |_| async move { list_external_collections().await.unwrap_or_default() },
     );
     let collections_action =
         Action::new(|(media_source_id, kind, deep_scan): &(i64, String, bool)| {
@@ -44,33 +46,6 @@ fn LibrariesIsland() -> impl IntoView {
             let deep_scan = *deep_scan;
             async move { scan_external_collections(media_source_id, kind, deep_scan).await }
         });
-
-    let toast = use_toast();
-    Effect::new(move |_| {
-        if let Some(res) = scan_action.value().get() {
-            match res {
-                Ok(_) => toast.push(tr(TextKey::ScanQueued).to_owned(), ToastSeverity::Success),
-                Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::ScanFailed)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if let Some(res) = collections_action.value().get() {
-            match res {
-                Ok(_) => toast.push(
-                    tr(TextKey::CollectionsScanQueued).to_owned(),
-                    ToastSeverity::Success,
-                ),
-                Err(e) => toast.push(
-                    format!("{}: {e}", tr(TextKey::CollectionsScanFailed)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
 
     // Poll the entity locker so each row knows whether its scan task is still
     // running. Mirrors ETV's `IEntityLocker.OnLibraryChanged` poll loop, but
@@ -91,6 +66,11 @@ fn LibrariesIsland() -> impl IntoView {
                     }
                     if let Ok(pairs) = list_scan_progress().await {
                         scan_progress.set(pairs);
+                    }
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
                     }
                     gloo_timers::future::TimeoutFuture::new(1_500).await;
                 }
@@ -325,7 +305,6 @@ fn LibrariesIsland() -> impl IntoView {
                     })
                 }}
             </Suspense>
-            <ToastContainer/>
         </div>
     }
 }

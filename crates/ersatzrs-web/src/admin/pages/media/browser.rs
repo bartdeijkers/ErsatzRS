@@ -9,6 +9,8 @@ use std::future::Future;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{season_display_name, tr, TextKey};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::MediaCardRow;
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
@@ -47,6 +49,7 @@ where
 {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let media_revision = RwSignal::new(String::new());
 
     Effect::new(move |_| {
         let _ = search.get();
@@ -54,12 +57,28 @@ where
     });
 
     let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new(
-        move || (search.get(), page.get()),
-        move |(q, p)| {
+        move || (search.get(), page.get(), media_revision.get()),
+        move |(q, p, _)| {
             let loader = loader.clone();
             async move { loader(q, p, PAGE_SIZE).await.unwrap_or_default() }
         },
     );
+
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
 
     let total = Signal::derive(move || data.get().map(|(_, t)| t));
 

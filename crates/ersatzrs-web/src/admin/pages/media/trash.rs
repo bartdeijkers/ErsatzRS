@@ -11,6 +11,8 @@ use crate::admin::i18n::{
     delete_failed, delete_selected_count, deleted_items_from_database, emptied_trash_count,
     empty_trash_failed, media_browser_error_message, selected_items_count, tr, TextKey,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     delete_media_items, empty_trash, list_trash_items, MediaCardRow, TrashPageData,
 };
@@ -30,9 +32,15 @@ struct TrashSection {
 
 #[component]
 pub fn TrashPage() -> impl IntoView {
+    view! { <TrashIsland/> }
+}
+
+#[island]
+fn TrashIsland() -> impl IntoView {
+    let media_revision = RwSignal::new(String::new());
     let data: Resource<TrashPageData> = Resource::new(
-        || (),
-        |()| async move { list_trash_items().await.unwrap_or_default() },
+        move || media_revision.get(),
+        |_| async move { list_trash_items().await.unwrap_or_default() },
     );
 
     let selected_ids = RwSignal::new(HashSet::<i64>::new());
@@ -95,6 +103,22 @@ pub fn TrashPage() -> impl IntoView {
     });
 
     let selected_count = Signal::derive(move || selected_ids.with(HashSet::len));
+
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
 
     view! {
         <div class=style::page>
@@ -295,12 +319,39 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
         });
     }
 
+    if !data.seasons.is_empty() {
+        sections.push(TrashSection {
+            key: "seasons",
+            title_key: TextKey::Seasons,
+            browse_href: "/media/tv/seasons",
+            rows: data.seasons,
+        });
+    }
+
+    if !data.episodes.is_empty() {
+        sections.push(TrashSection {
+            key: "episodes",
+            title_key: TextKey::Episodes,
+            browse_href: "/media/tv/episodes",
+            rows: data.episodes,
+        });
+    }
+
     if !data.artists.is_empty() {
         sections.push(TrashSection {
             key: "artists",
             title_key: TextKey::Artists,
             browse_href: "/media/music/artists",
             rows: data.artists,
+        });
+    }
+
+    if !data.music_videos.is_empty() {
+        sections.push(TrashSection {
+            key: "music-videos",
+            title_key: TextKey::MusicVideos,
+            browse_href: "/media/music/videos",
+            rows: data.music_videos,
         });
     }
 
@@ -328,6 +379,15 @@ fn build_sections(data: TrashPageData) -> Vec<TrashSection> {
             title_key: TextKey::Images,
             browse_href: "/media/browser/images",
             rows: data.images,
+        });
+    }
+
+    if !data.remote_streams.is_empty() {
+        sections.push(TrashSection {
+            key: "remote-streams",
+            title_key: TextKey::RemoteStreams,
+            browse_href: "/media/remote/streams",
+            rows: data.remote_streams,
         });
     }
 

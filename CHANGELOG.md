@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Fixed
 
+- Admin media scan results now refresh hydrated views without a manual reload:
+  `/system/health` recomputes current health checks, `/media/trash`,
+  `/media/libraries`, and the media browser lists refetch when scanner-updated
+  media state changes. `/media/trash` now includes the same `FileNotFound`
+  media families as ErsatzTV, including missing TV episodes that previously
+  appeared in health checks but not Trash. The non-ErsatzTV green scan-queued
+  snackbar on `/media/libraries` was removed.
 - Release builds now serve every Leptos server function again, fixing the
   Windows release-build failures where **Scan Library** (`/media/libraries`) and
   **Show Media Info** for TV episodes reported

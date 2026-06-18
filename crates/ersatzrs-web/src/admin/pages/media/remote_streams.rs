@@ -15,6 +15,8 @@ use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{item_count, range_of, selected_items_count, tr, TextKey};
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     list_remote_streams, remote_stream_page_map, MediaBrowserKind, MediaCardRow,
 };
@@ -123,10 +125,11 @@ fn remote_stream_rows_for_noscript(_query: String, _page: u32) -> (Vec<MediaCard
 
 #[island]
 fn RemoteStreamsIsland(query: String, page: u32) -> impl IntoView {
+    let media_revision = RwSignal::new(String::new());
     let q_for_rows = query.clone();
     let rows: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
-        move || (q_for_rows.clone(), page),
-        move |(q, p)| async move {
+        move || (q_for_rows.clone(), page, media_revision.get()),
+        move |(q, p, _)| async move {
             list_remote_streams(q, p, PAGE_SIZE)
                 .await
                 .unwrap_or_default()
@@ -135,13 +138,29 @@ fn RemoteStreamsIsland(query: String, page: u32) -> impl IntoView {
 
     let q_for_map = query.clone();
     let page_map = Resource::new_blocking(
-        move || q_for_map.clone(),
-        move |q| async move {
+        move || (q_for_map.clone(), media_revision.get()),
+        move |(q, _)| async move {
             remote_stream_page_map(q, PAGE_SIZE)
                 .await
                 .unwrap_or_default()
         },
     );
+
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
 
     view! {
         <Suspense fallback=move || view! {

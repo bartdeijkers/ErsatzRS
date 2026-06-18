@@ -529,10 +529,18 @@ pub struct PlaylistPreviewRow {
 pub struct TrashPageData {
     pub movies: Vec<MediaCardRow>,
     pub shows: Vec<MediaCardRow>,
+    #[serde(default)]
+    pub seasons: Vec<MediaCardRow>,
+    #[serde(default)]
+    pub episodes: Vec<MediaCardRow>,
     pub artists: Vec<MediaCardRow>,
+    #[serde(default)]
+    pub music_videos: Vec<MediaCardRow>,
     pub other_videos: Vec<MediaCardRow>,
     pub songs: Vec<MediaCardRow>,
     pub images: Vec<MediaCardRow>,
+    #[serde(default)]
+    pub remote_streams: Vec<MediaCardRow>,
 }
 
 fn song_subtitle(artists: Option<String>, album: Option<String>) -> Option<String> {
@@ -3143,22 +3151,41 @@ pub async fn list_trash_items() -> Result<TrashPageData, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    let (movies, shows, artists, other_videos, songs, images) = tokio::join!(
+    let (
+        movies,
+        shows,
+        seasons,
+        episodes,
+        artists,
+        music_videos,
+        other_videos,
+        songs,
+        images,
+        remote_streams,
+    ) = tokio::join!(
         load_trash_movies(&state.pool),
         load_trash_shows(&state.pool),
+        load_trash_seasons(&state.pool),
+        load_trash_episodes(&state.pool),
         load_trash_artists(&state.pool),
+        load_trash_music_videos(&state.pool),
         load_trash_other_videos(&state.pool),
         load_trash_songs(&state.pool),
         load_trash_images(&state.pool),
+        load_trash_remote_streams(&state.pool),
     );
 
     Ok(TrashPageData {
         movies: movies?,
         shows: shows?,
+        seasons: seasons?,
+        episodes: episodes?,
         artists: artists?,
+        music_videos: music_videos?,
         other_videos: other_videos?,
         songs: songs?,
         images: images?,
+        remote_streams: remote_streams?,
     })
 }
 
@@ -3280,6 +3307,110 @@ async fn load_trash_shows(
 }
 
 #[cfg(feature = "ssr")]
+async fn load_trash_seasons(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT s."Id" AS "Id",
+                  s."SeasonNumber" AS "SeasonNumber",
+                  COALESCE(shm."Title", '') AS "ShowTitle",
+                  COALESCE(shm."SortTitle", shm."Title", '') AS "ShowSortTitle",
+                  COALESCE(sa."Path", sha."Path") AS "Poster"
+           FROM "Season" s
+           JOIN "MediaItem" mi ON mi."Id" = s."Id" AND mi."State" = 1
+           JOIN "Show" sh ON sh."Id" = s."ShowId"
+           JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
+           LEFT JOIN "Artwork" sa
+               ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sha
+               ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
+           ORDER BY shm."SortTitle", shm."Title", s."SeasonNumber""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
+            let show_title: String = r.try_get("ShowTitle").unwrap_or_default();
+            let show_sort: String = r.try_get("ShowSortTitle").unwrap_or_default();
+            MediaCardRow {
+                id: r.try_get("Id").unwrap_or(0),
+                title: season_name(number),
+                sort_title: format!("{show_sort} {number:04}"),
+                subtitle: (!show_title.is_empty()).then_some(show_title),
+                artwork_path: r
+                    .try_get::<Option<String>, _>("Poster")
+                    .unwrap_or(None)
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                season_number: Some(number),
+            }
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_trash_episodes(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT e."Id" AS "Id",
+                  COALESCE(em."Title", '') AS "Title",
+                  COALESCE(em."SortTitle", em."Title", '') AS "SortTitle",
+                  em."EpisodeNumber" AS "EpisodeNumber",
+                  s."SeasonNumber" AS "SeasonNumber",
+                  COALESCE(shm."Title", '') AS "ShowTitle",
+                  COALESCE(ea."Path", sa."Path", sha."Path") AS "Poster"
+           FROM "Episode" e
+           JOIN "MediaItem" mi ON mi."Id" = e."Id" AND mi."State" = 1
+           JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
+           JOIN "Season" s ON s."Id" = e."SeasonId"
+           JOIN "Show" sh ON sh."Id" = s."ShowId"
+           JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
+           LEFT JOIN "Artwork" ea
+               ON ea."EpisodeMetadataId" = em."Id" AND ea."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sa
+               ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
+           LEFT JOIN "Artwork" sha
+               ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
+           ORDER BY shm."SortTitle", s."SeasonNumber", em."EpisodeNumber", em."SortTitle", em."Title""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let show_title: String = r.try_get("ShowTitle").unwrap_or_default();
+            let season_number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
+            let episode_number: i64 = r.try_get("EpisodeNumber").unwrap_or(0);
+            let subtitle = (!show_title.is_empty())
+                .then(|| format!("{show_title} - S{season_number} E{episode_number}"));
+            MediaCardRow {
+                id: r.try_get("Id").unwrap_or(0),
+                title: r.try_get("Title").unwrap_or_default(),
+                sort_title: r.try_get("SortTitle").unwrap_or_default(),
+                subtitle,
+                artwork_path: r
+                    .try_get::<Option<String>, _>("Poster")
+                    .unwrap_or(None)
+                    .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                season_number: None,
+            }
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
 async fn load_trash_artists(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<Vec<MediaCardRow>, sqlx::Error> {
@@ -3309,6 +3440,50 @@ async fn load_trash_artists(
             title: r.try_get("Title").unwrap_or_default(),
             sort_title: r.try_get("SortTitle").unwrap_or_default(),
             subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_trash_music_videos(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT mv."Id" AS "Id",
+                  COALESCE(mvm."Title", '') AS "Title",
+                  COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
+                  am."Title" AS "ArtistName",
+                  art."Path" AS "Thumb"
+           FROM "MusicVideo" mv
+           JOIN "MediaItem" mi ON mi."Id" = mv."Id" AND mi."State" = 1
+           JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+           LEFT JOIN "Artist" a ON a."Id" = mv."ArtistId"
+           LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           LEFT JOIN "Artwork" art
+               ON art."MusicVideoMetadataId" = mvm."Id" AND art."ArtworkKind" = 1
+           ORDER BY mvm."SortTitle", mvm."Title""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<String>, _>("ArtistName")
+                .unwrap_or(None)
+                .filter(|s| !s.trim().is_empty()),
             artwork_path: r
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
@@ -3433,6 +3608,45 @@ async fn load_trash_images(
             subtitle: r
                 .try_get::<Option<String>, _>("ReleaseDate")
                 .unwrap_or(None),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Thumb")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
+        })
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_trash_remote_streams(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<Vec<MediaCardRow>, sqlx::Error> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT rs."Id" AS "Id",
+                  COALESCE(rsm."Title", '') AS "Title",
+                  COALESCE(rsm."SortTitle", rsm."Title", '') AS "SortTitle",
+                  rsm."OriginalTitle" AS "Subtitle",
+                  art."Path" AS "Thumb"
+           FROM "RemoteStream" rs
+           JOIN "MediaItem" mi ON mi."Id" = rs."Id" AND mi."State" = 1
+           JOIN "RemoteStreamMetadata" rsm ON rsm."RemoteStreamId" = rs."Id"
+           LEFT JOIN "Artwork" art
+               ON art."RemoteStreamMetadataId" = rsm."Id" AND art."ArtworkKind" = 1
+           ORDER BY rsm."SortTitle", rsm."Title""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r.try_get::<Option<String>, _>("Subtitle").unwrap_or(None),
             artwork_path: r
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
@@ -6797,7 +7011,7 @@ mod playlist_tests {
 
 #[cfg(test)]
 mod season_detail_tests {
-    use super::{get_media_item_info_json, get_season_details};
+    use super::{get_media_item_info_json, get_season_details, list_trash_items};
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
@@ -6881,6 +7095,45 @@ mod season_detail_tests {
         assert_eq!(value["Streams"][1]["Kind"], "Subtitle");
         assert_eq!(value["Streams"][1]["IsExtracted"], true);
         assert_eq!(value["Chapters"][0]["Title"], "Opening");
+
+        owner.cleanup();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn trash_items_include_missing_episodes() {
+        let (_db_file, pool) = test_pool().await;
+        seed_season_detail_fixture(&pool).await;
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let trash = list_trash_items().await.unwrap();
+
+        assert!(trash.shows.is_empty());
+        assert_eq!(trash.episodes.len(), 1);
+        assert_eq!(trash.episodes[0].id, 30);
+        assert_eq!(trash.episodes[0].title, "Pilot");
+        assert_eq!(
+            trash.episodes[0].subtitle.as_deref(),
+            Some("Example Show - S1 E1")
+        );
 
         owner.cleanup();
     }

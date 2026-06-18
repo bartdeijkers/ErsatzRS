@@ -31,6 +31,8 @@ use crate::admin::i18n::{
     select_collection_to_add_selected_items, select_playlist_to_add_selected_items,
     selected_items_count, tr, TextKey,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
     get_media_item_info_json, list_artists, list_episodes, list_movies, list_music_videos,
@@ -231,11 +233,12 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
 fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView {
     let config = BrowserKindConfig::from_kind_code(kind_code);
     let kind = config.kind;
+    let media_revision = RwSignal::new(String::new());
 
     let q_for_resource = query.clone();
     let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
-        move || (q_for_resource.clone(), page),
-        move |(q, p)| async move {
+        move || (q_for_resource.clone(), page, media_revision.get()),
+        move |(q, p, _)| async move {
             match kind {
                 MediaBrowserKind::Movie => list_movies(q, p, PAGE_SIZE).await,
                 MediaBrowserKind::Show => list_shows(q, p, PAGE_SIZE).await,
@@ -252,9 +255,25 @@ fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView 
 
     let q_for_map = query.clone();
     let page_map: Resource<LetterPageMap> = Resource::new_blocking(
-        move || q_for_map.clone(),
-        move |q| async move { media_page_map(kind, q, PAGE_SIZE).await.unwrap_or_default() },
+        move || (q_for_map.clone(), media_revision.get()),
+        move |(q, _)| async move { media_page_map(kind, q, PAGE_SIZE).await.unwrap_or_default() },
     );
+
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>

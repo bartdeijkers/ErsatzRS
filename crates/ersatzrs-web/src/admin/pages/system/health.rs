@@ -1,14 +1,38 @@
 use leptos::prelude::*;
 
 use crate::admin::i18n::{health_summary, tr, TextKey};
+#[cfg(target_arch = "wasm32")]
+use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::layout::{load_health_snapshot, AdminHealthRow, AdminHealthSnapshot};
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
+    view! { <HealthIsland/> }
+}
+
+#[island]
+fn HealthIsland() -> impl IntoView {
+    let media_revision = RwSignal::new(String::new());
     let snapshot = Resource::new(
-        || (),
-        |()| async move { load_health_snapshot().await.unwrap_or_default() },
+        move || media_revision.get(),
+        |_| async move { load_health_snapshot().await.unwrap_or_default() },
     );
+
+    Effect::new(move |_| {
+        #[cfg(target_arch = "wasm32")]
+        {
+            leptos::task::spawn_local(async move {
+                loop {
+                    if let Ok(next) = media_state_revision().await {
+                        if media_revision.get_untracked() != next {
+                            media_revision.set(next);
+                        }
+                    }
+                    gloo_timers::future::TimeoutFuture::new(1_500).await;
+                }
+            });
+        }
+    });
 
     view! {
         <div style="max-width:64rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
