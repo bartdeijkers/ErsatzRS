@@ -8,8 +8,9 @@ rules: docs/automation/gap-prompt-rules.md
 
 # Top three gaps to fill - goal prompts
 
-Three paste-and-run goal prompts, each closing **one** ErsatzTV parity gap.
-Auto-prioritized from `docs/progress`. Regenerated daily by the
+Three paste-and-run goal prompts, each closing **one** ErsatzTV parity gap or a
+parity-critical runtime infrastructure gap. Auto-prioritized from `docs/progress`,
+with manual maintainer promotions called out inline. Regenerated daily by the
 [progress routine](automation/daily-progress-routine.md); see the
 [rules](automation/gap-prompt-rules.md). For the live gap list run
 `cargo xtask progress gaps`.
@@ -59,20 +60,28 @@ pages and to record that the FFmpeg/HLS items are ErsatzRS-specific deviations.
 `cargo xtask progress gaps` now lists **4** features, all `In progress`:
 `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`,
 `multi-collections-rerun-collections-playlists-filler-presets`, and `scanner`.
-Per the **one-ErsatzTV-parity-gap** and **fold-hardware-bound-verification**
-rules, the FFmpeg/HLS pair does not consume a goal-prompt slot: its open debts
-are ErsatzRS-specific hardening/deviations carrying their own ADRs
+Per the updated **ADR-backed FFmpeg/HLS hardening** rule, the FFmpeg/HLS pair
+may now consume a goal-prompt slot when pinned-baseline ErsatzTV gaps are drying
+up. Its open debts are ErsatzRS-specific hardening/deviations carrying their own
+ADRs
 (`ac3-segmenter-max-delay`, `default-profile-1080p60-retune` under ADR 0017;
 `active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a hardware-bound
 NVENC live proof (`nvenc-filter-gate-live-proof`, folded into a future
-encoder-capable verification session, not a standalone prompt). That leaves
-**two** actionable pinned-baseline ErsatzTV parity prompts below.
+encoder-capable verification session unless paired with behavior or release
+packaging work). There are still **two** actionable pinned-baseline ErsatzTV
+parity prompts below, and ADR 0008 fills slot 3 as manually promoted
+parity-critical FFmpeg runtime infrastructure.
 
 Ranking: `scanner` takes slot 1. It was worked on this window (re-ranked and
 rewritten against its current three-debt state per the carry-over rule), is a
 foundational backend gap that outranks leaf UI, and leads with its two
 runtime-evidenced debts. `multi-collections-…-filler-presets` is slot 2,
-carried over unchanged (no commits this window).
+carried over unchanged (no commits this window). Slot 3 is a manual maintainer
+promotion for ADR 0008: completing first-party FFmpeg 8.1 release artifacts is
+not a pinned-baseline ErsatzTV UI/backend gap, but it is parity-critical runtime
+infrastructure because the current implementation is still `Partial` while
+release payloads can depend on public "full" FFmpeg builds that may miss
+`drawvg`, `zscale`, or acceptable version/configuration output.
 
 ---
 
@@ -233,22 +242,93 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## Not a standalone prompt: FFmpeg command generation / HLS segmenter (slugs `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`)
+## 3 - ADR 0008: complete first-party FFmpeg 8.1 release artifacts and runtime validation
 
-These two `In progress` features remain in `cargo xtask progress gaps`, but
-their open debts are **not** pinned-baseline ErsatzTV parity gaps, so per the
-gap-prompt rules they do not consume a slot:
+Fix the next ErsatzRS parity-infrastructure gap: complete ADR 0008's FFmpeg 8.1
+runtime packaging work so every release artifact carries and validates the exact
+FFmpeg/ffprobe runtime ErsatzRS requires for `drawvg`, HDR `zscale`/`tonemap`,
+subtitles/text rendering, codec support, and startup capability reporting.
+
+Use the repo workflow from `AGENTS.md`. This is not a pinned-baseline ErsatzTV
+feature port, so do not force it through `skills/parity-slice.md` as if it were
+admin or scanner behavior. The goal is to make the ADR 0008 approach
+operationally stronger than ErsatzTV's separate `ErsatzTV-ffmpeg` repository:
+single-repo release ownership, redistributable default artifacts, explicit
+startup checks, and no hidden dependency on a user's system FFmpeg.
+
+Current status from `docs/adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md`:
+`Status: Proposed`; `Implementation: Partial — the FFmpeg 8.1 runtime
+requirement is detected and enforced at startup; multi-arch container images are
+not yet produced.` The release workflow plan in
+`plans/release-self-built-ffmpeg.md` records that public BtbN/Gyan-style builds
+were too weak for ErsatzRS because they could miss `drawvg`, `zscale`, or
+runtime-check-compatible version/configuration output.
+
+Before editing:
+1. Read ADR 0008, ADR 0005, `docs/explanation/deviations.md`,
+   `plans/release-self-built-ffmpeg.md`, `docker/Dockerfile`,
+   `docker-bake.hcl`, `.github/workflows/release.yml`,
+   `crates/ersatzrs-ffmpeg/src/version.rs`, and current release documentation.
+2. Inspect the existing runtime capability checks and confirm exactly which
+   filters, configure flags, codecs, encoders/decoders, and hardware accelerators
+   are required versus detected-only.
+3. Compare the ErsatzTV custom-build lesson without copying its separate repo
+   model: preserve ErsatzRS's redistributable default image policy, but make the
+   shipped runtime just as deterministic as ErsatzTV's pinned FFmpeg contract.
+4. Build a Source Map for release artifact creation -> bundled FFmpeg discovery
+   -> startup capability report -> admin FFmpeg profile hardware presentation ->
+   smoke/transcode proof.
+
+Implement the coherent ADR 0008 closeout slice: build first-party FFmpeg 8.1
+artifacts for all six release RIDs, stage them under
+`ffmpeg/bin/{ffmpeg,ffprobe}[.exe]`, include the runtime library closure, update
+runtime discovery so bundled binaries win after explicit environment overrides,
+and remove public BtbN/Gyan download assumptions from release workflow and docs.
+Keep published default artifacts redistributable: do not enable `--enable-nonfree`,
+bundle CUDA/libnpp, or add non-redistributable codecs unless a new ADR accepts
+that licensing/support model. If a GPU/nonfree variant is needed, keep it
+separate and explicitly non-default.
+
+Add validation that fails before artifact upload unless the relocated payload
+passes parseable `ffmpeg -version` / `ffprobe -version`, `--enable-cairo`,
+`drawvg`, `--enable-libzimg`, `zscale`, required codecs, a real `drawvg` smoke
+transcode, and a real HDR-tagged `zscale`/`tonemap` smoke transcode. Preserve
+PATH fallback for developer installs, but prove release archives run without a
+system FFmpeg on clean Linux/macOS/Windows environments.
+
+Verify with focused tests for bundled-path discovery and version parsing, the
+release workflow's FFmpeg validation commands on every supported RID that can be
+proven locally or in CI, Docker/image capability reports, `cargo xtask progress
+check`, and a throwaway release/archive inspection before marking ADR 0008's
+implementation complete. Update ADR 0008, release docs, changelog, and this
+prompt file only when evidence supports the new state. Report the Source Map,
+artifact matrix, validation results, remaining platform or hardware limitations,
+and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If a better way
+than ADR 0008 emerges during review, revise or supersede the ADR before changing
+the implementation direction.
+
+---
+
+## Allowed future hardening prompts: FFmpeg command generation / HLS segmenter (slugs `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`)
+
+These two `In progress` features remain in `cargo xtask progress gaps`. Their
+open debts are **not** pinned-baseline ErsatzTV parity gaps, but they are now
+allowed to consume goal-prompt slots as ADR-backed FFmpeg/HLS runtime hardening
+when fewer than three stronger pinned-baseline parity prompts remain:
 
 - `ac3-segmenter-max-delay` and `default-profile-1080p60-retune`
   (`ffmpeg-command-generation`) and `active-transcode-limit-not-a-real-ceiling`
   (`hls-variant-playlists-segmenter`) are ErsatzRS-specific streaming
   hardening/deviations tracked under ADR 0016 / ADR 0017 and
   [`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md),
-  not behavior present in ErsatzTV at the pin.
+  not behavior present in ErsatzTV at the pin. They should be framed as runtime
+  hardening prompts, not parity-porting prompts.
 - `nvenc-filter-gate-live-proof` is hardware-bound verification debt; per the
-  fold-hardware-bound-verification rule it must ride a future encoder-capable
-  verification session rather than a standalone prompt. This machine still lacks
-  an encoder-only/no-CUDA-filter FFmpeg build.
+  fold-hardware-bound-verification rule it should ride a future encoder-capable
+  verification session or a broader FFmpeg/HLS hardening prompt rather than
+  become proof-only scope. This machine still lacks an encoder-only/no-CUDA-filter
+  FFmpeg build.
 
-They stay tracked as visible `ParityDebt`; advance them through their own ADRs
-and plan, not through a daily goal-prompt slot.
+They stay tracked as visible `ParityDebt`; advance them through their ADRs,
+plan, and daily goal prompts when selected.

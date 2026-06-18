@@ -12,10 +12,13 @@ contract.
 - **State:** the last processed commit is stored in the front-matter of
   [`docs/top-three-gaps-to-fill-prompts.md`](../top-three-gaps-to-fill-prompts.md)
   (`last_processed_commit`). That is the "since last check" marker.
-- **Parity baseline:** gaps are measured **only** against the pinned ErsatzTV
-  commit in [`parity-baseline.md`](parity-baseline.md). Upstream ErsatzTV work
-  after that commit is out of scope until the pin is advanced (which the routine
-  never does on its own).
+- **Parity baseline:** ErsatzTV parity-porting gaps are measured **only** against
+  the pinned ErsatzTV commit in [`parity-baseline.md`](parity-baseline.md).
+  Upstream ErsatzTV work after that commit is out of scope until the pin is
+  advanced (which the routine never does on its own). ADR-backed FFmpeg/HLS
+  hardening is allowed as parity-critical runtime infrastructure when the gap
+  prompt rules select it; it must cite the governing ADR/plan instead of
+  pretending to be pinned-baseline ErsatzTV behavior.
 - **Schedule owner:** this routine is intended for the maintainer-owned
   scheduled remote agent against `bartdeijkers/ErsatzRS` `main`. The repository
   contract lives here; the external scheduler/account must point at this file
@@ -57,6 +60,10 @@ Before evaluating any gap, honor [`parity-baseline.md`](parity-baseline.md):
   Anything upstream added after the pin is out of scope; never flag it, never
   write a goal prompt for it, and never regress a `Ported` feature because
   upstream moved past the pin.
+- ADR-backed FFmpeg/HLS hardening prompts are the exception to "present in
+  ErsatzTV": they are allowed when selected by
+  [`gap-prompt-rules.md`](gap-prompt-rules.md), but must stay grounded in their
+  ADRs/plans and visible `ParityDebt`.
 - **Never advance the pin** — bumping the baseline is a separate, reviewed action.
 
 ### 2. Reconcile `docs/progress/`
@@ -106,8 +113,9 @@ path, or feature.
 Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
 `docs/automation/gap-prompt-rules.md` exactly:
 
-1. Get candidates: `cargo xtask progress gaps`. Candidates include individual
-   structured `[[debt]]` items, not only whole-feature slugs.
+1. Get candidates: `cargo xtask progress gaps`, plus ADR-backed FFmpeg/HLS
+   runtime hardening items allowed by the rules file. Candidates include
+   individual structured `[[debt]]` items, not only whole-feature slugs.
 2. Rank and pick the top three per the selection rules in the rules file.
    Apply the completed-scope rule first: a prior prompt whose feature is now
    `Ported`/`Deferred`/`Dropped`, or whose targeted debt ids are all closed,
