@@ -125,6 +125,13 @@ historical context; the authoritative live state is always `docs/progress/`
   with ready-to-run prompts (lift items one at a time).
 - `workflow-review.md` — review of the parity-progress pipeline; its
   recommendations are tracked under Deferred Contract Work below.
+- `extras-alternate-versions-and-stream-roles.md` — implements ADR 0018
+  (special features/extras, alternate versions, and stream-role/commentary
+  selection): additive `MediaItem` content-variant columns, new search tokens
+  (`content_kind`/`sub_kind`/`parent_title`/`audio_title`/`subtitle_title`),
+  default `content_kind:primary` exclusion, `/media/*` surfacing, and scanner
+  import of extras ErsatzTV discards. Parity slug `content-variants` (to be
+  created at the first slice).
 
 ### Completed / historical
 
