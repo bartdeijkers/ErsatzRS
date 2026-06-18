@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-17
-last_processed_commit: cfc502479b32b6b968d8cb237cfa05073e075cc4
+generated: 2026-06-18
+last_processed_commit: 04383968d96c96e1e0039ccd1b86697cda1ec9ef
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -20,102 +20,146 @@ Auto-prioritized from `docs/progress`. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Daily reconcile (2026-06-17, window `5787fba..cfc5024`): four commits merged,
-all in the HLS variant playlists / segmenter family. `fix(hls): preserve
-sub-second segmenter seeks` (6694ceb) propagated full-precision request-time /
-in-point seek offsets as `Duration` through active-item selection, the worker
-FFmpeg command, the shared `StreamSeek` step, direct `.ts`, and troubleshooting
-previews, closing the last open content-timeline debt; `fix: limit active hls
-transcodes` (cfc5024) added the ErsatzRS-specific
-`ffmpeg.segmenter.active_transcode_limit` (ADR 0016, default 2). With every
-structured debt `resolved` at `cfc5024`, `hls-variant-playlists-segmenter` was
-`Ported` and dropped out of `cargo xtask progress gaps`; its over-budget summary
-was trimmed to current-state-only in this pass. (It was reopened the same day by
-the ADR 0016 revision — see the 2026-06-17 addendum below.) The two docs commits
-(f67a502, 2b98cb0) recorded that work and the prior reconcile. No other parity
-feature changed.
+Daily reconcile (2026-06-18, window `cfc5024..0438396`): 16 non-merge commits
+merged. Most of the feature work in this window was already folded into the
+prior pass's manual closeout addenda and self-documented by the commits
+themselves: `fix(ffmpeg): prove opacity watermark clocks` (5f97230) closed
+`ffmpeg-filter-graph` to `Ported`, `fix(scheduling): close classic filler
+parity` (d30b418) closed `classic-scheduling`, `feat(admin): close scheduling
+route parity` (735a896) closed `schedules-templates-decorations-deco-templates`,
+and `fix(web): close support pages parity` (6065b00) closed `support-pages`.
+All four dropped out of `cargo xtask progress gaps`.
 
-`cargo xtask progress gaps` listed 7 remaining features at `cfc5024`, all `In
-progress` (8 after the 2026-06-17 addendum below). None of the three
-carried-over picks saw any commits this window, so per the carry-over rule they
-were kept unchanged in the daily reconcile: slot 1 `ffmpeg-filter-graph`
-(phase-focus, foundational pipeline), slot 2
-`multi-collections-rerun-collections-playlists-filler-presets`, slot 3
-`scanner`. The manual closeout addendum below replaces the now-completed slot
-1. The root-cause note for the now-closed HLS deviation remains at
-[`explanation/hls-segmenter-playback-deviation-root-cause.md`](explanation/hls-segmenter-playback-deviation-root-cause.md).
+New in this window beyond those closeouts:
 
-**2026-06-17 addendum (manual reconcile; design work not yet committed).** Two
-ErsatzRS-specific streaming decisions were recorded, both tracked through
-[`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md):
+- `feat(scanner): detect missing library items and skip them in playouts`
+  (fdb22c0) ported ErsatzTV's previously-absent `MediaItemState` producer side
+  (local `FlagFileNotFound` trailing pass; media-server item-id diffing to trash
+  removed items and flag `RemoteOnly`; `playout.skip_missing_items` consumer
+  gate). `scanner` stays `In progress` and gained a new structured debt,
+  `media-server-unavailable-branch-unexercised`, recording that the `Unavailable`
+  (State=2) flag path is wired but never taken because only movies/TV are synced
+  and all three servers report remote-streaming support for those kinds.
+- `feat(docs): track ADR implementation state separately from decision status`
+  (320bc43) split ADR `## Status` (decision) from `## Implementation` (code
+  state), migrated all 17 ADRs, linked debts via `adr=NNNN`, and added a
+  `progress check` lint that fails when an ADR claims `Implemented` while a
+  linked debt is open.
+- `docs(status): revise ADR 0017 to seed five default FFmpeg profiles` (61e4fb2)
+  and `docs: update ADR 0016/0017 …` (c1b040b, 0ba6ca4) retargeted the
+  `default-profile-1080p60-retune` and HLS-capacity debts on
+  `ffmpeg-command-generation` / `hls-variant-playlists-segmenter`; both stay
+  `In progress`. The remaining release/Windows/server-path commits (cfcf906,
+  f5cbeed, 8f4aefd, 0438396) and doc-status commits did not change parity status.
 
-- **ADR 0016 revised** from a soft `active_transcode_limit` cap (whose
-  recently-accessed bypass was unbounded) into a hard capacity ceiling plus an
-  admission/preemption ladder. This reopened `hls-variant-playlists-segmenter`
-  (`In progress`) with debt `active-transcode-limit-not-a-real-ceiling`.
-- **ADR 0017 added** — the default FFmpeg profile tuned for smooth 1080p60 /
-  AC-3 6ch streaming on CPU — adding debts `default-profile-1080p60-retune` and
-  `ac3-segmenter-max-delay` to `ffmpeg-command-generation`.
+No parity status was advanced in this reconcile beyond what the commits already
+recorded; `phase.toml` `next_steps` was trimmed to drop the now-`Ported` support
+pages and to record that the FFmpeg/HLS items are ErsatzRS-specific deviations.
 
-`cargo xtask progress gaps` now lists **8** features. These three debts are
-ErsatzRS hardening/deviations carrying their own ADRs and a dedicated plan, not
-gaps against the pinned ErsatzTV baseline, so per the one-ErsatzTV-parity-gap
-rule they do not consume a goal-prompt slot; the three parity picks below are
-unchanged. The next routine run will fold this addendum into the regenerated
-narrative.
+`cargo xtask progress gaps` now lists **4** features, all `In progress`:
+`ffmpeg-command-generation`, `hls-variant-playlists-segmenter`,
+`multi-collections-rerun-collections-playlists-filler-presets`, and `scanner`.
+Per the **one-ErsatzTV-parity-gap** and **fold-hardware-bound-verification**
+rules, the FFmpeg/HLS pair does not consume a goal-prompt slot: its open debts
+are ErsatzRS-specific hardening/deviations carrying their own ADRs
+(`ac3-segmenter-max-delay`, `default-profile-1080p60-retune` under ADR 0017;
+`active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a hardware-bound
+NVENC live proof (`nvenc-filter-gate-live-proof`, folded into a future
+encoder-capable verification session, not a standalone prompt). That leaves
+**two** actionable pinned-baseline ErsatzTV parity prompts below.
 
-**2026-06-17 closeout addendum (manual gap #1).** The
-`ffmpeg-filter-graph` prompt was completed in this pass: opacity-expression
-still images now use looped inputs, direct `.ts` and HLS segmenter live proofs
-captured the resolved clock expressions and decoded black -> red -> black
-opacity transitions, and `ffmpeg-filter-graph` is now `Ported`. The hardware
-`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof` remains open
-because this machine still lacks an encoder-only/no-CUDA-filter FFmpeg build.
-Per the completed-scope replacement rule, slot 1 is refilled with
-`classic-scheduling`; slots 2 and 3 carry over. `cargo xtask progress gaps`
-now lists **7** features after this closeout.
-
-**2026-06-17 closeout addendum (manual gap #1 Classic).** The
-`classic-scheduling` prompt was completed in this pass: imported
-`ProgramScheduleItem` PreRoll/MidRoll/PostRoll/Tail/Fallback filler IDs now
-round-trip through the repository, Classic SQL reference loading resolves those
-filler presets and media, and the Classic engine schedules per-item pre/post
-filler, no-chapter mid-roll as post-roll, tail filler up to the next fixed item,
-fallback filler for the remaining gap, and existing fill-group state. Focused
-core and infra tests prove the imported SQL and scheduling paths, and
-`classic-scheduling` is now `Ported`. Per the completed-scope replacement rule,
-slot 1 is refilled with
-`schedules-templates-decorations-deco-templates`; slots 2 and 3 carry over.
-`cargo xtask progress gaps` now lists **6** features after this closeout.
-
-**2026-06-17 closeout addendum (manual gap #1 Scheduling admin).** The
-`schedules-templates-decorations-deco-templates` prompt was completed in this
-pass: the closeout Source Map and Visual Source Map were recorded in
-`plans/scheduling-route-family-parity-closeout.md`, durable Chromium browser
-coverage now creates and inspects schedules, blocks, templates, decos, and deco
-templates through `tests/e2e/scheduling-route-family.spec.ts`, and the tracker
-now records no remaining `ParityDebt` for this route family. Per the
-completed-scope replacement rule, slot 1 is refilled with `support-pages`;
-slots 2 and 3 carry over. `cargo xtask progress gaps` now lists **5** features
-after this closeout.
-
-**2026-06-17 closeout addendum (manual gap #1 Support pages).** The
-`support-pages` prompt was completed in this pass: the closeout Source Map and
-Visual Source Map were recorded in
-`plans/support-pages-parity-closeout.md`, hydrated Support nav badges now fetch
-and render warning/error counts, `/system/logs` now carries search, Timestamp /
-Level sort, persisted page size, and pager state through the server function,
-and durable Chromium coverage in `tests/e2e/support-pages.spec.ts` proves the
-health, logs, troubleshooting, sequential schedule validation, block playout,
-and playback fallback surfaces without console/runtime errors. The
-`support-pages` tracker is now `Ported`. `cargo xtask progress gaps` now lists
-**4** features after this closeout; the remaining FFmpeg/HLS items are
-ErsatzRS-specific hardening/deviation work from the addendum above, so only two
-actionable pinned-baseline ErsatzTV parity prompts remain below.
+Ranking: `scanner` takes slot 1. It was worked on this window (re-ranked and
+rewritten against its current three-debt state per the carry-over rule), is a
+foundational backend gap that outranks leaf UI, and leads with its two
+runtime-evidenced debts. `multi-collections-…-filler-presets` is slot 2,
+carried over unchanged (no commits this window).
 
 ---
 
-## 1 - Multi-collections / rerun collections / playlists / filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 1 - Scanner: real-world music-video NFO leniency, SQLite scan locking, and the media-server Unavailable branch (slug `scanner`)
+
+Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
+music-video NFO leniency, concurrent SQLite scan locking, and exercising the
+media-server `Unavailable` state branch (slug `scanner`, debts
+`music-video-nfo-fragment-leniency`, `sqlite-scan-locking`, and
+`media-server-unavailable-branch-unexercised`).
+
+Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps. Read ErsatzTV
+source only at the pinned commit
+`0d301df5e8512fdfccf3a611188d27ab1690ee31`.
+
+Lead with the two runtime-evidenced debts; the coverage debt follows.
+
+Current `ParityDebt` from `docs/progress/parity/scanner.toml`:
+- `music-video-nfo-fragment-leniency` (2026-06-10): "Local music-video NFO
+  parsing rejects real-world files that ErsatzTV accepts, falling back to
+  filename metadata." Evidence: "ErsatzRS.log: hundreds of `NFO did not contain
+  a <musicvideo> root element` errors during music-video scans."
+- `sqlite-scan-locking` (2026-06-10): "Concurrent scan and web activity can
+  abort library scans with SQLite database locked errors instead of serializing
+  work like ErsatzTV." Evidence: "ErsatzRS.log: library scan failed
+  library_id=3/5 with SQLite code 5 database is locked."
+- `media-server-unavailable-branch-unexercised` (2026-06-17): the `Unavailable`
+  (State=2) flag path is wired but never taken because only movies/TV are synced
+  from Plex/Jellyfin/Emby and all three report `ServerSupportsRemoteStreaming=true`
+  for those kinds, so a missing local file always resolves to `RemoteOnly`
+  (State=3). This is coverage/breadth debt, not a runtime failure.
+
+ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Scanner/` at the pinned commit,
+especially the local music-video scanner/NFO parsing path, the scan
+coordination/serialization behavior around library scans, and the
+`MediaItemState` producers for kinds that lack remote streaming. ErsatzRS
+target: `crates/ersatzrs-scanner`,
+`crates/ersatzrs-infra/src/{plex,jellyfin,emby,media_server}.rs`,
+`crates/ersatzrs-infra/src/repositories/`, scanner/infra tests under
+`crates/ersatzrs-scanner/tests/` and `crates/ersatzrs-infra/tests/`, and the
+scanner parity file.
+
+Before editing:
+1. Read the pinned ErsatzTV scanner source for local music-video NFO parsing
+   and fallback behavior, scan transaction boundaries and scan
+   concurrency/serialization, and which media kinds drive the `Unavailable`
+   (non-remote-streaming) state.
+2. Inspect the current ErsatzRS local music-video scanner, NFO parser, provider
+   sync write paths, the `flag_unavailable_media_server_items` callers, SQLite
+   pool/transaction usage, and existing scanner/infra tests and fixtures.
+3. Build a Source Map for music-video scan input -> NFO parse -> metadata row
+   writes -> fallback metadata, a second for web/scanner concurrent database
+   access and lock handling, and a third for the media-server item-state
+   producer paths (which kinds can reach `Unavailable`).
+4. Keep every remaining shortfall visible as structured `ParityDebt`, not prose.
+
+Implement the coherent scanner hardening slice: make local music-video NFO
+parsing accept the real-world fragments ErsatzTV accepts while preserving the
+existing strict row-shape and fallback semantics; make concurrent scan plus web
+activity serialize/retry consistently enough to stop aborting with SQLite
+database-locked errors; and either exercise the `Unavailable` branch for a kind
+ErsatzTV produces it for or keep the exact remaining shortfall as open debt with
+a tightened description. Do not weaken metadata parity, path hashing, or
+provider enum values to make fixtures pass. If a production log sample is needed
+but unavailable, build a minimal fixture from the observed failure shape and
+keep any unproven runtime breadth as structured `ParityDebt`.
+
+Add focused scanner/infra regressions for the accepted NFO fragment shape, the
+metadata written from that NFO, the fallback for truly invalid NFO, the SQLite
+locking scenario, and any media-server state-producer path you change. If the
+locking fix touches shared DB behavior, add the narrow repository or integration
+coverage that proves it does not hide real errors or break MySQL feature builds.
+
+Verify with focused `ersatzrs-scanner` and affected `ersatzrs-infra` tests,
+`cargo test --workspace --all-features` if shared DB behavior changed broadly,
+`cargo xtask progress check`, and `cargo xtask progress gaps`. Update
+`docs/progress/parity/scanner.toml`, the changelog, and this prompt file only
+when the evidence supports the new status. Report the Source Maps, behavior
+closed, remaining `ParityDebt`, verification run, and changed files.
+Remember that ErsatzTV could have a less than optimal solution. If you have a
+better way, please create an ADR, but only after careful review in depth.
+update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+
+---
+
+## 2 - Multi-collections / Rerun collections / Playlists / Filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
 collection route-family parity closeout for `/media/multi-collections`,
@@ -123,7 +167,9 @@ collection route-family parity closeout for `/media/multi-collections`,
 (slug `multi-collections-rerun-collections-playlists-filler-presets`).
 
 Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
+The goal is fully functional ErsatzTV parity without stopgaps. Read ErsatzTV
+source only at the pinned commit
+`0d301df5e8512fdfccf3a611188d27ab1690ee31`.
 
 Current status from
 `docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`:
@@ -187,64 +233,22 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
-## 2 - Scanner: close real-world music-video NFO and SQLite scan-locking parity debts (slug `scanner`)
+## Not a standalone prompt: FFmpeg command generation / HLS segmenter (slugs `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
-music-video NFO leniency and concurrent SQLite scan locking (slug `scanner`,
-debts `music-video-nfo-fragment-leniency` and `sqlite-scan-locking`).
+These two `In progress` features remain in `cargo xtask progress gaps`, but
+their open debts are **not** pinned-baseline ErsatzTV parity gaps, so per the
+gap-prompt rules they do not consume a slot:
 
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps.
+- `ac3-segmenter-max-delay` and `default-profile-1080p60-retune`
+  (`ffmpeg-command-generation`) and `active-transcode-limit-not-a-real-ceiling`
+  (`hls-variant-playlists-segmenter`) are ErsatzRS-specific streaming
+  hardening/deviations tracked under ADR 0016 / ADR 0017 and
+  [`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md),
+  not behavior present in ErsatzTV at the pin.
+- `nvenc-filter-gate-live-proof` is hardware-bound verification debt; per the
+  fold-hardware-bound-verification rule it must ride a future encoder-capable
+  verification session rather than a standalone prompt. This machine still lacks
+  an encoder-only/no-CUDA-filter FFmpeg build.
 
-Current `ParityDebt` from `docs/progress/parity/scanner.toml`:
-`music-video-nfo-fragment-leniency` says "Local music-video NFO parsing rejects
-real-world files that ErsatzTV accepts, falling back to filename metadata."
-Evidence: "ErsatzRS.log: hundreds of NFO did not contain a <musicvideo> root
-element errors during music-video scans." `sqlite-scan-locking` says
-"Concurrent scan and web activity can abort library scans with SQLite database
-locked errors instead of serializing work like ErsatzTV." Evidence:
-"ErsatzRS.log: library scan failed library_id=3/5 with SQLite code 5 database
-is locked."
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Scanner/` at the pinned commit,
-especially the local music-video scanner/NFO parsing path and the scan
-coordination behavior around library scans. ErsatzRS target:
-`crates/ersatzrs-scanner`, `crates/ersatzrs-infra/src/repositories/`, scanner
-tests under `crates/ersatzrs-scanner/tests/`, and the scanner parity file.
-
-Before editing:
-1. Read the pinned ErsatzTV scanner source for local music-video NFO parsing,
-   fallback behavior, scan transaction boundaries, and scan concurrency /
-   serialization.
-2. Inspect the current ErsatzRS local music-video scanner, NFO parser, provider
-   sync write paths, SQLite pool/transaction usage, existing scanner tests, and
-   any logs or fixtures referenced by the debt evidence.
-3. Build a Source Map for music-video scan input -> NFO parse -> metadata row
-   writes -> fallback metadata, and a second Source Map for web/scanner
-   concurrent database access and lock handling.
-4. Identify remaining `ParityDebt`; it must stay visible, not hidden in prose.
-
-Implement only the coherent scanner hardening slice: make local music-video NFO
-parsing accept the real-world fragments ErsatzTV accepts while preserving the
-existing strict row-shape and fallback semantics, and make concurrent scan plus
-web activity serialize/retry consistently enough to avoid aborting with SQLite
-database-locked errors. Do not weaken scanner metadata parity, path hashing, or
-provider enum values to make fixtures pass. If a production log sample is
-needed but unavailable, create a minimal fixture from the observed failure
-shape and keep any unproven runtime breadth as structured `ParityDebt`.
-
-Add focused scanner/infra regressions for the accepted NFO fragment shape, the
-metadata written from that NFO, the fallback behavior for truly invalid NFO,
-and the SQLite locking scenario. If the locking fix changes shared DB behavior,
-add the narrow repository or integration coverage that proves it does not hide
-real errors or break MySQL feature builds.
-
-Verify with focused `ersatzrs-scanner` and affected `ersatzrs-infra` tests,
-`cargo test --workspace --all-features` if shared DB behavior changed broadly,
-`cargo xtask progress check`, and `cargo xtask progress gaps`. Update
-`docs/progress/parity/scanner.toml`, changelog, and this prompt file only when
-the evidence supports the new status. Report the Source Map, behavior closed,
-remaining `ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+They stay tracked as visible `ParityDebt`; advance them through their own ADRs
+and plan, not through a daily goal-prompt slot.
