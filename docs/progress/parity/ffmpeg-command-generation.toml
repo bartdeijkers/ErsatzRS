@@ -87,3 +87,10 @@ description = 'The HLS segmenter output does not emit -max_delay for multichanne
 discovered  = '2026-06-17'
 evidence    = 'hls_output / add_output_options in crates/ersatzrs-ffmpeg/src/pipeline/mod.rs emit b:a/maxrate:a + bufsize:a but no -max_delay. Not present in the ErsatzTV baseline either, so this is an ErsatzRS addition.'
 resolved    = false
+
+[[debt]]
+id          = 'hdr-tonemap-calibration-live-proof'
+description = 'HDR -> SDR tonemapping matches ErsatzTV command/filter shape in snapshots (software zscale+tonemap, NVENC libplacebo, VAAPI tonemap_opencl, QSV vpp_qsv), and the generator now produces HDR10 PQ / HLG calibration masters plus SDR reference renders. The path has not yet been live-proven by ingesting those HDR clips, streaming through ErsatzRS, and comparing decoded output helper regions (peak-to-black chips, RGBYCM chips, dark grid, timer text, and geometry square) against the generated SDR references. Until that proof exists, HDR support should stay tracked as command-generation/runtime debt rather than being generalized from argv snapshots or TSDuck transport checks.'
+discovered  = '2026-06-18'
+evidence    = 'ErsatzTV source audit: ColorParams.IsHdr is true for `arib-std-b67` / `smpte2084`; SoftwarePipelineBuilder, NvidiaPipelineBuilder, VaapiPipelineBuilder, and QsvPipelineBuilder all call SetTonemap for HDR sources and reset ColorParams.Default after tonemap. ErsatzRS source audit: derive_color_params flags PQ/HLG as HDR, apply_source_video_filters emits tonemap_filter_for during transcode, and tonemap_filter_for maps software/NVENC/VAAPI/QSV to the same filter families. New calibration command committed in 7cfdaa4 adds CAL_COLOR_MODES/CAL_HDR_MODES and CAL_MAKE_SDR_REFS; local tiny generation/probes proved HDR10 and HLG source signaling plus BT.709 SDR reference signaling, but no live ErsatzRS stream capture or pixel comparison has been run.'
+resolved    = false
