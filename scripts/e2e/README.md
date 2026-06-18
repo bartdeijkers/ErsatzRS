@@ -32,6 +32,73 @@ explicitly:
 scripts/calibration/gen-calibration-clips.sh    # -> calibration-clips/cal_{1,2,3}.{mkv,ts}
 ```
 
+HDR and tone-mapping calibration clips are opt-in so the default TSDuck gate
+stays fast and compatible with its legacy `cal_{1,2,3}` inputs:
+
+```bash
+CAL_HDR_MODES="hdr10-pq hlg" \
+CAL_MAKE_SDR_REFS=1 \
+CAL_TONEMAP_ALGORITHMS="hable mobius reinhard" \
+scripts/calibration/gen-calibration-clips.sh
+```
+
+The HDR masters are written as `cal_hdr10-pq_{1,2,3}.mkv` and
+`cal_hlg_{1,2,3}.mkv`. SDR reference renders are written as
+`cal_<mode>_to_sdr_<algorithm>_<N>.mkv`. Every generated video labels its own
+color mode and embeds the inspection helpers: peak-to-black chips, saturated
+RGBYCM chips, dark grid lines, white timer boxes, the centered geometry square,
+and the sweep bar.
+
+## HDR / Tone-Mapping Calibration Spec
+
+TSDuck can automatically verify the **transport** part of HDR playback: TS
+sync, continuity counters, PCR/PTS/DTS continuity, PAT/PMT/service structure,
+video and audio PID presence, HLS playlist structure, and whether the stream
+keeps flowing. It cannot decide whether HDR -> SDR tone mapping is visually
+correct, because that requires decoded pixels and color-management semantics.
+Use this split:
+
+| Layer | Tool | Gate |
+|---|---|---|
+| HDR source signaling | `ffprobe` | HDR masters must be 10-bit BT.2020 with `smpte2084` for HDR10 PQ or `arib-std-b67` for HLG. Treat mastering-display and MaxCLL/MaxFALL side data as an additional libx265 capability check when it is present in the generated file. |
+| Static TS integrity | TSDuck | Optional HDR `.ts` muxes must pass the same baseline checks as SDR: no TEI/sync loss, no continuity errors, PCR present, video/audio PIDs present, sane bitrate, and no timestamp leaps. |
+| Live stream integrity | TSDuck | Captured ErsatzRS HDR-source playback must pass the existing URL/gate checks for every transport mode under test. |
+| SDR output signaling | `ffprobe` | A tone-mapped output must be `bt709` primaries, `bt709` transfer, `bt709` matrix, 8-bit `yuv420p` unless the profile intentionally requests HDR passthrough. |
+| SDR tone-map pixels | `ffmpeg` frame crops + metrics | Extract matching frames from the live stream and the generated `*_to_sdr_<algorithm>_*.mkv` reference; compare the embedded helper regions, not full-frame compression noise. |
+
+Recommended automated pixel checks:
+
+- Crop the right-side helper panel and compare it against the selected SDR
+  reference with `ssim` or `psnr`. Use strict thresholds for software paths
+  using the same algorithm, looser thresholds for hardware encoders.
+- Run `signalstats` on the peak-to-black strip. It should retain multiple
+  distinct luma bands after tone mapping; all-white peak chips, all-black dark
+  chips, or collapsed adjacent bands are failures.
+- Run `signalstats` on the RGBYCM strip. The saturated chips should remain
+  chroma-distinct; a gray or swapped-hue strip is a failure.
+- Crop the timer boxes and centered square. They should stay readable and
+  geometrically stable relative to the SDR reference; unreadable labels indicate
+  highlight clipping or range mistakes, while a distorted square indicates
+  scaling/pixel-aspect regression.
+- Keep the existing audio pip cadence and frame-order review. Tone mapping must
+  not mask playback-order, A/V sync, or dropped-frame regressions.
+
+Minimum manual review when pixel metrics are not wired yet:
+
+1. Generate HDR masters and SDR references with the command above.
+2. Ingest the HDR masters into ErsatzRS and stream through the target FFmpeg
+   profile with SDR output enabled.
+3. Capture the live output with the `url` mode and keep frame evidence:
+
+   ```bash
+   scripts/e2e/tsduck-playback-gate.sh --frames url \
+     'http://127.0.0.1:8409/iptv/channel/1.ts' 20
+   ```
+
+4. Compare captured frames to the matching `*_to_sdr_<algorithm>_*.mkv`
+   reference. Fail for clipped peak chips, crushed dark grid lines, hue shifts,
+   unreadable timer text, geometry changes, or timing/order regressions.
+
 ## Requirements
 
 `tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 8.1 on `PATH`
