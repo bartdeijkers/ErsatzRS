@@ -22,7 +22,11 @@ exercising the media-server Unavailable branch); multi-collections / rerun /
 playlists / filler presets route-family closeout; and the FFmpeg command
 generation / HLS segmenter items, which are ErsatzRS-specific hardening and
 deviations tracked under ADRs 0014/0016/0017 plus a hardware-bound NVENC live
-proof rather than pinned-baseline ErsatzTV parity gaps.
+proof and a new HDR->SDR tonemap calibration live-proof debt rather than
+pinned-baseline ErsatzTV parity gaps. ADR 0018 (Proposed / Not implemented)
+records a planned new capability — special features/extras, alternate versions,
+and stream roles — whose parity slug `content-variants` will be created at its
+first implementation slice (see plans/extras-alternate-versions-and-stream-roles.md).
 '''
 
 # Phase 0 checklist (all complete).

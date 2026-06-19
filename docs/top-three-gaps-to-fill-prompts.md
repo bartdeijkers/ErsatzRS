@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-18
-last_processed_commit: 04383968d96c96e1e0039ccd1b86697cda1ec9ef
+generated: 2026-06-19
+last_processed_commit: eb4dfe159af2dd9584378b50d552604fc8beeb21
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -21,67 +21,63 @@ with manual maintainer promotions called out inline. Regenerated daily by the
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Daily reconcile (2026-06-18, window `cfc5024..0438396`): 16 non-merge commits
-merged. Most of the feature work in this window was already folded into the
-prior pass's manual closeout addenda and self-documented by the commits
-themselves: `fix(ffmpeg): prove opacity watermark clocks` (5f97230) closed
-`ffmpeg-filter-graph` to `Ported`, `fix(scheduling): close classic filler
-parity` (d30b418) closed `classic-scheduling`, `feat(admin): close scheduling
-route parity` (735a896) closed `schedules-templates-decorations-deco-templates`,
-and `fix(web): close support pages parity` (6065b00) closed `support-pages`.
-All four dropped out of `cargo xtask progress gaps`.
+Daily reconcile (2026-06-19, window `0438396..eb4dfe1`): 7 non-merge commits
+merged. All parity-relevant feature work in this window was self-documented by
+the commits themselves, so `docs/progress/` was already current; no parity
+status changed:
 
-New in this window beyond those closeouts:
+- `fix(web): refresh scan-state admin views` (c676445) refreshed the hydrated
+  libraries table, media-browser lists, `/media/trash`, and `/system/health`
+  island so scanner-updated media state appears without a manual reload, and
+  removed the non-ErsatzTV library-scan snackbar. It already updated the
+  `library-management`, `media-browsers`, and `support-pages` summaries (all
+  stay `Ported`) and added its own session line. This is admin/web UI work; it
+  did **not** touch the `scanner` backend or its three open debts.
+- `docs(status): record HDR tonemap proof debt` (91d2d7c) and
+  `test(calibration): add HDR tone-map clip modes` (7cfdaa4) added the new
+  `hdr-tonemap-calibration-live-proof` debt to `ffmpeg-command-generation`
+  (stays `In progress`): HDR->SDR tonemapping matches ErsatzTV command/filter
+  shape in snapshots and the calibration generator now emits HDR10 PQ / HLG
+  masters plus SDR references, but no live ErsatzRS stream capture / pixel
+  comparison has been run, so HDR stays command-generation/runtime debt.
+- `feat(docs): add ADR 0018 for special features, alternate versions, and
+  stream roles` (eb4dfe1) recorded ADR 0018 (`Status: Proposed`,
+  `Implementation: Not implemented`) plus
+  `plans/extras-alternate-versions-and-stream-roles.md`. Its parity slug
+  `content-variants` is declared "to be created at first implementation slice",
+  so no parity file exists yet and it is **not** an in-scope gap candidate
+  (not in `cargo xtask progress gaps`, not FFmpeg/HLS hardening). Recorded in
+  `phase.toml` `next_steps` as a planned future capability.
+- The remaining commits did not change parity: `chore(cargo): use default
+  target directory` (ce03b07), the automation-docs refinements
+  (`docs(gap-prompt-rules)…` 8ba1efc), and the prior daily reconcile
+  (`docs(status): daily reconcile … cfc5024..0438396` a3ae190).
 
-- `feat(scanner): detect missing library items and skip them in playouts`
-  (fdb22c0) ported ErsatzTV's previously-absent `MediaItemState` producer side
-  (local `FlagFileNotFound` trailing pass; media-server item-id diffing to trash
-  removed items and flag `RemoteOnly`; `playout.skip_missing_items` consumer
-  gate). `scanner` stays `In progress` and gained a new structured debt,
-  `media-server-unavailable-branch-unexercised`, recording that the `Unavailable`
-  (State=2) flag path is wired but never taken because only movies/TV are synced
-  and all three servers report remote-streaming support for those kinds.
-- `feat(docs): track ADR implementation state separately from decision status`
-  (320bc43) split ADR `## Status` (decision) from `## Implementation` (code
-  state), migrated all 17 ADRs, linked debts via `adr=NNNN`, and added a
-  `progress check` lint that fails when an ADR claims `Implemented` while a
-  linked debt is open.
-- `docs(status): revise ADR 0017 to seed five default FFmpeg profiles` (61e4fb2)
-  and `docs: update ADR 0016/0017 …` (c1b040b, 0ba6ca4) retargeted the
-  `default-profile-1080p60-retune` and HLS-capacity debts on
-  `ffmpeg-command-generation` / `hls-variant-playlists-segmenter`; both stay
-  `In progress`. The remaining release/Windows/server-path commits (cfcf906,
-  f5cbeed, 8f4aefd, 0438396) and doc-status commits did not change parity status.
-
-No parity status was advanced in this reconcile beyond what the commits already
-recorded; `phase.toml` `next_steps` was trimmed to drop the now-`Ported` support
-pages and to record that the FFmpeg/HLS items are ErsatzRS-specific deviations.
-
-`cargo xtask progress gaps` now lists **4** features, all `In progress`:
+`cargo xtask progress gaps` still lists **4** features, all `In progress`:
 `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`,
 `multi-collections-rerun-collections-playlists-filler-presets`, and `scanner`.
-Per the updated **ADR-backed FFmpeg/HLS hardening** rule, the FFmpeg/HLS pair
-may now consume a goal-prompt slot when pinned-baseline ErsatzTV gaps are drying
-up. Its open debts are ErsatzRS-specific hardening/deviations carrying their own
-ADRs
-(`ac3-segmenter-max-delay`, `default-profile-1080p60-retune` under ADR 0017;
-`active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a hardware-bound
-NVENC live proof (`nvenc-filter-gate-live-proof`, folded into a future
-encoder-capable verification session unless paired with behavior or release
-packaging work). There are still **two** actionable pinned-baseline ErsatzTV
-parity prompts below, and ADR 0008 fills slot 3 as manually promoted
-parity-critical FFmpeg runtime infrastructure.
+Per the **ADR-backed FFmpeg/HLS hardening** rule, the FFmpeg/HLS pair may
+consume a goal-prompt slot when pinned-baseline ErsatzTV gaps are drying up.
+Their open debts are ErsatzRS-specific hardening/deviations carrying their own
+ADRs (`ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and now
+`hdr-tonemap-calibration-live-proof` under ADR 0017;
+`active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a
+hardware-bound NVENC live proof (`nvenc-filter-gate-live-proof`). There are
+still **two** actionable pinned-baseline ErsatzTV parity prompts below, and ADR
+0008 fills slot 3 as manually promoted parity-critical FFmpeg runtime
+infrastructure.
 
-Ranking: `scanner` takes slot 1. It was worked on this window (re-ranked and
-rewritten against its current three-debt state per the carry-over rule), is a
-foundational backend gap that outranks leaf UI, and leads with its two
-runtime-evidenced debts. `multi-collections-…-filler-presets` is slot 2,
-carried over unchanged (no commits this window). Slot 3 is a manual maintainer
-promotion for ADR 0008: completing first-party FFmpeg 8.1 release artifacts is
-not a pinned-baseline ErsatzTV UI/backend gap, but it is parity-critical runtime
-infrastructure because the current implementation is still `Partial` while
-release payloads can depend on public "full" FFmpeg builds that may miss
-`drawvg`, `zscale`, or acceptable version/configuration output.
+Ranking: all three prior picks **carry over unchanged** — none had commits
+against their targeted scope this window (the carry-over rule). `scanner` keeps
+slot 1: a foundational backend gap that outranks leaf UI, leading with its two
+runtime-evidenced debts; the window's scan-state UI work did not touch it.
+`multi-collections-…-filler-presets` is slot 2, carried over (no commits). Slot
+3 is the manual maintainer promotion for ADR 0008: completing first-party
+FFmpeg 8.1 release artifacts is not a pinned-baseline ErsatzTV UI/backend gap,
+but it is parity-critical runtime infrastructure because the implementation is
+still `Partial` while release payloads can depend on public "full" FFmpeg
+builds that may miss `drawvg`, `zscale`, or acceptable version/configuration
+output.
 
 ---
 
@@ -317,13 +313,22 @@ open debts are **not** pinned-baseline ErsatzTV parity gaps, but they are now
 allowed to consume goal-prompt slots as ADR-backed FFmpeg/HLS runtime hardening
 when fewer than three stronger pinned-baseline parity prompts remain:
 
-- `ac3-segmenter-max-delay` and `default-profile-1080p60-retune`
-  (`ffmpeg-command-generation`) and `active-transcode-limit-not-a-real-ceiling`
+- `ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and
+  `hdr-tonemap-calibration-live-proof` (`ffmpeg-command-generation`) and
+  `active-transcode-limit-not-a-real-ceiling`
   (`hls-variant-playlists-segmenter`) are ErsatzRS-specific streaming
   hardening/deviations tracked under ADR 0016 / ADR 0017 and
   [`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md),
   not behavior present in ErsatzTV at the pin. They should be framed as runtime
   hardening prompts, not parity-porting prompts.
+- `hdr-tonemap-calibration-live-proof` (added 2026-06-18) is runtime proof debt:
+  the HDR->SDR tonemap path matches ErsatzTV in snapshots and the calibration
+  generator now emits HDR10 PQ / HLG masters plus SDR references, but it has not
+  been live-proven by streaming the HDR clips through ErsatzRS and comparing
+  decoded helper regions. Per the fold-verification rule it should ride the
+  e2e/calibration validation gate of an FFmpeg/HLS hardening or ADR 0008
+  release-artifact prompt (which already lists an HDR `zscale`/`tonemap` smoke
+  transcode gate) rather than becoming proof-only scope.
 - `nvenc-filter-gate-live-proof` is hardware-bound verification debt; per the
   fold-hardware-bound-verification rule it should ride a future encoder-capable
   verification session or a broader FFmpeg/HLS hardening prompt rather than
