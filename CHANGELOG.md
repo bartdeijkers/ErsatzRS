@@ -49,12 +49,12 @@ release section when tagging a release.
 
 ### Changed
 
-- Revised the default FFmpeg profile decision (ADR 0017). New installations will
-  seed **five** ready-to-use profiles instead of one — 720p, 1080p, 1080p HDR,
-  4K, and 4K HDR, all with AC-3 6-channel 640 kbps audio — and **auto-enable
-  hardware acceleration when a usable encoder is detected**. Bitrates are tuned
-  for 25 fps content over 1 Gbps HTTP unicast with two concurrent streams. (ADR
-  only; the seeding code is not yet implemented.)
+- New installations now seed **five** ready-to-use FFmpeg profiles instead of
+  one — 720p, 1080p, 1080p HDR, 4K, and 4K HDR, all with AC-3 6-channel
+  640 kbps audio — and apply the best detected hardware encoder to that fresh
+  seed at startup with hardware-compatible presets. HLS segmenter output also
+  adds `-max_delay 500000` for
+  multichannel AC-3 to tighten A/V interleaving at segment boundaries.
 - ADRs now track decision state and implementation state as two independent
   sections. `## Status` records only the decision lifecycle
   (Proposed/Accepted/Superseded); a new `## Implementation` section records

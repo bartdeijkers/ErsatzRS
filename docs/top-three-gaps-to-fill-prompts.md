@@ -39,15 +39,13 @@ promoting it over either open feature.
 
 ---
 
-## 1 - FFmpeg command generation: default profiles, AC-3 segmenter delay, and HDR live proof (slug `ffmpeg-command-generation`)
+## 1 - FFmpeg command generation: HDR/NVENC live proof (slug `ffmpeg-command-generation`)
 
-Fix the next ErsatzRS runtime-hardening gap: finish the ADR-backed FFmpeg
-command-generation debts for default profile seeding, multichannel AC-3
-segmenter delay, and HDR tonemap live proof (slug
-`ffmpeg-command-generation`, debts `default-profile-1080p60-retune`,
-`ac3-segmenter-max-delay`, and `hdr-tonemap-calibration-live-proof`). Fold
-`nvenc-filter-gate-live-proof` into the validation run only if encoder-capable
-hardware/builds are available.
+Fix the remaining ErsatzRS runtime-hardening gap in FFmpeg command generation:
+turn the snapshot-covered HDR/NVENC command paths into live proof (slug
+`ffmpeg-command-generation`, debts `hdr-tonemap-calibration-live-proof` and
+`nvenc-filter-gate-live-proof`). Fold `nvenc-filter-gate-live-proof` into the
+validation run only if encoder-capable hardware/builds are available.
 
 Use the repo workflow from `AGENTS.md`. This is ADR-backed FFmpeg/HLS runtime
 hardening, not a pinned-baseline ErsatzTV behavior gap, so do not force it
@@ -58,16 +56,18 @@ the pinned ErsatzTV FFmpeg source where it defines the command/filter baseline.
 
 Current `ParityDebt` from
 `docs/progress/parity/ffmpeg-command-generation.toml`:
-- `default-profile-1080p60-retune` (ADR 0017): fresh databases still seed one
-  conservative `1920x1080 x264 aac` profile instead of five ready-to-use
-  720p/1080p/1080p HDR/4K/4K HDR AC-3 profiles with seed-time hardware
-  acceleration detection and profile #2 as the default.
-- `ac3-segmenter-max-delay` (ADR 0017): HLS segmenter output does not emit
-  `-max_delay 500000` for multichannel AC-3, so 6-channel AC-3 can pop or drift
-  at segment boundaries.
 - `hdr-tonemap-calibration-live-proof`: HDR->SDR command/filter shape is
   snapshot-covered and calibration clips exist, but no live ErsatzRS stream
   capture/pixel comparison has proven the path.
+- `nvenc-filter-gate-live-proof` (ADR 0014): CUDA-filter decode gating and
+  encoder-only software-graph demotion are unit/snapshot-covered, but live proof
+  requires an FFmpeg build with NVENC encoders + `cuda` hwaccel but no CUDA
+  filter kernels.
+
+Closed 2026-06-19 in this feature: `default-profile-1080p60-retune` and
+`ac3-segmenter-max-delay` are resolved. Fresh databases seed the five ADR 0017
+profiles, web startup applies detected hardware acceleration to that fresh seed,
+and HLS output emits `-max_delay 500000` only for multichannel AC-3.
 
 Before editing:
 1. Inspect `crates/ersatzrs-infra/src/db.rs`,
@@ -83,21 +83,16 @@ Before editing:
 4. Keep hardware-bound or platform-bound shortfalls as structured `ParityDebt`,
    not prose.
 
-Implement the coherent hardening slice: seed the five ADR 0017 profiles on
-fresh databases without overwriting existing user profiles; set the default
-profile pointer to the 1080p SDR profile; detect and apply the preferred
-available hardware acceleration at seed time while preserving ADR 0014 runtime
-fallback; emit `-max_delay 500000` only for multichannel AC-3 HLS segmenter
-outputs; and run or script the HDR calibration live proof that streams HDR10 PQ
-and HLG clips through ErsatzRS, decodes the output, and compares helper regions
-against SDR references. Do not weaken existing command-generation snapshots or
-replace proof with argv-only assertions.
+Implement the coherent proof slice: stream HDR10 PQ and HLG calibration clips
+through ErsatzRS, decode the output, and compare helper regions against SDR
+references. Do not weaken existing command-generation snapshots or replace proof
+with argv-only assertions.
 
-Add focused tests/snapshots for the seeded profile rows, hardware-acceleration
-selection fallback, AC-3 `-max_delay` gating, and HDR tonemap command paths. If
-live HDR proof cannot run on the current machine, keep
-`hdr-tonemap-calibration-live-proof` open with exact missing commands and
-runtime prerequisites.
+Add or update focused tests/scripts for the live HDR proof harness and keep the
+transport/content split explicit: TSDuck can prove stream structure, while
+decoded pixel crops/metrics must prove tone-map content. If live HDR proof
+cannot run on the current machine, keep `hdr-tonemap-calibration-live-proof`
+open with exact missing commands and runtime prerequisites.
 
 Verify with focused `ersatzrs-infra` DB seed tests, `ersatzrs-ffmpeg` snapshot
 tests, the HDR calibration/live-stream proof when available, `cargo xtask smoke`

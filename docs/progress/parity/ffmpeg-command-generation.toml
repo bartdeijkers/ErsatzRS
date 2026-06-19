@@ -17,43 +17,18 @@ time limits, output metadata, and platform-specific encoder options.
 
 Hardware capability coverage is in place for VAAPI/QSV device rows, NVIDIA CLI
 and native CUDA/NVDEC/NVENC probes, direct macOS VideoToolbox framework
-enumeration, and the HLS segmenter's runtime-learned hardware decode denial
-slice. Unsupported or denied HLS decode paths fall back to software input decode
-while preserving the selected hardware encoder. On a classified FFmpeg
-hardware-decode-unsupported stderr signature, the HLS segmenter persists a
-denial row in `ConfigElement`, updates the in-session runtime report, and retries
-once so later HLS segmenter commands select software decode up front; learned
-denials are currently reapplied after startup/settings FFmpeg runtime refresh
-and are surfaced through health/troubleshooting. Text/image subtitle, watermark,
-native graphics, HDR tonemap, QSV/VAAPI/NVENC upload/download, and
-color-normalization branches are snapshot-covered against the current
-command/filter builders.
+enumeration, and runtime-learned hardware decode denials. Unsupported or denied
+decode paths fall back to software input decode while preserving the selected
+hardware encoder, with denials persisted in `ConfigElement` and surfaced through
+health/troubleshooting. Text/image subtitle, watermark, native graphics, HDR
+tonemap, QSV/VAAPI/NVENC upload/download, and color-normalization branches are
+snapshot-covered against the current command/filter builders.
 
-Live NVENC/CUDA HLS proof on 2026-06-11 closed only the HLS learned-denial slice
-of the AV1 fallback work using a temporary copy of the configured database
-because the reported channel 4 no longer existed locally. The proof shifted
-channel 2's existing AV1 item into the live window, preserved the learned denial
-row, and captured the spawned segmenter argv as `-init_hw_device cuda -hwaccel
-none -c:v libdav1d ... -codec:v h264_nvenc`; `/iptv/channel/2.m3u8?mode=segmenter`
-and `/iptv/session/2/hls.m3u8` both returned 200, with generated MPEG-TS segment
-bytes starting at sync byte `0x47`.
-
-The 2026-06-12 slice closed the remaining four ADR 0014 hardware-decode debts:
-NVENC hardware decode is now gated on the CUDA filters the GPU graph emits
-(`scale_cuda`/`yadif_cuda`/`overlay_cuda`) being present in the build, with the
-pipeline demoting the filter graph to software while keeping the NVENC encoder
-on encoder-only builds (gate recovered from abandoned commit `b1246b0`,
-snapshot `nvenc_pipeline_keeps_nvenc_encode_on_encoder_only_build_snapshot`);
-ErsatzTV's conservative NVIDIA architecture table (pre-NvEncSharp
-`NvidiaHardwareCapabilities`) is ported as an additional AND over probe rows
-when GPU model/SM info is parseable from the capability report's GPU list;
-direct IPTV `.ts`/HLS-direct spawns run the same learned-denial loop as the
-HLS segmenter (classify decode-unsupported stderr via the shared
-`ersatzrs-infra::ffmpeg_capabilities` helpers, persist the denial, respawn
-exactly once with software input decode into the same response body); and
-persisted denial rows now store the `ffmpeg` path they were learned against —
-startup reapplies them only for the same binary, while an FFmpeg path change
-or a settings-save capability refresh clears them instead of reapplying.
+The 2026-06-12 ADR 0014 slice added CUDA-filter decode gating, the conservative
+NVIDIA architecture-table floor, direct IPTV `.ts`/HLS-direct learned-denial
+retry, and denial invalidation when the FFmpeg binary changes or capabilities
+are explicitly refreshed. The remaining ADR 0014 debt is live proof on an
+encoder-only NVENC build with no CUDA filter kernels.
 
 The 2026-06-16 slice carries `SourceVideoStream.index` and the selected audio
 stream through `PipelineRequest` so transcode input maps use the persisted
@@ -63,6 +38,18 @@ channels whose files store audio before video, which previously failed with a
 filtergraph stream-specifier error (observed live on the MTV channel);
 covered by the `pipeline_uses_persisted_stream_indexes_when_audio_precedes_video`
 snapshot.
+
+The 2026-06-19 ADR 0017 slice retuned fresh database FFmpeg defaults from the
+single conservative `1920x1080 x264 aac` seed to five ready-to-use AC-3 6ch
+profiles (720p, 1080p default, 1080p HDR, 4K, 4K HDR). Web startup now applies
+the preferred available hardware encoder (Nvenc > Qsv > Vaapi > VideoToolbox >
+Amf > None) to that fresh seed after the FFmpeg runtime report is captured,
+using hardware-compatible presets (`llhq` for NVENC, `veryfast` for QSV,
+unset where platform encoders reject software-style presets), without rewriting
+existing profile tables. HLS segmenter output now emits `-max_delay 500000`
+only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
+idempotence, seed hardware update, hardware preference selection, and AC-3
+max-delay gating.
 '''
 
 [[debt]]
@@ -75,18 +62,18 @@ evidence    = '`which -a ffmpeg` builds (`/usr/bin/ffmpeg`, `~/.local/ffmpeg-8.1
 [[debt]]
 id          = 'default-profile-1080p60-retune'
 adr         = '0017'
-description = 'ensure_default_ffmpeg_profile in crates/ersatzrs-infra/src/db.rs still seeds a single conservative ErsatzTV baseline profile ("1920x1080 x264 aac": H.264 High, preset unset/medium, no B-frames, video 2000/4000 kbit, AAC 192 kbps stereo) and never enables hardware acceleration. ADR 0017 (revised) replaces this with FIVE seeded profiles, all AC-3 6ch 640/640 kbit: (1) 1280x720 x264 8-bit SDR 8000 kbit; (2) 1920x1080 x264 8-bit SDR 16000 kbit [default]; (3) 1920x1080 x265 Main10 10-bit HDR10 20000 kbit; (4) 3840x2160 x265 8-bit SDR 45000 kbit; (5) 3840x2160 x265 Main10 10-bit HDR10 60000 kbit. VBV ~= 1x bitrate, B-frames off, deinterlace on, framerate-normalize off, software preset veryfast; bitrates tuned for 25 fps over 1 Gbps unicast (N=2). Seed-time hardware-acceleration detection (Nvenc>Qsv>Vaapi>VideoToolbox>Amf>None) sets hardware_acceleration on all five, with ADR 0014 runtime fallback as the safety net. ffmpeg.default_profile points at profile #2. Resolutions 1280x720/1920x1080/3840x2160 are already seeded. The crates/ersatzrs-ffmpeg DesiredVideoState fallbacks should align. Fresh-DB seed only; existing saved profiles are not overwritten. Implementing the HDR/4K cells also requires HEVC Main10 + 10-bit HDR (BT.2020/PQ) and hardware encode support in the pipeline where not already wired.'
+description = 'Resolved 2026-06-19: fresh database bootstrap now seeds five ADR 0017 profiles, all AC-3 6ch 640/640 kbit: (1) 1280x720 x264 8-bit SDR 8000 kbit; (2) 1920x1080 x264 8-bit SDR 16000 kbit [default]; (3) 1920x1080 x265 Main10 10-bit HDR10 20000 kbit; (4) 3840x2160 x265 8-bit SDR 45000 kbit; (5) 3840x2160 x265 Main10 10-bit HDR10 60000 kbit. VBV ~= 1x bitrate, B-frames off, deinterlace on, framerate-normalize off, software preset veryfast. Web startup applies seed-time hardware-acceleration detection (Nvenc>Qsv>Vaapi>VideoToolbox>Amf>None) plus compatible presets to the same fresh seed after the FFmpeg runtime report is captured, with ADR 0014 runtime fallback as the safety net. Existing saved profile tables are not overwritten.'
 discovered  = '2026-06-17'
-evidence    = 'Current seed reads from db.rs ensure_default_ffmpeg_profile: one INSERT of "1920x1080 x264 aac", AudioFormat=Aac, 2ch, video 2000/4000 kbit, preset NULL (libx264 medium), HardwareAcceleration=None. Codec/HW enums confirmed in crates/ersatzrs-domain/src/ffmpeg.rs (Hevc, Ac3, TenBit, HardwareAccelerationKind). Decision recorded in ADR 0017 (revised 2026-06-17).'
-resolved    = false
+evidence    = '`crates/ersatzrs-infra/src/db.rs` table-driven seed plus tests `media_server_initializer_seeds_upstream_defaults`, `media_server_initializer_is_idempotent`, and `default_ffmpeg_profile_hardware_update_targets_seeded_profiles`; `crates/ersatzrs-ffmpeg/src/version.rs` tests `default_profile_acceleration_prefers_nvenc_then_qsv_then_vaapi` and `default_profile_acceleration_handles_platform_specific_encoders`; web startup calls the update only when `seeded_default_ffmpeg_profiles` is true; `cargo xtask smoke` passed on 2026-06-19 with NVENC detection after the seed updater selected an NVENC-compatible preset.'
+resolved    = true
 
 [[debt]]
 id          = 'ac3-segmenter-max-delay'
 adr         = '0017'
-description = 'The HLS segmenter output does not emit -max_delay for multichannel AC-3, so 6-channel AC-3 can pop or drift at segment boundaries when audio is not interleaved tightly with video. ADR 0017 (section 2) adds -max_delay 500000 (0.5 s) gated to multichannel AC-3 output.'
+description = 'Resolved 2026-06-19: HLS segmenter output emits `-max_delay 500000` for multichannel AC-3 only, so 6-channel AC-3 is interleaved more tightly at segment boundaries without changing stereo AC-3 or AAC output.'
 discovered  = '2026-06-17'
-evidence    = 'hls_output / add_output_options in crates/ersatzrs-ffmpeg/src/pipeline/mod.rs emit b:a/maxrate:a + bufsize:a but no -max_delay. Not present in the ErsatzTV baseline either, so this is an ErsatzRS addition.'
-resolved    = false
+evidence    = '`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` adds the gated HLS output option. Tests `hls_output_adds_max_delay_for_multichannel_ac3` and `hls_output_does_not_add_max_delay_for_stereo_or_non_ac3_audio` prove the gate.'
+resolved    = true
 
 [[debt]]
 id          = 'hdr-tonemap-calibration-live-proof'

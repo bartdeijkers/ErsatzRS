@@ -116,9 +116,8 @@ pub async fn run() {
         "database initialised"
     );
 
-    let (ffmpeg_path, ffprobe_path) = resolve_and_persist_ffmpeg_paths(&startup.pool).await;
-    let ffmpeg_runtime =
-        check_startup_ffmpeg_runtime(&startup.pool, &ffmpeg_path, &ffprobe_path).await;
+    let ffmpeg_runtime = resolve_and_check_startup_ffmpeg_runtime(&startup.pool).await;
+    apply_seeded_default_profile_acceleration(&startup, &ffmpeg_runtime).await;
     let (playout_build_tx, playout_build_rx) =
         tokio::sync::mpsc::channel(PLAYOUT_BUILD_QUEUE_CAPACITY);
     // Single playout lock registry shared with the scheduler: the web host
@@ -221,6 +220,42 @@ pub async fn run() {
 
     pool.close().await;
     tracing::info!("shutdown complete");
+}
+
+async fn resolve_and_check_startup_ffmpeg_runtime(
+    pool: &DbPool,
+) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
+    let (ffmpeg_path, ffprobe_path) = resolve_and_persist_ffmpeg_paths(pool).await;
+    check_startup_ffmpeg_runtime(pool, &ffmpeg_path, &ffprobe_path).await
+}
+
+async fn apply_seeded_default_profile_acceleration(
+    startup: &ersatzrs_infra::db::MediaServerStartupDatabase,
+    ffmpeg_runtime: &ersatzrs_ffmpeg::FfmpegRuntimeReport,
+) {
+    if !startup.seeded_default_ffmpeg_profiles {
+        return;
+    }
+
+    let acceleration =
+        ersatzrs_ffmpeg::preferred_default_profile_acceleration(&ffmpeg_runtime.capabilities);
+    if let Err(error) = ersatzrs_infra::db::apply_default_ffmpeg_profile_hardware_acceleration(
+        &startup.pool,
+        acceleration,
+    )
+    .await
+    {
+        tracing::warn!(
+            %error,
+            ?acceleration,
+            "failed to apply startup FFmpeg hardware acceleration to seeded profiles"
+        );
+    } else {
+        tracing::info!(
+            ?acceleration,
+            "applied startup FFmpeg hardware acceleration to seeded profiles"
+        );
+    }
 }
 
 /// Await the first OS shutdown signal and cancel the shared token.

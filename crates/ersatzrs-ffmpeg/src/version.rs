@@ -343,6 +343,33 @@ impl FfmpegCapabilityReport {
     }
 }
 
+/// Select the ADR 0017 seed-time hardware acceleration preference from a
+/// runtime capability report.
+#[must_use]
+pub fn preferred_default_profile_acceleration(
+    report: &FfmpegCapabilityReport,
+) -> HardwareAccelerationKind {
+    if report.has_hwaccel("cuda") && has_encoder_suffix(&report.encoders, "_nvenc") {
+        HardwareAccelerationKind::Nvenc
+    } else if report.has_hwaccel("qsv") && has_encoder_suffix(&report.encoders, "_qsv") {
+        HardwareAccelerationKind::Qsv
+    } else if report.has_hwaccel("vaapi") && has_encoder_suffix(&report.encoders, "_vaapi") {
+        HardwareAccelerationKind::Vaapi
+    } else if report.has_hwaccel("videotoolbox")
+        && (has_encoder_suffix(&report.encoders, "_videotoolbox")
+            || report
+                .videotoolbox_encoders
+                .iter()
+                .any(|encoder| encoder.contains("(HW)")))
+    {
+        HardwareAccelerationKind::VideoToolbox
+    } else if has_encoder_suffix(&report.encoders, "_amf") {
+        HardwareAccelerationKind::Amf
+    } else {
+        HardwareAccelerationKind::None
+    }
+}
+
 /// One VAAPI-style profile/entrypoint row reported by a hardware device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VaapiProfileEntrypoint {
@@ -1876,9 +1903,10 @@ mod tests {
         collect_runtime_issues, dedupe_vaapi_profiles, nvidia_decoder_probe_specs,
         nvidia_gpu_list_summary, parse_capability_names, parse_configuration_flags, parse_hwaccels,
         parse_nvidia_decoder_capabilities, parse_nvidia_encoder_capability,
-        parse_vaapi_profile_entrypoints, parse_version, videotoolbox_decoder_probe_specs,
-        FfmpegCapabilityReport, FfmpegHardwareProbeDevice, FfmpegRuntimeCheckConfig,
-        FfmpegRuntimeIssue, FfmpegVersion, NvidiaDecoderCapability, VaapiProfileEntrypoint,
+        parse_vaapi_profile_entrypoints, parse_version, preferred_default_profile_acceleration,
+        videotoolbox_decoder_probe_specs, FfmpegCapabilityReport, FfmpegHardwareProbeDevice,
+        FfmpegRuntimeCheckConfig, FfmpegRuntimeIssue, FfmpegVersion, HardwareAccelerationKind,
+        NvidiaDecoderCapability, VaapiProfileEntrypoint,
     };
     use std::collections::BTreeSet;
 
@@ -2216,6 +2244,70 @@ h264_nvenc AVOptions:
         );
         assert!(issues[0].is_error());
         assert!(!issues[3].is_error());
+    }
+
+    #[test]
+    fn default_profile_acceleration_prefers_nvenc_then_qsv_then_vaapi() {
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from([
+                "h264_vaapi".to_owned(),
+                "hevc_qsv".to_owned(),
+                "h264_nvenc".to_owned(),
+            ]),
+            hwaccels: BTreeSet::from(["vaapi".to_owned(), "qsv".to_owned(), "cuda".to_owned()]),
+            ..FfmpegCapabilityReport::default()
+        };
+        assert_eq!(
+            preferred_default_profile_acceleration(&report),
+            HardwareAccelerationKind::Nvenc
+        );
+
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from(["h264_vaapi".to_owned(), "hevc_qsv".to_owned()]),
+            hwaccels: BTreeSet::from(["vaapi".to_owned(), "qsv".to_owned()]),
+            ..FfmpegCapabilityReport::default()
+        };
+        assert_eq!(
+            preferred_default_profile_acceleration(&report),
+            HardwareAccelerationKind::Qsv
+        );
+
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from(["h264_vaapi".to_owned()]),
+            hwaccels: BTreeSet::from(["vaapi".to_owned()]),
+            ..FfmpegCapabilityReport::default()
+        };
+        assert_eq!(
+            preferred_default_profile_acceleration(&report),
+            HardwareAccelerationKind::Vaapi
+        );
+    }
+
+    #[test]
+    fn default_profile_acceleration_handles_platform_specific_encoders() {
+        let report = FfmpegCapabilityReport {
+            hwaccels: BTreeSet::from(["videotoolbox".to_owned()]),
+            videotoolbox_encoders: BTreeSet::from(["H.264 (HW)".to_owned()]),
+            ..FfmpegCapabilityReport::default()
+        };
+        assert_eq!(
+            preferred_default_profile_acceleration(&report),
+            HardwareAccelerationKind::VideoToolbox
+        );
+
+        let report = FfmpegCapabilityReport {
+            encoders: BTreeSet::from(["h264_amf".to_owned()]),
+            ..FfmpegCapabilityReport::default()
+        };
+        assert_eq!(
+            preferred_default_profile_acceleration(&report),
+            HardwareAccelerationKind::Amf
+        );
+
+        assert_eq!(
+            preferred_default_profile_acceleration(&FfmpegCapabilityReport::default()),
+            HardwareAccelerationKind::None
+        );
     }
 }
 

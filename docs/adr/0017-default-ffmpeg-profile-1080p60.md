@@ -6,10 +6,10 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Not implemented — decision accepted, but seeding the five default profiles, the
-seed-time hardware-acceleration detection, and the AC-3 `-max_delay` step are
-not yet in code (`ParityDebt default-profile-1080p60-retune`,
-`ac3-segmenter-max-delay`).
+Implemented — fresh database bootstrap seeds the five default profiles, web
+startup applies seed-time hardware-acceleration detection from the captured
+FFmpeg runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
+multichannel AC-3.
 
 ## Context
 
@@ -105,7 +105,9 @@ leave it `None` (software). Detection priority:
 hardware path turns out unusable at runtime, the learned-capability fallback
 demotes that spawn to software automatically, so an over-optimistic seed is
 self-correcting rather than fatal. The software fallback preset stays
-`veryfast`; admins on a strong CPU can pick a slower preset per channel.
+`veryfast`; NVENC seeds use `llhq`, QSV keeps `veryfast`, and platforms whose
+FFmpeg encoders reject those software-style presets leave the preset unset.
+Admins on a strong CPU can pick a slower preset per channel.
 
 ### 3. Segmenter A/V interleaving
 
@@ -139,11 +141,11 @@ starting points an admin can edit or delete per channel.
   not a claim that the pipeline already supports every cell.
 - **Correctness:** VBV ≈ 1× makes `-maxrate` effective instead of decorative;
   `-max_delay` removes a real multichannel-AC-3 seam artifact.
-- **Follow-up:** rewrite `ensure_default_ffmpeg_profile` to seed the five
-  profiles + seed-time HW detection and point `ffmpeg.default_profile` at #2;
-  align the `crates/ersatzrs-ffmpeg` `DesiredVideoState` fallbacks; add the
-  `-max_delay` step with an `insta` argv snapshot; update the db.rs seed
-  assertions; refresh `CHANGELOG.md` when it lands.
+- **Implemented:** `ensure_default_ffmpeg_profile` seeds the five profiles and
+  points `ffmpeg.default_profile_id` at #2; web startup applies the detected
+  encoder choice to that fresh seed only; HLS output emits `-max_delay 500000`
+  for multichannel AC-3; focused DB and command-generation tests cover the
+  behavior.
 
 ## Alternatives Considered
 

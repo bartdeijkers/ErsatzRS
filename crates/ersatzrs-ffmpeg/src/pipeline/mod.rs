@@ -3231,6 +3231,12 @@ fn hls_output(
         ]);
     }
 
+    if desired.audio_format == FFmpegProfileAudioFormat::Ac3
+        && desired.audio_channels.is_some_and(|channels| channels > 2)
+    {
+        options.extend(["-max_delay".to_owned(), "500000".to_owned()]);
+    }
+
     options.extend([
         "-f".to_owned(),
         "hls".to_owned(),
@@ -3278,4 +3284,53 @@ fn hls_output(
     ]);
 
     PipelineStep::generic("hls", options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hls_options_for(
+        audio_format: FFmpegProfileAudioFormat,
+        audio_channels: Option<u32>,
+    ) -> Vec<String> {
+        let mut desired = DesiredVideoState::h264_1080p();
+        desired.audio_format = audio_format;
+        desired.audio_channels = audio_channels;
+        hls_output(
+            OutputFormat::Hls,
+            &HlsOutput {
+                playlist_path: "playlist.m3u8".to_owned(),
+                segment_template: "segment-%05d.ts".to_owned(),
+                init_template: None,
+                segment_options: None,
+                is_first_transcode: true,
+                troubleshooting: false,
+            },
+            &desired,
+            HardwareAccelerationKind::None,
+        )
+        .output_options()
+        .to_vec()
+    }
+
+    #[test]
+    fn hls_output_adds_max_delay_for_multichannel_ac3() {
+        let options = hls_options_for(FFmpegProfileAudioFormat::Ac3, Some(6));
+        let rendered = options.join(" ");
+
+        assert!(rendered.contains("-max_delay 500000 -f hls"), "{rendered}");
+    }
+
+    #[test]
+    fn hls_output_does_not_add_max_delay_for_stereo_or_non_ac3_audio() {
+        let stereo_ac3 = hls_options_for(FFmpegProfileAudioFormat::Ac3, Some(2)).join(" ");
+        let multichannel_aac = hls_options_for(FFmpegProfileAudioFormat::Aac, Some(6)).join(" ");
+
+        assert!(!stereo_ac3.contains("-max_delay"), "{stereo_ac3}");
+        assert!(
+            !multichannel_aac.contains("-max_delay"),
+            "{multichannel_aac}"
+        );
+    }
 }

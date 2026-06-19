@@ -8,16 +8,16 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use ersatzrs_domain::{
-    CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT, CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES,
-    CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT, CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
-    CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE, CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES,
-    CONFIG_KEY_FFMPEG_SAVE_REPORTS, CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT,
-    CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS,
-    CONFIG_KEY_LIBRARY_REFRESH_INTERVAL, CONFIG_KEY_MINIMUM_LOG_LEVEL,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING,
-    CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING, CONFIG_KEY_PAGES_IS_DARK_MODE,
-    CONFIG_KEY_PAGES_LANGUAGE, CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
+    HardwareAccelerationKind, CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+    CONFIG_KEY_FFMPEG_EXTRACT_EMBEDDED_SUBTITLES, CONFIG_KEY_FFMPEG_HLS_DIRECT_OUTPUT_FORMAT,
+    CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT, CONFIG_KEY_FFMPEG_PREFERRED_LANGUAGE_CODE,
+    CONFIG_KEY_FFMPEG_PROBE_FOR_INTERLACED_FRAMES, CONFIG_KEY_FFMPEG_SAVE_REPORTS,
+    CONFIG_KEY_FFMPEG_SEGMENTER_TIMEOUT, CONFIG_KEY_FFMPEG_USE_EMBEDDED_SUBTITLES,
+    CONFIG_KEY_FFMPEG_WORK_AHEAD_SEGMENTERS, CONFIG_KEY_LIBRARY_REFRESH_INTERVAL,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL, CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
+    CONFIG_KEY_MINIMUM_LOG_LEVEL_SEARCHING, CONFIG_KEY_MINIMUM_LOG_LEVEL_STREAMING,
+    CONFIG_KEY_PAGES_IS_DARK_MODE, CONFIG_KEY_PAGES_LANGUAGE, CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD,
     CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
     CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE,
 };
@@ -74,12 +74,85 @@ pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
 const SQLITE_BUSY_TIMEOUT_MS: u64 = 30_000;
 
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
-const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 aac";
+const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
 const DEFAULT_CHANNEL_NUMBER: &str = "1";
 const DEFAULT_CHANNEL_NAME: &str = "ErsatzTV";
 const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_RESOLUTION_ID: &str = "ffmpeg.default_resolution_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";
+
+const ADR0017_DEFAULT_PROFILE_NAMES: [&str; 5] = [
+    "1280x720 x264 ac3 6ch",
+    DEFAULT_FFMPEG_PROFILE_NAME,
+    "1920x1080 x265 10-bit hdr ac3 6ch",
+    "3840x2160 x265 ac3 6ch",
+    "3840x2160 x265 10-bit hdr ac3 6ch",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DefaultFfmpegProfileSeed {
+    name: &'static str,
+    width: i32,
+    height: i32,
+    video_format: i32,
+    video_profile: &'static str,
+    bit_depth: i32,
+    video_bitrate: i32,
+    video_buffer_size: i32,
+}
+
+const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
+    DefaultFfmpegProfileSeed {
+        name: "1280x720 x264 ac3 6ch",
+        width: 1280,
+        height: 720,
+        video_format: 1,
+        video_profile: "high",
+        bit_depth: 0,
+        video_bitrate: 8000,
+        video_buffer_size: 8000,
+    },
+    DefaultFfmpegProfileSeed {
+        name: DEFAULT_FFMPEG_PROFILE_NAME,
+        width: 1920,
+        height: 1080,
+        video_format: 1,
+        video_profile: "high",
+        bit_depth: 0,
+        video_bitrate: 16000,
+        video_buffer_size: 16000,
+    },
+    DefaultFfmpegProfileSeed {
+        name: "1920x1080 x265 10-bit hdr ac3 6ch",
+        width: 1920,
+        height: 1080,
+        video_format: 2,
+        video_profile: "main10",
+        bit_depth: 1,
+        video_bitrate: 20000,
+        video_buffer_size: 20000,
+    },
+    DefaultFfmpegProfileSeed {
+        name: "3840x2160 x265 ac3 6ch",
+        width: 3840,
+        height: 2160,
+        video_format: 2,
+        video_profile: "main",
+        bit_depth: 0,
+        video_bitrate: 45000,
+        video_buffer_size: 45000,
+    },
+    DefaultFfmpegProfileSeed {
+        name: "3840x2160 x265 10-bit hdr ac3 6ch",
+        width: 3840,
+        height: 2160,
+        video_format: 2,
+        video_profile: "main10",
+        bit_depth: 1,
+        video_bitrate: 60000,
+        video_buffer_size: 60000,
+    },
+];
 
 static SQLITE_MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
 #[cfg(feature = "mysql")]
@@ -112,6 +185,7 @@ pub struct MediaServerStartupDatabase {
     pub database_backend: DatabaseBackend,
     pub pool: DbPool,
     pub schema_status: DatabaseSchemaStatus,
+    pub seeded_default_ffmpeg_profiles: bool,
 }
 
 #[derive(Debug, Error)]
@@ -260,10 +334,11 @@ async fn bootstrap_media_server_database_from_url(
     let database_backend = database_backend(&database_url);
     let pool = connect_database(&database_url, database_backend).await?;
     let schema_status = inspect_database_schema(&pool, database_backend).await?;
+    let mut seeded_default_ffmpeg_profiles = false;
 
     if schema_status.is_ready() {
         run_migrations(&pool, database_backend).await?;
-        initialize_media_server_database(&pool).await?;
+        seeded_default_ffmpeg_profiles = initialize_media_server_database(&pool).await?;
     }
 
     Ok(MediaServerStartupDatabase {
@@ -271,6 +346,7 @@ async fn bootstrap_media_server_database_from_url(
         database_backend,
         pool,
         schema_status,
+        seeded_default_ffmpeg_profiles,
     })
 }
 
@@ -475,7 +551,7 @@ pub fn lazy_sqlite_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
     }
 }
 
-async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Error> {
+async fn initialize_media_server_database(pool: &DbPool) -> Result<bool, sqlx::Error> {
     ensure_system_playlist_group(pool).await?;
 
     let default_resolution_id = ensure_default_resolution(pool).await?;
@@ -486,7 +562,8 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Err
     )
     .await?;
 
-    let default_profile_id = ensure_default_ffmpeg_profile(pool, default_resolution_id).await?;
+    let (default_profile_id, seeded_default_ffmpeg_profiles) =
+        ensure_default_ffmpeg_profile(pool).await?;
     ensure_config_value(
         pool,
         CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID,
@@ -532,7 +609,7 @@ async fn initialize_media_server_database(pool: &DbPool) -> Result<(), sqlx::Err
 
     ensure_default_channel(pool, default_profile_id).await?;
 
-    Ok(())
+    Ok(seeded_default_ffmpeg_profiles)
 }
 
 async fn ensure_system_playlist_group(pool: &DbPool) -> Result<i64, sqlx::Error> {
@@ -611,10 +688,49 @@ async fn ensure_default_resolution(pool: &DbPool) -> Result<i64, sqlx::Error> {
     .await
 }
 
-async fn ensure_default_ffmpeg_profile(
+async fn ensure_resolution(
     pool: &DbPool,
-    resolution_id: i64,
+    name: &str,
+    width: i32,
+    height: i32,
 ) -> Result<i64, sqlx::Error> {
+    if let Some(id) = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "Resolution"
+           WHERE "Width" = ? AND "Height" = ?
+           ORDER BY "Id"
+           LIMIT 1"#,
+    )
+    .bind(width)
+    .bind(height)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(id);
+    }
+
+    sqlx::query(
+        r#"INSERT INTO "Resolution" ("Name", "IsCustom", "Width", "Height")
+           VALUES (?, 0, ?, ?)"#,
+    )
+    .bind(name)
+    .bind(width)
+    .bind(height)
+    .execute(pool)
+    .await?;
+
+    sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "Resolution"
+           WHERE "Width" = ? AND "Height" = ?
+           ORDER BY "Id"
+           LIMIT 1"#,
+    )
+    .bind(width)
+    .bind(height)
+    .fetch_one(pool)
+    .await
+}
+
+async fn ensure_default_ffmpeg_profile(pool: &DbPool) -> Result<(i64, bool), sqlx::Error> {
     if let Some(id) = sqlx::query_scalar::<_, i64>(
         r#"SELECT "Id" FROM "FFmpegProfile" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
     )
@@ -622,9 +738,45 @@ async fn ensure_default_ffmpeg_profile(
     .fetch_optional(pool)
     .await?
     {
-        return Ok(id);
+        return Ok((id, false));
     }
 
+    let profile_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "FFmpegProfile""#)
+        .fetch_one(pool)
+        .await?;
+
+    if profile_count > 0 {
+        let id = sqlx::query_scalar::<_, i64>(
+            r#"SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1"#,
+        )
+        .fetch_one(pool)
+        .await?;
+        return Ok((id, false));
+    }
+
+    for profile in ADR0017_DEFAULT_PROFILES {
+        let resolution_id =
+            ensure_resolution(pool, profile.name, profile.width, profile.height).await?;
+        insert_default_ffmpeg_profile(pool, profile, resolution_id, HardwareAccelerationKind::None)
+            .await?;
+    }
+
+    let id = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "FFmpegProfile" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(DEFAULT_FFMPEG_PROFILE_NAME)
+    .fetch_one(pool)
+    .await?;
+
+    Ok((id, true))
+}
+
+async fn insert_default_ffmpeg_profile(
+    pool: &DbPool,
+    profile: DefaultFfmpegProfileSeed,
+    resolution_id: i64,
+    hardware_acceleration: HardwareAccelerationKind,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"INSERT INTO "FFmpegProfile" (
             "AudioBitrate", "AudioBufferSize", "AudioChannels", "AudioFormat",
@@ -637,15 +789,15 @@ async fn ensure_default_ffmpeg_profile(
             "NormalizeAudio", "NormalizeColors", "NormalizeVideo"
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
-    .bind(192_i32)
-    .bind(384_i32)
+    .bind(640_i32)
+    .bind(640_i32)
+    .bind(6_i32)
     .bind(2_i32)
-    .bind(1_i32)
     .bind(48_i32)
-    .bind(0_i32)
+    .bind(profile.bit_depth)
     .bind(1_i32)
-    .bind(0_i32)
-    .bind(DEFAULT_FFMPEG_PROFILE_NAME)
+    .bind(hardware_acceleration as i32)
+    .bind(profile.name)
     .bind(0_i32)
     .bind(0_i32)
     .bind(64_i32)
@@ -654,11 +806,11 @@ async fn ensure_default_ffmpeg_profile(
     .bind(0_i32)
     .bind(Option::<&str>::None)
     .bind(0_i32)
-    .bind(2000_i32)
-    .bind(4000_i32)
-    .bind(1_i32)
-    .bind("high")
-    .bind(Option::<&str>::None)
+    .bind(profile.video_bitrate)
+    .bind(profile.video_buffer_size)
+    .bind(profile.video_format)
+    .bind(profile.video_profile)
+    .bind("veryfast")
     .bind(0_i32)
     .bind(Option::<&str>::None)
     .bind(0_i32)
@@ -670,12 +822,46 @@ async fn ensure_default_ffmpeg_profile(
     .execute(pool)
     .await?;
 
-    sqlx::query_scalar::<_, i64>(
-        r#"SELECT "Id" FROM "FFmpegProfile" WHERE "Name" = ? ORDER BY "Id" LIMIT 1"#,
-    )
-    .bind(DEFAULT_FFMPEG_PROFILE_NAME)
-    .fetch_one(pool)
-    .await
+    Ok(())
+}
+
+/// Apply the startup-detected encoder choice to freshly seeded ADR 0017
+/// profiles.
+///
+/// The caller must only invoke this for the same startup that inserted the
+/// default profiles. Existing databases are intentionally left alone.
+///
+/// # Errors
+///
+/// Returns an error when the update query fails.
+pub async fn apply_default_ffmpeg_profile_hardware_acceleration(
+    pool: &DbPool,
+    acceleration: HardwareAccelerationKind,
+) -> Result<(), sqlx::Error> {
+    let acceleration = acceleration as i32;
+    let video_preset = default_profile_video_preset_for_acceleration(acceleration);
+    for name in ADR0017_DEFAULT_PROFILE_NAMES {
+        sqlx::query(
+            r#"UPDATE "FFmpegProfile"
+               SET "HardwareAcceleration" = ?, "VideoPreset" = ?
+               WHERE "Name" = ?"#,
+        )
+        .bind(acceleration)
+        .bind(video_preset)
+        .bind(name)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+const fn default_profile_video_preset_for_acceleration(acceleration: i32) -> Option<&'static str> {
+    match acceleration {
+        0 | 1 => Some("veryfast"),
+        2 => Some("llhq"),
+        _ => None,
+    }
 }
 
 async fn ensure_default_channel(pool: &DbPool, ffmpeg_profile_id: i64) -> Result<(), sqlx::Error> {
@@ -739,12 +925,26 @@ fn sqlite_url_with_create_mode(database_url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        apply_default_ffmpeg_profile_hardware_acceleration,
         bootstrap_media_server_database_from_url, connect_database, database_backend, init,
         initialize_media_server_database, inspect_database_schema, resolve_database_url_from_parts,
-        DatabaseBackend, DatabaseUrlError, DEFAULT_SQLITE_DIR_NAME, DEFAULT_SQLITE_FILE_NAME,
+        DatabaseBackend, DatabaseUrlError, DbRow, DEFAULT_SQLITE_DIR_NAME,
+        DEFAULT_SQLITE_FILE_NAME,
     };
+    use ersatzrs_domain::HardwareAccelerationKind;
     use sqlx::Row;
     use std::ffi::OsString;
+
+    #[derive(Clone, Copy)]
+    struct ExpectedProfile<'a> {
+        name: &'a str,
+        width: i32,
+        height: i32,
+        video_format: i32,
+        video_profile: &'a str,
+        bit_depth: i32,
+        bitrate: i32,
+    }
 
     #[test]
     fn sqlite_urls_map_to_sqlite_backend() {
@@ -813,19 +1013,35 @@ mod tests {
         let database_url = temp_sqlite_database_url();
         let pool = init(&database_url).await.expect("initialize database");
 
-        initialize_media_server_database(&pool)
+        let seeded = initialize_media_server_database(&pool)
             .await
             .expect("seed mediaserver defaults");
+        assert!(seeded);
 
         let resolution_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Resolution""#)
             .fetch_one(&pool)
             .await
             .expect("load resolution count");
-        let profile_name: String =
-            sqlx::query_scalar(r#"SELECT "Name" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1"#)
-                .fetch_one(&pool)
-                .await
-                .expect("load default profile");
+        let profiles = sqlx::query(
+            r#"SELECT p."Name", r."Width", r."Height", p."VideoFormat", p."VideoProfile",
+                      p."BitDepth", p."VideoBitrate", p."VideoBufferSize",
+                      p."AudioFormat", p."AudioBitrate", p."AudioBufferSize",
+                      p."AudioChannels", p."AudioSampleRate", p."VideoPreset",
+                      p."AllowBFrames", p."DeinterlaceVideo", p."NormalizeFramerate",
+                      p."HardwareAcceleration"
+               FROM "FFmpegProfile" p
+               JOIN "Resolution" r ON r."Id" = p."ResolutionId"
+               ORDER BY p."Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load default profiles");
+        let default_profile_id: i64 = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "FFmpegProfile" WHERE "Name" = '1920x1080 x264 ac3 6ch'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load default profile id");
         let channel_name: String =
             sqlx::query_scalar(r#"SELECT "Name" FROM "Channel" ORDER BY "Id" LIMIT 1"#)
                 .fetch_one(&pool)
@@ -876,7 +1092,7 @@ mod tests {
         .expect("load config rows");
 
         assert_eq!(resolution_count, 4);
-        assert_eq!(profile_name, "1920x1080 x264 aac");
+        assert_default_ffmpeg_profiles(&profiles);
         assert_eq!(channel_name, "ErsatzTV");
         assert_eq!(group_name, "Trakt Lists");
         let config_rows: std::collections::HashMap<String, String> = config_rows
@@ -891,7 +1107,169 @@ mod tests {
             })
             .collect();
 
+        assert_default_config_rows(&config_rows, default_profile_id);
+    }
+
+    fn assert_default_ffmpeg_profiles(profiles: &[DbRow]) {
+        assert_eq!(profiles.len(), 5);
+        assert_profile_row(
+            &profiles[0],
+            ExpectedProfile {
+                name: "1280x720 x264 ac3 6ch",
+                width: 1280,
+                height: 720,
+                video_format: 1,
+                video_profile: "high",
+                bit_depth: 0,
+                bitrate: 8000,
+            },
+        );
+        assert_profile_row(
+            &profiles[1],
+            ExpectedProfile {
+                name: "1920x1080 x264 ac3 6ch",
+                width: 1920,
+                height: 1080,
+                video_format: 1,
+                video_profile: "high",
+                bit_depth: 0,
+                bitrate: 16000,
+            },
+        );
+        assert_profile_row(
+            &profiles[2],
+            ExpectedProfile {
+                name: "1920x1080 x265 10-bit hdr ac3 6ch",
+                width: 1920,
+                height: 1080,
+                video_format: 2,
+                video_profile: "main10",
+                bit_depth: 1,
+                bitrate: 20000,
+            },
+        );
+        assert_profile_row(
+            &profiles[3],
+            ExpectedProfile {
+                name: "3840x2160 x265 ac3 6ch",
+                width: 3840,
+                height: 2160,
+                video_format: 2,
+                video_profile: "main",
+                bit_depth: 0,
+                bitrate: 45000,
+            },
+        );
+        assert_profile_row(
+            &profiles[4],
+            ExpectedProfile {
+                name: "3840x2160 x265 10-bit hdr ac3 6ch",
+                width: 3840,
+                height: 2160,
+                video_format: 2,
+                video_profile: "main10",
+                bit_depth: 1,
+                bitrate: 60000,
+            },
+        );
+
+        for row in profiles {
+            assert_shared_profile_defaults(row);
+        }
+    }
+
+    fn assert_profile_row(row: &DbRow, expected: ExpectedProfile<'_>) {
+        assert_eq!(
+            row.try_get::<String, _>("Name").expect("name"),
+            expected.name
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("Width").expect("width"),
+            expected.width
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("Height").expect("height"),
+            expected.height
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("VideoFormat").expect("video format"),
+            expected.video_format
+        );
+        assert_eq!(
+            row.try_get::<String, _>("VideoProfile")
+                .expect("video profile"),
+            expected.video_profile
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("BitDepth").expect("bit depth"),
+            expected.bit_depth
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("VideoBitrate")
+                .expect("video bitrate"),
+            expected.bitrate
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("VideoBufferSize")
+                .expect("video buffer"),
+            expected.bitrate
+        );
+    }
+
+    fn assert_shared_profile_defaults(row: &DbRow) {
+        assert_eq!(row.try_get::<i32, _>("AudioFormat").expect("audio"), 2);
+        assert_eq!(
+            row.try_get::<i32, _>("AudioBitrate")
+                .expect("audio bitrate"),
+            640
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("AudioBufferSize")
+                .expect("audio buffer"),
+            640
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("AudioChannels")
+                .expect("audio channels"),
+            6
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("AudioSampleRate")
+                .expect("sample rate"),
+            48
+        );
+        assert_eq!(
+            row.try_get::<String, _>("VideoPreset")
+                .expect("video preset"),
+            "veryfast"
+        );
+        assert_eq!(row.try_get::<i32, _>("AllowBFrames").expect("bframes"), 0);
+        assert_eq!(
+            row.try_get::<i32, _>("DeinterlaceVideo")
+                .expect("deinterlace"),
+            1
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("NormalizeFramerate")
+                .expect("framerate"),
+            0
+        );
+        assert_eq!(
+            row.try_get::<i32, _>("HardwareAcceleration")
+                .expect("hardware acceleration"),
+            0
+        );
+    }
+
+    fn assert_default_config_rows(
+        config_rows: &std::collections::HashMap<String, String>,
+        default_profile_id: i64,
+    ) {
         assert_eq!(config_rows.len(), 28);
+        assert_eq!(
+            config_rows["ffmpeg.default_profile_id"],
+            default_profile_id.to_string()
+        );
         assert_eq!(config_rows["ffmpeg.preferred_language_code"], "eng");
         assert_eq!(config_rows["ffmpeg.use_embedded_subtitles"], "True");
         assert_eq!(config_rows["ffmpeg.extract_embedded_subtitles"], "False");
@@ -921,23 +1299,23 @@ mod tests {
         let database_url = temp_sqlite_database_url();
         let pool = init(&database_url).await.expect("initialize database");
 
-        initialize_media_server_database(&pool)
+        let first_seeded = initialize_media_server_database(&pool)
             .await
             .expect("seed mediaserver defaults");
-        initialize_media_server_database(&pool)
+        let second_seeded = initialize_media_server_database(&pool)
             .await
             .expect("repeat mediaserver defaults");
+        assert!(first_seeded);
+        assert!(!second_seeded);
 
         let resolution_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Resolution""#)
             .fetch_one(&pool)
             .await
             .expect("load resolution count");
-        let profile_count: i64 = sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM "FFmpegProfile" WHERE "Name" = '1920x1080 x264 aac'"#,
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("load profile count");
+        let profile_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "FFmpegProfile""#)
+            .fetch_one(&pool)
+            .await
+            .expect("load profile count");
         let channel_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel""#)
             .fetch_one(&pool)
             .await
@@ -949,9 +1327,49 @@ mod tests {
                 .expect("load system group count");
 
         assert_eq!(resolution_count, 4);
-        assert_eq!(profile_count, 1);
+        assert_eq!(profile_count, 5);
         assert_eq!(channel_count, 1);
         assert_eq!(system_group_count, 1);
+    }
+
+    #[tokio::test]
+    async fn default_ffmpeg_profile_hardware_update_targets_seeded_profiles() {
+        let database_url = temp_sqlite_database_url();
+        let pool = init(&database_url).await.expect("initialize database");
+
+        let seeded = initialize_media_server_database(&pool)
+            .await
+            .expect("seed mediaserver defaults");
+        assert!(seeded);
+
+        apply_default_ffmpeg_profile_hardware_acceleration(
+            &pool,
+            HardwareAccelerationKind::VideoToolbox,
+        )
+        .await
+        .expect("apply hardware acceleration");
+
+        let rows = sqlx::query(
+            r#"SELECT "HardwareAcceleration", "VideoPreset"
+               FROM "FFmpegProfile"
+               ORDER BY "Id""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load hardware rows");
+
+        for row in rows {
+            assert_eq!(
+                row.try_get::<i32, _>("HardwareAcceleration")
+                    .expect("hardware acceleration"),
+                4
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("VideoPreset")
+                    .expect("video preset"),
+                None
+            );
+        }
     }
 
     #[tokio::test]
