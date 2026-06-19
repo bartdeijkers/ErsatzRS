@@ -100,15 +100,43 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # v1.0.11-alpha is a Windows-only hotfix release: only the win-x64 archive is
-        # produced (Linux, macOS, and Docker are intentionally omitted). Restore
-        # the Linux/macOS entries before the next full release.
+        # Full multi-RID release matrix (see docs/how-to/publish-release.md).
+        # Linux and Windows build on the self-hosted runners; arm64/armv7 are
+        # cross-compiled on the x86_64 Linux runner. macOS has no self-hosted
+        # runner, so it uses GitHub-hosted `macos-latest` (the env block below
+        # already accounts for hosted runners). For a Windows-only hotfix,
+        # temporarily reduce this list to the `win-x64` entry.
         include:
+          - rid: linux-x64
+            runner: '["self-hosted","ersatzrs-linux-release"]'
+            target: x86_64-unknown-linux-gnu
+            cross: false
+            archive: tar.gz
+          - rid: linux-arm64
+            runner: '["self-hosted","ersatzrs-linux-release"]'
+            target: aarch64-unknown-linux-gnu
+            cross: true
+            archive: tar.gz
+          - rid: linux-arm
+            runner: '["self-hosted","ersatzrs-linux-release"]'
+            target: armv7-unknown-linux-gnueabihf
+            cross: true
+            archive: tar.gz
           - rid: win-x64
             runner: '["self-hosted","ersatzrs-windows-release"]'
             target: x86_64-pc-windows-msvc
             cross: false
             archive: zip
+          - rid: osx-arm64
+            runner: '["macos-latest"]'
+            target: aarch64-apple-darwin
+            cross: false
+            archive: tar.gz
+          - rid: osx-x64
+            runner: '["macos-latest"]'
+            target: x86_64-apple-darwin
+            cross: false
+            archive: tar.gz
     steps:
       - uses: actions/checkout@v6
       - name: Prefer Git Bash on Windows
