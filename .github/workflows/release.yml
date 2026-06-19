@@ -160,23 +160,25 @@ jobs:
         if: ${{ matrix.rid == 'win-x64' }}
         shell: bash
         env:
-          # Pinned Gyan win64 GPL build of FFmpeg 8.1. ErsatzRS hard-requires the
-          # `drawvg` filter (FFmpeg 8.1+), asserted below.
-          FFMPEG_ZIP_URL: https://github.com/GyanD/codexffmpeg/releases/download/8.1.1/ffmpeg-8.1.1-full_build.zip
+          # First-party ErsatzRS-ffmpeg win-x64 package (FFmpeg 8.1.2, built with
+          # --enable-cairo so `drawvg` is present, asserted below). Pinned to a
+          # known-good ErsatzRS-ffmpeg release per ADR 0008. The archive contains
+          # ffmpeg.exe/ffprobe.exe plus their bundled DLLs in a single folder.
+          FFMPEG_ZIP_URL: https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/download/v1.0.0/ersatzrs-ffmpeg-1.0.0-win-x64.zip
         run: |
           set -euo pipefail
           curl -fL "$FFMPEG_ZIP_URL" -o ffmpeg-win64.zip
           7z x ffmpeg-win64.zip -offmpeg-extracted >/dev/null
           ffmpeg_exe="$(find ffmpeg-extracted -name ffmpeg.exe | head -n1)"
-          ffprobe_exe="$(find ffmpeg-extracted -name ffprobe.exe | head -n1)"
-          if [ -z "$ffmpeg_exe" ] || [ -z "$ffprobe_exe" ]; then
-            echo "ffmpeg.exe/ffprobe.exe not found in the GyanD archive" >&2
+          if [ -z "$ffmpeg_exe" ] || [ ! -f "$(dirname "$ffmpeg_exe")/ffprobe.exe" ]; then
+            echo "ffmpeg.exe/ffprobe.exe not found in the ErsatzRS-ffmpeg archive" >&2
             exit 1
           fi
-          cp "$ffmpeg_exe" ffmpeg.exe
-          cp "$ffprobe_exe" ffprobe.exe
+          # Stage the whole bundle (exes + their DLLs) for the archive step.
+          rm -rf ffmpeg-bundle && mkdir ffmpeg-bundle
+          cp "$(dirname "$ffmpeg_exe")"/* ffmpeg-bundle/
           # Hard-require the drawvg filter; fail the release if it is missing.
-          ./ffmpeg.exe -hide_banner -filters | grep -w drawvg
+          ./ffmpeg-bundle/ffmpeg.exe -hide_banner -filters | grep -w drawvg
       # --- Optional Windows code signing (skipped until secrets exist) ---------
       # Disabled by default: both steps are skipped unless AZURE_CLIENT_ID is set.
       # Signs the built exes in place (before staging) so the copies that get
@@ -217,9 +219,9 @@ jobs:
             cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
             # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
             cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-            # Bundled FFmpeg staged by the earlier step.
-            cp ffmpeg.exe "$stage/"
-            cp ffprobe.exe "$stage/"
+            # Bundled FFmpeg (ffmpeg.exe/ffprobe.exe + their DLLs) staged by the
+            # earlier step.
+            cp ffmpeg-bundle/* "$stage/"
           else
             cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"

@@ -49,6 +49,13 @@ release section when tagging a release.
 
 ### Changed
 
+- The Windows (`win-x64`) release now bundles the first-party
+  [`ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg) **8.1.2**
+  package (pinned to release `v1.0.0`) instead of a third-party Gyan build. This
+  guarantees the `drawvg` filter (built with `--enable-cairo`) and the rest of
+  the ErsatzRS-required capability set, and aligns the bundled runtime with
+  ADR 0008 (first-party builds, no `--enable-nonfree`). The drawvg presence
+  assertion is retained.
 - New installations now seed **five** ready-to-use FFmpeg profiles instead of
   one — 720p, 1080p, 1080p HDR, 4K, and 4K HDR, all with AC-3 6-channel
   640 kbps audio — and apply the best detected hardware encoder to that fresh
