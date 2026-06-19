@@ -69,6 +69,13 @@ detected hardware acceleration to that fresh seed, HLS output emits
 `scripts/e2e/hdr-tone-map-proof.sh` live-proves HDR10 PQ and HLG tone mapping
 against generated SDR references.
 
+Added 2026-06-19: `scripts/e2e/nvenc-filter-gate-proof.sh` codifies the live
+NVENC encoder-only proof and rejects full CUDA-filter builds before boot. The
+`bartdeijkers/ErsatzRS-ffmpeg` v1.0.0 linux-x64 release package verifies as
+FFmpeg 8.1.2 with `cuda`, `h264_nvenc`, `drawvg`, and `zscale`, but it also
+ships `scale_cuda`, `yadif_cuda`, and `overlay_cuda`, so it cannot close
+`nvenc-filter-gate-live-proof`.
+
 Before editing:
 1. Inspect `crates/ersatzrs-infra/src/db.rs`,
    `crates/ersatzrs-domain/src/ffmpeg.rs`,

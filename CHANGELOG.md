@@ -59,6 +59,10 @@ release section when tagging a release.
   color state instead of leaving BT.2020 primaries/matrix on the output. A new
   manual `scripts/e2e/hdr-tone-map-proof.sh` gate live-proves HDR10 PQ and HLG
   calibration streams against generated SDR references.
+- A new manual `scripts/e2e/nvenc-filter-gate-proof.sh` gate codifies the
+  remaining NVENC encoder-only proof prerequisite: FFmpeg must report
+  `cuda` + `h264_nvenc` while omitting `scale_cuda`, `yadif_cuda`, and
+  `overlay_cuda`.
 - ADRs now track decision state and implementation state as two independent
   sections. `## Status` records only the decision lifecycle
   (Proposed/Accepted/Superseded); a new `## Implementation` section records

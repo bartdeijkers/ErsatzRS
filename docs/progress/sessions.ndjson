@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-19","summary":"Added NVENC encoder-only live proof gate and verified ErsatzRS-ffmpeg v1.0.0 linux-x64 is a full CUDA-filter build, so nvenc-filter-gate-live-proof remains open pending a matching encoder-only package."}
 {"agent":"Codex","date":"2026-06-19","summary":"Closed FFmpeg HDR tone-map live-proof debt with an HDR10/HLG E2E crop-metric gate and BT.709 software tonemap fix; NVENC filter-gate live proof remains open"}
 {"agent":"Codex","date":"2026-06-19","summary":"Closed FFmpeg command-generation ADR 0017 defaults and AC-3 HLS max-delay debts; HDR/NVENC live proof remains open"}
 {"agent":"Codex","date":"2026-06-19","summary":"Closed media collection route-family parity with multi-collection fallbacks and browser visual proof"}

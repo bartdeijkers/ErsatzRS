@@ -6,7 +6,7 @@ Accepted (2026-06-12).
 
 ## Implementation
 
-Partial — core implemented for the HLS segmenter and direct IPTV `.ts` spawns (architecture gate, CUDA-filter decode gate, refresh-triggered denial invalidation); live proof on an encoder-only FFmpeg build remains open (`ParityDebt nvenc-filter-gate-live-proof`).
+Partial — core implemented for the HLS segmenter and direct IPTV `.ts` spawns (architecture gate, CUDA-filter decode gate, refresh-triggered denial invalidation); `scripts/e2e/nvenc-filter-gate-proof.sh` now codifies the encoder-only proof, but live proof on a matching FFmpeg build remains open (`ParityDebt nvenc-filter-gate-live-proof`).
 
 ## Context
 

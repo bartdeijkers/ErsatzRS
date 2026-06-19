@@ -65,7 +65,7 @@ id          = 'nvenc-filter-gate-live-proof'
 adr         = '0014'
 description = 'The CUDA-filter decode gate and the encoder-only software-graph demotion are verified by unit tests and argv snapshots only; live proof requires an FFmpeg build with NVENC encoders + `cuda` hwaccel but no CUDA filter kernels, and no such build was available on 2026-06-12 (both local builds ship all three CUDA filters). The IPTV .ts learned-denial retry likewise has unit/snapshot coverage plus a passing `cargo xtask smoke` happy path, but its retry-in-response has not been observed live against real rejecting hardware the way the HLS slice was on 2026-06-11.'
 discovered  = '2026-06-12'
-evidence    = '`which -a ffmpeg` builds (`/usr/bin/ffmpeg`, `~/.local/ffmpeg-8.1`) each report scale_cuda/yadif_cuda/overlay_cuda present, so the "No such filter" runtime path could not be reproduced live this session.'
+evidence    = '`scripts/e2e/nvenc-filter-gate-proof.sh` now codifies the live proof and rejects unsuitable full CUDA-filter builds before boot. The 2026-06-19 `bartdeijkers/ErsatzRS-ffmpeg` v1.0.0 linux-x64 release package (`sha256:da5bb5c43995d52684a75379eaef85486bdee6595a27175b55984de3ddb878fe`) reports FFmpeg 8.1.2 with `cuda`, `h264_nvenc`, `drawvg`, and `zscale`, but the proof preflight rejects it because `scale_cuda`, `yadif_cuda`, and `overlay_cuda` are present. Earlier local builds (`/usr/bin/ffmpeg`, `~/.local/ffmpeg-8.1`) also report those filters, so the required encoder-only runtime path still lacks a matching live build.'
 
 [[debt]]
 id          = 'default-profile-1080p60-retune'

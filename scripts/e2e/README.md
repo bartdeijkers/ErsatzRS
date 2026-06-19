@@ -115,6 +115,29 @@ metric files. The same gate honors `HDR_PROOF_MODES`, `HDR_PROOF_CLIP_SECONDS`,
 `HDR_PROOF_CAPTURE_SECONDS`, `HDR_PROOF_SIZE`, `HDR_PROOF_MIN_PSNR`, and
 `HDR_PROOF_MIN_SSIM` for local proof tuning.
 
+## NVENC Encoder-Only Filter Gate
+
+The automated live proof for ADR 0014's NVENC encoder-only path is:
+
+```bash
+NVENC_PROOF_FFMPEG_DIR=/path/to/ffmpeg-package/ffmpeg \
+  scripts/e2e/nvenc-filter-gate-proof.sh
+```
+
+This gate is intentionally narrower than the normal playback gates. It only
+runs when the selected FFmpeg build reports `cuda` hwaccel and `h264_nvenc`
+while omitting `scale_cuda`, `yadif_cuda`, and `overlay_cuda`. A full
+CUDA-filter build is rejected before boot because it cannot prove the
+encoder-only software-graph demotion path. On a matching build, the script
+boots `ersatzrs-web` on a throwaway SQLite database, seeds a short SDR
+calibration clip, forces the channel profile to NVENC H.264, captures the live
+MPEG-TS stream, verifies H.264 BT.709 output with `ffprobe`, and scans the
+server log for CUDA-filter and playback failure signatures.
+
+Set `NVENC_PROOF_KEEP=1` to keep the throwaway DB, server log, and capture.
+The same gate honors `NVENC_PROOF_CLIP_SECONDS`,
+`NVENC_PROOF_CAPTURE_SECONDS`, `NVENC_PROOF_SIZE`, and `NVENC_PROOF_FPS`.
+
 ## Requirements
 
 `tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 8.1 on `PATH`
