@@ -1,176 +1,176 @@
-# Build FFmpeg 8.1 in the release workflow
+# Acquire FFmpeg 8.1 at runtime from ErsatzRS-ffmpeg releases
+
+> Revised 2026-06-19. This plan previously bundled a self-built FFmpeg into every
+> release archive. Per [ADR 0008](../docs/adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+> (revised), ErsatzRS now ships **without** FFmpeg/ffprobe and acquires the
+> runtime at startup from the first-party
+> [`bartdeijkers/ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg)
+> GitHub Releases, with an update-availability indicator on `/system/health`.
 
 ## Context
 
-The Windows release workflow currently downloads a public FFmpeg archive and
-stages `ffmpeg.exe` / `ffprobe.exe` next to the launcher. That is too weak for
-ErsatzRS: startup requires both tools to report a parseable FFmpeg version
-`>= 8.1`, the `drawvg` filter (via `--enable-cairo`), and the `zscale` filter
-(via `--enable-libzimg`) for the HDR/tonemap color pipeline. Recent
-BtbN/Gyan-style public builds either missed those capabilities or did not
-produce version/configuration output that the runtime checker accepted.
+ErsatzRS startup requires both `ffmpeg` and `ffprobe` to report a parseable
+version `>= 8.1`, the `drawvg` filter (via `--enable-cairo`), and the `zscale`
+filter (via `--enable-libzimg`) for the HDR/tonemap color pipeline. Public
+BtbN/Gyan-style builds either miss those capabilities or do not produce
+version/configuration output the runtime checker accepts.
 
-Replace the public download with a first-party FFmpeg 8.1 build in GitHub
-Actions. The release archive should carry the exact runtime that the app
-validates.
+Bundling a self-built FFmpeg into every release archive met the capability
+requirement but produced large six-RID artifacts and coupled the FFmpeg lifecycle
+to the ErsatzRS release cadence. Instead:
+
+- First-party FFmpeg 8.1 builds are produced and published by the separate
+  `ErsatzRS-ffmpeg` repository as **per-RID GitHub Release packages**.
+- ErsatzRS application artifacts ship without FFmpeg/ffprobe.
+- A startup runtime manager resolves an existing runtime, downloads the matching
+  `ErsatzRS-ffmpeg` package when none is usable, and checks for newer releases to
+  surface on `/system/health`.
 
 ## Goals
 
-- Build FFmpeg 8.1 from official source during the release workflow.
-- Produce a relocatable payload at `ffmpeg/bin/{ffmpeg,ffprobe}[.exe]`.
-- Include the runtime library closure needed by the payload on each platform.
-- Run the same runtime checks that ErsatzRS uses before uploading artifacts:
-  parseable `ffmpeg -version` / `ffprobe -version`, `--enable-cairo`, `drawvg`,
-  `--enable-libzimg`, `zscale`, required codecs, a real `drawvg` smoke
-  transcode, and a real `zscale`/`tonemap` smoke transcode.
-- Remove all BtbN/Gyan download assumptions from `.github/workflows/release.yml`
-  and release docs.
-- Keep environment overrides higher priority than bundled binaries.
+- Ship ErsatzRS release archives/images **without** `ffmpeg`/`ffprobe`.
+- Resolve a usable FFmpeg/ffprobe runtime at startup in a deterministic order
+  (env override → managed runtime dir → `PATH`).
+- When no resolved runtime satisfies the capability contract, download the
+  `ErsatzRS-ffmpeg` release package matching the current RID, verify its published
+  checksum, install it into a managed runtime directory, and record the installed
+  release tag.
+- Run the existing capability checks against the resolved/downloaded runtime
+  before it is accepted: parseable `ffmpeg -version` / `ffprobe -version`,
+  `--enable-cairo`, `drawvg`, `--enable-libzimg`, `zscale`, required codecs, a
+  real `drawvg` smoke transcode, and a real `zscale`/`tonemap` smoke transcode.
+- Check the latest `ErsatzRS-ffmpeg` release at startup and expose an
+  "update available" indicator (installed tag → latest tag) in the health report
+  and on `/system/health`.
+- Remove all FFmpeg bundling and BtbN/Gyan download assumptions from
+  `.github/workflows/release.yml` and release docs.
+- Keep environment overrides higher priority than the managed runtime, and keep a
+  documented offline/air-gapped path.
 
 ## Non-Goals
 
 - Do not change the graphics-engine runtime requirements.
 - Do not lower the required FFmpeg version below 8.1.
-- Do not depend on a user's system FFmpeg for release archives.
-- Do not solve the existing DB-configured FFmpeg path gap in this slice.
+- Do not silently auto-replace a working runtime; updates are notify + explicit
+  apply.
+- Do not own the FFmpeg build here — configure flags, the source pin/SHA-256, and
+  per-RID compilation live in `ErsatzRS-ffmpeg`.
 
-## Workflow Shape
+## ErsatzRS-ffmpeg release contract
 
-Add a new `build-ffmpeg` job before `binaries`:
+The `ErsatzRS-ffmpeg` repository owns the build and publishes, per supported RID,
+a redistributable package containing relocatable `ffmpeg`/`ffprobe` plus their
+library closure. ErsatzRS depends on this contract:
 
-```text
-release
-  |
-  +-- build-ffmpeg matrix
-  |     -> uploads ffmpeg-linux-x64
-  |     -> uploads ffmpeg-linux-arm64
-  |     -> uploads ffmpeg-linux-arm
-  |     -> uploads ffmpeg-osx-x64
-  |     -> uploads ffmpeg-osx-arm64
-  |     -> uploads ffmpeg-win-x64
-  |
-  +-- binaries matrix
-        -> downloads matching ffmpeg-<rid>
-        -> stages archive with ffmpeg/bin payload
-```
+- One asset per RID: `linux-x64`, `linux-arm64`, `linux-arm`, `osx-x64`,
+  `osx-arm64`, `win-x64`. Stable, RID-keyed asset names.
+- A published checksum (e.g. `*.sha256`) per asset that ErsatzRS verifies before
+  install.
+- Each asset passes, on the relocated payload, the same capability gate ErsatzRS
+  enforces (see Required Validation) so a drawvg-only / zimg-less build cannot be
+  published.
+- Release tags are orderable so ErsatzRS can compare installed vs latest.
+- Packages are redistributable: no `--enable-nonfree`, CUDA toolkit, or libnpp in
+  the default published assets.
 
-Change `binaries.needs` from `release` to `[release, build-ffmpeg]`.
+`ErsatzRS-ffmpeg` keeps its own platform build details (Linux Docker export with
+`-Wl,-rpath,$ORIGIN/../lib`, Windows MSYS2 UCRT64/MINGW64 + DLL closure, macOS
+Homebrew + `@loader_path/../lib` dylib relocation). They are no longer carried in
+this repository.
 
-## Platform Builds
+## Required Validation (applied to the resolved/downloaded runtime)
 
-### Linux
-
-Reuse the existing Docker `ffmpeg-build` recipe as the source of truth for
-Linux configure flags.
-
-- Add `--extra-ldflags='-Wl,-rpath,$ORIGIN/../lib'` to the Linux FFmpeg
-  configure invocation.
-- Add an `ffmpeg-export` Docker target that copies `/opt/ffmpeg` into
-  `/ffmpeg` and vendors the non-baseline shared-library closure into
-  `/ffmpeg/lib`.
-- Build each Linux RID through `docker buildx build --target ffmpeg-export`
-  with `--output type=local,dest=out`.
-- Upload `out/ffmpeg` as artifact `ffmpeg-<rid>`.
-- Verify from a clean container that `ffmpeg/bin/ffmpeg` has no unresolved
-  `ldd` entries and resolves non-baseline dependencies from `ffmpeg/lib`.
-
-### Windows
-
-Build FFmpeg 8.1 from source on `windows-latest` using MSYS2 UCRT64 or MINGW64.
-
-- Install cairo, fontconfig, freetype, fribidi, harfbuzz, libass, x264, x265,
-  svt-av1, dav1d, aom, vpx, opus, lame, vorbis, webp, zimg, OpenSSL, nasm,
-  yasm, pkg-config, and the compiler toolchain.
-- Configure with the common required flags:
-  `--enable-cairo`, `--enable-libzimg`, `--enable-libfontconfig`,
-  `--enable-libass`, `--enable-libfreetype`, `--enable-libfribidi`,
-  `--enable-libharfbuzz`, `--enable-gpl`, `--enable-version3`,
-  `--enable-shared`, `--enable-ffprobe`.
-- Include codec/library flags that map to the installed MSYS2 packages.
-- Exclude Linux-only flags such as `--enable-libdrm`, `--enable-libv4l2`,
-  `--enable-vaapi`, and Linux rpath linker syntax.
-- Copy `ffmpeg.exe`, `ffprobe.exe`, and all required DLLs into `ffmpeg/bin`.
-- Verify the relocated payload from a shell where MSYS2 bin directories are not
-  implicitly satisfying missing DLLs.
-
-### macOS
-
-Build FFmpeg 8.1 from source on native macOS runners.
-
-- Use an Intel runner for `osx-x64` and an arm64 runner for `osx-arm64`.
-- Install required dependencies via Homebrew, including `zimg` (Homebrew
-  formula `zimg`) so `--enable-libzimg`/`zscale` is available.
-- Configure with the common cairo/zimg/libass/font stack and codecs available
-  on Homebrew, including `--enable-libzimg`.
-- Exclude Linux-only flags such as `libdrm`, `libv4l2`, `vaapi`, CUDA/QSV, and
-  Linux `TARGETARCH`-gated accelerator options.
-- Relocate non-system dylibs to `@loader_path/../lib` and verify with
-  `otool -L ffmpeg/bin/ffmpeg`.
-- Upload `ffmpeg/bin` plus the relocated dylib closure.
-
-## Required Validation
-
-Every `build-ffmpeg` matrix cell must fail before upload unless these checks
-pass against the relocated payload:
+Before a runtime is accepted (whether resolved from `PATH`, the managed dir, or a
+fresh download), it must pass:
 
 ```bash
-ffmpeg/bin/ffmpeg -version
-ffmpeg/bin/ffprobe -version
-ffmpeg/bin/ffmpeg -hide_banner -buildconf | grep -- --enable-cairo
-ffmpeg/bin/ffmpeg -hide_banner -filters | grep -w drawvg
-ffmpeg/bin/ffmpeg -hide_banner -buildconf | grep -- --enable-libzimg
-ffmpeg/bin/ffmpeg -hide_banner -filters | grep -w zscale
-ffmpeg/bin/ffmpeg -hide_banner \
+<ffmpeg> -version
+<ffprobe> -version
+<ffmpeg> -hide_banner -buildconf | grep -- --enable-cairo
+<ffmpeg> -hide_banner -filters | grep -w drawvg
+<ffmpeg> -hide_banner -buildconf | grep -- --enable-libzimg
+<ffmpeg> -hide_banner -filters | grep -w zscale
+<ffmpeg> -hide_banner \
   -f lavfi -i color=c=black:s=32x32:d=0.1 \
   -vf "drawvg=script='rect 4 4 16 16 fill',format=yuv420p" \
   -frames:v 1 -f null -
-ffmpeg/bin/ffmpeg -hide_banner -loglevel error \
+<ffmpeg> -hide_banner -loglevel error \
   -f lavfi -i "color=c=black:s=64x64:d=0.1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc" \
   -vf "zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p" \
   -frames:v 1 -f null -
 ```
 
-The synthetic source must be tagged with HDR color metadata
+The HDR smoke source must be tagged with HDR color metadata
 (`setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc`);
 otherwise `zscale` reports "no path between colorspaces" even on a correct zimg
-build and the smoke check fails spuriously.
+build and the check fails spuriously.
 
-Also keep the existing release capability reports for Docker images. The release
-archive validation should be explicit and independent from image validation.
+## Runtime Manager
 
-## Runtime Discovery
+Add an FFmpeg runtime manager that runs during startup capability detection.
 
-Update runtime path resolution so release archives can be self-contained:
+### Resolution order
 
-1. Existing env var override.
-2. Bundled binary next to the executable:
-   - `<exe_dir>/ffmpeg/bin/ffmpeg[.exe]`
-   - `<exe_dir>/ffmpeg/bin/ffprobe[.exe]`
-3. Legacy sibling fallback for transition:
-   - `<exe_dir>/ffmpeg[.exe]`
-   - `<exe_dir>/ffprobe[.exe]`
-4. PATH fallback: `ffmpeg` / `ffprobe`.
+1. Explicit env/config override (operator-provided `ffmpeg`/`ffprobe` path) —
+   always wins, never auto-downloaded.
+2. Managed runtime directory under the ErsatzRS data dir, e.g.
+   `<data_dir>/ffmpeg/<tag>/bin/{ffmpeg,ffprobe}[.exe]`, with a stable
+   `current` pointer.
+3. `PATH` (`ffmpeg` / `ffprobe`) for developer installs.
 
-Apply this in:
+### Download / install
 
-- `crates/ersatzrs-ffmpeg/src/version.rs`
-- `crates/ersatzrs-scanner/src/main.rs` for scanner `ffprobe` discovery
+- If steps 1–3 yield no runtime that passes Required Validation, select the
+  `ErsatzRS-ffmpeg` release asset for the current RID (pinned minimum/known-good
+  tag by default), download it, verify the published checksum, extract into the
+  managed runtime directory, run Required Validation, and only then promote it via
+  the `current` pointer and record the installed tag.
+- A download or validation failure aborts startup with an explicit, actionable
+  error (which capability/version failed, and the manual-install path).
+- Offline/air-gapped: an operator can pre-place a managed runtime directory or set
+  the env override; the manager must detect this and skip the network entirely.
 
-Add resolver tests that prove env vars win, bundled paths are discovered, and
-PATH fallback remains intact.
+### Update check
 
-## Release Staging
+- Record the installed `ErsatzRS-ffmpeg` tag. At startup query the latest release
+  tag (best-effort, network-failure-tolerant).
+- A *missing* runtime is auto-downloaded. An *outdated but valid* runtime is left
+  in place and an "update available" flag (installed → latest) is set.
+- Applying an update is an explicit action; never swap a runtime mid-operation.
+
+### Code touch points
+
+- `crates/ersatzrs-ffmpeg/src/version.rs` — resolver + capability gate + manager
+  entry, replacing any bundled-`ffmpeg/bin`-sibling assumption.
+- `crates/ersatzrs-scanner/src/main.rs` — scanner `ffprobe` discovery uses the
+  same resolver/managed path.
+- `ersatzrs-core::health` / `ersatzrs-infra::health` — add an FFmpeg-runtime
+  health check (resolved source, installed version, update-available) per the
+  Health Check Parity contract.
+
+Add resolver tests proving: env override wins; a pre-placed managed dir is
+discovered without network; `PATH` fallback works; an outdated managed runtime
+sets the update flag; checksum mismatch is rejected.
+
+## Health surfacing
+
+`/system/health` reports the resolved FFmpeg source (override / managed / PATH),
+installed FFmpeg+ffprobe version, and whether a newer `ErsatzRS-ffmpeg` release is
+available. The indicator must localize per the language contract and not spawn
+`ffmpeg` per request — it reads the captured startup report.
+
+## Release workflow changes
 
 In `.github/workflows/release.yml`:
 
-- Delete the `Bundle FFmpeg 8.1 with drawvg (win-x64)` download step.
-- Add `actions/download-artifact` for `ffmpeg-${{ matrix.rid }}`.
-- Stage the downloaded `ffmpeg/` directory into every archive, including
-  Windows.
-- Prefer `ffmpeg/bin/` over root-level `ffmpeg.exe` / `ffprobe.exe`.
-- Keep the launcher as `ErsatzRS.exe` in the Windows archive.
-- Ensure the Windows archive still includes `site/`, `assets/`, `LICENSE`, and
-  `README.md`.
+- Delete the `Bundle FFmpeg 8.1 with drawvg (win-x64)` download/staging step and
+  any `ffmpeg/bin` staging across archives.
+- Do **not** add a `build-ffmpeg` job here; that build lives in `ErsatzRS-ffmpeg`.
+- Release archives contain the ErsatzRS binaries (and Windows launcher/site) only;
+  no `ffmpeg/` directory.
+- Container images may, at build time, fetch and pre-place the matching
+  `ErsatzRS-ffmpeg` package at the managed runtime path so first run needs no
+  network; document the pinned tag.
 
 Expected archive shape:
 
@@ -179,49 +179,47 @@ ersatzrs-vX.Y.Z-<rid>/
   ersatzrs-web[.exe]
   ersatzrs-scanner[.exe]
   ErsatzRS.exe                # Windows only
-  ffmpeg/
-    bin/
-      ffmpeg[.exe]
-      ffprobe[.exe]
-      *.dll / *.dylib / platform libs as needed
-    lib/                      # Linux/macOS when needed
   site/                       # Windows only for launcher UI
   assets/
   LICENSE
   README.md
+  # no ffmpeg/ — fetched into the data dir on first run
 ```
 
 ## Documentation Updates
 
-- `RELEASING.md`: describe the bundled self-built FFmpeg payload, discovery
-  order, and local smoke checks.
-- `plans/bundling-ffmpeg.md`: either link to this workflow-focused plan or mark
-  this as the implementation slice for replacing public downloads.
-- `CHANGELOG.md`: add an Unreleased entry once implementation starts.
+- `RELEASING.md`: describe that archives no longer bundle FFmpeg, the startup
+  download/update from `ErsatzRS-ffmpeg` releases, the resolution order, the
+  managed runtime directory, and the offline/air-gapped install path.
+- `CHANGELOG.md`: add an Unreleased entry once implementation starts (release
+  artifacts no longer bundle FFmpeg; runtime is downloaded/updated from
+  `ErsatzRS-ffmpeg`).
 
 ## Acceptance Criteria
 
-- Release workflow no longer references BtbN or Gyan download URLs.
-- All six release RIDs upload an `ffmpeg-<rid>` artifact.
-- All release archives contain `ffmpeg/bin/{ffmpeg,ffprobe}[.exe]`.
-- Windows launcher starts from the zip on a machine without system FFmpeg.
-- `ffmpeg -version` and `ffprobe -version` are parseable by
-  `crates/ersatzrs-ffmpeg/src/version.rs`.
-- `--enable-cairo`, `drawvg`, `--enable-libzimg`, and `zscale` are checked in
-  CI before artifact upload, and a `zscale`/`tonemap` smoke transcode passes, so
-  a drawvg-only (zimg-less) FFmpeg build cannot produce a release archive.
-- Linux exported payload runs in a clean container without `LD_LIBRARY_PATH`.
-- macOS payload runs without `DYLD_LIBRARY_PATH`.
-- Windows payload runs without adding MSYS2 directories to `PATH`.
+- Release workflow no longer references BtbN/Gyan URLs or stages `ffmpeg/bin`.
+- ErsatzRS release archives contain **no** `ffmpeg/ffprobe`.
+- On a machine without system FFmpeg, a fresh ErsatzRS start downloads the matching
+  `ErsatzRS-ffmpeg` release, validates it, and serves playback.
+- Env override and a pre-placed managed runtime both bypass the download (offline
+  path proven).
+- `--enable-cairo`, `drawvg`, `--enable-libzimg`, `zscale`, and the
+  `drawvg`/`zscale`+`tonemap` smoke transcodes are validated against the resolved
+  runtime before it is accepted; a drawvg-only (zimg-less) runtime is rejected.
+- `/system/health` shows resolved source, installed version, and update
+  availability; publishing a newer `ErsatzRS-ffmpeg` release flips the indicator
+  without re-releasing ErsatzRS.
+- Checksum verification rejects a tampered/mismatched download.
 
 ## Suggested Implementation Order
 
-1. Add runtime bundled-path discovery and tests.
-2. Add Docker `ffmpeg-export` target and prove linux-x64 locally.
-3. Add `build-ffmpeg` job for linux-x64 only.
-4. Wire artifact download into `binaries` staging.
-5. Extend `build-ffmpeg` to linux-arm64 and linux-arm.
-6. Add Windows source build and DLL closure staging.
-7. Add macOS x64/arm64 source builds and dylib relocation.
-8. Update release docs and remove stale BtbN/Gyan wording.
-9. Run a throwaway tag release and inspect all archives.
+1. Define/confirm the `ErsatzRS-ffmpeg` per-RID release asset + checksum contract.
+2. Add the runtime resolver (env → managed → PATH) and capability gate with tests.
+3. Add download + checksum-verify + managed-install for one RID (linux-x64) and
+   prove a from-empty start.
+4. Add the update check and the `/system/health` indicator + health check.
+5. Extend asset selection to all six RIDs.
+6. Remove FFmpeg bundling from `.github/workflows/release.yml`.
+7. Pre-place the managed runtime in container images at build time.
+8. Update release docs (`RELEASING.md`, `CHANGELOG.md`).
+9. Run a throwaway tag release and a clean-machine first-run install.
