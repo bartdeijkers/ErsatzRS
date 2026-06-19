@@ -15,7 +15,7 @@ use crate::admin::server_fns::media_browser::{
     MultiCollectionListRow, MultiCollectionSelectOption,
 };
 use crate::admin::ui::primitives::{
-    button::{Button, ButtonVariant, LinkButton},
+    button::{ButtonVariant, LinkButton},
     dialog::DeleteDialog,
     form::TextField,
     toast::{use_toast, ToastSeverity},
@@ -139,16 +139,20 @@ fn MultiCollectionsIsland() -> impl IntoView {
                                                                 >
                                                                     {tr(TextKey::Edit)}
                                                                 </a>
-                                                                <button
-                                                                    type="button"
-                                                                    class=style::btn_delete
-                                                                    on:click=move |_| {
-                                                                        delete_target.set(Some(row_for_delete.clone()));
-                                                                        delete_open.set(true);
-                                                                    }
-                                                                >
-                                                                    {tr(TextKey::Delete)}
-                                                                </button>
+                                                                <form method="post" action="/api/multi-collections/delete">
+                                                                    <input type="hidden" name="id" value=id.to_string()/>
+                                                                    <button
+                                                                        type="submit"
+                                                                        class=style::btn_delete
+                                                                        on:click=move |event| {
+                                                                            event.prevent_default();
+                                                                            delete_target.set(Some(row_for_delete.clone()));
+                                                                            delete_open.set(true);
+                                                                        }
+                                                                    >
+                                                                        {tr(TextKey::Delete)}
+                                                                    </button>
+                                                                </form>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -359,23 +363,34 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
     });
 
     view! {
-        <div class=style::page>
+        <form
+            method="post"
+            action="/api/multi-collections/save"
+            class=style::page
+            on:submit=move |event| {
+                event.prevent_default();
+                on_save.run(());
+            }
+        >
+            <input type="hidden" name="id" value=move || id_signal.get().to_string()/>
             <div class=style::toolbar>
                 <h1 class=style::page_title>{tr(TextKey::MultiCollection)}</h1>
-                <Button
-                    variant=ButtonVariant::Primary
-                    on_click=Some(on_save)
-                >
+                <button type="submit" class=style::btn_add>
                     {move || if id_signal.get() == 0 {
                         tr(TextKey::AddMultiCollection)
                     } else {
                         tr(TextKey::SaveMultiCollection)
                     }}
-                </Button>
+                </button>
             </div>
 
             <div class=style::editor>
-                <TextField label=tr(TextKey::Name) value=name error=Some(name_err_signal)/>
+                <TextField
+                    label=tr(TextKey::Name)
+                    value=name
+                    name=Some("name")
+                    error=Some(name_err_signal)
+                />
 
                 <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                     {move || {
@@ -486,20 +501,18 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                             }
                         }}
                     </h2>
+                    {move || multi_collection_item_hidden_fields(items.get())}
                     <MultiCollectionItemsTable items=items/>
                 </section>
 
                 <div class=style::form_actions>
-                    <Button
-                        variant=ButtonVariant::Primary
-                        on_click=Some(on_save)
-                    >
-                    {move || if id_signal.get() == 0 {
-                        tr(TextKey::AddMultiCollection)
-                    } else {
-                        tr(TextKey::SaveMultiCollection)
-                    }}
-                </Button>
+                    <button type="submit" class=style::btn_add>
+                        {move || if id_signal.get() == 0 {
+                            tr(TextKey::AddMultiCollection)
+                        } else {
+                            tr(TextKey::SaveMultiCollection)
+                        }}
+                    </button>
                     <LinkButton
                         href="/media/multi-collections".to_string()
                         variant=ButtonVariant::Text
@@ -508,8 +521,42 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                     </LinkButton>
                 </div>
             </div>
-        </div>
+        </form>
     }
+}
+
+fn multi_collection_item_hidden_fields(items: Vec<MultiCollectionItemForm>) -> impl IntoView {
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let collection_id = item.collection_id.unwrap_or_default().to_string();
+            let smart_collection_id = item.smart_collection_id.unwrap_or_default().to_string();
+            let collection_type = item.collection_type.to_string();
+            let use_custom_playback_order = item.use_custom_playback_order.to_string();
+            let playback_order = item.playback_order.to_string();
+            view! {
+                <input type="hidden" name="item_collection_id" value=collection_id/>
+                <input type="hidden" name="item_smart_collection_id" value=smart_collection_id/>
+                <input type="hidden" name="item_name" value=item.name/>
+                <input type="hidden" name="item_collection_type" value=collection_type/>
+                <input type="hidden" name="item_use_custom_playback_order" value=use_custom_playback_order/>
+                <input type="hidden" name="item_playback_order" value=playback_order/>
+                {if item.schedule_as_group {
+                    view! {
+                        <input
+                            type="hidden"
+                            name="item_schedule_as_group_index"
+                            value=index.to_string()
+                        />
+                    }
+                    .into_any()
+                } else {
+                    ().into_any()
+                }}
+            }
+        })
+        .collect_view()
 }
 
 #[component]

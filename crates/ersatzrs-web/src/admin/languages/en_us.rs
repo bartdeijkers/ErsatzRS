@@ -599,7 +599,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MovieNotFound => "Movie not found",
         TextKey::Movies => "Movies",
         TextKey::MusicVideo => "Music Video",
-        TextKey::MultiCollections => "Multi-Collections",
+        TextKey::MultiCollections => "Multi Collections",
         TextKey::ManualCollections => "Manual Collections",
         TextKey::MatchFailed => "Match failed",
         TextKey::MatchStatus => "Match Status",

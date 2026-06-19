@@ -4150,6 +4150,14 @@ pub async fn save_multi_collection(form: MultiCollectionForm) -> Result<i64, Ser
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    save_multi_collection_with_state(&state, form).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_multi_collection_with_state(
+    state: &crate::host::state::AppState,
+    form: MultiCollectionForm,
+) -> Result<i64, ServerFnError> {
     let name = form.name.trim().to_string();
     validate_multi_collection_name(&state.pool, form.id, &name).await?;
     validate_multi_collection_items(&state.pool, &form.items).await?;
@@ -4232,7 +4240,7 @@ pub async fn save_multi_collection(form: MultiCollectionForm) -> Result<i64, Ser
     tx.commit().await?;
 
     if form.id != 0 && existing_items != incoming_items {
-        enqueue_multi_collection_playout_refresh(&state, id).await?;
+        enqueue_multi_collection_playout_refresh(state, id).await?;
     }
 
     Ok(id)
@@ -4243,9 +4251,17 @@ pub async fn delete_multi_collection(id: i64) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    delete_multi_collection_with_pool(&state.pool, id).await
+}
+
+#[cfg(feature = "ssr")]
+pub async fn delete_multi_collection_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    id: i64,
+) -> Result<(), ServerFnError> {
     let result = sqlx::query(r#"DELETE FROM "MultiCollection" WHERE "Id" = ?"#)
         .bind(id)
-        .execute(&state.pool)
+        .execute(pool)
         .await?;
     if result.rows_affected() == 0 {
         return Err(ServerFnError::new(format!(

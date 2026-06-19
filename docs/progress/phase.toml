@@ -16,9 +16,9 @@ the non-web health-check engine in ersatzrs-core::health / ersatzrs-infra::healt
 next_steps = '''
 Broaden health / troubleshooting coverage and the remaining Phase 7 hardening
 items. Support pages (health/logs/troubleshooting) closed to `Ported`
-2026-06-17. Active in-progress feature work (see `cargo xtask progress gaps`):
-multi-collections / rerun / playlists / filler presets route-family closeout;
-and the FFmpeg command
+2026-06-17, and the multi-collections / rerun collections / playlists /
+filler presets route family closed to `Ported` 2026-06-19. Active in-progress
+feature work (see `cargo xtask progress gaps`): the FFmpeg command
 generation / HLS segmenter items, which are ErsatzRS-specific hardening and
 deviations tracked under ADRs 0014/0016/0017 plus a hardware-bound NVENC live
 proof and a new HDR->SDR tonemap calibration live-proof debt rather than

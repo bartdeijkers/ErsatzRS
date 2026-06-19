@@ -53,11 +53,13 @@ status changed:
   (`docs(gap-prompt-rules)…` 8ba1efc), and the prior daily reconcile
   (`docs(status): daily reconcile … cfc5024..0438396` a3ae190).
 
-`cargo xtask progress gaps` now lists **3** features:
-`ffmpeg-command-generation`, `hls-variant-playlists-segmenter`,
-and `multi-collections-rerun-collections-playlists-filler-presets`; `scanner`
+`cargo xtask progress gaps` now lists **2** features after the 2026-06-19
+route-family closeout:
+`ffmpeg-command-generation` and `hls-variant-playlists-segmenter`; `scanner`
 is now `Ported` after the 2026-06-19 hardening slice closed the music-video NFO
-fragment, SQLite locking, and media-server `Unavailable` branch coverage debts.
+fragment, SQLite locking, and media-server `Unavailable` branch coverage debts,
+and `multi-collections-rerun-collections-playlists-filler-presets` is now
+`Ported` after the browser-proof/fallback closeout.
 Per the **ADR-backed FFmpeg/HLS hardening** rule, the FFmpeg/HLS pair may
 consume a goal-prompt slot when pinned-baseline ErsatzTV gaps are drying up.
 Their open debts are ErsatzRS-specific hardening/deviations carrying their own
@@ -66,90 +68,32 @@ ADRs (`ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and
 `active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a
 hardware-bound NVENC live proof (`nvenc-filter-gate-live-proof`).
 
-Ranking: completed scanner scope is replaced. The remaining pinned-baseline
-ErsatzTV parity prompt, `multi-collections-…-filler-presets`, moves to slot 1.
-`ffmpeg-command-generation` fills slot 2 because its default-profile and AC-3
-segmenter debts are ADR-backed runtime hardening with direct release/playback
-impact. Slot 3 remains the manual maintainer promotion for ADR 0008: completing
-first-party FFmpeg 8.1 release artifacts is not a pinned-baseline ErsatzTV
-UI/backend gap, but it is parity-critical runtime infrastructure because the
-implementation is still `Partial` while release payloads can depend on public
-"full" FFmpeg builds that may miss `drawvg`, `zscale`, or acceptable
-version/configuration output.
+Ranking: completed scanner and media collection route-family scope is replaced.
+`ffmpeg-command-generation` is the next live gap because its default-profile
+and AC-3 segmenter debts are ADR-backed runtime hardening with direct
+release/playback impact. The HLS segmenter remains the paired runtime-hardening
+gap. The prior manual maintainer promotion for ADR 0008 (first-party FFmpeg 8.1
+release artifacts) is still parity-critical runtime infrastructure, but it is
+not a pinned-baseline ErsatzTV UI/backend gap; refresh this file from
+`cargo xtask progress gaps` before starting another pasted goal.
 
 ---
 
-## 1 - Multi-collections / Rerun collections / Playlists / Filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## Completed 2026-06-19 - Multi-collections / Rerun collections / Playlists / Filler presets (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
-Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
-collection route-family parity closeout for `/media/multi-collections`,
-`/media/rerun-collections`, `/media/playlists`, and `/media/filler/presets`
-(slug `multi-collections-rerun-collections-playlists-filler-presets`).
+This prompt slot is complete. The route family is now `Ported` in
+`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`.
+The closeout added shared HTML POST fallback save/delete routes for
+`/media/multi-collections`, kept ADR 0011's generated-playlist read-only UI
+deviation explicit, and added
+`tests/e2e/media-collection-route-family.spec.ts` to prove the
+multi-collections, rerun collections, playlists, and filler presets route
+surfaces with deterministic SQLite seed data, visible geometry checks,
+localized English labels, fallback/hydrated controls, and no console/runtime
+errors.
 
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps. Read ErsatzTV
-source only at the pinned commit
-`0d301df5e8512fdfccf3a611188d27ab1690ee31`.
-
-Current status from
-`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`:
-"In progress: `/media/multi-collections` now ports the ErsatzTV
-multi-collection list plus add/edit/delete editor surface ... `/media/playlists`
-now ports the playlist group/tree and playlist editor route ... Generated/system
-playlists intentionally diverge from ErsatzTV's disabled-editor presentation:
-ADR 0011 keeps scheduling semantics but renders generated rows as read-only
-projections with clearer Count and Play All labels."
-
-ErsatzTV source: `ErsatzTV/Pages/MultiCollections*.razor`,
-`ErsatzTV/Pages/RerunCollections.razor`,
-`ErsatzTV/Pages/RerunCollectionEditor.razor`,
-`ErsatzTV/Pages/Playlists.razor`, `ErsatzTV/Pages/PlaylistEditor.razor`,
-`ErsatzTV/Pages/FillerPresets.razor`, and
-`ErsatzTV/Pages/FillerPresetEditor.razor` at the pinned commit. ErsatzRS
-target: `crates/ersatzrs-web/src/admin/pages/media/`,
-`crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`,
-`crates/ersatzrs-web/src/admin/server_fns/filler.rs`,
-`crates/ersatzrs-web/src/api/{collections,playlists,rerun_collections,filler}.rs`,
-and `crates/ersatzrs-web/src/admin/languages/`.
-
-Before editing:
-1. Read the pinned ErsatzTV Razor pages, editor models, validation/save
-   handlers, delete/copy actions, and localization resources for all four
-   route families.
-2. Inspect the current ErsatzRS pages, server functions, raw HTML POST
-   fallbacks, API handlers, language modules, existing browser smoke notes, and
-   ADR 0011 generated-playlist deviation.
-3. Build a Source Map and Visual Source Map for the list and editor routes,
-   including add/delete/copy actions, page-size persistence, validation,
-   generated/system playlist behavior, smart-collection preview, and playout
-   refresh side effects.
-4. Identify remaining `ParityDebt`; if the route family is already complete,
-   prove it and close the tracker instead of inventing new scope.
-
-Implement only the coherent closeout slice: fix any mismatch found in source
-review or browser proof, preserve existing SSR/raw POST fallbacks and
-localized text, keep ADR 0011's intentional generated-playlist deviation
-explicit, and avoid unrelated media-browser refactors. Add focused tests for
-any fixed persistence, validation, preview, delete/copy, or playout-refresh
-behavior.
-
-Add browser coverage that exercises the high-risk workflows across the route
-family: create/edit/delete multi-collections, rerun collections, playlists and
-playlist groups/items, and filler presets; verify visible geometry, hydrated
-actions or fallback forms, localized labels, and no console errors. If one route
-still cannot be proven, keep the exact missing workflow as structured
-`ParityDebt`.
-
-Verify with focused `ersatzrs-web` tests, `cargo xtask hydration-lint -p
-ersatzrs-web`, the added browser spec or documented Playwright run,
-`cargo xtask parity-check web`, and `cargo xtask progress check`. Update
-`docs/progress/parity/multi-collections-rerun-collections-playlists-filler-presets.toml`,
-changelog, and this prompt file only when the evidence supports the new status.
-Report the Source Map, Visual Source Map, behavior closed, remaining
-`ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
+Run `cargo xtask progress gaps` before starting a new gap from this file; the
+next live gap is now the FFmpeg command-generation hardening slice below.
 
 ---
 

@@ -87,6 +87,14 @@ pub fn build_app(app_state: AppState) -> Router {
             "/api/smart-collections/save",
             post(api::collections::save_smart_collection_form),
         )
+        .route(
+            "/api/multi-collections/save",
+            post(api::collections::save_multi_collection_form),
+        )
+        .route(
+            "/api/multi-collections/delete",
+            post(api::collections::delete_multi_collection_form),
+        )
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
             "/api/channels/save-multipart",

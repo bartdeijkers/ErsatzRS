@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Media collection route-family parity is complete for multi-collections,
+  rerun collections, playlists, and filler presets. Multi-collections now have
+  HTML POST fallback save/delete routes matching the other media collection
+  editors, and durable browser coverage proves the route family renders the
+  localized list/editor workflows without console errors.
 - Scanner parity is complete: local music-video NFO parsing now accepts
   ErsatzTV-style XML fragment streams while preserving fallback behavior for
   invalid sidecars, local scans retry SQLite busy/locked contention instead of

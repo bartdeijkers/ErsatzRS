@@ -490,13 +490,15 @@ tbody tr:hover {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
+    min-width: 2rem;
     height: 2rem;
+    padding: 0 0.5rem;
     border: 0;
-    border-radius: 50%;
+    border-radius: var(--radius);
     background: transparent;
     color: var(--color-action-default);
-    font-size: 1.25rem;
+    font: inherit;
+    font-size: 0.875rem;
     cursor: pointer;
 }
 
