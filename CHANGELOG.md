@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.12-alpha] - 2026-06-19
+
 ### Fixed
 
 - Media collection route-family parity is complete for multi-collections,
@@ -401,7 +403,11 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.8-alpha...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.12-alpha...HEAD
+[1.0.12-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.11-alpha...v1.0.12-alpha
+[1.0.11-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.10-alpha...v1.0.11-alpha
+[1.0.10-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.9-alpha...v1.0.10-alpha
+[0.0.9-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.8-alpha...v0.0.9-alpha
 [0.0.8-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.7-alpha...v0.0.8-alpha
 [0.0.7-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.6-alpha...v0.0.7-alpha
 [0.0.6-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.5-alpha...v0.0.6-alpha
