@@ -36,7 +36,7 @@ pub fn tonemap_filter(
     algorithm: TonemapAlgorithm,
 ) -> String {
     let tonemap = format!(
-        "zscale=transfer=linear,tonemap={},zscale=transfer=bt709,format={}",
+        "zscale=t=linear,tonemap={},zscale=p=bt709:t=bt709:m=bt709:r=tv,format={},setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709",
         algorithm.ffmpeg_name(),
         desired_pixel_format.ffmpeg_name()
     );

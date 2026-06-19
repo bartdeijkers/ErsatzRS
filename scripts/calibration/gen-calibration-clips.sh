@@ -165,7 +165,7 @@ mode_stem() {
 
 require_filter() {
   local filter="$1"
-  "$FFMPEG_BIN" -hide_banner -filters 2>&1 | grep -qw "$filter" || {
+  "$FFMPEG_BIN" -hide_banner -filters 2>&1 | grep -w "$filter" >/dev/null || {
     echo "ERROR: ffmpeg filter '$filter' missing; HDR SDR references require zscale + tonemap" >&2
     exit 1
   }
@@ -173,7 +173,7 @@ require_filter() {
 
 require_encoder() {
   local encoder="$1"
-  "$FFMPEG_BIN" -hide_banner -encoders 2>&1 | grep -qw "$encoder" || {
+  "$FFMPEG_BIN" -hide_banner -encoders 2>&1 | grep -w "$encoder" >/dev/null || {
     echo "ERROR: ffmpeg encoder '$encoder' missing; set CAL_HDR_ENCODER or rebuild FFmpeg" >&2
     exit 1
   }

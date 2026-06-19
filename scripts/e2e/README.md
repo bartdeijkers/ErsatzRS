@@ -99,6 +99,22 @@ Minimum manual review when pixel metrics are not wired yet:
    reference. Fail for clipped peak chips, crushed dark grid lines, hue shifts,
    unreadable timer text, geometry changes, or timing/order regressions.
 
+The automated live content gate is:
+
+```bash
+scripts/e2e/hdr-tone-map-proof.sh
+```
+
+It generates short HDR10 PQ and HLG calibration masters plus SDR references,
+boots `ersatzrs-web` on a throwaway SQLite database, seeds each HDR master as
+the active channel source, captures the live MPEG-TS output, asserts 8-bit
+BT.709 SDR signaling with `ffprobe`, and compares the decoded static helper-chip
+crop against the generated SDR reference with PSNR and SSIM. Set
+`HDR_PROOF_KEEP=1` to keep the throwaway DB, server log, live captures, and
+metric files. The same gate honors `HDR_PROOF_MODES`, `HDR_PROOF_CLIP_SECONDS`,
+`HDR_PROOF_CAPTURE_SECONDS`, `HDR_PROOF_SIZE`, `HDR_PROOF_MIN_PSNR`, and
+`HDR_PROOF_MIN_SSIM` for local proof tuning.
+
 ## Requirements
 
 `tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 8.1 on `PATH`

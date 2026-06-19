@@ -55,6 +55,10 @@ release section when tagging a release.
   seed at startup with hardware-compatible presets. HLS segmenter output also
   adds `-max_delay 500000` for
   multichannel AC-3 to tighten A/V interleaving at segment boundaries.
+- HDR-to-SDR software tone mapping now converts and tags the full BT.709 SDR
+  color state instead of leaving BT.2020 primaries/matrix on the output. A new
+  manual `scripts/e2e/hdr-tone-map-proof.sh` gate live-proves HDR10 PQ and HLG
+  calibration streams against generated SDR references.
 - ADRs now track decision state and implementation state as two independent
   sections. `## Status` records only the decision lifecycle
   (Proposed/Accepted/Superseded); a new `## Implementation` section records

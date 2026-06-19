@@ -50,6 +50,14 @@ existing profile tables. HLS segmenter output now emits `-max_delay 500000`
 only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
 idempotence, seed hardware update, hardware preference selection, and AC-3
 max-delay gating.
+
+The 2026-06-19 HDR proof slice added a live HDR -> SDR calibration gate that
+generates HDR10 PQ and HLG masters, boots ErsatzRS on a throwaway database,
+streams each clip through the real MPEG-TS endpoint, probes the captured output
+for 8-bit BT.709 signaling, and compares decoded static helper-chip crops
+against generated SDR references. That proof caught and fixed the software
+tonemap filter, which now converts primaries/matrix/range to BT.709 instead of
+only changing transfer metadata.
 '''
 
 [[debt]]
@@ -77,7 +85,7 @@ resolved    = true
 
 [[debt]]
 id          = 'hdr-tonemap-calibration-live-proof'
-description = 'HDR -> SDR tonemapping matches ErsatzTV command/filter shape in snapshots (software zscale+tonemap, NVENC libplacebo, VAAPI tonemap_opencl, QSV vpp_qsv), and the generator now produces HDR10 PQ / HLG calibration masters plus SDR reference renders. The path has not yet been live-proven by ingesting those HDR clips, streaming through ErsatzRS, and comparing decoded output helper regions (peak-to-black chips, RGBYCM chips, dark grid, timer text, and geometry square) against the generated SDR references. Until that proof exists, HDR support should stay tracked as command-generation/runtime debt rather than being generalized from argv snapshots or TSDuck transport checks.'
+description = 'Resolved 2026-06-19: `scripts/e2e/hdr-tone-map-proof.sh` now live-proves the software HDR -> SDR path by generating HDR10 PQ and HLG calibration masters plus hable SDR references, booting ErsatzRS on a throwaway SQLite database, seeding each HDR master as the active channel source, capturing the live MPEG-TS output, asserting 8-bit BT.709 SDR signaling, and comparing decoded static helper-chip crops against the generated SDR references. The proof caught the previous software zscale+tonemap bug where output stayed tagged BT.2020; `tonemap_filter` now converts and tags BT.709 primaries, transfer, matrix, and range.'
 discovered  = '2026-06-18'
-evidence    = 'ErsatzTV source audit: ColorParams.IsHdr is true for `arib-std-b67` / `smpte2084`; SoftwarePipelineBuilder, NvidiaPipelineBuilder, VaapiPipelineBuilder, and QsvPipelineBuilder all call SetTonemap for HDR sources and reset ColorParams.Default after tonemap. ErsatzRS source audit: derive_color_params flags PQ/HLG as HDR, apply_source_video_filters emits tonemap_filter_for during transcode, and tonemap_filter_for maps software/NVENC/VAAPI/QSV to the same filter families. New calibration command committed in 7cfdaa4 adds CAL_COLOR_MODES/CAL_HDR_MODES and CAL_MAKE_SDR_REFS; local tiny generation/probes proved HDR10 and HLG source signaling plus BT.709 SDR reference signaling, but no live ErsatzRS stream capture or pixel comparison has been run.'
-resolved    = false
+evidence    = '`scripts/e2e/hdr-tone-map-proof.sh` passed on 2026-06-19: HDR10 PQ source signaling was yuv420p10le/bt2020/smpte2084, live output was yuv420p/bt709 with helper-chip psnr=38.45 and ssim=0.997898; HLG source signaling was yuv420p10le/bt2020/arib-std-b67, live output was yuv420p/bt709 with psnr=32.47 and ssim=0.993461. Focused `cargo test -p ersatzrs-ffmpeg --test pipeline_snapshots tonemap` passed after updating the software tonemap snapshots.'
+resolved    = true
