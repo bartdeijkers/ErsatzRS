@@ -453,11 +453,11 @@ where
     T: DeserializeOwned,
 {
     let sanitized = sanitize_nfo_text(input);
-    if !contains_root(&sanitized, root) {
+    let Some(fragment) = extract_root_fragment(&sanitized, root) else {
         return Err(NfoError::MissingRoot(root));
-    }
+    };
 
-    let raw: T = de::from_str(&sanitized)?;
+    let raw: T = de::from_str(&fragment)?;
     Ok(map(raw))
 }
 
@@ -485,20 +485,54 @@ fn sanitize_nfo_text(input: &str) -> String {
 }
 
 fn contains_root(input: &str, root: &str) -> bool {
+    extract_root_fragment(input, root).is_some()
+}
+
+fn extract_root_fragment(input: &str, root: &str) -> Option<String> {
     let mut reader = Reader::from_str(input);
     reader.config_mut().trim_text(true);
+    let mut start = None;
+    let mut depth = 0usize;
 
     loop {
+        let before = usize::try_from(reader.buffer_position()).ok()?;
         match reader.read_event() {
-            Ok(Event::Start(element) | Event::Empty(element))
+            Ok(Event::Empty(element))
                 if element
                     .name()
                     .as_ref()
                     .eq_ignore_ascii_case(root.as_bytes()) =>
             {
-                return true;
+                let end = usize::try_from(reader.buffer_position()).ok()?;
+                return input.get(before..end).map(str::to_owned);
             }
-            Ok(Event::Eof) | Err(_) => return false,
+            Ok(Event::Start(element))
+                if element
+                    .name()
+                    .as_ref()
+                    .eq_ignore_ascii_case(root.as_bytes()) =>
+            {
+                if start.is_none() {
+                    start = Some(before);
+                    depth = 1;
+                    continue;
+                }
+                depth = depth.saturating_add(1);
+            }
+            Ok(Event::End(element))
+                if start.is_some()
+                    && element
+                        .name()
+                        .as_ref()
+                        .eq_ignore_ascii_case(root.as_bytes()) =>
+            {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    let end = usize::try_from(reader.buffer_position()).ok()?;
+                    return input.get(start?..end).map(str::to_owned);
+                }
+            }
+            Ok(Event::Eof) | Err(_) => return None,
             _ => {}
         }
     }
@@ -942,6 +976,28 @@ mod tests {
         assert_eq!(video.track, Some(4));
         assert_eq!(video.directors, ["Toni Basil"]);
         assert!(video.aired.is_some());
+    }
+
+    #[test]
+    fn parses_music_video_nfo_from_fragment_stream() {
+        let parsed = parse_music_video_nfo_str(
+            r"https://example.invalid/metadata
+            <musicvideo>
+                <artist>Talking Heads</artist>
+                <title>Once in a Lifetime</title>
+                <album>Remain in Light</album>
+                <track>4</track>
+                <genre>New Wave</genre>
+            </musicvideo>
+            <ignored><title>Trailing fragment</title></ignored>",
+        )
+        .expect("music-video fragment should parse");
+
+        assert_eq!(parsed.title.as_deref(), Some("Once in a Lifetime"));
+        assert_eq!(parsed.album.as_deref(), Some("Remain in Light"));
+        assert_eq!(parsed.track, Some(4));
+        assert_eq!(parsed.artists, ["Talking Heads"]);
+        assert_eq!(parsed.genres, ["New Wave"]);
     }
 
     #[test]

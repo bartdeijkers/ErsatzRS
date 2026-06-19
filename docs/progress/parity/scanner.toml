@@ -1,7 +1,7 @@
 feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 
 summary    = '''
@@ -37,26 +37,36 @@ data drops `FileNotFound`/`Unavailable` items when `playout.skip_missing_items`
 is enabled, mirroring `PlayoutBuilder`'s `PlayoutSkipMissingItems` gate
 (default off; `RemoteOnly` stays eligible).
 
-Remaining `ParityDebt` is structured below: runtime log evidence from
-2026-06-10 shows real-world music-video NFO files rejected where ErsatzTV is
-lenient, and concurrent scan plus web activity can still abort with SQLite
-database-locked errors.
+The 2026-06-19 hardening slice closed the remaining scanner debts. Music-video
+NFO parsing now mirrors ErsatzTV's fragment-level `XmlReader` behavior by
+extracting the first `<musicvideo>` element from real-world fragment streams
+before deserialization, while truly invalid NFO still falls back to filename
+metadata. Local scanner writes now retry SQLite `BUSY`/`LOCKED` failures with
+bounded backoff, preserving real errors while letting concurrent web/scanner
+writers serialize instead of aborting immediately. The media-server
+`Unavailable` branch is regression-covered for providers that do not support
+remote streaming; the pinned ErsatzTV baseline confirms every concrete
+Plex/Jellyfin/Emby scanner currently overrides `ServerSupportsRemoteStreaming`
+to `true`, so no additional provider path is missing at the baseline.
 '''
 
 [[debt]]
 id          = 'music-video-nfo-fragment-leniency'
 description = 'Local music-video NFO parsing rejects real-world files that ErsatzTV accepts, falling back to filename metadata.'
 discovered  = '2026-06-10'
-evidence    = 'ErsatzRS.log: hundreds of NFO did not contain a <musicvideo> root element errors during music-video scans.'
+evidence    = 'Fixed 2026-06-19: crates/ersatzrs-scanner/src/nfo.rs extracts the first <musicvideo> root from XML fragment streams before deserialization, matching ErsatzTV.Scanner/Core/Metadata/Nfo/MusicVideoNfoReader.cs ConformanceLevel.Fragment behavior. Covered by nfo::tests::parses_music_video_nfo_from_fragment_stream and music_video_enrichment::writes_music_video_metadata_from_fragment_nfo.'
+resolved    = true
 
 [[debt]]
 id          = 'sqlite-scan-locking'
 description = 'Concurrent scan and web activity can abort library scans with SQLite database locked errors instead of serializing work like ErsatzTV.'
 discovered  = '2026-06-10'
-evidence    = 'ErsatzRS.log: library scan failed library_id=3/5 with SQLite code 5 database is locked.'
+evidence    = 'Fixed 2026-06-19: scan_local_library_with_progress retries SQLite BUSY/LOCKED errors with bounded backoff around the idempotent scan operation. Covered by tests::sqlite_busy_retry_waits_for_concurrent_writer.'
+resolved    = true
 
 [[debt]]
 id          = 'media-server-unavailable-branch-unexercised'
-description = 'The media-server Unavailable (State=2) flag path is wired but never taken in practice: only movies and TV are synced from Plex/Jellyfin/Emby, and all three servers report ServerSupportsRemoteStreaming=true for those kinds, so a missing local file always resolves to RemoteOnly (State=3). Kinds that lack remote streaming (e.g. Plex other-video) are not yet synced from media servers, so Unavailable cannot be produced.'
+description = 'The media-server Unavailable (State=2) flag path needed coverage for the generic ErsatzTV branch where a media-server scanner does not support remote streaming.'
 discovered  = '2026-06-17'
-evidence    = 'crates/ersatzrs-infra/src/{plex,jellyfin,emby}.rs flag_unavailable_media_server_items callers pass supports_remote_streaming=true for every synced kind.'
+evidence    = 'Fixed 2026-06-19: the pinned ErsatzTV baseline shows every concrete Plex/Jellyfin/Emby scanner, including PlexOtherVideoLibraryScanner, overrides ServerSupportsRemoteStreaming => true, so no concrete pinned-baseline provider path produces Unavailable today. crates/ersatzrs-infra/tests/media_server.rs now covers the false-support branch with unavailable_flags_present_item_with_missing_local_file_as_unavailable_without_remote_streaming.'
+resolved    = true

@@ -141,3 +141,32 @@ async fn unavailable_flags_present_item_with_missing_local_file_as_remote_only()
     assert_eq!(state(&pool, moved).await, 3, "missing file -> RemoteOnly");
     assert_eq!(state(&pool, restored).await, 0, "returned file restored");
 }
+
+#[tokio::test]
+async fn unavailable_flags_present_item_with_missing_local_file_as_unavailable_without_remote_streaming(
+) {
+    let pool = common::test_db().await;
+    seed_library(&pool).await;
+
+    let moved = seed_movie(&pool, "moved", 0).await;
+    attach_file(&pool, moved, "/definitely/not/here/no-remote.mkv").await;
+    let restored = seed_movie(&pool, "restored", 2).await;
+    attach_file(
+        &pool,
+        restored,
+        concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+    )
+    .await;
+
+    let incoming: std::collections::HashSet<String> = ["moved", "restored"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    flag_unavailable_media_server_items(&pool, "JellyfinMovie", "ItemId", 1, &incoming, &[], false)
+        .await
+        .unwrap();
+
+    assert_eq!(state(&pool, moved).await, 2, "missing file -> Unavailable");
+    assert_eq!(state(&pool, restored).await, 0, "returned file restored");
+}

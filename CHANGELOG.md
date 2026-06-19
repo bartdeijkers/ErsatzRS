@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Scanner parity is complete: local music-video NFO parsing now accepts
+  ErsatzTV-style XML fragment streams while preserving fallback behavior for
+  invalid sidecars, local scans retry SQLite busy/locked contention instead of
+  aborting immediately, and the media-server `Unavailable` state branch has
+  regression coverage.
 - Admin media scan results now refresh hydrated views without a manual reload:
   `/system/health` recomputes current health checks, `/media/trash`,
   `/media/libraries`, and the media browser lists refetch when scanner-updated

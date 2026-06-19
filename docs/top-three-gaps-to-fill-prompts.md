@@ -53,118 +53,33 @@ status changed:
   (`docs(gap-prompt-rules)…` 8ba1efc), and the prior daily reconcile
   (`docs(status): daily reconcile … cfc5024..0438396` a3ae190).
 
-`cargo xtask progress gaps` still lists **4** features, all `In progress`:
+`cargo xtask progress gaps` now lists **3** features:
 `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`,
-`multi-collections-rerun-collections-playlists-filler-presets`, and `scanner`.
+and `multi-collections-rerun-collections-playlists-filler-presets`; `scanner`
+is now `Ported` after the 2026-06-19 hardening slice closed the music-video NFO
+fragment, SQLite locking, and media-server `Unavailable` branch coverage debts.
 Per the **ADR-backed FFmpeg/HLS hardening** rule, the FFmpeg/HLS pair may
 consume a goal-prompt slot when pinned-baseline ErsatzTV gaps are drying up.
 Their open debts are ErsatzRS-specific hardening/deviations carrying their own
-ADRs (`ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and now
+ADRs (`ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and
 `hdr-tonemap-calibration-live-proof` under ADR 0017;
 `active-transcode-limit-not-a-real-ceiling` under ADR 0016) plus a
-hardware-bound NVENC live proof (`nvenc-filter-gate-live-proof`). There are
-still **two** actionable pinned-baseline ErsatzTV parity prompts below, and ADR
-0008 fills slot 3 as manually promoted parity-critical FFmpeg runtime
-infrastructure.
+hardware-bound NVENC live proof (`nvenc-filter-gate-live-proof`).
 
-Ranking: all three prior picks **carry over unchanged** — none had commits
-against their targeted scope this window (the carry-over rule). `scanner` keeps
-slot 1: a foundational backend gap that outranks leaf UI, leading with its two
-runtime-evidenced debts; the window's scan-state UI work did not touch it.
-`multi-collections-…-filler-presets` is slot 2, carried over (no commits). Slot
-3 is the manual maintainer promotion for ADR 0008: completing first-party
-FFmpeg 8.1 release artifacts is not a pinned-baseline ErsatzTV UI/backend gap,
-but it is parity-critical runtime infrastructure because the implementation is
-still `Partial` while release payloads can depend on public "full" FFmpeg
-builds that may miss `drawvg`, `zscale`, or acceptable version/configuration
-output.
+Ranking: completed scanner scope is replaced. The remaining pinned-baseline
+ErsatzTV parity prompt, `multi-collections-…-filler-presets`, moves to slot 1.
+`ffmpeg-command-generation` fills slot 2 because its default-profile and AC-3
+segmenter debts are ADR-backed runtime hardening with direct release/playback
+impact. Slot 3 remains the manual maintainer promotion for ADR 0008: completing
+first-party FFmpeg 8.1 release artifacts is not a pinned-baseline ErsatzTV
+UI/backend gap, but it is parity-critical runtime infrastructure because the
+implementation is still `Partial` while release payloads can depend on public
+"full" FFmpeg builds that may miss `drawvg`, `zscale`, or acceptable
+version/configuration output.
 
 ---
 
-## 1 - Scanner: real-world music-video NFO leniency, SQLite scan locking, and the media-server Unavailable branch (slug `scanner`)
-
-Fix the next ErsatzTV parity gap in ErsatzRS: Scanner hardening for real-world
-music-video NFO leniency, concurrent SQLite scan locking, and exercising the
-media-server `Unavailable` state branch (slug `scanner`, debts
-`music-video-nfo-fragment-leniency`, `sqlite-scan-locking`, and
-`media-server-unavailable-branch-unexercised`).
-
-Use the repo workflow from `AGENTS.md` plus `skills/parity-slice.md`.
-The goal is fully functional ErsatzTV parity without stopgaps. Read ErsatzTV
-source only at the pinned commit
-`0d301df5e8512fdfccf3a611188d27ab1690ee31`.
-
-Lead with the two runtime-evidenced debts; the coverage debt follows.
-
-Current `ParityDebt` from `docs/progress/parity/scanner.toml`:
-- `music-video-nfo-fragment-leniency` (2026-06-10): "Local music-video NFO
-  parsing rejects real-world files that ErsatzTV accepts, falling back to
-  filename metadata." Evidence: "ErsatzRS.log: hundreds of `NFO did not contain
-  a <musicvideo> root element` errors during music-video scans."
-- `sqlite-scan-locking` (2026-06-10): "Concurrent scan and web activity can
-  abort library scans with SQLite database locked errors instead of serializing
-  work like ErsatzTV." Evidence: "ErsatzRS.log: library scan failed
-  library_id=3/5 with SQLite code 5 database is locked."
-- `media-server-unavailable-branch-unexercised` (2026-06-17): the `Unavailable`
-  (State=2) flag path is wired but never taken because only movies/TV are synced
-  from Plex/Jellyfin/Emby and all three report `ServerSupportsRemoteStreaming=true`
-  for those kinds, so a missing local file always resolves to `RemoteOnly`
-  (State=3). This is coverage/breadth debt, not a runtime failure.
-
-ErsatzTV source: `$ERSATZTV_SRC/ErsatzTV.Scanner/` at the pinned commit,
-especially the local music-video scanner/NFO parsing path, the scan
-coordination/serialization behavior around library scans, and the
-`MediaItemState` producers for kinds that lack remote streaming. ErsatzRS
-target: `crates/ersatzrs-scanner`,
-`crates/ersatzrs-infra/src/{plex,jellyfin,emby,media_server}.rs`,
-`crates/ersatzrs-infra/src/repositories/`, scanner/infra tests under
-`crates/ersatzrs-scanner/tests/` and `crates/ersatzrs-infra/tests/`, and the
-scanner parity file.
-
-Before editing:
-1. Read the pinned ErsatzTV scanner source for local music-video NFO parsing
-   and fallback behavior, scan transaction boundaries and scan
-   concurrency/serialization, and which media kinds drive the `Unavailable`
-   (non-remote-streaming) state.
-2. Inspect the current ErsatzRS local music-video scanner, NFO parser, provider
-   sync write paths, the `flag_unavailable_media_server_items` callers, SQLite
-   pool/transaction usage, and existing scanner/infra tests and fixtures.
-3. Build a Source Map for music-video scan input -> NFO parse -> metadata row
-   writes -> fallback metadata, a second for web/scanner concurrent database
-   access and lock handling, and a third for the media-server item-state
-   producer paths (which kinds can reach `Unavailable`).
-4. Keep every remaining shortfall visible as structured `ParityDebt`, not prose.
-
-Implement the coherent scanner hardening slice: make local music-video NFO
-parsing accept the real-world fragments ErsatzTV accepts while preserving the
-existing strict row-shape and fallback semantics; make concurrent scan plus web
-activity serialize/retry consistently enough to stop aborting with SQLite
-database-locked errors; and either exercise the `Unavailable` branch for a kind
-ErsatzTV produces it for or keep the exact remaining shortfall as open debt with
-a tightened description. Do not weaken metadata parity, path hashing, or
-provider enum values to make fixtures pass. If a production log sample is needed
-but unavailable, build a minimal fixture from the observed failure shape and
-keep any unproven runtime breadth as structured `ParityDebt`.
-
-Add focused scanner/infra regressions for the accepted NFO fragment shape, the
-metadata written from that NFO, the fallback for truly invalid NFO, the SQLite
-locking scenario, and any media-server state-producer path you change. If the
-locking fix touches shared DB behavior, add the narrow repository or integration
-coverage that proves it does not hide real errors or break MySQL feature builds.
-
-Verify with focused `ersatzrs-scanner` and affected `ersatzrs-infra` tests,
-`cargo test --workspace --all-features` if shared DB behavior changed broadly,
-`cargo xtask progress check`, and `cargo xtask progress gaps`. Update
-`docs/progress/parity/scanner.toml`, the changelog, and this prompt file only
-when the evidence supports the new status. Report the Source Maps, behavior
-closed, remaining `ParityDebt`, verification run, and changed files.
-Remember that ErsatzTV could have a less than optimal solution. If you have a
-better way, please create an ADR, but only after careful review in depth.
-update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
-
----
-
-## 2 - Multi-collections / Rerun collections / Playlists / Filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
+## 1 - Multi-collections / Rerun collections / Playlists / Filler presets: close route-family parity (slug `multi-collections-rerun-collections-playlists-filler-presets`)
 
 Fix the next ErsatzTV parity gap in ErsatzRS: finish and prove the media
 collection route-family parity closeout for `/media/multi-collections`,
@@ -238,6 +153,73 @@ update changelog, docs and /docs/top-three-gaps-to-fill-prompts.md when done.
 
 ---
 
+## 2 - FFmpeg command generation: default profiles, AC-3 segmenter delay, and HDR live proof (slug `ffmpeg-command-generation`)
+
+Fix the next ErsatzRS runtime-hardening gap in ErsatzRS: finish the ADR-backed
+FFmpeg command-generation debts for default profile seeding, multichannel AC-3
+segmenter delay, and HDR tonemap live proof (slug `ffmpeg-command-generation`,
+debts `default-profile-1080p60-retune`, `ac3-segmenter-max-delay`, and
+`hdr-tonemap-calibration-live-proof`). Fold `nvenc-filter-gate-live-proof` into
+the validation run only if encoder-capable hardware/builds are available.
+
+Use the repo workflow from `AGENTS.md`. This is ADR-backed FFmpeg/HLS runtime
+hardening, not a pinned-baseline ErsatzTV behavior gap, so do not force it
+through `skills/parity-slice.md`. Read ADR 0017, ADR 0014, ADR 0003,
+`docs/progress/parity/ffmpeg-command-generation.toml`,
+`plans/hls-transcode-capacity-and-admission.md` only for HLS interactions, and
+the pinned ErsatzTV FFmpeg source where it defines the command/filter baseline.
+
+Current `ParityDebt` from
+`docs/progress/parity/ffmpeg-command-generation.toml`:
+- `default-profile-1080p60-retune` (ADR 0017): fresh databases still seed one
+  conservative `1920x1080 x264 aac` profile instead of five ready-to-use
+  720p/1080p/1080p HDR/4K/4K HDR AC-3 profiles with seed-time hardware
+  acceleration detection and profile #2 as the default.
+- `ac3-segmenter-max-delay` (ADR 0017): HLS segmenter output does not emit
+  `-max_delay 500000` for multichannel AC-3, so 6-channel AC-3 can pop or drift
+  at segment boundaries.
+- `hdr-tonemap-calibration-live-proof`: HDR->SDR command/filter shape is
+  snapshot-covered and calibration clips exist, but no live ErsatzRS stream
+  capture/pixel comparison has proven the path.
+
+Before editing:
+1. Inspect `crates/ersatzrs-infra/src/db.rs`, `crates/ersatzrs-domain/src/ffmpeg.rs`,
+   `crates/ersatzrs-ffmpeg/src/pipeline/`, `crates/ersatzrs-ffmpeg/src/filter/`,
+   calibration scripts, and current FFmpeg profile tests/snapshots.
+2. Build a Source Map for fresh DB defaults -> hardware capability detection ->
+   seeded profile rows -> command generation -> HLS segmenter output -> live
+   HDR calibration proof.
+3. Verify which parts are ADR 0017 deviations from ErsatzTV rather than
+   pinned-baseline parity, and keep that distinction visible.
+4. Keep hardware-bound or platform-bound shortfalls as structured `ParityDebt`,
+   not prose.
+
+Implement the coherent hardening slice: seed the five ADR 0017 profiles on
+fresh databases without overwriting existing user profiles; set the default
+profile pointer to the 1080p SDR profile; detect and apply the preferred
+available hardware acceleration at seed time while preserving ADR 0014 runtime
+fallback; emit `-max_delay 500000` only for multichannel AC-3 HLS segmenter
+outputs; and run or script the HDR calibration live proof that streams HDR10 PQ
+and HLG clips through ErsatzRS, decodes the output, and compares helper regions
+against SDR references. Do not weaken existing command-generation snapshots or
+replace proof with argv-only assertions.
+
+Add focused tests/snapshots for the seeded profile rows, hardware-acceleration
+selection fallback, AC-3 `-max_delay` gating, and HDR tonemap command paths.
+If live HDR proof cannot run on the current machine, keep
+`hdr-tonemap-calibration-live-proof` open with exact missing commands and
+runtime prerequisites.
+
+Verify with focused `ersatzrs-infra` DB seed tests, `ersatzrs-ffmpeg` snapshot
+tests, the HDR calibration/live-stream proof when available, `cargo xtask smoke`
+if streaming behavior changes, `cargo xtask progress check`, and
+`cargo xtask progress gaps`. Update ADR 0017, `docs/progress/parity/ffmpeg-command-generation.toml`,
+the changelog, and this prompt file only when evidence supports the new state.
+Report the Source Map, behavior closed, remaining `ParityDebt`, verification
+run, and changed files.
+
+---
+
 ## 3 - ADR 0008: complete first-party FFmpeg 8.1 release artifacts and runtime validation
 
 Fix the next ErsatzRS parity-infrastructure gap: complete ADR 0008's FFmpeg 8.1
@@ -306,29 +288,19 @@ the implementation direction.
 
 ---
 
-## Allowed future hardening prompts: FFmpeg command generation / HLS segmenter (slugs `ffmpeg-command-generation`, `hls-variant-playlists-segmenter`)
+## Allowed future hardening prompts: HLS segmenter and hardware-bound FFmpeg proof
 
-These two `In progress` features remain in `cargo xtask progress gaps`. Their
-open debts are **not** pinned-baseline ErsatzTV parity gaps, but they are now
-allowed to consume goal-prompt slots as ADR-backed FFmpeg/HLS runtime hardening
-when fewer than three stronger pinned-baseline parity prompts remain:
+The remaining FFmpeg/HLS open debts are **not** pinned-baseline ErsatzTV parity
+gaps, but they are allowed to consume goal-prompt slots as ADR-backed
+FFmpeg/HLS runtime hardening when fewer than three stronger pinned-baseline
+parity prompts remain:
 
-- `ac3-segmenter-max-delay`, `default-profile-1080p60-retune`, and
-  `hdr-tonemap-calibration-live-proof` (`ffmpeg-command-generation`) and
-  `active-transcode-limit-not-a-real-ceiling`
-  (`hls-variant-playlists-segmenter`) are ErsatzRS-specific streaming
-  hardening/deviations tracked under ADR 0016 / ADR 0017 and
+- `active-transcode-limit-not-a-real-ceiling`
+  (`hls-variant-playlists-segmenter`) is ErsatzRS-specific streaming
+  hardening/deviation tracked under ADR 0016 and
   [`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md),
-  not behavior present in ErsatzTV at the pin. They should be framed as runtime
+  not behavior present in ErsatzTV at the pin. It should be framed as runtime
   hardening prompts, not parity-porting prompts.
-- `hdr-tonemap-calibration-live-proof` (added 2026-06-18) is runtime proof debt:
-  the HDR->SDR tonemap path matches ErsatzTV in snapshots and the calibration
-  generator now emits HDR10 PQ / HLG masters plus SDR references, but it has not
-  been live-proven by streaming the HDR clips through ErsatzRS and comparing
-  decoded helper regions. Per the fold-verification rule it should ride the
-  e2e/calibration validation gate of an FFmpeg/HLS hardening or ADR 0008
-  release-artifact prompt (which already lists an HDR `zscale`/`tonemap` smoke
-  transcode gate) rather than becoming proof-only scope.
 - `nvenc-filter-gate-live-proof` is hardware-bound verification debt; per the
   fold-hardware-bound-verification rule it should ride a future encoder-capable
   verification session or a broader FFmpeg/HLS hardening prompt rather than

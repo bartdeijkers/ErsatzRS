@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::RepositoryError;
@@ -26,6 +28,7 @@ pub mod nfo;
 
 const METADATA_KIND_FALLBACK: i32 = 0;
 const METADATA_KIND_SIDECAR: i32 = 1;
+const SQLITE_BUSY_RETRY_DELAYS_MS: &[u64] = &[250, 500, 1_000, 2_000, 4_000];
 
 #[derive(Debug, Error)]
 pub enum ScannerError {
@@ -111,6 +114,19 @@ pub async fn scan_local_library(
     clippy::cast_possible_truncation
 )]
 pub async fn scan_local_library_with_progress(
+    pool: &DbPool,
+    config: &LocalScanConfig,
+    progress: Option<&dyn ScanProgressSink>,
+) -> Result<LocalScanReport> {
+    retry_sqlite_busy(|| scan_local_library_with_progress_once(pool, config, progress)).await
+}
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation
+)]
+async fn scan_local_library_with_progress_once(
     pool: &DbPool,
     config: &LocalScanConfig,
     progress: Option<&dyn ScanProgressSink>,
@@ -245,6 +261,45 @@ pub async fn scan_local_library_with_progress(
         sink.report(1.0);
     }
     Ok(report)
+}
+
+async fn retry_sqlite_busy<T, Fut, F>(mut operation: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    let mut attempt = 0usize;
+    loop {
+        match operation().await {
+            Ok(value) => return Ok(value),
+            Err(error)
+                if is_sqlite_busy_error(&error) && attempt < SQLITE_BUSY_RETRY_DELAYS_MS.len() =>
+            {
+                let delay = SQLITE_BUSY_RETRY_DELAYS_MS[attempt];
+                attempt += 1;
+                warn!(
+                    attempt,
+                    delay_ms = delay,
+                    error = %error,
+                    "sqlite database was busy during scanner write; retrying"
+                );
+                tokio::time::sleep(StdDuration::from_millis(delay)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn is_sqlite_busy_error(error: &ScannerError) -> bool {
+    let ScannerError::Sqlx(sqlx::Error::Database(database_error)) = error else {
+        return false;
+    };
+    let code_matches = database_error
+        .code()
+        .as_deref()
+        .is_some_and(|code| matches!(code, "5" | "6" | "SQLITE_BUSY" | "SQLITE_LOCKED"));
+    let message = database_error.message().to_ascii_lowercase();
+    code_matches || message.contains("database is locked") || message.contains("database is busy")
 }
 
 /// Walks the music-video library root and yields `(artist_folder, file_path)`
@@ -1857,7 +1912,7 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_scannable_for_kind, path_hash};
+    use super::{is_scannable_for_kind, path_hash, retry_sqlite_busy};
     use ersatzrs_domain::LibraryMediaKind;
     use std::path::Path;
 
@@ -1887,6 +1942,85 @@ mod tests {
             Path::new("/media/song.flac"),
             LibraryMediaKind::Movies
         ));
+    }
+
+    #[tokio::test]
+    async fn sqlite_busy_retry_preserves_non_busy_errors() {
+        let attempts = std::cell::Cell::new(0usize);
+
+        let error = retry_sqlite_busy(|| {
+            attempts.set(attempts.get() + 1);
+            async { Err::<(), super::ScannerError>(super::ScannerError::MissingLibraryPaths(42)) }
+        })
+        .await
+        .expect_err("non-busy errors should not be retried away");
+
+        assert_eq!(attempts.get(), 1);
+        assert!(matches!(
+            error,
+            super::ScannerError::MissingLibraryPaths(42)
+        ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn sqlite_busy_retry_waits_for_concurrent_writer() {
+        use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+        use sqlx::{Executor, Row};
+        use std::time::Duration as StdDuration;
+        use tempfile::TempDir;
+
+        async fn pool(database_url: &str) -> sqlx::SqlitePool {
+            let options = database_url
+                .parse::<SqliteConnectOptions>()
+                .expect("sqlite options")
+                .create_if_missing(true)
+                .foreign_keys(true)
+                .busy_timeout(StdDuration::from_millis(50));
+            SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(options)
+                .await
+                .expect("connect sqlite")
+        }
+
+        let temp = TempDir::new().expect("temp dir");
+        let database_url = format!("sqlite:{}", temp.path().join("busy.db").display());
+        let holder = pool(&database_url).await;
+        let writer = pool(&database_url).await;
+        holder
+            .execute(r#"CREATE TABLE "BusyRetry" ("Id" INTEGER PRIMARY KEY, "Name" TEXT)"#)
+            .await
+            .expect("create table");
+
+        let lock_pool = holder.clone();
+        let lock = tokio::spawn(async move {
+            let mut tx = lock_pool.begin().await.expect("begin lock tx");
+            sqlx::query(r#"INSERT INTO "BusyRetry" ("Name") VALUES ('held')"#)
+                .execute(&mut *tx)
+                .await
+                .expect("hold write lock");
+            tokio::time::sleep(StdDuration::from_millis(300)).await;
+            tx.commit().await.expect("release lock");
+        });
+        tokio::time::sleep(StdDuration::from_millis(50)).await;
+
+        retry_sqlite_busy(|| async {
+            sqlx::query(r#"INSERT INTO "BusyRetry" ("Name") VALUES ('retried')"#)
+                .execute(&writer)
+                .await?;
+            Ok(())
+        })
+        .await
+        .expect("retry should wait for lock release");
+        lock.await.expect("lock task");
+
+        let count: i64 = sqlx::query(r#"SELECT COUNT(*) AS "Count" FROM "BusyRetry""#)
+            .fetch_one(&writer)
+            .await
+            .expect("count rows")
+            .get("Count");
+        assert_eq!(count, 2);
     }
 
     #[cfg(not(feature = "mysql"))]
@@ -2162,6 +2296,211 @@ mod tests {
         }
 
         async fn count_table(pool: &SqlitePool, table: &str) -> i64 {
+            let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
+            sqlx::query_scalar(assert_sql_safe(sql))
+                .fetch_one(pool)
+                .await
+                .expect("count")
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    mod music_video_enrichment {
+        use super::super::{
+            upsert_artist_for_folder, upsert_local_music_video, LocalLibraryPath,
+            METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
+        };
+        use chrono::Duration;
+        use ersatzrs_domain::{LibraryMediaKind, MediaVersion, VideoScanKind};
+        use ersatzrs_infra::db::assert_sql_safe;
+        use ersatzrs_infra::ffprobe::FfprobeMediaVersion;
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::{Executor, Row, SqlitePool};
+        use std::path::Path;
+        use tempfile::TempDir;
+
+        #[tokio::test]
+        async fn writes_music_video_metadata_from_fragment_nfo() {
+            let temp = TempDir::new().expect("temp dir");
+            let library_path = seed_music_video_library_path(temp.path());
+            let artist_dir = temp.path().join("Talking Heads");
+            std::fs::create_dir_all(&artist_dir).expect("artist dir");
+            let video_path = artist_dir.join("Once in a Lifetime.mkv");
+            std::fs::write(&video_path, b"not probed").expect("video file");
+            std::fs::write(
+                artist_dir.join("Once in a Lifetime.nfo"),
+                r"https://example.invalid/nfo
+                <musicvideo>
+                    <artist>Talking Heads</artist>
+                    <title>Once in a Lifetime</title>
+                    <album>Remain in Light</album>
+                    <track>4</track>
+                    <plot>Iconic music video.</plot>
+                    <year>1980</year>
+                    <genre>New Wave</genre>
+                    <tag>iconic</tag>
+                    <studio>Sire</studio>
+                    <director>Toni Basil</director>
+                </musicvideo>",
+            )
+            .expect("nfo file");
+
+            let pool = test_db().await;
+            seed_music_video_library(&pool, &library_path).await;
+            let artist_id = upsert_artist_for_folder(&pool, &library_path, "Talking Heads")
+                .await
+                .expect("artist");
+
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                artist_id,
+                &artist_dir,
+                &video_path,
+                probed_version(),
+            )
+            .await
+            .expect("music video upsert");
+
+            let row = sqlx::query(
+                r#"SELECT "MetadataKind", "Title", "Album", "Plot", "Year", "Track"
+                   FROM "MusicVideoMetadata" LIMIT 1"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("metadata row");
+            assert_eq!(row.get::<i32, _>("MetadataKind"), METADATA_KIND_SIDECAR);
+            assert_eq!(
+                row.get::<Option<String>, _>("Title").as_deref(),
+                Some("Once in a Lifetime")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("Album").as_deref(),
+                Some("Remain in Light")
+            );
+            assert_eq!(
+                row.get::<Option<String>, _>("Plot").as_deref(),
+                Some("Iconic music video.")
+            );
+            assert_eq!(row.get::<Option<i32>, _>("Year"), Some(1980));
+            assert_eq!(row.get::<Option<i32>, _>("Track"), Some(4));
+
+            assert_eq!(count(&pool, "MusicVideoArtist").await, 1);
+            assert_eq!(count(&pool, "Genre").await, 1);
+            assert_eq!(count(&pool, "Tag").await, 1);
+            assert_eq!(count(&pool, "Studio").await, 1);
+            assert_eq!(count(&pool, "Director").await, 1);
+        }
+
+        #[tokio::test]
+        async fn invalid_music_video_nfo_falls_back_to_filename_metadata() {
+            let temp = TempDir::new().expect("temp dir");
+            let library_path = seed_music_video_library_path(temp.path());
+            let artist_dir = temp.path().join("Talking Heads");
+            std::fs::create_dir_all(&artist_dir).expect("artist dir");
+            let video_path = artist_dir.join("Broken Video.mkv");
+            std::fs::write(&video_path, b"not probed").expect("video file");
+            std::fs::write(artist_dir.join("Broken Video.nfo"), b"<not-music-video />")
+                .expect("nfo file");
+
+            let pool = test_db().await;
+            seed_music_video_library(&pool, &library_path).await;
+            let artist_id = upsert_artist_for_folder(&pool, &library_path, "Talking Heads")
+                .await
+                .expect("artist");
+
+            upsert_local_music_video(
+                &pool,
+                &library_path,
+                artist_id,
+                &artist_dir,
+                &video_path,
+                probed_version(),
+            )
+            .await
+            .expect("music video upsert");
+
+            let row = sqlx::query(
+                r#"SELECT "MetadataKind", "Title", "Album", "Track"
+                   FROM "MusicVideoMetadata" LIMIT 1"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("metadata row");
+            assert_eq!(row.get::<i32, _>("MetadataKind"), METADATA_KIND_FALLBACK);
+            assert_eq!(
+                row.get::<Option<String>, _>("Title").as_deref(),
+                Some("Broken Video")
+            );
+            assert!(row.get::<Option<String>, _>("Album").is_none());
+            assert!(row.get::<Option<i32>, _>("Track").is_none());
+        }
+
+        fn seed_music_video_library_path(path: &Path) -> LocalLibraryPath {
+            LocalLibraryPath {
+                id: 1,
+                path: path.display().to_string(),
+                media_kind: LibraryMediaKind::MusicVideos,
+            }
+        }
+
+        async fn seed_music_video_library(pool: &SqlitePool, library_path: &LocalLibraryPath) {
+            pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+                .await
+                .expect("media source");
+            pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+                .await
+                .expect("local source");
+            pool.execute(
+                r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+                   VALUES (1, 'Music Videos', 3, 1)"#,
+            )
+            .await
+            .expect("library");
+            pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+                .await
+                .expect("local library");
+            sqlx::query(
+                r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#,
+            )
+            .bind(&library_path.path)
+            .execute(pool)
+            .await
+            .expect("library path");
+        }
+
+        fn probed_version() -> FfprobeMediaVersion {
+            FfprobeMediaVersion {
+                version: MediaVersion {
+                    name: "Main".to_owned(),
+                    duration: Duration::seconds(180),
+                    video_scan_kind: VideoScanKind::Progressive,
+                    width: 1920,
+                    height: 1080,
+                    ..MediaVersion::default()
+                },
+                streams: Vec::new(),
+                chapters: Vec::new(),
+            }
+        }
+
+        async fn test_db() -> SqlitePool {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("connect sqlite");
+            pool.execute("PRAGMA foreign_keys = ON")
+                .await
+                .expect("foreign keys");
+            sqlx::migrate!("../../migrations")
+                .run(&pool)
+                .await
+                .expect("migrate");
+            pool
+        }
+
+        async fn count(pool: &SqlitePool, table: &str) -> i64 {
             let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
             sqlx::query_scalar(assert_sql_safe(sql))
                 .fetch_one(pool)
