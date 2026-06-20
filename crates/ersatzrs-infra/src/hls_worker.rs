@@ -4,7 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
-    atomic::{AtomicI32, AtomicI64, Ordering},
+    atomic::{AtomicI32, AtomicI64, AtomicU64, Ordering},
     Arc, Mutex as StdMutex, OnceLock,
 };
 use std::time::Duration;
@@ -53,11 +53,13 @@ const HLS_WORK_AHEAD_TRANSCODE_SECONDS: u64 = 44;
 const HLS_ACTIVE_WATCH_WINDOW: Duration = Duration::from_secs(30);
 const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25);
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
+const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 const DEFAULT_ACTIVE_TRANSCODE_LIMIT: i32 = 2;
 
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
 static HLS_ACTIVE_TRANSCODE_COUNT: AtomicI32 = AtomicI32::new(0);
+static HLS_ACTIVE_TRANSCODE_SLOT_ID: AtomicU64 = AtomicU64::new(1);
 static HLS_ACTIVE_TRANSCODE_SLOTS: OnceLock<StdMutex<HashMap<String, ActiveTranscodeSlot>>> =
     OnceLock::new();
 
@@ -163,6 +165,8 @@ pub struct HlsSessionWorker {
     last_delete_ms: Arc<AtomicI64>,
     state: AtomicI32,
     admission_status: AtomicI32,
+    reclaim_requested_slot_id: Arc<AtomicU64>,
+    reclaim_reacquire_deferred_until_ms: Arc<AtomicI64>,
     playlist_start: Mutex<DateTime<Utc>>,
     ts_continuity: Mutex<TsContinuityState>,
     init_segment_cache: Mutex<HlsInitSegmentCache>,
@@ -191,6 +195,8 @@ impl HlsSessionWorker {
             last_delete_ms: Arc::new(AtomicI64::new(0)),
             state: AtomicI32::new(HlsSessionState::SeekAndRealtime.as_i32()),
             admission_status: AtomicI32::new(HlsAdmissionStatus::Waiting.as_i32()),
+            reclaim_requested_slot_id: Arc::new(AtomicU64::new(0)),
+            reclaim_reacquire_deferred_until_ms: Arc::new(AtomicI64::new(0)),
             playlist_start: Mutex::new(Utc::now()),
             ts_continuity: Mutex::new(TsContinuityState::default()),
             init_segment_cache: Mutex::new(HlsInitSegmentCache::default()),
@@ -291,6 +297,14 @@ impl HlsSessionWorker {
                 continue;
             }
 
+            if let Some(delay) = self.active_transcode_reacquire_delay() {
+                self.set_admission_status(HlsAdmissionStatus::Waiting);
+                self.set_session_state(self.session_state().throttle());
+                let _ = self.trim_playlist_inner().await;
+                tokio::time::sleep(delay).await;
+                continue;
+            }
+
             let work_ahead_reservation = if realtime_by_buffer {
                 None
             } else {
@@ -311,14 +325,17 @@ impl HlsSessionWorker {
                     active_transcode_kind,
                     Arc::clone(&self.last_access_ms),
                     Arc::clone(&self.reclaim_transcode),
+                    Arc::clone(&self.reclaim_requested_slot_id),
+                    Arc::clone(&self.reclaim_reacquire_deferred_until_ms),
                     idle_timeout.is_some(),
                 ),
             );
-            let Some(_active_transcode_reservation) = active_transcode_reservation else {
+            let Some(active_transcode_reservation) = active_transcode_reservation else {
                 if let Some(reclaim) = request_active_transcode_reclaim(&self.channel_number) {
                     tracing::info!(
                         channel_number = %self.channel_number,
                         target_channel = %reclaim.channel_number,
+                        target_slot_id = reclaim.slot_id,
                         reason = ?reclaim.reason,
                         "requesting HLS transcode slot reclaim"
                     );
@@ -333,6 +350,7 @@ impl HlsSessionWorker {
             };
             self.set_admission_status(HlsAdmissionStatus::Transcoding);
             let _admission_status_guard = AdmissionStatusGuard::new(&self);
+            let active_transcode_slot_id = active_transcode_reservation.slot_id();
             let watch_idle_timeout = transcode_watch_idle_timeout(idle_timeout);
             let decision =
                 hls_transcode_decision(self.session_state(), transcoded_until, now, realtime);
@@ -405,6 +423,7 @@ impl HlsSessionWorker {
                         &mut cleanup_interval,
                         idle_timeout,
                         watch_idle_timeout,
+                        Some(active_transcode_slot_id),
                     )
                     .await;
                 if let Err(error) =
@@ -684,6 +703,7 @@ impl HlsSessionWorker {
                     &mut cleanup_interval,
                     idle_timeout,
                     watch_idle_timeout,
+                    Some(active_transcode_slot_id),
                 )
                 .await;
             if let Some(path) = graphics_cleanup_dir {
@@ -778,6 +798,7 @@ impl HlsSessionWorker {
                             &mut cleanup_interval,
                             idle_timeout,
                             watch_idle_timeout,
+                            Some(active_transcode_slot_id),
                         )
                         .await
                     {
@@ -822,21 +843,9 @@ impl HlsSessionWorker {
         cleanup_interval: &mut tokio::time::Interval,
         idle_timeout: Option<Duration>,
         watch_idle_timeout: Option<Duration>,
+        active_transcode_slot_id: Option<u64>,
     ) -> HlsProcessOutcome {
-        let mut process = Command::new(&command.executable);
-        process
-            .args(&command.arguments)
-            .current_dir(&self.working_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-
-        for variable in command.environment {
-            process.env(variable.name, variable.value);
-        }
-
-        let Ok(mut child) = process.spawn() else {
+        let Ok(mut child) = self.spawn_hls_child(command) else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
             return HlsProcessOutcome::Failed("failed to spawn ffmpeg hls segmenter".to_owned());
         };
@@ -908,21 +917,60 @@ impl HlsSessionWorker {
                         .await;
                     return HlsProcessOutcome::Reclaimed;
                 }
-                () = self.reclaim_transcode.notified() => {
-                    tracing::info!(
-                        channel_number = %self.channel_number,
-                        "reclaiming HLS transcode slot for admission control"
-                    );
-                    self
-                        .terminate_hls_child(&mut child, stderr_task.take(), "hls transcode capacity reclaim")
-                        .await;
-                    return HlsProcessOutcome::Reclaimed;
+                () = self.reclaim_transcode.notified(), if active_transcode_slot_id.is_some() => {
+                    if let Some(outcome) = self
+                        .reclaim_hls_child_for_admission(
+                            active_transcode_slot_id,
+                            &mut child,
+                            &mut stderr_task,
+                        )
+                        .await
+                    {
+                        return outcome;
+                    }
                 }
                 _ = cleanup_interval.tick() => {
                     let _ = self.trim_playlist_inner().await;
                 }
             }
         }
+    }
+
+    fn spawn_hls_child(&self, command: FfmpegCommand) -> std::io::Result<Child> {
+        let mut process = Command::new(&command.executable);
+        process
+            .args(&command.arguments)
+            .current_dir(&self.working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+
+        for variable in command.environment {
+            process.env(variable.name, variable.value);
+        }
+
+        process.spawn()
+    }
+
+    async fn reclaim_hls_child_for_admission(
+        &self,
+        active_transcode_slot_id: Option<u64>,
+        child: &mut Child,
+        stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
+    ) -> Option<HlsProcessOutcome> {
+        let slot_id = active_transcode_slot_id?;
+        if !self.take_reclaim_request(slot_id) {
+            return None;
+        }
+        tracing::info!(
+            channel_number = %self.channel_number,
+            active_transcode_slot_id = slot_id,
+            "reclaiming HLS transcode slot for admission control"
+        );
+        self.terminate_hls_child(child, stderr_task.take(), "hls transcode capacity reclaim")
+            .await;
+        Some(HlsProcessOutcome::Reclaimed)
     }
 
     async fn wait_for_idle_timeout(&self, idle_timeout: Option<Duration>) {
@@ -952,6 +1000,17 @@ impl HlsSessionWorker {
 
     fn was_recently_accessed(&self) -> bool {
         self.idle_for_duration() < HLS_ACTIVE_WATCH_WINDOW
+    }
+
+    fn active_transcode_reacquire_delay(&self) -> Option<Duration> {
+        active_transcode_reacquire_delay(
+            &self.reclaim_reacquire_deferred_until_ms,
+            Utc::now().timestamp_millis(),
+        )
+    }
+
+    fn take_reclaim_request(&self, active_transcode_slot_id: u64) -> bool {
+        take_reclaim_request(&self.reclaim_requested_slot_id, active_transcode_slot_id)
     }
 
     async fn terminate_hls_child(
@@ -1846,10 +1905,13 @@ enum ActiveTranscodeKind {
 
 #[derive(Clone)]
 struct ActiveTranscodeSlot {
+    slot_id: u64,
     channel_number: String,
     kind: ActiveTranscodeKind,
     last_access_ms: Arc<AtomicI64>,
     reclaim_transcode: Arc<Notify>,
+    reclaim_requested_slot_id: Arc<AtomicU64>,
+    reclaim_reacquire_deferred_until_ms: Arc<AtomicI64>,
     allow_watched_preemption: bool,
 }
 
@@ -1859,13 +1921,18 @@ impl ActiveTranscodeSlot {
         kind: ActiveTranscodeKind,
         last_access_ms: Arc<AtomicI64>,
         reclaim_transcode: Arc<Notify>,
+        reclaim_requested_slot_id: Arc<AtomicU64>,
+        reclaim_reacquire_deferred_until_ms: Arc<AtomicI64>,
         allow_watched_preemption: bool,
     ) -> Self {
         Self {
+            slot_id: next_active_transcode_slot_id(),
             channel_number: channel_number.to_owned(),
             kind,
             last_access_ms,
             reclaim_transcode,
+            reclaim_requested_slot_id,
+            reclaim_reacquire_deferred_until_ms,
             allow_watched_preemption,
         }
     }
@@ -1876,10 +1943,23 @@ impl ActiveTranscodeSlot {
             .max(0);
         Duration::from_millis(u64::try_from(idle_ms).unwrap_or(u64::MAX))
     }
+
+    fn request_reclaim(&self, now_ms: i64) {
+        defer_active_transcode_reacquire(&self.reclaim_reacquire_deferred_until_ms, now_ms);
+        self.reclaim_requested_slot_id
+            .store(self.slot_id, Ordering::Release);
+    }
 }
 
 struct ActiveTranscodeReservation {
     channel_number: String,
+    slot_id: u64,
+}
+
+impl ActiveTranscodeReservation {
+    const fn slot_id(&self) -> u64 {
+        self.slot_id
+    }
 }
 
 impl Drop for ActiveTranscodeReservation {
@@ -1914,8 +1994,13 @@ enum ActiveTranscodeReclaimReason {
 
 struct ActiveTranscodeReclaim {
     channel_number: String,
+    slot_id: u64,
     notify: Arc<Notify>,
     reason: ActiveTranscodeReclaimReason,
+}
+
+fn next_active_transcode_slot_id() -> u64 {
+    HLS_ACTIVE_TRANSCODE_SLOT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 fn active_transcode_slots() -> &'static StdMutex<HashMap<String, ActiveTranscodeSlot>> {
@@ -1942,12 +2027,16 @@ fn try_reserve_active_transcode(
         return None;
     }
 
+    let slot_id = slot.slot_id;
     slots.insert(channel_number.clone(), slot);
     HLS_ACTIVE_TRANSCODE_COUNT.store(
         i32::try_from(slots.len()).unwrap_or(i32::MAX),
         Ordering::Release,
     );
-    Some(ActiveTranscodeReservation { channel_number })
+    Some(ActiveTranscodeReservation {
+        channel_number,
+        slot_id,
+    })
 }
 
 fn release_active_transcode(channel_number: &str) {
@@ -1989,8 +2078,10 @@ fn request_active_transcode_reclaim(requester_channel: &str) -> Option<ActiveTra
     };
 
     let (slot, reason) = work_ahead.or_else(cooling).or_else(stale_watched)?;
+    slot.request_reclaim(now_ms);
     Some(ActiveTranscodeReclaim {
         channel_number: slot.channel_number.clone(),
+        slot_id: slot.slot_id,
         notify: Arc::clone(&slot.reclaim_transcode),
         reason,
     })
@@ -2011,6 +2102,46 @@ fn best_reclaim_candidate<'a>(
         })
         .max_by_key(|(_, idle_for)| *idle_for)
         .map(|(slot, _)| slot)
+}
+
+fn defer_active_transcode_reacquire(deferred_until_ms: &AtomicI64, now_ms: i64) {
+    let delay_ms = i64::try_from(HLS_RECLAIMED_REACQUIRE_DELAY.as_millis()).unwrap_or(i64::MAX);
+    deferred_until_ms.store(now_ms.saturating_add(delay_ms), Ordering::Release);
+}
+
+fn active_transcode_reacquire_delay(
+    deferred_until_ms: &AtomicI64,
+    now_ms: i64,
+) -> Option<Duration> {
+    let remaining_ms = deferred_until_ms
+        .load(Ordering::Acquire)
+        .saturating_sub(now_ms);
+    (remaining_ms > 0).then(|| Duration::from_millis(u64::try_from(remaining_ms).unwrap_or(0)))
+}
+
+fn take_reclaim_request(
+    reclaim_requested_slot_id: &AtomicU64,
+    active_transcode_slot_id: u64,
+) -> bool {
+    match reclaim_requested_slot_id.compare_exchange(
+        active_transcode_slot_id,
+        0,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Ok(_) => true,
+        Err(stale_slot_id) => {
+            if stale_slot_id != 0 {
+                let _ = reclaim_requested_slot_id.compare_exchange(
+                    stale_slot_id,
+                    0,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
+            }
+            false
+        }
+    }
 }
 
 fn transcode_watch_idle_timeout(session_idle_timeout: Option<Duration>) -> Option<Duration> {
@@ -3414,6 +3545,8 @@ mod tests {
             kind,
             Arc::new(AtomicI64::new(last_access_ms)),
             Arc::new(Notify::new()),
+            Arc::new(AtomicU64::new(0)),
+            Arc::new(AtomicI64::new(0)),
             allow_watched_preemption,
         )
     }
@@ -3469,6 +3602,7 @@ mod tests {
                 &mut cleanup_interval,
                 Some(Duration::from_millis(50)),
                 None,
+                None,
             ),
         )
         .await
@@ -3509,6 +3643,7 @@ mod tests {
                 &mut cleanup_interval,
                 None,
                 Some(Duration::from_millis(50)),
+                None,
             ),
         )
         .await
@@ -3831,6 +3966,84 @@ mod tests {
         drop(stale);
         drop(keep_running);
         drop(fresh);
+    }
+
+    #[test]
+    fn active_transcode_reclaim_defers_target_reacquire_for_requester_retry_window() {
+        let _guard = hls_counter_test_guard();
+        reset_active_transcode_state();
+        let worker = HlsSessionWorker::new(
+            "target".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-reclaim-deferral"),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+        let reservation = try_reserve_active_transcode(
+            1,
+            ActiveTranscodeSlot::new(
+                "target",
+                ActiveTranscodeKind::WorkAhead,
+                Arc::clone(&worker.last_access_ms),
+                Arc::clone(&worker.reclaim_transcode),
+                Arc::clone(&worker.reclaim_requested_slot_id),
+                Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+                true,
+            ),
+        );
+        assert!(reservation.is_some());
+
+        let reclaim = request_active_transcode_reclaim("requester").expect("reclaim target");
+        assert_eq!(reclaim.channel_number, "target");
+        assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::WorkAhead);
+
+        let delay = worker
+            .active_transcode_reacquire_delay()
+            .expect("target reacquire is deferred");
+        assert!(delay > Duration::ZERO);
+        assert!(delay <= HLS_RECLAIMED_REACQUIRE_DELAY);
+
+        drop(reservation);
+    }
+
+    #[test]
+    fn stale_reclaim_generation_does_not_match_later_slot_generation() {
+        let worker = HlsSessionWorker::new(
+            "42".to_string(),
+            1,
+            std::env::temp_dir().join("ersatzrs-hls-test-stale-reclaim"),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+        let first_slot = ActiveTranscodeSlot::new(
+            "42",
+            ActiveTranscodeKind::Realtime,
+            Arc::clone(&worker.last_access_ms),
+            Arc::clone(&worker.reclaim_transcode),
+            Arc::clone(&worker.reclaim_requested_slot_id),
+            Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+            true,
+        );
+        let second_slot = ActiveTranscodeSlot::new(
+            "42",
+            ActiveTranscodeKind::Realtime,
+            Arc::clone(&worker.last_access_ms),
+            Arc::clone(&worker.reclaim_transcode),
+            Arc::clone(&worker.reclaim_requested_slot_id),
+            Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+            true,
+        );
+        assert_ne!(first_slot.slot_id, second_slot.slot_id);
+
+        first_slot.request_reclaim(Utc::now().timestamp_millis());
+        assert!(!worker.take_reclaim_request(second_slot.slot_id));
+        assert_eq!(worker.reclaim_requested_slot_id.load(Ordering::Acquire), 0);
+
+        second_slot.request_reclaim(Utc::now().timestamp_millis());
+        assert!(worker.take_reclaim_request(second_slot.slot_id));
+        assert_eq!(worker.reclaim_requested_slot_id.load(Ordering::Acquire), 0);
     }
 
     #[test]
