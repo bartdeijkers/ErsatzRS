@@ -1,7 +1,7 @@
 feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0003', '0014', '0017']
 
 summary    = '''
@@ -22,13 +22,11 @@ decode paths fall back to software input decode while preserving the selected
 hardware encoder, with denials persisted in `ConfigElement` and surfaced through
 health/troubleshooting. Text/image subtitle, watermark, native graphics, HDR
 tonemap, QSV/VAAPI/NVENC upload/download, and color-normalization branches are
-snapshot-covered against the current command/filter builders.
-
-The 2026-06-12 ADR 0014 slice added CUDA-filter decode gating, the conservative
-NVIDIA architecture-table floor, direct IPTV `.ts`/HLS-direct learned-denial
-retry, and denial invalidation when the FFmpeg binary changes or capabilities
-are explicitly refreshed. The remaining ADR 0014 debt is live proof on an
-encoder-only NVENC build with no CUDA filter kernels.
+snapshot-covered against the current command/filter builders. ADR 0014's
+CUDA-filter decode gate is now live-proven on an encoder-only NVENC build that
+reports `cuda` and `h264_nvenc` while omitting `scale_cuda`, `yadif_cuda`, and
+`overlay_cuda`; the captured direct IPTV MPEG-TS output stayed H.264 yuv420p
+BT.709 and the server log contained no CUDA-filter failure signatures.
 
 The 2026-06-16 slice carries `SourceVideoStream.index` and the selected audio
 stream through `PipelineRequest` so transcode input maps use the persisted
@@ -63,9 +61,10 @@ only changing transfer metadata.
 [[debt]]
 id          = 'nvenc-filter-gate-live-proof'
 adr         = '0014'
-description = 'The CUDA-filter decode gate and the encoder-only software-graph demotion are verified by unit tests and argv snapshots only; live proof requires an FFmpeg build with NVENC encoders + `cuda` hwaccel but no CUDA filter kernels, and no such build was available on 2026-06-12 (both local builds ship all three CUDA filters). The IPTV .ts learned-denial retry likewise has unit/snapshot coverage plus a passing `cargo xtask smoke` happy path, but its retry-in-response has not been observed live against real rejecting hardware the way the HLS slice was on 2026-06-11.'
+description = 'Resolved 2026-06-20: the CUDA-filter decode gate and encoder-only software-graph demotion are live-proven on an FFmpeg 8.1 build configured with `--enable-cuda --disable-cuda-llvm --enable-cuvid --enable-nvenc --enable-nvdec --enable-ffnvcodec`, which reports `cuda`, `h264_nvenc`, `drawvg`, and `zscale` while omitting `scale_cuda`, `yadif_cuda`, and `overlay_cuda`. The proof boots ErsatzRS on a throwaway SQLite database, forces the active channel to an NVENC H.264 profile, captures the direct IPTV MPEG-TS stream, and rejects CUDA-filter or playback failure signatures.'
 discovered  = '2026-06-12'
-evidence    = '`scripts/e2e/nvenc-filter-gate-proof.sh` now codifies the live proof and rejects unsuitable full CUDA-filter builds before boot. The 2026-06-19 `bartdeijkers/ErsatzRS-ffmpeg` v1.0.0 linux-x64 release package (`sha256:da5bb5c43995d52684a75379eaef85486bdee6595a27175b55984de3ddb878fe`) reports FFmpeg 8.1.2 with `cuda`, `h264_nvenc`, `drawvg`, and `zscale`, but the proof preflight rejects it because `scale_cuda`, `yadif_cuda`, and `overlay_cuda` are present. Earlier local builds (`/usr/bin/ffmpeg`, `~/.local/ffmpeg-8.1`) also report those filters, so the required encoder-only runtime path still lacks a matching live build.'
+evidence    = '`scripts/e2e/nvenc-filter-gate-proof.sh` passed on 2026-06-20 with `NVENC_PROOF_FFMPEG_DIR=/tmp/ersatzrs-ffmpeg-nvenc-proof`: preflight saw FFmpeg 8.1.0 with `cuda`, `h264_nvenc`, `drawvg`, and `zscale`, and no `scale_cuda`/`yadif_cuda`/`overlay_cuda`; web startup detected the proof binary and applied seeded profile acceleration `Nvenc`; `/iptv/channel/1.ts?mode=ts` captured to `/tmp/ersatzrs-nvenc-proof.GazO8i/live_nvenc.ts`; ffprobe reported H.264 yuv420p BT.709 video plus AAC audio; the server log contained no CUDA-filter or playback failure signatures.'
+resolved    = true
 
 [[debt]]
 id          = 'default-profile-1080p60-retune'

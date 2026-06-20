@@ -23,6 +23,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- FFmpeg command-generation parity is complete: the NVENC encoder-only
+  CUDA-filter gate is now live-proven against an FFmpeg 8.1 build with `cuda`
+  and `h264_nvenc` but without `scale_cuda`, `yadif_cuda`, or `overlay_cuda`,
+  confirming ErsatzRS keeps NVENC encode while demoting decode/filter work away
+  from unavailable CUDA filters.
 - FFmpeg profile scaling now preserves the selected `Scale and Pad` behavior for
   near-16:9 sources with odd fitted dimensions instead of rounding the fit up
   into a full-frame stretch; `Stretch` and `Crop` command generation now have

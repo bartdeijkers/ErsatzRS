@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-19
-last_processed_commit: 8327709ec1a316332fba661bb947135483f523a0
+generated: 2026-06-20
+last_processed_commit: 417f9f25cc7fd25f960bd3226d390664523dfb22
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -21,97 +21,25 @@ see the [rules](automation/gap-prompt-rules.md). For the live gap list run
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Current reconcile (2026-06-19, through `8327709`): `cargo xtask progress gaps`
-lists **2** remaining features, so this file intentionally contains only two
-actionable prompts:
+Current reconcile (2026-06-20, through `417f9f2`): `cargo xtask progress gaps`
+lists **1** remaining feature, so this file intentionally contains only one
+actionable prompt:
 
-- `ffmpeg-command-generation`
 - `hls-variant-playlists-segmenter`
 
-The completed media collection route-family prompt was removed per
+The completed FFmpeg command-generation and media collection route-family
+prompts were removed per
 `docs/automation/gap-prompt-rules.md`: completed scope is replaced, never kept
 with a completed banner. ADR 0008 FFmpeg runtime acquisition (ship without
 FFmpeg; download/update from the `bartdeijkers/ErsatzRS-ffmpeg` releases at
 startup; surface update availability on `/system/health`) is still
 parity-critical infrastructure, but it is not currently emitted by
 `cargo xtask progress gaps`; refresh this file from progress data before
-promoting it over either open feature.
+promoting it over the remaining open feature.
 
 ---
 
-## 1 - FFmpeg command generation: NVENC filter-gate live proof (slug `ffmpeg-command-generation`)
-
-Fix the remaining ErsatzRS runtime-hardening gap in FFmpeg command generation:
-turn the snapshot-covered NVENC filter-gate command path into live proof (slug
-`ffmpeg-command-generation`, debt `nvenc-filter-gate-live-proof`). This debt is
-hardware/build-bound: it requires an FFmpeg build with NVENC encoders + `cuda`
-hwaccel but no CUDA filter kernels.
-
-Use the repo workflow from `AGENTS.md`. This is ADR-backed FFmpeg/HLS runtime
-hardening, not a pinned-baseline ErsatzTV behavior gap, so do not force it
-through `skills/parity-slice.md`. Read ADR 0017, ADR 0014, ADR 0003,
-`docs/progress/parity/ffmpeg-command-generation.toml`,
-`plans/hls-transcode-capacity-and-admission.md` only for HLS interactions, and
-the pinned ErsatzTV FFmpeg source where it defines the command/filter baseline.
-
-Current `ParityDebt` from
-`docs/progress/parity/ffmpeg-command-generation.toml`:
-- `nvenc-filter-gate-live-proof` (ADR 0014): CUDA-filter decode gating and
-  encoder-only software-graph demotion are unit/snapshot-covered, but live proof
-  requires an FFmpeg build with NVENC encoders + `cuda` hwaccel but no CUDA
-  filter kernels.
-
-Closed 2026-06-19 in this feature: `default-profile-1080p60-retune`,
-`ac3-segmenter-max-delay`, and `hdr-tonemap-calibration-live-proof` are
-resolved. Fresh databases seed the five ADR 0017 profiles, web startup applies
-detected hardware acceleration to that fresh seed, HLS output emits
-`-max_delay 500000` only for multichannel AC-3, and
-`scripts/e2e/hdr-tone-map-proof.sh` live-proves HDR10 PQ and HLG tone mapping
-against generated SDR references.
-
-Added 2026-06-19: `scripts/e2e/nvenc-filter-gate-proof.sh` codifies the live
-NVENC encoder-only proof and rejects full CUDA-filter builds before boot. The
-`bartdeijkers/ErsatzRS-ffmpeg` v1.0.0 linux-x64 release package verifies as
-FFmpeg 8.1.2 with `cuda`, `h264_nvenc`, `drawvg`, and `zscale`, but it also
-ships `scale_cuda`, `yadif_cuda`, and `overlay_cuda`, so it cannot close
-`nvenc-filter-gate-live-proof`.
-
-Before editing:
-1. Inspect `crates/ersatzrs-infra/src/db.rs`,
-   `crates/ersatzrs-domain/src/ffmpeg.rs`,
-   `crates/ersatzrs-ffmpeg/src/pipeline/`,
-   `crates/ersatzrs-ffmpeg/src/filter/`, calibration scripts, and current
-   FFmpeg profile tests/snapshots.
-2. Build a Source Map for hardware capability detection -> CUDA filter
-   enumeration -> command generation -> live NVENC software-graph demotion
-   proof.
-3. Verify which parts are ADR 0017 deviations from ErsatzTV rather than
-   pinned-baseline parity, and keep that distinction visible.
-4. Keep hardware-bound or platform-bound shortfalls as structured `ParityDebt`,
-   not prose.
-
-Implement the coherent proof slice: run against an encoder-capable FFmpeg build
-that exposes NVENC and `cuda` hwaccel but lacks CUDA filter kernels, then prove
-the live command path demotes decode/filter graph work away from CUDA filters
-while preserving the selected NVENC encoder. Do not weaken existing
-command-generation snapshots or replace proof with argv-only assertions.
-
-Add or update focused tests/scripts for the live NVENC filter-gate proof. If
-the required no-CUDA-filter NVENC build cannot run on the current machine, keep
-`nvenc-filter-gate-live-proof` open with exact missing commands and runtime
-prerequisites.
-
-Verify with focused `ersatzrs-infra` DB seed tests, `ersatzrs-ffmpeg` snapshot
-tests, the HDR calibration/live-stream proof when available, `cargo xtask smoke`
-if streaming behavior changes, `cargo xtask progress check`, and
-`cargo xtask progress gaps`. Update ADR 0017,
-`docs/progress/parity/ffmpeg-command-generation.toml`, the changelog, and this
-prompt file only when evidence supports the new state. Report the Source Map,
-behavior closed, remaining `ParityDebt`, verification run, and changed files.
-
----
-
-## 2 - HLS variant playlists / segmenter: hard active transcode capacity (slug `hls-variant-playlists-segmenter`)
+## 1 - HLS variant playlists / segmenter: hard active transcode capacity (slug `hls-variant-playlists-segmenter`)
 
 Fix the next ErsatzRS streaming runtime-hardening gap: make
 `ffmpeg.segmenter.active_transcode_limit` a real ceiling for actively watched
