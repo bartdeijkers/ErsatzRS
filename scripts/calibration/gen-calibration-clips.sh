@@ -38,6 +38,9 @@
 #   CAL_DURATION=180              seconds per clip
 #   CAL_FPS=60                    frame rate
 #   CAL_SIZE=1920x1080            WxH
+#   CAL_SIZE_PRESET=              named WxH preset; use 2010 for the local
+#                                  2010: The Year We Make Contact source size
+#                                  proven by ffprobe as 1920x800 SAR 1:1
 #   CAL_CRF=14                    libx264 quality (lower = better/larger)
 #   CAL_PRESET=medium             libx264 preset
 #   CAL_CLIPS="1 2 3"             which clips to build
@@ -64,7 +67,8 @@ TMPL="$SCRIPT_DIR/calibration.fg.tmpl"
 OUT="${CAL_OUT:-./calibration-clips}"
 DUR="${CAL_DURATION:-180}"
 FPS="${CAL_FPS:-60}"
-SIZE="${CAL_SIZE:-1920x1080}"
+RAW_SIZE="${CAL_SIZE:-1920x1080}"
+SIZE_PRESET="${CAL_SIZE_PRESET:-}"
 CRF="${CAL_CRF:-14}"
 PRESET="${CAL_PRESET:-medium}"
 CLIPS="${CAL_CLIPS:-1 2 3}"
@@ -85,6 +89,44 @@ TONEMAP_ALGORITHMS="${CAL_TONEMAP_ALGORITHMS:-hable}"
 TONEMAP_NPL="${CAL_TONEMAP_NPL:-100}"
 TONEMAP_PEAK="${CAL_TONEMAP_PEAK:-1000}"
 TONEMAP_DESAT="${CAL_TONEMAP_DESAT:-2}"
+
+size_preset() {
+  case "$1" in
+    2010|2010-year-we-make-contact|2010-year-we-made-contact|2010-the-year-we-make-contact|2010-the-year-we-made-contact)
+      # Local library source:
+      #   2010 - The Year We Make Contact (1984)
+      #   ffprobe: 1920x800, SAR 1:1, DAR 12:5, yuv420p
+      echo "1920x800"
+      ;;
+    *)
+      echo "ERROR: unsupported CAL_SIZE_PRESET '$1' (known: 2010)" >&2
+      exit 2
+      ;;
+  esac
+}
+
+resolve_size() {
+  local value="$1"
+  case "$value" in
+    2010|2010-year-we-make-contact|2010-year-we-made-contact|2010-the-year-we-make-contact|2010-the-year-we-made-contact)
+      size_preset "$value"
+      ;;
+    *)
+      echo "$value"
+      ;;
+  esac
+}
+
+if [ -n "$SIZE_PRESET" ]; then
+  SIZE="$(size_preset "$SIZE_PRESET")"
+else
+  SIZE="$(resolve_size "$RAW_SIZE")"
+fi
+
+if ! [[ "$SIZE" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+  echo "ERROR: CAL_SIZE must be WxH or a known preset; got '$SIZE'" >&2
+  exit 2
+fi
 
 # --- FFmpeg + its private lib dir (silent-fail trap) -------------------------
 FFMPEG_BIN="$(command -v ffmpeg || true)"

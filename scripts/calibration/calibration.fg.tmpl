@@ -2,8 +2,8 @@
 drawgrid=w=120:h=120:t=1:c=white@0.06,
 drawbox=x=0:y=0:w=iw:h=ih:t=3:c=white@0.65,
 drawbox=x=10:y=10:w=iw-20:h=ih-20:t=2:c=white@0.30,
-drawbox=x=(iw-600)/2:y=240:w=600:h=600:t=4:c=white,
-drawbox=x='20+mod(t,1)*(iw-54)':y=900:w=14:h=40:c=cyan:t=fill,
+drawbox=x=(iw-(min(iw\,ih)*0.55))/2:y=(ih-(min(iw\,ih)*0.55))/2:w=min(iw\,ih)*0.55:h=min(iw\,ih)*0.55:t=4:c=white,
+drawbox=x='20+mod(t,1)*(iw-54)':y=ih-180:w=14:h=40:c=cyan:t=fill,
 drawbox=x=w-356:y=146:w=332:h=306:t=2:c=white@0.55,
 drawbox=x=w-338:y=168:w=48:h=44:c=white:t=fill,
 drawbox=x=w-282:y=168:w=48:h=44:c=0xDCDCDC:t=fill,
@@ -25,7 +25,7 @@ drawtext=fontfile=__FMONO__:fontsize=18:fontcolor=white@0.9:box=1:boxcolor=black
 drawtext=fontfile=__FMONO__:fontsize=48:fontcolor=white:box=1:boxcolor=black:boxborderw=20:x=(w-text_w)/2:y=400:text='ABS %{pts\:hms\:__OFFSEC__}',
 drawtext=fontfile=__FMONO__:fontsize=40:fontcolor=white:box=1:boxcolor=black:boxborderw=16:x=(w-text_w)/2:y=520:text='CLIP %{pts\:hms}',
 drawtext=fontfile=__FMONO__:fontsize=28:fontcolor=white:box=1:boxcolor=black:boxborderw=14:x=(w-text_w)/2:y=632:text='ABS#%{eif\:n+__OFFFR__\:d}  CLIP#%{eif\:n\:d}  f/__FPS__ %{eif\:mod(n\,__FPS__)\:d}',
-drawtext=fontfile=__FBOLD__:fontsize=30:fontcolor=white@0.92:box=1:boxcolor=black@0.6:boxborderw=10:x=(w-text_w)/2:y=1000:text='BG __BGNAME__    PIP __PITCH__ Hz/s    __WxH__ p__FPS__  __FOOTER_NOTE__',
+drawtext=fontfile=__FBOLD__:fontsize=30:fontcolor=white@0.92:box=1:boxcolor=black@0.6:boxborderw=10:x=(w-text_w)/2:y=h-text_h-40:text='BG __BGNAME__    PIP __PITCH__ Hz/s    __WxH__ p__FPS__  __FOOTER_NOTE__',
 format=__PIX_FMT__,
 setparams=range=tv:color_primaries=__COLOR_PRIMARIES__:color_trc=__COLOR_TRC__:colorspace=__COLORSPACE__
 [v]

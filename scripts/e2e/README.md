@@ -138,6 +138,24 @@ Set `NVENC_PROOF_KEEP=1` to keep the throwaway DB, server log, and capture.
 The same gate honors `NVENC_PROOF_CLIP_SECONDS`,
 `NVENC_PROOF_CAPTURE_SECONDS`, `NVENC_PROOF_SIZE`, and `NVENC_PROOF_FPS`.
 
+## Scale And Pad Profile Proof
+
+The live Scale and Pad proof reproduces the local library geometry of
+`2010 - The Year We Make Contact (1984)` without using the movie itself:
+
+```bash
+scripts/e2e/scale-pad-profile-proof.sh
+```
+
+The gate generates a calibration source with
+`CAL_SIZE_PRESET=2010` (`1920x800`, SAR `1:1`, DAR `12:5`), boots
+`ersatzrs-web` on a throwaway SQLite database, seeds that source as active
+channel content, forces a software H.264 `1920x1080` Scale and Pad profile,
+captures the live MPEG-TS stream, and samples decoded pixels to prove the
+output is `1920x1080` with black top/bottom padding and visible source
+content. Set `SCALE_PAD_PROOF_KEEP=1` to keep the throwaway DB, logs, and
+capture.
+
 ## Requirements
 
 `tsduck` (`tsanalyze`, `tsp`), `jq`, `curl`, and FFmpeg 8.1 on `PATH`
