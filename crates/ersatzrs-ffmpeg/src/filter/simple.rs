@@ -180,6 +180,19 @@ pub fn pad_filter(current: &FrameState, padded_size: FrameSize) -> String {
 }
 
 #[must_use]
+pub fn pad_vaapi_filter(current: &FrameState, padded_size: FrameSize) -> String {
+    let pad = format!(
+        "pad_vaapi=w={}:h={}:x=-1:y=-1:color=black",
+        padded_size.width, padded_size.height
+    );
+    if current.frame_data_location == FrameDataLocation::Hardware {
+        pad
+    } else {
+        format!("format=nv12|p010le|vaapi,hwupload,{pad}")
+    }
+}
+
+#[must_use]
 pub fn crop_filter(current: &FrameState, cropped_size: FrameSize) -> String {
     with_hwdownload(
         current,

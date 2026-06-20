@@ -1,0 +1,7 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 2597
+expression: rendered
+---
+software => format=nv12|p010le|vaapi,hwupload,pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black
+hardware => pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black

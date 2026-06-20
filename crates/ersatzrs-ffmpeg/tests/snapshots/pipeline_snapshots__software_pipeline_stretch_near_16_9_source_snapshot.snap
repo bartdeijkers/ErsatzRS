@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 641
+expression: arguments
+---
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -readrate 1.05 -i /media/movie.mkv -filter_complex [0:0]scale=1920:1080:flags=fast_bilinear,setsar=1[v];[0:1]aresample=async=1,apad[a] -map [v] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v libx264 -codec:a aac -video_track_timescale 90000 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

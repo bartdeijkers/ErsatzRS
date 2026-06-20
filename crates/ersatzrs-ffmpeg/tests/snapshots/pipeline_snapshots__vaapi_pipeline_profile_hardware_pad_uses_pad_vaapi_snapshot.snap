@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 595
+expression: graph
+---
+[0:0]scale_vaapi=format=nv12,pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black[v];[1:1]aresample=async=1,apad[a]

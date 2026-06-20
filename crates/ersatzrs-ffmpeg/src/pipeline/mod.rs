@@ -11,19 +11,19 @@ use crate::{
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
     hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
     no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
-    normalize_loudness_filter, pad_filter, pipe_output, progress_to_stdout, realtime_filter,
-    reset_pts_filter, scale_subtitle_image_filter, select_forced_software_video_decoder,
-    select_software_video_decoder, select_video_decoder, standard_format_flags,
-    still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
-    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
-    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
-    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
-    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
-    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability,
-    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
-    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, PipelineStep,
-    PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
-    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    normalize_loudness_filter, pad_filter, pad_vaapi_filter, pipe_output, progress_to_stdout,
+    realtime_filter, reset_pts_filter, scale_subtitle_image_filter,
+    select_forced_software_video_decoder, select_software_video_decoder, select_video_decoder,
+    standard_format_flags, still_image_loop_filter, subtitle_overlay_cuda_filter,
+    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
+    subtitles_filter, time_limit, tonemap_filter_for, vaapi_subtitle_pixel_format_filter,
+    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
+    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
+    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
+    ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate,
+    FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile,
+    InputKind, PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod,
+    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -304,17 +304,22 @@ fn square_pixel_frame_size(
     };
 
     Some(even_frame_size(
-        scaled_dimension(width, percent),
-        scaled_dimension(height, percent),
+        scaled_dimension(width, percent, scale),
+        scaled_dimension(height, percent, scale),
+        scale,
     ))
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn scaled_dimension(value: f64, percent: f64) -> u32 {
-    let scaled = (value * percent).floor();
+fn scaled_dimension(value: f64, percent: f64, scale: SquarePixelScale) -> u32 {
+    let scaled = value * percent;
     if !scaled.is_finite() || scaled <= 0.0 {
         return 0;
     }
+    let scaled = match scale {
+        SquarePixelScale::Fit => scaled.floor(),
+        SquarePixelScale::Fill => scaled.ceil(),
+    };
     scaled.min(f64::from(u32::MAX)) as u32
 }
 
@@ -352,8 +357,29 @@ fn parse_aspect_ratio(value: &str) -> Option<f64> {
     trimmed.parse::<f64>().ok()
 }
 
-const fn even_frame_size(width: u32, height: u32) -> FrameSize {
-    FrameSize::new(width + (width % 2), height + (height % 2))
+const fn even_frame_size(width: u32, height: u32, scale: SquarePixelScale) -> FrameSize {
+    match scale {
+        SquarePixelScale::Fit => FrameSize::new(even_floor(width), even_floor(height)),
+        SquarePixelScale::Fill => FrameSize::new(even_ceil(width), even_ceil(height)),
+    }
+}
+
+const fn even_floor(value: u32) -> u32 {
+    let even = value - (value % 2);
+    if even == 0 {
+        2
+    } else {
+        even
+    }
+}
+
+const fn even_ceil(value: u32) -> u32 {
+    let even = value + (value % 2);
+    if even == 0 {
+        2
+    } else {
+        even
+    }
 }
 
 /// Source audio stream metadata reserved for audio decoder dispatch.
@@ -497,6 +523,7 @@ pub enum RealtimeMode {
     On,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DesiredVideoState {
     pub scaled_size: FrameSize,
@@ -522,6 +549,7 @@ pub struct DesiredVideoState {
     pub normalize_loudness_mode: NormalizeLoudnessMode,
     pub target_loudness: Option<f64>,
     pub normalize_colors: bool,
+    pub deinterlace: bool,
     pub allow_b_frames: bool,
     pub vaapi_device: Option<String>,
     pub vaapi_driver: Option<String>,
@@ -560,6 +588,7 @@ impl DesiredVideoState {
             // the ErsatzRS DB seed (`db.rs`), so transcodes normalize colors to
             // bt709 by default via the colorspace filter above.
             normalize_colors: true,
+            deinterlace: true,
             allow_b_frames: false,
             vaapi_device: None,
             vaapi_driver: None,
@@ -616,6 +645,7 @@ impl DesiredVideoState {
                 .then_some(profile.target_loudness)
                 .flatten(),
             normalize_colors: profile.normalize_colors,
+            deinterlace: profile.deinterlace_video == Some(true),
             allow_b_frames: profile.allow_b_frames,
             vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
             vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
@@ -658,6 +688,7 @@ impl DesiredVideoState {
             normalize_loudness_mode: NormalizeLoudnessMode::Off,
             target_loudness: None,
             normalize_colors: profile.normalize_colors,
+            deinterlace: false,
             allow_b_frames: true,
             vaapi_device: non_empty_string(profile.vaapi_device.as_deref()),
             vaapi_driver: vaapi_driver_name(profile.vaapi_driver).map(str::to_owned),
@@ -1458,8 +1489,9 @@ fn apply_source_video_filters(
     let is_transcode = request.desired.video_format != FFmpegProfileVideoFormat::Copy;
 
     if let Some(source) = &request.source_video_stream {
-        target_state.should_deinterlace =
-            source.scan_kind == VideoScanKind::Interlaced && is_transcode;
+        target_state.should_deinterlace = request.desired.deinterlace
+            && source.scan_kind == VideoScanKind::Interlaced
+            && is_transcode;
         target_state.is_hdr = source.color_params.is_hdr || source.color_params.is_bt2020_ten;
         target_state.colors_are_bt709 = source.color_params.is_bt709();
 
@@ -1503,6 +1535,7 @@ fn apply_source_video_filters(
         target_state.frame_data_location = crate::FrameDataLocation::Hardware;
     }
 
+    let used_hdr_tonemap = target_state.is_hdr && is_transcode;
     if target_state.is_hdr && is_transcode {
         filter_chain.video.push(tonemap_filter_for(
             acceleration,
@@ -1560,14 +1593,13 @@ fn apply_source_video_filters(
     if request.desired.cropped_size.is_none()
         && target_state.padded_size != request.desired.frame_size
     {
-        filter_chain
-            .video
-            .push(pad_filter(target_state, request.desired.frame_size));
-        target_state.padded_size = request.desired.frame_size;
-        target_state.scaled_size = request.desired.frame_size;
-        target_state.frame_data_location = crate::FrameDataLocation::Software;
-        target_state.pixel_format = request.desired.pixel_format();
-        upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
+        apply_pad_filter(
+            request,
+            acceleration,
+            used_hdr_tonemap,
+            target_state,
+            filter_chain,
+        );
     }
 
     if let Some(cropped_size) = request.desired.cropped_size {
@@ -1581,6 +1613,40 @@ fn apply_source_video_filters(
         target_state.pixel_format = request.desired.pixel_format();
         upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
     }
+}
+
+fn apply_pad_filter(
+    request: &PipelineRequest,
+    acceleration: HardwareAccelerationKind,
+    used_hdr_tonemap: bool,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    let use_vaapi_pad = acceleration == HardwareAccelerationKind::Vaapi
+        && request.desired.pad_mode == FilterMode::HardwareIfPossible
+        && !used_hdr_tonemap;
+    if use_vaapi_pad {
+        filter_chain
+            .video
+            .push(pad_vaapi_filter(target_state, request.desired.frame_size));
+    } else {
+        filter_chain
+            .video
+            .push(pad_filter(target_state, request.desired.frame_size));
+    }
+    target_state.padded_size = request.desired.frame_size;
+    target_state.scaled_size = request.desired.frame_size;
+    if use_vaapi_pad {
+        target_state.frame_data_location = crate::FrameDataLocation::Hardware;
+        target_state.pixel_format = match request.desired.bit_depth {
+            FFmpegProfileBitDepth::EightBit => PixelFormat::Nv12,
+            FFmpegProfileBitDepth::TenBit => PixelFormat::Yuv420P10Le,
+        };
+    } else {
+        target_state.frame_data_location = crate::FrameDataLocation::Software;
+        target_state.pixel_format = request.desired.pixel_format();
+    }
+    upload_software_frames_for_hardware_encoder(acceleration, target_state, filter_chain);
 }
 
 fn apply_colorspace_normalization(

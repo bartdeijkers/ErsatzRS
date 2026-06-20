@@ -13,13 +13,13 @@ use ersatzrs_ffmpeg::{
     audio_pad_filter, audio_resample_filter, capability_report_for_tests, colorspace_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter,
     deinterlace_qsv_filter, deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter,
-    hardware_upload_filter, lower_third_overlay, normalize_loudness_filter, song_progress_filter,
-    subtitle_graphics_lavfi_input, subtitle_scale_npp_filter, tonemap_cuda_filter, tonemap_filter,
-    tonemap_qsv_filter, tonemap_vaapi_filter, translate_watermark_opacity_expression,
-    translate_watermark_opacity_expression_with_clock, yadif_cuda_filter, yadif_filter,
-    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
-    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
-    GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
+    hardware_upload_filter, lower_third_overlay, normalize_loudness_filter, pad_vaapi_filter,
+    song_progress_filter, subtitle_graphics_lavfi_input, subtitle_scale_npp_filter,
+    tonemap_cuda_filter, tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter,
+    translate_watermark_opacity_expression, translate_watermark_opacity_expression_with_clock,
+    yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
+    ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate,
+    FrameSize, FrameState, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
     GraphicsTemplateRenderer, HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat,
     OutputMetadata, PipelineBuilder, PipelineRequest, PixelFormat, QsvPipelineBuilder,
     RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder, SourceAudioCodec,
@@ -231,6 +231,7 @@ fn desired_video_state_from_profile_maps_transcode_fields_and_source_sizing() {
         normalize_framerate: true,
         normalize_colors: true,
         pad_mode: FilterMode::Software,
+        deinterlace_video: Some(true),
         qsv_extra_hardware_frames: Some(18),
         ..FFmpegProfile::default()
     };
@@ -265,6 +266,7 @@ fn desired_video_state_from_profile_maps_transcode_fields_and_source_sizing() {
     assert!(desired.pad_audio);
     assert_eq!(desired.target_loudness, Some(-23.0));
     assert_eq!(desired.frame_rate, Some(FrameRate::new(24_000, 1_001)));
+    assert!(desired.deinterlace);
     assert!(desired.allow_b_frames);
     assert_eq!(desired.qsv_extra_hardware_frames, 18);
 }
@@ -297,7 +299,40 @@ fn desired_video_state_uses_copy_for_hls_direct() {
     assert_eq!(desired.frame_rate, None);
     assert_eq!(desired.video_bitrate, None);
     assert_eq!(desired.audio_bitrate, None);
+    assert!(!desired.deinterlace);
     assert!(!desired.pad_audio);
+}
+
+#[test]
+fn desired_video_state_from_profile_disables_deinterlace_when_flag_is_not_true() {
+    let source = source_1080p(SourceVideoCodec::H264, 1920, 1080);
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+
+    for deinterlace_video in [None, Some(false)] {
+        let profile = FFmpegProfile {
+            video_format: FFmpegProfileVideoFormat::H264,
+            audio_format: FFmpegProfileAudioFormat::Aac,
+            deinterlace_video,
+            ..FFmpegProfile::default()
+        };
+
+        let desired = DesiredVideoState::from_profile(
+            &profile,
+            &resolution,
+            Some(&source),
+            None,
+            StreamingMode::TransportStream,
+        );
+
+        assert!(
+            !desired.deinterlace,
+            "nullable profile flag must only enable deinterlace when true"
+        );
+    }
 }
 
 #[test]
@@ -324,6 +359,89 @@ fn desired_video_state_crop_scales_small_source_to_cover_target() {
     );
 
     assert_eq!(desired.scaled_size, FrameSize::new(1920, 1440));
+    assert_eq!(desired.cropped_size, Some(FrameSize::new(1920, 1080)));
+}
+
+#[test]
+fn desired_video_state_scale_and_pad_rounds_fit_down_before_padding() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+
+    assert_eq!(desired.scaled_size, FrameSize::new(1920, 1078));
+    assert_eq!(desired.frame_size, FrameSize::new(1920, 1080));
+    assert_eq!(desired.cropped_size, None);
+}
+
+#[test]
+fn desired_video_state_stretch_uses_exact_target_size() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::Stretch,
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+
+    assert_eq!(desired.scaled_size, FrameSize::new(1920, 1080));
+    assert_eq!(desired.frame_size, FrameSize::new(1920, 1080));
+    assert_eq!(desired.cropped_size, None);
+}
+
+#[test]
+fn desired_video_state_crop_rounds_fill_up_before_cropping() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::Crop,
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+
+    assert_eq!(desired.scaled_size, FrameSize::new(1922, 1080));
+    assert_eq!(desired.frame_size, FrameSize::new(1920, 1080));
     assert_eq!(desired.cropped_size, Some(FrameSize::new(1920, 1080)));
 }
 
@@ -406,6 +524,7 @@ fn vaapi_pipeline_profile_pad_uploads_after_software_pad() {
     let profile = FFmpegProfile {
         video_format: FFmpegProfileVideoFormat::H264,
         audio_format: FFmpegProfileAudioFormat::Aac,
+        pad_mode: FilterMode::Software,
         ..FFmpegProfile::default()
     };
     let resolution = Resolution {
@@ -436,6 +555,44 @@ fn vaapi_pipeline_profile_pad_uploads_after_software_pad() {
         "VAAPI upload must follow software padding: {graph}"
     );
     assert!(command.arguments.join(" ").contains("-codec:v h264_vaapi"));
+}
+
+#[test]
+fn vaapi_pipeline_profile_hardware_pad_uses_pad_vaapi_snapshot() {
+    let source = source_1080p(SourceVideoCodec::H264, 1440, 1080);
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        pad_mode: FilterMode::HardwareIfPossible,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = VaapiPipelineBuilder.build(request.clone());
+    let graph = pipeline.filter_graph.expect("filter graph");
+
+    assert!(
+        graph.contains("pad_vaapi=w=1920:h=1080:x=-1:y=-1:color=black"),
+        "expected VAAPI padding: {graph}"
+    );
+    assert!(
+        !graph.contains("pad=1920:1080"),
+        "hardware padding should avoid software pad: {graph}"
+    );
+    insta::assert_snapshot!(graph);
 }
 
 #[test]
@@ -477,6 +634,161 @@ fn software_pipeline_profile_scale_pad_ac3_snapshot() {
 
     assert!(arguments.contains("-tag:v hvc1"));
     assert!(arguments.contains("-x265-params log-level=error"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn software_pipeline_scale_and_pad_near_16_9_source_snapshot() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments
+            .contains("scale=1920:1080:flags=fast_bilinear:force_original_aspect_ratio=decrease"),
+        "scale-and-pad must preserve source aspect ratio: {arguments}"
+    );
+    assert!(
+        arguments.contains("pad=1920:1080:-1:-1:color=black"),
+        "scale-and-pad must add padding: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn software_pipeline_stretch_near_16_9_source_snapshot() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::Stretch,
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments.contains("scale=1920:1080:flags=fast_bilinear,setsar=1"),
+        "stretch must scale directly to the target frame: {arguments}"
+    );
+    assert!(
+        !arguments.contains("force_original_aspect_ratio")
+            && !arguments.contains("pad=1920:1080")
+            && !arguments.contains("crop=w=1920:h=1080"),
+        "stretch must not preserve aspect ratio, pad, or crop: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn software_pipeline_crop_near_16_9_source_snapshot() {
+    let source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    let profile = FFmpegProfile {
+        scaling_behavior: ScalingBehavior::Crop,
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::TransportStream,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments
+            .contains("scale=1920:1080:flags=fast_bilinear:force_original_aspect_ratio=increase"),
+        "crop must scale to cover the target frame: {arguments}"
+    );
+    assert!(
+        arguments.contains("crop=w=1920:h=1080"),
+        "crop must trim back to the target frame: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
+fn nvenc_pipeline_scale_and_pad_near_16_9_source_snapshot() {
+    let mut source = source_1080p(SourceVideoCodec::H264, 1067, 600);
+    source.pixel_format = Some(PixelFormat::Yuv420P);
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        None,
+        StreamingMode::HttpLiveStreamingSegmenter,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        arguments.contains("scale_cuda=1920:1080:format=nv12:force_original_aspect_ratio=decrease"),
+        "NVENC scale-and-pad must preserve source aspect ratio: {arguments}"
+    );
+    assert!(
+        arguments.contains("pad=1920:1080:-1:-1:color=black"),
+        "NVENC scale-and-pad must add padding: {arguments}"
+    );
     insta::assert_snapshot!(arguments);
 }
 
@@ -2267,6 +2579,25 @@ fn frame_rate_filter_hardware_snapshot() {
 }
 
 #[test]
+fn pad_vaapi_filter_snapshots() {
+    let rendered = [
+        ("software", software_state()),
+        ("hardware", hardware_state(PixelFormat::Vaapi)),
+    ]
+    .into_iter()
+    .map(|(name, state)| {
+        format!(
+            "{name} => {}",
+            pad_vaapi_filter(&state, FrameSize::new(1920, 1080))
+        )
+    })
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
 fn pipeline_emits_deinterlace_for_interlaced_source_snapshot() {
     let mut source = SourceVideoStream::new(SourceVideoCodec::H264);
     source.scan_kind = VideoScanKind::Interlaced;
@@ -2280,6 +2611,41 @@ fn pipeline_emits_deinterlace_for_interlaced_source_snapshot() {
     let command = pipeline.command(&request.inputs);
 
     insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn pipeline_skips_deinterlace_when_profile_flag_disabled_snapshot() {
+    let mut source = source_1080p(SourceVideoCodec::H264, 1920, 1080);
+    source.scan_kind = VideoScanKind::Interlaced;
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        deinterlace_video: Some(false),
+        ..FFmpegProfile::default()
+    };
+    let resolution = Resolution {
+        width: 1920,
+        height: 1080,
+        ..Resolution::default()
+    };
+    let desired = DesiredVideoState::from_profile(
+        &profile,
+        &resolution,
+        Some(&source),
+        Some(FrameRate::DEFAULT),
+        StreamingMode::TransportStream,
+    );
+    let request = PipelineRequest::new(InputFile::video("/media/movie.mkv"), desired)
+        .with_source_video_stream(source);
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let arguments = pipeline.command(&request.inputs).arguments.join(" ");
+
+    assert!(
+        !arguments.contains("yadif"),
+        "profile-disabled deinterlace must not emit yadif: {arguments}"
+    );
+    insta::assert_snapshot!(arguments);
 }
 
 fn sd_source_with_colors(

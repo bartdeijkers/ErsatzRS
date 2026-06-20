@@ -13,6 +13,17 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- FFmpeg profile scaling now preserves the selected `Scale and Pad` behavior for
+  near-16:9 sources with odd fitted dimensions instead of rounding the fit up
+  into a full-frame stretch; `Stretch` and `Crop` command generation now have
+  dedicated regression snapshots alongside the NVENC scale-and-pad path.
+- FFmpeg profile command generation now honors VAAPI `HardwareIfPossible`
+  padding with `pad_vaapi`, and respects the profile `DeinterlaceVideo` flag
+  so interlaced sources are only deinterlaced when the selected profile enables
+  it.
+
 ## [1.0.12-alpha] - 2026-06-19
 
 ### Fixed
