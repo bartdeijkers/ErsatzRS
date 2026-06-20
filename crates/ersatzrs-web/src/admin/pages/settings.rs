@@ -591,6 +591,8 @@ mod tests {
         let html = render_ffmpeg(data).into_view().to_html();
         let input = input_html(&html, r#"name="active_transcode_limit""#);
 
+        assert!(html.contains("Maximum Simultaneous HLS Transcodes"));
+        assert!(html.contains("all-streams-in-use"));
         assert!(input.contains(r#"type="number""#));
         assert!(input.contains(r#"min="1""#));
         assert!(input.contains(r#"value="2""#));

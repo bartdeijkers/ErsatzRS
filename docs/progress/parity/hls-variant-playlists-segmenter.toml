@@ -4,16 +4,11 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_spe
 status     = 'In progress'
 adr        = ['0015', '0016']
 summary    = '''
-Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs:
-`/iptv/channels.m3u` emits `.m3u8?mode={segmenter,hls-direct}` /
-`.ts[?mode=ts-legacy]` suffixes with Kodi `#KODIPROP` headers, short base64
-ids, `ChannelIdentifier.FromNumber` tvg-id, and `tvc-stream-{v,a}codec` tags. `/iptv/channel/{n}.m3u8?mode=segmenter` returns a
-multi-variant playlist (`#EXT-X-STREAM-INF` bandwidth from ErsatzTV's
-`(VideoBitrate + AudioBitrate) * 1000 * 1.2`); TS modes redirect to `.ts`;
-`hls-direct` returns a single-entry playlist with per-channel media-sequence /
-`#EXT-X-DISCONTINUITY` tracking and `/iptv/hls-direct/{n}[.ts|.mp4|.mkv]`
-targets driven by `ffmpeg.hls_direct.output_format` (copy audio/video, realtime
-pacing like ErsatzTV).
+Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
+multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
+playlists with per-channel media-sequence / `#EXT-X-DISCONTINUITY` tracking and
+`ffmpeg.hls_direct.output_format` targets (copy audio/video, realtime pacing
+like ErsatzTV).
 
 The segmenter worker (`HlsSessionWorker` in infra, with
 `HlsSessionRegistry`/`HlsSessionHandle`) spawns FFmpeg via
@@ -55,15 +50,17 @@ ErsatzTV instead of flooring to seconds.
 
 ADR 0016 adds an active HLS transcode limit
 (`ffmpeg.segmenter.active_transcode_limit`, default 2) beside ErsatzTV's
-work-ahead limit. The shipped first cut is a soft cap whose priority bypass is
-unbounded, so it is not a true ceiling; ADR 0016 was revised to a hard capacity
-ceiling plus an admission/preemption ladder (see the open debt below).
+work-ahead limit. The 2026-06-20 hardening slice removed the unbounded priority
+bypass: active HLS segmenter transcodes are tracked in a process-local slot map,
+no reservation path exceeds the configured ceiling, and over-capacity admission
+reclaims work-ahead, cooling, then stale watched StopOnDisconnect slots before
+returning an all-streams-in-use error without holding capacity. The 30s watch
+window is now separate from segmenter idle retention.
 
-Runtime proof: repeated TSDuck / `cargo xtask smoke` captures (2026-06-08
-through 2026-06-16) showed zero transport, sync-loss, continuity-counter, or
-PTS/DTS/PCR faults across MPEG-TS and HLS segmenter paths; the 2026-06-16
-`tsduck-playback-gate.sh gate` passed 86 checks with audio-pip cadence
-1.000-1.030 s. Slice-by-slice history lives in `sessions.ndjson` and git log.
+Runtime proof: repeated TSDuck / `cargo xtask smoke` captures through
+2026-06-16 showed zero transport, sync-loss, continuity-counter, or
+PTS/DTS/PCR faults across MPEG-TS and HLS segmenter paths. Slice-by-slice
+history lives in `sessions.ndjson` and git log.
 '''
 
 [[debt]]
@@ -92,5 +89,21 @@ id          = 'active-transcode-limit-not-a-real-ceiling'
 adr         = '0016'
 description = 'ffmpeg.segmenter.active_transcode_limit (ADR 0016) does not bound concurrent transcodes for actively-watched channels. The priority bypass (force_reserve_active_transcode in crates/ersatzrs-infra/src/hls_worker.rs) increments the counter without an upper bound whenever a session is recently accessed (idle < 30s), and every playlist/segment request calls touch(), so each live viewer permanently bypasses the cap. With K viewers on K channels and limit N, K-N sessions force-reserve, yielding K concurrent transcodes regardless of N. The single 30s constant also conflates "is anyone watching?" with the priority-slot lifetime. The revised ADR 0016 replaces this with a hard capacity ceiling plus an admission/preemption ladder (stop work-ahead, reclaim cooling, preempt stalest watched, else serve an "all streams in use" slate that holds no slot), decoupled watch (~30s) vs retention (= idle timeout) windows, a tuner-model configuration ("Maximum simultaneous transcodes" + reframed work-ahead), a live "Streams in use: X / N" readout, a hardware-aware suggested default, and eventual pipeline-agnostic (MPEG-TS) counting.'
 discovered  = '2026-06-17'
-evidence    = 'Code review of commit cfc5024 (ADR 0016 implementation). hls_worker.rs force_reserve_active_transcode does an unconditional fetch_add; was_recently_accessed() uses idle < HLS_ACTIVE_VIEWER_GRACE (30s); touch() is called on every playlist poll (crates/ersatzrs-web/src/transport/iptv/hls.rs:493) and segment fetch (:566). Plan: plans/hls-transcode-capacity-and-admission.md.'
+evidence    = 'Fixed 2026-06-20: crates/ersatzrs-infra/src/hls_worker.rs removed force_reserve_active_transcode, replaced the active counter with a process-local slot map, added admission-status reporting plus a reclaim signal, and split the 30s HLS_ACTIVE_WATCH_WINDOW from the configured idle-retention timeout. Focused tests prove the counter never exceeds N, work-ahead is reclaimed before cooling and stale watched sessions, stale preemption only targets preemptible watched slots, slot release on drop returns the count to zero, and watch-window expiry reclaims the FFmpeg child without cancelling the retained session. crates/ersatzrs-web/src/transport/iptv/hls.rs and stream.rs now return an all-HLS-transcode-slots-in-use 503 path when no initial playlist is available because capacity is full.'
+resolved    = true
+
+[[debt]]
+id          = 'active-transcode-observability-and-suggestion'
+adr         = '0016'
+description = 'ADR 0016 calls for a live "Streams in use: X / N (peak Y)" readout on FFmpeg settings/troubleshooting and a hardware-aware suggested value from the existing capability probe. The hard HLS ceiling now exists, but the admin-facing readout and suggestion have not been implemented.'
+discovered  = '2026-06-20'
+evidence    = 'The 2026-06-20 hard-ceiling slice updated the settings label/help text and tests, but did not add a public active/peak counter API, FFmpeg settings readout, troubleshooting readout, or hardware-aware suggestion.'
+resolved    = false
+
+[[debt]]
+id          = 'pipeline-agnostic-transcode-capacity-counting'
+adr         = '0016'
+description = 'The active transcode ceiling currently covers HLS segmenter FFmpeg generations only. ADR 0016 intentionally leaves MPEG-TS legacy/hybrid transcodes as follow-up work so the setting can eventually mean total transcode capacity across streaming modes.'
+discovered  = '2026-06-20'
+evidence    = 'The 2026-06-20 implementation is scoped to crates/ersatzrs-infra/src/hls_worker.rs and the HLS initial-segment wait paths; crates/ersatzrs-web/src/transport/iptv/stream.rs only observes HLS segmenter admission for the hybrid wrapper and does not count direct MPEG-TS FFmpeg processes.'
 resolved    = false

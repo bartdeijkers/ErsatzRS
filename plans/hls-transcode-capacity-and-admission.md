@@ -20,17 +20,22 @@ Two goals must hold simultaneously:
   viewer over capacity gets a graceful "all streams in use" slate instead of
   degrading every active stream.
 
-## Current state (verified 2026-06-17)
+## Current state (verified 2026-06-20)
 
-- Reservation + bypass live in
+- Reservation + admission live in
   [`crates/ersatzrs-infra/src/hls_worker.rs`](../crates/ersatzrs-infra/src/hls_worker.rs):
-  `HLS_ACTIVE_TRANSCODE_COUNT`, `try_reserve_active_transcode` (correct atomic
-  CAS cap), `force_reserve_active_transcode` (**unbounded** — the defect),
-  `was_recently_accessed` (idle `< HLS_ACTIVE_VIEWER_GRACE = 30 s`),
-  `priority_transcode_idle_timeout`, and the run-loop wiring (~lines 269–291).
+  `HLS_ACTIVE_TRANSCODE_COUNT`, `HLS_ACTIVE_TRANSCODE_SLOTS`,
+  `try_reserve_active_transcode`, `request_active_transcode_reclaim`,
+  `HLS_ACTIVE_WATCH_WINDOW = 30 s`, and the run-loop admission wiring.
+  The unbounded `force_reserve_active_transcode` bypass is removed.
 - `touch()` is called on every playlist poll and segment fetch
   ([`crates/ersatzrs-web/src/transport/iptv/hls.rs`](../crates/ersatzrs-web/src/transport/iptv/hls.rs)),
-  so any live viewer is permanently "recently accessed."
+  so watched sessions remain inside the watch window, but touching no longer
+  bypasses the configured active-transcode ceiling.
+- When capacity is full, the worker now asks a lower-priority running transcode
+  to release its slot in cost order (work-ahead, cooling, stale watched
+  StopOnDisconnect); otherwise the cold session reports an all-streams-in-use
+  503 path without holding a slot. A playable slate loop remains A3 follow-up.
 - Settings plumbing is complete and consistent: config key in
   [`crates/ersatzrs-domain/src/config.rs`](../crates/ersatzrs-domain/src/config.rs),
   seed default `2` in [`crates/ersatzrs-infra/src/db.rs`](../crates/ersatzrs-infra/src/db.rs),
@@ -52,7 +57,7 @@ Two goals must hold simultaneously:
 - ErsatzTV session lifecycle / idle / KeepRunning:
   `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`
   `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/Commands/StartFFmpegSessionHandler.cs`
-  `$ERSATZTV_SRC/ErsatzTV.Core/Interfaces/Streaming/IFFmpegSegmenterService.cs`
+  `$ERSATZTV_SRC/ErsatzTV.Core/Interfaces/FFmpeg/IFFmpegSegmenterService.cs`
 - ErsatzTV work-ahead semantics: `ffmpeg.segmenter.work_ahead_limit` usage in
   the segmenter service.
 - ErsatzTV rate-control source of truth (already ported):
@@ -68,6 +73,8 @@ Read the ErsatzTV lifecycle sources above; confirm the ErsatzRS code map and the
 exact run-loop points where a slot is acquired/held/released. No code change.
 
 ### Stage A1 — Minimum honest fix (make the number truthful)
+Status: implemented 2026-06-20.
+
 The smallest change that stops the unbounded bypass and the false labeling.
 
 - Remove the unbounded `force_reserve_active_transcode`. Replace the run-loop
@@ -85,6 +92,8 @@ The smallest change that stops the unbounded bypass and the false labeling.
   [feedback](../docs/adr/)); help-text render test updated.
 
 ### Stage A2 — Admission / preemption ladder
+Status: implemented 2026-06-20 for HLS segmenter workers.
+
 - Implement the cost-ordered ladder when a watched worker needs a slot and the
   pool is full: (1) stop a work-ahead burst, (2) reclaim a cooling
   (`W ≤ idle < R`) slot, (3) preempt the **stalest watched** session only past a
@@ -97,6 +106,9 @@ The smallest change that stops the unbounded bypass and the false labeling.
   channel.
 
 ### Stage A3 — Slate-on-full admission
+Status: partial. The cold-session error path is implemented; the playable slate
+loop remains open.
+
 - When the ladder cannot free a slot, serve the existing offline/error slate
   (build from `ERROR_BACKGROUND_PNG` / the troubleshooting slate path) as a
   short loop that does **not** consume a real transcode slot; the worker keeps

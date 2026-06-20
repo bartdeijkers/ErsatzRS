@@ -2,6 +2,37 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+/// Admission state for an HLS segmenter session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HlsAdmissionStatus {
+    /// The worker is alive but is not currently holding a transcode slot.
+    Waiting,
+    /// The worker is holding a transcode slot and may have an `FFmpeg` child.
+    Transcoding,
+    /// The worker needs a transcode slot, but the configured capacity is full.
+    AtCapacity,
+}
+
+impl HlsAdmissionStatus {
+    #[must_use]
+    pub const fn as_i32(self) -> i32 {
+        match self {
+            Self::Waiting => 0,
+            Self::Transcoding => 1,
+            Self::AtCapacity => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_i32(value: i32) -> Self {
+        match value {
+            1 => Self::Transcoding,
+            2 => Self::AtCapacity,
+            _ => Self::Waiting,
+        }
+    }
+}
+
 /// A live handle to a running HLS segmenter worker.
 ///
 /// Ports the parts of [`IHlsSessionWorker`] that the HTTP layer needs today.
@@ -13,6 +44,10 @@ use async_trait::async_trait;
 pub trait HlsSessionHandle: Send + Sync {
     fn channel_number(&self) -> &str;
     fn touch(&self);
+    fn admission_status(&self) -> HlsAdmissionStatus {
+        HlsAdmissionStatus::Waiting
+    }
+
     async fn trim_playlist(&self) -> Option<String>;
 
     /// Requests cancellation of the running session.

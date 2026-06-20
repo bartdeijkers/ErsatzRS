@@ -1694,14 +1694,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Używaj osadzonych napisów",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Element bez tytułu",
-        TextKey::ActiveTranscodeLimit => "Limit aktywnych transkodowań HLS",
+        TextKey::ActiveTranscodeLimit => "Maksymalna liczba jednoczesnych transkodowań HLS",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Maksymalna liczba transkodowań FFmpeg segmentera HLS, które mogą działać jednocześnie. Aktywni widzowie mogą tymczasowo dostać priorytet, aby przełączanie kanałów pozostało szybkie."
+            "Twardy limit transkodowań FFmpeg segmentera HLS. Gdy wszystkie miejsca są zajęte, nowy widz otrzymuje komunikat, że wszystkie strumienie są w użyciu, dopóki miejsce się nie zwolni; aktywne strumienie nie omijają limitu."
         },
         TextKey::Watermarks => "Znaki wodne",
         TextKey::Width => "Szerokość",
-        TextKey::WorkAheadSegmenterLimit => "Limit segmenterów HLS z wyprzedzeniem",
-        TextKey::WorkAheadSegmenterLimitHelp => "Liczba segmenterów (kanałów), które będą pracować z wyprzedzeniem i transkodować z maksymalną szybkością, gdy oglądanych jest wiele kanałów",
+        TextKey::WorkAheadSegmenterLimit => "Transkodowania HLS z wyprzedzeniem",
+        TextKey::WorkAheadSegmenterLimitHelp => "Ile miejsc transkodowania HLS może pracować z wyprzedzeniem z maksymalną szybkością, aby zbudować bufor. Praca z wyprzedzeniem zawsze ustępuje oglądanym strumieniom.",
         TextKey::AccelerationKind => "Rodzaj akceleracji",
         TextKey::AddFfmpegProfile => "Dodaj profil FFmpeg",
         TextKey::AddProfile => "Dodaj profil",

@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-20
-last_processed_commit: 417f9f25cc7fd25f960bd3226d390664523dfb22
+last_processed_commit: c0d72c8ec91cb9c2da819ddf687e9ddec2df8bba
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -21,14 +21,14 @@ see the [rules](automation/gap-prompt-rules.md). For the live gap list run
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Current reconcile (2026-06-20, through `417f9f2`): `cargo xtask progress gaps`
+Current reconcile (2026-06-20, through `c0d72c8`): `cargo xtask progress gaps`
 lists **1** remaining feature, so this file intentionally contains only one
 actionable prompt:
 
 - `hls-variant-playlists-segmenter`
 
-The completed FFmpeg command-generation and media collection route-family
-prompts were removed per
+The completed FFmpeg command-generation, media collection route-family, and HLS
+active-transcode hard-ceiling prompts were removed per
 `docs/automation/gap-prompt-rules.md`: completed scope is replaced, never kept
 with a completed banner. ADR 0008 FFmpeg runtime acquisition (ship without
 FFmpeg; download/update from the `bartdeijkers/ErsatzRS-ffmpeg` releases at
@@ -39,12 +39,11 @@ promoting it over the remaining open feature.
 
 ---
 
-## 1 - HLS variant playlists / segmenter: hard active transcode capacity (slug `hls-variant-playlists-segmenter`)
+## 1 - HLS variant playlists / segmenter: capacity observability and pipeline-wide counting (slug `hls-variant-playlists-segmenter`)
 
-Fix the next ErsatzRS streaming runtime-hardening gap: make
-`ffmpeg.segmenter.active_transcode_limit` a real ceiling for actively watched
-HLS segmenter sessions (slug `hls-variant-playlists-segmenter`, debt
-`active-transcode-limit-not-a-real-ceiling`).
+Fix the next ErsatzRS streaming runtime-hardening gap: finish the remaining ADR
+0016 active-transcode capacity follow-ups now that the HLS segmenter hard
+ceiling is in place (slug `hls-variant-playlists-segmenter`).
 
 Use the repo workflow from `AGENTS.md`. This is ADR-backed HLS runtime hardening
 under ADR 0016, not a pinned-baseline ErsatzTV behavior gap, so do not force it
@@ -56,44 +55,52 @@ baseline.
 
 Current `ParityDebt` from
 `docs/progress/parity/hls-variant-playlists-segmenter.toml`:
-- `active-transcode-limit-not-a-real-ceiling` (ADR 0016): the current priority
-  bypass increments the active-transcode counter without an upper bound for
-  recently accessed sessions, and every playlist/segment request calls
-  `touch()`. With K viewers on K channels and limit N, K-N sessions can
-  force-reserve, yielding K concurrent transcodes regardless of N.
+- `active-transcode-observability-and-suggestion` (ADR 0016): the hard HLS
+  ceiling exists, but the FFmpeg settings/troubleshooting pages still do not
+  expose `Streams in use: X / N (peak Y)` or a hardware-aware suggested value
+  from the existing capability probe.
+- `pipeline-agnostic-transcode-capacity-counting` (ADR 0016): the ceiling
+  currently covers HLS segmenter FFmpeg generations only. MPEG-TS legacy/hybrid
+  transcodes still need to participate in the same capacity accounting before
+  the setting can mean total streaming transcode capacity.
 
 Before editing:
 1. Inspect `crates/ersatzrs-infra/src/hls_worker.rs`,
    `crates/ersatzrs-infra/src/hls.rs`, `crates/ersatzrs-core/src/hls.rs`,
    `crates/ersatzrs-web/src/transport/iptv/hls.rs`, the `/channels` active
-   transcode UI/status path, and existing HLS worker tests.
-2. Build a Source Map for playlist/segment touch -> watched/cooling state ->
-   capacity reservation -> work-ahead reclamation -> preemption/admission ->
-   error/slate response -> active-session reporting.
+   transcode UI/status path, `crates/ersatzrs-web/src/transport/iptv/stream.rs`,
+   FFmpeg settings/troubleshooting server functions, and existing HLS/stream
+   tests.
+2. Build a Source Map for HLS slot reservations -> active/peak snapshots ->
+   FFmpeg settings/troubleshooting readouts -> hardware capability suggestion
+   -> MPEG-TS direct/hybrid FFmpeg process startup/release -> active-session
+   reporting.
 3. Preserve the already-ported HLS segmenter and StopOnDisconnect lifecycle
    behavior; do not regress `cargo xtask smoke` or TSDuck playback assumptions.
-4. Keep MPEG-TS pipeline-agnostic counting or hardware-aware default tuning as
-   visible future debt unless this slice proves it end-to-end.
+4. Treat playable all-streams-in-use slate output as a follow-up unless this
+   slice explicitly implements and runtime-proves it; do not hide it if you
+   discover the current 503 error path is insufficient.
 
-Implement the coherent ADR 0016 slice: replace the unbounded priority bypass
-with a hard capacity ceiling; decouple the watch window from idle retention;
-stop work-ahead first, reclaim cooling sessions next, preempt the stalest
-watched session only when configured behavior allows it, and otherwise serve an
-"all streams in use" slate/error path that holds no active transcode slot. Keep
-the active count accurate during cancellation, process exit, temp-dir cleanup,
-playlist polling, and segment fetches.
+Implement the coherent remaining ADR 0016 slice: expose a process-local
+active/peak capacity snapshot for the HLS ceiling, render it on FFmpeg settings
+and troubleshooting in all supported admin languages, add a hardware-aware
+suggested value without auto-applying it, and fold MPEG-TS legacy/hybrid
+transcode processes into the same reservation/release accounting if the slice
+can prove direct and wrapper streaming behavior end-to-end. If MPEG-TS counting
+must remain separate, leave that as explicit `ParityDebt` with the proof gap and
+close only the observability/suggestion debt.
 
-Add focused tests for limit N with K>N watched channels, playlist/segment touch
-not bypassing the cap, work-ahead reclamation before watched-session preemption,
-slot release on cancellation/drop, and active-session/status reporting. Add or
-update browser/UI coverage only if the visible `/channels` readout or controls
-change.
+Add focused tests for active/peak snapshot accounting, settings/troubleshooting
+rendering, hardware suggestion selection, MPEG-TS reservation release on normal
+exit and body-drop cancellation, and HLS segmenter regression coverage proving
+the existing hard ceiling still holds.
 
-Verify with focused HLS worker tests, `cargo xtask smoke`, the TSDuck playback
-gate if segmenter lifecycle behavior changes, `cargo xtask progress check`, and
-`cargo xtask progress gaps`. Update ADR 0016,
+Verify with focused HLS/stream/settings tests, `cargo xtask smoke`, the TSDuck
+playback gate if any runtime streaming lifecycle changes, `cargo xtask
+hydration-lint -p ersatzrs-web` if UI hydration changes, `cargo xtask progress
+check`, and `cargo xtask progress gaps`. Update ADR 0016,
 `plans/hls-transcode-capacity-and-admission.md`,
 `docs/progress/parity/hls-variant-playlists-segmenter.toml`, the changelog, and
 this prompt file only when evidence supports the new state. Report the Source
-Map, admission/preemption behavior, remaining `ParityDebt`, verification run,
-and changed files.
+Map, snapshot/readout behavior, remaining `ParityDebt`, verification run, and
+changed files.

@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
-use ersatzrs_core::hls::HlsSessionRegistry;
+use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionRegistry};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::{Channel, ChannelIdleBehavior, StreamingMode};
 use ersatzrs_ffmpeg::OutputFormat;
@@ -37,6 +37,7 @@ const CONFIG_KEY_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_form
 const DEFAULT_SEGMENTER_TIMEOUT_SECONDS_USIZE: usize = 60;
 const DEFAULT_INITIAL_SEGMENT_COUNT: usize = 1;
 const INITIAL_SEGMENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
+pub(crate) const HLS_AT_CAPACITY_MESSAGE: &str = "all HLS transcode slots are in use";
 
 pub(crate) fn request_scheme(headers: &HeaderMap) -> String {
     headers
@@ -68,6 +69,10 @@ fn hls_response(body: String) -> Response {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+fn hls_at_capacity_response() -> Response {
+    (StatusCode::SERVICE_UNAVAILABLE, HLS_AT_CAPACITY_MESSAGE).into_response()
 }
 
 pub(crate) async fn ensure_segmenter_worker_running(
@@ -173,27 +178,38 @@ fn parse_positive_usize(value: &str) -> Option<usize> {
         .filter(|value| *value > 0)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InitialSegmentWaitResult {
+    Ready,
+    AtCapacity,
+    MissingSession,
+    Timeout,
+}
+
 pub(crate) async fn wait_for_initial_segments(
-    state: &AppState,
+    registry: &dyn HlsSessionRegistry,
     channel_number: &str,
     segment_count: usize,
     startup_timeout: Duration,
-) -> bool {
+) -> InitialSegmentWaitResult {
     let started_at = tokio::time::Instant::now();
     while started_at.elapsed() < startup_timeout {
-        if let Some(handle) = state.hls_sessions.try_get(channel_number).await {
+        if let Some(handle) = registry.try_get(channel_number).await {
             if let Some(playlist) = handle.trim_playlist().await {
                 if count_playlist_segments(&playlist) >= segment_count {
-                    return true;
+                    return InitialSegmentWaitResult::Ready;
                 }
             }
+            if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
+                return InitialSegmentWaitResult::AtCapacity;
+            }
         } else {
-            return false;
+            return InitialSegmentWaitResult::MissingSession;
         }
         tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
     }
 
-    false
+    InitialSegmentWaitResult::Timeout
 }
 
 fn count_playlist_segments(playlist: &str) -> usize {
@@ -452,21 +468,33 @@ async fn serve_hls_segmenter_playlist(
 
     let initial_segment_count = load_initial_segment_count(state).await;
     let startup_timeout = load_segmenter_startup_timeout(state).await;
-    if !wait_for_initial_segments(
-        state,
+    match wait_for_initial_segments(
+        &*state.hls_sessions,
         &channel.number,
         initial_segment_count,
         startup_timeout,
     )
     .await
     {
-        tracing::warn!(
-            channel_number = %channel.number,
-            initial_segment_count,
-            startup_timeout_seconds = startup_timeout.as_secs(),
-            "hls segmenter did not produce initial playlist segments before timeout"
-        );
-        return (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response();
+        InitialSegmentWaitResult::Ready => {}
+        InitialSegmentWaitResult::AtCapacity => {
+            tracing::warn!(
+                channel_number = %channel.number,
+                initial_segment_count,
+                startup_timeout_seconds = startup_timeout.as_secs(),
+                "hls segmenter admission denied because all transcode slots are in use"
+            );
+            return hls_at_capacity_response();
+        }
+        InitialSegmentWaitResult::MissingSession | InitialSegmentWaitResult::Timeout => {
+            tracing::warn!(
+                channel_number = %channel.number,
+                initial_segment_count,
+                startup_timeout_seconds = startup_timeout.as_secs(),
+                "hls segmenter did not produce initial playlist segments before timeout"
+            );
+            return (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response();
+        }
     }
 
     let body =
@@ -491,8 +519,12 @@ pub async fn get_session_playlist(
 
     if let Some(handle) = state.hls_sessions.try_get(&channel_number).await {
         handle.touch();
+        let admission_status = handle.admission_status();
         return match handle.trim_playlist().await {
             Some(playlist) => hls_response(playlist),
+            None if admission_status == HlsAdmissionStatus::AtCapacity => {
+                hls_at_capacity_response()
+            }
             None => (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response(),
         };
     }
@@ -640,13 +672,19 @@ mod tests {
     struct FakeHandle {
         channel: String,
         touched: AtomicUsize,
+        admission_status: HlsAdmissionStatus,
     }
 
     impl FakeHandle {
         fn new(channel: &str) -> Arc<Self> {
+            Self::with_admission_status(channel, HlsAdmissionStatus::Waiting)
+        }
+
+        fn with_admission_status(channel: &str, admission_status: HlsAdmissionStatus) -> Arc<Self> {
             Arc::new(Self {
                 channel: channel.to_string(),
                 touched: AtomicUsize::new(0),
+                admission_status,
             })
         }
     }
@@ -659,6 +697,10 @@ mod tests {
 
         fn touch(&self) {
             self.touched.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn admission_status(&self) -> HlsAdmissionStatus {
+            self.admission_status
         }
 
         async fn trim_playlist(&self) -> Option<String> {
@@ -771,6 +813,21 @@ mod tests {
         touch_session_segment(&registry, "12").await;
 
         assert_eq!(handle.touched.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn initial_segment_wait_reports_at_capacity_without_waiting_for_timeout() {
+        let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
+        registry
+            .insert(FakeHandle::with_admission_status(
+                "12",
+                HlsAdmissionStatus::AtCapacity,
+            ))
+            .await;
+
+        let result = wait_for_initial_segments(&registry, "12", 1, Duration::from_mins(1)).await;
+
+        assert_eq!(result, InitialSegmentWaitResult::AtCapacity);
     }
 
     #[test]

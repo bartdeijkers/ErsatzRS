@@ -6,7 +6,14 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Partial — admission control is accepted and revised, but `ffmpeg.segmenter.active_transcode_limit` does not yet bound concurrent transcodes for actively-watched channels (`ParityDebt active-transcode-limit-not-a-real-ceiling`).
+Partial — the HLS segmenter hard ceiling and admission ladder are implemented
+as of 2026-06-20: no active HLS reservation path can exceed
+`ffmpeg.segmenter.active_transcode_limit`, work-ahead/cooling/stale-watched
+sessions are reclaimed before a newcomer is denied, and an over-capacity cold
+session returns an all-streams-in-use error without holding a slot. Remaining
+implementation work is the live/peak readout, hardware-aware suggested value,
+playable slate loop, and pipeline-agnostic counting for non-HLS segmenter
+transcodes.
 
 ## Context
 
@@ -186,3 +193,7 @@ everything else is opportunistic and reclaimable.*
   streams, AC-3 6ch, 25 fps, 720p→4K HDR, over 1 Gbps HTTP unicast). The
   `N = 2` decision is unchanged; the example now reflects the higher link and
   the multi-resolution profiles, reinforcing that the ceiling is CPU/GPU-bound.
+- 2026-06-20: Implemented the core HLS hard ceiling and admission ladder:
+  removed the unbounded priority bypass, split watch-window slot reclamation
+  from idle-retention cleanup, and added an all-streams-in-use error path for
+  cold sessions that cannot acquire capacity.

@@ -1710,14 +1710,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Usar legendas embutidas",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item sem título",
-        TextKey::ActiveTranscodeLimit => "Limite de transcodificações HLS ativas",
+        TextKey::ActiveTranscodeLimit => "Máximo de transcodificações HLS simultâneas",
         TextKey::ActiveTranscodeLimitHelp => {
-            "O número máximo de transcodificações FFmpeg do segmentador HLS que podem rodar ao mesmo tempo. Espectadores ativos podem receber prioridade temporária para manter a troca de canais rápida."
+            "Limite rígido para transcodificações FFmpeg do segmentador HLS. Quando todos os slots estão ocupados, um novo espectador recebe uma resposta de todos os streams em uso até que um slot seja liberado; streams ativos não ultrapassam o limite."
         },
         TextKey::Watermarks => "Marcas d'água",
         TextKey::Width => "Largura",
-        TextKey::WorkAheadSegmenterLimit => "Limite de segmentadores HLS antecipados",
-        TextKey::WorkAheadSegmenterLimitHelp => "O número de segmentadores (canais) que trabalharão antecipadamente e transcodificarão na velocidade máxima simultaneamente quando vários canais estiverem sendo assistidos",
+        TextKey::WorkAheadSegmenterLimit => "Transcodificações HLS antecipadas",
+        TextKey::WorkAheadSegmenterLimitHelp => "Quantos slots de transcodificação HLS podem avançar na velocidade máxima para criar buffer. O avanço sempre cede lugar a streams assistidos.",
         TextKey::AccelerationKind => "Tipo de aceleração",
         TextKey::AddFfmpegProfile => "Adicionar perfil FFmpeg",
         TextKey::AddProfile => "Adicionar perfil",

@@ -23,6 +23,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- HLS segmenter active transcode limits now enforce a hard ceiling instead of
+  letting recently watched channels bypass the cap. Over-capacity HLS sessions
+  reclaim work-ahead/cooling/stale watched transcodes first, otherwise return an
+  all-streams-in-use error without holding a transcode slot; the FFmpeg settings
+  copy now describes the hard limit.
 - FFmpeg command-generation parity is complete: the NVENC encoder-only
   CUDA-filter gate is now live-proven against an FFmpeg 8.1 build with `cuda`
   and `h264_nvenc` but without `scale_cuda`, `yadif_cuda`, or `overlay_cuda`,

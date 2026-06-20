@@ -1684,14 +1684,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Ingesloten ondertitels gebruiken",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item zonder titel",
-        TextKey::ActiveTranscodeLimit => "Limiet voor actieve HLS-transcodes",
+        TextKey::ActiveTranscodeLimit => "Maximaal gelijktijdige HLS-transcodes",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Het maximale aantal FFmpeg-transcodes van HLS-segmenters dat tegelijk mag draaien. Actieve kijkers kunnen tijdelijk voorrang krijgen zodat zappen snel blijft."
+            "Harde limiet voor FFmpeg-transcodes van de HLS-segmenter. Wanneer alle slots bezet zijn, krijgt een nieuwe kijker een melding dat alle streams in gebruik zijn totdat er een slot vrijkomt; actieve streams omzeilen de limiet niet."
         },
         TextKey::Watermarks => "Watermerken",
         TextKey::Width => "Breedte",
-        TextKey::WorkAheadSegmenterLimit => "Limiet voor vooruitwerkende HLS-segmenters",
-        TextKey::WorkAheadSegmenterLimitHelp => "Het aantal segmenters (kanalen) dat tegelijk vooruitwerkt (transcodeert op maximale snelheid) wanneer meerdere kanalen worden bekeken",
+        TextKey::WorkAheadSegmenterLimit => "Vooruitwerkende HLS-transcodes",
+        TextKey::WorkAheadSegmenterLimitHelp => "Hoeveel HLS-transcodeslots vooruit mogen werken op maximale snelheid om buffer op te bouwen. Vooruitwerken wijkt altijd voor bekeken streams.",
         TextKey::AccelerationKind => "Acceleratietype",
         TextKey::AddFfmpegProfile => "FFmpeg-profiel toevoegen",
         TextKey::AddProfile => "Profiel toevoegen",

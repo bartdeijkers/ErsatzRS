@@ -1028,15 +1028,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Use Embedded Subtitles",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Untitled item",
-        TextKey::ActiveTranscodeLimit => "Active HLS Transcode Limit",
+        TextKey::ActiveTranscodeLimit => "Maximum Simultaneous HLS Transcodes",
         TextKey::ActiveTranscodeLimitHelp => {
-            "The maximum number of HLS segmenter FFmpeg transcodes that may run at the same time. Active viewers can temporarily take priority so channel changes stay responsive."
+            "Hard ceiling for HLS segmenter FFmpeg transcodes. When all slots are busy, a new viewer gets an all-streams-in-use response until a slot frees; active streams are not bypassed over the limit."
         },
         TextKey::Watermarks => "Watermarks",
         TextKey::Width => "Width",
-        TextKey::WorkAheadSegmenterLimit => "Work-Ahead HLS Segmenter Limit",
+        TextKey::WorkAheadSegmenterLimit => "Work-Ahead HLS Transcodes",
         TextKey::WorkAheadSegmenterLimitHelp => {
-            "The number of segmenters (channels) that will work-ahead (transcode at maximum speed) simultaneously, if multiple channels are being watched"
+            "How many HLS transcode slots may run ahead at maximum speed to build buffer. Work-ahead always yields to watched streams."
         },
         TextKey::AccelerationKind => "Acceleration Kind",
         TextKey::AddFfmpegProfile => "Add FFmpeg Profile",

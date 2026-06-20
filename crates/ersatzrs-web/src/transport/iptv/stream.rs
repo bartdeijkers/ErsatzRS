@@ -525,21 +525,20 @@ async fn serve_segmenter_wrapper_stream(
 
     let initial_segment_count = hls::load_initial_segment_count(state).await;
     let startup_timeout = hls::load_segmenter_startup_timeout(state).await;
-    if !hls::wait_for_initial_segments(
-        state,
+    let wait_result = hls::wait_for_initial_segments(
+        &*state.hls_sessions,
         &channel.number,
         initial_segment_count,
         startup_timeout,
     )
-    .await
-    {
-        tracing::warn!(
-            channel_number = %channel.number,
-            initial_segment_count,
-            startup_timeout_seconds = startup_timeout.as_secs(),
-            "hls segmenter did not produce initial playlist segments before wrapper startup timeout"
-        );
-        return (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response();
+    .await;
+    if let Some(response) = segmenter_wrapper_wait_failure_response(
+        wait_result,
+        &channel.number,
+        initial_segment_count,
+        startup_timeout,
+    ) {
+        return response;
     }
 
     let aac_latm_audio = match load_channel_playback_profile(&state.pool, channel.id).await {
@@ -594,6 +593,41 @@ async fn serve_segmenter_wrapper_stream(
         Err(error) => {
             tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for wrapped segmenter");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn segmenter_wrapper_wait_failure_response(
+    wait_result: hls::InitialSegmentWaitResult,
+    channel_number: &str,
+    initial_segment_count: usize,
+    startup_timeout: Duration,
+) -> Option<Response> {
+    match wait_result {
+        hls::InitialSegmentWaitResult::Ready => None,
+        hls::InitialSegmentWaitResult::AtCapacity => {
+            tracing::warn!(
+                channel_number,
+                initial_segment_count,
+                startup_timeout_seconds = startup_timeout.as_secs(),
+                "hls segmenter admission denied before wrapper startup because all transcode slots are in use"
+            );
+            Some(
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    hls::HLS_AT_CAPACITY_MESSAGE,
+                )
+                    .into_response(),
+            )
+        }
+        hls::InitialSegmentWaitResult::MissingSession | hls::InitialSegmentWaitResult::Timeout => {
+            tracing::warn!(
+                channel_number,
+                initial_segment_count,
+                startup_timeout_seconds = startup_timeout.as_secs(),
+                "hls segmenter did not produce initial playlist segments before wrapper startup timeout"
+            );
+            Some((StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response())
         }
     }
 }
