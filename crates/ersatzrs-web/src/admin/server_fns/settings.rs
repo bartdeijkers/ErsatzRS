@@ -61,12 +61,41 @@ pub struct FfmpegSettingsPageData {
     /// form so an empty (auto-detect) field still surfaces the detected path.
     pub ffmpeg_resolved: String,
     pub ffprobe_resolved: String,
+    pub active_transcode_capacity: ActiveTranscodeCapacityStatus,
     pub ffmpeg_profiles: Vec<SelectOption>,
     pub languages: Vec<SelectOption>,
     pub watermarks: Vec<SelectOption>,
     pub fallback_fillers: Vec<SelectOption>,
     pub mpeg_ts_scripts: Vec<SelectOption>,
     pub custom_resolutions: Vec<SelectOption>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ActiveTranscodeCapacityStatus {
+    pub active: i32,
+    pub limit: i32,
+    pub peak: i32,
+    pub suggested_limit: i32,
+    pub suggestion_reason: ActiveTranscodeSuggestionReason,
+}
+
+impl Default for ActiveTranscodeCapacityStatus {
+    fn default() -> Self {
+        Self {
+            active: 0,
+            limit: 2,
+            peak: 0,
+            suggested_limit: 2,
+            suggestion_reason: ActiveTranscodeSuggestionReason::Software,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ActiveTranscodeSuggestionReason {
+    Hardware,
+    #[default]
+    Software,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -166,7 +195,7 @@ pub async fn load_ffmpeg_settings() -> Result<FfmpegSettingsPageData, ServerFnEr
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    load_ffmpeg_settings_with_pool(&state.pool).await
+    load_ffmpeg_settings_with_state(&state).await
 }
 
 #[server]
@@ -315,6 +344,28 @@ pub async fn delete_custom_resolution(id: i64) -> Result<(), ServerFnError> {
 pub async fn load_ffmpeg_settings_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<FfmpegSettingsPageData, ServerFnError> {
+    load_ffmpeg_settings_with_capabilities(
+        pool,
+        &ersatzrs_ffmpeg::FfmpegCapabilityReport::default(),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_lines)]
+#[cfg(feature = "ssr")]
+pub async fn load_ffmpeg_settings_with_state(
+    state: &crate::host::state::AppState,
+) -> Result<FfmpegSettingsPageData, ServerFnError> {
+    let runtime = state.ffmpeg_runtime.read().await;
+    load_ffmpeg_settings_with_capabilities(&state.pool, &runtime.capabilities).await
+}
+
+#[allow(clippy::too_many_lines)]
+#[cfg(feature = "ssr")]
+async fn load_ffmpeg_settings_with_capabilities(
+    pool: &ersatzrs_infra::db::DbPool,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> Result<FfmpegSettingsPageData, ServerFnError> {
     let form = FfmpegSettingsForm {
         ffmpeg_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "").await?,
         ffprobe_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH, "").await?,
@@ -402,11 +453,14 @@ pub async fn load_ffmpeg_settings_with_pool(
 
     let ffmpeg_resolved = ersatzrs_ffmpeg::resolve_ffmpeg_path(Some(&form.ffmpeg_path)).path;
     let ffprobe_resolved = ersatzrs_ffmpeg::resolve_ffprobe_path(Some(&form.ffprobe_path)).path;
+    let active_transcode_capacity =
+        active_transcode_capacity_status(form.active_transcode_limit, capabilities);
 
     Ok(FfmpegSettingsPageData {
         form,
         ffmpeg_resolved,
         ffprobe_resolved,
+        active_transcode_capacity,
         ffmpeg_profiles: select_options(
             pool,
             r#"SELECT "Id", "Name" FROM "FFmpegProfile" ORDER BY "Name", "Id""#,
@@ -622,6 +676,47 @@ async fn refresh_ffmpeg_runtime(
         .map_err(|error| ServerFnError::new(error.to_string()))?;
     *state.ffmpeg_runtime.write().await = report;
     Ok(())
+}
+
+#[cfg(feature = "ssr")]
+pub(crate) fn active_transcode_capacity_status(
+    limit: i32,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+) -> ActiveTranscodeCapacityStatus {
+    let snapshot = ersatzrs_infra::transcode_capacity::active_transcode_snapshot(limit);
+    let suggestion = suggest_active_transcode_limit(capabilities, available_parallelism());
+    ActiveTranscodeCapacityStatus {
+        active: snapshot.active,
+        limit: snapshot.limit,
+        peak: snapshot.peak,
+        suggested_limit: suggestion.0,
+        suggestion_reason: suggestion.1,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn available_parallelism() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
+}
+
+#[cfg(feature = "ssr")]
+fn suggest_active_transcode_limit(
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
+    cpu_count: usize,
+) -> (i32, ActiveTranscodeSuggestionReason) {
+    let cpu_count = cpu_count.max(1);
+    let acceleration = ersatzrs_ffmpeg::preferred_default_profile_acceleration(capabilities);
+    if acceleration != ersatzrs_domain::HardwareAccelerationKind::None {
+        (
+            i32::try_from(cpu_count.clamp(2, 8)).unwrap_or(8),
+            ActiveTranscodeSuggestionReason::Hardware,
+        )
+    } else {
+        (
+            i32::try_from((cpu_count / 2).clamp(1, 4)).unwrap_or(4),
+            ActiveTranscodeSuggestionReason::Software,
+        )
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -1263,6 +1358,7 @@ fn enqueue_playout_builds(
 mod tests {
     use super::*;
     use sqlx::Row;
+    use std::collections::BTreeSet;
 
     async fn fresh_pool() -> ersatzrs_infra::db::DbPool {
         let dir = tempfile::tempdir().expect("temp db dir");
@@ -1289,6 +1385,34 @@ mod tests {
         assert!(data.form.ffmpeg_path.is_empty());
         assert!(!data.ffmpeg_resolved.is_empty());
         assert!(!data.ffprobe_resolved.is_empty());
+        assert_eq!(data.active_transcode_capacity.limit, 2);
+        assert!(data.active_transcode_capacity.suggested_limit >= 1);
+    }
+
+    #[test]
+    fn active_transcode_suggestion_prefers_hardware_capacity_when_encoder_is_available() {
+        let capabilities = ersatzrs_ffmpeg::FfmpegCapabilityReport {
+            hwaccels: BTreeSet::from(["cuda".to_owned()]),
+            encoders: BTreeSet::from(["h264_nvenc".to_owned()]),
+            ..ersatzrs_ffmpeg::FfmpegCapabilityReport::default()
+        };
+
+        assert_eq!(
+            suggest_active_transcode_limit(&capabilities, 6),
+            (6, ActiveTranscodeSuggestionReason::Hardware)
+        );
+    }
+
+    #[test]
+    fn active_transcode_suggestion_stays_conservative_for_software_encoding() {
+        assert_eq!(
+            suggest_active_transcode_limit(&ersatzrs_ffmpeg::FfmpegCapabilityReport::default(), 8),
+            (4, ActiveTranscodeSuggestionReason::Software)
+        );
+        assert_eq!(
+            suggest_active_transcode_limit(&ersatzrs_ffmpeg::FfmpegCapabilityReport::default(), 1),
+            (1, ActiveTranscodeSuggestionReason::Software)
+        );
     }
 
     #[tokio::test]

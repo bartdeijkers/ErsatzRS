@@ -3,9 +3,9 @@ use leptos::prelude::*;
 use crate::admin::i18n::{log_level_text, supported_ui_language_options, tr, use_i18n, TextKey};
 use crate::admin::server_fns::settings::{
     load_ffmpeg_settings, load_hdhr_settings, load_logging_settings, load_playout_settings,
-    load_scanner_settings, load_ui_settings, load_xmltv_settings, FfmpegSettingsPageData,
-    HdhrSettingsForm, LoggingSettingsForm, PlayoutSettingsForm, ScannerSettingsForm, SelectOption,
-    UiSettingsForm, XmltvSettingsForm,
+    load_scanner_settings, load_ui_settings, load_xmltv_settings, ActiveTranscodeCapacityStatus,
+    ActiveTranscodeSuggestionReason, FfmpegSettingsPageData, HdhrSettingsForm, LoggingSettingsForm,
+    PlayoutSettingsForm, ScannerSettingsForm, SelectOption, UiSettingsForm, XmltvSettingsForm,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
@@ -104,6 +104,7 @@ pub fn XmltvSettingsPage() -> impl IntoView {
 
 #[allow(clippy::too_many_lines)]
 fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
+    let active_transcode_capacity = data.active_transcode_capacity;
     let form = data.form;
     let mpeg_ts_scripts = localize_mpeg_ts_script_options(data.mpeg_ts_scripts);
     // The path inputs are intentionally not `required`: an empty value saves
@@ -194,6 +195,8 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
             <Field label=tr(TextKey::ActiveTranscodeLimit)>
                 <input class=style::input name="active_transcode_limit" type="number" min="1" required value=form.active_transcode_limit/>
                 <p class=style::help>{tr(TextKey::ActiveTranscodeLimitHelp)}</p>
+                <p class=style::help>{active_transcode_readout(active_transcode_capacity)}</p>
+                <p class=style::help>{active_transcode_suggestion(active_transcode_capacity)}</p>
             </Field>
             <Field label=tr(TextKey::HlsSegmenterInitialSegmentCount)>
                 <input class=style::input name="initial_segment_count" type="number" min="1" required value=form.initial_segment_count/>
@@ -302,6 +305,30 @@ fn localize_mpeg_ts_script_options(options: Vec<SelectOption>) -> Vec<SelectOpti
             option
         })
         .collect()
+}
+
+fn active_transcode_readout(capacity: ActiveTranscodeCapacityStatus) -> String {
+    format!(
+        "{}: {} / {} ({} {})",
+        tr(TextKey::StreamsInUse),
+        capacity.active,
+        capacity.limit,
+        tr(TextKey::Peak),
+        capacity.peak
+    )
+}
+
+fn active_transcode_suggestion(capacity: ActiveTranscodeCapacityStatus) -> String {
+    let reason = match capacity.suggestion_reason {
+        ActiveTranscodeSuggestionReason::Hardware => tr(TextKey::ActiveTranscodeSuggestionHardware),
+        ActiveTranscodeSuggestionReason::Software => tr(TextKey::ActiveTranscodeSuggestionSoftware),
+    };
+    format!(
+        "{}: {} - {}",
+        tr(TextKey::SuggestedTranscodeLimit),
+        capacity.suggested_limit,
+        reason
+    )
 }
 
 fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
@@ -591,8 +618,10 @@ mod tests {
         let html = render_ffmpeg(data).into_view().to_html();
         let input = input_html(&html, r#"name="active_transcode_limit""#);
 
-        assert!(html.contains("Maximum Simultaneous HLS Transcodes"));
+        assert!(html.contains("Maximum Simultaneous Streaming Transcodes"));
         assert!(html.contains("all-streams-in-use"));
+        assert!(html.contains("Streams in use: 0 / 2 (peak 0)"));
+        assert!(html.contains("Suggested value: 2"));
         assert!(input.contains(r#"type="number""#));
         assert!(input.contains(r#"min="1""#));
         assert!(input.contains(r#"value="2""#));

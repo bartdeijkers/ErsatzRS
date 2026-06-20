@@ -1028,10 +1028,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Use Embedded Subtitles",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Untitled item",
-        TextKey::ActiveTranscodeLimit => "Maximum Simultaneous HLS Transcodes",
+        TextKey::ActiveTranscodeLimit => "Maximum Simultaneous Streaming Transcodes",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Hard ceiling for HLS segmenter FFmpeg transcodes. When all slots are busy, a new viewer gets an all-streams-in-use response until a slot frees; active streams are not bypassed over the limit."
+            "Hard ceiling for streaming FFmpeg transcodes. When all slots are busy, a new viewer gets an all-streams-in-use response until a slot frees; active streams are not bypassed over the limit."
         },
+        TextKey::ActiveTranscodeSuggestionHardware => {
+            "Hardware encoder detected; this is a suggested value, not an automatic change."
+        },
+        TextKey::ActiveTranscodeSuggestionSoftware => {
+            "Software encoding only; this is a suggested value, not an automatic change."
+        },
+        TextKey::Peak => "peak",
+        TextKey::StreamsInUse => "Streams in use",
+        TextKey::SuggestedTranscodeLimit => "Suggested value",
         TextKey::Watermarks => "Watermarks",
         TextKey::Width => "Width",
         TextKey::WorkAheadSegmenterLimit => "Work-Ahead HLS Transcodes",

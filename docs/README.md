@@ -46,6 +46,7 @@ Location: [explanation/](explanation/)
 Current explanation pages:
 
 - [Leptos runtime configuration](explanation/leptos-runtime-config.md)
+- [Avoiding the inspection paradox in streaming-reliability testing](explanation/streaming-reliability-sampling.md)
 
 ## Rule of Thumb
 

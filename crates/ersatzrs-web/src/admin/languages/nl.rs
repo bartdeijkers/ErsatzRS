@@ -1684,10 +1684,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Ingesloten ondertitels gebruiken",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item zonder titel",
-        TextKey::ActiveTranscodeLimit => "Maximaal gelijktijdige HLS-transcodes",
+        TextKey::ActiveTranscodeLimit => "Maximaal gelijktijdige streamingtranscodes",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Harde limiet voor FFmpeg-transcodes van de HLS-segmenter. Wanneer alle slots bezet zijn, krijgt een nieuwe kijker een melding dat alle streams in gebruik zijn totdat er een slot vrijkomt; actieve streams omzeilen de limiet niet."
+            "Harde limiet voor FFmpeg-streamingtranscodes. Wanneer alle slots bezet zijn, krijgt een nieuwe kijker een melding dat alle streams in gebruik zijn totdat er een slot vrijkomt; actieve streams omzeilen de limiet niet."
         },
+        TextKey::ActiveTranscodeSuggestionHardware => {
+            "Hardware-encoder gevonden; dit is een voorgestelde waarde, geen automatische wijziging."
+        },
+        TextKey::ActiveTranscodeSuggestionSoftware => {
+            "Alleen software-encoding; dit is een voorgestelde waarde, geen automatische wijziging."
+        },
+        TextKey::Peak => "piek",
+        TextKey::StreamsInUse => "Streams in gebruik",
+        TextKey::SuggestedTranscodeLimit => "Voorgestelde waarde",
         TextKey::Watermarks => "Watermerken",
         TextKey::Width => "Breedte",
         TextKey::WorkAheadSegmenterLimit => "Vooruitwerkende HLS-transcodes",

@@ -1710,10 +1710,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Usar legendas embutidas",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item sem título",
-        TextKey::ActiveTranscodeLimit => "Máximo de transcodificações HLS simultâneas",
+        TextKey::ActiveTranscodeLimit => "Máximo de transcodificações de streaming simultâneas",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Limite rígido para transcodificações FFmpeg do segmentador HLS. Quando todos os slots estão ocupados, um novo espectador recebe uma resposta de todos os streams em uso até que um slot seja liberado; streams ativos não ultrapassam o limite."
+            "Limite rígido para transcodificações FFmpeg de streaming. Quando todos os slots estão ocupados, um novo espectador recebe uma resposta de todos os streams em uso até que um slot seja liberado; streams ativos não ultrapassam o limite."
         },
+        TextKey::ActiveTranscodeSuggestionHardware => {
+            "Codificador de hardware detectado; este é um valor sugerido, não uma alteração automática."
+        },
+        TextKey::ActiveTranscodeSuggestionSoftware => {
+            "Apenas codificação por software; este é um valor sugerido, não uma alteração automática."
+        },
+        TextKey::Peak => "pico",
+        TextKey::StreamsInUse => "Streams em uso",
+        TextKey::SuggestedTranscodeLimit => "Valor sugerido",
         TextKey::Watermarks => "Marcas d'água",
         TextKey::Width => "Largura",
         TextKey::WorkAheadSegmenterLimit => "Transcodificações HLS antecipadas",

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{
     atomic::{AtomicI32, AtomicI64, AtomicU64, Ordering},
-    Arc, Mutex as StdMutex, OnceLock,
+    Arc,
 };
 use std::time::Duration;
 
@@ -35,6 +35,10 @@ use crate::playback::{
     watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
+use crate::transcode_capacity::{
+    load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
+    ActiveTranscodeKind, ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
+};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
@@ -55,13 +59,8 @@ const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25)
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
-const DEFAULT_ACTIVE_TRANSCODE_LIMIT: i32 = 2;
 
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
-static HLS_ACTIVE_TRANSCODE_COUNT: AtomicI32 = AtomicI32::new(0);
-static HLS_ACTIVE_TRANSCODE_SLOT_ID: AtomicU64 = AtomicU64::new(1);
-static HLS_ACTIVE_TRANSCODE_SLOTS: OnceLock<StdMutex<HashMap<String, ActiveTranscodeSlot>>> =
-    OnceLock::new();
 
 const ERROR_BACKGROUND_PNG: &[u8] = include_bytes!("../../../assets/_background.png");
 
@@ -313,25 +312,32 @@ impl HlsSessionWorker {
             };
             let realtime = realtime_by_buffer || work_ahead_reservation.is_none();
             let active_transcode_kind = if realtime {
-                ActiveTranscodeKind::Realtime
+                ActiveTranscodeKind::HlsRealtime
             } else {
-                ActiveTranscodeKind::WorkAhead
+                ActiveTranscodeKind::HlsWorkAhead
             };
-            let active_limit = load_hls_active_transcode_limit(&pool).await;
+            let active_limit = load_active_transcode_limit(&pool).await;
             let active_transcode_reservation = try_reserve_active_transcode(
                 active_limit,
-                ActiveTranscodeSlot::new(
+                ActiveTranscodeSlot::new_hls(
                     &self.channel_number,
                     active_transcode_kind,
                     Arc::clone(&self.last_access_ms),
-                    Arc::clone(&self.reclaim_transcode),
-                    Arc::clone(&self.reclaim_requested_slot_id),
-                    Arc::clone(&self.reclaim_reacquire_deferred_until_ms),
-                    idle_timeout.is_some(),
+                    ActiveTranscodeReclaimHandle::new(
+                        Arc::clone(&self.reclaim_transcode),
+                        Arc::clone(&self.reclaim_requested_slot_id),
+                        Arc::clone(&self.reclaim_reacquire_deferred_until_ms),
+                        idle_timeout.is_some(),
+                    ),
                 ),
             );
             let Some(active_transcode_reservation) = active_transcode_reservation else {
-                if let Some(reclaim) = request_active_transcode_reclaim(&self.channel_number) {
+                if let Some(reclaim) = request_active_transcode_reclaim(
+                    &self.channel_number,
+                    HLS_ACTIVE_WATCH_WINDOW,
+                    HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+                    HLS_RECLAIMED_REACQUIRE_DELAY,
+                ) {
                     tracing::info!(
                         channel_number = %self.channel_number,
                         target_channel = %reclaim.channel_number,
@@ -1897,77 +1903,6 @@ fn release_work_ahead() {
         .ok();
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ActiveTranscodeKind {
-    Realtime,
-    WorkAhead,
-}
-
-#[derive(Clone)]
-struct ActiveTranscodeSlot {
-    slot_id: u64,
-    channel_number: String,
-    kind: ActiveTranscodeKind,
-    last_access_ms: Arc<AtomicI64>,
-    reclaim_transcode: Arc<Notify>,
-    reclaim_requested_slot_id: Arc<AtomicU64>,
-    reclaim_reacquire_deferred_until_ms: Arc<AtomicI64>,
-    allow_watched_preemption: bool,
-}
-
-impl ActiveTranscodeSlot {
-    fn new(
-        channel_number: &str,
-        kind: ActiveTranscodeKind,
-        last_access_ms: Arc<AtomicI64>,
-        reclaim_transcode: Arc<Notify>,
-        reclaim_requested_slot_id: Arc<AtomicU64>,
-        reclaim_reacquire_deferred_until_ms: Arc<AtomicI64>,
-        allow_watched_preemption: bool,
-    ) -> Self {
-        Self {
-            slot_id: next_active_transcode_slot_id(),
-            channel_number: channel_number.to_owned(),
-            kind,
-            last_access_ms,
-            reclaim_transcode,
-            reclaim_requested_slot_id,
-            reclaim_reacquire_deferred_until_ms,
-            allow_watched_preemption,
-        }
-    }
-
-    fn idle_for(&self, now_ms: i64) -> Duration {
-        let idle_ms = now_ms
-            .saturating_sub(self.last_access_ms.load(Ordering::Relaxed))
-            .max(0);
-        Duration::from_millis(u64::try_from(idle_ms).unwrap_or(u64::MAX))
-    }
-
-    fn request_reclaim(&self, now_ms: i64) {
-        defer_active_transcode_reacquire(&self.reclaim_reacquire_deferred_until_ms, now_ms);
-        self.reclaim_requested_slot_id
-            .store(self.slot_id, Ordering::Release);
-    }
-}
-
-struct ActiveTranscodeReservation {
-    channel_number: String,
-    slot_id: u64,
-}
-
-impl ActiveTranscodeReservation {
-    const fn slot_id(&self) -> u64 {
-        self.slot_id
-    }
-}
-
-impl Drop for ActiveTranscodeReservation {
-    fn drop(&mut self) {
-        release_active_transcode(&self.channel_number);
-    }
-}
-
 struct AdmissionStatusGuard<'a> {
     worker: &'a HlsSessionWorker,
 }
@@ -1983,130 +1918,6 @@ impl Drop for AdmissionStatusGuard<'_> {
         self.worker
             .set_admission_status(HlsAdmissionStatus::Waiting);
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ActiveTranscodeReclaimReason {
-    WorkAhead,
-    Cooling,
-    StaleWatched,
-}
-
-struct ActiveTranscodeReclaim {
-    channel_number: String,
-    slot_id: u64,
-    notify: Arc<Notify>,
-    reason: ActiveTranscodeReclaimReason,
-}
-
-fn next_active_transcode_slot_id() -> u64 {
-    HLS_ACTIVE_TRANSCODE_SLOT_ID.fetch_add(1, Ordering::Relaxed)
-}
-
-fn active_transcode_slots() -> &'static StdMutex<HashMap<String, ActiveTranscodeSlot>> {
-    HLS_ACTIVE_TRANSCODE_SLOTS.get_or_init(|| StdMutex::new(HashMap::new()))
-}
-
-fn try_reserve_active_transcode(
-    limit: i32,
-    slot: ActiveTranscodeSlot,
-) -> Option<ActiveTranscodeReservation> {
-    if limit <= 0 {
-        return None;
-    }
-
-    let mut slots = active_transcode_slots()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if slots.len() >= usize::try_from(limit).unwrap_or(usize::MAX) {
-        return None;
-    }
-
-    let channel_number = slot.channel_number.clone();
-    if slots.contains_key(&channel_number) {
-        return None;
-    }
-
-    let slot_id = slot.slot_id;
-    slots.insert(channel_number.clone(), slot);
-    HLS_ACTIVE_TRANSCODE_COUNT.store(
-        i32::try_from(slots.len()).unwrap_or(i32::MAX),
-        Ordering::Release,
-    );
-    Some(ActiveTranscodeReservation {
-        channel_number,
-        slot_id,
-    })
-}
-
-fn release_active_transcode(channel_number: &str) {
-    let mut slots = active_transcode_slots()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    slots.remove(channel_number);
-    HLS_ACTIVE_TRANSCODE_COUNT.store(
-        i32::try_from(slots.len()).unwrap_or(i32::MAX),
-        Ordering::Release,
-    );
-}
-
-fn request_active_transcode_reclaim(requester_channel: &str) -> Option<ActiveTranscodeReclaim> {
-    let now_ms = Utc::now().timestamp_millis();
-    let slots = active_transcode_slots()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-    let work_ahead = best_reclaim_candidate(&slots, requester_channel, now_ms, |slot, _| {
-        slot.kind == ActiveTranscodeKind::WorkAhead
-    })
-    .map(|slot| (slot, ActiveTranscodeReclaimReason::WorkAhead));
-
-    let cooling = || {
-        best_reclaim_candidate(&slots, requester_channel, now_ms, |_, idle_for| {
-            idle_for >= HLS_ACTIVE_WATCH_WINDOW
-        })
-        .map(|slot| (slot, ActiveTranscodeReclaimReason::Cooling))
-    };
-
-    let stale_watched = || {
-        best_reclaim_candidate(&slots, requester_channel, now_ms, |slot, idle_for| {
-            slot.allow_watched_preemption
-                && idle_for >= HLS_STALE_WATCHED_PREEMPTION_THRESHOLD
-                && idle_for < HLS_ACTIVE_WATCH_WINDOW
-        })
-        .map(|slot| (slot, ActiveTranscodeReclaimReason::StaleWatched))
-    };
-
-    let (slot, reason) = work_ahead.or_else(cooling).or_else(stale_watched)?;
-    slot.request_reclaim(now_ms);
-    Some(ActiveTranscodeReclaim {
-        channel_number: slot.channel_number.clone(),
-        slot_id: slot.slot_id,
-        notify: Arc::clone(&slot.reclaim_transcode),
-        reason,
-    })
-}
-
-fn best_reclaim_candidate<'a>(
-    slots: &'a HashMap<String, ActiveTranscodeSlot>,
-    requester_channel: &str,
-    now_ms: i64,
-    predicate: impl Fn(&ActiveTranscodeSlot, Duration) -> bool,
-) -> Option<&'a ActiveTranscodeSlot> {
-    slots
-        .values()
-        .filter(|slot| slot.channel_number != requester_channel)
-        .filter_map(|slot| {
-            let idle_for = slot.idle_for(now_ms);
-            predicate(slot, idle_for).then_some((slot, idle_for))
-        })
-        .max_by_key(|(_, idle_for)| *idle_for)
-        .map(|(slot, _)| slot)
-}
-
-fn defer_active_transcode_reacquire(deferred_until_ms: &AtomicI64, now_ms: i64) {
-    let delay_ms = i64::try_from(HLS_RECLAIMED_REACQUIRE_DELAY.as_millis()).unwrap_or(i64::MAX);
-    deferred_until_ms.store(now_ms.saturating_add(delay_ms), Ordering::Release);
 }
 
 fn active_transcode_reacquire_delay(
@@ -2160,18 +1971,6 @@ async fn load_hls_work_ahead_limit(pool: &DbPool) -> i32 {
         .and_then(|value| value.trim().parse::<i32>().ok())
         .unwrap_or(DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT)
         .max(0)
-}
-
-async fn load_hls_active_transcode_limit(pool: &DbPool) -> i32 {
-    sqlx::query_scalar::<_, String>(r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#)
-        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|value| value.trim().parse::<i32>().ok())
-        .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT)
-        .max(1)
 }
 
 async fn load_channel_slug_seconds(pool: &DbPool, channel_id: i64) -> Option<f64> {
@@ -3506,6 +3305,7 @@ async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transcode_capacity::ActiveTranscodeReclaimReason;
     use ersatzrs_domain::{
         FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat,
         HardwareAccelerationKind, Resolution, WatermarkLocation, WatermarkSize,
@@ -3515,21 +3315,12 @@ mod tests {
     use tokio::time::timeout;
     use uuid::Uuid;
 
-    static HLS_COUNTER_TEST_LOCK: OnceLock<StdMutex<()>> = OnceLock::new();
-
     fn hls_counter_test_guard() -> std::sync::MutexGuard<'static, ()> {
-        HLS_COUNTER_TEST_LOCK
-            .get_or_init(|| StdMutex::new(()))
-            .lock()
-            .expect("hls counter test lock")
+        crate::transcode_capacity::active_transcode_test_guard_for_tests()
     }
 
     fn reset_active_transcode_state() {
-        let mut slots = active_transcode_slots()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        slots.clear();
-        HLS_ACTIVE_TRANSCODE_COUNT.store(0, Ordering::Release);
+        crate::transcode_capacity::reset_active_transcode_state_for_tests();
     }
 
     fn test_active_slot(
@@ -3540,14 +3331,16 @@ mod tests {
     ) -> ActiveTranscodeSlot {
         let idle_ms = i64::try_from(idle_for.as_millis()).unwrap_or(i64::MAX);
         let last_access_ms = Utc::now().timestamp_millis().saturating_sub(idle_ms);
-        ActiveTranscodeSlot::new(
+        ActiveTranscodeSlot::new_hls(
             channel_number,
             kind,
             Arc::new(AtomicI64::new(last_access_ms)),
-            Arc::new(Notify::new()),
-            Arc::new(AtomicU64::new(0)),
-            Arc::new(AtomicI64::new(0)),
-            allow_watched_preemption,
+            ActiveTranscodeReclaimHandle::new(
+                Arc::new(Notify::new()),
+                Arc::new(AtomicU64::new(0)),
+                Arc::new(AtomicI64::new(0)),
+                allow_watched_preemption,
+            ),
         )
     }
 
@@ -3816,26 +3609,32 @@ mod tests {
         reset_active_transcode_state();
         let first = try_reserve_active_transcode(
             2,
-            test_active_slot("1", ActiveTranscodeKind::Realtime, Duration::ZERO, true),
+            test_active_slot("1", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true),
         );
         let second = try_reserve_active_transcode(
             2,
-            test_active_slot("2", ActiveTranscodeKind::Realtime, Duration::ZERO, true),
+            test_active_slot("2", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true),
         );
         assert!(first.is_some());
         assert!(second.is_some());
         assert!(try_reserve_active_transcode(
             2,
-            test_active_slot("3", ActiveTranscodeKind::Realtime, Duration::ZERO, true,),
+            test_active_slot("3", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
         )
         .is_none());
-        assert_eq!(HLS_ACTIVE_TRANSCODE_COUNT.load(Ordering::Acquire), 2);
+        assert_eq!(
+            crate::transcode_capacity::active_transcode_snapshot(2).active,
+            2
+        );
         drop(second);
         drop(first);
-        assert_eq!(HLS_ACTIVE_TRANSCODE_COUNT.load(Ordering::Acquire), 0);
+        assert_eq!(
+            crate::transcode_capacity::active_transcode_snapshot(2).active,
+            0
+        );
         assert!(try_reserve_active_transcode(
             0,
-            test_active_slot("4", ActiveTranscodeKind::Realtime, Duration::ZERO, true,),
+            test_active_slot("4", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
         )
         .is_none());
     }
@@ -3861,7 +3660,7 @@ mod tests {
             3,
             test_active_slot(
                 "work-ahead",
-                ActiveTranscodeKind::WorkAhead,
+                ActiveTranscodeKind::HlsWorkAhead,
                 Duration::from_secs(1),
                 true,
             ),
@@ -3870,7 +3669,7 @@ mod tests {
             3,
             test_active_slot(
                 "cooling",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_ACTIVE_WATCH_WINDOW + Duration::from_secs(5),
                 true,
             ),
@@ -3879,13 +3678,19 @@ mod tests {
             3,
             test_active_slot(
                 "stale",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
                 true,
             ),
         );
 
-        let reclaim = request_active_transcode_reclaim("requester").expect("reclaim target");
+        let reclaim = request_active_transcode_reclaim(
+            "requester",
+            HLS_ACTIVE_WATCH_WINDOW,
+            HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+            HLS_RECLAIMED_REACQUIRE_DELAY,
+        )
+        .expect("reclaim target");
         assert_eq!(reclaim.channel_number, "work-ahead");
         assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::WorkAhead);
 
@@ -3902,7 +3707,7 @@ mod tests {
             2,
             test_active_slot(
                 "cooling",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_ACTIVE_WATCH_WINDOW + Duration::from_secs(1),
                 true,
             ),
@@ -3911,13 +3716,19 @@ mod tests {
             2,
             test_active_slot(
                 "stale",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
                 true,
             ),
         );
 
-        let reclaim = request_active_transcode_reclaim("requester").expect("reclaim target");
+        let reclaim = request_active_transcode_reclaim(
+            "requester",
+            HLS_ACTIVE_WATCH_WINDOW,
+            HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+            HLS_RECLAIMED_REACQUIRE_DELAY,
+        )
+        .expect("reclaim target");
         assert_eq!(reclaim.channel_number, "cooling");
         assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::Cooling);
 
@@ -3933,7 +3744,7 @@ mod tests {
             3,
             test_active_slot(
                 "fresh",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_STALE_WATCHED_PREEMPTION_THRESHOLD
                     .checked_sub(Duration::from_secs(1))
                     .expect("threshold exceeds one second"),
@@ -3944,7 +3755,7 @@ mod tests {
             3,
             test_active_slot(
                 "keep-running",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
                 false,
             ),
@@ -3953,13 +3764,19 @@ mod tests {
             3,
             test_active_slot(
                 "stale",
-                ActiveTranscodeKind::Realtime,
+                ActiveTranscodeKind::HlsRealtime,
                 HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
                 true,
             ),
         );
 
-        let reclaim = request_active_transcode_reclaim("requester").expect("reclaim target");
+        let reclaim = request_active_transcode_reclaim(
+            "requester",
+            HLS_ACTIVE_WATCH_WINDOW,
+            HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+            HLS_RECLAIMED_REACQUIRE_DELAY,
+        )
+        .expect("reclaim target");
         assert_eq!(reclaim.channel_number, "stale");
         assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::StaleWatched);
 
@@ -3982,19 +3799,27 @@ mod tests {
         );
         let reservation = try_reserve_active_transcode(
             1,
-            ActiveTranscodeSlot::new(
+            ActiveTranscodeSlot::new_hls(
                 "target",
-                ActiveTranscodeKind::WorkAhead,
+                ActiveTranscodeKind::HlsWorkAhead,
                 Arc::clone(&worker.last_access_ms),
-                Arc::clone(&worker.reclaim_transcode),
-                Arc::clone(&worker.reclaim_requested_slot_id),
-                Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
-                true,
+                ActiveTranscodeReclaimHandle::new(
+                    Arc::clone(&worker.reclaim_transcode),
+                    Arc::clone(&worker.reclaim_requested_slot_id),
+                    Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+                    true,
+                ),
             ),
         );
         assert!(reservation.is_some());
 
-        let reclaim = request_active_transcode_reclaim("requester").expect("reclaim target");
+        let reclaim = request_active_transcode_reclaim(
+            "requester",
+            HLS_ACTIVE_WATCH_WINDOW,
+            HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+            HLS_RECLAIMED_REACQUIRE_DELAY,
+        )
+        .expect("reclaim target");
         assert_eq!(reclaim.channel_number, "target");
         assert_eq!(reclaim.reason, ActiveTranscodeReclaimReason::WorkAhead);
 
@@ -4017,32 +3842,40 @@ mod tests {
             Vec::new(),
             FfmpegCapabilityReport::default(),
         );
-        let first_slot = ActiveTranscodeSlot::new(
+        let first_slot = ActiveTranscodeSlot::new_hls(
             "42",
-            ActiveTranscodeKind::Realtime,
+            ActiveTranscodeKind::HlsRealtime,
             Arc::clone(&worker.last_access_ms),
-            Arc::clone(&worker.reclaim_transcode),
-            Arc::clone(&worker.reclaim_requested_slot_id),
-            Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
-            true,
+            ActiveTranscodeReclaimHandle::new(
+                Arc::clone(&worker.reclaim_transcode),
+                Arc::clone(&worker.reclaim_requested_slot_id),
+                Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+                true,
+            ),
         );
-        let second_slot = ActiveTranscodeSlot::new(
+        let second_slot = ActiveTranscodeSlot::new_hls(
             "42",
-            ActiveTranscodeKind::Realtime,
+            ActiveTranscodeKind::HlsRealtime,
             Arc::clone(&worker.last_access_ms),
-            Arc::clone(&worker.reclaim_transcode),
-            Arc::clone(&worker.reclaim_requested_slot_id),
-            Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
-            true,
+            ActiveTranscodeReclaimHandle::new(
+                Arc::clone(&worker.reclaim_transcode),
+                Arc::clone(&worker.reclaim_requested_slot_id),
+                Arc::clone(&worker.reclaim_reacquire_deferred_until_ms),
+                true,
+            ),
         );
-        assert_ne!(first_slot.slot_id, second_slot.slot_id);
+        assert_ne!(first_slot.slot_id(), second_slot.slot_id());
 
-        first_slot.request_reclaim(Utc::now().timestamp_millis());
-        assert!(!worker.take_reclaim_request(second_slot.slot_id));
+        worker
+            .reclaim_requested_slot_id
+            .store(first_slot.slot_id(), Ordering::Release);
+        assert!(!worker.take_reclaim_request(second_slot.slot_id()));
         assert_eq!(worker.reclaim_requested_slot_id.load(Ordering::Acquire), 0);
 
-        second_slot.request_reclaim(Utc::now().timestamp_millis());
-        assert!(worker.take_reclaim_request(second_slot.slot_id));
+        worker
+            .reclaim_requested_slot_id
+            .store(second_slot.slot_id(), Ordering::Release);
+        assert!(worker.take_reclaim_request(second_slot.slot_id()));
         assert_eq!(worker.reclaim_requested_slot_id.load(Ordering::Acquire), 0);
     }
 

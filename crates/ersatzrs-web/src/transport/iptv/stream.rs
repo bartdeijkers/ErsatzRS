@@ -40,6 +40,10 @@ use ersatzrs_infra::playback::{
     watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
+use ersatzrs_infra::transcode_capacity::{
+    load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeReservation,
+    ActiveTranscodeSlot,
+};
 use serde::Deserialize;
 use sqlx::Row;
 use tokio::io::AsyncReadExt;
@@ -107,7 +111,7 @@ pub async fn serve_transport_stream(
             );
             axum::response::Redirect::temporary(&target).into_response()
         }
-        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, headers),
+        TransportStreamMode::Legacy => serve_legacy_concat_stream(state, &channel, headers).await,
         TransportStreamMode::HybridWrapper => {
             serve_segmenter_wrapper_stream(state, &channel, headers, query).await
         }
@@ -450,11 +454,27 @@ async fn serve_channel_stream_with_channel(
             })
         },
     };
+    let capacity_reservation =
+        if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
+            match reserve_mpeg_ts_capacity(state, &channel.number).await {
+                Ok(reservation) => Some(reservation),
+                Err(response) => {
+                    for path in graphics_cleanup_dirs {
+                        cleanup_stream_artifact(&path).await;
+                    }
+                    return response;
+                }
+            }
+        } else {
+            None
+        };
+
     match spawn_stream_body(
         &command,
         graphics_cleanup_dirs,
         channel.number.clone(),
         state.hls_sessions.clone(),
+        capacity_reservation,
         Some(retry),
     ) {
         Ok(body) => {
@@ -573,11 +593,22 @@ async fn serve_segmenter_wrapper_stream(
             ),
         };
 
+    let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
+        Ok(reservation) => Some(reservation),
+        Err(response) => {
+            for path in cleanup_paths {
+                cleanup_stream_artifact(&path).await;
+            }
+            return response;
+        }
+    };
+
     match spawn_stream_body(
         &command,
         cleanup_paths,
         channel.number.clone(),
         state.hls_sessions.clone(),
+        capacity_reservation,
         None,
     ) {
         Ok(body) => {
@@ -632,7 +663,7 @@ fn segmenter_wrapper_wait_failure_response(
     }
 }
 
-fn serve_legacy_concat_stream(
+async fn serve_legacy_concat_stream(
     state: &AppState,
     channel: &Channel,
     headers: &HeaderMap,
@@ -649,11 +680,17 @@ fn serve_legacy_concat_stream(
     };
     let command = build_mpegts_concat_command(concat_url, &metadata);
 
+    let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
+        Ok(reservation) => Some(reservation),
+        Err(response) => return response,
+    };
+
     match spawn_stream_body(
         &command,
         Vec::new(),
         channel.number.clone(),
         state.hls_sessions.clone(),
+        capacity_reservation,
         None,
     ) {
         Ok(body) => {
@@ -687,6 +724,26 @@ fn build_segmenter_wrapper_hls_url(
         "{scheme}://{host}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
         access_token.query_amp()
     )
+}
+
+async fn reserve_mpeg_ts_capacity(
+    state: &AppState,
+    channel_number: &str,
+) -> Result<ActiveTranscodeReservation, Response> {
+    let limit = load_active_transcode_limit(&state.pool).await;
+    try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number))
+        .ok_or_else(|| {
+            tracing::warn!(
+                channel_number,
+                limit,
+                "mpeg-ts stream admission denied because all transcode slots are in use"
+            );
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                hls::HLS_AT_CAPACITY_MESSAGE,
+            )
+                .into_response()
+        })
 }
 
 async fn configured_mpegts_script_command(
@@ -1414,6 +1471,7 @@ fn spawn_stream_body(
     cleanup_paths: Vec<PathBuf>,
     channel_number: String,
     session_registry: Arc<dyn HlsSessionRegistry>,
+    capacity_reservation: Option<ActiveTranscodeReservation>,
     retry: Option<StreamDenialRetry>,
 ) -> Result<Body, StreamSpawnError> {
     let mut child = spawn_stream_process(command)?;
@@ -1426,6 +1484,7 @@ fn spawn_stream_body(
     let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
 
     tokio::spawn(async move {
+        let _capacity_reservation = capacity_reservation;
         let registered = session_registry.try_insert(handle).await;
         let mut retry = retry;
         loop {
@@ -2318,6 +2377,7 @@ mod tests {
             "98".to_owned(),
             Arc::clone(&registry),
             None,
+            None,
         )
         .expect("spawn stream body");
         let grandchild_running = || async {
@@ -2365,6 +2425,61 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn spawn_stream_body_releases_mpegts_capacity_on_process_exit() {
+        ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let reservation = try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("91"))
+            .expect("capacity reservation");
+
+        let body = spawn_stream_body(
+            &shell_command("printf done", "echo done"),
+            Vec::new(),
+            "91".to_owned(),
+            registry,
+            Some(reservation),
+            None,
+        )
+        .expect("spawn stream body");
+
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
+            1
+        );
+        wait_for_capacity_active(1, 0).await;
+        drop(body);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn spawn_stream_body_releases_mpegts_capacity_on_body_drop() {
+        ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let reservation = try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("92"))
+            .expect("capacity reservation");
+
+        let body = spawn_stream_body(
+            &shell_command(
+                "printf started; sleep 30",
+                "echo started & ping -n 30 127.0.0.1 >NUL",
+            ),
+            Vec::new(),
+            "92".to_owned(),
+            registry,
+            Some(reservation),
+            None,
+        )
+        .expect("spawn stream body");
+
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
+            1
+        );
+        drop(body);
+        wait_for_capacity_active(1, 0).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg on PATH"]
     async fn spawn_stream_body_kills_ffmpeg_when_body_is_dropped() {
         // One viewing session must never leave a transcode process running
@@ -2399,6 +2514,7 @@ mod tests {
             "97".to_owned(),
             Arc::clone(&registry),
             None,
+            None,
         )
         .expect("spawn stream body");
         // Wait for the fire-and-forget supervisor task to register the
@@ -2422,6 +2538,35 @@ mod tests {
                 "session was not torn down after the body was dropped"
             );
             tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    fn shell_command(unix_script: &str, windows_script: &str) -> FfmpegCommand {
+        if cfg!(windows) {
+            FfmpegCommand {
+                executable: "cmd.exe".to_owned(),
+                arguments: vec!["/C".to_owned(), windows_script.to_owned()],
+                environment: Vec::new(),
+            }
+        } else {
+            FfmpegCommand {
+                executable: "/bin/sh".to_owned(),
+                arguments: vec!["-c".to_owned(), unix_script.to_owned()],
+                environment: Vec::new(),
+            }
+        }
+    }
+
+    async fn wait_for_capacity_active(limit: i32, expected: i32) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while ersatzrs_infra::transcode_capacity::active_transcode_snapshot(limit).active
+            != expected
+        {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "capacity active count did not reach {expected}"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
         }
     }
 

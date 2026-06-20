@@ -25,4 +25,5 @@ pub mod repositories;
 pub mod subtitles;
 pub mod trakt;
 pub mod trakt_sync;
+pub mod transcode_capacity;
 pub mod xmltv;

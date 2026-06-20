@@ -1694,10 +1694,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseEmbeddedSubtitles => "Używaj osadzonych napisów",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Element bez tytułu",
-        TextKey::ActiveTranscodeLimit => "Maksymalna liczba jednoczesnych transkodowań HLS",
+        TextKey::ActiveTranscodeLimit => "Maksymalna liczba jednoczesnych transkodowań strumieni",
         TextKey::ActiveTranscodeLimitHelp => {
-            "Twardy limit transkodowań FFmpeg segmentera HLS. Gdy wszystkie miejsca są zajęte, nowy widz otrzymuje komunikat, że wszystkie strumienie są w użyciu, dopóki miejsce się nie zwolni; aktywne strumienie nie omijają limitu."
+            "Twardy limit strumieniowych transkodowań FFmpeg. Gdy wszystkie miejsca są zajęte, nowy widz otrzymuje komunikat, że wszystkie strumienie są w użyciu, dopóki miejsce się nie zwolni; aktywne strumienie nie omijają limitu."
         },
+        TextKey::ActiveTranscodeSuggestionHardware => {
+            "Wykryto enkoder sprzętowy; to sugerowana wartość, a nie automatyczna zmiana."
+        },
+        TextKey::ActiveTranscodeSuggestionSoftware => {
+            "Tylko kodowanie programowe; to sugerowana wartość, a nie automatyczna zmiana."
+        },
+        TextKey::Peak => "szczyt",
+        TextKey::StreamsInUse => "Strumienie w użyciu",
+        TextKey::SuggestedTranscodeLimit => "Sugerowana wartość",
         TextKey::Watermarks => "Znaki wodne",
         TextKey::Width => "Szerokość",
         TextKey::WorkAheadSegmenterLimit => "Transkodowania HLS z wyprzedzeniem",

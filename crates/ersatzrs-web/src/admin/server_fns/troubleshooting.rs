@@ -167,7 +167,8 @@ pub async fn load_troubleshooting_report_with_state(
     use ersatzrs_core::health::HealthCheckStatus;
     use ersatzrs_infra::health::make_health_check_service;
 
-    let ffmpeg_settings = load_ffmpeg_settings(&state.pool).await?;
+    let runtime = state.ffmpeg_runtime.read().await.clone();
+    let ffmpeg_settings = load_ffmpeg_settings(&state.pool, &runtime.capabilities).await?;
     let health_service = make_health_check_service(
         state.pool.clone(),
         state.ffmpeg_runtime.read().await.clone(),
@@ -189,7 +190,6 @@ pub async fn load_troubleshooting_report_with_state(
         })
         .collect();
 
-    let runtime = state.ffmpeg_runtime.read().await.clone();
     let nvidia_probe_output = nvidia_probe_output(&runtime.capabilities);
     let video_toolbox_probe_output = video_toolbox_probe_output(&runtime.capabilities);
     let info = GeneralTroubleshootingInfo {
@@ -306,6 +306,7 @@ struct FfmpegSettingsSummary {
     hls_segmenter_idle_timeout: i32,
     work_ahead_segmenter_limit: i32,
     active_transcode_limit: i32,
+    active_transcode_capacity: crate::admin::server_fns::settings::ActiveTranscodeCapacityStatus,
     initial_segment_count: i32,
     hls_direct_output_format: i32,
     default_mpeg_ts_script: String,
@@ -340,7 +341,14 @@ struct FfmpegProfileSummary {
 #[cfg(feature = "ssr")]
 async fn load_ffmpeg_settings(
     pool: &ersatzrs_infra::db::DbPool,
+    capabilities: &ersatzrs_ffmpeg::FfmpegCapabilityReport,
 ) -> Result<FfmpegSettingsSummary, ServerFnError> {
+    let active_transcode_limit = load_i32(
+        pool,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
+        2,
+    )
+    .await?;
     Ok(FfmpegSettingsSummary {
         ffmpeg_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "").await?,
         ffprobe_path: load_string(pool, ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH, "").await?,
@@ -382,12 +390,12 @@ async fn load_ffmpeg_settings(
             1,
         )
         .await?,
-        active_transcode_limit: load_i32(
-            pool,
-            ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT,
-            2,
-        )
-        .await?,
+        active_transcode_limit,
+        active_transcode_capacity:
+            crate::admin::server_fns::settings::active_transcode_capacity_status(
+                active_transcode_limit,
+                capabilities,
+            ),
         initial_segment_count: load_i32(
             pool,
             ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
@@ -1572,6 +1580,8 @@ mod tests {
                 hls_segmenter_idle_timeout: 60,
                 work_ahead_segmenter_limit: 1,
                 active_transcode_limit: 2,
+                active_transcode_capacity:
+                    crate::admin::server_fns::settings::ActiveTranscodeCapacityStatus::default(),
                 initial_segment_count: 1,
                 hls_direct_output_format: 2,
                 default_mpeg_ts_script: "default".to_owned(),
