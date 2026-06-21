@@ -1727,6 +1727,7 @@ mod tests {
     };
     use ersatzrs_ffmpeg::{FfmpegCapabilityReport, GraphicsPipelineOverlay, WatermarkOverlay};
     use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
     use std::time::Duration;
 
     const TESTDATA_CANDIDATES: &[&str] = &[
@@ -1739,6 +1740,13 @@ mod tests {
         "../../testdata/bbb_sunflower_2160p_30fps_normal.mp4",
         "../../testdata/bbb_sunflower_2160p_60fps_normal.mp4",
     ];
+
+    async fn active_transcode_stream_test_guard() -> tokio::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+            .lock()
+            .await
+    }
 
     #[test]
     fn build_stream_command_pipes_mpegts_to_stdout() {
@@ -2426,6 +2434,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn spawn_stream_body_releases_mpegts_capacity_on_process_exit() {
+        let _guard = active_transcode_stream_test_guard().await;
         ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
         let registry: Arc<dyn HlsSessionRegistry> =
             Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
@@ -2452,6 +2461,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn spawn_stream_body_releases_mpegts_capacity_on_body_drop() {
+        let _guard = active_transcode_stream_test_guard().await;
         ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
         let registry: Arc<dyn HlsSessionRegistry> =
             Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());

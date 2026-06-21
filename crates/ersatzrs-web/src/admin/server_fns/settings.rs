@@ -706,15 +706,15 @@ fn suggest_active_transcode_limit(
 ) -> (i32, ActiveTranscodeSuggestionReason) {
     let cpu_count = cpu_count.max(1);
     let acceleration = ersatzrs_ffmpeg::preferred_default_profile_acceleration(capabilities);
-    if acceleration != ersatzrs_domain::HardwareAccelerationKind::None {
-        (
-            i32::try_from(cpu_count.clamp(2, 8)).unwrap_or(8),
-            ActiveTranscodeSuggestionReason::Hardware,
-        )
-    } else {
+    if acceleration == ersatzrs_domain::HardwareAccelerationKind::None {
         (
             i32::try_from((cpu_count / 2).clamp(1, 4)).unwrap_or(4),
             ActiveTranscodeSuggestionReason::Software,
+        )
+    } else {
+        (
+            i32::try_from(cpu_count.clamp(2, 8)).unwrap_or(8),
+            ActiveTranscodeSuggestionReason::Hardware,
         )
     }
 }

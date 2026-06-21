@@ -302,6 +302,11 @@ pub fn reset_active_transcode_state_for_tests() {
 }
 
 #[cfg(any(test, debug_assertions))]
+/// Serializes tests that mutate global active-transcode state.
+///
+/// # Panics
+///
+/// Panics if another test poisons the shared lock.
 pub fn active_transcode_test_guard_for_tests() -> std::sync::MutexGuard<'static, ()> {
     ACTIVE_TRANSCODE_TEST_LOCK
         .get_or_init(|| StdMutex::new(()))
