@@ -100,12 +100,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Full multi-RID release matrix (see docs/how-to/publish-release.md).
-        # Linux and Windows build on the self-hosted runners; arm64/armv7 are
-        # cross-compiled on the x86_64 Linux runner. macOS has no self-hosted
-        # runner, so it uses GitHub-hosted `macos-latest` (the env block below
-        # already accounts for hosted runners). For a Windows-only hotfix,
-        # temporarily reduce this list to the `win-x64` entry.
+        # Active release matrix (see docs/how-to/publish-release.md). Linux and
+        # Windows build on self-hosted runners; arm64/armv7 are cross-compiled
+        # on the x86_64 Linux runner. macOS archives are intentionally omitted
+        # until a future macOS-targeted release so GitHub-hosted runner credits
+        # are not spent on this release line.
         include:
           - rid: linux-x64
             runner: '["self-hosted","ersatzrs-linux-release"]'
@@ -127,16 +126,6 @@ jobs:
             target: x86_64-pc-windows-msvc
             cross: false
             archive: zip
-          - rid: osx-arm64
-            runner: '["macos-latest"]'
-            target: aarch64-apple-darwin
-            cross: false
-            archive: tar.gz
-          - rid: osx-x64
-            runner: '["macos-latest"]'
-            target: x86_64-apple-darwin
-            cross: false
-            archive: tar.gz
     steps:
       - uses: actions/checkout@v6
       - name: Prefer Git Bash on Windows

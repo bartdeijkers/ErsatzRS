@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Release archives now intentionally skip macOS targets until a future
+  macOS-targeted release, preserving GitHub-hosted runner credits while the
+  active release line builds Linux and Windows archives on self-hosted runners.
+
 ## [1.0.13-alpha] - 2026-06-21
 
 ### Added

@@ -1,17 +1,19 @@
 # Publish a full release
 
-Use this guide to publish a full release through the release workflow. This
-produces the GitHub release archives:
+Use this guide to publish a release through the release workflow. The active
+matrix currently produces the GitHub release archives:
 
 - `ersatzrs-<tag>-linux-x64.tar.gz`
 - `ersatzrs-<tag>-linux-arm64.tar.gz`
 - `ersatzrs-<tag>-linux-arm.tar.gz`
-- `ersatzrs-<tag>-osx-arm64.tar.gz`
-- `ersatzrs-<tag>-osx-x64.tar.gz`
 - `ersatzrs-<tag>-win-x64.zip`
 - GitHub-generated source archives
 
-The same workflow also publishes the multi-arch Docker image to GHCR.
+macOS archives are intentionally omitted for now to avoid spending
+GitHub-hosted runner credits on this release line; restore the two `osx-*`
+matrix entries in `.github/workflows/release.yml` for a future macOS-targeted
+release. Docker publication is currently disabled in the workflow until image
+publishing is re-enabled.
 
 Do not use `./run.ps1 build` for release packaging. That command is a local dev
 one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create a
@@ -43,8 +45,8 @@ git push origin "$tag"
 ```
 
 The tag push is the release command. It starts `.github/workflows/release.yml`,
-which creates the GitHub release, builds the web assets once, builds each
-platform archive, uploads the archives, and publishes the Docker image.
+which creates the GitHub release, builds the web assets once, builds each active
+platform archive, and uploads the archives.
 
 ## Watch the workflow
 
@@ -64,13 +66,14 @@ gh run watch <run-id>
 
 ## Verify the published release
 
-Confirm the release has all six binary archives:
+Confirm the release has the active binary archives:
 
 ```bash
 gh release view "$tag" --json tagName,assets,url
 ```
 
-Confirm the Docker image manifest includes the expected Linux platforms:
+When Docker publication is re-enabled, confirm the Docker image manifest
+includes the expected Linux platforms:
 
 ```bash
 docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
@@ -84,10 +87,10 @@ The manifest should include:
 
 ## When GitHub-hosted minutes are exhausted
 
-If hosted Actions minutes are exhausted, use
-[Publish a release without GitHub-hosted minutes](publish-release-with-self-hosted-runners.md).
-That path keeps the release workflow but runs it on self-hosted Linux and
-Windows runners, with macOS archives temporarily omitted.
+If you need to restore macOS archives for a future release, re-add the two
+`osx-*` matrix entries and use GitHub-hosted macOS runners or a macOS
+self-hosted runner. The current Linux/Windows matrix avoids GitHub-hosted
+minutes.
 
 ## When GitHub Actions cannot build everything
 

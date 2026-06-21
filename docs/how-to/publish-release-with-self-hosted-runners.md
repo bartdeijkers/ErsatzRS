@@ -1,8 +1,9 @@
 # Publish a release without GitHub-hosted minutes
 
-Use this guide when GitHub-hosted Actions minutes are exhausted and the release
-can temporarily omit macOS archives. The release still runs through GitHub
-Actions, but the build jobs run on self-hosted machines.
+Use this guide for the current Linux/Windows release path. macOS archives are
+intentionally omitted until a future macOS-targeted release, so the release
+still runs through GitHub Actions without spending GitHub-hosted macOS runner
+credits.
 
 This produces:
 
@@ -11,12 +12,14 @@ This produces:
 - `ersatzrs-<tag>-linux-arm.tar.gz`
 - `ersatzrs-<tag>-win-x64.zip`
 - GitHub-generated source archives
-- The multi-arch Docker image on GHCR
 
 It intentionally does not produce:
 
 - `ersatzrs-<tag>-osx-arm64.tar.gz`
 - `ersatzrs-<tag>-osx-x64.tar.gz`
+
+Docker publication is currently disabled in `.github/workflows/release.yml`
+until image publishing is re-enabled.
 
 ## Prepare the runners
 
@@ -29,8 +32,8 @@ Recommended labels:
 | Linux release runner | WSL Ubuntu 24.04 or Linux host with Docker | `self-hosted`, `ersatzrs-linux-release` |
 | Windows release runner | Windows x64 host with Rust MSVC tooling | `self-hosted`, `ersatzrs-windows-release` |
 
-The Linux runner handles release creation, web assets, Linux archives, and the
-Docker image. The Windows runner handles the Windows archive.
+The Linux runner handles release creation, web assets, and Linux archives. The
+Windows runner handles the Windows archive.
 
 Add the Windows runner from GitHub:
 
@@ -56,8 +59,7 @@ cargo install cross --locked
 docker buildx version
 ```
 
-Docker must support `buildx` and QEMU for the Docker image and ARM Linux
-archives.
+Docker must support `buildx` and QEMU for ARM Linux archives.
 
 On the Windows runner, install:
 
@@ -77,20 +79,21 @@ stylance --version
 7z
 ```
 
-## Patch the release workflow for self-hosted runners
+## Release workflow shape
 
-Use a short-lived release branch. Do not keep the macOS entries removed after the
-hosted-minute emergency is over.
+The committed `.github/workflows/release.yml` already uses the self-hosted
+Linux/Windows release runner shape and omits macOS archives. Keep that shape for
+this release line.
 
 In `.github/workflows/release.yml`:
 
-1. Change the `release` job to:
+1. The `release` job should use:
 
 ```yaml
 runs-on: [self-hosted, ersatzrs-linux-release]
 ```
 
-2. Change the `web-assets` job to:
+2. The `web-assets` job should use:
 
 ```yaml
 runs-on: [self-hosted, ersatzrs-linux-release]
@@ -100,7 +103,8 @@ runs-on: [self-hosted, ersatzrs-linux-release]
 
 - Set the Linux entries to use the Linux release runner.
 - Set the Windows entry to use the Windows release runner.
-- Remove the two macOS entries.
+- Do not add the two macOS entries unless this is a future macOS-targeted
+  release.
 
 Use this matrix shape:
 
@@ -135,13 +139,7 @@ Then change the `binaries` job `runs-on` to:
 runs-on: ${{ fromJSON(matrix.runner) }}
 ```
 
-4. Change the `docker` job to:
-
-```yaml
-runs-on: [self-hosted, ersatzrs-linux-release]
-```
-
-Commit this workflow patch before tagging the release.
+Commit any workflow change before tagging the release.
 
 ## Push the release tag
 
@@ -168,7 +166,7 @@ Confirm the release has the expected non-macOS archives:
 gh release view "$tag" --json tagName,assets,url
 ```
 
-Confirm the Docker image manifest:
+When Docker publication is re-enabled, confirm the Docker image manifest:
 
 ```bash
 docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
@@ -180,7 +178,8 @@ The manifest should include:
 - `linux/arm64`
 - `linux/arm/v7`
 
-## Restore the normal workflow
+## Restoring macOS archives later
 
-After the release, revert the temporary workflow patch or restore the macOS
-matrix entries before the next normal release.
+For a future macOS-targeted release, restore the two `osx-*` matrix entries and
+use GitHub-hosted macOS runners or add a macOS self-hosted runner. Do this in a
+separate release-prep commit before tagging that release.
