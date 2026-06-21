@@ -13,11 +13,20 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.14-alpha] - 2026-06-21
+
 ### Changed
 
 - Release archives now intentionally skip macOS targets until a future
   macOS-targeted release, preserving GitHub-hosted runner credits while the
   active release line builds Linux and Windows archives on self-hosted runners.
+
+### Fixed
+
+- Windows upgrades from older bundled-FFmpeg archives now clear stale stored
+  `ffmpeg.exe` / `ffprobe.exe` paths from the previous release folder when those
+  files are no longer present, allowing managed `ErsatzRS-ffmpeg` startup
+  acquisition to run instead of failing before download.
 
 ## [1.0.13-alpha] - 2026-06-21
 

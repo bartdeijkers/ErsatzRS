@@ -8,7 +8,7 @@ use ersatzrs_infra::{
 use std::{
     fs::{File, OpenOptions},
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 use tokio_util::sync::CancellationToken;
@@ -236,6 +236,20 @@ async fn resolve_and_check_startup_ffmpeg_runtime(
         .get(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
         .await
         .unwrap_or_default();
+    let ffmpeg_config = sanitize_startup_ffmpeg_config(
+        &repositories.config,
+        ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
+        ffmpeg_config,
+        "ffmpeg.exe",
+    )
+    .await;
+    let ffprobe_config = sanitize_startup_ffmpeg_config(
+        &repositories.config,
+        ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
+        ffprobe_config,
+        "ffprobe.exe",
+    )
+    .await;
     let manager = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(
         file_system_layout::ffmpeg_runtime_folder(),
     );
@@ -257,6 +271,55 @@ async fn resolve_and_check_startup_ffmpeg_runtime(
             std::process::exit(1);
         }
     }
+}
+
+async fn sanitize_startup_ffmpeg_config(
+    repository: &dyn ConfigRepository,
+    key: &str,
+    value: Option<String>,
+    tool_name: &str,
+) -> Option<String> {
+    let value = value?;
+
+    if !legacy_missing_release_bundle_tool(&value, tool_name) {
+        return Some(value);
+    }
+
+    tracing::warn!(
+        key = %key,
+        path = %value,
+        "clearing stale bundled FFmpeg path so managed runtime acquisition can run"
+    );
+    if let Err(error) = repository.set(key, "").await {
+        tracing::warn!(
+            key = %key,
+            path = %value,
+            %error,
+            "failed to clear stale bundled FFmpeg path"
+        );
+    }
+
+    None
+}
+
+fn legacy_missing_release_bundle_tool(value: &str, tool_name: &str) -> bool {
+    let path = Path::new(value.trim());
+    if path.as_os_str().is_empty() || path.exists() {
+        return false;
+    }
+
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if !file_name.eq_ignore_ascii_case(tool_name) {
+        return false;
+    }
+
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+
+    parent.join("ersatzrs-web.exe").is_file() || parent.join("ErsatzRS.exe").is_file()
 }
 
 async fn apply_seeded_default_profile_acceleration(
@@ -692,6 +755,28 @@ pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct TestConfigRepository {
+        values: Mutex<BTreeMap<String, String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ConfigRepository for TestConfigRepository {
+        async fn get(&self, key: &str) -> ersatzrs_core::repositories::Result<Option<String>> {
+            Ok(self.values.lock().expect("values").get(key).cloned())
+        }
+
+        async fn set(&self, key: &str, value: &str) -> ersatzrs_core::repositories::Result<()> {
+            self.values
+                .lock()
+                .expect("values")
+                .insert(key.to_owned(), value.to_owned());
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn extract_streaming_resources_overwrites_stale_files() {
@@ -767,5 +852,72 @@ mod tests {
         assert!(yaml.contains("linux_script"));
         assert_eq!(run_sh, "custom");
         assert!(String::from_utf8_lossy(&run_bat).contains("FFmpegPath"));
+    }
+
+    #[test]
+    fn legacy_missing_release_bundle_tool_detects_old_windows_bundle_paths() {
+        let root = tempfile::tempdir().expect("temp release root");
+        std::fs::write(root.path().join("ersatzrs-web.exe"), b"server")
+            .expect("write server exe marker");
+        let legacy_ffmpeg = root.path().join("ffmpeg.exe");
+
+        assert!(legacy_missing_release_bundle_tool(
+            &legacy_ffmpeg.to_string_lossy(),
+            "ffmpeg.exe"
+        ));
+    }
+
+    #[test]
+    fn legacy_missing_release_bundle_tool_keeps_real_overrides_explicit() {
+        let root = tempfile::tempdir().expect("temp release root");
+        std::fs::write(root.path().join("ersatzrs-web.exe"), b"server")
+            .expect("write server exe marker");
+        std::fs::write(root.path().join("ffmpeg.exe"), b"ffmpeg").expect("write ffmpeg");
+        let existing_ffmpeg = root.path().join("ffmpeg.exe");
+        let missing_custom = root.path().join("tools").join("ffmpeg.exe");
+        let wrong_tool = root.path().join("ffprobe.exe");
+
+        assert!(!legacy_missing_release_bundle_tool(
+            &existing_ffmpeg.to_string_lossy(),
+            "ffmpeg.exe"
+        ));
+        assert!(!legacy_missing_release_bundle_tool(
+            &missing_custom.to_string_lossy(),
+            "ffmpeg.exe"
+        ));
+        assert!(!legacy_missing_release_bundle_tool(
+            &wrong_tool.to_string_lossy(),
+            "ffmpeg.exe"
+        ));
+    }
+
+    #[tokio::test]
+    async fn sanitize_startup_ffmpeg_config_clears_legacy_missing_bundle_path() {
+        let root = tempfile::tempdir().expect("temp release root");
+        std::fs::write(root.path().join("ersatzrs-web.exe"), b"server")
+            .expect("write server exe marker");
+        let legacy_ffmpeg = root
+            .path()
+            .join("ffmpeg.exe")
+            .to_string_lossy()
+            .into_owned();
+        let repo = TestConfigRepository::default();
+
+        let sanitized = sanitize_startup_ffmpeg_config(
+            &repo,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
+            Some(legacy_ffmpeg),
+            "ffmpeg.exe",
+        )
+        .await;
+
+        assert!(sanitized.is_none());
+        assert_eq!(
+            repo.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
+                .await
+                .expect("config")
+                .as_deref(),
+            Some("")
+        );
     }
 }
