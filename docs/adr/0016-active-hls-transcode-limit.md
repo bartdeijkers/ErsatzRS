@@ -10,10 +10,14 @@ Partial — the HLS segmenter hard ceiling and admission ladder are implemented
 as of 2026-06-20: no active HLS reservation path can exceed
 `ffmpeg.segmenter.active_transcode_limit`, work-ahead/cooling/stale-watched
 sessions are reclaimed before a newcomer is denied, and an over-capacity cold
-session returns an all-streams-in-use error without holding a slot. Remaining
-implementation work is the live/peak readout, hardware-aware suggested value,
-playable slate loop, and pipeline-agnostic counting for non-HLS segmenter
-transcodes.
+session returns an all-streams-in-use error without holding a slot. The
+2026-06-21 closeout added the live `Streams in use: X / N (peak Y)` readout and
+hardware-aware suggested value on the FFmpeg settings/troubleshooting surface,
+and folded MPEG-TS direct/legacy/hybrid transcodes into the same process-local
+ceiling (a shared `transcode_capacity` reservation registry), so the limit now
+means total streaming-transcode capacity rather than HLS-only. The remaining
+implementation work is the **playable slate loop**: the over-capacity path still
+returns an HTTP 503 instead of a slot-free looping "all streams in use" clip.
 
 ## Context
 
@@ -197,3 +201,7 @@ everything else is opportunistic and reclaimable.*
   removed the unbounded priority bypass, split watch-window slot reclamation
   from idle-retention cleanup, and added an all-streams-in-use error path for
   cold sessions that cannot acquire capacity.
+- 2026-06-21: Added the live `Streams in use: X / N (peak Y)` readout and
+  hardware-aware suggested value on FFmpeg settings/troubleshooting, and folded
+  MPEG-TS direct/legacy/hybrid transcodes into the shared process-local
+  capacity ceiling. Remaining: the playable slate loop (still a 503).

@@ -20,7 +20,10 @@ items. Support pages (health/logs/troubleshooting) closed to `Ported`
 filler presets route family closed to `Ported` 2026-06-19. Active in-progress
 feature work (see `cargo xtask progress gaps`): the HLS segmenter active
 transcode capacity item, which is ErsatzRS-specific hardening tracked under
-ADR 0016 rather than a pinned-baseline ErsatzTV parity gap. FFmpeg command
+ADR 0016 rather than a pinned-baseline ErsatzTV parity gap. The 2026-06-21
+closeout landed the live capacity readout/hardware suggestion and folded
+MPEG-TS transcodes into the shared ceiling; the only remaining ADR 0016 item is
+the playable all-streams-in-use slate (the over-capacity path is still a 503). FFmpeg command
 generation closed to `Ported` 2026-06-20 after the encoder-only NVENC
 filter-gate proof passed. ADR 0018 (Proposed / Not implemented) records a
 planned new capability — special features/extras, alternate versions, and stream
