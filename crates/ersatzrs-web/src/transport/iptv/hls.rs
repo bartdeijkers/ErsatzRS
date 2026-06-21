@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
-use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionRegistry};
+use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::{Channel, ChannelIdleBehavior, StreamingMode};
 use ersatzrs_ffmpeg::OutputFormat;
@@ -193,6 +193,7 @@ pub(crate) async fn wait_for_initial_segments(
     startup_timeout: Duration,
 ) -> InitialSegmentWaitResult {
     let started_at = tokio::time::Instant::now();
+    let mut saw_at_capacity = false;
     while started_at.elapsed() < startup_timeout {
         if let Some(handle) = registry.try_get(channel_number).await {
             if let Some(playlist) = handle.trim_playlist().await {
@@ -201,7 +202,7 @@ pub(crate) async fn wait_for_initial_segments(
                 }
             }
             if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
-                return InitialSegmentWaitResult::AtCapacity;
+                saw_at_capacity = true;
             }
         } else {
             return InitialSegmentWaitResult::MissingSession;
@@ -209,7 +210,11 @@ pub(crate) async fn wait_for_initial_segments(
         tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
     }
 
-    InitialSegmentWaitResult::Timeout
+    if saw_at_capacity {
+        InitialSegmentWaitResult::AtCapacity
+    } else {
+        InitialSegmentWaitResult::Timeout
+    }
 }
 
 fn count_playlist_segments(playlist: &str) -> usize {
@@ -523,7 +528,11 @@ pub async fn get_session_playlist(
         return match handle.trim_playlist().await {
             Some(playlist) => hls_response(playlist),
             None if admission_status == HlsAdmissionStatus::AtCapacity => {
-                hls_at_capacity_response()
+                let startup_timeout = load_segmenter_startup_timeout(&state).await;
+                match wait_for_capacity_playlist(handle, startup_timeout).await {
+                    Some(playlist) => hls_response(playlist),
+                    None => hls_at_capacity_response(),
+                }
             }
             None => (StatusCode::SERVICE_UNAVAILABLE, "no segments yet").into_response(),
         };
@@ -599,6 +608,24 @@ async fn touch_session_segment(registry: &dyn HlsSessionRegistry, channel_number
     }
 }
 
+async fn wait_for_capacity_playlist(
+    handle: Arc<dyn HlsSessionHandle>,
+    startup_timeout: Duration,
+) -> Option<String> {
+    let started_at = tokio::time::Instant::now();
+    while started_at.elapsed() < startup_timeout {
+        handle.touch();
+        if let Some(playlist) = handle.trim_playlist().await {
+            return Some(playlist);
+        }
+        if handle.admission_status() != HlsAdmissionStatus::AtCapacity {
+            return None;
+        }
+        tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
+    }
+    None
+}
+
 async fn serve_troubleshooting_hls_file(filename: &str) -> Response {
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
         return (StatusCode::BAD_REQUEST, "invalid troubleshooting filename").into_response();
@@ -668,11 +695,13 @@ mod tests {
     use async_trait::async_trait;
     use ersatzrs_core::hls::HlsSessionHandle;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     struct FakeHandle {
         channel: String,
         touched: AtomicUsize,
         admission_status: HlsAdmissionStatus,
+        playlist: Mutex<Option<String>>,
     }
 
     impl FakeHandle {
@@ -685,7 +714,15 @@ mod tests {
                 channel: channel.to_string(),
                 touched: AtomicUsize::new(0),
                 admission_status,
+                playlist: Mutex::new(None),
             })
+        }
+
+        fn set_playlist(&self, playlist: &str) {
+            *self
+                .playlist
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(playlist.to_owned());
         }
     }
 
@@ -704,7 +741,10 @@ mod tests {
         }
 
         async fn trim_playlist(&self) -> Option<String> {
-            None
+            self.playlist
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
         }
 
         async fn cancel(&self) {}
@@ -816,7 +856,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn initial_segment_wait_reports_at_capacity_without_waiting_for_timeout() {
+    async fn initial_segment_wait_gives_capacity_slate_time_to_publish() {
         let registry = ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new();
         registry
             .insert(FakeHandle::with_admission_status(
@@ -825,9 +865,25 @@ mod tests {
             ))
             .await;
 
-        let result = wait_for_initial_segments(&registry, "12", 1, Duration::from_mins(1)).await;
+        let result = wait_for_initial_segments(&registry, "12", 1, Duration::from_millis(1)).await;
 
         assert_eq!(result, InitialSegmentWaitResult::AtCapacity);
+    }
+
+    #[tokio::test]
+    async fn capacity_session_playlist_wait_returns_generated_slate() {
+        let handle = FakeHandle::with_admission_status("12", HlsAdmissionStatus::AtCapacity);
+        let updater = handle.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            updater.set_playlist("#EXTM3U\n#EXTINF:4.000,\nslate.ts\n");
+        });
+
+        let playlist = wait_for_capacity_playlist(handle, Duration::from_secs(1))
+            .await
+            .expect("capacity slate playlist");
+
+        assert!(playlist.contains("slate.ts"));
     }
 
     #[test]

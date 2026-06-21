@@ -32,6 +32,9 @@ use ersatzrs_infra::ffmpeg_capabilities::{
     learned_hardware_decode_denial, persist_hardware_decode_denial,
 };
 use ersatzrs_infra::file_system_layout;
+use ersatzrs_infra::hls_worker::{
+    build_mpeg_ts_slate_command, MpegTsSlateCommandRequest, ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+};
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
@@ -58,6 +61,8 @@ use crate::transport::iptv::{hls, hls::HlsQuery};
 static NEXT_GRAPHICS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const DEFAULT_MPEG_TS_SCRIPT_ID: &str = "default";
+const MPEG_TS_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
+const MPEG_TS_CAPACITY_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct MpegTsScriptDefinition {
@@ -421,6 +426,9 @@ async fn serve_channel_stream_with_channel(
         graphics_overlays.clone(),
         Some(opacity_clock),
     );
+    let slate_metadata = metadata.clone();
+    let slate_runtime_capabilities = runtime_capabilities.clone();
+    let retry_playback_profile = playback_profile.clone();
     let retry = StreamDenialRetry {
         pool: state.pool.clone(),
         runtime_capabilities,
@@ -439,7 +447,7 @@ async fn serve_channel_stream_with_channel(
                     output_format,
                     start_position,
                     stream_duration,
-                    &playback_profile,
+                    &retry_playback_profile,
                     target_frame_rate,
                     effective_streaming_mode,
                     metadata,
@@ -457,12 +465,20 @@ async fn serve_channel_stream_with_channel(
     let capacity_reservation =
         if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
             match reserve_mpeg_ts_capacity(state, &channel.number).await {
-                Ok(reservation) => Some(reservation),
-                Err(response) => {
-                    for path in graphics_cleanup_dirs {
-                        cleanup_stream_artifact(&path).await;
-                    }
-                    return response;
+                Some(reservation) => Some(reservation),
+                None => {
+                    return mpeg_ts_capacity_wait_response(
+                        state,
+                        &channel,
+                        command,
+                        graphics_cleanup_dirs,
+                        &playback_profile,
+                        target_frame_rate,
+                        slate_metadata,
+                        slate_runtime_capabilities,
+                        Some(retry),
+                    )
+                    .await;
                 }
             }
         } else {
@@ -561,17 +577,12 @@ async fn serve_segmenter_wrapper_stream(
         return response;
     }
 
-    let aac_latm_audio = match load_channel_playback_profile(&state.pool, channel.id).await {
-        Ok(Some(profile)) => profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm,
-        Ok(None) => {
-            tracing::error!(channel_number = %channel.number, "channel has no playback ffmpeg profile");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-        Err(error) => {
-            tracing::error!(%error, channel_number = %channel.number, "failed to load playback ffmpeg profile for wrapped segmenter");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let (playback_profile, target_frame_rate, runtime_capabilities) =
+        match load_capacity_slate_context(state, channel, "wrapped segmenter").await {
+            Ok(context) => context,
+            Err(response) => return response,
+        };
+    let aac_latm_audio = playback_profile.profile.audio_format == FFmpegProfileAudioFormat::AacLatm;
     let access_token = AccessToken::new(query.access_token.clone());
     let hls_url = build_segmenter_wrapper_hls_url(
         &hls::request_scheme(headers),
@@ -579,11 +590,7 @@ async fn serve_segmenter_wrapper_stream(
         &channel.number,
         &access_token,
     );
-    let metadata = OutputMetadata {
-        service_provider: Some("ErsatzTV".to_owned()),
-        service_name: Some(channel.name.clone()),
-        ..OutputMetadata::default()
-    };
+    let metadata = channel_stream_metadata(channel);
     let (command, cleanup_paths) =
         match configured_mpegts_script_command(state, channel, &hls_url).await {
             Some(command) => command,
@@ -594,12 +601,20 @@ async fn serve_segmenter_wrapper_stream(
         };
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Ok(reservation) => Some(reservation),
-        Err(response) => {
-            for path in cleanup_paths {
-                cleanup_stream_artifact(&path).await;
-            }
-            return response;
+        Some(reservation) => Some(reservation),
+        None => {
+            return mpeg_ts_capacity_wait_response(
+                state,
+                channel,
+                command,
+                cleanup_paths,
+                &playback_profile,
+                target_frame_rate,
+                metadata,
+                runtime_capabilities,
+                None,
+            )
+            .await;
         }
     };
 
@@ -673,16 +688,30 @@ async fn serve_legacy_concat_stream(
         &hls::request_host(headers),
         &channel.number,
     );
-    let metadata = OutputMetadata {
-        service_provider: Some("ErsatzTV".to_owned()),
-        service_name: Some(channel.name.clone()),
-        ..OutputMetadata::default()
-    };
+    let metadata = channel_stream_metadata(channel);
+    let (playback_profile, target_frame_rate, runtime_capabilities) =
+        match load_capacity_slate_context(state, channel, "legacy stream").await {
+            Ok(context) => context,
+            Err(response) => return response,
+        };
     let command = build_mpegts_concat_command(concat_url, &metadata);
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
-        Ok(reservation) => Some(reservation),
-        Err(response) => return response,
+        Some(reservation) => Some(reservation),
+        None => {
+            return mpeg_ts_capacity_wait_response(
+                state,
+                channel,
+                command,
+                Vec::new(),
+                &playback_profile,
+                target_frame_rate,
+                metadata,
+                runtime_capabilities,
+                None,
+            )
+            .await;
+        }
     };
 
     match spawn_stream_body(
@@ -726,24 +755,141 @@ fn build_segmenter_wrapper_hls_url(
     )
 }
 
+fn channel_stream_metadata(channel: &Channel) -> OutputMetadata {
+    OutputMetadata {
+        service_provider: Some("ErsatzTV".to_owned()),
+        service_name: Some(channel.name.clone()),
+        ..OutputMetadata::default()
+    }
+}
+
 async fn reserve_mpeg_ts_capacity(
     state: &AppState,
     channel_number: &str,
-) -> Result<ActiveTranscodeReservation, Response> {
+) -> Option<ActiveTranscodeReservation> {
     let limit = load_active_transcode_limit(&state.pool).await;
-    try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number))
-        .ok_or_else(|| {
+    let reservation =
+        try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number));
+    if reservation.is_none() {
+        tracing::warn!(
+            channel_number,
+            limit,
+            "mpeg-ts stream admission waiting on all-streams-in-use slate because all transcode slots are in use"
+        );
+    }
+    reservation
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn mpeg_ts_capacity_wait_response(
+    state: &AppState,
+    channel: &Channel,
+    command: FfmpegCommand,
+    mut cleanup_paths: Vec<PathBuf>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    retry: Option<StreamDenialRetry>,
+) -> Response {
+    let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
+    let Some(slate_command) = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
+        working_dir: &slate_dir,
+        duration: MPEG_TS_CAPACITY_SLATE_DURATION,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        message: ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+    })
+    .await
+    else {
+        tracing::warn!(
+            channel_number = %channel.number,
+            "failed to build MPEG-TS all-streams-in-use slate"
+        );
+        for path in cleanup_paths {
+            cleanup_stream_artifact(&path).await;
+        }
+        cleanup_stream_artifact(&slate_dir).await;
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            hls::HLS_AT_CAPACITY_MESSAGE,
+        )
+            .into_response();
+    };
+    cleanup_paths.push(slate_dir);
+
+    let body = spawn_stream_body_waiting_for_mpegts_capacity(
+        command,
+        slate_command,
+        cleanup_paths,
+        channel.number.clone(),
+        state.hls_sessions.clone(),
+        state.pool.clone(),
+        retry,
+    );
+    let mut response = body.into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("video/mp2t"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+async fn load_capacity_slate_context(
+    state: &AppState,
+    channel: &Channel,
+    context: &str,
+) -> Result<(PlaybackProfile, Option<FrameRate>, FfmpegCapabilityReport), Response> {
+    let playback_profile = match load_channel_playback_profile(&state.pool, channel.id).await {
+        Ok(Some(profile)) => profile,
+        Ok(None) => {
+            tracing::error!(channel_number = %channel.number, context, "channel has no playback ffmpeg profile");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        }
+        Err(error) => {
+            tracing::error!(%error, channel_number = %channel.number, context, "failed to load playback ffmpeg profile");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        }
+    };
+    let target_frame_rate =
+        load_capacity_slate_target_frame_rate(state, channel, &playback_profile).await;
+    let runtime_capabilities = state.ffmpeg_runtime.read().await.capabilities.clone();
+
+    Ok((playback_profile, target_frame_rate, runtime_capabilities))
+}
+
+async fn load_capacity_slate_target_frame_rate(
+    state: &AppState,
+    channel: &Channel,
+    playback_profile: &PlaybackProfile,
+) -> Option<FrameRate> {
+    if !playback_profile.profile.normalize_framerate {
+        return None;
+    }
+
+    match load_channel_target_frame_rate(&state.pool, channel.id).await {
+        Ok(frame_rate) => frame_rate,
+        Err(error) => {
             tracing::warn!(
-                channel_number,
-                limit,
-                "mpeg-ts stream admission denied because all transcode slots are in use"
+                %error,
+                channel_number = %channel.number,
+                "failed to load channel target frame rate for MPEG-TS capacity slate"
             );
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                hls::HLS_AT_CAPACITY_MESSAGE,
-            )
-                .into_response()
-        })
+            None
+        }
+    }
+}
+
+fn mpeg_ts_capacity_slate_dir(channel_id: i64) -> PathBuf {
+    let request_id = NEXT_GRAPHICS_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir()
+        .join("ersatzrs-mpegts-capacity-slate")
+        .join(format!("channel-{channel_id}"))
+        .join(format!("request-{request_id}"))
 }
 
 async fn configured_mpegts_script_command(
@@ -1474,7 +1620,7 @@ fn spawn_stream_body(
     capacity_reservation: Option<ActiveTranscodeReservation>,
     retry: Option<StreamDenialRetry>,
 ) -> Result<Body, StreamSpawnError> {
-    let mut child = spawn_stream_process(command)?;
+    let child = spawn_stream_process(command)?;
     if child.stdout.is_none() {
         return Err(StreamSpawnError::MissingStdout);
     }
@@ -1487,45 +1633,100 @@ fn spawn_stream_body(
         let _capacity_reservation = capacity_reservation;
         let registered = session_registry.try_insert(handle).await;
         let mut retry = retry;
+        let _ = supervise_stream_command_with_retry(
+            child,
+            &mut writer,
+            &cancel,
+            &channel_number,
+            &mut retry,
+        )
+        .await;
+        if registered {
+            session_registry.remove(&channel_number).await;
+        }
+        for path in cleanup_paths {
+            cleanup_stream_artifact(&path).await;
+        }
+    });
+
+    Ok(guarded_stream_body(reader, handle_cancel))
+}
+
+fn spawn_stream_body_waiting_for_mpegts_capacity(
+    command: FfmpegCommand,
+    slate_command: FfmpegCommand,
+    cleanup_paths: Vec<PathBuf>,
+    channel_number: String,
+    session_registry: Arc<dyn HlsSessionRegistry>,
+    pool: DbPool,
+    retry: Option<StreamDenialRetry>,
+) -> Body {
+    let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
+    let cancel = handle.cancel.clone();
+    let handle_cancel = handle.cancel.clone();
+    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+
+    tokio::spawn(async move {
+        let registered = session_registry.try_insert(handle).await;
+        let mut retry = retry;
         loop {
-            let outcome =
-                supervise_stream_process(&mut child, &mut writer, &cancel, &channel_number).await;
-            let DirectStreamOutcome::Failed(stderr) = outcome else {
+            let limit = load_active_transcode_limit(&pool).await;
+            if let Some(reservation) = try_reserve_active_transcode(
+                limit,
+                ActiveTranscodeSlot::new_mpeg_ts(&channel_number),
+            ) {
+                let _capacity_reservation = reservation;
+                match spawn_stream_process(&command) {
+                    Ok(child) => {
+                        let _ = supervise_stream_command_with_retry(
+                            child,
+                            &mut writer,
+                            &cancel,
+                            &channel_number,
+                            &mut retry,
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            channel_number = %channel_number,
+                            "failed to spawn MPEG-TS stream after capacity became available"
+                        );
+                    }
+                }
                 break;
-            };
-            let denial = retry.take().and_then(|context| {
-                learned_hardware_decode_denial(
-                    false,
-                    context.acceleration,
-                    context.source_stream.as_ref(),
-                    &stderr,
-                )
-                .map(|denial| (context, denial))
-            });
-            let Some((context, denial)) = denial else {
-                break;
-            };
-            tracing::warn!(
-                channel_number = %channel_number,
-                acceleration = ?denial.acceleration,
-                codec = %denial.codec,
-                bit_depth = denial.bit_depth,
-                "retrying channel stream once with software input decode after runtime hardware decode rejection"
-            );
-            let mut capabilities = context.runtime_capabilities;
-            if let Err(error) =
-                persist_hardware_decode_denial(&context.pool, &mut capabilities, denial).await
-            {
-                tracing::warn!(
-                    %error,
-                    channel_number = %channel_number,
-                    "failed to persist runtime-learned hardware decode denial"
-                );
             }
-            match spawn_stream_process(&(context.rebuild)(capabilities)) {
-                Ok(next) => child = next,
+
+            tracing::debug!(
+                channel_number = %channel_number,
+                limit,
+                "serving MPEG-TS all-streams-in-use slate without reserving transcode capacity"
+            );
+            let mut slate_child = match spawn_stream_process(&slate_command) {
+                Ok(child) => child,
                 Err(error) => {
-                    tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
+                    tracing::warn!(
+                        %error,
+                        channel_number = %channel_number,
+                        "failed to spawn MPEG-TS all-streams-in-use slate"
+                    );
+                    break;
+                }
+            };
+            match supervise_stream_process(&mut slate_child, &mut writer, &cancel, &channel_number)
+                .await
+            {
+                DirectStreamOutcome::Completed => {
+                    tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
+                }
+                DirectStreamOutcome::Cancelled => break,
+                DirectStreamOutcome::Failed(stderr) => {
+                    tracing::warn!(
+                        stderr = %stderr,
+                        channel_number = %channel_number,
+                        "MPEG-TS all-streams-in-use slate exited unsuccessfully"
+                    );
                     break;
                 }
             }
@@ -1538,7 +1739,58 @@ fn spawn_stream_body(
         }
     });
 
-    Ok(guarded_stream_body(reader, handle_cancel))
+    guarded_stream_body(reader, handle_cancel)
+}
+
+async fn supervise_stream_command_with_retry(
+    mut child: tokio::process::Child,
+    writer: &mut tokio::io::DuplexStream,
+    cancel: &Arc<Notify>,
+    channel_number: &str,
+    retry: &mut Option<StreamDenialRetry>,
+) -> DirectStreamOutcome {
+    loop {
+        let outcome = supervise_stream_process(&mut child, writer, cancel, channel_number).await;
+        let DirectStreamOutcome::Failed(stderr) = outcome else {
+            return outcome;
+        };
+        let denial = retry.take().and_then(|context| {
+            learned_hardware_decode_denial(
+                false,
+                context.acceleration,
+                context.source_stream.as_ref(),
+                &stderr,
+            )
+            .map(|denial| (context, denial))
+        });
+        let Some((context, denial)) = denial else {
+            return DirectStreamOutcome::Failed(stderr);
+        };
+        tracing::warn!(
+            channel_number = %channel_number,
+            acceleration = ?denial.acceleration,
+            codec = %denial.codec,
+            bit_depth = denial.bit_depth,
+            "retrying channel stream once with software input decode after runtime hardware decode rejection"
+        );
+        let mut capabilities = context.runtime_capabilities;
+        if let Err(error) =
+            persist_hardware_decode_denial(&context.pool, &mut capabilities, denial).await
+        {
+            tracing::warn!(
+                %error,
+                channel_number = %channel_number,
+                "failed to persist runtime-learned hardware decode denial"
+            );
+        }
+        match spawn_stream_process(&(context.rebuild)(capabilities)) {
+            Ok(next) => child = next,
+            Err(error) => {
+                tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
+                return DirectStreamOutcome::Failed(error.to_string());
+            }
+        }
+    }
 }
 
 /// Builds the response [`Body`], tying the `FFmpeg` process lifetime to the
@@ -2490,6 +2742,53 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mpegts_capacity_wait_body_serves_slate_without_extra_slot_then_switches() {
+        let _guard = active_transcode_stream_test_guard().await;
+        ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
+        let pool = capacity_test_pool(1).await;
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let occupied = try_reserve_active_transcode(1, ActiveTranscodeSlot::new_mpeg_ts("busy"))
+            .expect("occupy the only MPEG-TS slot");
+
+        let body = spawn_stream_body_waiting_for_mpegts_capacity(
+            shell_command("printf content", "echo content"),
+            shell_command("printf slate", "echo slate"),
+            Vec::new(),
+            "93".to_owned(),
+            registry,
+            pool,
+            None,
+        );
+        let release = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            drop(occupied);
+        });
+
+        let bytes = axum::body::to_bytes(body, 64 * 1024)
+            .await
+            .expect("read MPEG-TS wait body");
+        release.await.expect("release occupied capacity");
+        let output = String::from_utf8_lossy(&bytes);
+        let slate_index = output.find("slate").expect("slate output");
+        let content_index = output.find("content").expect("content output");
+
+        assert!(
+            slate_index < content_index,
+            "capacity slate should precede real content, got {output:?}"
+        );
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
+            0
+        );
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).peak,
+            1,
+            "slate loop must not increment active capacity beyond the occupied real slot"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg on PATH"]
     async fn spawn_stream_body_kills_ffmpeg_when_body_is_dropped() {
         // One viewing session must never leave a transcode process running
@@ -2565,6 +2864,41 @@ mod tests {
                 environment: Vec::new(),
             }
         }
+    }
+
+    async fn capacity_test_pool(limit: i32) -> DbPool {
+        #[cfg(feature = "mysql")]
+        let pool = {
+            sqlx::any::install_default_drivers();
+            sqlx::any::AnyPoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("open capacity test db")
+        };
+        #[cfg(not(feature = "mysql"))]
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("open capacity test db");
+        sqlx::query(
+            r#"CREATE TABLE "ConfigElement" (
+                "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "Key" TEXT NOT NULL UNIQUE,
+                "Value" TEXT NOT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create ConfigElement");
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+            .bind(limit.to_string())
+            .execute(&pool)
+            .await
+            .expect("insert active transcode limit");
+        pool
     }
 
     async fn wait_for_capacity_active(limit: i32, expected: i32) {

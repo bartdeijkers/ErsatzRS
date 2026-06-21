@@ -23,11 +23,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Over-capacity HLS and MPEG-TS viewers now receive a playable, looping
+  "all streams in use" slate that does not consume a transcode slot and switches
+  to real content once capacity frees, instead of immediately getting HTTP 503.
 - HLS segmenter active transcode limits now enforce a hard ceiling instead of
   letting recently watched channels bypass the cap. Over-capacity HLS sessions
-  reclaim work-ahead/cooling/stale watched transcodes first, otherwise return an
-  all-streams-in-use error without holding a transcode slot; the FFmpeg settings
-  copy now describes the hard limit.
+  reclaim work-ahead/cooling/stale watched transcodes first, otherwise wait on
+  the slot-free all-streams-in-use slate; the FFmpeg settings copy now describes
+  the hard limit.
 - FFmpeg command-generation parity is complete: the NVENC encoder-only
   CUDA-filter gate is now live-proven against an FFmpeg 8.1 build with `cuda`
   and `h264_nvenc` but without `scale_cuda`, `yadif_cuda`, or `overlay_cuda`,

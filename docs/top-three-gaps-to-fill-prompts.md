@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-21
-last_processed_commit: 56fd5dd586a3ddc50a3c3f714491fc29eefae7ea
+last_processed_commit: 24e8383a2155503890457543a82958248e406dba
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -21,98 +21,77 @@ see the [rules](automation/gap-prompt-rules.md). For the live gap list run
 commit is out of scope until the pin in
 [`automation/parity-baseline.md`](automation/parity-baseline.md) is advanced.
 
-Current reconcile (2026-06-21, through `56fd5dd`): `cargo xtask progress gaps`
-lists **1** remaining feature with a single open debt, so this file
-intentionally contains only one actionable prompt:
+Current reconcile (2026-06-21): the HLS / MPEG-TS
+`all-streams-in-use-playable-slate` closeout resolves the last item emitted by
+`cargo xtask progress gaps`, so the progress query should report **0** remaining
+features after this commit. Per `docs/automation/gap-prompt-rules.md`, completed
+scope is replaced, never kept with a completed banner. This file intentionally
+contains one actionable ADR-backed runtime-hardening prompt:
 
-- `hls-variant-playlists-segmenter` (debt `all-streams-in-use-playable-slate`)
-
-The 2026-06-21 closeout resolved the two prior open debts —
-`active-transcode-observability-and-suggestion` (live `Streams in use: X / N
-(peak Y)` readout + hardware-aware suggested value on FFmpeg
-settings/troubleshooting) and `pipeline-agnostic-transcode-capacity-counting`
-(MPEG-TS direct/legacy/hybrid spawns folded into the shared
-`transcode_capacity` ceiling). Those prompts were removed per
-`docs/automation/gap-prompt-rules.md`: completed scope is replaced, never kept
-with a completed banner. The single remaining ADR 0016 implementation item is
-the playable all-streams-in-use slate, prompted below. ADR 0008 FFmpeg runtime
-acquisition (ship without FFmpeg; download/update from the
-`bartdeijkers/ErsatzRS-ffmpeg` releases at startup; surface update availability
-on `/system/health`) remains parity-critical infrastructure but is not emitted
-by `cargo xtask progress gaps`; refresh this file from progress data before
-promoting it over the remaining open debt.
+- ADR 0008 FFmpeg runtime acquisition from first-party
+  `bartdeijkers/ErsatzRS-ffmpeg` releases.
 
 ---
 
-## 1 - HLS / MPEG-TS over-capacity: playable "all streams in use" slate (slug `hls-variant-playlists-segmenter`)
+## 1 - FFmpeg runtime acquisition from ErsatzRS-ffmpeg releases (ADR 0008)
 
-Fix the next ErsatzRS parity-infrastructure gap: replace the over-capacity HTTP
-503 with the playable, slot-free "all streams in use" slate promised by ADR
-0016, so a marginal viewer joining a full transcode pool sees a short looping
-clip that flips to real content the instant a slot frees (slug
-`hls-variant-playlists-segmenter`, debt `all-streams-in-use-playable-slate`).
+Fix the next ErsatzRS parity-infrastructure gap: implement ADR 0008's startup
+FFmpeg runtime acquisition manager so ErsatzRS release archives ship without
+bundled FFmpeg/ffprobe, resolve an acceptable runtime at startup, download the
+matching first-party `ErsatzRS-ffmpeg` package when needed, and surface update
+availability on `/system/health`.
 
-Use the repo workflow from `AGENTS.md`. This is ADR-backed HLS/streaming runtime
-hardening under ADR 0016, not a pinned-baseline ErsatzTV behavior gap, so do not
-force it through `skills/parity-slice.md`. Read
-[`docs/adr/0016-active-hls-transcode-limit.md`](adr/0016-active-hls-transcode-limit.md)
-(decision points 3.4 and 4 and the Implementation section),
-[`plans/hls-transcode-capacity-and-admission.md`](../plans/hls-transcode-capacity-and-admission.md),
-and `docs/progress/parity/hls-variant-playlists-segmenter.toml`. Read the pinned
-ErsatzTV HLS source (`$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`,
-`$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`,
-`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`) only where it
-informs the existing slug black-video / silent-audio slate generation that this
-slate should reuse. Confirm `git -C "$ERSATZTV_SRC" rev-parse HEAD` is the
-pinned baseline before reading.
+Use the repo workflow from `AGENTS.md`. This is ADR-backed runtime hardening, not
+a pinned-baseline ErsatzTV behavior gap, so do not force it through
+`skills/parity-slice.md`. Read
+[`docs/adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md`](adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md)
+and [`plans/release-self-built-ffmpeg.md`](../plans/release-self-built-ffmpeg.md)
+before editing. Treat ADR 0008's six supported RIDs (`linux-x64`, `linux-arm64`,
+`linux-arm`, `osx-x64`, `osx-arm64`, `win-x64`) plus Docker pre-placement as
+part of the compatibility contract.
 
-Current `ParityDebt` from
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`:
-- `all-streams-in-use-playable-slate` (ADR 0016): when the transcode pool is
-  full the over-capacity admission path still returns HTTP 503
-  (`HLS_AT_CAPACITY_MESSAGE` / `SERVICE_UNAVAILABLE` in
-  `crates/ersatzrs-web/src/transport/iptv/hls.rs` and `stream.rs`) instead of a
-  short, looping slate that holds no transcode slot and switches to real content
-  once a slot frees.
+Current ADR 0008 implementation state:
+- Startup already detects/enforces FFmpeg 8.1 capabilities.
+- The managed download/update manager, release-asset resolver, checksum
+  verification, managed runtime directory, scanner ffprobe reuse, release
+  workflow cleanup, Docker pre-placement, and health-page update indicator are
+  not yet implemented.
 
 Before editing:
-1. Inspect the over-capacity refusal paths in
-   `crates/ersatzrs-web/src/transport/iptv/hls.rs` and
-   `crates/ersatzrs-web/src/transport/iptv/stream.rs`, the shared ceiling and
-   reclaim signalling in `crates/ersatzrs-infra/src/transcode_capacity.rs`, the
-   HLS worker's existing slug black-video + silent-audio / error-ASS slate
-   generation in `crates/ersatzrs-infra/src/hls_worker.rs`, and the
-   `/channels` active-transcode status path.
-2. Build a Source Map for over-capacity admission -> slate clip generation
-   (reusing the existing black-video/silent-audio path, NOT a real content
-   transcode slot) -> slate served over both the HLS segmenter playlist and the
-   MPEG-TS direct/hybrid responses -> automatic switch to real content when a
-   slot frees, without leaking or holding a `transcode_capacity` reservation.
-3. Preserve the already-ported hard ceiling, reclaim ladder, watch/retention
-   decoupling, and StopOnDisconnect lifecycle; the slate must hold **no** slot
-   and must not let active counts exceed the configured limit. Do not regress
-   `cargo xtask smoke` or TSDuck playback assumptions.
+1. Inspect `crates/ersatzrs-ffmpeg/src/version.rs`,
+   `crates/ersatzrs-scanner/src/main.rs`, `ersatzrs-core::health` /
+   `ersatzrs-infra::health`, `/system/health`, `.github/workflows/release.yml`,
+   Docker packaging, and existing FFmpeg capability tests.
+2. Build a Source Map for runtime resolution (env/config override -> managed
+   runtime dir -> PATH), capability validation, download/checksum/install,
+   update check, health surfacing, release artifacts, Docker images, and scanner
+   ffprobe discovery.
+3. Preserve the FFmpeg 8.1 + `drawvg` + `zscale` capability contract. Do not
+   lower requirements, silently auto-update a working runtime, or move FFmpeg
+   build ownership back into the application repo.
 
-Implement the slate end-to-end: when admission cannot acquire a slot, serve a
-slot-free looping "all streams in use" slate (reusing the existing slug
-slate-generation primitive) on both the HLS segmenter and MPEG-TS paths, keep
-the configured ceiling truthful while the slate plays, and flip the session to
-real content the moment a slot frees. If any path must remain a 503 (e.g. a
-genuinely unrenderable slate), do not hide it in prose: leave
-`all-streams-in-use-playable-slate` open with the specific uncovered path
-recorded as visible `ParityDebt`.
+Implement the slice end-to-end: add the managed runtime resolver and installer,
+map current OS/architecture to the six ADR RIDs, download and checksum-verify the
+matching `ErsatzRS-ffmpeg` release when no valid runtime is resolved, validate
+the accepted runtime with the existing capability gate plus the ADR 0008
+drawvg/zscale smoke checks, record the installed tag, best-effort check latest
+release at startup, expose resolved source/version/update availability through
+health and localized `/system/health`, make the scanner use the same ffprobe
+resolver, remove bundled-FFmpeg assumptions from release workflow/docs, and make
+Docker pre-place the managed runtime when configured.
 
-Add focused tests for: slate served on full-pool admission without incrementing
-the active count past the limit, slate held no slot (snapshot active/peak
-unchanged by a refused newcomer), automatic switch to real content on slot
-release, and regression coverage proving the hard ceiling and reclaim ladder
-still hold for both HLS and MPEG-TS.
+Add focused tests for: env override wins; pre-placed managed runtime bypasses
+network; PATH fallback works; invalid checksum is rejected; missing runtime
+downloads the RID-specific package; outdated managed runtime sets update
+available without replacing it; scanner ffprobe uses the shared resolver; health
+serializes resolved source/version/update status; release archive staging has no
+`ffmpeg/` directory. Use test doubles for GitHub release metadata/downloads; do
+not depend on live network in unit tests.
 
-Verify with focused HLS/stream/capacity tests, `cargo xtask smoke`, the TSDuck
-playback gate (`scripts/e2e/tsduck-playback-gate.sh gate`) since this changes
-runtime streaming lifecycle, `cargo xtask hydration-lint -p ersatzrs-web` if any
-admin UI changes, `cargo xtask progress check`, and `cargo xtask progress gaps`.
-Update ADR 0016, `plans/hls-transcode-capacity-and-admission.md`,
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`, the changelog, and
-this prompt file only when evidence supports the new state. Report the Source
-Map, slate behavior, remaining `ParityDebt`, verification run, and changed files.
+Verify with focused resolver/health/release tests, both normal and MySQL clippy
+passes if shared crates change, `cargo test --workspace --all-features`,
+`cargo xtask smoke`, `cargo xtask progress check`, and `cargo xtask progress
+gaps`. Run `cargo xtask hydration-lint -p ersatzrs-web` if the `/system/health`
+UI changes. Report the Source Map, implemented runtime behavior, remaining ADR
+0008 debt if any, compatibility audit for Windows/Linux/macOS/Docker, verification
+run, and changed files.

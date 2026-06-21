@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0015', '0016']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
@@ -48,18 +48,14 @@ ADR 0016 adds a hard active transcode ceiling
 work-ahead limit. A shared process-local reservation registry
 (`transcode_capacity.rs`) tracks every transcode with active/limit/peak
 snapshotting; no path exceeds the ceiling, and over-capacity admission reclaims
-work-ahead, cooling, then stale-watched StopOnDisconnect slots (watch window
-decoupled from idle retention) before refusing a newcomer without holding
-capacity. The 2026-06-21 closeout folded MPEG-TS
-direct/legacy/hybrid spawns into the same ceiling (`stream.rs` reserves a
-`MpegTs` slot per spawn, released on exit or response-body drop), so the limit
-means total streaming-transcode capacity; and added a live
-`Streams in use: X / N (peak Y)` readout plus a hardware-aware suggested value
-(higher with an NVENC/QSV/VAAPI encoder, conservative for software x264; shown,
-not auto-applied) on FFmpeg settings in all four admin languages, with the same
-object in troubleshooting JSON. Remaining ADR 0016 debt is the playable
-all-streams-in-use slate: the over-capacity path still returns a 503, not a
-slot-free looping slate.
+work-ahead, cooling, then stale-watched StopOnDisconnect slots before serving a
+slot-free all-streams-in-use slate for the marginal viewer. The 2026-06-21
+closeouts folded MPEG-TS direct/legacy/hybrid spawns into the same ceiling,
+added a live `Streams in use: X / N (peak Y)` readout plus hardware-aware
+suggestion on FFmpeg settings/troubleshooting, and replaced the HLS/MPEG-TS
+over-capacity 503 paths with a generated, looping all-streams-in-use slate that
+holds no `transcode_capacity` reservation and switches to real content when a
+slot frees.
 
 Runtime proof: TSDuck / `cargo xtask smoke` captures through 2026-06-16 showed
 zero transport, sync-loss, continuity-counter, or PTS/DTS/PCR faults across
@@ -116,5 +112,5 @@ id          = 'all-streams-in-use-playable-slate'
 adr         = '0016'
 description = 'ADR 0016 (decision points 3.4 and 4) specifies that when the transcode pool is full a marginal viewer sees a short, looping "all streams in use" slate that holds no transcode slot and flips to real content the moment a slot frees. The over-capacity admission path currently returns an HTTP 503 instead of serving that playable slate.'
 discovered  = '2026-06-21'
-evidence    = 'crates/ersatzrs-web/src/transport/iptv/hls.rs returns SERVICE_UNAVAILABLE with HLS_AT_CAPACITY_MESSAGE, and crates/ersatzrs-web/src/transport/iptv/stream.rs returns SERVICE_UNAVAILABLE on the at-capacity MPEG-TS paths; neither generates a slot-free looping slate clip. ADR 0016 Implementation still lists "playable slate loop" as outstanding.'
-resolved    = false
+evidence    = 'Resolved 2026-06-21: crates/ersatzrs-infra/src/hls_worker.rs reuses the existing generated error-slate primitive to append a 4s all-streams-in-use HLS slate while admission is full, passing no active transcode slot to the slate process; crates/ersatzrs-web/src/transport/iptv/hls.rs waits for the slate playlist instead of immediately returning the old at-capacity 503. crates/ersatzrs-web/src/transport/iptv/stream.rs builds the same visible slate as paced MPEG-TS and emits it without a reservation until reserve_mpeg_ts_capacity succeeds, then switches the response body to real content. Focused tests cover slate command generation/assets, HLS capacity wait behavior, MPEG-TS slate-before-content switching after slot release, and peak active count staying at the configured limit.'
+resolved    = true

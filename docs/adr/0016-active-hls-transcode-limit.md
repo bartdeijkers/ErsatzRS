@@ -6,18 +6,17 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Partial — the HLS segmenter hard ceiling and admission ladder are implemented
-as of 2026-06-20: no active HLS reservation path can exceed
+Implemented — the HLS segmenter hard ceiling and admission ladder are
+implemented: no active HLS reservation path can exceed
 `ffmpeg.segmenter.active_transcode_limit`, work-ahead/cooling/stale-watched
-sessions are reclaimed before a newcomer is denied, and an over-capacity cold
-session returns an all-streams-in-use error without holding a slot. The
-2026-06-21 closeout added the live `Streams in use: X / N (peak Y)` readout and
-hardware-aware suggested value on the FFmpeg settings/troubleshooting surface,
-and folded MPEG-TS direct/legacy/hybrid transcodes into the same process-local
-ceiling (a shared `transcode_capacity` reservation registry), so the limit now
-means total streaming-transcode capacity rather than HLS-only. The remaining
-implementation work is the **playable slate loop**: the over-capacity path still
-returns an HTTP 503 instead of a slot-free looping "all streams in use" clip.
+sessions are reclaimed before a newcomer waits, and an over-capacity cold
+session serves a slot-free all-streams-in-use slate. The 2026-06-21 closeouts
+added the live `Streams in use: X / N (peak Y)` readout and hardware-aware
+suggested value on the FFmpeg settings/troubleshooting surface, folded MPEG-TS
+direct/legacy/hybrid transcodes into the same process-local ceiling (a shared
+`transcode_capacity` reservation registry), and replaced the HLS/MPEG-TS
+over-capacity 503 paths with a generated, looping "all streams in use" slate
+that holds no reservation and switches to real content when a slot frees.
 
 ## Context
 
@@ -204,4 +203,8 @@ everything else is opportunistic and reclaimable.*
 - 2026-06-21: Added the live `Streams in use: X / N (peak Y)` readout and
   hardware-aware suggested value on FFmpeg settings/troubleshooting, and folded
   MPEG-TS direct/legacy/hybrid transcodes into the shared process-local
-  capacity ceiling. Remaining: the playable slate loop (still a 503).
+  capacity ceiling.
+- 2026-06-21: Implemented the playable all-streams-in-use slate loop for HLS and
+  MPEG-TS over-capacity admission. The slate uses generated black/error-slate
+  media, holds no `transcode_capacity` reservation, and the waiting response
+  switches to real content when a slot frees.

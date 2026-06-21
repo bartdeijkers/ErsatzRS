@@ -58,11 +58,14 @@ const HLS_ACTIVE_WATCH_WINDOW: Duration = Duration::from_secs(30);
 const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25);
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
+const HLS_AT_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
 
 const ERROR_BACKGROUND_PNG: &[u8] = include_bytes!("../../../assets/_background.png");
+pub const ALL_STREAMS_IN_USE_SLATE_MESSAGE: &str =
+    "All streams are in use. Playback will start when a stream is available.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HlsSessionState {
@@ -351,7 +354,30 @@ impl HlsSessionWorker {
                 self.set_session_state(self.session_state().throttle());
                 let _ = self.trim_playlist_inner().await;
                 drop(work_ahead_reservation);
-                tokio::time::sleep(HLS_ADMISSION_RETRY_INTERVAL).await;
+                match self
+                    .run_all_streams_in_use_slate(
+                        &pool,
+                        &mut cleanup_interval,
+                        idle_timeout,
+                        is_first,
+                        runtime_capabilities.clone(),
+                    )
+                    .await
+                {
+                    HlsProcessOutcome::Success => {
+                        is_first = false;
+                    }
+                    HlsProcessOutcome::Cancelled => break,
+                    HlsProcessOutcome::Reclaimed => {}
+                    HlsProcessOutcome::Failed(error) => {
+                        tracing::warn!(
+                            channel_number = %self.channel_number,
+                            %error,
+                            "failed to render all-streams-in-use HLS slate"
+                        );
+                        tokio::time::sleep(HLS_ADMISSION_RETRY_INTERVAL).await;
+                    }
+                }
                 continue;
             };
             self.set_admission_status(HlsAdmissionStatus::Transcoding);
@@ -841,6 +867,87 @@ impl HlsSessionWorker {
         self.set_admission_status(HlsAdmissionStatus::Waiting);
         let _ = cleanup_working_dir(&self.working_dir).await;
         registry.remove(&self.channel_number).await;
+    }
+
+    async fn run_all_streams_in_use_slate(
+        &self,
+        pool: &DbPool,
+        cleanup_interval: &mut tokio::time::Interval,
+        idle_timeout: Option<Duration>,
+        is_first_transcode: bool,
+        runtime_capabilities: FfmpegCapabilityReport,
+    ) -> HlsProcessOutcome {
+        let playback_profile = match load_channel_playback_profile(pool, self.channel_id).await {
+            Ok(Some(profile)) => profile,
+            Ok(None) => {
+                return HlsProcessOutcome::Failed(
+                    "channel has no playback ffmpeg profile for capacity slate".to_owned(),
+                );
+            }
+            Err(error) => {
+                return HlsProcessOutcome::Failed(format!(
+                    "failed to load playback ffmpeg profile for capacity slate: {error}"
+                ));
+            }
+        };
+        let channel_name = load_channel_name(pool, self.channel_id)
+            .await
+            .unwrap_or_else(|| self.channel_number.clone());
+        let target_frame_rate = if playback_profile.profile.normalize_framerate {
+            match load_channel_target_frame_rate(pool, self.channel_id).await {
+                Ok(frame_rate) => frame_rate,
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        "failed to load channel target frame rate for capacity slate"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let output_ts_offset = self.probe_output_ts_offset(is_first_transcode).await;
+        let Some(command) = build_hls_error_command(HlsErrorProcessRequest {
+            working_dir: &self.working_dir,
+            output_format: self.output_format,
+            is_first_transcode,
+            hls_realtime: true,
+            duration: HLS_AT_CAPACITY_SLATE_DURATION,
+            output_ts_offset,
+            playback_profile: &playback_profile,
+            target_frame_rate,
+            metadata: OutputMetadata {
+                service_provider: Some("ErsatzTV".to_owned()),
+                service_name: Some(channel_name),
+                ..OutputMetadata::default()
+            },
+            runtime_capabilities,
+            error_message: ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+        })
+        .await
+        else {
+            return HlsProcessOutcome::Failed(
+                "failed to build all-streams-in-use HLS slate command".to_owned(),
+            );
+        };
+
+        if self.trim_playlist_for_append().await.is_none() {
+            tracing::debug!(
+                channel_number = %self.channel_number,
+                "hls playlist not ready to trim before capacity slate append"
+            );
+        }
+
+        self.run_hls_process(
+            command,
+            cleanup_interval,
+            idle_timeout,
+            transcode_watch_idle_timeout(idle_timeout),
+            None,
+        )
+        .await
     }
 
     async fn run_hls_process(
@@ -1526,6 +1633,16 @@ struct HlsErrorProcessRequest<'a> {
     error_message: &'a str,
 }
 
+pub struct MpegTsSlateCommandRequest<'a> {
+    pub working_dir: &'a Path,
+    pub duration: Duration,
+    pub playback_profile: &'a PlaybackProfile,
+    pub target_frame_rate: Option<FrameRate>,
+    pub metadata: OutputMetadata,
+    pub runtime_capabilities: FfmpegCapabilityReport,
+    pub message: &'a str,
+}
+
 async fn build_hls_error_command(request: HlsErrorProcessRequest<'_>) -> Option<FfmpegCommand> {
     let assets_dir = request.working_dir.join("error");
     if let Err(error) = tokio::fs::create_dir_all(&assets_dir).await {
@@ -1566,6 +1683,43 @@ async fn build_hls_error_command(request: HlsErrorProcessRequest<'_>) -> Option<
     ))
 }
 
+pub async fn build_mpeg_ts_slate_command(
+    request: MpegTsSlateCommandRequest<'_>,
+) -> Option<FfmpegCommand> {
+    if let Err(error) = tokio::fs::create_dir_all(request.working_dir).await {
+        tracing::warn!(%error, path = %request.working_dir.display(), "failed to create mpeg-ts slate asset directory");
+        return None;
+    }
+
+    let background_path = request.working_dir.join("background.png");
+    if let Err(error) = tokio::fs::write(&background_path, ERROR_BACKGROUND_PNG).await {
+        tracing::warn!(%error, path = %background_path.display(), "failed to write mpeg-ts slate background");
+        return None;
+    }
+
+    let subtitle_path = request.working_dir.join("slate.ass");
+    let subtitle = hls_error_ass(
+        request.message,
+        playback_frame_size(request.playback_profile),
+    );
+    if let Err(error) = tokio::fs::write(&subtitle_path, subtitle).await {
+        tracing::warn!(%error, path = %subtitle_path.display(), "failed to write mpeg-ts slate subtitle");
+        return None;
+    }
+
+    Some(build_mpeg_ts_slate_command_from_assets(
+        MpegTsSlateCommandAssetRequest {
+            background_path: &background_path,
+            subtitle_path: &subtitle_path,
+            duration: request.duration,
+            playback_profile: request.playback_profile,
+            target_frame_rate: request.target_frame_rate,
+            metadata: request.metadata,
+            runtime_capabilities: request.runtime_capabilities,
+        },
+    ))
+}
+
 struct HlsErrorCommandRequest<'a> {
     background_path: &'a Path,
     subtitle_path: &'a Path,
@@ -1574,6 +1728,16 @@ struct HlsErrorCommandRequest<'a> {
     hls_realtime: bool,
     duration: Duration,
     output_ts_offset: Option<Duration>,
+    playback_profile: &'a PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+}
+
+struct MpegTsSlateCommandAssetRequest<'a> {
+    background_path: &'a Path,
+    subtitle_path: &'a Path,
+    duration: Duration,
     playback_profile: &'a PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     metadata: OutputMetadata,
@@ -1661,6 +1825,75 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
         is_first_transcode: request.is_first_transcode,
         troubleshooting: false,
     });
+
+    build_pipeline_for_acceleration(
+        request.playback_profile.profile.hardware_acceleration,
+        pipeline_request.clone(),
+    )
+    .command(&pipeline_request.inputs)
+}
+
+#[must_use]
+fn build_mpeg_ts_slate_command_from_assets(
+    request: MpegTsSlateCommandAssetRequest<'_>,
+) -> FfmpegCommand {
+    let frame_size = playback_frame_size(request.playback_profile);
+    let frame_rate = request.target_frame_rate.unwrap_or(FrameRate::DEFAULT);
+    let video_input = InputFile::video(request.background_path.to_string_lossy().into_owned())
+        .with_input_options(["-loop", "1"]);
+    let audio_sample_rate = generated_audio_sample_rate(request.playback_profile);
+    let audio_input = InputFile::lavfi_audio(format!(
+        "anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"
+    ));
+    let subtitle_input = InputFile::text_subtitle(
+        request.subtitle_path.to_string_lossy().into_owned(),
+        SubtitleMethod::Burn,
+    );
+    let mut desired = DesiredVideoState::from_profile(
+        &request.playback_profile.profile,
+        &request.playback_profile.resolution,
+        Some(&generated_error_video_stream(frame_size, frame_rate)),
+        request.target_frame_rate,
+        StreamingMode::TransportStream,
+    );
+    if matches!(
+        desired.video_format,
+        FFmpegProfileVideoFormat::Copy | FFmpegProfileVideoFormat::None
+    ) {
+        desired.video_format = FFmpegProfileVideoFormat::H264;
+    }
+    if desired.audio_format == FFmpegProfileAudioFormat::Copy {
+        desired.audio_format = FFmpegProfileAudioFormat::Aac;
+    }
+    desired.realtime_mode = RealtimeMode::On;
+    desired.frame_rate = Some(frame_rate);
+    desired.scaled_size = frame_size;
+    desired.frame_size = frame_size;
+    desired.cropped_size = None;
+
+    let mut pipeline_request = PipelineRequest {
+        inputs: vec![video_input, audio_input, subtitle_input],
+        state: ersatzrs_ffmpeg::FfmpegState::default(),
+        desired,
+        source_video_stream: Some(generated_error_video_stream(frame_size, frame_rate)),
+        source_audio_streams: vec![generated_slug_audio_stream(audio_sample_rate)],
+        runtime_capabilities: Some(request.runtime_capabilities),
+        watermark: None,
+        watermarks: Vec::new(),
+        watermark_opacity_clock: WatermarkOpacityClock::default(),
+        drawvg_filters: Vec::new(),
+        graphics_overlays: Vec::new(),
+        subtitle_fonts_dir: Some(subtitle_fonts_dir()),
+    };
+    pipeline_request.state.output_format = OutputFormat::MpegTs;
+    pipeline_request.state.duration = Some(request.duration);
+    pipeline_request.state.metadata = request.metadata;
+    pipeline_request.state.report_progress = false;
+    if let Ok(thread_count) = u32::try_from(request.playback_profile.profile.thread_count) {
+        if thread_count > 0 {
+            pipeline_request.state.thread_count = Some(thread_count);
+        }
+    }
 
     build_pipeline_for_acceleration(
         request.playback_profile.profile.hardware_acceleration,
@@ -4402,6 +4635,46 @@ mod tests {
         assert!(arguments.contains("subtitles=/tmp/hls/error/error.ass"));
     }
 
+    #[test]
+    fn build_mpeg_ts_slate_command_uses_background_subtitle_and_null_audio() {
+        let command = build_mpeg_ts_slate_command_from_assets(MpegTsSlateCommandAssetRequest {
+            background_path: Path::new("/tmp/mpegts/slate/background.png"),
+            subtitle_path: Path::new("/tmp/mpegts/slate/slate.ass"),
+            duration: Duration::from_secs(4),
+            playback_profile: &playback_profile(),
+            target_frame_rate: Some(FrameRate::new(30000, 1001)),
+            metadata: OutputMetadata {
+                service_provider: Some("ErsatzTV".to_owned()),
+                service_name: Some("Channel One".to_owned()),
+                ..OutputMetadata::default()
+            },
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+        });
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-loop 1 -i /tmp/mpegts/slate/background.png"));
+        assert!(
+            arguments.contains("anullsrc=channel_layout=stereo:sample_rate=48000"),
+            "{arguments}"
+        );
+        assert!(
+            arguments.contains("subtitles=/tmp/mpegts/slate/slate.ass"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-t 00:00:04.0000000"), "{arguments}");
+        assert!(
+            arguments.contains("-metadata service_provider=\"ErsatzTV\""),
+            "{arguments}"
+        );
+        assert!(
+            arguments.contains("-metadata service_name=\"Channel One\""),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-f mpegts"), "{arguments}");
+        assert!(arguments.contains("pipe:1"), "{arguments}");
+        assert!(arguments.contains("-readrate 1.05"), "{arguments}");
+    }
+
     #[tokio::test]
     async fn build_hls_error_command_writes_generated_assets() {
         let working_dir = tempfile::tempdir().expect("create hls temp dir");
@@ -4432,6 +4705,32 @@ mod tests {
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-output_ts_offset 8s"));
         assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
+    }
+
+    #[tokio::test]
+    async fn build_mpeg_ts_slate_command_writes_generated_assets() {
+        let working_dir = tempfile::tempdir().expect("create mpeg-ts slate temp dir");
+        let command = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
+            working_dir: working_dir.path(),
+            duration: Duration::from_secs(2),
+            playback_profile: &playback_profile(),
+            target_frame_rate: None,
+            metadata: OutputMetadata::default(),
+            runtime_capabilities: FfmpegCapabilityReport::default(),
+            message: "all streams\nin use",
+        })
+        .await
+        .expect("mpeg-ts slate command");
+
+        let subtitle = tokio::fs::read_to_string(working_dir.path().join("slate.ass"))
+            .await
+            .expect("read generated slate subtitle");
+
+        assert!(working_dir.path().join("background.png").exists());
+        assert!(subtitle.contains(r"all streams\Nin use"));
+        let arguments = command.arguments.join(" ");
+        assert!(arguments.contains("-f mpegts"), "{arguments}");
+        assert!(arguments.contains("pipe:1"), "{arguments}");
     }
 
     #[test]

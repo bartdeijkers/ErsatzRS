@@ -20,7 +20,7 @@ Two goals must hold simultaneously:
   viewer over capacity gets a graceful "all streams in use" slate instead of
   degrading every active stream.
 
-## Current state (verified 2026-06-20)
+## Current state (verified 2026-06-21)
 
 - Reservation + admission live in
   [`crates/ersatzrs-infra/src/hls_worker.rs`](../crates/ersatzrs-infra/src/hls_worker.rs):
@@ -34,8 +34,9 @@ Two goals must hold simultaneously:
   bypasses the configured active-transcode ceiling.
 - When capacity is full, the worker now asks a lower-priority running transcode
   to release its slot in cost order (work-ahead, cooling, stale watched
-  StopOnDisconnect); otherwise the cold session reports an all-streams-in-use
-  503 path without holding a slot. A playable slate loop remains A3 follow-up.
+  StopOnDisconnect); otherwise the cold session serves a generated
+  all-streams-in-use slate without holding a slot and retries admission until it
+  can switch to real content.
 - Settings plumbing is complete and consistent: config key in
   [`crates/ersatzrs-domain/src/config.rs`](../crates/ersatzrs-domain/src/config.rs),
   seed default `2` in [`crates/ersatzrs-infra/src/db.rs`](../crates/ersatzrs-infra/src/db.rs),
@@ -106,16 +107,16 @@ Status: implemented 2026-06-20 for HLS segmenter workers.
   channel.
 
 ### Stage A3 — Slate-on-full admission
-Status: partial. The cold-session error path is implemented; the playable slate
-loop remains open.
+Status: implemented 2026-06-21.
 
 - When the ladder cannot free a slot, serve the existing offline/error slate
   (build from `ERROR_BACKGROUND_PNG` / the troubleshooting slate path) as a
   short loop that does **not** consume a real transcode slot; the worker keeps
   retrying admission and flips to real content when a slot frees.
-- **Acceptance:** integration test that the (N+1)th cold channel returns a
-  playable slate while the N watched streams are uninterrupted; promotes to real
-  content within one admission cycle after a slot frees.
+- **Acceptance:** focused tests prove HLS waits for a capacity slate instead of
+  returning the immediate 503, MPEG-TS emits slate bytes without increasing
+  active/peak capacity past the occupied real slot, and the MPEG-TS response
+  switches to real content after the held slot releases.
 
 ### Stage A4 — Observability + smart default
 - Add a live **"Streams in use: X / N (peak Y)"** readout to the FFmpeg settings
