@@ -4,11 +4,14 @@ set -eu
 IMAGE="${IMAGE:-ghcr.io/bartdeijkers/ersatzrs:dev}"
 DRI_DEVICE="${DRI_DEVICE:-/dev/dri}"
 VAAPI_DEVICE="${VAAPI_DEVICE:-/dev/dri/renderD128}"
+script_dir="$(dirname "$0")"
+. "$script_dir/managed-ffmpeg.sh"
 
 exec docker run --rm \
     --device="${DRI_DEVICE}:${DRI_DEVICE}" \
-    --entrypoint ffmpeg \
+    --entrypoint sh \
     "$IMAGE" \
+    -c "$MANAGED_FFMPEG_BOOTSTRAP" sh \
     -hide_banner \
     -vaapi_device "$VAAPI_DEVICE" \
     -f lavfi -i testsrc2=s=128x72:d=1 \

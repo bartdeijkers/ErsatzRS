@@ -82,6 +82,23 @@ pub fn resolve_ffprobe_path(db_config: Option<&str>) -> LocatedTool {
     resolve_tool(DEFAULT_FFPROBE_PATH, FFPROBE_PATH_ENV_VARS, db_config)
 }
 
+/// Resolve `ffmpeg` only from `PATH`, without env/config/next-to-exe lookup.
+///
+/// ADR 0008's managed runtime acquisition order no longer treats release-folder
+/// siblings as an application-owned runtime. This helper keeps the developer
+/// `PATH` fallback precise while the older ErsatzTV-style locator remains
+/// available for settings display and historical path parity tests.
+#[must_use]
+pub fn resolve_ffmpeg_on_path() -> Option<LocatedTool> {
+    resolve_tool_on_path(DEFAULT_FFMPEG_PATH)
+}
+
+/// Resolve `ffprobe` only from `PATH`. See [`resolve_ffmpeg_on_path`].
+#[must_use]
+pub fn resolve_ffprobe_on_path() -> Option<LocatedTool> {
+    resolve_tool_on_path(DEFAULT_FFPROBE_PATH)
+}
+
 static RESOLVED_FFMPEG_PATH: RwLock<Option<String>> = RwLock::new(None);
 static RESOLVED_FFPROBE_PATH: RwLock<Option<String>> = RwLock::new(None);
 
@@ -136,6 +153,12 @@ fn resolve_tool(base: &str, env_keys: &[&str], db_config: Option<&str>) -> Locat
         exe_dir.as_deref(),
         path_var.as_deref(),
     )
+}
+
+fn resolve_tool_on_path(base: &str) -> Option<LocatedTool> {
+    let path_var = path_env_var()?;
+    let located = locate_tool_in(base, None, None, None, Some(&path_var));
+    (located.source == PathSource::OnPath).then_some(located)
 }
 
 /// Pure resolution used by [`resolve_tool`] and by tests. `exe_dir` and

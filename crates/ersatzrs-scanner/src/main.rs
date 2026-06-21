@@ -93,7 +93,7 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         pool,
         &LocalScanConfig {
             library_id: args.library_id,
-            ffprobe_path: resolve_ffprobe_path(pool, args).await,
+            ffprobe_path: resolve_ffprobe_path(pool, args).await?,
         },
     )
     .await?;
@@ -391,22 +391,27 @@ async fn load_connection_address(
         .context("provider connection not found")
 }
 
-/// Resolve the `ffprobe` path for a scan, sharing ErsatzRS's `FFmpegLocator`
-/// port. An explicit `--ffprobe-path` overrides everything; otherwise the DB
-/// config value (if it still exists) and then next-to-exe / `PATH` are tried.
-/// The scanner is a one-shot process, so it resolves but does not persist (the
-/// web host owns persistence).
-async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> String {
+/// Resolve the `ffprobe` path for a scan using the ADR 0008 runtime manager.
+/// An explicit `--ffprobe-path` remains a one-shot override; otherwise scanner
+/// shares the same managed runtime as the web host.
+async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> anyhow::Result<String> {
     if let Some(explicit) = args
         .ffprobe_path
         .as_ref()
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
     {
-        return explicit.to_owned();
+        return Ok(explicit.to_owned());
     }
 
-    let configured = load_first_config_value(
+    let ffmpeg_config = load_first_config_value(
+        pool,
+        &[ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH.to_owned()],
+        "ffmpeg path",
+    )
+    .await
+    .ok();
+    let ffprobe_config = load_first_config_value(
         pool,
         &[ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH.to_owned()],
         "ffprobe path",
@@ -414,7 +419,19 @@ async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> String {
     .await
     .ok();
 
-    ersatzrs_ffmpeg::resolve_ffprobe_path(configured.as_deref()).path
+    let manager = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(
+        ersatzrs_infra::file_system_layout::ffmpeg_runtime_folder(),
+    );
+    let report = ersatzrs_ffmpeg::resolve_or_acquire_ffmpeg_runtime(
+        &manager,
+        ffmpeg_config.as_deref(),
+        ffprobe_config.as_deref(),
+    )
+    .await
+    .context("resolve FFmpeg runtime for scanner")?;
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(report.ffmpeg.path.clone());
+    ersatzrs_ffmpeg::set_resolved_ffprobe_path(report.ffprobe.path.clone());
+    Ok(report.ffprobe.path)
 }
 
 #[cfg(all(test, not(feature = "mysql")))]

@@ -39,9 +39,13 @@ For the command sequence, see [Publish a full release](docs/how-to/publish-relea
 
 ## Windows bundle (`ersatzrs-<version>-win-x64.zip`)
 
-The win-x64 archive is self-contained: a user unzips it and double-clicks
-`ErsatzRS.exe`. See [Release Bundle Reference](docs/reference/release-bundle.md)
-for the archive layout and launcher environment.
+The win-x64 archive contains the launcher, server, scanner, hydration assets,
+and application assets. It does **not** bundle FFmpeg/ffprobe. On first startup,
+ErsatzRS downloads and validates the matching first-party
+[`ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg) release into
+the application state directory, and later starts reuse or update that managed
+runtime. See [Release Bundle Reference](docs/reference/release-bundle.md) for
+the archive layout and launcher environment.
 
 For local Windows release publishing, use
 [Build and publish a local Windows release](docs/how-to/release-locally.md).

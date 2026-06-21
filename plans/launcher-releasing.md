@@ -2,6 +2,10 @@
 
 > **Status: Mostly shipped.** The tray launcher and graceful shutdown shipped
 > (`ersatzrs-launcher`); code signing is researched but deferred (Part D).
+> The Windows FFmpeg bundling parts of this plan are superseded by
+> [ADR 0008](../docs/adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md):
+> release archives no longer package FFmpeg/ffprobe, and startup acquires the
+> managed `ErsatzRS-ffmpeg` runtime instead.
 
 ## Context
 
@@ -29,11 +33,13 @@ counterpart it needs: server port `8409`, log dir `%LOCALAPPDATA%\ErsatzRS\logs`
   `RELEASING.md`; CI gets a clearly-marked *optional* signing step that is skipped
   until secrets exist. Engineering effort goes into a real graceful-shutdown
   handler instead.
-- **Scope: launcher crate + Windows release pipeline + FFmpeg bundle.**
+- **Scope: launcher crate + Windows release pipeline.** The original FFmpeg
+  bundle scope is superseded by ADR 0008 startup runtime acquisition.
 - **Exit behavior: graceful Ctrl+C** — add `with_graceful_shutdown` to the axum
   server and have the launcher send a console Ctrl+C to the child (one small,
   audited `unsafe` block in the launcher crate only).
-- **FFmpeg for win-x64:** pinned **BtbN FFmpeg-Builds win64-gpl 8.1** prebuilt asset.
+- **FFmpeg for win-x64:** managed at startup through `ErsatzRS-ffmpeg` releases
+  per ADR 0008.
 - **Leptos assets:** include in the Windows bundle now (`cargo leptos build`).
 
 ---
@@ -136,7 +142,7 @@ call `static_vcruntime::metabuild()`; empty otherwise.
 
 ---
 
-## Part C — Windows release pipeline + FFmpeg bundle
+## Part C — Windows release pipeline
 
 Edit the `win-x64` matrix entry / steps in **`.github/workflows/release.yml`**
 (currently only copies `ersatzrs-web.exe` + `ersatzrs-scanner.exe`). Note:
@@ -147,12 +153,11 @@ Edit the `win-x64` matrix entry / steps in **`.github/workflows/release.yml`**
 2. Build Leptos assets (win-x64): `rustup target add wasm32-unknown-unknown`,
    `cargo install cargo-leptos --locked`, then
    `(cd crates/ersatzrs-web && cargo leptos build --release)` → `target/site`.
-3. **Bundle FFmpeg 8.1**: download the pinned BtbN win64-gpl 8.1 release asset,
-   extract `ffmpeg.exe` + `ffprobe.exe`, drop `ffplay`, and assert `drawvg` is in
-   `ffmpeg -filters` (mirror the docker job's drawvg gate).
+3. Do not bundle FFmpeg/ffprobe. The release workflow guards the staged archive
+   against `ffmpeg*` / `ffprobe*` entries; startup downloads the managed runtime.
 4. Stage layout: `ErsatzRS.exe` (launcher) + `ersatzrs-web.exe` +
-   `ersatzrs-scanner.exe` + `ffmpeg.exe` + `ffprobe.exe` + `site/` (Leptos assets) +
-   existing `assets/` + LICENSE + README.
+   `ersatzrs-scanner.exe` + `site/` (Leptos assets) + existing `assets/` +
+   LICENSE + README.
 5. Zip as `ersatzrs-<version>-win-x64.zip` and upload to the release.
 
 ---
@@ -206,8 +211,8 @@ Modify:
 - `crates/ersatzrs-web/src/transport/hdhr/udp.rs` — cancellation in UDP discovery loop.
 - `crates/ersatzrs-scheduler/src/runner.rs` + `Cargo.toml` — accept optional
   shutdown token.
-- `.github/workflows/release.yml` — launcher build, Leptos assets, FFmpeg bundle,
-  optional signing.
+- `.github/workflows/release.yml` — launcher build, Leptos assets, no-FFmpeg
+  archive guard, optional signing.
 - `RELEASING.md` — Windows bundle layout + signing setup.
 - AGENTS.md / platform-parity note — record the intentional Windows-only crate.
 - Session log: `cargo xtask progress add-session ...` per the handoff ritual.
@@ -221,16 +226,17 @@ Modify:
   logs show the shutdown sequence, background tasks stop, the DB pool closes, and
   the process exits 0 within the timeout. Add a test that `shutdown_signal` + token
   cancels background loops.
-- **Windows (manual, on a Windows host or VM):** build the win-x64 zip, unzip, run
-  `ErsatzRS.exe`; verify tray icon, "Open Web UI", "Show Logs", bundled `ffmpeg.exe`,
-  interactive UI, and clean "Exit".
+- **Windows (manual, on a Windows host or VM):** build the win-x64 zip, unzip,
+  run `ErsatzRS.exe`; verify tray icon, "Open Web UI", "Show Logs", managed
+  FFmpeg download/update, interactive UI, and clean "Exit".
 - **Release dry-run:** run the workflow on a branch and confirm the win-x64 zip
-  contains launcher + web + scanner + ffmpeg + ffprobe + site + assets, and the
-  optional sign step is skipped without secrets.
+  contains launcher + web + scanner + site + assets, excludes ffmpeg/ffprobe, and
+  the optional sign step is skipped without secrets.
 
 ## Risks / follow-ups
 
-- **FFmpeg 8.1 win64 with `drawvg`:** pinned BtbN asset; drawvg assert is the guard.
+- **FFmpeg 8.1 win64 with `drawvg`:** managed at startup via ADR 0008; startup
+  validation asserts drawvg/zscale before accepting the runtime.
 - **Leptos site assets in the win bundle** must be produced (cargo-leptos); launcher
   sets the matching `LEPTOS_SITE_ROOT` env.
 - **`unsafe` carve-out:** the launcher crate opts out of the workspace

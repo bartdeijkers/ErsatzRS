@@ -21,8 +21,6 @@ not create release archives or a `build/` directory.
 - `stylance-cli 0.8.2`.
 - GitHub CLI (`gh`) authenticated for this repository.
 - 7-Zip available as `7z`.
-- FFmpeg and ffprobe 8.1 or newer for Windows, with the `drawvg` and `zscale`
-  filters.
 - The repository `.cargo/config.toml` target directory in use. Do not override
   `CARGO_TARGET_DIR`; the committed config points release output at
   `F:\ErsatzRS\target-win` on this machine.
@@ -83,15 +81,6 @@ Copy the binaries, naming the launcher as the user-facing entry point:
 Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-web.exe $Stage\
 Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-scanner.exe $Stage\
 Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-launcher.exe $Stage\ErsatzRS.exe
-```
-
-Copy the bundled FFmpeg binaries and verify the required filters:
-
-```powershell
-Copy-Item C:\path\to\ffmpeg.exe $Stage\
-Copy-Item C:\path\to\ffprobe.exe $Stage\
-& "$Stage\ffmpeg.exe" -hide_banner -filters | Select-String -Pattern "\bdrawvg\b"
-& "$Stage\ffmpeg.exe" -hide_banner -filters | Select-String -Pattern "\bzscale\b"
 ```
 
 Copy the web assets and repository assets:

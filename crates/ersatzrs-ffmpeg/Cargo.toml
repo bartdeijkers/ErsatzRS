@@ -5,14 +5,22 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-trait = "0.1"
 ersatzrs-domain = { path = "../ersatzrs-domain", version = "0.1.0" }
 ersatzrs-hwprobe = { path = "../ersatzrs-hwprobe", version = "0.1.0" }
+flate2 = "1"
 mlua = { version = "0.11", features = ["lua54", "vendored"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.11"
+tar = "0.4"
 thiserror = "2"
 tokio = { version = "1", features = ["process"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 insta = "1"
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "process", "rt", "sync"] }
 
 [lints]

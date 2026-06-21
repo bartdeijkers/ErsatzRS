@@ -11,10 +11,11 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 - Rust toolchain pinned at MSRV `1.85` (workspace `Cargo.toml`).
 - `cargo install cargo-leptos --locked` (the web crate is built through it,
   not plain cargo, because of the SSR + WASM dual target).
-- FFmpeg 8.1+ on `PATH` — required at runtime for the `drawvg` filter.
-  This repo expects a custom build at `~/.local/ffmpeg-8.1/`. `run.sh`
-  exports `LD_LIBRARY_PATH`, `ErsatzRS_FFMPEG__PATH`, and
-  `ErsatzRS_FFPROBE__PATH` to point at it.
+- Network access for the first managed FFmpeg runtime download, or an explicit
+  FFmpeg 8.1+ override/pre-placed managed runtime for offline work. Startup
+  validates the managed `ErsatzRS-ffmpeg` runtime for `drawvg`, `zscale`, and
+  required codecs before serving. `run.sh` still exports local
+  `~/.local/ffmpeg-8.1/` overrides when that developer build exists.
 - `SQLX_OFFLINE=true` is already set in `.cargo/config.toml`. The repo ships
   the `.sqlx/` cache so query macros compile without a live database.
 - `wasm-bindgen-cli` is installed transitively by `cargo-leptos` and **must**
@@ -66,8 +67,9 @@ Microsoft.PowerShell` if it's not on PATH.
 `run.ps1` looks for FFmpeg 8.1 at `%USERPROFILE%\.local\ffmpeg-8.1\bin` and
 sets `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH` automatically when
 that directory exists. If your FFmpeg lives elsewhere, set those two
-environment variables yourself or put `ffmpeg.exe` on `PATH` and the runtime
-detector will find it on startup.
+environment variables yourself. Without an explicit override, startup uses the
+managed `ErsatzRS-ffmpeg` download/update path and falls back to `PATH` only if
+managed acquisition is disabled or fails.
 
 `run.ps1 seed` shells out to the `sqlite3` CLI; `winget install
 SQLite.SQLite` (or any other source of `sqlite3.exe` on `PATH`) covers the
@@ -203,7 +205,7 @@ Common things that look like a "rebuild bug" but aren't:
 | `cargo leptos: command not found`                | cargo-leptos not installed.                             | `cargo install cargo-leptos --locked`.                                                    |
 | Server starts but admin buttons do nothing       | Page's interactive body is `#[component]`, not `#[island]`.| See [TEST.md](TEST.md) hydration playbook + reference pattern in `libraries/mod.rs:16`. |
 | `SQLX_OFFLINE`-related compile errors            | `.sqlx/` cache out of date after schema changes.        | `DATABASE_URL=sqlite://./tmp.db cargo sqlx prepare --workspace`.                          |
-| FFmpeg missing / wrong version at startup        | `ErsatzRS_FFMPEG__PATH` not exported.                   | Always start the server via `./run.sh dev|build|serve` — it sets the env vars.            |
+| FFmpeg missing / wrong version at startup        | Managed download disabled/failed and no compliant override or `PATH` runtime exists. | Re-enable downloads, pre-place the managed runtime, or set `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH`. |
 
 ## Performance baseline
 

@@ -3,6 +3,8 @@ use std::process::ExitStatus;
 
 use ersatzrs_domain::HardwareAccelerationKind;
 
+use crate::runtime::FfmpegRuntimeAcquisition;
+
 /// Minimum required `FFmpeg` and `ffprobe` major version.
 pub const REQUIRED_MAJOR: u32 = 8;
 /// Minimum required `FFmpeg` and `ffprobe` minor version.
@@ -594,6 +596,8 @@ pub struct FfmpegRuntimeReport {
     pub capabilities: FfmpegCapabilityReport,
     /// Capability issues found during the runtime check.
     pub issues: Vec<FfmpegRuntimeIssue>,
+    /// How the accepted FFmpeg/ffprobe runtime was resolved or acquired.
+    pub acquisition: FfmpegRuntimeAcquisition,
 }
 
 impl FfmpegRuntimeReport {
@@ -662,6 +666,7 @@ impl FfmpegRuntimeReport {
             },
             capabilities,
             issues: Vec::new(),
+            acquisition: FfmpegRuntimeAcquisition::default(),
         }
     }
 }
@@ -862,6 +867,7 @@ pub async fn check_ffmpeg_runtime_with_config(
         ffprobe,
         capabilities,
         issues,
+        acquisition: FfmpegRuntimeAcquisition::default(),
     };
 
     if report.has_errors() {
@@ -875,7 +881,71 @@ pub async fn check_ffmpeg_runtime_with_config(
         ));
     }
 
+    run_required_smoke_transcodes(config).await?;
+
     Ok(report)
+}
+
+async fn run_required_smoke_transcodes(
+    config: &FfmpegRuntimeCheckConfig,
+) -> Result<(), FfmpegCheckError> {
+    if config
+        .required_filters
+        .iter()
+        .any(|filter| filter == "drawvg")
+    {
+        run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &[
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=32x32:d=0.1",
+                "-vf",
+                "drawvg=script='rect 4 4 16 16 fill',format=yuv420p",
+                "-frames:v",
+                "1",
+                "-f",
+                "null",
+                "-",
+            ],
+        )
+        .await?;
+    }
+
+    if config
+        .required_filters
+        .iter()
+        .any(|filter| filter == "zscale")
+    {
+        run_tool(
+            "ffmpeg",
+            &config.ffmpeg_path,
+            &[
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=64x64:d=0.1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc",
+                "-vf",
+                "zscale=t=linear:npl=100,tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p",
+                "-frames:v",
+                "1",
+                "-f",
+                "null",
+                "-",
+            ],
+        )
+        .await?;
+    }
+
+    Ok(())
 }
 
 async fn check_tool_version(
@@ -2607,6 +2677,9 @@ EOF
     ;;
   "-hide_banner -hwaccels")
     printf 'Hardware acceleration methods:\n{hwaccel_lines}\n'
+    ;;
+  "-hide_banner -loglevel error -f lavfi -i color=c=black:s=32x32:d=0.1 -vf drawvg=script='rect 4 4 16 16 fill',format=yuv420p -frames:v 1 -f null -")
+    exit 0
     ;;
   *)
     exit 2

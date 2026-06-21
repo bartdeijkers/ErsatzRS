@@ -29,6 +29,12 @@ pub fn data_folder() -> PathBuf {
     app_state_folder().join("data")
 }
 
+/// Root for the managed ADR 0008 `FFmpeg` runtime (`~/.ersatzrs/ffmpeg`).
+#[must_use]
+pub fn ffmpeg_runtime_folder() -> PathBuf {
+    app_state_folder().join("ffmpeg")
+}
+
 /// Resolve a path below the persistent data root.
 #[must_use]
 pub fn data_path(path: impl AsRef<Path>) -> PathBuf {
@@ -190,6 +196,16 @@ mod tests {
         assert!(
             path.ends_with(Path::new(".ersatzrs").join("data")),
             "unexpected data path: {}",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn ffmpeg_runtime_folder_lives_under_ersatzrs_state_root() {
+        let path = ffmpeg_runtime_folder();
+        assert!(
+            path.ends_with(Path::new(".ersatzrs").join("ffmpeg")),
+            "unexpected ffmpeg runtime path: {}",
             path.display()
         );
     }

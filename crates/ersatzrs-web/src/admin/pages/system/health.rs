@@ -3,7 +3,9 @@ use leptos::prelude::*;
 use crate::admin::i18n::{health_summary, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
-use crate::admin::server_fns::layout::{load_health_snapshot, AdminHealthRow, AdminHealthSnapshot};
+use crate::admin::server_fns::layout::{
+    load_health_snapshot, AdminFfmpegRuntimeStatus, AdminHealthRow, AdminHealthSnapshot,
+};
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
@@ -61,9 +63,11 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
 
     let summary = health_summary(snapshot.errors, snapshot.warnings);
 
+    let runtime = snapshot.ffmpeg_runtime.take();
     let rows = std::mem::take(&mut snapshot.rows);
     view! {
         <p style="font-size:0.875rem;color:var(--color-gray-300);margin:0">{summary}</p>
+        {runtime.map(render_ffmpeg_runtime)}
         <table style="width:100%;border-collapse:collapse;font-size:0.875rem">
             <thead>
                 <tr style="border-bottom:1px solid var(--color-border);color:var(--color-gray-300);text-align:left">
@@ -77,6 +81,61 @@ fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
         </table>
     }
     .into_any()
+}
+
+fn render_ffmpeg_runtime(runtime: AdminFfmpegRuntimeStatus) -> AnyView {
+    let source = runtime_source_label(&runtime.source);
+    let installed = runtime.installed_tag.unwrap_or_else(|| "-".to_owned());
+    let latest = runtime.latest_tag.unwrap_or_else(|| "-".to_owned());
+    let update = if let Some(error) = runtime.update_check_error {
+        format!("{}: {error}", tr(TextKey::FfmpegRuntimeUpdateFailed))
+    } else if runtime.downloaded_update {
+        match runtime.previous_tag.as_deref() {
+            Some(previous) => format!(
+                "{}: {previous} -> {installed}",
+                tr(TextKey::FfmpegRuntimeUpdated)
+            ),
+            None => tr(TextKey::FfmpegRuntimeUpdated).to_owned(),
+        }
+    } else if runtime.source == "downloaded" {
+        format!("{}: {installed}", tr(TextKey::FfmpegRuntimeDownloaded))
+    } else if runtime.update_available {
+        tr(TextKey::FfmpegRuntimeUpdateAvailable).to_owned()
+    } else {
+        tr(TextKey::FfmpegRuntimeUpToDate).to_owned()
+    };
+    view! {
+        <section style="border:1px solid var(--color-border);border-radius:6px;padding:1rem">
+            <h2 style="font-size:1rem;font-weight:700;color:var(--color-gray-100);margin:0 0 0.75rem 0">
+                {tr(TextKey::FfmpegRuntime)}
+            </h2>
+            <dl style="display:grid;gap:0.5rem 1rem;grid-template-columns:max-content minmax(0,1fr);margin:0;font-size:0.875rem">
+                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeSource)}</dt>
+                <dd style="color:var(--color-gray-100);margin:0">{source}</dd>
+                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeVersion)}</dt>
+                <dd style="color:var(--color-gray-100);margin:0">
+                    {format!("ffmpeg {}, ffprobe {}", runtime.ffmpeg_version, runtime.ffprobe_version)}
+                </dd>
+                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeRelease)}</dt>
+                <dd style="color:var(--color-gray-100);margin:0">{installed}</dd>
+                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeLatestRelease)}</dt>
+                <dd style="color:var(--color-gray-100);margin:0">{latest}</dd>
+                <dt style="color:var(--color-gray-300)">{tr(TextKey::Message)}</dt>
+                <dd style="color:var(--color-gray-100);margin:0">{update}</dd>
+            </dl>
+        </section>
+    }
+    .into_any()
+}
+
+fn runtime_source_label(source: &str) -> &'static str {
+    match source {
+        "override" => tr(TextKey::FfmpegRuntimeSourceOverride),
+        "managed" => tr(TextKey::FfmpegRuntimeSourceManaged),
+        "PATH" => tr(TextKey::FfmpegRuntimeSourcePath),
+        "downloaded" => tr(TextKey::FfmpegRuntimeSourceDownloaded),
+        _ => tr(TextKey::FfmpegRuntimeSourceUnknown),
+    }
 }
 
 fn render_row(row: AdminHealthRow) -> AnyView {

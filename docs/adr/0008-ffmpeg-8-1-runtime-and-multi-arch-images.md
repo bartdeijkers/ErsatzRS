@@ -2,17 +2,20 @@
 
 ## Status
 
-Proposed
+Accepted 2026-06-21
 
 ## Implementation
 
-Partial — the FFmpeg 8.1 runtime requirement is detected and enforced at startup.
-The 2026-06-19 acquisition model below (ship without FFmpeg; download/update from
-`ErsatzRS-ffmpeg` releases at startup; surface update availability on
-`/system/health`) is **not yet implemented**: the managed download/update manager,
-the release-asset resolver, and the health-page update indicator are still to be
-built. First-party FFmpeg builds are produced by the separate `ErsatzRS-ffmpeg`
-repository.
+Implemented — ErsatzRS release archives and Docker images ship without
+FFmpeg/ffprobe. Startup resolves explicit overrides first, then validates the
+managed runtime, auto-updates it from `ErsatzRS-ffmpeg` releases when a newer
+release is available, downloads a managed runtime when none is usable, and only
+then falls back to `PATH` if managed acquisition fails or is disabled. Downloaded
+archives are checksum-verified, staged, validated with the normal FFmpeg 8.1
+capability gate plus drawvg/zscale smoke transcodes, and promoted only after
+validation succeeds. `/system/health` and a startup admin toast report successful
+downloads/updates and failed update attempts. First-party FFmpeg builds are
+produced by the separate `ErsatzRS-ffmpeg` repository.
 
 ## Revision (2026-06-19): dedicated build repo + download-on-startup runtime
 
@@ -77,28 +80,34 @@ container images) ship **without** FFmpeg/ffprobe.
 runtime in this order:
 
 1. Explicit environment/config override (an operator-provided ffmpeg/ffprobe
-   path) — always wins.
+   path) — always wins and is never auto-updated.
 2. Managed runtime directory under the ErsatzRS data dir (a previously
-   downloaded `ErsatzRS-ffmpeg` package).
-3. `PATH` (`ffmpeg` / `ffprobe`), for developer installs.
+   downloaded `ErsatzRS-ffmpeg` package), auto-updated at startup when a newer
+   release is available.
+3. Managed download from the latest `ErsatzRS-ffmpeg` release, or an
+   operator-pinned release tag, when no valid managed runtime exists.
+4. `PATH` (`ffmpeg` / `ffprobe`), for developer installs and download-failure
+   fallback.
 
-If no resolved runtime satisfies the capability/version contract below, the
-manager downloads the `ErsatzRS-ffmpeg` release package matching the current RID,
-verifies its published checksum, installs it into the managed runtime directory,
-and records the installed release tag. A download that fails the capability
-contract fails startup with an explicit error; offline/air-gapped deployments
-satisfy the runtime via the env override or a pre-placed managed directory, and
-the download is skippable.
+Downloaded packages must match the current RID, verify against the published
+checksum, extract into a staged directory, pass the full capability/version
+contract below, and only then promote into the managed runtime directory and
+record the installed release tag. A failed update attempt keeps the previous
+valid managed runtime and reports a warning. A failed first install falls back to
+`PATH` when possible; otherwise startup fails with an explicit error.
+Offline/air-gapped deployments satisfy the runtime via the env override,
+pre-placed managed directory, or disabled downloads plus `PATH`.
 
-**Update check + notification.** The manager records the installed
+**Update + notification.** The manager records the installed
 `ErsatzRS-ffmpeg` release tag and, at startup, queries the latest published
-release. A missing runtime is auto-downloaded; an *outdated but working* runtime
-is **not** silently replaced — instead an "FFmpeg update available" indicator
-(installed tag → latest tag) is surfaced through the health report and on the
-`/system/health` page. Applying an available update is an explicit action, so a
-running runtime is never swapped mid-operation. This adds an FFmpeg-runtime
-status (resolved source, installed version, update-available) to the health-check
-parity surface in `ersatzrs-core::health` / `ersatzrs-infra::health`.
+release unless an operator pinned a release tag. A missing runtime is
+auto-downloaded; an outdated managed runtime is auto-downloaded and promoted
+before the web host starts. A successful download/update and a failed
+update/download attempt are surfaced through the health report, `/system/health`,
+and a startup admin toast. A running runtime is never swapped mid-operation.
+This adds an FFmpeg-runtime status (resolved source, installed version,
+download/update state, update failure) to the health-check parity surface in
+`ersatzrs-core::health` / `ersatzrs-infra::health`.
 
 **Capability enforcement (unchanged).** Startup checks must validate both FFmpeg
 and ffprobe are version `>= 8.1` and collect filters, encoders, decoders,
@@ -108,10 +117,12 @@ CPU/drawvg capabilities (including `--enable-cairo`/`drawvg` and
 detected and advertised from the actual resolved runtime instead of assumed from
 the CPU architecture.
 
-**Containers.** Container images may pre-place the matching `ErsatzRS-ffmpeg`
-build at the managed runtime path at image-build time so no first-run network
-download is needed; the update-availability check still runs. `ErsatzRS-ffmpeg`
-owns any multi-arch FFmpeg image production.
+**Containers.** ErsatzRS container images do not package FFmpeg/ffprobe. Their
+data volume contains the managed runtime directory, so the first start downloads
+the matching `ErsatzRS-ffmpeg` release into persistent state and later starts
+reuse or update it. Operators may pre-place a managed runtime in that volume for
+offline deployments. `ErsatzRS-ffmpeg` owns any multi-arch FFmpeg image
+production.
 
 The default support matrix that published `ErsatzRS-ffmpeg` packages must satisfy
 is:
@@ -135,8 +146,8 @@ manager attempts a managed download before failing.
 
 ErsatzRS release artifacts shrink because they no longer carry six per-RID FFmpeg
 payloads, and the FFmpeg runtime can be updated independently of the application
-release cadence: publishing a new `ErsatzRS-ffmpeg` release makes the update
-visible on `/system/health` without re-releasing ErsatzRS.
+release cadence: publishing a new `ErsatzRS-ffmpeg` release makes managed
+installations download it on next startup without re-releasing ErsatzRS.
 
 First run gains a network dependency. The manager must handle offline/air-gapped
 deployments gracefully with a clear error and a documented manual-install path
@@ -149,7 +160,8 @@ The admin FFmpeg profile editor uses the captured startup capability report
 instead of spawning `ffmpeg -hwaccels` on each request. Hardware acceleration
 options shown in the UI reflect what the current resolved runtime actually
 reports. The `/system/health` page additionally reports the resolved FFmpeg
-source, installed version, and whether an update is available.
+source, installed version, latest version, successful downloads/updates, and
+failed update attempts.
 
 Nonfree CUDA experiments may be produced only as local, unpublished
 `ErsatzRS-ffmpeg` build targets unless a future ADR accepts the licensing and
@@ -172,9 +184,9 @@ the graphics-engine contract that generated drawvg artifacts are VGS scripts.
   builds can miss `drawvg`/`zscale` or emit version/configuration output the
   runtime checker rejects; the env-override/PATH paths remain for operators who
   knowingly supply their own.
-- Silent auto-update of the FFmpeg runtime: rejected as the default — an
-  in-progress runtime should not be swapped underneath running playback; updates
-  are surfaced on `/system/health` and applied explicitly.
+- Mid-operation FFmpeg runtime swaps: rejected — updates happen only during
+  startup, before playback/transcode workers are spawned, and failures keep the
+  previous valid runtime.
 - Third-party FFmpeg base image: rejected because ErsatzRS needs FFmpeg 8.1
   `drawvg` and a controlled redistributable capability set.
 - Published nonfree CUDA package: rejected because redistributability must remain

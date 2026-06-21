@@ -33,8 +33,22 @@ directory on startup.
 
 ErsatzRS checks both FFmpeg and ffprobe at web startup. Both tools must be
 version 8.1 or newer and FFmpeg must expose the required capabilities described
-by [ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md). In
-particular FFmpeg must expose:
+by [ADR 0008](../adr/0008-ffmpeg-8-1-runtime-and-multi-arch-images.md). The
+normal path is the managed runtime under the ErsatzRS state directory
+(`~/.ersatzrs/ffmpeg` by default). Startup downloads the matching
+[`ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg) release
+when no managed runtime exists, and updates a managed runtime when a newer
+release is available. Release archives and Docker images do not bundle
+FFmpeg/ffprobe.
+
+The startup resolution order is:
+
+1. Explicit path override from environment or persisted config.
+2. Managed runtime under the state directory, auto-updated at startup.
+3. Managed download from the latest or pinned `ErsatzRS-ffmpeg` release.
+4. `PATH` fallback when managed download is disabled or fails.
+
+In particular FFmpeg must expose:
 
 - `drawvg` (built with `--enable-cairo`) for the graphics engine.
 - `zscale` (built with `--enable-libzimg`) for the HDR/tonemap color pipeline.
@@ -56,11 +70,9 @@ ffmpeg -hide_banner -buildconf | grep -- --enable-cairo
 ffmpeg -hide_banner -filters | grep -w drawvg
 ```
 
-If `zscale` (or `drawvg`) is absent, rebuild FFmpeg with the corresponding flag
-(`--enable-libzimg` for zscale, `--enable-cairo` for drawvg) or replace it with
-a compliant FFmpeg 8.1 binary. On the local WSL/NVIDIA dev box,
-`scripts/rebuild-ffmpeg-nvenc.sh` produces a compliant build (NVENC + drawvg +
-zscale). When multiple FFmpeg installs exist, point ErsatzRS at the compliant
+If `zscale` (or `drawvg`) is absent, replace it with a compliant FFmpeg 8.1
+binary or let the managed runtime download the first-party ErsatzRS-ffmpeg
+package. When multiple FFmpeg installs exist, point ErsatzRS at the compliant
 one with the path override variables below rather than weakening the runtime
 check.
 
@@ -76,6 +88,25 @@ FFPROBE_PATH=/opt/ffmpeg/bin/ffprobe
 ```
 
 `ERSATZRS_FFPROBE` remains accepted for older scanner test workflows.
+
+Managed runtime controls:
+
+```text
+ERSATZRS_FFMPEG_RELEASE_TAG=v1.0.1
+ERSATZRS_FFMPEG_DOWNLOAD=0
+```
+
+`ERSATZRS_FFMPEG_RELEASE_TAG` pins managed acquisition/update to a specific
+`ErsatzRS-ffmpeg` release tag. Without it, startup uses the latest published
+release and falls back to the built-in known-good tag when the latest lookup is
+unavailable during first install. `ERSATZRS_FFMPEG_DOWNLOAD=0` disables managed
+downloads; use it only when an explicit override, a pre-placed managed runtime,
+or a compliant `PATH` runtime is available.
+
+Managed download requires a release asset for the current RID. If the selected
+`ErsatzRS-ffmpeg` release does not publish that asset, startup falls back to an
+explicit override, a pre-placed managed runtime, or `PATH` when one is usable;
+otherwise startup fails with the missing asset error.
 
 ## Trakt
 

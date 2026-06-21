@@ -10,6 +10,7 @@ pub mod input;
 pub mod locator;
 pub mod options;
 pub mod pipeline;
+pub mod runtime;
 pub mod version;
 
 pub use capabilities::*;
@@ -22,4 +23,5 @@ pub use input::*;
 pub use locator::*;
 pub use options::*;
 pub use pipeline::*;
+pub use runtime::*;
 pub use version::*;

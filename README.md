@@ -10,9 +10,10 @@ The project is currently **pre-alpha**
 ## Goals
 
 - Reach feature parity with ErsatzTV Legacy first and then fork into a 'next' version with opinionated changes.
-- Use FFmpeg 8.1 as a hard runtime requirement.
-- Utilize the external graphics-renderer process with FFmpeg 8.1 `drawvg`
-  filters and SVG templates.
+- Use FFmpeg 8.1 as a hard runtime requirement, normally acquired from the
+  first-party `ErsatzRS-ffmpeg` release at startup.
+- Replace the external graphics-renderer process with FFmpeg 8.1 `drawvg`
+  filters and generated VGS templates.
 - Keep the project public-open-source ready, even while development starts as a
   solo-maintainer effort.
 
@@ -25,7 +26,8 @@ for the current phase checklist, parity matrix, and session log.
 
 ## Quick Start
 
-Build and run (requires FFmpeg 8.1+ on PATH):
+Build and run. On first startup, ErsatzRS downloads and validates the matching
+first-party FFmpeg runtime when no explicit override or managed copy exists:
 
 ```bash
 cargo build --workspace
@@ -60,7 +62,8 @@ Documentation follows the Diataxis structure under [docs/](docs/README.md):
 ## Development Requirements
 
 - Rust stable, pinned through [rust-toolchain.toml](rust-toolchain.toml).
-- FFmpeg 8.1 or newer available on `PATH` — a hard runtime requirement.
+- Network access for the first managed FFmpeg runtime download, or an explicit
+  FFmpeg 8.1+ override/pre-placed managed runtime for offline development.
 - SQLite as the default database backend (created at `~/.ersatzrs/ErsatzRS.db`).
 - MySQL 8/MariaDB support behind the `mysql` Cargo feature; set
   `DATABASE_URL='mysql://user:pass@host/ersatzrs'` to use it.

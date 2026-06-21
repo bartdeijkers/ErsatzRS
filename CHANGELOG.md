@@ -13,13 +13,29 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.13-alpha] - 2026-06-21
+
 ### Added
 
+- ErsatzRS now manages its FFmpeg 8.1 runtime at startup: explicit operator
+  overrides still win, otherwise the app validates a managed
+  `ErsatzRS-ffmpeg` install, downloads the matching first-party release when
+  needed, auto-updates managed installs when a newer release exists, verifies
+  checksums, runs drawvg/zscale smoke validation, and reports successful
+  downloads or failed update attempts through `/system/health` and an admin
+  toast.
 - Calibration clip generation now includes a `CAL_SIZE_PRESET=2010` mode for
   the local `2010 - The Year We Make Contact (1984)` source geometry
   (`1920x800`, SAR `1:1`, DAR `12:5`) plus a live Scale and Pad proof script
   that boots ErsatzRS, streams the generated source through a 1080p FFmpeg
   profile, and verifies black top/bottom padding in the captured output.
+
+### Changed
+
+- Release archives and Docker images no longer package FFmpeg/ffprobe. The
+  Windows launcher and Docker runtime now rely on the managed startup
+  `ErsatzRS-ffmpeg` download/update path, while offline deployments can still
+  use explicit FFmpeg/ffprobe path overrides or a pre-placed managed runtime.
 
 ### Fixed
 
@@ -435,7 +451,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.12-alpha...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.13-alpha...HEAD
+[1.0.13-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.12-alpha...v1.0.13-alpha
 [1.0.12-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.11-alpha...v1.0.12-alpha
 [1.0.11-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.10-alpha...v1.0.11-alpha
 [1.0.10-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v0.0.9-alpha...v1.0.10-alpha

@@ -49,7 +49,32 @@ pub struct AdminHealthRow {
 pub struct AdminHealthSnapshot {
     pub errors: u32,
     pub warnings: u32,
+    pub ffmpeg_runtime: Option<AdminFfmpegRuntimeStatus>,
     pub rows: Vec<AdminHealthRow>,
+}
+
+/// Startup `FFmpeg` runtime status for localized health-page rendering.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminFfmpegRuntimeStatus {
+    pub source: String,
+    pub ffmpeg_version: String,
+    pub ffprobe_version: String,
+    pub installed_tag: Option<String>,
+    pub latest_tag: Option<String>,
+    pub previous_tag: Option<String>,
+    pub downloaded_update: bool,
+    pub update_available: bool,
+    pub update_check_error: Option<String>,
+}
+
+/// One-shot startup `FFmpeg` runtime notification for hydrated admin sessions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdminFfmpegRuntimeNotification {
+    pub previous_tag: Option<String>,
+    pub installed_tag: Option<String>,
+    pub asset_name: Option<String>,
+    pub update_failed: bool,
+    pub error: Option<String>,
 }
 
 /// Loads the persisted parity health snapshot for the admin /system/health page.
@@ -60,9 +85,10 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
     use ersatzrs_infra::health::run_and_persist_health_checks;
 
     let state = expect_context::<AppState>();
+    let runtime = state.ffmpeg_runtime.read().await.clone();
     let run = run_and_persist_health_checks(
         state.pool.clone(),
-        state.ffmpeg_runtime.read().await.clone(),
+        runtime.clone(),
         state.system_startup.schema_status.clone(),
     )
     .await?;
@@ -92,8 +118,51 @@ pub async fn load_health_snapshot() -> Result<AdminHealthSnapshot, ServerFnError
     Ok(AdminHealthSnapshot {
         errors: run.summary.errors,
         warnings: run.summary.warnings,
+        ffmpeg_runtime: Some(AdminFfmpegRuntimeStatus {
+            source: runtime.acquisition.source.to_string(),
+            ffmpeg_version: runtime.ffmpeg.version.to_string(),
+            ffprobe_version: runtime.ffprobe.version.to_string(),
+            installed_tag: runtime.acquisition.installed_tag,
+            latest_tag: runtime.acquisition.latest_tag,
+            previous_tag: runtime.acquisition.previous_tag,
+            downloaded_update: runtime.acquisition.downloaded_update,
+            update_available: runtime.acquisition.update_available,
+            update_check_error: runtime.acquisition.update_check_error,
+        }),
         rows,
     })
+}
+
+/// Returns a startup notification when this process downloaded a managed FFmpeg runtime.
+#[server]
+pub async fn load_ffmpeg_runtime_notification(
+) -> Result<Option<AdminFfmpegRuntimeNotification>, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_ffmpeg::FfmpegRuntimeSource;
+
+    let state = expect_context::<AppState>();
+    let runtime = state.ffmpeg_runtime.read().await;
+    if let Some(error) = runtime.acquisition.update_check_error.clone() {
+        return Ok(Some(AdminFfmpegRuntimeNotification {
+            previous_tag: runtime.acquisition.previous_tag.clone(),
+            installed_tag: runtime.acquisition.installed_tag.clone(),
+            asset_name: runtime.acquisition.asset_name.clone(),
+            update_failed: true,
+            error: Some(error),
+        }));
+    }
+
+    if runtime.acquisition.source != FfmpegRuntimeSource::Downloaded {
+        return Ok(None);
+    }
+
+    Ok(Some(AdminFfmpegRuntimeNotification {
+        previous_tag: runtime.acquisition.previous_tag.clone(),
+        installed_tag: runtime.acquisition.installed_tag.clone(),
+        asset_name: runtime.acquisition.asset_name.clone(),
+        update_failed: false,
+        error: None,
+    }))
 }
 
 /// Cheap revision token for admin media views that need to notice scanner
@@ -130,9 +199,9 @@ pub async fn media_state_revision() -> Result<String, ServerFnError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_health_snapshot, media_state_revision};
+    use super::{load_ffmpeg_runtime_notification, load_health_snapshot, media_state_revision};
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
-    use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_ffmpeg::{FfmpegRuntimeReport, FfmpegRuntimeSource};
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
     use leptos::prelude::{provide_context, Owner};
     use sqlx::Executor;
@@ -162,6 +231,51 @@ mod tests {
         assert_ne!(before, after);
         assert!(after.contains("2026-06-18T16:56:46Z"));
         assert!(after.ends_with("|1"));
+
+        owner.cleanup();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ffmpeg_runtime_notification_reports_downloaded_update() {
+        let (_db_file, pool) = test_pool().await;
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.acquisition.source = FfmpegRuntimeSource::Downloaded;
+        runtime.acquisition.previous_tag = Some("v1.0.0".to_owned());
+        runtime.acquisition.installed_tag = Some("v1.0.1".to_owned());
+        runtime.acquisition.asset_name = Some("ersatzrs-ffmpeg-1.0.1-linux-x64.tar.gz".to_owned());
+        let owner = provide_test_state_with_runtime(pool, runtime);
+
+        let notification = load_ffmpeg_runtime_notification()
+            .await
+            .unwrap()
+            .expect("notification");
+
+        assert!(!notification.update_failed);
+        assert_eq!(notification.previous_tag.as_deref(), Some("v1.0.0"));
+        assert_eq!(notification.installed_tag.as_deref(), Some("v1.0.1"));
+
+        owner.cleanup();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn ffmpeg_runtime_notification_reports_update_failure() {
+        let (_db_file, pool) = test_pool().await;
+        let mut runtime = FfmpegRuntimeReport::for_tests();
+        runtime.acquisition.source = FfmpegRuntimeSource::Managed;
+        runtime.acquisition.installed_tag = Some("v1.0.0".to_owned());
+        runtime.acquisition.latest_tag = Some("v1.0.1".to_owned());
+        runtime.acquisition.update_available = true;
+        runtime.acquisition.update_check_error = Some("checksum mismatch".to_owned());
+        let owner = provide_test_state_with_runtime(pool, runtime);
+
+        let notification = load_ffmpeg_runtime_notification()
+            .await
+            .unwrap()
+            .expect("notification");
+
+        assert!(notification.update_failed);
+        assert_eq!(notification.installed_tag.as_deref(), Some("v1.0.0"));
+        assert_eq!(notification.error.as_deref(), Some("checksum mismatch"));
 
         owner.cleanup();
     }
@@ -230,6 +344,13 @@ mod tests {
     }
 
     fn provide_test_state(pool: ersatzrs_infra::db::DbPool) -> Owner {
+        provide_test_state_with_runtime(pool, FfmpegRuntimeReport::for_tests())
+    }
+
+    fn provide_test_state_with_runtime(
+        pool: ersatzrs_infra::db::DbPool,
+        runtime: FfmpegRuntimeReport,
+    ) -> Owner {
         let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
         let state = AppState::new(
             pool,
@@ -238,7 +359,7 @@ mod tests {
                 database_ready: true,
                 schema_status: DatabaseSchemaStatus::default(),
             },
-            FfmpegRuntimeReport::for_tests(),
+            runtime,
             Uuid::nil(),
             1,
             IptvAccessTokenVerifier::disabled(),

@@ -225,8 +225,38 @@ pub async fn run() {
 async fn resolve_and_check_startup_ffmpeg_runtime(
     pool: &DbPool,
 ) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
-    let (ffmpeg_path, ffprobe_path) = resolve_and_persist_ffmpeg_paths(pool).await;
-    check_startup_ffmpeg_runtime(pool, &ffmpeg_path, &ffprobe_path).await
+    let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    let ffmpeg_config = repositories
+        .config
+        .get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
+        .await
+        .unwrap_or_default();
+    let ffprobe_config = repositories
+        .config
+        .get(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
+        .await
+        .unwrap_or_default();
+    let manager = ersatzrs_ffmpeg::FfmpegRuntimeManagerConfig::from_env(
+        file_system_layout::ffmpeg_runtime_folder(),
+    );
+    let client = ersatzrs_ffmpeg::GitHubFfmpegReleaseClient::default_repository();
+    let validator = StartupFfmpegRuntimeValidator { pool: pool.clone() };
+
+    match ersatzrs_ffmpeg::resolve_or_acquire_ffmpeg_runtime_with(
+        &manager,
+        ffmpeg_config.as_deref(),
+        ffprobe_config.as_deref(),
+        &client,
+        &validator,
+    )
+    .await
+    {
+        Ok(report) => finish_startup_ffmpeg_runtime(pool, report).await,
+        Err(error) => {
+            tracing::error!(error = %error, "FFmpeg runtime acquisition failed");
+            std::process::exit(1);
+        }
+    }
 }
 
 async fn apply_seeded_default_profile_acceleration(
@@ -435,98 +465,60 @@ impl Write for FileAndStdout {
     }
 }
 
-/// Resolve the `ffmpeg`/`ffprobe` paths the way ErsatzTV's `FFmpegLocator` does
-/// — DB config (if it still exists) → next to the running executable → `PATH` —
-/// persist a freshly located path back into DB config, and publish the resolved
-/// paths into the process-wide holder every spawn site reads.
-async fn resolve_and_persist_ffmpeg_paths(pool: &DbPool) -> (String, String) {
-    let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
-    let ffmpeg = resolve_and_persist_tool(
-        &repositories.config,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH,
-        "ffmpeg",
-        ersatzrs_ffmpeg::resolve_ffmpeg_path,
-    )
-    .await;
-    let ffprobe = resolve_and_persist_tool(
-        &repositories.config,
-        ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
-        "ffprobe",
-        ersatzrs_ffmpeg::resolve_ffprobe_path,
-    )
-    .await;
-
-    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(ffmpeg.clone());
-    ersatzrs_ffmpeg::set_resolved_ffprobe_path(ffprobe.clone());
-    (ffmpeg, ffprobe)
+struct StartupFfmpegRuntimeValidator {
+    pool: DbPool,
 }
 
-async fn resolve_and_persist_tool<R: ConfigRepository>(
-    config: &R,
-    key: &str,
-    tool: &str,
-    resolve: impl Fn(Option<&str>) -> ersatzrs_ffmpeg::LocatedTool,
-) -> String {
-    let configured = config.get(key).await.unwrap_or_default();
-    let located = resolve(configured.as_deref());
-
-    if located.should_persist() {
-        if let Err(error) = config.set(key, &located.path).await {
-            tracing::warn!(%error, key, "failed to persist resolved FFmpeg tool path");
-        } else {
-            tracing::info!(tool, path = %located.path, "located and persisted FFmpeg tool path");
-        }
-    } else if located.db_was_stale {
-        // Configured path no longer exists and nothing else was located; clear
-        // the stale value (ErsatzTV deletes it).
-        let _ = config.set(key, "").await;
-        tracing::warn!(
-            tool,
-            key,
-            "configured FFmpeg tool path no longer exists; cleared"
-        );
+#[async_trait::async_trait]
+impl ersatzrs_ffmpeg::FfmpegRuntimeValidator for StartupFfmpegRuntimeValidator {
+    async fn validate(
+        &self,
+        ffmpeg_path: &str,
+        ffprobe_path: &str,
+    ) -> Result<ersatzrs_ffmpeg::FfmpegRuntimeReport, ersatzrs_ffmpeg::FfmpegCheckError> {
+        let config =
+            ffmpeg_runtime_config_with_profile_probes(&self.pool, ffmpeg_path, ffprobe_path).await;
+        ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await
     }
-
-    located.path
 }
 
-async fn check_startup_ffmpeg_runtime(
+async fn finish_startup_ffmpeg_runtime(
     pool: &DbPool,
-    ffmpeg_path: &str,
-    ffprobe_path: &str,
+    mut report: ersatzrs_ffmpeg::FfmpegRuntimeReport,
 ) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
-    let config = ffmpeg_runtime_config_with_profile_probes(pool, ffmpeg_path, ffprobe_path).await;
-    match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&config).await {
-        Ok(mut report) => {
-            // Startup is not an explicit capability refresh (ADR 0014):
-            // denials learned against this same ffmpeg binary are reapplied,
-            // but a path change since the last run clears them instead.
-            if let Err(error) = ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
-                pool,
-                &mut report.capabilities,
-                ffmpeg_path,
-            )
-            .await
-            {
-                tracing::warn!(%error, "failed to apply runtime-learned hardware decode denials");
-            }
-            tracing::info!(
-                ffmpeg = %report.ffmpeg.version,
-                ffprobe = %report.ffprobe.version,
-                ffmpeg_path = %report.ffmpeg.path,
-                ffprobe_path = %report.ffprobe.path,
-                "FFmpeg 8.1+ runtime detected"
-            );
-            for issue in report.issues.iter().filter(|issue| !issue.is_error()) {
-                tracing::warn!(?issue, "FFmpeg runtime capability warning");
-            }
-            report
-        }
-        Err(error) => {
-            tracing::error!(error = %error, "FFmpeg runtime check failed");
-            std::process::exit(1);
-        }
+    ersatzrs_ffmpeg::set_resolved_ffmpeg_path(report.ffmpeg.path.clone());
+    ersatzrs_ffmpeg::set_resolved_ffprobe_path(report.ffprobe.path.clone());
+
+    // Startup is not an explicit capability refresh (ADR 0014): denials learned
+    // against this same ffmpeg binary are reapplied, but a path change since the
+    // last run clears them instead.
+    if let Err(error) = ersatzrs_infra::ffmpeg_capabilities::apply_hardware_decode_denials(
+        pool,
+        &mut report.capabilities,
+        &report.ffmpeg.path,
+    )
+    .await
+    {
+        tracing::warn!(%error, "failed to apply runtime-learned hardware decode denials");
     }
+    tracing::info!(
+        ffmpeg = %report.ffmpeg.version,
+        ffprobe = %report.ffprobe.version,
+        ffmpeg_path = %report.ffmpeg.path,
+        ffprobe_path = %report.ffprobe.path,
+        source = %report.acquisition.source,
+        installed_tag = ?report.acquisition.installed_tag,
+        latest_tag = ?report.acquisition.latest_tag,
+        previous_tag = ?report.acquisition.previous_tag,
+        downloaded_update = report.acquisition.downloaded_update,
+        update_available = report.acquisition.update_available,
+        update_error = ?report.acquisition.update_check_error,
+        "FFmpeg 8.1+ runtime detected"
+    );
+    for issue in report.issues.iter().filter(|issue| !issue.is_error()) {
+        tracing::warn!(?issue, "FFmpeg runtime capability warning");
+    }
+    report
 }
 
 pub(crate) async fn ffmpeg_runtime_config_with_profile_probes(

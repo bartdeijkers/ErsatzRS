@@ -184,29 +184,6 @@ jobs:
         env:
           ERSATZRS_SKIP_STYLANCE: "1"
         run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
-      - name: Bundle FFmpeg 8.1 with drawvg (win-x64)
-        if: ${{ matrix.rid == 'win-x64' }}
-        shell: bash
-        env:
-          # First-party ErsatzRS-ffmpeg win-x64 package (FFmpeg 8.1.2, built with
-          # --enable-cairo so `drawvg` is present, asserted below). Pinned to a
-          # known-good ErsatzRS-ffmpeg release per ADR 0008. The archive contains
-          # ffmpeg.exe/ffprobe.exe plus their bundled DLLs in a single folder.
-          FFMPEG_ZIP_URL: https://github.com/bartdeijkers/ErsatzRS-ffmpeg/releases/download/v1.0.0/ersatzrs-ffmpeg-1.0.0-win-x64.zip
-        run: |
-          set -euo pipefail
-          curl -fL "$FFMPEG_ZIP_URL" -o ffmpeg-win64.zip
-          7z x ffmpeg-win64.zip -offmpeg-extracted >/dev/null
-          ffmpeg_exe="$(find ffmpeg-extracted -name ffmpeg.exe | head -n1)"
-          if [ -z "$ffmpeg_exe" ] || [ ! -f "$(dirname "$ffmpeg_exe")/ffprobe.exe" ]; then
-            echo "ffmpeg.exe/ffprobe.exe not found in the ErsatzRS-ffmpeg archive" >&2
-            exit 1
-          fi
-          # Stage the whole bundle (exes + their DLLs) for the archive step.
-          rm -rf ffmpeg-bundle && mkdir ffmpeg-bundle
-          cp "$(dirname "$ffmpeg_exe")"/* ffmpeg-bundle/
-          # Hard-require the drawvg filter; fail the release if it is missing.
-          ./ffmpeg-bundle/ffmpeg.exe -hide_banner -filters | grep -w drawvg
       # --- Optional Windows code signing (skipped until secrets exist) ---------
       # Disabled by default: both steps are skipped unless AZURE_CLIENT_ID is set.
       # Signs the built exes in place (before staging) so the copies that get
@@ -247,9 +224,6 @@ jobs:
             cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
             # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
             cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
-            # Bundled FFmpeg (ffmpeg.exe/ffprobe.exe + their DLLs) staged by the
-            # earlier step.
-            cp ffmpeg-bundle/* "$stage/"
           else
             cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
@@ -259,6 +233,10 @@ jobs:
           cp -R assets "$stage/assets"
           cp LICENSE "$stage/"
           cp README.md "$stage/"
+          if find "$stage" \( -iname 'ffmpeg*' -o -iname 'ffprobe*' \) -print -quit | grep -q .; then
+            echo "release archives must not bundle ffmpeg or ffprobe" >&2
+            exit 1
+          fi
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
             echo "ARCHIVE_PATH=${stage}.zip" >> "$GITHUB_ENV"
@@ -277,7 +255,7 @@ jobs:
 
   docker:
     name: Publish Docker image
-    # v0.0.8-alpha is a Windows/Linux archive-only release.
+    # Docker publication remains disabled until image publishing is re-enabled.
     if: ${{ false }}
     needs: [release, web-assets]
     runs-on: [self-hosted, ersatzrs-linux-release]
@@ -326,90 +304,9 @@ jobs:
           grep -q 'linux/arm64' manifest.txt
           grep -q 'linux/arm/v7' manifest.txt
 
-      - name: Collect static FFmpeg capability reports
+      - name: Verify image does not package FFmpeg
         run: |
-          require_capability() {
-            local file="$1"
-            local name="$2"
-            if ! grep -wq "$name" "$file"; then
-              echo "missing required FFmpeg capability '$name' in $file" >&2
-              exit 1
-            fi
-          }
-
-          assert_common_capabilities() {
-            local slug="$1"
-            require_capability "capability-reports/${slug}-filters.txt" drawvg
-            require_capability "capability-reports/${slug}-filters.txt" subtitles
-            require_capability "capability-reports/${slug}-encoders.txt" aac
-            require_capability "capability-reports/${slug}-encoders.txt" ac3
-            require_capability "capability-reports/${slug}-encoders.txt" libx264
-            require_capability "capability-reports/${slug}-encoders.txt" libx265
-            require_capability "capability-reports/${slug}-encoders.txt" libsvtav1
-            require_capability "capability-reports/${slug}-decoders.txt" h264
-            require_capability "capability-reports/${slug}-decoders.txt" hevc
-            require_capability "capability-reports/${slug}-decoders.txt" av1
-          }
-
-          assert_gpu_capabilities() {
-            local platform="$1"
-            local slug="$2"
-            case "$platform" in
-              linux/amd64)
-                require_capability "capability-reports/${slug}-hwaccels.txt" cuda
-                require_capability "capability-reports/${slug}-hwaccels.txt" vaapi
-                require_capability "capability-reports/${slug}-hwaccels.txt" vulkan
-                require_capability "capability-reports/${slug}-hwaccels.txt" qsv
-                require_capability "capability-reports/${slug}-encoders.txt" h264_nvenc
-                require_capability "capability-reports/${slug}-encoders.txt" hevc_nvenc
-                require_capability "capability-reports/${slug}-encoders.txt" h264_vaapi
-                require_capability "capability-reports/${slug}-encoders.txt" hevc_vaapi
-                require_capability "capability-reports/${slug}-encoders.txt" h264_qsv
-                require_capability "capability-reports/${slug}-encoders.txt" hevc_qsv
-                require_capability "capability-reports/${slug}-decoders.txt" h264_cuvid
-                require_capability "capability-reports/${slug}-decoders.txt" hevc_cuvid
-                ;;
-              linux/arm64)
-                require_capability "capability-reports/${slug}-hwaccels.txt" vaapi
-                require_capability "capability-reports/${slug}-hwaccels.txt" vulkan
-                require_capability "capability-reports/${slug}-encoders.txt" h264_vaapi
-                require_capability "capability-reports/${slug}-encoders.txt" hevc_vaapi
-                ;;
-              linux/arm/v7)
-                ;;
-              *)
-                echo "unhandled platform '$platform'" >&2
-                exit 1
-                ;;
-            esac
-          }
-
-          mkdir -p capability-reports
           for platform in linux/amd64 linux/arm64 linux/arm/v7; do
-            slug="${platform//\//-}"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -version \
-              > "capability-reports/${slug}-ffmpeg-version.txt"
-            docker run --rm --platform "$platform" --entrypoint ffprobe "$REGISTRY_IMAGE:$VERSION" -version \
-              > "capability-reports/${slug}-ffprobe-version.txt"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -filters \
-              > "capability-reports/${slug}-filters.txt"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -encoders \
-              > "capability-reports/${slug}-encoders.txt"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -decoders \
-              > "capability-reports/${slug}-decoders.txt"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" -hide_banner -hwaccels \
-              > "capability-reports/${slug}-hwaccels.txt"
-            docker run --rm --platform "$platform" --entrypoint ffmpeg "$REGISTRY_IMAGE:$VERSION" \
-              -hide_banner \
-              -f lavfi -i color=c=black:s=32x32:d=0.1 \
-              -vf "drawvg=script='rect 4 4 16 16 fill',format=yuv420p" \
-              -frames:v 1 -f null -
-            assert_common_capabilities "$slug"
-            assert_gpu_capabilities "$platform" "$slug"
+            docker run --rm --platform "$platform" --entrypoint sh "$REGISTRY_IMAGE:$VERSION" -c \
+              '! command -v ffmpeg >/dev/null 2>&1 && ! command -v ffprobe >/dev/null 2>&1 && test ! -e /opt/ffmpeg/bin/ffmpeg && test ! -e /opt/ffmpeg/bin/ffprobe'
           done
-
-      - name: Upload FFmpeg capability reports
-        uses: actions/upload-artifact@v7
-        with:
-          name: ffmpeg-capability-reports
-          path: capability-reports/

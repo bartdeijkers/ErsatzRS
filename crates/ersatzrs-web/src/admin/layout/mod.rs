@@ -2,7 +2,11 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::layout::nav::NavDrawer;
+use crate::admin::server_fns::layout::{
+    load_ffmpeg_runtime_notification, AdminFfmpegRuntimeNotification,
+};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::toast::{use_toast, ToastContainer, ToastSeverity};
 
 mod badges;
 mod nav;
@@ -36,7 +40,62 @@ pub fn AppShell(children: Children) -> impl IntoView {
             </div>
             <NavStateScript/>
             <ThemeStateScript/>
+            <StartupNotifications/>
         </div>
+    }
+}
+
+#[island]
+fn StartupNotifications() -> impl IntoView {
+    let toast = use_toast();
+    let shown = RwSignal::new(false);
+    let notification = Resource::new(
+        || (),
+        |()| async move { load_ffmpeg_runtime_notification().await.ok().flatten() },
+    );
+
+    Effect::new(move |_| {
+        if shown.get_untracked() {
+            return;
+        }
+
+        let Some(Some(notification)) = notification.get() else {
+            return;
+        };
+        shown.set(true);
+
+        if notification.update_failed {
+            let message = notification.error.as_deref().map_or_else(
+                || tr(TextKey::FfmpegRuntimeUpdateFailed).to_owned(),
+                |error| format!("{}: {error}", tr(TextKey::FfmpegRuntimeUpdateFailed)),
+            );
+            toast.push(message, ToastSeverity::Warning);
+        } else {
+            toast.push(
+                ffmpeg_runtime_notification_message(&notification),
+                ToastSeverity::Info,
+            );
+        }
+    });
+
+    view! { <ToastContainer/> }
+}
+
+fn ffmpeg_runtime_notification_message(notification: &AdminFfmpegRuntimeNotification) -> String {
+    match (
+        notification.previous_tag.as_deref(),
+        notification.installed_tag.as_deref(),
+    ) {
+        (Some(previous), Some(installed)) => {
+            format!(
+                "{}: {previous} -> {installed}",
+                tr(TextKey::FfmpegRuntimeUpdated)
+            )
+        }
+        (None, Some(installed)) => {
+            format!("{}: {installed}", tr(TextKey::FfmpegRuntimeDownloaded))
+        }
+        _ => tr(TextKey::FfmpegRuntimeDownloaded).to_owned(),
     }
 }
 
