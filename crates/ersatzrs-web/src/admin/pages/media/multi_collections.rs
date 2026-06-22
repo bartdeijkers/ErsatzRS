@@ -38,29 +38,56 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn MultiCollectionsPage() -> impl IntoView {
-    view! { <MultiCollectionsIsland/> }
+    let initial: Resource<(u32, (Vec<MultiCollectionListRow>, u64))> = Resource::new_blocking(
+        || (),
+        |()| async {
+            let page_size = get_multi_collections_page_size().await.unwrap_or(10);
+            let rows = list_multi_collections(String::new(), 0, page_size)
+                .await
+                .unwrap_or_default();
+            (page_size, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_page_size, (initial_rows, initial_total))| {
+                    view! {
+                        <MultiCollectionsIsland
+                            initial_page_size=initial_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn MultiCollectionsIsland() -> impl IntoView {
+fn MultiCollectionsIsland(
+    initial_page_size: u32,
+    initial_rows: Vec<MultiCollectionListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size);
+    let current_data = RwSignal::new((initial_rows, initial_total));
 
-    let saved_page_size = Resource::new(
-        || (),
-        |()| async { get_multi_collections_page_size().await.unwrap_or(10) },
-    );
+    let data: LocalResource<(Vec<MultiCollectionListRow>, u64)> = LocalResource::new(move || {
+        let q = search.get();
+        let p = page.get();
+        let size = page_size.get();
+        async move { list_multi_collections(q, p, size).await.unwrap_or_default() }
+    });
     Effect::new(move |_| {
-        if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved);
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
         }
     });
-
-    let data: Resource<(Vec<MultiCollectionListRow>, u64)> = Resource::new(
-        move || (search.get(), page.get(), page_size.get()),
-        move |(q, p, size)| async move { list_multi_collections(q, p, size).await.unwrap_or_default() },
-    );
 
     let delete_target: RwSignal<Option<MultiCollectionListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
@@ -102,117 +129,114 @@ fn MultiCollectionsIsland() -> impl IntoView {
                 </a>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    data.get().map(|(rows, total)| {
-                        let size = u64::from(page_size.get().max(1));
-                        let total_pages = u32::try_from(total.div_ceil(size))
-                            .unwrap_or(u32::MAX)
-                            .max(1);
+            {move || {
+                let (rows, total) = current_data.get();
+                let size = u64::from(page_size.get().max(1));
+                let total_pages = u32::try_from(total.div_ceil(size))
+                    .unwrap_or(u32::MAX)
+                    .max(1);
 
-                        let rows_view = if rows.is_empty() {
-                            view! { <p class=style::empty>{tr(TextKey::NoMultiCollections)}</p> }
-                                .into_any()
-                        } else {
-                            view! {
-                                <div class=style::table_wrap>
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>{tr(TextKey::Name)}</th>
-                                                <th/>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {rows.into_iter().map(|row| {
-                                                let id = row.id;
-                                                let name = row.name.clone();
-                                                let row_for_delete = row.clone();
-                                                view! {
-                                                    <tr>
-                                                        <td>{name}</td>
-                                                        <td>
-                                                            <div class=style::row_actions>
-                                                                <a
-                                                                    class=style::btn_edit
-                                                                    href=format!("/media/multi-collections/{id}/edit")
-                                                                >
-                                                                    {tr(TextKey::Edit)}
-                                                                </a>
-                                                                <form method="post" action="/api/multi-collections/delete">
-                                                                    <input type="hidden" name="id" value=id.to_string()/>
-                                                                    <button
-                                                                        type="submit"
-                                                                        class=style::btn_delete
-                                                                        on:click=move |event| {
-                                                                            event.prevent_default();
-                                                                            delete_target.set(Some(row_for_delete.clone()));
-                                                                            delete_open.set(true);
-                                                                        }
-                                                                    >
-                                                                        {tr(TextKey::Delete)}
-                                                                    </button>
-                                                                </form>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            }).collect_view()}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            }
-                            .into_any()
-                        };
-
-                        view! {
-                            {rows_view}
-                            <div class=style::pager>
-                                <button
-                                    type="button"
-                                    class=style::pager_btn
-                                    disabled=move || page.get() == 0
-                                    on:click=move |_| {
-                                        page.update(|page| *page = page.saturating_sub(1));
-                                    }
-                                >
-                                    {tr(TextKey::PreviousPage)}
-                                </button>
-                                <span class=style::pager_status>
-                                    {move || page_of(page.get() + 1, total_pages)}
-                                </span>
-                                <button
-                                    type="button"
-                                    class=style::pager_btn
-                                    disabled=move || { page.get() + 1 >= total_pages }
-                                    on:click=move |_| {
-                                        let max_page = total_pages.saturating_sub(1);
-                                        page.update(|page| *page = (*page + 1).min(max_page));
-                                    }
-                                >
-                                    {tr(TextKey::NextPage)}
-                                </button>
-                                <select
-                                    class=style::page_size
-                                    prop:value=move || page_size.get().to_string()
-                                    on:change=move |event| {
-                                        if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                            page_size.set(value.max(1));
-                                            page.set(0);
-                                        }
-                                    }
-                                >
-                                    <option value="10">"10"</option>
-                                    <option value="25">"25"</option>
-                                    <option value="50">"50"</option>
-                                    <option value="100">"100"</option>
-                                </select>
-                            </div>
-                        }
+                let rows_view = if rows.is_empty() {
+                    view! { <p class=style::empty>{tr(TextKey::NoMultiCollections)}</p> }
                         .into_any()
-                    })
-                }}
-            </Suspense>
+                } else {
+                    view! {
+                        <div class=style::table_wrap>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{tr(TextKey::Name)}</th>
+                                        <th/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.into_iter().map(|row| {
+                                        let id = row.id;
+                                        let name = row.name.clone();
+                                        let row_for_delete = row.clone();
+                                        view! {
+                                            <tr>
+                                                <td>{name}</td>
+                                                <td>
+                                                    <div class=style::row_actions>
+                                                        <a
+                                                            class=style::btn_edit
+                                                            href=format!("/media/multi-collections/{id}/edit")
+                                                        >
+                                                            {tr(TextKey::Edit)}
+                                                        </a>
+                                                        <form method="post" action="/api/multi-collections/delete">
+                                                            <input type="hidden" name="id" value=id.to_string()/>
+                                                            <button
+                                                                type="submit"
+                                                                class=style::btn_delete
+                                                                on:click=move |event| {
+                                                                    event.prevent_default();
+                                                                    delete_target.set(Some(row_for_delete.clone()));
+                                                                    delete_open.set(true);
+                                                                }
+                                                            >
+                                                                {tr(TextKey::Delete)}
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }).collect_view()}
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    .into_any()
+                };
+
+                view! {
+                    {rows_view}
+                    <div class=style::pager>
+                        <button
+                            type="button"
+                            class=style::pager_btn
+                            disabled=move || page.get() == 0
+                            on:click=move |_| {
+                                page.update(|page| *page = page.saturating_sub(1));
+                            }
+                        >
+                            {tr(TextKey::PreviousPage)}
+                        </button>
+                        <span class=style::pager_status>
+                            {move || page_of(page.get() + 1, total_pages)}
+                        </span>
+                        <button
+                            type="button"
+                            class=style::pager_btn
+                            disabled=move || { page.get() + 1 >= total_pages }
+                            on:click=move |_| {
+                                let max_page = total_pages.saturating_sub(1);
+                                page.update(|page| *page = (*page + 1).min(max_page));
+                            }
+                        >
+                            {tr(TextKey::NextPage)}
+                        </button>
+                        <select
+                            class=style::page_size
+                            prop:value=move || page_size.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                    page_size.set(value.max(1));
+                                    page.set(0);
+                                }
+                            }
+                        >
+                            <option value="10">"10"</option>
+                            <option value="25">"25"</option>
+                            <option value="50">"50"</option>
+                            <option value="100">"100"</option>
+                        </select>
+                    </div>
+                }
+                .into_any()
+            }}
 
             <DeleteDialog
                 open=delete_open

@@ -48,33 +48,63 @@ fn set_browser_location(_path: &str) {}
 pub fn RerunCollectionsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <RerunCollectionsIsland initial_error=error/> }
+    let initial: Resource<(u32, (Vec<RerunCollectionListRow>, u64))> = Resource::new_blocking(
+        || (),
+        |()| async {
+            let page_size = get_rerun_collections_page_size().await.unwrap_or(10);
+            let rows = list_rerun_collections(String::new(), 0, page_size)
+                .await
+                .unwrap_or_default();
+            (page_size, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                    view! {
+                        <RerunCollectionsIsland
+                            initial_error=error.clone()
+                            initial_page_size=initial_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
+fn RerunCollectionsIsland(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<RerunCollectionListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size);
+    let current_data = RwSignal::new((initial_rows, initial_total));
 
-    let saved_page_size = Resource::new_blocking(
-        || (),
-        |()| async { get_rerun_collections_page_size().await.unwrap_or(10) },
-    );
-    Effect::new(move |_| {
-        if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved);
-        }
-    });
-
-    let data: Resource<(Vec<RerunCollectionListRow>, u64)> = Resource::new_blocking(
-        move || (search.get(), page.get(), page_size.get()),
-        move |(search, page, page_size)| async move {
+    let data: LocalResource<(Vec<RerunCollectionListRow>, u64)> = LocalResource::new(move || {
+        let search = search.get();
+        let page = page.get();
+        let page_size = page_size.get();
+        async move {
             list_rerun_collections(search, page, page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
+        }
+    });
     let delete_action = Action::new(|id: &i64| delete_rerun_collection(*id));
     let delete_target: RwSignal<Option<RerunCollectionListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
@@ -110,134 +140,131 @@ fn RerunCollectionsIsland(initial_error: String) -> impl IntoView {
                     {tr(TextKey::RerunCollectionActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                                .unwrap_or(u32::MAX)
-                                .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+                {move || {
+                    let (rows, total) = current_data.get();
+                    let size = page_size.get().max(1);
+                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                        .unwrap_or(u32::MAX)
+                        .max(1);
+                    let current_page = page.get().min(total_pages.saturating_sub(1));
+                    let range_start = if total == 0 {
+                        0
+                    } else {
+                        u64::from(current_page) * u64::from(size) + 1
+                    };
+                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
-                            view! {
-                                <div class=style::table_wrap>
-                                    <div class=style::table_toolbar>
-                                        <label class=style::search_field>
-                                            <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
-                                            <input
-                                                class=style::search
-                                                type="search"
-                                                placeholder=tr(TextKey::SearchForRerunCollections)
-                                                prop:value=move || search.get()
-                                                on:input=move |event| {
-                                                    search.set(event_target_value(&event));
-                                                    page.set(0);
-                                                }
-                                            />
-                                        </label>
-                                    </div>
-                                    <table>
-                                        <tbody>
-                                            {rows.into_iter().map(|row| {
-                                                let id = row.id;
-                                                let name = row.name.clone();
-                                                let row_for_delete = row.clone();
-                                                view! {
-                                                    <tr>
-                                                        <td>{name}</td>
-                                                        <td>
-                                                            <div class=style::row_actions>
-                                                                <a
-                                                                    class=style::icon_button
-                                                                    href=format!("/media/rerun-collections/{id}/edit")
-                                                                    title=tr(TextKey::EditRerunCollection)
-                                                                    aria-label=tr(TextKey::EditRerunCollection)
-                                                                >
-                                                                    <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
-                                                                </a>
-                                                                <form method="post" action="/api/rerun-collections/delete">
-                                                                    <input type="hidden" name="id" value=id.to_string()/>
-                                                                    <button
-                                                                        type="submit"
-                                                                        class=style::icon_button
-                                                                        title=tr(TextKey::DeleteRerunCollection)
-                                                                        aria-label=tr(TextKey::DeleteRerunCollection)
-                                                                        on:click=move |event| {
-                                                                            event.prevent_default();
-                                                                            delete_target.set(Some(row_for_delete.clone()));
-                                                                            delete_open.set(true);
-                                                                        }
-                                                                    >
-                                                                        <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                                    </button>
-                                                                </form>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            }).collect_view()}
-                                        </tbody>
-                                    </table>
-                                    <div class=style::pager>
-                                        <span>{tr(TextKey::RowsPerPage)}</span>
-                                        <select
-                                            class=style::page_size
-                                            aria-label=tr(TextKey::RowsPerPage)
-                                            prop:value=move || page_size.get().to_string()
-                                            on:change=move |event| {
-                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                    page_size.set(value.max(1));
-                                                    page.set(0);
-                                                }
-                                            }
-                                        >
-                                            <option value="10">"10"</option>
-                                            <option value="25">"25"</option>
-                                            <option value="50">"50"</option>
-                                            <option value="100">"100"</option>
-                                        </select>
-                                        <span class=style::pager_status>{range_of(
-                                            u32::try_from(range_start).unwrap_or(u32::MAX),
-                                            u32::try_from(range_end).unwrap_or(u32::MAX),
-                                            total,
-                                        )}</span>
-                                        <div class=style::pager_buttons>
-                                            <button
-                                                type="button"
-                                                class=style::icon_button
-                                                disabled=move || page.get() == 0
-                                                title=tr(TextKey::PreviousPage)
-                                                aria-label=tr(TextKey::PreviousPage)
-                                                on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
-                                            >
-                                                <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class=style::icon_button
-                                                disabled=move || { page.get() + 1 >= total_pages }
-                                                title=tr(TextKey::NextPage)
-                                                aria-label=tr(TextKey::NextPage)
-                                                on:click=move |_| {
-                                                    page.update(|page| *page = (*page + 1).min(total_pages.saturating_sub(1)));
-                                                }
-                                            >
-                                                <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                            </button>
-                                        </div>
-                                    </div>
+                    view! {
+                        <div class=style::table_wrap>
+                            <div class=style::table_toolbar>
+                                <label class=style::search_field>
+                                    <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
+                                    <input
+                                        class=style::search
+                                        type="search"
+                                        placeholder=tr(TextKey::SearchForRerunCollections)
+                                        prop:value=move || search.get()
+                                        on:input=move |event| {
+                                            search.set(event_target_value(&event));
+                                            page.set(0);
+                                        }
+                                    />
+                                </label>
+                            </div>
+                            <table>
+                                <tbody>
+                                    {rows.into_iter().map(|row| {
+                                        let id = row.id;
+                                        let name = row.name.clone();
+                                        let row_for_delete = row.clone();
+                                        view! {
+                                            <tr>
+                                                <td>{name}</td>
+                                                <td>
+                                                    <div class=style::row_actions>
+                                                        <a
+                                                            class=style::icon_button
+                                                            href=format!("/media/rerun-collections/{id}/edit")
+                                                            title=tr(TextKey::EditRerunCollection)
+                                                            aria-label=tr(TextKey::EditRerunCollection)
+                                                        >
+                                                            <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                        </a>
+                                                        <form method="post" action="/api/rerun-collections/delete">
+                                                            <input type="hidden" name="id" value=id.to_string()/>
+                                                            <button
+                                                                type="submit"
+                                                                class=style::icon_button
+                                                                title=tr(TextKey::DeleteRerunCollection)
+                                                                aria-label=tr(TextKey::DeleteRerunCollection)
+                                                                on:click=move |event| {
+                                                                    event.prevent_default();
+                                                                    delete_target.set(Some(row_for_delete.clone()));
+                                                                    delete_open.set(true);
+                                                                }
+                                                            >
+                                                                <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }).collect_view()}
+                                </tbody>
+                            </table>
+                            <div class=style::pager>
+                                <span>{tr(TextKey::RowsPerPage)}</span>
+                                <select
+                                    class=style::page_size
+                                    aria-label=tr(TextKey::RowsPerPage)
+                                    prop:value=move || page_size.get().to_string()
+                                    on:change=move |event| {
+                                        if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                            page_size.set(value.max(1));
+                                            page.set(0);
+                                        }
+                                    }
+                                >
+                                    <option value="10">"10"</option>
+                                    <option value="25">"25"</option>
+                                    <option value="50">"50"</option>
+                                    <option value="100">"100"</option>
+                                </select>
+                                <span class=style::pager_status>{range_of(
+                                    u32::try_from(range_start).unwrap_or(u32::MAX),
+                                    u32::try_from(range_end).unwrap_or(u32::MAX),
+                                    total,
+                                )}</span>
+                                <div class=style::pager_buttons>
+                                    <button
+                                        type="button"
+                                        class=style::icon_button
+                                        disabled=move || page.get() == 0
+                                        title=tr(TextKey::PreviousPage)
+                                        aria-label=tr(TextKey::PreviousPage)
+                                        on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
+                                    >
+                                        <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class=style::icon_button
+                                        disabled=move || { page.get() + 1 >= total_pages }
+                                        title=tr(TextKey::NextPage)
+                                        aria-label=tr(TextKey::NextPage)
+                                        on:click=move |_| {
+                                            page.update(|page| *page = (*page + 1).min(total_pages.saturating_sub(1)));
+                                        }
+                                    >
+                                        <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                    </button>
                                 </div>
-                            }
-                            .into_any()
-                        })
-                    }}
-                </Suspense>
+                            </div>
+                        </div>
+                    }
+                    .into_any()
+                }}
             </section>
             <DeleteDialog
                 open=delete_open

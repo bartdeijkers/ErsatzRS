@@ -40,32 +40,61 @@ const COLLECTION_TYPE_PLAYLIST: i32 = 6;
 pub fn FillerPresetsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <FillerPresetsIsland initial_error=error/> }
+    let initial: Resource<(u32, (Vec<FillerPresetListRow>, u64))> = Resource::new_blocking(
+        || (),
+        |()| async {
+            let page_size = get_filler_presets_page_size().await.unwrap_or(10);
+            let rows = list_filler_presets(0, page_size)
+                .await
+                .unwrap_or_default();
+            (page_size, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                    view! {
+                        <FillerPresetsIsland
+                            initial_error=error.clone()
+                            initial_page_size=initial_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
+fn FillerPresetsIsland(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<FillerPresetListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size);
+    let current_data = RwSignal::new((initial_rows, initial_total));
 
-    let saved_page_size = Resource::new_blocking(
-        || (),
-        |()| async { get_filler_presets_page_size().await.unwrap_or(10) },
-    );
-    Effect::new(move |_| {
-        if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved);
-        }
-    });
-
-    let data: Resource<(Vec<FillerPresetListRow>, u64)> = Resource::new_blocking(
-        move || (page.get(), page_size.get()),
-        move |(page, page_size)| async move {
+    let data: LocalResource<(Vec<FillerPresetListRow>, u64)> = LocalResource::new(move || {
+        let page = page.get();
+        let page_size = page_size.get();
+        async move {
             list_filler_presets(page, page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
+        }
+    });
     let delete_action = Action::new(|id: &i64| delete_filler_preset(*id));
     let delete_target: RwSignal<Option<FillerPresetListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
@@ -101,139 +130,136 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                     {tr(TextKey::FillerPresetActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                                .unwrap_or(u32::MAX)
-                                .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+                {move || {
+                    let (rows, total) = current_data.get();
+                    let size = page_size.get().max(1);
+                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                        .unwrap_or(u32::MAX)
+                        .max(1);
+                    let current_page = page.get().min(total_pages.saturating_sub(1));
+                    let range_start = if total == 0 {
+                        0
+                    } else {
+                        u64::from(current_page) * u64::from(size) + 1
+                    };
+                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
-                            view! {
-                                <div class=style::table_wrap>
-                                    <table>
-                                        <thead>
+                    view! {
+                        <div class=style::table_wrap>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{tr(TextKey::Name)}</th>
+                                        <th>{tr(TextKey::FillerKind)}</th>
+                                        <th/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {if rows.is_empty() {
+                                        view! {
                                             <tr>
-                                                <th>{tr(TextKey::Name)}</th>
-                                                <th>{tr(TextKey::FillerKind)}</th>
-                                                <th/>
+                                                <td class=style::empty_cell colspan="3">{tr(TextKey::NoFillerPresets)}</td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {if rows.is_empty() {
-                                                view! {
-                                                    <tr>
-                                                        <td class=style::empty_cell colspan="3">{tr(TextKey::NoFillerPresets)}</td>
-                                                    </tr>
-                                                }.into_any()
-                                            } else {
-                                                rows.into_iter().map(|row| {
-                                                    let id = row.id;
-                                                    let name = row.name.clone();
-                                                    let row_for_delete = row.clone();
-                                                    view! {
-                                                        <tr>
-                                                            <td>{name}</td>
-                                                            <td>{filler_kind_label(row.filler_kind)}</td>
-                                                            <td>
-                                                                <div class=style::row_actions>
-                                                                    <a
-                                                                        class=style::icon_button
-                                                                        href=format!("/media/filler/presets/{id}/edit")
-                                                                        title=tr(TextKey::EditFillerPreset)
-                                                                        aria-label=tr(TextKey::EditFillerPreset)
-                                                                    >
-                                                                        <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
-                                                                    </a>
-                                                                    <form method="post" action="/api/filler-presets/delete">
-                                                                        <input type="hidden" name="id" value=id.to_string()/>
-                                                                        <button
-                                                                            type="submit"
-                                                                            class=style::icon_button
-                                                                            title=tr(TextKey::DeleteFillerPreset)
-                                                                            aria-label=tr(TextKey::DeleteFillerPreset)
-                                                                            on:click=move |event| {
-                                                                                event.prevent_default();
-                                                                                delete_target.set(Some(row_for_delete.clone()));
-                                                                                delete_open.set(true);
-                                                                            }
-                                                                        >
-                                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                                        </button>
-                                                                    </form>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                }).collect_view().into_any()
-                                            }}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class=style::pager>
-                                    <span>{tr(TextKey::RowsPerPage)} ":"</span>
-                                    <select
-                                        class=style::page_size
-                                        aria-label=tr(TextKey::RowsPerPage)
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                page_size.set(value.max(1));
-                                                page.set(0);
+                                        }.into_any()
+                                    } else {
+                                        rows.into_iter().map(|row| {
+                                            let id = row.id;
+                                            let name = row.name.clone();
+                                            let row_for_delete = row.clone();
+                                            view! {
+                                                <tr>
+                                                    <td>{name}</td>
+                                                    <td>{filler_kind_label(row.filler_kind)}</td>
+                                                    <td>
+                                                        <div class=style::row_actions>
+                                                            <a
+                                                                class=style::icon_button
+                                                                href=format!("/media/filler/presets/{id}/edit")
+                                                                title=tr(TextKey::EditFillerPreset)
+                                                                aria-label=tr(TextKey::EditFillerPreset)
+                                                            >
+                                                                <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                            </a>
+                                                            <form method="post" action="/api/filler-presets/delete">
+                                                                <input type="hidden" name="id" value=id.to_string()/>
+                                                                <button
+                                                                    type="submit"
+                                                                    class=style::icon_button
+                                                                    title=tr(TextKey::DeleteFillerPreset)
+                                                                    aria-label=tr(TextKey::DeleteFillerPreset)
+                                                                    on:click=move |event| {
+                                                                        event.prevent_default();
+                                                                        delete_target.set(Some(row_for_delete.clone()));
+                                                                        delete_open.set(true);
+                                                                    }
+                                                                >
+                                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </td>
+                                                </tr>
                                             }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                        <option value="100">"100"</option>
-                                    </select>
-                                    <span class=style::pager_status>
-                                        {range_of(
-                                            u32::try_from(range_start).unwrap_or(u32::MAX),
-                                            u32::try_from(range_end).unwrap_or(u32::MAX),
-                                            total,
-                                        )}
-                                    </span>
-                                    <div class=style::pager_buttons>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || page.get() == 0
-                                            title=tr(TextKey::PreviousPage)
-                                            aria-label=tr(TextKey::PreviousPage)
-                                            on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
-                                        >
-                                            <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || { page.get() + 1 >= total_pages }
-                                            title=tr(TextKey::NextPage)
-                                            aria-label=tr(TextKey::NextPage)
-                                            on:click=move |_| {
-                                                page.update(|page| {
-                                                    *page = (*page + 1).min(total_pages.saturating_sub(1));
-                                                });
-                                            }
-                                        >
-                                            <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                            .into_any()
-                        })
-                    }}
-                </Suspense>
+                                        }).collect_view().into_any()
+                                    }}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class=style::pager>
+                            <span>{tr(TextKey::RowsPerPage)} ":"</span>
+                            <select
+                                class=style::page_size
+                                aria-label=tr(TextKey::RowsPerPage)
+                                prop:value=move || page_size.get().to_string()
+                                on:change=move |event| {
+                                    if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                        page_size.set(value.max(1));
+                                        page.set(0);
+                                    }
+                                }
+                            >
+                                <option value="10">"10"</option>
+                                <option value="25">"25"</option>
+                                <option value="50">"50"</option>
+                                <option value="100">"100"</option>
+                            </select>
+                            <span class=style::pager_status>
+                                {range_of(
+                                    u32::try_from(range_start).unwrap_or(u32::MAX),
+                                    u32::try_from(range_end).unwrap_or(u32::MAX),
+                                    total,
+                                )}
+                            </span>
+                            <div class=style::pager_buttons>
+                                <button
+                                    type="button"
+                                    class=style::icon_button
+                                    disabled=move || page.get() == 0
+                                    title=tr(TextKey::PreviousPage)
+                                    aria-label=tr(TextKey::PreviousPage)
+                                    on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
+                                >
+                                    <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class=style::icon_button
+                                    disabled=move || { page.get() + 1 >= total_pages }
+                                    title=tr(TextKey::NextPage)
+                                    aria-label=tr(TextKey::NextPage)
+                                    on:click=move |_| {
+                                        page.update(|page| {
+                                            *page = (*page + 1).min(total_pages.saturating_sub(1));
+                                        });
+                                    }
+                                >
+                                    <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    .into_any()
+                }}
             </section>
             <DeleteDialog
                 open=delete_open
