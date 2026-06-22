@@ -35,6 +35,9 @@ release section when tagging a release.
 - Windows launcher builds made from Linux/WSL now embed the tray icon resources
   correctly, preventing `ErsatzRS.exe` from failing at startup with
   `Error setting icon from resource: 1812`.
+- Database schema health reporting now distinguishes real downgrade detection
+  from dirty migrations and migration checksum mismatches, so `/system/health`
+  no longer labels every schema metadata issue as an ErsatzTV downgrade.
 
 ## [1.0.14-alpha] - 2026-06-21
 
