@@ -12,13 +12,10 @@
 //! * The page wrapper is a plain `#[component]`. Search and pagination are
 //!   URL-driven (`?query=…&page=N`), mirroring `ErsatzTV`'s
 //!   `NavigationManager.NavigateTo("…/page/N")` pattern.
-//! * The interactive multi-select toolbar lives in [`MultiSelectIsland`].
-//!   The island owns its own `Resource::new_blocking` for the card grid and
-//!   renders `<Suspense>` internally, so it sits **above** the suspense
-//!   boundary as the rules in `TEST.md` require. Selection state is
-//!   per-page and ephemeral (matches `ErsatzTV`'s `MultiSelectBase`).
-//! * The island only takes plain scalar props (`String`, `u32`, `i32` kind
-//!   discriminant) — the "no prop-bearing island across Suspense" pattern.
+//! * The page wrapper loads the first card grid and letter map during SSR,
+//!   then hands that concrete payload to [`MultiSelectIsland`]. The island
+//!   keeps the same interactive selection state and refreshes from client
+//!   resources after hydration.
 
 #![allow(clippy::too_many_lines)]
 use std::collections::HashSet;
@@ -206,6 +203,17 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     let toolbar_query = initial_query.clone();
     let title = config.title;
     let base_path = config.base_path;
+    let initial_query_for_resource = initial_query.clone();
+    let initial: Resource<((Vec<MediaCardRow>, u64), LetterPageMap)> = Resource::new_blocking(
+        move || (initial_query_for_resource.clone(), initial_page),
+        move |(q, p)| async move {
+            let (rows, page_map) = tokio::join!(
+                load_browser_rows(config.kind, q.clone(), p),
+                load_browser_page_map(config.kind, q),
+            );
+            (rows, page_map)
+        },
+    );
 
     view! {
         <div class=style::page>
@@ -220,44 +228,67 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                 />
             </form>
 
-            <MultiSelectIsland
-                query=initial_query
-                page=initial_page
-                kind_code=config.kind_code()
-            />
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+                {move || {
+                    let query = initial_query.clone();
+                    initial.get().map(move |((initial_rows, initial_total), initial_page_map)| {
+                        view! {
+                            <MultiSelectIsland
+                                query=query.clone()
+                                page=initial_page
+                                kind_code=config.kind_code()
+                                initial_rows=initial_rows
+                                initial_total=initial_total
+                                initial_page_map=initial_page_map
+                            />
+                        }
+                    })
+                }}
+            </Suspense>
         </div>
     }
 }
 
 #[island]
-fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView {
+fn MultiSelectIsland(
+    query: String,
+    page: u32,
+    kind_code: i32,
+    initial_rows: Vec<MediaCardRow>,
+    initial_total: u64,
+    initial_page_map: LetterPageMap,
+) -> impl IntoView {
     let config = BrowserKindConfig::from_kind_code(kind_code);
     let kind = config.kind;
     let media_revision = RwSignal::new(String::new());
+    let current_data = RwSignal::new((initial_rows, initial_total));
+    let current_page_map = RwSignal::new(initial_page_map);
 
     let q_for_resource = query.clone();
-    let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
-        move || (q_for_resource.clone(), page, media_revision.get()),
-        move |(q, p, _)| async move {
-            match kind {
-                MediaBrowserKind::Movie => list_movies(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::Show => list_shows(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::Artist => list_artists(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::OtherVideo => list_other_videos(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::Season => list_seasons(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::Episode => list_episodes(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::MusicVideo => list_music_videos(q, p, PAGE_SIZE).await,
-                MediaBrowserKind::RemoteStream => list_remote_streams(q, p, PAGE_SIZE).await,
-            }
-            .unwrap_or_default()
+    let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(
+        move || {
+            let q = q_for_resource.clone();
+            let _ = media_revision.get();
+            async move { load_browser_rows(kind, q, page).await }
         },
     );
+    Effect::new(move |_| {
+        if let Some(rows) = data.get() {
+            current_data.set(rows);
+        }
+    });
 
     let q_for_map = query.clone();
-    let page_map: Resource<LetterPageMap> = Resource::new_blocking(
-        move || (q_for_map.clone(), media_revision.get()),
-        move |(q, _)| async move { media_page_map(kind, q, PAGE_SIZE).await.unwrap_or_default() },
-    );
+    let page_map: LocalResource<LetterPageMap> = LocalResource::new(move || {
+        let q = q_for_map.clone();
+        let _ = media_revision.get();
+        async move { load_browser_page_map(kind, q).await }
+    });
+    Effect::new(move |_| {
+        if let Some(next_page_map) = page_map.get() {
+            current_page_map.set(next_page_map);
+        }
+    });
 
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
@@ -276,41 +307,55 @@ fn MultiSelectIsland(query: String, page: u32, kind_code: i32) -> impl IntoView 
     });
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                let query_for_links = query.clone();
-                let query_for_jump = query.clone();
-                data.get().map(|(rows, total)| {
-                    let present: Signal<Option<HashSet<char>>> = Signal::derive({
-                        let rows = rows.clone();
-                        move || Some(rows.iter().map(|r| letter_bucket(&r.sort_title)).collect())
-                    });
-                    let letter_bar_view = match page_map.get() {
-                        Some(pm) => {
-                            let jump = LetterJump {
-                                base_uri: config.base_path.to_string(),
-                                query: query_for_jump,
-                                page_map: pm,
-                            };
-                            view! { <LetterBar present=present jump=jump/> }.into_any()
-                        }
-                        None => view! { <LetterBar present=present/> }.into_any(),
-                    };
-                    view! {
-                        {letter_bar_view}
-                        <GridWithSelection
-                            rows=rows
-                            total=total
-                            page=page
-                            query=query_for_links
-                            config=config
-                        />
-                    }
-                    .into_any()
-                })
-            }}
-        </Suspense>
+        {move || {
+            let query_for_links = query.clone();
+            let (rows, total) = current_data.get();
+            let present: Signal<Option<HashSet<char>>> = Signal::derive({
+                let rows = rows.clone();
+                move || Some(rows.iter().map(|r| letter_bucket(&r.sort_title)).collect())
+            });
+            let jump = LetterJump {
+                base_uri: config.base_path.to_string(),
+                query: query.clone(),
+                page_map: current_page_map.get(),
+            };
+
+            view! {
+                <LetterBar present=present jump=jump/>
+                <GridWithSelection
+                    rows=rows
+                    total=total
+                    page=page
+                    query=query_for_links
+                    config=config
+                />
+            }
+        }}
     }
+}
+
+async fn load_browser_rows(
+    kind: MediaBrowserKind,
+    query: String,
+    page: u32,
+) -> (Vec<MediaCardRow>, u64) {
+    match kind {
+        MediaBrowserKind::Movie => list_movies(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Show => list_shows(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Artist => list_artists(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::OtherVideo => list_other_videos(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Season => list_seasons(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Episode => list_episodes(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::MusicVideo => list_music_videos(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::RemoteStream => list_remote_streams(query, page, PAGE_SIZE).await,
+    }
+    .unwrap_or_default()
+}
+
+async fn load_browser_page_map(kind: MediaBrowserKind, query: String) -> LetterPageMap {
+    media_page_map(kind, query, PAGE_SIZE)
+        .await
+        .unwrap_or_default()
 }
 
 #[component]
