@@ -244,3 +244,46 @@ tsanalyze --json cal_1.ts | jq '.pids[]|{id,description,cc:.packets.discontinuit
 tsp -I file cal_1.ts -P continuity -P pcrverify -O drop   # CC + PCR in one pass
 tsp -I http 'http://127.0.0.1:8409/iptv/channel/1.ts' -P continuity -O drop  # live
 ```
+
+---
+
+# Island hydration smoke (E2E)
+
+A **required manual gate for confirming the admin UI is interactive** — *not*
+part of CI. Where the TSDuck gate proves the served container is sound, this gate
+proves every Leptos `#[island]` actually hydrates, so the click handlers that
+SSR alone cannot exercise (stop/delete on `/channels`, refresh and row-select on
+`/playouts`, every dialog and form) really attach in the browser.
+
+It exists because we keep regressing one failure class: a change to a
+shell-level island, a shared UI primitive, the router, or a Cargo dependency
+aborts island hydration and silently disables the interactive controls on
+otherwise-unrelated pages. Plain `<a>` links keep working, so it is easy to ship
+without noticing.
+
+```bash
+scripts/e2e/hydration-smoke.sh
+```
+
+The runner is self-contained: it builds the Leptos hydration assets
+(`cargo leptos build`), boots `ersatzrs-web` on a throwaway SQLite database with
+an isolated `HOME` (never touches `~/.ersatzrs`), waits for `/healthz`, runs
+`tests/e2e/island-hydration.spec.ts` against every island route, then tears the
+server and temp files down. Requires `cargo-leptos` (`cargo install cargo-leptos
+--locked`) and `npx`. An FFmpeg override at `~/.local/ffmpeg-8.1` (like
+`run.sh`) is used when present so startup skips the managed runtime download.
+
+| Env var | Default | Effect |
+| --- | --- | --- |
+| `ERSATZRS_SKIP_LEPTOS_BUILD` | `0` | `1` = reuse already-built hydration assets |
+| `ERSATZRS_E2E_KEEP_TEMP` | `0` | `1` = keep the temp DB/log dir for debugging |
+| `ERSATZRS_E2E_PORT` | `8409` | server port |
+| `ERSATZRS_FFMPEG_DIR` | `~/.local/ffmpeg-8.1` | FFmpeg override root |
+| `ERSATZRS_SKIP_PW_INSTALL` | `0` | `1` = skip `playwright install chromium` |
+
+Per-route pass criteria: `window.__ersatzrs_hydrated === true` (set right after
+`hydrate_islands()` in `crates/ersatzrs-web/src/lib.rs`), no uncaught page
+errors, no hydration-signature console errors, and no fall-through to the 404
+catch-all. Add new island routes to the `ISLAND_ROUTES` table in the spec.
+Detail/editor routes that need a seeded `:id` are out of scope here — cover them
+in dedicated seeded specs.

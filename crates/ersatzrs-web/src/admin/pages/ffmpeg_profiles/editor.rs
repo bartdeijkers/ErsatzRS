@@ -49,13 +49,58 @@ fn set_browser_location(_path: &str) {}
 #[component]
 pub fn FfmpegProfileEditorPage() -> impl IntoView {
     let params = use_params_map();
-    let profile_id = move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()));
+    let profile_id = params
+        .with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()))
+        .unwrap_or(0);
+    let none_label = tr(TextKey::NoneOption).to_string();
+    let language = use_i18n();
 
-    // Pass `0` for the "add" route, otherwise the actual id. The island owns
-    // the blocking resource and the inner #[component] renders the editor body.
+    #[allow(clippy::type_complexity)]
+    let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
+        Resource::new_blocking(
+            move || profile_id,
+            move |id| {
+                let none_label = none_label.clone();
+                async move {
+                    let (resolutions, form) =
+                        tokio::join!(list_resolutions_for_select(), async move {
+                            if id == 0 {
+                                Some(FfmpegProfileForm::new_defaults())
+                            } else {
+                                get_ffmpeg_profile_form(id).await.unwrap_or(None)
+                            }
+                        });
+                    let resolutions = resolutions.unwrap_or_default();
+                    let hw_accels = list_supported_hw_accelerations().await;
+                    let hw_accels = hw_accels.map_or_else(
+                        |_| vec![(0, none_label)],
+                        |options| localized_hw_accel_items(language, options),
+                    );
+                    form.map(|f| (f, resolutions, hw_accels))
+                }
+            },
+        );
+
     view! {
-        <FfmpegProfileEditorIsland profile_id=profile_id().unwrap_or(0)/>
-        <FfmpegProfileEditorNoScriptFallback profile_id=profile_id().unwrap_or(0)/>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                data.get().map(|maybe| match maybe {
+                    Some((form, resolutions, hw_accels)) => view! {
+                        <FfmpegProfileEditorIsland
+                            initial_form=form
+                            initial_resolutions=resolutions
+                            initial_hw_accels=hw_accels
+                        />
+                    }
+                    .into_any(),
+                    None => view! {
+                        <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
+                    }
+                    .into_any(),
+                })
+            }}
+        </Suspense>
+        <FfmpegProfileEditorNoScriptFallback profile_id=profile_id/>
     }
 }
 
@@ -159,58 +204,21 @@ fn FfmpegProfileNoScriptForm(form: FfmpegProfileForm) -> impl IntoView {
 }
 
 // ---------------------------------------------------------------------------
-// Island — owns blocking resource; inner component is the fully hydrated editor
+// Island — renders concrete SSR data and owns only client interactivity
 // ---------------------------------------------------------------------------
 
 #[island]
-fn FfmpegProfileEditorIsland(profile_id: i64) -> impl IntoView {
-    let none_label = tr(TextKey::NoneOption).to_string();
-    let language = use_i18n();
-    #[allow(clippy::type_complexity)]
-    let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
-        Resource::new_blocking(
-            move || profile_id,
-            move |id| {
-                let none_label = none_label.clone();
-                async move {
-                    let (resolutions, form) =
-                        tokio::join!(list_resolutions_for_select(), async move {
-                            if id == 0 {
-                                Some(FfmpegProfileForm::new_defaults())
-                            } else {
-                                get_ffmpeg_profile_form(id).await.unwrap_or(None)
-                            }
-                        });
-                    let resolutions = resolutions.unwrap_or_default();
-                    let hw_accels = list_supported_hw_accelerations().await;
-                    let hw_accels = hw_accels.map_or_else(
-                        |_| vec![(0, none_label)],
-                        |options| localized_hw_accel_items(language, options),
-                    );
-                    form.map(|f| (f, resolutions, hw_accels))
-                }
-            },
-        );
-
+fn FfmpegProfileEditorIsland(
+    initial_form: FfmpegProfileForm,
+    initial_resolutions: Vec<(i64, String)>,
+    initial_hw_accels: Vec<(i32, String)>,
+) -> impl IntoView {
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                data.get().map(|maybe| match maybe {
-                    Some((form, resolutions, hw_accels)) => view! {
-                        <FfmpegProfileEditorForm
-                            initial_form=form
-                            initial_resolutions=resolutions
-                            initial_hw_accels=hw_accels
-                        />
-                    }
-                    .into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
-                    }
-                    .into_any(),
-                })
-            }}
-        </Suspense>
+        <FfmpegProfileEditorForm
+            initial_form=initial_form
+            initial_resolutions=initial_resolutions
+            initial_hw_accels=initial_hw_accels
+        />
     }
 }
 

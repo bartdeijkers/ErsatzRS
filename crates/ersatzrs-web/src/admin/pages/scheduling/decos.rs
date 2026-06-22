@@ -41,6 +41,14 @@ mod style {
 
 #[component]
 pub fn DecosPage() -> impl IntoView {
+    let initial: Resource<(Vec<DecoGroupRow>, Vec<DecoRow>)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let (groups, decos) = tokio::join!(list_deco_groups(), list_decos(String::new()));
+            (groups.unwrap_or_default(), decos.unwrap_or_default())
+        },
+    );
+
     view! {
         <style>".decos-noscript-list { display: none; }"</style>
         <noscript>
@@ -49,7 +57,18 @@ pub fn DecosPage() -> impl IntoView {
                 <DecosNoScriptRows/>
             </div>
         </noscript>
-        <DecosIsland/>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_groups, initial_decos)| {
+                    view! {
+                        <DecosIsland
+                            initial_groups=initial_groups
+                            initial_decos=initial_decos
+                        />
+                    }
+                })
+            }}
+        </Suspense>
     }
 }
 
@@ -70,16 +89,26 @@ fn DecosNoScriptRows() -> impl IntoView {
 }
 
 #[island]
-fn DecosIsland() -> impl IntoView {
-    let groups: Resource<Vec<DecoGroupRow>> = Resource::new_blocking(
-        || (),
-        |()| async { list_deco_groups().await.unwrap_or_default() },
-    );
+fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -> impl IntoView {
+    let current_groups = RwSignal::new(initial_groups);
+    let groups: LocalResource<Vec<DecoGroupRow>> =
+        LocalResource::new(|| async { list_deco_groups().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(rows) = groups.get() {
+            current_groups.set(rows);
+        }
+    });
     let search = RwSignal::new(String::new());
-    let decos: Resource<Vec<DecoRow>> = Resource::new_blocking(
-        move || search.get(),
-        |query| async move { list_decos(query).await.unwrap_or_default() },
-    );
+    let current_decos = RwSignal::new(initial_decos);
+    let decos: LocalResource<Vec<DecoRow>> = LocalResource::new(move || {
+        let query = search.get();
+        async move { list_decos(query).await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = decos.get() {
+            current_decos.set(rows);
+        }
+    });
 
     let new_group_name = RwSignal::new(String::new());
     let new_deco_group_id = RwSignal::new(0i64);
@@ -208,26 +237,28 @@ fn DecosIsland() -> impl IntoView {
                     <div class=style::divider></div>
                     <form method="post" action="/api/decos/create" class=style::form_grid>
                         <label class=style::label for="deco-group">{tr(TextKey::DecoGroup)}</label>
-                        <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                            {move || groups.get().map(|rows| view! {
-                                <select
-                                    id="deco-group"
-                                    class=style::select
-                                    name="group_id"
-                                    prop:value=move || new_deco_group_id.get().to_string()
-                                    on:change=move |event| {
-                                        if let Ok(id) = event_target_value(&event).parse::<i64>() {
-                                            new_deco_group_id.set(id);
-                                        }
-                                    }
-                                >
-                                    <option value="0"></option>
-                                    {rows.into_iter().map(|group| {
+                        <select
+                            id="deco-group"
+                            class=style::select
+                            name="group_id"
+                            prop:value=move || new_deco_group_id.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(id) = event_target_value(&event).parse::<i64>() {
+                                    new_deco_group_id.set(id);
+                                }
+                            }
+                        >
+                            <option value="0"></option>
+                            {move || {
+                                current_groups
+                                    .get()
+                                    .into_iter()
+                                    .map(|group| {
                                         view! { <option value=group.id.to_string()>{group.name}</option> }
-                                    }).collect_view()}
-                                </select>
-                            })}
-                        </Suspense>
+                                    })
+                                    .collect_view()
+                            }}
+                        </select>
 
                         <label class=style::label for="deco-name">{tr(TextKey::DecoName)}</label>
                         <input
@@ -265,8 +296,9 @@ fn DecosIsland() -> impl IntoView {
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || decos.get().map(|rows| view! {
+                {move || {
+                    let rows = current_decos.get();
+                    view! {
                         <DecoTable
                             rows=rows
                             delete_group_open=delete_group_open
@@ -274,8 +306,8 @@ fn DecosIsland() -> impl IntoView {
                             delete_deco_open=delete_deco_open
                             delete_deco_target=delete_deco_target
                         />
-                    })}
-                </Suspense>
+                    }
+                }}
             </div>
 
             <DeleteDialog
@@ -742,6 +774,16 @@ fn DecoEditorForm(initial: DecoForm, options: DecoEditorOptions) -> impl IntoVie
 
 #[component]
 pub fn DecoTemplatesPage() -> impl IntoView {
+    let initial: Resource<(Vec<DecoTemplateGroupRow>, Vec<DecoTemplateRow>)> =
+        Resource::new_blocking(
+            || (),
+            |()| async move {
+                let (groups, templates) =
+                    tokio::join!(list_deco_template_groups(), list_deco_templates(String::new()));
+                (groups.unwrap_or_default(), templates.unwrap_or_default())
+            },
+        );
+
     view! {
         <style>".deco-templates-noscript-list { display: none; }"</style>
         <noscript>
@@ -750,7 +792,18 @@ pub fn DecoTemplatesPage() -> impl IntoView {
                 <DecoTemplatesNoScriptRows/>
             </div>
         </noscript>
-        <DecoTemplatesIsland/>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_groups, initial_templates)| {
+                    view! {
+                        <DecoTemplatesIsland
+                            initial_groups=initial_groups
+                            initial_templates=initial_templates
+                        />
+                    }
+                })
+            }}
+        </Suspense>
     }
 }
 
@@ -771,16 +824,29 @@ fn DecoTemplatesNoScriptRows() -> impl IntoView {
 }
 
 #[island]
-fn DecoTemplatesIsland() -> impl IntoView {
-    let groups: Resource<Vec<DecoTemplateGroupRow>> = Resource::new_blocking(
-        || (),
-        |()| async { list_deco_template_groups().await.unwrap_or_default() },
-    );
+fn DecoTemplatesIsland(
+    initial_groups: Vec<DecoTemplateGroupRow>,
+    initial_templates: Vec<DecoTemplateRow>,
+) -> impl IntoView {
+    let current_groups = RwSignal::new(initial_groups);
+    let groups: LocalResource<Vec<DecoTemplateGroupRow>> =
+        LocalResource::new(|| async { list_deco_template_groups().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(rows) = groups.get() {
+            current_groups.set(rows);
+        }
+    });
     let search = RwSignal::new(String::new());
-    let templates: Resource<Vec<DecoTemplateRow>> = Resource::new_blocking(
-        move || search.get(),
-        |query| async move { list_deco_templates(query).await.unwrap_or_default() },
-    );
+    let current_templates = RwSignal::new(initial_templates);
+    let templates: LocalResource<Vec<DecoTemplateRow>> = LocalResource::new(move || {
+        let query = search.get();
+        async move { list_deco_templates(query).await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = templates.get() {
+            current_templates.set(rows);
+        }
+    });
 
     let new_group_name = RwSignal::new(String::new());
     let new_template_group_id = RwSignal::new(0i64);
@@ -915,26 +981,28 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     <div class=style::divider></div>
                     <form method="post" action="/api/deco-templates/create" class=style::form_grid>
                         <label class=style::label for="deco-template-group">{tr(TextKey::DecoTemplateGroup)}</label>
-                        <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                            {move || groups.get().map(|rows| view! {
-                                <select
-                                    id="deco-template-group"
-                                    class=style::select
-                                    name="group_id"
-                                    prop:value=move || new_template_group_id.get().to_string()
-                                    on:change=move |event| {
-                                        if let Ok(id) = event_target_value(&event).parse::<i64>() {
-                                            new_template_group_id.set(id);
-                                        }
-                                    }
-                                >
-                                    <option value="0"></option>
-                                    {rows.into_iter().map(|group| {
+                        <select
+                            id="deco-template-group"
+                            class=style::select
+                            name="group_id"
+                            prop:value=move || new_template_group_id.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(id) = event_target_value(&event).parse::<i64>() {
+                                    new_template_group_id.set(id);
+                                }
+                            }
+                        >
+                            <option value="0"></option>
+                            {move || {
+                                current_groups
+                                    .get()
+                                    .into_iter()
+                                    .map(|group| {
                                         view! { <option value=group.id.to_string()>{group.name}</option> }
-                                    }).collect_view()}
-                                </select>
-                            })}
-                        </Suspense>
+                                    })
+                                    .collect_view()
+                            }}
+                        </select>
 
                         <label class=style::label for="deco-template-name">{tr(TextKey::DecoTemplateName)}</label>
                         <input
@@ -972,8 +1040,9 @@ fn DecoTemplatesIsland() -> impl IntoView {
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || templates.get().map(|rows| view! {
+                {move || {
+                    let rows = current_templates.get();
+                    view! {
                         <DecoTemplateTable
                             rows=rows
                             delete_group_open=delete_group_open
@@ -981,8 +1050,8 @@ fn DecoTemplatesIsland() -> impl IntoView {
                             delete_template_open=delete_template_open
                             delete_template_target=delete_template_target
                         />
-                    })}
-                </Suspense>
+                    }
+                }}
             </div>
 
             <DeleteDialog

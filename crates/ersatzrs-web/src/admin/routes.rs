@@ -88,7 +88,7 @@ pub fn AdminRoutes() -> impl IntoView {
     view! {
         <Routes fallback=|| {
             view! {
-                <div class=style::not_found>
+                <div class=style::not_found data-not-found="true">
                     <p class=style::not_found_code>"404"</p>
                     <p class=style::not_found_msg>{tr(TextKey::NotFound)}</p>
                     <a href="/" class=style::not_found_link>{tr(TextKey::GoHome)}</a>

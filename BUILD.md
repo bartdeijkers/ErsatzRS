@@ -203,9 +203,47 @@ Common things that look like a "rebuild bug" but aren't:
 | `failed_to_cast_marker_node` in browser console  | Hydration DOM shape mismatch (conditional rendering).   | See [TEST.md](TEST.md) hydration rules — replace `cond.then(...)` with `style:display`.   |
 | `wasm-bindgen` version mismatch                  | `wasm-bindgen-cli` and crate drifted after `cargo update`.| `cargo install cargo-leptos --locked`.                                                  |
 | `cargo leptos: command not found`                | cargo-leptos not installed.                             | `cargo install cargo-leptos --locked`.                                                    |
-| Server starts but admin buttons do nothing       | Page's interactive body is `#[component]`, not `#[island]`.| See [TEST.md](TEST.md) hydration playbook + reference pattern in `libraries/mod.rs:16`. |
+| Server starts but admin buttons do nothing       | Page's interactive body is `#[component]`, not `#[island]`, OR the SSR binary and WASM bundle disagree on hashing (see "Hydration build consistency"). | See [TEST.md](TEST.md) hydration playbook; for the build-consistency case run `scripts/release/verify-web-bundle.sh`. |
+| `failed to read hash file` panic / blank admin UI after release | "wasm checksum mismatch": server expects hashed `/pkg` names the bundle lacks. | See "Hydration build consistency" below.                                |
 | `SQLX_OFFLINE`-related compile errors            | `.sqlx/` cache out of date after schema changes.        | `DATABASE_URL=sqlite://./tmp.db cargo sqlx prepare --workspace`.                          |
 | FFmpeg missing / wrong version at startup        | Managed download disabled/failed and no compliant override or `PATH` runtime exists. | Re-enable downloads, pre-place the managed runtime, or set `ErsatzRS_FFMPEG__PATH` / `ErsatzRS_FFPROBE__PATH`. |
+
+## Hydration build consistency (the "wasm checksum" trap)
+
+The Leptos SSR server binary and the WASM hydration bundle **must come from a
+consistent build**, or the admin UI silently fails to hydrate (buttons/dialogs
+dead, lists non-interactive) even though the page renders. This has broken
+several releases. Two distinct failure modes:
+
+1. **Separate builds.** `cargo leptos build` produces a matched binary + WASM.
+   Building the server separately (`cargo build --bin` / `cargo run --bin`
+   after `cargo leptos build`) can yield a binary that is hydration-incompatible
+   with that WASM. The dev recipe `cargo leptos build` then `cargo run --bin`
+   works only because the binary defaults agree; prefer `./run.sh dev`
+   (`cargo leptos watch`) or `./run.sh serve`, which keep them in lockstep.
+2. **File-hashing mismatch ("wasm checksum mismatch").** cargo-leptos can hash
+   `/pkg` asset filenames (writing `site/pkg/hash.txt`). If the WASM build and
+   the running binary disagree about hashing, the server emits
+   `/pkg/ersatzrs-web.<hash>.{js,wasm}` URLs the bundle does not contain (or
+   panics with `failed to read hash file`). Hashing is pinned **off** in
+   `crates/ersatzrs-web/Cargo.toml` (`[package.metadata.leptos] hash-files =
+   false`) and in `.github/workflows/release.yml` (`LEPTOS_HASH_FILES: "false"`
+   on **both** the web-assets and binaries jobs). Keep those in agreement.
+
+**Structural gate:** `scripts/release/verify-web-bundle.sh` boots a built server
+binary against a site-assets directory and fails if any `/pkg` asset the shell
+HTML references does not resolve (HTTP 200). The release workflow runs it against
+the real release artifacts (linux-x64) before publishing, so a checksum mismatch
+fails the release instead of shipping. Run it locally against any bundle:
+
+```bash
+ERSATZRS_WEB_BIN=target/release/ersatzrs-web \
+ERSATZRS_SITE_ROOT=target/site \
+  scripts/release/verify-web-bundle.sh
+```
+
+For a deeper, browser-level check (every island actually hydrates), use
+`scripts/e2e/hydration-smoke.sh` (see [TEST.md](TEST.md)).
 
 ## Performance baseline
 

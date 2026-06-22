@@ -26,19 +26,20 @@ fn ChannelsListIsland() -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
-    let rows_resource: Resource<Vec<ChannelListRow>> = Resource::new(
-        move || (show_disabled.get(), params.get()),
-        |(disabled, p)| async move {
+    let rows_resource: LocalResource<Vec<ChannelListRow>> = LocalResource::new(move || {
+        let disabled = show_disabled.get();
+        let p = params.get();
+        async move {
             list_channel_rows(disabled, p.page, p.page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
 
-    let count_resource: Resource<u64> = Resource::new(
-        move || show_disabled.get(),
-        |disabled| async move { count_channels(disabled).await.unwrap_or(0) },
-    );
+    let count_resource: LocalResource<u64> = LocalResource::new(move || {
+        let disabled = show_disabled.get();
+        async move { count_channels(disabled).await.unwrap_or(0) }
+    });
 
     let total = Signal::derive(move || count_resource.get());
 

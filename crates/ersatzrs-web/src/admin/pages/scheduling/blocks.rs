@@ -16,26 +16,57 @@ stylance::import_crate_style!(style, "src/admin/pages/scheduling/blocks.module.c
 
 #[component]
 pub fn BlocksPage() -> impl IntoView {
-    view! { <BlocksIsland/> }
+    let initial: Resource<(Vec<BlockGroupRow>, Vec<BlockRow>)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let (groups, blocks) = tokio::join!(list_block_groups(), list_blocks(String::new()));
+            (groups.unwrap_or_default(), blocks.unwrap_or_default())
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_groups, initial_blocks)| {
+                    view! {
+                        <BlocksIsland
+                            initial_groups=initial_groups
+                            initial_blocks=initial_blocks
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn BlocksIsland() -> impl IntoView {
+fn BlocksIsland(initial_groups: Vec<BlockGroupRow>, initial_blocks: Vec<BlockRow>) -> impl IntoView {
     // ── Groups ─────────────────────────────────────────────────────────────
-    let groups: Resource<Vec<BlockGroupRow>> = Resource::new(
-        || (),
-        |()| async { list_block_groups().await.unwrap_or_default() },
-    );
+    let current_groups = RwSignal::new(initial_groups);
+    let groups: LocalResource<Vec<BlockGroupRow>> =
+        LocalResource::new(|| async { list_block_groups().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(rows) = groups.get() {
+            current_groups.set(rows);
+        }
+    });
 
     let new_group_name = RwSignal::new(String::new());
     let create_group_action = Action::new(|name: &String| create_block_group(name.clone()));
 
     // ── Blocks ─────────────────────────────────────────────────────────────
     let search = RwSignal::new(String::new());
-    let blocks: Resource<Vec<BlockRow>> = Resource::new(
-        move || search.get(),
-        |q| async move { list_blocks(q).await.unwrap_or_default() },
-    );
+    let current_blocks = RwSignal::new(initial_blocks);
+    let blocks: LocalResource<Vec<BlockRow>> = LocalResource::new(move || {
+        let q = search.get();
+        async move { list_blocks(q).await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = blocks.get() {
+            current_blocks.set(rows);
+        }
+    });
 
     let new_block_name = RwSignal::new(String::new());
     let new_block_group_id: RwSignal<i64> = RwSignal::new(0);
@@ -201,27 +232,27 @@ fn BlocksIsland() -> impl IntoView {
                 <div class=style::add_row>
                     <div class=style::add_field>
                         <label class=style::add_label>{tr(TextKey::BlockGroup)}</label>
-                        <Suspense>
-                            {move || groups.get().map(|grps| {
-                                view! {
-                                    <select
-                                        class=style::add_select
-                                        on:change=move |e| {
-                                            if let Ok(id) = event_target_value(&e).parse::<i64>() {
-                                                new_block_group_id.set(id);
-                                            }
-                                        }
-                                    >
-                                        <option value="0">{tr(TextKey::SelectGroup)}</option>
-                                        {grps.into_iter().map(|g| {
-                                            let id = g.id;
-                                            let name = g.name.clone();
-                                            view! { <option value=id.to_string()>{name}</option> }
-                                        }).collect_view()}
-                                    </select>
+                        <select
+                            class=style::add_select
+                            on:change=move |e| {
+                                if let Ok(id) = event_target_value(&e).parse::<i64>() {
+                                    new_block_group_id.set(id);
                                 }
-                            })}
-                        </Suspense>
+                            }
+                        >
+                            <option value="0">{tr(TextKey::SelectGroup)}</option>
+                            {move || {
+                                current_groups
+                                    .get()
+                                    .into_iter()
+                                    .map(|g| {
+                                        let id = g.id;
+                                        let name = g.name.clone();
+                                        view! { <option value=id.to_string()>{name}</option> }
+                                    })
+                                    .collect_view()
+                            }}
+                        </select>
                     </div>
                     <div class=style::add_field>
                         <label class=style::add_label>{tr(TextKey::BlockName)}</label>
@@ -262,125 +293,122 @@ fn BlocksIsland() -> impl IntoView {
                 />
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    blocks.get().map(|rows| {
-                        if rows.is_empty() {
-                            return view! { <div></div> }.into_any();
-                        }
+            {move || {
+                let rows = current_blocks.get();
+                if rows.is_empty() {
+                    return view! { <div></div> }.into_any();
+                }
 
-                        // Group rows by group_name for display
-                        let mut grouped: Vec<(String, Vec<BlockRow>)> = Vec::new();
-                        let mut current_group = String::new();
-                        for row in rows {
-                            if row.group_name != current_group {
-                                current_group.clone_from(&row.group_name);
-                                grouped.push((current_group.clone(), Vec::new()));
-                            }
-                            if let Some(last) = grouped.last_mut() {
-                                last.1.push(row);
-                            }
-                        }
-                        // capture group_id of first block for group delete
-                        let del_group_rows: Vec<(String, i64, i64)> = grouped
-                            .iter()
-                            .map(|(name, rows)| {
-                                (
-                                    name.clone(),
-                                    rows.first().map_or(0, |r| r.group_id),
-                                    rows.first().map_or(0, |r| r.id),
-                                )
-                            })
-                            .collect();
+                // Group rows by group_name for display
+                let mut grouped: Vec<(String, Vec<BlockRow>)> = Vec::new();
+                let mut current_group = String::new();
+                for row in rows {
+                    if row.group_name != current_group {
+                        current_group.clone_from(&row.group_name);
+                        grouped.push((current_group.clone(), Vec::new()));
+                    }
+                    if let Some(last) = grouped.last_mut() {
+                        last.1.push(row);
+                    }
+                }
+                // capture group_id of first block for group delete
+                let del_group_rows: Vec<(String, i64, i64)> = grouped
+                    .iter()
+                    .map(|(name, rows)| {
+                        (
+                            name.clone(),
+                            rows.first().map_or(0, |r| r.group_id),
+                            rows.first().map_or(0, |r| r.id),
+                        )
+                    })
+                    .collect();
 
-                        view! {
-                            <div class=style::table_wrap>
-                                <table>
-                                    <thead>
+                view! {
+                    <div class=style::table_wrap>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>{tr(TextKey::Name)}</th>
+                                    <th>{tr(TextKey::Duration)}</th>
+                                    <th>{tr(TextKey::StopScheduling)}</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {grouped.into_iter().zip(del_group_rows).map(|((gname, block_rows), (_, group_id, _))| {
+                                    let gname_clone = gname.clone();
+                                    view! {
                                         <tr>
-                                            <th>{tr(TextKey::Name)}</th>
-                                            <th>{tr(TextKey::Duration)}</th>
-                                            <th>{tr(TextKey::StopScheduling)}</th>
-                                            <th/>
+                                            <td colspan="4" class=style::group_header>
+                                                <div class=style::row_actions>
+                                                    <span style="flex:1">{gname}</span>
+                                                    <button
+                                                        class=style::btn_delete
+                                                        on:click=move |_| {
+                                                            del_group_target.set(Some(BlockGroupRow {
+                                                                id: group_id,
+                                                                name: gname_clone.clone(),
+                                                            }));
+                                                            del_group_open.set(true);
+                                                        }
+                                                    >
+                                                        {tr(TextKey::DeleteBlockGroup)}
+                                                    </button>
+                                                </div>
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {grouped.into_iter().zip(del_group_rows).map(|((gname, block_rows), (_, group_id, _))| {
-                                            let gname_clone = gname.clone();
+                                        {block_rows.into_iter().filter(|b| b.id >= 0).map(|b| {
+                                            let id = b.id;
+                                            let name = b.name.clone();
+                                            let dur = format_duration_label(b.minutes);
+                                            let stop = stop_scheduling_label_i18n(b.stop_scheduling);
+                                            let b_for_del = b.clone();
+                                            let b_for_copy = b.clone();
                                             view! {
                                                 <tr>
-                                                    <td colspan="4" class=style::group_header>
+                                                    <td>
+                                                        <a href=format!("/blocks/{id}")>{name.clone()}</a>
+                                                    </td>
+                                                    <td class=style::cell_muted>{dur}</td>
+                                                    <td class=style::cell_muted>{stop}</td>
+                                                    <td>
                                                         <div class=style::row_actions>
-                                                            <span style="flex:1">{gname}</span>
+                                                            <a class=style::btn_edit href=format!("/blocks/{id}")>
+                                                                {tr(TextKey::Edit)}
+                                                            </a>
+                                                            <button
+                                                                class=style::btn_edit
+                                                                on:click=move |_| {
+                                                                    copy_name.set(format!("{} {}", name, tr(TextKey::CopyNameSuffix)));
+                                                                    copy_group_id.set(b_for_copy.group_id);
+                                                                    copy_target.set(Some(b_for_copy.clone()));
+                                                                    copy_open.set(true);
+                                                                }
+                                                            >
+                                                                {tr(TextKey::Copy)}
+                                                            </button>
                                                             <button
                                                                 class=style::btn_delete
                                                                 on:click=move |_| {
-                                                                    del_group_target.set(Some(BlockGroupRow {
-                                                                        id: group_id,
-                                                                        name: gname_clone.clone(),
-                                                                    }));
-                                                                    del_group_open.set(true);
+                                                                    del_block_target.set(Some(b_for_del.clone()));
+                                                                    del_block_open.set(true);
                                                                 }
                                                             >
-                                                                {tr(TextKey::DeleteBlockGroup)}
+                                                                {tr(TextKey::Delete)}
                                                             </button>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {block_rows.into_iter().filter(|b| b.id >= 0).map(|b| {
-                                                    let id = b.id;
-                                                    let name = b.name.clone();
-                                                    let dur = format_duration_label(b.minutes);
-                                                    let stop = stop_scheduling_label_i18n(b.stop_scheduling);
-                                                    let b_for_del = b.clone();
-                                                    let b_for_copy = b.clone();
-                                                    view! {
-                                                        <tr>
-                                                            <td>
-                                                                <a href=format!("/blocks/{id}")>{name.clone()}</a>
-                                                            </td>
-                                                            <td class=style::cell_muted>{dur}</td>
-                                                            <td class=style::cell_muted>{stop}</td>
-                                                            <td>
-                                                                <div class=style::row_actions>
-                                                                    <a class=style::btn_edit href=format!("/blocks/{id}")>
-                                                                        {tr(TextKey::Edit)}
-                                                                    </a>
-                                                                    <button
-                                                                        class=style::btn_edit
-                                                                        on:click=move |_| {
-                                                                            copy_name.set(format!("{} {}", name, tr(TextKey::CopyNameSuffix)));
-                                                                            copy_group_id.set(b_for_copy.group_id);
-                                                                            copy_target.set(Some(b_for_copy.clone()));
-                                                                            copy_open.set(true);
-                                                                        }
-                                                                    >
-                                                                        {tr(TextKey::Copy)}
-                                                                    </button>
-                                                                    <button
-                                                                        class=style::btn_delete
-                                                                        on:click=move |_| {
-                                                                            del_block_target.set(Some(b_for_del.clone()));
-                                                                            del_block_open.set(true);
-                                                                        }
-                                                                    >
-                                                                        {tr(TextKey::Delete)}
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                }).collect_view()}
                                             }
                                         }).collect_view()}
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
+                                    }
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                .into_any()
+            }}
 
             // ── Delete dialogs — always rendered; visibility via `open` signal ──
             <DeleteDialog
@@ -423,27 +451,27 @@ fn BlocksIsland() -> impl IntoView {
                 <h2 class=style::section_title>{tr(TextKey::CopyBlock)}</h2>
                 <label class=style::add_field>
                     <span class=style::add_label>{tr(TextKey::BlockGroup)}</span>
-                    <Suspense>
-                        {move || groups.get().map(|grps| {
-                            view! {
-                                <select
-                                    class=style::add_select
-                                    prop:value=move || copy_group_id.get().to_string()
-                                    on:change=move |e| {
-                                        if let Ok(id) = event_target_value(&e).parse::<i64>() {
-                                            copy_group_id.set(id);
-                                        }
-                                    }
-                                >
-                                    {grps.into_iter().map(|g| {
-                                        let id = g.id;
-                                        let name = g.name.clone();
-                                        view! { <option value=id.to_string()>{name}</option> }
-                                    }).collect_view()}
-                                </select>
+                    <select
+                        class=style::add_select
+                        prop:value=move || copy_group_id.get().to_string()
+                        on:change=move |e| {
+                            if let Ok(id) = event_target_value(&e).parse::<i64>() {
+                                copy_group_id.set(id);
                             }
-                        })}
-                    </Suspense>
+                        }
+                    >
+                        {move || {
+                            current_groups
+                                .get()
+                                .into_iter()
+                                .map(|g| {
+                                    let id = g.id;
+                                    let name = g.name.clone();
+                                    view! { <option value=id.to_string()>{name}</option> }
+                                })
+                                .collect_view()
+                        }}
+                    </select>
                 </label>
                 <label class=style::add_field>
                     <span class=style::add_label>{tr(TextKey::BlockName)}</span>

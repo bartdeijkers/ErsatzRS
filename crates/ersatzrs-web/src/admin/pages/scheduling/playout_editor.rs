@@ -24,25 +24,51 @@ stylance::import_crate_style!(
 pub fn PlayoutEditorPage() -> impl IntoView {
     let params = use_params_map();
     let kind = params.with(|p| p.get("kind").unwrap_or_default());
-    view! { <PlayoutEditorIsland initial_kind=kind/> }
+    let initial: Resource<(Vec<PlayoutCreateChannel>, Vec<PlayoutCreateSchedule>)> =
+        Resource::new_blocking(
+            || (),
+            |()| async move {
+                let (channels, schedules) = tokio::join!(
+                    list_playout_create_channels(),
+                    list_playout_create_schedules(),
+                );
+                (
+                    channels.unwrap_or_default(),
+                    schedules.unwrap_or_default(),
+                )
+            },
+        );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::caption>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_channels, initial_schedules)| {
+                    view! {
+                        <PlayoutEditorIsland
+                            initial_kind=kind.clone()
+                            initial_channels=initial_channels
+                            initial_schedules=initial_schedules
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn PlayoutEditorIsland(initial_kind: String) -> impl IntoView {
+fn PlayoutEditorIsland(
+    initial_kind: String,
+    initial_channels: Vec<PlayoutCreateChannel>,
+    initial_schedules: Vec<PlayoutCreateSchedule>,
+) -> impl IntoView {
     let form = RwSignal::new(PlayoutCreateForm {
         kind: canonical_kind(&initial_kind).to_owned(),
         ..PlayoutCreateForm::default()
     });
     let save_error = RwSignal::new(String::new());
-
-    let channels: Resource<Vec<PlayoutCreateChannel>> = Resource::new_blocking(
-        || (),
-        |()| async move { list_playout_create_channels().await.unwrap_or_default() },
-    );
-    let schedules: Resource<Vec<PlayoutCreateSchedule>> = Resource::new_blocking(
-        || (),
-        |()| async move { list_playout_create_schedules().await.unwrap_or_default() },
-    );
+    let channels = RwSignal::new(initial_channels);
+    let schedules = RwSignal::new(initial_schedules);
 
     let save_action = Action::new(|form: &PlayoutCreateForm| create_playout(form.clone()));
     Effect::new(move |_| {
@@ -88,9 +114,7 @@ fn PlayoutEditorIsland(initial_kind: String) -> impl IntoView {
                     }
                 >
                     <input type="hidden" name="kind" value=move || form.get().kind/>
-                    <Suspense fallback=move || channel_field(form, Vec::new())>
-                        {move || channels.get().map(|channels| channel_field(form, channels))}
-                    </Suspense>
+                    {move || channel_field(form, channels.get())}
 
                     {move || match form.get().kind.as_str() {
                         "" | "Classic" => classic_schedule_field(form, schedules).into_any(),
@@ -150,13 +174,9 @@ fn channel_field(
 
 fn classic_schedule_field(
     form: RwSignal<PlayoutCreateForm>,
-    schedules: Resource<Vec<PlayoutCreateSchedule>>,
+    schedules: RwSignal<Vec<PlayoutCreateSchedule>>,
 ) -> impl IntoView {
-    view! {
-        <Suspense fallback=move || classic_schedule_select(form, Vec::new())>
-            {move || schedules.get().map(|schedules| classic_schedule_select(form, schedules))}
-        </Suspense>
-    }
+    view! { {move || classic_schedule_select(form, schedules.get())} }
 }
 
 fn classic_schedule_select(

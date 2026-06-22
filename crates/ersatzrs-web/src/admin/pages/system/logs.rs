@@ -7,21 +7,58 @@ use crate::admin::server_fns::logs::{
 
 #[component]
 pub fn LogsPage() -> impl IntoView {
-    view! { <LogsIsland/> }
+    let initial: Resource<(u32, AdminLogSnapshot)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let page_size = get_logs_page_size().await.unwrap_or(10).max(1);
+            let snapshot = load_recent_log_entries(
+                String::new(),
+                0,
+                page_size,
+                AdminLogSortField::Timestamp,
+                None,
+            )
+            .await
+            .unwrap_or_default();
+            (page_size, snapshot)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! {
+            {render_snapshot(
+                AdminLogSnapshot::default(),
+                RwSignal::new(0),
+                RwSignal::new(10),
+                RwSignal::new(AdminLogSortField::Timestamp),
+                RwSignal::new(None::<bool>),
+            )}
+        }>
+            {move || {
+                initial.get().map(|(initial_page_size, initial_snapshot)| {
+                    view! {
+                        <LogsIsland
+                            initial_page_size=initial_page_size
+                            initial_snapshot=initial_snapshot
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn LogsIsland() -> impl IntoView {
+fn LogsIsland(initial_page_size: u32, initial_snapshot: AdminLogSnapshot) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size.max(1));
     let sort_field = RwSignal::new(AdminLogSortField::Timestamp);
     let sort_descending = RwSignal::new(None::<bool>);
+    let current_snapshot = RwSignal::new(initial_snapshot);
 
-    let saved_page_size = Resource::new_blocking(
-        || (),
-        |()| async { get_logs_page_size().await.unwrap_or(10) },
-    );
+    let saved_page_size: LocalResource<u32> =
+        LocalResource::new(|| async { get_logs_page_size().await.unwrap_or(10) });
     Effect::new(move |_| {
         if let Some(saved) = saved_page_size.get() {
             let saved = saved.max(1);
@@ -31,22 +68,24 @@ fn LogsIsland() -> impl IntoView {
         }
     });
 
-    let logs = Resource::new_blocking(
-        move || {
-            (
-                search.get(),
-                page.get(),
-                page_size.get(),
-                sort_field.get(),
-                sort_descending.get(),
-            )
-        },
-        |(filter, page, page_size, sort_field, sort_descending)| async move {
+    let logs: LocalResource<AdminLogSnapshot> = LocalResource::new(move || {
+        let filter = search.get();
+        let page = page.get();
+        let page_size = page_size.get();
+        let sort_field = sort_field.get();
+        let sort_descending = sort_descending.get();
+        async move {
             load_recent_log_entries(filter, page, page_size, sort_field, sort_descending)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+
+    Effect::new(move |_| {
+        if let Some(snapshot) = logs.get() {
+            current_snapshot.set(snapshot);
+        }
+    });
 
     view! {
         <div style="max-width:80rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
@@ -73,15 +112,15 @@ fn LogsIsland() -> impl IntoView {
                 />
             </div>
 
-            <Suspense fallback=move || view! {
-                {render_snapshot(AdminLogSnapshot::default(), page, page_size, sort_field, sort_descending)}
-            }>
-                {move || {
-                    logs.get().map(move |snapshot| {
-                        render_snapshot(snapshot, page, page_size, sort_field, sort_descending)
-                    })
-                }}
-            </Suspense>
+            {move || {
+                render_snapshot(
+                    current_snapshot.get(),
+                    page,
+                    page_size,
+                    sort_field,
+                    sort_descending,
+                )
+            }}
         </div>
     }
 }

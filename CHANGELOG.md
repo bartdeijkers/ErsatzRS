@@ -13,6 +13,23 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Release gate against the recurring "wasm checksum mismatch" that has broken
+  several releases (`scripts/release/verify-web-bundle.sh`, wired into the
+  release workflow). The Leptos SSR binary and the WASM bundle are built in
+  separate jobs; if they disagree on cargo-leptos file hashing the server
+  references `/pkg` asset URLs the bundle does not contain and the admin UI
+  never hydrates. The gate boots the assembled bundle and fails the release if
+  any hydration asset 404s. Hashing is now pinned off deterministically
+  (`hash-files = false` in `crates/ersatzrs-web/Cargo.toml`, `LEPTOS_HASH_FILES`
+  on both release jobs).
+- Whole-app island hydration smoke (`scripts/e2e/hydration-smoke.sh` +
+  `tests/e2e/island-hydration.spec.ts`): a browser-level pre-release check that
+  boots the host and verifies every route rendering a Leptos `#[island]`
+  actually hydrates (sets `window.__ersatzrs_hydrated`, no marker-mismatch
+  panics). Documents the build-consistency requirement in BUILD.md.
+
 ## [1.0.14-alpha] - 2026-06-21
 
 ### Changed

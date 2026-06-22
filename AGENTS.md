@@ -126,6 +126,14 @@ cargo test --workspace --all-features
 #   cargo install cargo-leptos --locked
 #   (cd crates/ersatzrs-web && cargo leptos build)
 cargo run --bin ersatzrs-web
+# HYDRATION BUILD CONSISTENCY: the SSR binary and the WASM bundle must come from
+# a consistent build, or the admin UI renders but never hydrates (every island
+# button/dialog dead) — the recurring "wasm checksum mismatch" that has broken
+# multiple releases. `cargo leptos build` then a SEPARATE `cargo run/build --bin`
+# can drift (esp. file-hashing); prefer `./run.sh dev` (cargo leptos watch) or
+# `./run.sh serve`, which keep them in lockstep. Before tagging a release run the
+# gate `scripts/release/verify-web-bundle.sh` (also enforced in release CI). See
+# BUILD.md "Hydration build consistency (the wasm checksum trap)".
 
 # Verify the server is up.
 curl http://127.0.0.1:8409/healthz
@@ -249,9 +257,12 @@ Read the relevant contract before changing that area:
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
 - [CHANGELOG.md](CHANGELOG.md) for the main release overview; keep
   `[Unreleased]` current for notable changes.
-- [BUILD.md](BUILD.md) before changing the build cycle, profile flags, or
-  `run.sh` — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
-  cargo-leptos hot-reload, and compile-cost troubleshooting.
+- [BUILD.md](BUILD.md) before changing the build cycle, profile flags,
+  `run.sh`, or anything that builds the WASM bundle / SSR binary / release
+  artifacts — covers `./run.sh dev|build|serve|seed`, dev profile tuning,
+  cargo-leptos hot-reload, compile-cost troubleshooting, and the mandatory
+  **hydration build consistency** ("wasm checksum") rules + the
+  `scripts/release/verify-web-bundle.sh` release gate.
 - [TEST.md](TEST.md) before adding admin-UI tests or hydration playbooks, or
   before changing Leptos hydration, islands, shared UI primitives, router
   setup, or Cargo dependencies for an admin UI bug — covers the Leptos

@@ -9,16 +9,34 @@ use crate::admin::server_fns::layout::{
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
-    view! { <HealthIsland/> }
+    let snapshot: Resource<AdminHealthSnapshot> =
+        Resource::new_blocking(|| (), |()| async move {
+            load_health_snapshot().await.unwrap_or_default()
+        });
+
+    view! {
+        <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
+            {move || snapshot.get().map(|initial_snapshot| {
+                view! { <HealthIsland initial_snapshot=initial_snapshot/> }
+            })}
+        </Suspense>
+    }
 }
 
 #[island]
-fn HealthIsland() -> impl IntoView {
+fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
-    let snapshot = Resource::new(
-        move || media_revision.get(),
-        |_| async move { load_health_snapshot().await.unwrap_or_default() },
-    );
+    let snapshot = RwSignal::new(initial_snapshot);
+    let refreshed_snapshot: LocalResource<AdminHealthSnapshot> = LocalResource::new(move || {
+        let _ = media_revision.get();
+        async move { load_health_snapshot().await.unwrap_or_default() }
+    });
+
+    Effect::new(move |_| {
+        if let Some(next) = refreshed_snapshot.get() {
+            snapshot.set(next);
+        }
+    });
 
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
@@ -44,9 +62,7 @@ fn HealthIsland() -> impl IntoView {
             <p style="font-size:0.875rem;color:var(--color-muted);margin:0">
                 {tr(TextKey::HealthPersistedRunHelp)}
             </p>
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || snapshot.get().map(render_snapshot)}
-            </Suspense>
+            {move || render_snapshot(snapshot.get())}
         </div>
     }
 }

@@ -69,6 +69,15 @@ folders = ["./src/"]
 output-name = "ersatzrs-web"
 site-root = "target/site"
 site-pkg-dir = "pkg"
+# Pin content-hashing OFF deterministically. cargo-leptos can hash the wasm/js
+# filenames (writing `site/pkg/hash.txt`); when the WASM build and the running
+# SSR binary disagree about hashing, the server emits `/pkg/ersatzrs-web.<hash>.js`
+# URLs the bundle doesn't contain (or panics reading a missing hash.txt), and the
+# admin UI silently fails to hydrate. This has broken several releases. Pinning it
+# here (not just via the env var in release.yml) keeps the build and the runtime
+# default in agreement. The release gate `scripts/release/verify-web-bundle.sh`
+# boots the assembled bundle and fails if any /pkg asset 404s.
+hash-files = false
 assets-dir = "public"
 site-addr = "0.0.0.0:8409"
 reload-port = 3001

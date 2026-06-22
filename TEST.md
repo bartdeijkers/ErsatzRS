@@ -219,6 +219,37 @@ Workflow:
 3. Check browser console for `failed_to_cast_marker_node` or other hydration
    errors; any such error is a product bug in the affected island.
 
+### Whole-app island hydration smoke (release gate)
+
+`tests/e2e/island-hydration.spec.ts` visits every route that renders an
+`#[island]` and proves, per route, that island hydration ran to completion.
+This is the durable guard against the recurring class of regression where a
+shell-level island, a shared primitive, the router, or a Cargo dependency
+aborts hydration and silently kills the click handlers on otherwise-unrelated
+pages (e.g. the stop/delete buttons on `/channels`, refresh/row-select on
+`/playouts`). Run it before every release:
+
+```bash
+scripts/e2e/hydration-smoke.sh
+```
+
+The runner is self-contained: it builds the Leptos hydration assets, boots
+`ersatzrs-web` on a throwaway SQLite database (isolated `HOME`, never touches
+`~/.ersatzrs`), waits for `/healthz`, runs the spec, and tears everything down.
+An FFmpeg operator override (`~/.local/ffmpeg-8.1`, like `run.sh`) is used when
+present so startup skips the managed runtime download. Useful env knobs:
+`ERSATZRS_SKIP_LEPTOS_BUILD=1` (reuse existing assets), `ERSATZRS_E2E_KEEP_TEMP=1`
+(keep the temp DB/log), `ERSATZRS_E2E_PORT=NNNN`.
+
+Detection signals per route: `window.__ersatzrs_hydrated === true` (set in
+`crates/ersatzrs-web/src/lib.rs::hydrate` right after `hydrate_islands()`, so a
+marker-mismatch panic in any island leaves it unset), no uncaught page errors,
+no hydration-signature console errors, and the route did not fall through to the
+404 catch-all (`[data-not-found]`). The spec covers islands reachable without
+seeded data (list / add / settings / system / source routes); detail and editor
+routes that need a real `:id` belong in their own seeded specs. When you add a
+new island route, add it to the `ISLAND_ROUTES` table in the spec.
+
 Support page parity criteria are captured from the live ErsatzTV Legacy
 Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can
 seed the persisted health snapshot with `E2E_SEED_SUPPORT=1` when

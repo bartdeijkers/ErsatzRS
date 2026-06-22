@@ -136,3 +136,109 @@ at end of 2026-06-21 session (scratch >40 GiB), so the next build is cold.
 - `scripts/e2e/hydration-smoke.sh` — new runner
 - `TEST.md`, `scripts/e2e/README.md`, `CHANGELOG.md` — docs
 - (also pre-existing uncommitted: launcher/main.rs, host/bootstrap.rs from before)
+
+---
+
+# Day 2 findings (2026-06-22) — systemic island hydration failure
+
+**Badge bug: FIXED.** `badges.rs` `PlayoutWarningBadge`/`HealthBadge` converted
+from `#[island]` to plain `#[component]` (server-rendered, no hydration
+boundary). Root cause was an `#[island]` nested inside `<details>/<summary>`,
+which breaks the islands hydration walk. SSR confirmed: no more
+`data-component="…Badge"` wrappers, badge `data-*-badge` spans still present.
+
+**The gate then exposed a much larger, PRE-EXISTING problem.** With badges
+fixed: **13 routes pass, 43 fail.** Every failure is the same class —
+`A hydration error occurred … expected a marker node, but found this instead`
++ an `unreachable` wasm pageerror — and it is **fatal**: handlers never attach.
+
+Proven in a real browser (Playwright, `/tmp/probe3.cjs`): on `/channels`,
+clicking Delete does NOT open the dialog (overlay `display` stays `none`). So
+the original `/channels` report was NEVER actually fixed by the badge /
+StartupNotifications work; it is part of this systemic failure.
+
+**Discriminator (clear):** islands that render a **dynamic node list**
+(`collect_view`/`<For>`/Suspense list — table rows, `<option>` lists, the
+`LetterBar`) FAIL; islands with only static markup + reactive *attributes*
+(settings forms, empty lists) PASS. The 13 passing are settings/troubleshooting
+pages and pages whose lists are empty in the seed DB.
+
+**Not a Leptos version regression.** leptos has been 0.8.19 for 30+ commits
+(since mid-May). Latest 0.8.x IS 0.8.19 (next is 0.9.0-alpha — too risky). So
+no version-bump escape.
+
+**`Resource::new_blocking` is NOT a reliable fix.** TEST.md rule 3 says islands
+should own `Resource::new_blocking`; the failing list islands used non-blocking
+`Resource::new`. Converting ALL 42 admin `Resource::new(` → `new_blocking(`
+(done, in tree) did NOT clear the gate — still 13 pass / 43 fail, `/channels`
+still fatal in-browser. (A one-off channels-only build appeared to work, but
+that was an unreliable/stale-wasm artifact; the reliably-rebuilt state is
+broken.) Biggest single source: `LetterBar` (`letter_bar.rs:127`, 8 routes).
+
+**Conclusion:** this is a deep Leptos 0.8.19 islands hydration bug with
+dynamic-node content, latent until the gate caught it. It is NOT a quick fix and
+NOT safely releasable. Build-cycle guessing has not converged.
+
+**Open next steps to try (each needs a ~5-min wasm build to verify):**
+- Minimal repro: one island that renders `vec.into_iter().map(..).collect_view()`
+  vs `<For>` with keys — determine if `<For>`+keys emits correct markers where
+  `collect_view` does not. If so, the fix is `collect_view` → `<For>` in
+  `LetterBar`, `PagedTable` rows, and select-option lists (shared primitives →
+  fixes most routes at once).
+- Check the Leptos `islands` example's list rendering and copy it verbatim.
+- Inspect SSR markup of a working dynamic list (if any) vs a failing one for the
+  `<!>`/`<!--…-->` marker differences.
+- Consider whether `.into_any()` on per-row/cell views drops markers.
+
+**State of tree (branch docs/island-hydration-smoke-plan, uncommitted):**
+badges.rs (components), 21 admin files + channels/list.rs (Resource→new_blocking,
+UNVERIFIED — consider reverting), lib.rs/routes.rs (signals), spec/runner/docs.
+Gate currently RED (correctly). DO NOT cut a release — admin UI list pages have
+non-functional controls in the browser.
+
+---
+
+# Day 2 RESOLUTION (2026-06-22) — two distinct bugs
+
+The maintainer identified the real recurring **release breaker**: a **wasm
+checksum mismatch** (cargo-leptos `LEPTOS_HASH_FILES`/`hash.txt`). It is SEPARATE
+from the island-list hydration bug below.
+
+## Bug A — wasm checksum / build inconsistency — FIXED + GATED
+Release builds the WASM (`web-assets` job, `LEPTOS_HASH_FILES=false`) and the SSR
+binary (`binaries` job) separately; the binaries job never set `LEPTOS_HASH_FILES`,
+so the running server can reference `/pkg/*.<hash>.{js,wasm}` URLs the bundle
+lacks → no hydration. Fixes:
+- `crates/ersatzrs-web/Cargo.toml`: `hash-files = false` (deterministic).
+- `.github/workflows/release.yml`: `LEPTOS_HASH_FILES: "false"` on the binaries
+  job + a "Verify web bundle (wasm checksum gate)" step.
+- `scripts/release/verify-web-bundle.sh`: boots binary+assets, fails if any
+  `/pkg` asset 404s. Tested PASS (consistent) and FAIL (LEPTOS_HASH_FILES=true,
+  surfaced the leptos `failed to read hash file` panic).
+- Documented: BUILD.md, AGENTS.md, memory `project-wasm-checksum-hydration-consistency`.
+
+## Bug B — island-list hydration marker mismatch — STILL OPEN (pre-existing)
+With a CLEAN, CONSISTENT build (`cargo clean` + `cargo leptos build`, gate-verified
+consistent), the browser smoke is still **17 pass / 39 fail**. Islands that render
+a non-empty dynamic list fail with "expected a marker node"; `/channels` delete
+confirmed dead in-browser. This is the "app-wide island marker issue" the session
+log notes from 2026-05-22 — pre-existing, already in shipped releases.
+NONE of these fixed it (all reverted): `Resource::new` → `new_blocking`,
+`collect_view` → `<For>`, badges island → component. A MINIMAL repro island
+(static list / collect_view / collect_view-in-Suspense / reactive text /
+component-with-list) hydrated CLEANLY — so the trigger is something specific to
+the real list rendering.
+**Strongest untested lead:** `PagedTable` renders each cell via a
+`Box<dyn Fn(&Row) -> AnyView>` returning `.into_any()` (columns + row_actions);
+the probe variant testing `.into_any()` + `Box<dyn Fn>` lists was built but never
+observed (interrupted). Re-add that probe (`/dev/hydration`) and test
+`.into_any()`-in-list vs not. If that's it, the fix is in the shared `PagedTable`
+/ column-renderer primitive (fixes most of the 39 at once).
+
+## Final tree state (uncommitted, branch docs/island-hydration-smoke-plan)
+Kept (verified): checksum fix (Cargo.toml, release.yml, verify-web-bundle.sh),
+hydration smoke (spec + runner using the cargo-leptos binary), lib.rs flag,
+routes.rs `data-not-found`, docs (BUILD/AGENTS/TEST/README/CHANGELOG/plan/memory).
+Reverted (did not fix Bug B): all `new_blocking`, `<For>`, badge, and
+StartupNotifications code changes. Tree compiles (`cargo check -p ersatzrs-web
+--lib --features ssr`).

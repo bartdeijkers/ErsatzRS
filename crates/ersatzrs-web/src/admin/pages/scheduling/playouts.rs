@@ -27,68 +27,127 @@ const DETAIL_PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn PlayoutsPage() -> impl IntoView {
-    view! { <PlayoutsIsland/> }
+    let initial: Resource<(Vec<PlayoutListRow>, u64, bool)> =
+        Resource::new_blocking(
+            || (),
+            |()| async move {
+                let (rows, count, show_filler) = tokio::join!(
+                    list_playouts(String::new(), 0, LIST_PAGE_SIZE),
+                    count_playouts(),
+                    get_show_filler_pref(),
+                );
+                (
+                    rows.unwrap_or_default(),
+                    count.unwrap_or(0),
+                    show_filler.unwrap_or(false),
+                )
+            },
+        );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_rows, initial_count, initial_show_filler)| {
+                    view! {
+                        <PlayoutsIsland
+                            initial_rows=initial_rows
+                            initial_count=initial_count
+                            initial_show_filler=initial_show_filler
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn PlayoutsIsland() -> impl IntoView {
+fn PlayoutsIsland(
+    initial_rows: Vec<PlayoutListRow>,
+    initial_count: u64,
+    initial_show_filler: bool,
+) -> impl IntoView {
     // -- list state --
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let add_menu_open = RwSignal::new(false);
 
-    let list_rows: Resource<Vec<PlayoutListRow>> = Resource::new(
-        move || (search.get(), page.get()),
-        |(query, page)| async move {
+    let current_list_rows = RwSignal::new(initial_rows);
+    let current_list_count = RwSignal::new(initial_count);
+    let list_rows: LocalResource<Vec<PlayoutListRow>> = LocalResource::new(move || {
+        let query = search.get();
+        let page = page.get();
+        async move {
             list_playouts(query, page, LIST_PAGE_SIZE)
                 .await
                 .unwrap_or_default()
-        },
-    );
-    let list_count: Resource<u64> = Resource::new(
-        || (),
-        |()| async move { count_playouts().await.unwrap_or(0) },
-    );
-    let list_total = Signal::derive(move || list_count.get());
+        }
+    });
+    let list_count: LocalResource<u64> =
+        LocalResource::new(|| async move { count_playouts().await.unwrap_or(0) });
+    Effect::new(move |_| {
+        if let Some(rows) = list_rows.get() {
+            current_list_rows.set(rows);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(count) = list_count.get() {
+            current_list_count.set(count);
+        }
+    });
+    let list_total = Signal::derive(move || Some(current_list_count.get()));
 
     // -- selection / detail state --
     let selected_id: RwSignal<Option<i64>> = RwSignal::new(None);
     let build_message = RwSignal::new(String::new());
-    let show_filler = RwSignal::new(false);
+    let show_filler = RwSignal::new(initial_show_filler);
     let detail_page = RwSignal::new(0u32);
 
-    // Seed the persisted Show Filler preference once.
-    let filler_pref: Resource<bool> = Resource::new_blocking(
-        || (),
-        |()| async move { get_show_filler_pref().await.unwrap_or(false) },
-    );
+    // Refresh the persisted Show Filler preference after hydration.
+    let filler_pref: LocalResource<bool> =
+        LocalResource::new(|| async move { get_show_filler_pref().await.unwrap_or(false) });
     Effect::new(move |_| {
         if let Some(value) = filler_pref.get() {
             show_filler.set(value);
         }
     });
 
-    let detail_rows: Resource<Vec<PlayoutDetailItem>> = Resource::new(
-        move || (selected_id.get(), show_filler.get(), detail_page.get()),
-        |(id, filler, page)| async move {
+    let current_detail_rows = RwSignal::new(Vec::<PlayoutDetailItem>::new());
+    let current_detail_count = RwSignal::new(0u64);
+    let detail_rows: LocalResource<Vec<PlayoutDetailItem>> = LocalResource::new(move || {
+        let id = selected_id.get();
+        let filler = show_filler.get();
+        let page = detail_page.get();
+        async move {
             match id {
                 Some(id) => list_playout_detail_items(id, filler, page, DETAIL_PAGE_SIZE)
                     .await
                     .unwrap_or_default(),
                 None => Vec::new(),
             }
-        },
-    );
-    let detail_count: Resource<u64> = Resource::new(
-        move || (selected_id.get(), show_filler.get()),
-        |(id, filler)| async move {
+        }
+    });
+    let detail_count: LocalResource<u64> = LocalResource::new(move || {
+        let id = selected_id.get();
+        let filler = show_filler.get();
+        async move {
             match id {
                 Some(id) => count_playout_detail_items(id, filler).await.unwrap_or(0),
                 None => 0,
             }
-        },
-    );
-    let detail_total = Signal::derive(move || detail_count.get());
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = detail_rows.get() {
+            current_detail_rows.set(rows);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(count) = detail_count.get() {
+            current_detail_count.set(count);
+        }
+    });
+    let detail_total = Signal::derive(move || Some(current_detail_count.get()));
 
     // -- lock polling (mirrors libraries-page IEntityLocker poll) --
     let locked: RwSignal<Vec<i64>> = RwSignal::new(Vec::new());
@@ -299,38 +358,33 @@ fn PlayoutsIsland() -> impl IntoView {
                             </tr>
                         </thead>
                         <tbody>
-                            <Suspense fallback=move || view! {
-                                <tr><td colspan="4" class=style::empty>{tr(TextKey::Loading)}</td></tr>
-                            }>
-                                {move || {
-                                    list_rows.get().map(|rows| {
-                                        if rows.is_empty() {
-                                            return view! {
-                                                <tr><td colspan="4" class=style::empty>
-                                                    {tr(TextKey::NoPlayoutsFound)}
-                                                </td></tr>
-                                            }.into_any();
-                                        }
-                                        rows.into_iter().map(|row| {
-                                            playout_row(
-                                                row,
-                                                selected_id,
-                                                locked,
-                                                select_row,
-                                                reset_action,
-                                                delete_target,
-                                                delete_open,
-                                                schedule_target,
-                                                schedule_minutes,
-                                                schedule_open,
-                                                json_target,
-                                                json_value,
-                                                json_open,
-                                            )
-                                        }).collect_view().into_any()
-                                    })
-                                }}
-                            </Suspense>
+                            {move || {
+                                let rows = current_list_rows.get();
+                                if rows.is_empty() {
+                                    return view! {
+                                        <tr><td colspan="4" class=style::empty>
+                                            {tr(TextKey::NoPlayoutsFound)}
+                                        </td></tr>
+                                    }.into_any();
+                                }
+                                rows.into_iter().map(|row| {
+                                    playout_row(
+                                        row,
+                                        selected_id,
+                                        locked,
+                                        select_row,
+                                        reset_action,
+                                        delete_target,
+                                        delete_open,
+                                        schedule_target,
+                                        schedule_minutes,
+                                        schedule_open,
+                                        json_target,
+                                        json_value,
+                                        json_open,
+                                    )
+                                }).collect_view().into_any()
+                            }}
                         </tbody>
                     </table>
                 </div>
@@ -388,24 +442,19 @@ fn PlayoutsIsland() -> impl IntoView {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <Suspense fallback=move || view! {
-                                        <tr><td colspan="5" class=style::empty>{tr(TextKey::Loading)}</td></tr>
-                                    }>
-                                        {move || {
-                                            detail_rows.get().map(|items| {
-                                                if items.is_empty() {
-                                                    return view! {
-                                                        <tr><td colspan="5" class=style::empty>
-                                                            {tr(TextKey::NoItems)}
-                                                        </td></tr>
-                                                    }.into_any();
-                                                }
-                                                items.into_iter().map(|item| {
-                                                    detail_row(item, context_title, context_action)
-                                                }).collect_view().into_any()
-                                            })
-                                        }}
-                                    </Suspense>
+                                    {move || {
+                                        let items = current_detail_rows.get();
+                                        if items.is_empty() {
+                                            return view! {
+                                                <tr><td colspan="5" class=style::empty>
+                                                    {tr(TextKey::NoItems)}
+                                                </td></tr>
+                                            }.into_any();
+                                        }
+                                        items.into_iter().map(|item| {
+                                            detail_row(item, context_title, context_action)
+                                        }).collect_view().into_any()
+                                    }}
                                 </tbody>
                             </table>
                         </div>
