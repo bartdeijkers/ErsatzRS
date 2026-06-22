@@ -1,7 +1,6 @@
 #![allow(clippy::too_many_lines, dead_code)]
 use leptos::prelude::*;
-use leptos_router::hooks::{use_navigate, use_params_map};
-use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_params_map;
 
 use crate::admin::i18n::{
     media_kind_label, media_source_error_message, provider_libraries_title, provider_path_label,
@@ -17,6 +16,16 @@ use crate::admin::ui::primitives::dialog::DeleteDialog;
 use super::jellyfin::PathsEditor;
 
 stylance::import_crate_style!(style, "src/admin/pages/media_sources/shared.module.css");
+
+#[cfg(target_arch = "wasm32")]
+fn set_browser_location(path: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().set_href(path);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn set_browser_location(_path: &str) {}
 
 // ─── Sources list ─────────────────────────────────────────────────────────────
 
@@ -151,12 +160,10 @@ pub fn PlexSignInIsland() -> impl IntoView {
     }
 
     let state: RwSignal<State> = RwSignal::new(State::Idle);
-    let navigate = use_navigate();
 
     let start_action = Action::new(|()| async move { start_plex_pin_flow().await });
 
     Effect::new(move |_| {
-        let nav = navigate.clone();
         match start_action.value().get() {
             Some(Ok((pin_id, auth_url))) => {
                 let pin = pin_id.clone();
@@ -169,7 +176,7 @@ pub fn PlexSignInIsland() -> impl IntoView {
                         match check_plex_pin(pin.clone()).await {
                             Ok(Some(_token)) => {
                                 state.set(State::Done);
-                                nav("/media/sources/plex", NavigateOptions::default());
+                                set_browser_location("/media/sources/plex");
                                 break;
                             }
                             Ok(None) => {}

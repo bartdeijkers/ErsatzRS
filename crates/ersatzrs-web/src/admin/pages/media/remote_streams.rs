@@ -48,10 +48,40 @@ pub fn RemoteStreamsPage() -> impl IntoView {
             .unwrap_or(1)
             .saturating_sub(1)
     });
+    let initial_query = query.clone();
+    let initial: Resource<((Vec<MediaCardRow>, u64), crate::admin::server_fns::media_browser::LetterPageMap)> =
+        Resource::new_blocking(
+            move || (initial_query.clone(), page),
+            move |(query, page)| async move {
+                let (rows, page_map) = tokio::join!(
+                    list_remote_streams(query.clone(), page, PAGE_SIZE),
+                    remote_stream_page_map(query, PAGE_SIZE),
+                );
+                (
+                    rows.unwrap_or_default(),
+                    page_map.unwrap_or_default(),
+                )
+            },
+        );
 
     view! {
         <RemoteStreamsNoScriptFallback query=query.clone() page=page/>
-        <RemoteStreamsIsland query=query page=page/>
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let query = query.clone();
+                initial.get().map(move |((initial_rows, initial_total), initial_page_map)| {
+                    view! {
+                        <RemoteStreamsIsland
+                            query=query.clone()
+                            page=page
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                            initial_page_map=initial_page_map
+                        />
+                    }
+                })
+            }}
+        </Suspense>
     }
 }
 
@@ -124,27 +154,48 @@ fn remote_stream_rows_for_noscript(_query: String, _page: u32) -> (Vec<MediaCard
 }
 
 #[island]
-fn RemoteStreamsIsland(query: String, page: u32) -> impl IntoView {
+fn RemoteStreamsIsland(
+    query: String,
+    page: u32,
+    initial_rows: Vec<MediaCardRow>,
+    initial_total: u64,
+    initial_page_map: crate::admin::server_fns::media_browser::LetterPageMap,
+) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
+    let current_rows = RwSignal::new((initial_rows, initial_total));
+    let current_page_map = RwSignal::new(initial_page_map);
     let q_for_rows = query.clone();
-    let rows: Resource<(Vec<MediaCardRow>, u64)> = Resource::new_blocking(
-        move || (q_for_rows.clone(), page, media_revision.get()),
-        move |(q, p, _)| async move {
+    let rows: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
+        let q = q_for_rows.clone();
+        let p = page;
+        let _ = media_revision.get();
+        async move {
             list_remote_streams(q, p, PAGE_SIZE)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_rows) = rows.get() {
+            current_rows.set(next_rows);
+        }
+    });
 
     let q_for_map = query.clone();
-    let page_map = Resource::new_blocking(
-        move || (q_for_map.clone(), media_revision.get()),
-        move |(q, _)| async move {
+    let page_map = LocalResource::new(move || {
+        let q = q_for_map.clone();
+        let _ = media_revision.get();
+        async move {
             remote_stream_page_map(q, PAGE_SIZE)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_page_map) = page_map.get() {
+            current_page_map.set(next_page_map);
+        }
+    });
 
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
@@ -163,44 +214,24 @@ fn RemoteStreamsIsland(query: String, page: u32) -> impl IntoView {
     });
 
     view! {
-        <Suspense fallback=move || view! {
-            <div class=style::page>
-                <div class=style::action_bar>
-                    <div class=style::action_row>
-                        <span class=style::query_label>{tr(TextKey::Loading)}</span>
-                    </div>
-                </div>
-                <div class=style::content>
-                    <h1 class=style::title>{tr(TextKey::RemoteStreams)}</h1>
-                    <div class=style::divider></div>
-                    <p class=style::empty>{tr(TextKey::Loading)}</p>
-                </div>
-            </div>
-        }>
-            {move || {
-                let query_for_view = query.clone();
-                rows.get().map(|(items, total)| {
-                    let present: Signal<Option<HashSet<char>>> = Signal::derive({
-                        let items = items.clone();
-                        move || Some(items.iter().map(|r| letter_bucket(&r.sort_title)).collect())
-                    });
-                    let jump = page_map.get().map(|map| LetterJump {
-                        base_uri: BASE_PATH.to_owned(),
-                        query: query_for_view.clone(),
-                        page_map: map,
-                    });
+        {move || {
+            let query_for_view = query.clone();
+            let (items, total) = current_rows.get();
+            let present: Signal<Option<HashSet<char>>> = Signal::derive({
+                let items = items.clone();
+                move || Some(items.iter().map(|r| letter_bucket(&r.sort_title)).collect())
+            });
+            let jump = LetterJump {
+                base_uri: BASE_PATH.to_owned(),
+                query: query_for_view.clone(),
+                page_map: current_page_map.get(),
+            };
 
-                    view! {
-                        {match jump {
-                            Some(jump) => view! { <LetterBar present=present jump=jump/> }.into_any(),
-                            None => view! { <LetterBar present=present/> }.into_any(),
-                        }}
-                        <RemoteStreamsContent query=query_for_view page=page rows=items total=total/>
-                    }
-                    .into_any()
-                })
-            }}
-        </Suspense>
+            view! {
+                <LetterBar present=present jump=jump/>
+                <RemoteStreamsContent query=query_for_view page=page rows=items total=total/>
+            }
+        }}
     }
 }
 

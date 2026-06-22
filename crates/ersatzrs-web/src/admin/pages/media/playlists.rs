@@ -12,7 +12,7 @@ use crate::admin::server_fns::media_browser::{
     create_playlist, create_playlist_group, delete_playlist, delete_playlist_group,
     get_playlist_editor, get_playlist_editor_options, get_playlist_page, preview_playlist_playout,
     PlaylistEditorForm, PlaylistEditorOptions, PlaylistItemForm, PlaylistItemOption,
-    PlaylistPreviewRow, PlaylistRow,
+    PlaylistPageData, PlaylistPreviewRow, PlaylistRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -43,15 +43,29 @@ const PLAYBACK_ORDER_SEASON_EPISODE: i32 = 6;
 
 #[component]
 pub fn PlaylistsPage() -> impl IntoView {
-    view! { <PlaylistsIsland/> }
+    let initial: Resource<PlaylistPageData> =
+        Resource::new_blocking(|| (), |()| async { get_playlist_page().await.unwrap_or_default() });
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|initial_page| {
+                    view! { <PlaylistsIsland initial_page=initial_page/> }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn PlaylistsIsland() -> impl IntoView {
-    let data = Resource::new(
-        || (),
-        |()| async { get_playlist_page().await.unwrap_or_default() },
-    );
+fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
+    let current_page = RwSignal::new(initial_page);
+    let data = LocalResource::new(|| async { get_playlist_page().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(page_data) = data.get() {
+            current_page.set(page_data);
+        }
+    });
     let group_name = RwSignal::new(String::new());
     let playlist_name = RwSignal::new(String::new());
     let selected_group = RwSignal::new(0_i64);
@@ -171,8 +185,9 @@ fn PlaylistsIsland() -> impl IntoView {
             <section class=style::playlist_section>
                 <h2 class=style::page_title>{tr(TextKey::Playlists)}</h2>
                 <div class=style::divider/>
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || data.get().map(|page| {
+                {move || {
+                    let page = current_page.get();
+                    {
                         if selected_group.get_untracked() == 0 {
                             if let Some(first) = page.groups.first() {
                                 selected_group.set(first.id);
@@ -263,8 +278,8 @@ fn PlaylistsIsland() -> impl IntoView {
                                 </div>
                             </div>
                         }
-                    })}
-                </Suspense>
+                    }
+                }}
             </section>
             <DeleteDialog
                 open=delete_open

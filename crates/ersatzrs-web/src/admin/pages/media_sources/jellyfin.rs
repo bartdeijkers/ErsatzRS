@@ -135,11 +135,6 @@ fn JellyfinSourcesIsland() -> impl IntoView {
 
 #[component]
 pub fn JellyfinConnectionPage() -> impl IntoView {
-    view! { <JellyfinConnectionEditorIsland/> }
-}
-
-#[island]
-fn JellyfinConnectionEditorIsland() -> impl IntoView {
     let initial: Resource<ConnectionForm> = Resource::new_blocking(
         || (),
         |()| async { get_jellyfin_connection().await.unwrap_or_default() },
@@ -148,12 +143,17 @@ fn JellyfinConnectionEditorIsland() -> impl IntoView {
     view! {
         <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
             {move || {
-                initial.get().map(|form| view! {
-                    <JellyfinConnectionEditorForm initial_form=form/>
+                initial.get().map(|initial_form| {
+                    view! { <JellyfinConnectionEditorIsland initial_form=initial_form/> }
                 })
             }}
         </Suspense>
     }
+}
+
+#[island]
+fn JellyfinConnectionEditorIsland(initial_form: ConnectionForm) -> impl IntoView {
+    view! { <JellyfinConnectionEditorForm initial_form=initial_form/> }
 }
 
 #[component]
