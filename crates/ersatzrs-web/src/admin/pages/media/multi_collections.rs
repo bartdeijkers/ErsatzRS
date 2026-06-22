@@ -263,44 +263,53 @@ fn MultiCollectionsIsland(
 pub fn MultiCollectionEditorPage() -> impl IntoView {
     let params = use_params_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
-    view! { <MultiCollectionEditorIsland id/> }
+    let default_name = tr(TextKey::NewMultiCollection).to_string();
+    let initial: Resource<(MultiCollectionForm, MultiCollectionEditorOptions)> =
+        Resource::new_blocking(
+            move || (id, default_name.clone()),
+            move |(id, default_name)| async move {
+                let form = if id == 0 {
+                    MultiCollectionForm {
+                        name: default_name,
+                        ..MultiCollectionForm::default()
+                    }
+                } else {
+                    get_multi_collection(id)
+                        .await
+                        .unwrap_or_default()
+                        .unwrap_or_default()
+                };
+                let options = get_multi_collection_editor_options()
+                    .await
+                    .unwrap_or_default();
+                (form, options)
+            },
+        );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_form, editor_options)| {
+                    view! {
+                        <MultiCollectionEditorIsland
+                            initial_form=initial_form
+                            editor_options=editor_options
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
-    let route_id = move || (id != 0).then_some(id);
-
-    let initial: Resource<MultiCollectionForm> = Resource::new(route_id, |id| async move {
-        match id {
-            Some(id) => get_multi_collection(id)
-                .await
-                .unwrap_or_default()
-                .unwrap_or_default(),
-            None => MultiCollectionForm {
-                name: tr(TextKey::NewMultiCollection).to_string(),
-                ..MultiCollectionForm::default()
-            },
-        }
-    });
-    let options: Resource<MultiCollectionEditorOptions> = Resource::new(
-        || (),
-        |()| async {
-            get_multi_collection_editor_options()
-                .await
-                .unwrap_or_default()
-        },
-    );
-
-    let id_signal = RwSignal::new(0_i64);
-    let name = RwSignal::new(String::new());
-    let items = RwSignal::new(Vec::<MultiCollectionItemForm>::new());
-    Effect::new(move |_| {
-        if let Some(form) = initial.get() {
-            id_signal.set(form.id);
-            name.set(form.name);
-            items.set(form.items);
-        }
-    });
+fn MultiCollectionEditorIsland(
+    initial_form: MultiCollectionForm,
+    editor_options: MultiCollectionEditorOptions,
+) -> impl IntoView {
+    let id_signal = RwSignal::new(initial_form.id);
+    let name = RwSignal::new(initial_form.name);
+    let items = RwSignal::new(initial_form.items);
 
     let selected_collection = RwSignal::new(0_i64);
     let selected_smart_collection = RwSignal::new(0_i64);
@@ -416,10 +425,9 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                     error=Some(name_err_signal)
                 />
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        options.get().map(|options| {
-                            view! {
+                {
+                    let options = editor_options.clone();
+                    view! {
                                 <div class=style::field_group>
                                     <label class=style::field_label>{tr(TextKey::Collections)}</label>
                                     <select
@@ -509,10 +517,8 @@ fn MultiCollectionEditorIsland(id: i64) -> impl IntoView {
                                         {tr(TextKey::AddSmartCollection)}
                                     </button>
                                 </div>
-                            }
-                        })
-                    }}
-                </Suspense>
+                    }
+                }
 
                 <section>
                     <h2 class=style::section_title>

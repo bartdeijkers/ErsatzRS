@@ -293,18 +293,12 @@ pub fn RerunCollectionEditorPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <RerunCollectionEditorIsland id initial_error=error/> }
-}
-
-#[island]
-fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     let new_collection_name = tr(TextKey::NewCollection).to_owned();
-    let initial: Resource<RerunCollectionForm> = Resource::new_blocking(
-        move || id,
-        move |id| {
-            let new_collection_name = new_collection_name.clone();
-            async move {
-                if id == 0 {
+    let initial: Resource<(RerunCollectionForm, RerunCollectionEditorOptions)> =
+        Resource::new_blocking(
+            move || (id, new_collection_name.clone()),
+            move |(id, new_collection_name)| async move {
+                let form = if id == 0 {
                     RerunCollectionForm {
                         name: new_collection_name,
                         collection_type: COLLECTION_TYPE_COLLECTION,
@@ -317,64 +311,74 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                         .await
                         .unwrap_or_default()
                         .unwrap_or_default()
-                }
-            }
-        },
-    );
-    let options: Resource<RerunCollectionEditorOptions> = Resource::new_blocking(
-        || (),
-        |()| async {
-            get_rerun_collection_editor_options()
-                .await
-                .unwrap_or_default()
-        },
-    );
+                };
+                let options = get_rerun_collection_editor_options()
+                    .await
+                    .unwrap_or_default();
+                (form, options)
+            },
+        );
 
-    let form_id = RwSignal::new(id);
-    let name = RwSignal::new(String::new());
-    let collection_type = RwSignal::new(COLLECTION_TYPE_COLLECTION);
-    let collection_id = RwSignal::new(String::new());
-    let media_item_id = RwSignal::new(String::new());
-    let multi_collection_id = RwSignal::new(String::new());
-    let smart_collection_id = RwSignal::new(String::new());
-    let first_run_playback_order = RwSignal::new(PLAYBACK_ORDER_CHRONOLOGICAL);
-    let rerun_playback_order = RwSignal::new(PLAYBACK_ORDER_CHRONOLOGICAL);
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_form, editor_options)| {
+                    view! {
+                        <RerunCollectionEditorIsland
+                            initial_error=error.clone()
+                            initial_form=initial_form
+                            editor_options=editor_options
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
+}
 
-    Effect::new(move |_| {
-        if let Some(form) = initial.get() {
-            form_id.set(form.id);
-            name.set(form.name);
-            collection_type.set(form.collection_type);
-            collection_id.set(
-                form.collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            media_item_id.set(
-                form.media_item_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            multi_collection_id.set(
-                form.multi_collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            smart_collection_id.set(
-                form.smart_collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            first_run_playback_order.set(default_playback_order(
-                form.first_run_playback_order,
-                form.collection_type,
-            ));
-            rerun_playback_order.set(default_playback_order(
-                form.rerun_playback_order,
-                form.collection_type,
-            ));
-        }
-    });
+#[island]
+fn RerunCollectionEditorIsland(
+    initial_error: String,
+    initial_form: RerunCollectionForm,
+    editor_options: RerunCollectionEditorOptions,
+) -> impl IntoView {
+    let initial_collection_type = initial_form.collection_type;
+    let form_id = RwSignal::new(initial_form.id);
+    let name = RwSignal::new(initial_form.name);
+    let collection_type = RwSignal::new(initial_collection_type);
+    let collection_id = RwSignal::new(
+        initial_form
+            .collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let media_item_id = RwSignal::new(
+        initial_form
+            .media_item_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let multi_collection_id = RwSignal::new(
+        initial_form
+            .multi_collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let smart_collection_id = RwSignal::new(
+        initial_form
+            .smart_collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let first_run_playback_order = RwSignal::new(default_playback_order(
+        initial_form.first_run_playback_order,
+        initial_collection_type,
+    ));
+    let rerun_playback_order = RwSignal::new(default_playback_order(
+        initial_form.rerun_playback_order,
+        initial_collection_type,
+    ));
 
     let error_message = RwSignal::new(initial_error);
     let save_action = Action::new(|form: &RerunCollectionForm| {
@@ -429,7 +433,7 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                         }
                     >
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                        <span>{if id == 0 { tr(TextKey::AddRerunCollection) } else { tr(TextKey::SaveRerunCollection) }}</span>
+                        <span>{if form_id.get_untracked() == 0 { tr(TextKey::AddRerunCollection) } else { tr(TextKey::SaveRerunCollection) }}</span>
                     </button>
                 </div>
                 <section class=style::editor>
@@ -470,10 +474,9 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                             <option value=COLLECTION_TYPE_PLAYLIST>{tr(TextKey::Playlist)}</option>
                         </select>
                     </label>
-                    <Suspense fallback=move || view! { <div/> }>
-                        {move || {
-                            options.get().map(|options| {
-                                view! {
+                    {
+                        let options = editor_options.clone();
+                        view! {
                                     <TargetSelect
                                         label=TextKey::Collection
                                         name="collection_id"
@@ -516,10 +519,8 @@ fn RerunCollectionEditorIsland(id: i64, initial_error: String) -> impl IntoView 
                                         value=media_item_id
                                         visible=Signal::derive(move || collection_type.get() == COLLECTION_TYPE_ARTIST)
                                     />
-                                }
-                            })
-                        }}
-                    </Suspense>
+                        }
+                    }
                     <PlaybackOrderSelect
                         label=TextKey::FirstRunPlaybackOrder
                         name="first_run_playback_order"
