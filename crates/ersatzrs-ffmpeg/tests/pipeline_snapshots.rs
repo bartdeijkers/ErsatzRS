@@ -502,6 +502,7 @@ fn software_pipeline_fmp4_hls_uses_fragmented_mp4_movflags() {
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
         segment_options: None,
         is_first_transcode: true,
+        discontinuity: false,
         troubleshooting: false,
     });
 
@@ -965,6 +966,7 @@ fn software_pipeline_hls_snapshot() {
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
         segment_options: None,
         is_first_transcode: true,
+        discontinuity: false,
         troubleshooting: false,
     });
 
@@ -986,6 +988,7 @@ fn software_pipeline_hls_time_limit_snapshot() {
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
         segment_options: None,
         is_first_transcode: true,
+        discontinuity: false,
         troubleshooting: true,
     });
 
@@ -1873,6 +1876,7 @@ fn qsv_pipeline_hls_snapshot() {
         playlist_path: "/tmp/channel-1/index.m3u8".to_owned(),
         segment_options: None,
         is_first_transcode: true,
+        discontinuity: false,
         troubleshooting: false,
     });
 

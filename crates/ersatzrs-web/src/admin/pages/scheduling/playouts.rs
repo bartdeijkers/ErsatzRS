@@ -27,22 +27,21 @@ const DETAIL_PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn PlayoutsPage() -> impl IntoView {
-    let initial: Resource<(Vec<PlayoutListRow>, u64, bool)> =
-        Resource::new_blocking(
-            || (),
-            |()| async move {
-                let (rows, count, show_filler) = tokio::join!(
-                    list_playouts(String::new(), 0, LIST_PAGE_SIZE),
-                    count_playouts(),
-                    get_show_filler_pref(),
-                );
-                (
-                    rows.unwrap_or_default(),
-                    count.unwrap_or(0),
-                    show_filler.unwrap_or(false),
-                )
-            },
-        );
+    let initial: Resource<(Vec<PlayoutListRow>, u64, bool)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let (rows, count, show_filler) = tokio::join!(
+                list_playouts(String::new(), 0, LIST_PAGE_SIZE),
+                count_playouts(),
+                get_show_filler_pref(),
+            );
+            (
+                rows.unwrap_or_default(),
+                count.unwrap_or(0),
+                show_filler.unwrap_or(false),
+            )
+        },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>

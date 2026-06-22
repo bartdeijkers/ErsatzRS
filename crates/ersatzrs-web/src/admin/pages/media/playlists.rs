@@ -43,8 +43,10 @@ const PLAYBACK_ORDER_SEASON_EPISODE: i32 = 6;
 
 #[component]
 pub fn PlaylistsPage() -> impl IntoView {
-    let initial: Resource<PlaylistPageData> =
-        Resource::new_blocking(|| (), |()| async { get_playlist_page().await.unwrap_or_default() });
+    let initial: Resource<PlaylistPageData> = Resource::new_blocking(
+        || (),
+        |()| async { get_playlist_page().await.unwrap_or_default() },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>

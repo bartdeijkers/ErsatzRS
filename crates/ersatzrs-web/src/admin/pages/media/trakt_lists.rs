@@ -38,9 +38,7 @@ pub fn TraktListsPage() -> impl IntoView {
         || (),
         |()| async {
             let page_size = get_trakt_lists_page_size().await.unwrap_or(10);
-            let rows = list_trakt_lists(0, page_size)
-                .await
-                .unwrap_or_default();
+            let rows = list_trakt_lists(0, page_size).await.unwrap_or_default();
             (page_size, rows)
         },
     );

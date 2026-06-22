@@ -545,10 +545,118 @@ impl ersatzrs_ffmpeg::FfmpegRuntimeValidator for StartupFfmpegRuntimeValidator {
     }
 }
 
+fn managed_runtime_source(report: &ersatzrs_ffmpeg::FfmpegRuntimeReport) -> bool {
+    matches!(
+        report.acquisition.source,
+        ersatzrs_ffmpeg::FfmpegRuntimeSource::Managed
+            | ersatzrs_ffmpeg::FfmpegRuntimeSource::Downloaded
+    )
+}
+
+#[cfg(windows)]
+fn colocate_managed_ffmpeg_runtime(
+    report: &mut ersatzrs_ffmpeg::FfmpegRuntimeReport,
+) -> io::Result<()> {
+    if !managed_runtime_source(report) {
+        return Ok(());
+    }
+
+    let Some(destination) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+    else {
+        return Ok(());
+    };
+
+    if let Some((ffmpeg_path, ffprobe_path)) = copy_runtime_tools_to_directory(
+        Path::new(&report.ffmpeg.path),
+        Path::new(&report.ffprobe.path),
+        &destination,
+    )? {
+        report.ffmpeg.path = ffmpeg_path.to_string_lossy().into_owned();
+        report.ffprobe.path = ffprobe_path.to_string_lossy().into_owned();
+    }
+
+    Ok(())
+}
+
+#[cfg(any(windows, test))]
+fn copy_runtime_tools_to_directory(
+    ffmpeg_path: &Path,
+    ffprobe_path: &Path,
+    destination: &Path,
+) -> io::Result<Option<(PathBuf, PathBuf)>> {
+    let Some(source_dir) = ffmpeg_path.parent() else {
+        return Ok(None);
+    };
+    let (Some(ffmpeg_file), Some(ffprobe_file)) =
+        (ffmpeg_path.file_name(), ffprobe_path.file_name())
+    else {
+        return Ok(None);
+    };
+
+    std::fs::create_dir_all(destination)?;
+    if source_dir != destination {
+        for entry in std::fs::read_dir(source_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                std::fs::copy(entry.path(), destination.join(entry.file_name()))?;
+            }
+        }
+    }
+
+    let copied_ffmpeg = destination.join(ffmpeg_file);
+    let copied_ffprobe = destination.join(ffprobe_file);
+    if copied_ffmpeg.is_file() && copied_ffprobe.is_file() {
+        Ok(Some((copied_ffmpeg, copied_ffprobe)))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn persist_managed_ffmpeg_runtime_paths(
+    pool: &DbPool,
+    report: &ersatzrs_ffmpeg::FfmpegRuntimeReport,
+) -> ersatzrs_core::repositories::Result<()> {
+    let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    persist_managed_ffmpeg_runtime_paths_to_repo(&repositories.config, report).await
+}
+
+async fn persist_managed_ffmpeg_runtime_paths_to_repo(
+    repository: &dyn ConfigRepository,
+    report: &ersatzrs_ffmpeg::FfmpegRuntimeReport,
+) -> ersatzrs_core::repositories::Result<()> {
+    if !managed_runtime_source(report) {
+        return Ok(());
+    }
+
+    repository
+        .set(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, &report.ffmpeg.path)
+        .await?;
+    repository
+        .set(
+            ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH,
+            &report.ffprobe.path,
+        )
+        .await?;
+
+    Ok(())
+}
+
 async fn finish_startup_ffmpeg_runtime(
     pool: &DbPool,
     mut report: ersatzrs_ffmpeg::FfmpegRuntimeReport,
 ) -> ersatzrs_ffmpeg::FfmpegRuntimeReport {
+    #[cfg(not(windows))]
+    let _ = &mut report;
+    #[cfg(windows)]
+    if let Err(error) = colocate_managed_ffmpeg_runtime(&mut report) {
+        tracing::warn!(%error, "failed to copy managed FFmpeg runtime next to executable");
+    }
+    if let Err(error) = persist_managed_ffmpeg_runtime_paths(pool, &report).await {
+        tracing::warn!(%error, "failed to persist managed FFmpeg runtime paths");
+    }
+
     ersatzrs_ffmpeg::set_resolved_ffmpeg_path(report.ffmpeg.path.clone());
     ersatzrs_ffmpeg::set_resolved_ffprobe_path(report.ffprobe.path.clone());
 
@@ -776,6 +884,82 @@ mod tests {
                 .insert(key.to_owned(), value.to_owned());
             Ok(())
         }
+    }
+
+    #[test]
+    fn copy_runtime_tools_to_directory_copies_companion_files() {
+        let source = tempfile::tempdir().expect("source runtime");
+        let destination = tempfile::tempdir().expect("release dir");
+        std::fs::write(source.path().join("ffmpeg.exe"), b"ffmpeg").expect("write ffmpeg");
+        std::fs::write(source.path().join("ffprobe.exe"), b"ffprobe").expect("write ffprobe");
+        std::fs::write(source.path().join("avcodec.dll"), b"dll").expect("write dll");
+
+        let copied = copy_runtime_tools_to_directory(
+            &source.path().join("ffmpeg.exe"),
+            &source.path().join("ffprobe.exe"),
+            destination.path(),
+        )
+        .expect("copy runtime")
+        .expect("copied paths");
+
+        assert_eq!(copied.0, destination.path().join("ffmpeg.exe"));
+        assert_eq!(copied.1, destination.path().join("ffprobe.exe"));
+        assert_eq!(
+            std::fs::read(destination.path().join("avcodec.dll")).expect("read dll"),
+            b"dll"
+        );
+    }
+
+    #[tokio::test]
+    async fn managed_ffmpeg_runtime_paths_are_persisted_to_config() {
+        let repo = TestConfigRepository::default();
+        let mut report = ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests();
+        report.acquisition.source = ersatzrs_ffmpeg::FfmpegRuntimeSource::Downloaded;
+        report.ffmpeg.path = r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffmpeg.exe".to_owned();
+        report.ffprobe.path = r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffprobe.exe".to_owned();
+
+        persist_managed_ffmpeg_runtime_paths_to_repo(&repo, &report)
+            .await
+            .expect("persist paths");
+
+        assert_eq!(
+            repo.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
+                .await
+                .expect("ffmpeg path")
+                .as_deref(),
+            Some(r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffmpeg.exe")
+        );
+        assert_eq!(
+            repo.get(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
+                .await
+                .expect("ffprobe path")
+                .as_deref(),
+            Some(r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffprobe.exe")
+        );
+    }
+
+    #[tokio::test]
+    async fn path_ffmpeg_runtime_paths_do_not_override_config() {
+        let repo = TestConfigRepository::default();
+        repo.set(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH, "custom-ffmpeg")
+            .await
+            .expect("seed ffmpeg path");
+        let mut report = ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests();
+        report.acquisition.source = ersatzrs_ffmpeg::FfmpegRuntimeSource::Path;
+        report.ffmpeg.path = "ffmpeg-from-path".to_owned();
+        report.ffprobe.path = "ffprobe-from-path".to_owned();
+
+        persist_managed_ffmpeg_runtime_paths_to_repo(&repo, &report)
+            .await
+            .expect("persist paths");
+
+        assert_eq!(
+            repo.get(ersatzrs_domain::CONFIG_KEY_FFMPEG_PATH)
+                .await
+                .expect("ffmpeg path")
+                .as_deref(),
+            Some("custom-ffmpeg")
+        );
     }
 
     #[tokio::test]

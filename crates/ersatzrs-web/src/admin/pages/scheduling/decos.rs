@@ -778,8 +778,10 @@ pub fn DecoTemplatesPage() -> impl IntoView {
         Resource::new_blocking(
             || (),
             |()| async move {
-                let (groups, templates) =
-                    tokio::join!(list_deco_template_groups(), list_deco_templates(String::new()));
+                let (groups, templates) = tokio::join!(
+                    list_deco_template_groups(),
+                    list_deco_templates(String::new())
+                );
                 (groups.unwrap_or_default(), templates.unwrap_or_default())
             },
         );

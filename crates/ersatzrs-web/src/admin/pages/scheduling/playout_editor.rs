@@ -32,10 +32,7 @@ pub fn PlayoutEditorPage() -> impl IntoView {
                     list_playout_create_channels(),
                     list_playout_create_schedules(),
                 );
-                (
-                    channels.unwrap_or_default(),
-                    schedules.unwrap_or_default(),
-                )
+                (channels.unwrap_or_default(), schedules.unwrap_or_default())
             },
         );
 

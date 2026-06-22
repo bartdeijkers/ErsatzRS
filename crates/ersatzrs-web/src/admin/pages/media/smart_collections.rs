@@ -39,7 +39,11 @@ fn set_browser_location(_path: &str) {}
 pub fn SmartCollectionsPage() -> impl IntoView {
     let initial: Resource<(Vec<CollectionListRow>, u64)> = Resource::new_blocking(
         || (),
-        |()| async { list_smart_collections(String::new(), 0, 10).await.unwrap_or_default() },
+        |()| async {
+            list_smart_collections(String::new(), 0, 10)
+                .await
+                .unwrap_or_default()
+        },
     );
 
     view! {
@@ -59,7 +63,10 @@ pub fn SmartCollectionsPage() -> impl IntoView {
 }
 
 #[island]
-fn SmartCollectionsIsland(initial_rows: Vec<CollectionListRow>, initial_total: u64) -> impl IntoView {
+fn SmartCollectionsIsland(
+    initial_rows: Vec<CollectionListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(10u32);

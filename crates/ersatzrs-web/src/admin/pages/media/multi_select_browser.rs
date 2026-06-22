@@ -265,13 +265,11 @@ fn MultiSelectIsland(
     let current_page_map = RwSignal::new(initial_page_map);
 
     let q_for_resource = query.clone();
-    let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(
-        move || {
-            let q = q_for_resource.clone();
-            let _ = media_revision.get();
-            async move { load_browser_rows(kind, q, page).await }
-        },
-    );
+    let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
+        let q = q_for_resource.clone();
+        let _ = media_revision.get();
+        async move { load_browser_rows(kind, q, page).await }
+    });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
             current_data.set(rows);

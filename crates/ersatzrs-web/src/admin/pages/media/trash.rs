@@ -32,10 +32,10 @@ struct TrashSection {
 
 #[component]
 pub fn TrashPage() -> impl IntoView {
-    let initial: Resource<TrashPageData> =
-        Resource::new_blocking(|| (), |()| async move {
-            list_trash_items().await.unwrap_or_default()
-        });
+    let initial: Resource<TrashPageData> = Resource::new_blocking(
+        || (),
+        |()| async move { list_trash_items().await.unwrap_or_default() },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>

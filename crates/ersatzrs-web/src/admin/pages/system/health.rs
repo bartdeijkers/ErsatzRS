@@ -9,10 +9,10 @@ use crate::admin::server_fns::layout::{
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
-    let snapshot: Resource<AdminHealthSnapshot> =
-        Resource::new_blocking(|| (), |()| async move {
-            load_health_snapshot().await.unwrap_or_default()
-        });
+    let snapshot: Resource<AdminHealthSnapshot> = Resource::new_blocking(
+        || (),
+        |()| async move { load_health_snapshot().await.unwrap_or_default() },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>

@@ -38,14 +38,16 @@ pub fn WatermarkEditorPage() -> impl IntoView {
         .with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()))
         .unwrap_or(0);
 
-    let data: Resource<Option<WatermarkForm>> =
-        Resource::new_blocking(move || watermark_id, |id| async move {
+    let data: Resource<Option<WatermarkForm>> = Resource::new_blocking(
+        move || watermark_id,
+        |id| async move {
             if id == 0 {
                 Some(WatermarkForm::default())
             } else {
                 get_watermark_form(id).await.ok()
             }
-        });
+        },
+    );
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>

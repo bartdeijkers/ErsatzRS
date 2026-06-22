@@ -23,10 +23,7 @@ pub fn LibrariesPage() -> impl IntoView {
         |()| async move {
             let (libraries, externals) =
                 tokio::join!(list_libraries(), list_external_collections());
-            (
-                libraries.unwrap_or_default(),
-                externals.unwrap_or_default(),
-            )
+            (libraries.unwrap_or_default(), externals.unwrap_or_default())
         },
     );
 

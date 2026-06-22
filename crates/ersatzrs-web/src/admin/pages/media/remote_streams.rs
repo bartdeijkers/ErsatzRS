@@ -49,20 +49,19 @@ pub fn RemoteStreamsPage() -> impl IntoView {
             .saturating_sub(1)
     });
     let initial_query = query.clone();
-    let initial: Resource<((Vec<MediaCardRow>, u64), crate::admin::server_fns::media_browser::LetterPageMap)> =
-        Resource::new_blocking(
-            move || (initial_query.clone(), page),
-            move |(query, page)| async move {
-                let (rows, page_map) = tokio::join!(
-                    list_remote_streams(query.clone(), page, PAGE_SIZE),
-                    remote_stream_page_map(query, PAGE_SIZE),
-                );
-                (
-                    rows.unwrap_or_default(),
-                    page_map.unwrap_or_default(),
-                )
-            },
-        );
+    let initial: Resource<(
+        (Vec<MediaCardRow>, u64),
+        crate::admin::server_fns::media_browser::LetterPageMap,
+    )> = Resource::new_blocking(
+        move || (initial_query.clone(), page),
+        move |(query, page)| async move {
+            let (rows, page_map) = tokio::join!(
+                list_remote_streams(query.clone(), page, PAGE_SIZE),
+                remote_stream_page_map(query, PAGE_SIZE),
+            );
+            (rows.unwrap_or_default(), page_map.unwrap_or_default())
+        },
+    );
 
     view! {
         <RemoteStreamsNoScriptFallback query=query.clone() page=page/>

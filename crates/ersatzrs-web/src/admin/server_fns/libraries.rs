@@ -2,7 +2,9 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::host::state::{LibraryLockGuard, ScanProgressMap};
+use crate::host::state::{
+    EntityLocker, LibraryLockGuard, LibraryScanJob, LibraryScanQueue, ScanProgressMap,
+};
 
 #[cfg(not(target_arch = "wasm32"))]
 struct ScanCleanup {
@@ -117,84 +119,119 @@ pub async fn scan_library(
     let pool = state.pool.clone();
     let locker = state.entity_locker.clone();
     let progress_map = state.scan_progress.clone();
+    let queue = state.library_scan_queue.clone();
 
     tracing::info!(library_id, kind = %kind, deep_scan, "scan_library invoked");
 
-    let Some(lock_guard) = locker.try_lock_library(library_id) else {
-        tracing::info!(library_id, "scan_library: already locked, no-op");
-        return Ok(false);
-    };
+    let should_spawn = queue.enqueue(LibraryScanJob {
+        library_id,
+        kind,
+        deep_scan,
+    });
+    if should_spawn {
+        tokio::task::spawn(run_library_scan_queue(pool, locker, progress_map, queue));
+    }
 
-    tokio::task::spawn(async move {
-        let cleanup = ScanCleanup {
-            _lock_guard: lock_guard,
-            progress_map: progress_map.clone(),
+    Ok(true)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn run_library_scan_queue(
+    pool: ersatzrs_infra::db::DbPool,
+    locker: EntityLocker,
+    progress_map: ScanProgressMap,
+    queue: LibraryScanQueue,
+) {
+    while let Some(job) = queue.pop_next_or_stop() {
+        run_library_scan_job(&pool, &locker, &progress_map, job).await;
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+async fn run_library_scan_job(
+    pool: &ersatzrs_infra::db::DbPool,
+    locker: &EntityLocker,
+    progress_map: &ScanProgressMap,
+    job: LibraryScanJob,
+) {
+    let LibraryScanJob {
+        library_id,
+        kind,
+        deep_scan,
+    } = job;
+    let Some(lock_guard) = locker.try_lock_library(library_id) else {
+        tracing::info!(
             library_id,
+            "library scan queue: already locked, skipping job"
+        );
+        return;
+    };
+    let cleanup = ScanCleanup {
+        _lock_guard: lock_guard,
+        progress_map: progress_map.clone(),
+        library_id,
+    };
+    let started = std::time::Instant::now();
+    tracing::info!(library_id, kind = %kind, "library scan started");
+    let sink = progress_map.sink_for(library_id);
+    let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
+    macro_rules! log_err {
+        ($res:expr) => {
+            if let Err(e) = $res {
+                tracing::warn!(library_id, kind = %kind, error = %e, "library scan failed");
+            }
         };
-        let started = std::time::Instant::now();
-        tracing::info!(library_id, kind = %kind, "library scan started");
-        let sink = progress_map.sink_for(library_id);
-        let sink_ref: &dyn ersatzrs_domain::ScanProgressSink = &sink;
-        macro_rules! log_err {
-            ($res:expr) => {
-                if let Err(e) = $res {
-                    tracing::warn!(library_id, kind, error = %e, "library scan failed");
-                }
-            };
-        }
-        match kind.as_str() {
-            "Plex" => log_err!(
-                ersatzrs_infra::plex::sync_library_by_id_with_progress(
-                    &pool,
+    }
+    match kind.as_str() {
+        "Plex" => log_err!(
+            ersatzrs_infra::plex::sync_library_by_id_with_progress(
+                pool,
+                library_id,
+                deep_scan,
+                Some(sink_ref),
+            )
+            .await
+        ),
+        "Jellyfin" => {
+            log_err!(
+                ersatzrs_infra::jellyfin::sync_library_by_id_with_progress(
+                    pool,
                     library_id,
                     deep_scan,
                     Some(sink_ref),
                 )
                 .await
-            ),
-            "Jellyfin" => {
-                log_err!(
-                    ersatzrs_infra::jellyfin::sync_library_by_id_with_progress(
-                        &pool,
-                        library_id,
-                        deep_scan,
-                        Some(sink_ref),
-                    )
-                    .await
-                );
-            }
-            "Emby" => {
-                log_err!(
-                    ersatzrs_infra::emby::sync_library_by_id_with_progress(
-                        &pool,
-                        library_id,
-                        deep_scan,
-                        Some(sink_ref),
-                    )
-                    .await
-                );
-            }
-            "Local" => {
-                use ersatzrs_scanner::{scan_local_library_with_progress, LocalScanConfig};
-                let config = LocalScanConfig {
-                    library_id,
-                    ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
-                };
-                log_err!(scan_local_library_with_progress(&pool, &config, Some(sink_ref)).await);
-            }
-            other => {
-                tracing::warn!(kind = other, "unknown library kind in scan_library");
-            }
+            );
         }
-        drop(cleanup);
-        tracing::info!(
-            library_id,
-            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            "library scan finished"
-        );
-    });
-
-    Ok(true)
+        "Emby" => {
+            log_err!(
+                ersatzrs_infra::emby::sync_library_by_id_with_progress(
+                    pool,
+                    library_id,
+                    deep_scan,
+                    Some(sink_ref),
+                )
+                .await
+            );
+        }
+        "Local" => {
+            use ersatzrs_scanner::{scan_local_library_with_progress, LocalScanConfig};
+            let config = LocalScanConfig {
+                library_id,
+                ffprobe_path: ersatzrs_ffmpeg::ffprobe_path(),
+            };
+            log_err!(scan_local_library_with_progress(pool, &config, Some(sink_ref)).await);
+        }
+        other => {
+            tracing::warn!(kind = other, "unknown library kind in scan_library");
+        }
+    }
+    drop(cleanup);
+    tracing::info!(
+        library_id,
+        elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        "library scan finished"
+    );
 }
 
 /// Fires a background scan for a single show.
@@ -326,7 +363,11 @@ pub async fn list_locked_libraries() -> Result<Vec<i64>, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    Ok(state.entity_locker.locked_libraries())
+    let mut library_ids = state.entity_locker.locked_libraries();
+    library_ids.extend(state.library_scan_queue.queued_libraries());
+    library_ids.sort_unstable();
+    library_ids.dedup();
+    Ok(library_ids)
 }
 
 /// Returns the fractional scan progress per library in `[0.0, 1.0]`. Polled

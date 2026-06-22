@@ -41,7 +41,10 @@ pub fn BlocksPage() -> impl IntoView {
 }
 
 #[island]
-fn BlocksIsland(initial_groups: Vec<BlockGroupRow>, initial_blocks: Vec<BlockRow>) -> impl IntoView {
+fn BlocksIsland(
+    initial_groups: Vec<BlockGroupRow>,
+    initial_blocks: Vec<BlockRow>,
+) -> impl IntoView {
     // ── Groups ─────────────────────────────────────────────────────────────
     let current_groups = RwSignal::new(initial_groups);
     let groups: LocalResource<Vec<BlockGroupRow>> =

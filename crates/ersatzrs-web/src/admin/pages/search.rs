@@ -220,13 +220,13 @@ fn SearchIsland(query: String, results: SearchResults) -> impl IntoView {
             let any = SECTIONS
                 .iter()
                 .any(|m| !section_for(&results, m.kind).cards.is_empty());
-            if !any {
+            if any {
+                view! { <SearchResultsView query=query results=results/> }.into_any()
+            } else {
                 view! {
                     <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
                 }
                 .into_any()
-            } else {
-                view! { <SearchResultsView query=query results=results/> }.into_any()
             }
         }}
     }

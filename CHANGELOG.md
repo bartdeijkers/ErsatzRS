@@ -32,6 +32,18 @@ release section when tagging a release.
 
 ### Fixed
 
+- Managed FFmpeg startup on Windows now copies downloaded first-party
+  ffmpeg/ffprobe files next to `ErsatzRS.exe` and persists those paths so
+  `/settings/ffmpeg` shows the acquired runtime instead of a generic PATH tool.
+- Fresh databases now seed the first channel name and group as `ErsatzRS`.
+- Library scan clicks now queue in FIFO order and run one library scan at a
+  time instead of racing concurrent scans or dropping already-locked requests.
+- The hydrated Add Schedule Item action on `/schedules/:id/items` now opens a
+  new editable row reliably.
+- Remote stream placeholders with zero duration no longer trigger Zero Duration
+  warnings on `/system/health`.
+- HLS segmenter MPEG-TS appends with normalized timestamp offsets no longer
+  force an HLS discontinuity marker at the FFmpeg generation boundary.
 - Windows launcher builds made from Linux/WSL now embed the tray icon resources
   correctly, preventing `ErsatzRS.exe` from failing at startup with
   `Error setting icon from resource: 1812`.

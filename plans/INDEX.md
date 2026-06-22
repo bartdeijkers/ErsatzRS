@@ -121,6 +121,9 @@ historical context; the authoritative live state is always `docs/progress/`
   workflow with first-party FFmpeg 8.1 builds and bundled runtimes per RID.
 - `ffmpeg-zscale-runtime-remediation.md` — ensure self-built/release FFmpeg ship
   `zscale` (`--enable-libzimg`) for the fail-fast startup capability check.
+- `island_hydration_durable_fix.md` + `island-hydration-smoke-gate.md` — open
+  admin island-list marker mismatch after the wasm checksum/build-consistency
+  release bug was fixed and gated; tracked in `docs/progress/hydration.toml`.
 - `module-split-survey.md` — standing refactoring backlog: large files to split,
   with ready-to-run prompts (lift items one at a time).
 - `workflow-review.md` — review of the parity-progress pipeline; its

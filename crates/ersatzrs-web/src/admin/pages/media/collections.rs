@@ -40,7 +40,11 @@ fn set_browser_location(_path: &str) {}
 pub fn CollectionsPage() -> impl IntoView {
     let initial: Resource<(Vec<CollectionListRow>, u64)> = Resource::new_blocking(
         || (),
-        |()| async { list_collections(String::new(), 0, 10).await.unwrap_or_default() },
+        |()| async {
+            list_collections(String::new(), 0, 10)
+                .await
+                .unwrap_or_default()
+        },
     );
 
     view! {

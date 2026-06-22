@@ -45,6 +45,7 @@ pub struct HlsOutput {
     pub playlist_path: String,
     pub segment_options: Option<String>,
     pub is_first_transcode: bool,
+    pub discontinuity: bool,
     pub troubleshooting: bool,
 }
 
@@ -3338,10 +3339,10 @@ fn hls_output(
     } else {
         "program_date_time+omit_endlist+"
     };
-    let discont = if hls.is_first_transcode {
-        ""
-    } else {
+    let discont = if hls.discontinuity {
         "+discont_start"
+    } else {
+        ""
     };
     options.extend([
         "-hls_flags".to_owned(),
@@ -3371,6 +3372,7 @@ mod tests {
                 init_template: None,
                 segment_options: None,
                 is_first_transcode: true,
+                discontinuity: false,
                 troubleshooting: false,
             },
             &desired,

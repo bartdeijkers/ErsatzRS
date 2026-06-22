@@ -662,8 +662,9 @@ impl HealthCheck for ZeroDurationHealthCheck {
             r#"SELECT mf."Path"
                FROM "MediaVersion" mv
                INNER JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-               WHERE mv."Duration" = '00:00:00'
-                  OR mv."Duration" LIKE '00:00:00.%'
+               WHERE (mv."Duration" = '00:00:00'
+                  OR mv."Duration" LIKE '00:00:00.%')
+                 AND mv."RemoteStreamId" IS NULL
                ORDER BY mf."Path", mf."Id""#,
         )
         .fetch_all(&self.pool)
@@ -1512,6 +1513,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn zero_duration_check_ignores_remote_stream_placeholders() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_remote_stream_with_zero_duration(&pool).await;
+
+        let check = ZeroDurationHealthCheck::new(pool);
+        let result = check.check().await.expect("zero duration check");
+
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
     async fn vaapi_device_check_fails_when_device_is_missing() {
         let pool = test_pool().await;
         seed_library_path(&pool).await;
@@ -1664,6 +1677,37 @@ mod tests {
         )
         .await
         .expect("seed media file");
+    }
+
+    async fn seed_remote_stream_with_zero_duration(pool: &Pool<Db>) {
+        pool.execute(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (22, 10, 1)"#,
+        )
+        .await
+        .expect("seed remote stream media item");
+        pool.execute(
+            r#"INSERT INTO "RemoteStream" ("Id", "Duration", "Url", "IsLive")
+               VALUES (22, '00:00:00', 'https://example.test/live.m3u8', 1)"#,
+        )
+        .await
+        .expect("seed remote stream");
+        pool.execute(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "DateAdded", "DateUpdated", "Duration", "Height", "RemoteStreamId",
+                "VideoScanKind", "Width"
+               ) VALUES (
+                22, '2026-04-26T00:00:00Z', '2026-04-26T00:00:00Z',
+                '00:00:00', 0, 22, 1, 0
+               )"#,
+        )
+        .await
+        .expect("seed remote stream media version");
+        pool.execute(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+               VALUES (22, 'https://example.test/live.m3u8', 'hash22')"#,
+        )
+        .await
+        .expect("seed remote stream media file");
     }
 
     async fn seed_empty_schedule(pool: &Pool<Db>) {

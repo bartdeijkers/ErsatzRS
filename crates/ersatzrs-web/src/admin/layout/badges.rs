@@ -71,10 +71,10 @@ fn load_playout_warning_count_initial() -> u32 {
             .unwrap_or(0)
         };
 
-        return match tokio::runtime::Handle::try_current() {
+        match tokio::runtime::Handle::try_current() {
             Ok(handle) => tokio::task::block_in_place(|| handle.block_on(count)),
             Err(_) => 0,
-        };
+        }
     }
 
     #[cfg(not(feature = "ssr"))]
@@ -106,10 +106,10 @@ fn load_health_counts_initial() -> (u32, u32) {
             (errors, warnings)
         };
 
-        return match tokio::runtime::Handle::try_current() {
+        match tokio::runtime::Handle::try_current() {
             Ok(handle) => tokio::task::block_in_place(|| handle.block_on(counts)),
             Err(_) => (0, 0),
-        };
+        }
     }
 
     #[cfg(not(feature = "ssr"))]

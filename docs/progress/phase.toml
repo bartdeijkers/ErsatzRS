@@ -2,7 +2,7 @@
 # parity/*.toml; query everything with `cargo xtask progress next`.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7 hardening follow-ups'
+current_focus = 'Phase 7 regression hardening and HLS segmenter stutter proof'
 
 summary = '''
 Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
@@ -22,10 +22,15 @@ generation closed to `Ported` 2026-06-20 after the encoder-only NVENC
 filter-gate proof passed. HLS variant playlists / segmenter closed to `Ported`
 2026-06-21 after ADR 0016's hard capacity ceiling, live readout, shared HLS /
 MPEG-TS transcode counting, and playable all-streams-in-use slate were
-implemented. With `cargo xtask progress gaps` now clear, the next hardening
-candidate is ADR 0008 runtime acquisition from first-party `ErsatzRS-ffmpeg`
-releases (ship without FFmpeg, download/update at startup, surface update
-availability on `/system/health`). ADR 0018 (Proposed / Not implemented)
+implemented. The 2026-06-22 regression pass fixed managed FFmpeg Windows path
+surfacing, fresh-database channel branding, serialized library scan queueing,
+schedule item add-button hydration, and remote-stream zero-duration health
+noise. HLS segmenter playback stutter around the first normalized append is
+open again until live playback/TSDuck proof verifies the no-discontinuity
+MPEG-TS append fix. After that proof, the next hardening candidate is ADR 0008
+runtime acquisition from first-party `ErsatzRS-ffmpeg` releases (ship without
+FFmpeg, download/update at startup, surface update availability on
+`/system/health`). ADR 0018 (Proposed / Not implemented)
 records a planned new capability — special features/extras, alternate versions,
 and stream roles — whose parity slug `content-variants` will be created at its
 first implementation slice (see plans/extras-alternate-versions-and-stream-roles.md).
@@ -77,7 +82,7 @@ done = true
 
 # Known TODOs carried forward.
 [[known_todo]]
-note = 'Admin pages with dead on:* handlers (islands hydration gap) — tracked in hydration.toml; fix pattern documented in TEST.md, proven on LibrariesPage / PlexSourcesPage.'
+note = 'Admin island-list marker mismatch (whole-app hydration smoke still 17 pass / 39 fail after the wasm checksum/build-consistency fix) — tracked in hydration.toml and reconciled in plans/island_hydration_durable_fix.md; /channels Delete and /playouts row-select/refresh must browser-pass before this is release-green.'
 [[known_todo]]
 note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
 [[known_todo]]

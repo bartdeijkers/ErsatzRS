@@ -30,11 +30,13 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/schedules.module.css");
 
+type ScheduleInitialResourceValue = ((u32, u32), (Vec<ScheduleListRow>, u64));
+
 #[component]
 pub fn SchedulesPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial: Resource<((u32, u32), (Vec<ScheduleListRow>, u64))> = Resource::new_blocking(
+    let initial: Resource<ScheduleInitialResourceValue> = Resource::new_blocking(
         || (),
         |()| async move {
             let sizes = get_schedules_page_size().await.unwrap_or((10, 10));
@@ -1012,16 +1014,16 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
     });
 
     let add_item = move |_| {
+        let next_index = items.get_untracked().len();
         let item = ScheduleItemForm {
-            index: i32::try_from(items.get_untracked().len()).unwrap_or(i32::MAX),
+            index: i32::try_from(next_index).unwrap_or(i32::MAX),
             ..ScheduleItemForm::default()
         };
-        items.update(|items| {
-            items.push(item);
-            selected.set(Some(items.len().saturating_sub(1)));
-        });
+        items.update(|items| items.push(item));
+        selected.set(Some(next_index));
     };
     let copy_item = move |index: usize| {
+        let mut selected_index = None;
         items.update(|items| {
             if let Some(source) = items.get(index).cloned() {
                 let mut copy = source;
@@ -1029,27 +1031,38 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                 copy.index = i32::try_from(index + 1).unwrap_or(i32::MAX);
                 items.insert(index + 1, copy);
                 normalize_indexes(items);
-                selected.set(Some(index + 1));
+                selected_index = Some(index + 1);
             }
         });
+        if let Some(index) = selected_index {
+            selected.set(Some(index));
+        }
     };
     let move_item = move |from: usize, to: usize| {
+        let mut selected_index = None;
         items.update(|items| {
             if from < items.len() && to < items.len() {
                 items.swap(from, to);
                 normalize_indexes(items);
-                selected.set(Some(to));
+                selected_index = Some(to);
             }
         });
+        if let Some(index) = selected_index {
+            selected.set(Some(index));
+        }
     };
     let delete_item = move |index: usize| {
+        let mut deleted = false;
         items.update(|items| {
             if index < items.len() {
                 items.remove(index);
                 normalize_indexes(items);
-                selected.set(None);
+                deleted = true;
             }
         });
+        if deleted {
+            selected.set(None);
+        }
     };
 
     view! {
@@ -1063,11 +1076,11 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                             })
                         }).unwrap_or_else(|| schedule_name.get())}
                     </div>
-                    <button class=style::btn_primary on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
+                    <button type="button" class=style::btn_primary on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::SaveScheduleItems)}</span>
                     </button>
-                    <button class=style::btn_default on:click=add_item>
+                    <button type="button" class=style::btn_default on:click=add_item>
                         <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::AddScheduleItem)}</span>
                     </button>
@@ -1114,16 +1127,16 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                                                             <td>{playout_label(&row)}</td>
                                                             <td>
                                                                 <div class=style::actions>
-                                                                    <button class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
+                                                                    <button type="button" class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
                                                                         <span style=icon_style(IconName::Copy, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
+                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
                                                                         <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
+                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
                                                                         <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
+                                                                    <button type="button" class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
                                                                         <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
                                                                 </div>

@@ -44,9 +44,7 @@ pub fn FillerPresetsPage() -> impl IntoView {
         || (),
         |()| async {
             let page_size = get_filler_presets_page_size().await.unwrap_or(10);
-            let rows = list_filler_presets(0, page_size)
-                .await
-                .unwrap_or_default();
+            let rows = list_filler_presets(0, page_size).await.unwrap_or_default();
             (page_size, rows)
         },
     );
@@ -303,9 +301,7 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
                     .unwrap_or_default()
                     .unwrap_or_default()
             };
-            let options = get_filler_preset_editor_options()
-                .await
-                .unwrap_or_default();
+            let options = get_filler_preset_editor_options().await.unwrap_or_default();
             (form, options)
         },
     );

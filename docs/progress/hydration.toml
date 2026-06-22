@@ -1,4 +1,11 @@
 # Admin UI hydration parity. status: one of the verbatim markers below.
+# Route-level entries below record the last focused proof for each page. They
+# are not release-level proof while WholeAppIslandHydrationSmokeGate is pending.
+
+[[page]]
+name   = 'WholeAppIslandHydrationSmokeGate'
+status = '⏳'
+notes  = 'Open 2026-06-22: after the wasm checksum/build-consistency fix, `scripts/e2e/hydration-smoke.sh` still proved a clean, consistent build at 17 pass / 39 fail. `/channels` Delete was dead in-browser, and the still-open Bug B is an island-list marker mismatch with strongest unverified lead in `PagedTable` / boxed `AnyView` row-cell rendering. See `plans/island-hydration-smoke-gate.md` and `plans/island_hydration_durable_fix.md`.'
 
 [[page]]
 name   = 'LibrariesPage'
@@ -32,8 +39,8 @@ notes  = ''
 
 [[page]]
 name   = 'TimelinePage` (`/playouts`)'
-status = '✅'
-notes  = 'Read-only SVG island; selection is the gap (Slice F).'
+status = '⏳'
+notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; `/playouts` refresh/row-select is part of the original dead-handler report until the smoke gate and browser spot-check pass. Prior read-only SVG island proof is not enough release-level evidence.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -62,8 +69,8 @@ notes  = 'Detail page island wired; `/media/music/artists/2355` modal-open smoke
 
 [[page]]
 name   = 'ChannelsListPage'
-status = '✅'
-notes  = 'Delete dialog server fn smoke clean.'
+status = '⏳'
+notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; `/channels` Delete was confirmed dead in-browser on 2026-06-22 even though the server fn smoke is clean.'
 
 [[page]]
 name   = 'FfmpegProfilesListPage'
@@ -98,7 +105,7 @@ notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
 [[page]]
 name   = 'PlayoutsPage` row selection'
 status = '⏳'
-notes  = 'Slice F — lift selection to URL query param.'
+notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; row selection and refresh controls are not release-green until `/playouts` browser spot-checks pass after the shared fix.'
 
 [[page]]
 name   = 'BlocksPage'
