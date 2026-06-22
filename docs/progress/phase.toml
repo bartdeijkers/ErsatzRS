@@ -22,13 +22,21 @@ generation closed to `Ported` 2026-06-20 after the encoder-only NVENC
 filter-gate proof passed. HLS variant playlists / segmenter closed to `Ported`
 2026-06-21 after ADR 0016's hard capacity ceiling, live readout, shared HLS /
 MPEG-TS transcode counting, and playable all-streams-in-use slate were
-implemented. With `cargo xtask progress gaps` now clear, the next hardening
-candidate is ADR 0008 runtime acquisition from first-party `ErsatzRS-ffmpeg`
-releases (ship without FFmpeg, download/update at startup, surface update
-availability on `/system/health`). ADR 0018 (Proposed / Not implemented)
-records a planned new capability — special features/extras, alternate versions,
-and stream roles — whose parity slug `content-variants` will be created at its
-first implementation slice (see plans/extras-alternate-versions-and-stream-roles.md).
+implemented. ADR 0008 managed runtime acquisition (Accepted 2026-06-21) is now
+implemented — ErsatzRS ships without FFmpeg and downloads/updates first-party
+`ErsatzRS-ffmpeg` releases at startup, surfacing update availability on
+`/system/health`; a 2026-06-21 follow-up fix (`596a2fc`) makes Windows upgrades
+from older bundled-FFmpeg archives clear stale stored `ffmpeg.exe`/`ffprobe.exe`
+paths so managed acquisition runs instead of failing before download. As of
+2026-06-21 the release line intentionally omits the two macOS archives
+(osx-x64/osx-arm64) to preserve GitHub-hosted runner credits (tracked in
+`platform-support.toml`; CI still builds/tests all six RIDs). With
+`cargo xtask progress gaps` clear, the next spec-backed candidates are ADR 0018
+(Proposed / Not implemented) — special features/extras, alternate versions, and
+stream roles, whose parity slug `content-variants` will be created at its first
+implementation slice (see plans/extras-alternate-versions-and-stream-roles.md);
+the open `ersatzrs-healthcheck` binary TODO; and ADR 0013 in-app TSDuck MPEG-TS
+troubleshooting (Proposed / Not implemented).
 '''
 
 # Phase 0 checklist (all complete).

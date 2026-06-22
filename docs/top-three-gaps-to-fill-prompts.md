@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-21
-last_processed_commit: 7901e3ac3d8d480e9f57e081047f494f9a4076cd
+generated: 2026-06-22
+last_processed_commit: 596a2fc08fee8cf416c3c95167a54ae88c8ae195
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -26,8 +26,13 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-21): `cargo xtask progress gaps` is clear and every tracked
-`[[debt]]` is `resolved`, so the top three come from the spec backlog. Ranking:
+Selection (2026-06-22): `cargo xtask progress gaps` is clear and every tracked
+`[[debt]]` is `resolved`, so the top three come from the spec backlog. The
+2026-06-22 reconcile window (`7901e3a..596a2fc`) landed only docs/CI/runtime
+fixes — ADR 0008 managed FFmpeg acquisition is now implemented (with a Windows
+stale-bundled-path follow-up fix) and the release line intentionally drops the
+macOS archives — so **no commit touched the three chores below; all three are
+carried over unchanged and remain actionable today**. Ranking:
 (1) **content-variants** — named in `phase.toml` `next_steps` as the next
 capability and backed by an explicit maintainer request (ADR 0018), so it leads;
 (2) **ersatzrs-healthcheck binary** — open `phase.toml` `[[known_todo]]`,
