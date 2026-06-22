@@ -1,9 +1,11 @@
 // Resource script for the Windows tray launcher.
 //
-// `ersatzrs-icon` is the named icon resource that tray-item loads at runtime
-// (see IconSource::Resource("ersatzrs-icon") in src/main.rs). The path is
-// relative to this .rc file, i.e. the crate root -> repo-root/artwork.
-ersatzrs-icon ICON "../../artwork/Ersatzrs.ico"
+// `tray-default` is the named icon resource that tray-item tries while creating
+// its hidden window. `ERSATZRS_ICON` is the visible tray icon loaded from
+// IconSource::Resource("ERSATZRS_ICON") in src/main.rs. The path is relative to
+// this .rc file, i.e. the crate root -> repo-root/artwork.
+"tray-default" ICON "../../artwork/Ersatzrs.ico"
+ERSATZRS_ICON ICON "../../artwork/Ersatzrs.ico"
 
 1 VERSIONINFO
 FILEVERSION 0,1,0,0

@@ -30,6 +30,12 @@ release section when tagging a release.
   actually hydrates (sets `window.__ersatzrs_hydrated`, no marker-mismatch
   panics). Documents the build-consistency requirement in BUILD.md.
 
+### Fixed
+
+- Windows launcher builds made from Linux/WSL now embed the tray icon resources
+  correctly, preventing `ErsatzRS.exe` from failing at startup with
+  `Error setting icon from resource: 1812`.
+
 ## [1.0.14-alpha] - 2026-06-21
 
 ### Changed
