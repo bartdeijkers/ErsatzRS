@@ -243,7 +243,9 @@ ERSATZRS_SITE_ROOT=target/site \
 ```
 
 For a deeper, browser-level check (every island actually hydrates), use
-`scripts/e2e/hydration-smoke.sh` (see [TEST.md](TEST.md)).
+`scripts/e2e/hydration-smoke.sh` (see [TEST.md](TEST.md)). Normal CI runs that
+browser smoke only for web, Leptos, E2E, workflow, Cargo, Node, and hydration
+policy changes; release CI always keeps the structural web-bundle gate above.
 
 ## Performance baseline
 

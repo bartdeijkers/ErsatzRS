@@ -1,6 +1,13 @@
 # Island hydration smoke gate — WIP handoff
 
-**Status:** in progress, gate currently RED on a real bug (see "Open bug").
+**Status update (2026-06-23):** the WIP failure state below is historical.
+`plans/island_hydration_durable_fix.md` now records the closed audit: a clean
+cargo-leptos build passed `scripts/e2e/hydration-smoke.sh` for all 56 listed
+island routes, and browser spot-checks proved `/channels` Delete plus seeded
+`/playouts` row-select/refresh controls.
+
+**Status:** historical WIP handoff; the gate is now green from the
+2026-06-23 durable-fix audit.
 **Started:** 2026-06-21. **Goal (user):** "test all island hydrations before
 every release" — a Playwright e2e that proves every Leptos `#[island]` route
 actually hydrates, run as a manual pre-release gate.
@@ -59,7 +66,7 @@ wasm32-gated **client-only** fetch (no SSR resource). No smoke error ever pointe
 at it, so keep it. (Whether it alone fixed `/channels` is now uncertain — the
 badge bug below also breaks every page; see "Reassess".)
 
-## OPEN BUG (blocks green gate): nav badge hydration mismatch
+## Historical Open Bug: nav badge hydration mismatch
 
 `crates/ersatzrs-web/src/admin/layout/badges.rs` — `PlayoutWarningBadge` and
 `HealthBadge` live in the nav drawer, so they hydrate on **every** page → all 56
@@ -217,7 +224,7 @@ lacks → no hydration. Fixes:
   surfaced the leptos `failed to read hash file` panic).
 - Documented: BUILD.md, AGENTS.md, memory `project-wasm-checksum-hydration-consistency`.
 
-## Bug B — island-list hydration marker mismatch — STILL OPEN (pre-existing)
+## Historical Bug B — island-list hydration marker mismatch
 With a CLEAN, CONSISTENT build (`cargo clean` + `cargo leptos build`, gate-verified
 consistent), the browser smoke is still **17 pass / 39 fail**. Islands that render
 a non-empty dynamic list fail with "expected a marker node"; `/channels` delete

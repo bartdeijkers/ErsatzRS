@@ -25,9 +25,12 @@ MPEG-TS transcode counting, and playable all-streams-in-use slate were
 implemented. The 2026-06-22 regression pass fixed managed FFmpeg Windows path
 surfacing, fresh-database channel branding, serialized library scan queueing,
 schedule item add-button hydration, and remote-stream zero-duration health
-noise. HLS segmenter playback stutter around the first normalized append is
-open again until live playback/TSDuck proof verifies the no-discontinuity
-MPEG-TS append fix. After that proof, the next hardening candidate is ADR 0008
+noise. The 2026-06-23 island hydration audit closed the stale marker-mismatch
+TODO with a clean 56/56 whole-app smoke plus `/channels` Delete and seeded
+`/playouts` row-select/refresh browser proof. HLS segmenter playback stutter
+around the first normalized append is open again until live playback/TSDuck
+proof verifies the no-discontinuity MPEG-TS append fix. After that proof, the
+next hardening candidate is ADR 0008
 runtime acquisition from first-party `ErsatzRS-ffmpeg` releases (ship without
 FFmpeg, download/update at startup, surface update availability on
 `/system/health`). ADR 0018 (Proposed / Not implemented)
@@ -81,8 +84,6 @@ item = 'Health endpoint (/healthz → 200)'
 done = true
 
 # Known TODOs carried forward.
-[[known_todo]]
-note = 'Admin island-list marker mismatch (whole-app hydration smoke still 17 pass / 39 fail after the wasm checksum/build-consistency fix) — tracked in hydration.toml and reconciled in plans/island_hydration_durable_fix.md; /channels Delete and /playouts row-select/refresh must browser-pass before this is release-green.'
 [[known_todo]]
 note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
 [[known_todo]]

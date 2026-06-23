@@ -1,4 +1,4 @@
-//! Lints for Leptos 0.7 hydration anti-patterns that have repeatedly bitten
+//! Lints for Leptos 0.8 hydration anti-patterns that have repeatedly bitten
 //! the admin UI port. The rules track TEST.md's "Hydration rules" section.
 //!
 //! v1 is intentionally lexical: it walks the token stream of `view! { … }`
@@ -11,8 +11,8 @@
 //!   * **rule-1** — `<Show>` inside `#[island]`. `Show`'s server/client
 //!     branches don't always match; use `style:display`.
 //!   * **rule-2** — Prop-bearing call to a known `#[island]` function inside
-//!     a `<Suspense>` region. Hoist `Suspense` out of the wrapper or have the
-//!     island own its blocking resource (`Resource::new_blocking`).
+//!     a `<Suspense>` region. Hoist `Suspense` out of the wrapper, or pass only
+//!     stable scalar props and let the island own the async boundary.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -356,7 +356,7 @@ fn scan_view_body(ctx: &mut Ctx<'_>, body: TokenStream, suspense_depth: &mut i32
                                 span,
                                 "rule-2",
                                 &format!(
-                                    "prop-bearing island `<{name}>` inside `<Suspense>` \u{2014} hoist Suspense or have the island own a `Resource::new_blocking` (TEST.md hydration rule 3)"
+                                    "prop-bearing island `<{name}>` inside `<Suspense>` \u{2014} hoist Suspense or pass only stable scalar props and let the island own the async boundary (TEST.md hydration rule 3)"
                                 ),
                             );
                         }

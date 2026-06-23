@@ -29,6 +29,9 @@ release section when tagging a release.
   boots the host and verifies every route rendering a Leptos `#[island]`
   actually hydrates (sets `window.__ersatzrs_hydrated`, no marker-mismatch
   panics). Documents the build-consistency requirement in BUILD.md.
+- CI now runs `cargo xtask hydration-lint -p ersatzrs-web` and runs the
+  whole-app browser hydration smoke when web, Leptos, E2E, workflow, Cargo,
+  Node, or hydration policy files change.
 
 ### Fixed
 
@@ -50,6 +53,10 @@ release section when tagging a release.
 - Database schema health reporting now distinguishes real downgrade detection
   from dirty migrations and migration checksum mismatches, so `/system/health`
   no longer labels every schema metadata issue as an ErsatzTV downgrade.
+- Admin island hydration is release-green again: the whole-app smoke now passes
+  all 56 no-fixture island routes, and browser spot-checks prove `/channels`
+  Delete plus `/playouts` row-select/refresh controls attach without marker
+  mismatches.
 
 ## [1.0.14-alpha] - 2026-06-21
 

@@ -1,11 +1,12 @@
 # Admin UI hydration parity. status: one of the verbatim markers below.
 # Route-level entries below record the last focused proof for each page. They
-# are not release-level proof while WholeAppIslandHydrationSmokeGate is pending.
+# are paired with WholeAppIslandHydrationSmokeGate for release-level no-fixture
+# browser proof that every listed island route hydrates.
 
 [[page]]
 name   = 'WholeAppIslandHydrationSmokeGate'
-status = '⏳'
-notes  = 'Open 2026-06-22: after the wasm checksum/build-consistency fix, `scripts/e2e/hydration-smoke.sh` still proved a clean, consistent build at 17 pass / 39 fail. `/channels` Delete was dead in-browser, and the still-open Bug B is an island-list marker mismatch with strongest unverified lead in `PagedTable` / boxed `AnyView` row-cell rendering. See `plans/island-hydration-smoke-gate.md` and `plans/island_hydration_durable_fix.md`.'
+status = '✅'
+notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard.'
 
 [[page]]
 name   = 'LibrariesPage'
@@ -39,8 +40,8 @@ notes  = ''
 
 [[page]]
 name   = 'TimelinePage` (`/playouts`)'
-status = '⏳'
-notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; `/playouts` refresh/row-select is part of the original dead-handler report until the smoke gate and browser spot-check pass. Prior read-only SVG island proof is not enough release-level evidence.'
+status = '✅'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -69,8 +70,8 @@ notes  = 'Detail page island wired; `/media/music/artists/2355` modal-open smoke
 
 [[page]]
 name   = 'ChannelsListPage'
-status = '⏳'
-notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; `/channels` Delete was confirmed dead in-browser on 2026-06-22 even though the server fn smoke is clean.'
+status = '✅'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Browser spot-check proved the row Delete Channel button opens and closes the Confirm Delete dialog without hydration/page errors.'
 
 [[page]]
 name   = 'FfmpegProfilesListPage'
@@ -104,8 +105,8 @@ notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
 
 [[page]]
 name   = 'PlayoutsPage` row selection'
-status = '⏳'
-notes  = 'Whole-app hydration smoke remains red for the systemic island-list marker mismatch; row selection and refresh controls are not release-green until `/playouts` browser spot-checks pass after the shared fix.'
+status = '✅'
+notes  = 'Seeded browser spot-check on 2026-06-23 proved row selection populates the detail section and Refresh Playout dispatches; covered by the 56/56 whole-app island hydration smoke.'
 
 [[page]]
 name   = 'BlocksPage'
