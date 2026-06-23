@@ -6,3 +6,10 @@ adr        = ['0004']
 summary    = '''
 Ported: the initial SQLite schema matches the ErsatzTV table/column/foreign-key shape and infra repositories now read/write ErsatzTV integer enums, EF-style UTC `DateTime` text, ErsatzTV `TimeSpan` values, and playout runtime state tables (`PlayoutAnchor`, `ScheduleItemsEnumeratorState`, `PlayoutGap`, `PlayoutHistory`, `PlayoutProgramScheduleAnchor`, `CollectionEnumeratorState`, `PlayoutScheduleItemFillGroupIndex`, `FillGroupEnumeratorState`, and `PlayoutTemplate`) for the covered persistence surfaces. Phase 7 Slice 14 adds typed `ProgramScheduleItem` subtype repositories (`Duration`/`Flood`/`Multiple`/`One`), schedule item watermark/graphics joins, EF-compatible `ProgramScheduleAlternate` converters, and typed `BlockItem` target/overlay writes. Phase 7 Slice 7 adds the MySQL backend behind the `mysql` feature: URL detection for `mysql://` / `mariadb://`, unsupported-backend errors when the feature is absent, ErsatzTV-style MySQL DDL with named constraints and `utf8mb4`/`utf8mb4_general_ci` parity, runtime backend-aware SQL helpers, and feature-gated MySQL migration/read-write integration coverage. Remaining table-level read/write and real-world decode gaps are tracked in [persistence-gap-matrix.md](persistence-gap-matrix.md).
 '''
+
+[[debt]]
+id          = 'fresh-db-default-channel-branding'
+description = 'Fresh database bootstrap still created the first channel with `Name` / `Group` set to `ErsatzTV` instead of the ErsatzRS brand.'
+discovered  = '2026-06-22'
+evidence    = 'Fixed 2026-06-22: the collapsed SQLite schema default for `Channel.Group` is now `ErsatzRS`, and `ensure_default_channel` explicitly inserts both `Name` and `Group` as `ErsatzRS`. `media_server_initializer_seeds_upstream_defaults` now asserts both values.'
+resolved    = true

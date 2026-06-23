@@ -75,7 +75,7 @@ pub type RowActionsRenderer<T> = Box<dyn Fn(&T) -> AnyView + Send + Sync>;
 #[component]
 pub fn PagedTable<T>(
     /// The current (fetched) rows to display.
-    rows: Resource<Vec<T>>,
+    rows: impl Get<Value = Option<Vec<T>>> + Clone + Send + Sync + 'static,
     /// Total item count across all pages (for footer).
     total: Signal<Option<u64>>,
     /// Shared page/sort params — the parent derives its resource key from this.
@@ -138,106 +138,101 @@ where
                         </tr>
                     </thead>
                     <tbody>
-                        <Suspense fallback=|| view! {
-                            <tr><td colspan="99" class=style::td_empty>
-                                {tr(TextKey::Loading)}
-                            </td></tr>
-                        }>
-                            {move || {
-                                rows.get().map(|items| {
-                                    if items.is_empty() {
+                        {move || {
+                            match rows.get() {
+                                None => view! {
+                                    <tr><td colspan="99" class=style::td_empty>
+                                        {tr(TextKey::Loading)}
+                                    </td></tr>
+                                }.into_any(),
+                                Some(items) if items.is_empty() => view! {
+                                    <tr>
+                                        <td colspan="99" class=style::td_empty>
+                                            {tr(TextKey::NoItems)}
+                                        </td>
+                                    </tr>
+                                }.into_any(),
+                                Some(items) => items.iter().map(|row| {
+                                    let cells = columns.iter().map(|col| {
                                         view! {
-                                            <tr>
-                                                <td colspan="99" class=style::td_empty>
-                                                    {tr(TextKey::NoItems)}
-                                                </td>
-                                            </tr>
-                                        }.into_any()
-                                    } else {
-                                        items.iter().map(|row| {
-                                            let cells = columns.iter().map(|col| {
-                                                view! {
-                                                    <td class=style::td>
-                                                        {(col.render)(row)}
-                                                    </td>
-                                                }
-                                            }).collect_view();
-                                            let action_cell = row_actions.as_ref().map(|ra| {
-                                                view! {
-                                                    <td class=style::td_actions>
-                                                        {(ra)(row)}
-                                                    </td>
-                                                }
-                                            });
-                                            view! {
-                                                <tr class=style::tr>
-                                                    {cells}
-                                                    {action_cell}
-                                                </tr>
-                                            }
-                                        }).collect_view().into_any()
+                                            <td class=style::td>
+                                                {(col.render)(row)}
+                                            </td>
+                                        }
+                                    }).collect_view();
+                                    let action_cell = row_actions.as_ref().map(|ra| {
+                                        view! {
+                                            <td class=style::td_actions>
+                                                {(ra)(row)}
+                                            </td>
+                                        }
+                                    });
+                                    view! {
+                                        <tr class=style::tr>
+                                            {cells}
+                                            {action_cell}
+                                        </tr>
                                     }
-                                })
-                            }}
-                        </Suspense>
+                                }).collect_view().into_any(),
+                            }
+                        }}
                     </tbody>
                 </table>
             </div>
-            <Suspense fallback=|| view! {
-                <div class=style::pagination>
-                    <span>{tr(TextKey::Loading)}</span>
-                    <div class=style::page_btns>
-                        <button class=style::page_btn disabled=true>"‹"</button>
-                        <button class=style::page_btn disabled=true>"›"</button>
-                    </div>
-                </div>
-            }>
-                {move || {
-                    total.get().map(|total_items| {
-                        view! {
-                            <div class=style::pagination>
-                                <span>
-                                    {move || {
-                                        let p = params.get();
-                                        rows_per_page(p.page_size)
-                                    }}
-                                </span>
-                                <span>
-                                    {move || {
-                                        let p = params.get();
-                                        let start = p.page * p.page_size + 1;
-                                        let end = ((p.page + 1) * p.page_size)
-                                            .min(u32::try_from(total_items).unwrap_or(u32::MAX));
-                                        if total_items == 0 {
-                                            item_count(0)
-                                        } else {
-                                            range_of(start, end, total_items)
-                                        }
-                                    }}
-                                </span>
-                                <div class=style::page_btns>
-                                    <button
-                                        class=style::page_btn
-                                        disabled=move || params.get().page == 0
-                                        on:click=go_prev
-                                        title=tr(TextKey::PreviousPage)
-                                    >"‹"</button>
-                                    <button
-                                        class=style::page_btn
-                                        disabled=move || {
-                                            let p = params.get();
-                                            total_items == 0
-                                                || u64::from((p.page + 1) * p.page_size) >= total_items
-                                        }
-                                        on:click=go_next
-                                        title=tr(TextKey::NextPage)
-                                    >"›"</button>
-                                </div>
+            {move || {
+                match total.get() {
+                    None => view! {
+                        <div class=style::pagination>
+                            <span>{tr(TextKey::Loading)}</span>
+                            <div class=style::page_btns>
+                                <button class=style::page_btn disabled=true>"‹"</button>
+                                <button class=style::page_btn disabled=true>"›"</button>
                             </div>
-                        }
-                    })
-                }}
-            </Suspense>
+                        </div>
+                    }.into_any(),
+                    Some(total_items) => view! {
+                        <div class=style::pagination>
+                            <span>
+                                {move || {
+                                    let p = params.get();
+                                    rows_per_page(p.page_size)
+                                }}
+                            </span>
+                            <span>
+                                {move || {
+                                    let p = params.get();
+                                    let start = p.page * p.page_size + 1;
+                                    let end = ((p.page + 1) * p.page_size)
+                                        .min(u32::try_from(total_items).unwrap_or(u32::MAX));
+                                    if total_items == 0 {
+                                        item_count(0)
+                                    } else {
+                                        range_of(start, end, total_items)
+                                    }
+                                }}
+                            </span>
+                            <div class=style::page_btns>
+                                <button
+                                    class=style::page_btn
+                                    disabled=move || params.get().page == 0
+                                    on:click=go_prev
+                                    title=tr(TextKey::PreviousPage)
+                                >"‹"</button>
+                                <button
+                                    class=style::page_btn
+                                    disabled=move || {
+                                        let p = params.get();
+                                        total_items == 0
+                                            || u64::from((p.page + 1) * p.page_size) >= total_items
+                                    }
+                                    on:click=go_next
+                                    title=tr(TextKey::NextPage)
+                                >"›"</button>
+                            </div>
+                        </div>
+                    }.into_any(),
+                }
+            }}
         </div>
     }
 }

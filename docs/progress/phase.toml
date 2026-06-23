@@ -2,7 +2,7 @@
 # parity/*.toml; query everything with `cargo xtask progress next`.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7 hardening follow-ups'
+current_focus = 'Phase 7 regression hardening and HLS segmenter stutter proof'
 
 summary = '''
 Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
@@ -30,12 +30,20 @@ from older bundled-FFmpeg archives clear stale stored `ffmpeg.exe`/`ffprobe.exe`
 paths so managed acquisition runs instead of failing before download. As of
 2026-06-21 the release line intentionally omits the two macOS archives
 (osx-x64/osx-arm64) to preserve GitHub-hosted runner credits (tracked in
-`platform-support.toml`; CI still builds/tests all six RIDs). With
-`cargo xtask progress gaps` clear, the next spec-backed candidates are ADR 0018
-(Proposed / Not implemented) — special features/extras, alternate versions, and
-stream roles, whose parity slug `content-variants` will be created at its first
-implementation slice (see plans/extras-alternate-versions-and-stream-roles.md);
-the open `ersatzrs-healthcheck` binary TODO; and ADR 0013 in-app TSDuck MPEG-TS
+`platform-support.toml`; CI still builds/tests all six RIDs). The 2026-06-22
+regression pass fixed managed FFmpeg Windows path surfacing, fresh-database
+channel branding, serialized library scan queueing, schedule item add-button
+hydration, and remote-stream zero-duration health noise. The 2026-06-23 island
+hydration audit closed the stale marker-mismatch TODO with a clean 56/56
+whole-app smoke plus `/channels` Delete and seeded `/playouts`
+row-select/refresh browser proof. HLS segmenter playback stutter around the
+first normalized append is open again until live playback/TSDuck proof verifies
+the no-discontinuity MPEG-TS append fix. After that proof, the next spec-backed
+candidates are ADR 0018 (Proposed / Not implemented) — special
+features/extras, alternate versions, and stream roles, whose parity slug
+`content-variants` will be created at its first implementation slice (see
+plans/extras-alternate-versions-and-stream-roles.md); the open
+`ersatzrs-healthcheck` binary TODO; and ADR 0013 in-app TSDuck MPEG-TS
 troubleshooting (Proposed / Not implemented).
 '''
 
@@ -84,8 +92,6 @@ item = 'Health endpoint (/healthz → 200)'
 done = true
 
 # Known TODOs carried forward.
-[[known_todo]]
-note = 'Admin pages with dead on:* handlers (islands hydration gap) — tracked in hydration.toml; fix pattern documented in TEST.md, proven on LibrariesPage / PlexSourcesPage.'
 [[known_todo]]
 note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
 [[known_todo]]

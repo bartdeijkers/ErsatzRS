@@ -93,6 +93,14 @@ jobs:
       CARGO_BUILD_JOBS: "1"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_LTO: "false"
+      # Must match the web-assets job. The SSR binary and the WASM bundle are
+      # built in SEPARATE jobs; if they disagree about Leptos file hashing the
+      # running server emits `/pkg/*.<hash>.{js,wasm}` URLs the bundle does not
+      # contain and the admin UI never hydrates ("wasm checksum mismatch" — the
+      # recurring release breakage). Also pinned in crates/ersatzrs-web/Cargo.toml
+      # ([package.metadata.leptos] hash-files = false) and enforced by the
+      # "Verify web bundle" gate step below.
+      LEPTOS_HASH_FILES: "false"
       # Empty unless the signing secrets are configured. Hoisted to job env
       # because the `secrets` context is not available in step `if:` conditions;
       # the optional signing steps gate on `env.AZURE_CLIENT_ID != ''`.
@@ -173,6 +181,20 @@ jobs:
         env:
           ERSATZRS_SKIP_STYLANCE: "1"
         run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+      # Boot the assembled bundle (this RID's freshly built SSR binary + the
+      # web-assets artifact) and fail the release if any `/pkg` hydration asset
+      # 404s. This is the structural catch for the recurring "wasm checksum
+      # mismatch" breakage, which no other step detects. Runs on linux-x64 only:
+      # the self-hosted linux runner can execute the native binary and the asset
+      # URLs the server emits are platform-independent, so one RID proves the
+      # whole bundle is consistent.
+      - name: Verify web bundle (wasm checksum gate)
+        if: ${{ matrix.rid == 'linux-x64' }}
+        shell: bash
+        env:
+          ERSATZRS_WEB_BIN: ${{ github.workspace }}/target/${{ matrix.target }}/release/ersatzrs-web
+          ERSATZRS_SITE_ROOT: ${{ github.workspace }}/release-web-assets/site
+        run: scripts/release/verify-web-bundle.sh
       # --- Optional Windows code signing (skipped until secrets exist) ---------
       # Disabled by default: both steps are skipped unless AZURE_CLIENT_ID is set.
       # Signs the built exes in place (before staging) so the copies that get

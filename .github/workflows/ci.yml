@@ -85,6 +85,70 @@ jobs:
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
 
+  hydration:
+    name: Hydration
+    runs-on: [self-hosted, Linux]
+    # Gate on the fast fmt job so formatting failures do not burn a browser
+    # smoke build on the serial self-hosted runner.
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Self-hosted runner shares $CARGO_HOME/bin with the developer
+          # shell, so don't let rust-cache prune cargo-leptos /
+          # stylance-cli / wasm-bindgen between runs.
+          cache-bin: "false"
+      - name: Hydration lint
+        run: cargo xtask hydration-lint -p ersatzrs-web
+      - name: Detect browser hydration smoke scope
+        id: hydration_scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [[ -z "$base" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "No base commit available; running hydration smoke."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$base" HEAD)"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -Eq '^(crates/ersatzrs-web/|tests/e2e/|scripts/e2e/hydration-smoke\.sh|scripts/release/verify-web-bundle\.sh|xtask/src/hydration_lint\.rs|\.hydration-lint-baseline|\.github/workflows/(ci|release)\.yml|package\.json|package-lock\.json|Cargo\.toml|Cargo\.lock|\.cargo/config\.toml|TEST\.md|BUILD\.md)$|(^|/)Cargo\.toml$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install web hydration tools
+        if: steps.hydration_scope.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
+          if ! command -v cargo-leptos >/dev/null 2>&1 || [ "$(cargo leptos --version)" != "cargo-leptos 0.3.6" ]; then
+            cargo install cargo-leptos --version 0.3.6 --locked
+          fi
+          npm ci
+      - name: Browser island hydration smoke
+        if: steps.hydration_scope.outputs.run == 'true'
+        run: scripts/e2e/hydration-smoke.sh
+      - name: Browser island hydration smoke skipped
+        if: steps.hydration_scope.outputs.run != 'true'
+        run: echo "No web, Leptos, workflow, or hydration-sensitive files changed; browser hydration smoke skipped."
+
   deny:
     name: Cargo deny
     runs-on: [self-hosted, Linux]

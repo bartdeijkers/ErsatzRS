@@ -30,19 +30,54 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 
 stylance::import_crate_style!(style, "src/admin/pages/scheduling/schedules.module.css");
 
+type ScheduleInitialResourceValue = ((u32, u32), (Vec<ScheduleListRow>, u64));
+
 #[component]
 pub fn SchedulesPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <SchedulesIsland initial_error=error/> }
+    let initial: Resource<ScheduleInitialResourceValue> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let sizes = get_schedules_page_size().await.unwrap_or((10, 10));
+            let rows = list_schedules(String::new(), 0, sizes.0)
+                .await
+                .unwrap_or_default();
+            (sizes, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|((initial_page_size, initial_detail_page_size), (initial_rows, initial_total))| {
+                    view! {
+                        <SchedulesIsland
+                            initial_error=error.clone()
+                            initial_page_size=initial_page_size
+                            initial_detail_page_size=initial_detail_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn SchedulesIsland(initial_error: String) -> impl IntoView {
+fn SchedulesIsland(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_detail_page_size: u32,
+    initial_rows: Vec<ScheduleListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size.max(1));
     let detail_page = RwSignal::new(0u32);
-    let detail_page_size = RwSignal::new(10u32);
+    let detail_page_size = RwSignal::new(initial_detail_page_size.max(1));
     let query = RwSignal::new(String::new());
     let selected = RwSignal::new(None::<ScheduleListRow>);
     let delete_open = RwSignal::new(false);
@@ -51,10 +86,8 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
     let copy_target = RwSignal::new(None::<ScheduleListRow>);
     let copy_error = RwSignal::new(String::new());
 
-    let saved_page_sizes = Resource::new_blocking(
-        || (),
-        |()| async { get_schedules_page_size().await.unwrap_or((10, 10)) },
-    );
+    let saved_page_sizes: LocalResource<(u32, u32)> =
+        LocalResource::new(|| async { get_schedules_page_size().await.unwrap_or((10, 10)) });
     Effect::new(move |_| {
         if let Some((saved, detail_saved)) = saved_page_sizes.get() {
             page_size.set(saved);
@@ -62,20 +95,29 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
         }
     });
 
-    let data: Resource<(Vec<ScheduleListRow>, u64)> = Resource::new_blocking(
-        move || (query.get(), page.get(), page_size.get()),
-        move |(query, page, page_size)| async move {
+    let current_data = RwSignal::new((initial_rows, initial_total));
+    let data: LocalResource<(Vec<ScheduleListRow>, u64)> = LocalResource::new(move || {
+        let query = query.get();
+        let page = page.get();
+        let page_size = page_size.get();
+        async move {
             list_schedules(query, page, page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next) = data.get() {
+            current_data.set(next);
+        }
+    });
     let detail_page_size_action =
         Action::new(|page_size: &u32| save_schedules_detail_page_size(*page_size));
 
-    let detail_data: Resource<Vec<ScheduleItemForm>> = Resource::new_blocking(
-        move || selected.get().map(|row| row.id),
-        move |id| async move {
+    let current_detail_items = RwSignal::new(Vec::<ScheduleItemForm>::new());
+    let detail_data: LocalResource<Vec<ScheduleItemForm>> = LocalResource::new(move || {
+        let id = selected.get().map(|row| row.id);
+        async move {
             if let Some(id) = id {
                 get_schedule_items_page(id)
                     .await
@@ -86,8 +128,13 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
             } else {
                 Vec::new()
             }
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(items) = detail_data.get() {
+            current_detail_items.set(items);
+        }
+    });
 
     let delete_action = Action::new(|id: &i64| delete_schedule(*id));
     Effect::new(move |_| {
@@ -148,9 +195,8 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                     />
                 </label>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
+                {move || {
+                            let (rows, total) = current_data.get();
                             let size = page_size.get().max(1);
                             let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
                                 .unwrap_or(u32::MAX)
@@ -283,17 +329,14 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                                     </button>
                                 </div>
                             }
-                        })
                     }}
-                </Suspense>
 
                 <div class=style::detail style:display=move || if selected.get().is_some() { "" } else { "none" }>
                     <h2 class=style::page_title>
                         {move || selected.get().map(|row| format!("{} {}", row.name, tr(TextKey::Items))).unwrap_or_default()}
                     </h2>
-                    <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                        {move || {
-                            detail_data.get().map(|items| {
+                    {move || {
+                                let items = current_detail_items.get();
                                 let total = u64::try_from(items.len()).unwrap_or(u64::MAX);
                                 let size = detail_page_size.get().max(1);
                                 let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
@@ -385,9 +428,7 @@ fn SchedulesIsland(initial_error: String) -> impl IntoView {
                                         </button>
                                     </div>
                                 }
-                            })
                         }}
-                    </Suspense>
                 </div>
             </section>
             <Modal
@@ -973,16 +1014,16 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
     });
 
     let add_item = move |_| {
+        let next_index = items.get_untracked().len();
         let item = ScheduleItemForm {
-            index: i32::try_from(items.get_untracked().len()).unwrap_or(i32::MAX),
+            index: i32::try_from(next_index).unwrap_or(i32::MAX),
             ..ScheduleItemForm::default()
         };
-        items.update(|items| {
-            items.push(item);
-            selected.set(Some(items.len().saturating_sub(1)));
-        });
+        items.update(|items| items.push(item));
+        selected.set(Some(next_index));
     };
     let copy_item = move |index: usize| {
+        let mut selected_index = None;
         items.update(|items| {
             if let Some(source) = items.get(index).cloned() {
                 let mut copy = source;
@@ -990,27 +1031,38 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                 copy.index = i32::try_from(index + 1).unwrap_or(i32::MAX);
                 items.insert(index + 1, copy);
                 normalize_indexes(items);
-                selected.set(Some(index + 1));
+                selected_index = Some(index + 1);
             }
         });
+        if let Some(index) = selected_index {
+            selected.set(Some(index));
+        }
     };
     let move_item = move |from: usize, to: usize| {
+        let mut selected_index = None;
         items.update(|items| {
             if from < items.len() && to < items.len() {
                 items.swap(from, to);
                 normalize_indexes(items);
-                selected.set(Some(to));
+                selected_index = Some(to);
             }
         });
+        if let Some(index) = selected_index {
+            selected.set(Some(index));
+        }
     };
     let delete_item = move |index: usize| {
+        let mut deleted = false;
         items.update(|items| {
             if index < items.len() {
                 items.remove(index);
                 normalize_indexes(items);
-                selected.set(None);
+                deleted = true;
             }
         });
+        if deleted {
+            selected.set(None);
+        }
     };
 
     view! {
@@ -1024,11 +1076,11 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                             })
                         }).unwrap_or_else(|| schedule_name.get())}
                     </div>
-                    <button class=style::btn_primary on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
+                    <button type="button" class=style::btn_primary on:click=move |_| { save_action.dispatch((id, items.get_untracked())); }>
                         <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::SaveScheduleItems)}</span>
                     </button>
-                    <button class=style::btn_default on:click=add_item>
+                    <button type="button" class=style::btn_default on:click=add_item>
                         <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::AddScheduleItem)}</span>
                     </button>
@@ -1075,16 +1127,16 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                                                             <td>{playout_label(&row)}</td>
                                                             <td>
                                                                 <div class=style::actions>
-                                                                    <button class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
+                                                                    <button type="button" class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
                                                                         <span style=icon_style(IconName::Copy, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
+                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
                                                                         <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
+                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
                                                                         <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
-                                                                    <button class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
+                                                                    <button type="button" class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
                                                                         <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
                                                                     </button>
                                                                 </div>

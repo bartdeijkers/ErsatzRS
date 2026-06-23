@@ -18,16 +18,47 @@ stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module
 
 #[component]
 pub fn LibrariesPage() -> impl IntoView {
-    view! { <LibrariesIsland/> }
+    let initial: Resource<(Vec<LibraryRow>, Vec<ExternalCollectionRow>)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let (libraries, externals) =
+                tokio::join!(list_libraries(), list_external_collections());
+            (libraries.unwrap_or_default(), externals.unwrap_or_default())
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_libraries, initial_externals)| {
+                    view! {
+                        <LibrariesIsland
+                            initial_libraries=initial_libraries
+                            initial_externals=initial_externals
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn LibrariesIsland() -> impl IntoView {
+fn LibrariesIsland(
+    initial_libraries: Vec<LibraryRow>,
+    initial_externals: Vec<ExternalCollectionRow>,
+) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
-    let libs: Resource<Vec<LibraryRow>> = Resource::new(
-        move || media_revision.get(),
-        |_| async move { list_libraries().await.unwrap_or_default() },
-    );
+    let current_libraries = RwSignal::new(initial_libraries);
+    let libs: LocalResource<Vec<LibraryRow>> = LocalResource::new(move || {
+        let _ = media_revision.get();
+        async move { list_libraries().await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = libs.get() {
+            current_libraries.set(rows);
+        }
+    });
     let scan_action = Action::new(|(id, kind, deep_scan): &(i64, String, bool)| {
         let id = *id;
         let kind = kind.clone();
@@ -35,10 +66,16 @@ fn LibrariesIsland() -> impl IntoView {
         async move { scan_library(id, kind, deep_scan).await }
     });
 
-    let externals: Resource<Vec<ExternalCollectionRow>> = Resource::new(
-        move || media_revision.get(),
-        |_| async move { list_external_collections().await.unwrap_or_default() },
-    );
+    let current_externals = RwSignal::new(initial_externals);
+    let externals: LocalResource<Vec<ExternalCollectionRow>> = LocalResource::new(move || {
+        let _ = media_revision.get();
+        async move { list_external_collections().await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = externals.get() {
+            current_externals.set(rows);
+        }
+    });
     let collections_action =
         Action::new(|(media_source_id, kind, deep_scan): &(i64, String, bool)| {
             let media_source_id = *media_source_id;
@@ -99,129 +136,123 @@ fn LibrariesIsland() -> impl IntoView {
     view! {
         <div class=style::page>
             <h1 class=style::page_title>{tr(TextKey::Libraries)}</h1>
-            <Suspense fallback=move || {
-                view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }
-            }>
-                {move || {
-                    libs.get().map(|rows| {
-                        if rows.is_empty() {
-                            return view! {
-                                <p class=style::empty>
-                                    {tr(TextKey::NoLibrariesConfigured)}
-                                </p>
-                            }
-                            .into_any();
-                        }
+            {move || {
+                let rows = current_libraries.get();
+                if rows.is_empty() {
+                    return view! {
+                        <p class=style::empty>
+                            {tr(TextKey::NoLibrariesConfigured)}
+                        </p>
+                    }
+                    .into_any();
+                }
 
-                        view! {
-                            <div class=style::table_wrap>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>{tr(TextKey::Kind)}</th>
-                                            <th>{tr(TextKey::Server)}</th>
-                                            <th>{tr(TextKey::Name)}</th>
-                                            <th>{tr(TextKey::MediaKind)}</th>
-                                            <th/>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rows
-                                            .into_iter()
-                                            .map(|lib| {
-                                                let id = lib.id;
-                                                let kind = lib.kind.clone();
-                                                let display_kind = library_kind_label(&kind);
-                                                let display_media_kind = media_kind_label(lib.media_kind);
-                                                let is_remote = kind != "Local";
-                                                let kind_scan = kind.clone();
-                                                let kind_deep = kind.clone();
-                                                let srv = lib.source_name.clone().unwrap_or_default();
-                                                let search_href = format!("/search?query=library_id%3a{id}");
-                                                view! {
-                                                    <tr>
-                                                        <td>{display_kind}</td>
-                                                        <td class=style::cell_muted>{srv}</td>
-                                                        <td>{lib.name.clone()}</td>
-                                                        <td class=style::cell_muted>{display_media_kind}</td>
-                                                        <td>
-                                                            <div class=style::actions>
-                                                                // Scan indicator goes first (left) so it occupies the
-                                                                // free space at the start of the right-justified action
-                                                                // row instead of pushing the icon column wider on the
-                                                                // right. Mirrors ETV's Libraries.razor, where the
-                                                                // percent + spinner appear before the trailing controls.
-                                                                <ScanIndicator
-                                                                    visible=Signal::derive(move || is_locked(id))
-                                                                    fraction=Signal::derive(move || progress_for(id))
-                                                                />
-                                                                {if is_remote {
-                                                                    view! {
-                                                                        <button
-                                                                            class=style::icon_btn
-                                                                            disabled=move || scanning() || is_locked(id)
-                                                                            title=tr(TextKey::DeepScanLibrary)
-                                                                            aria-label=tr(TextKey::DeepScanLibrary)
-                                                                            on:click=move |_| {
-                                                                                scan_action.dispatch((id, kind_deep.clone(), true));
-                                                                            }
-                                                                        >
-                                                                            <span
-                                                                                style=icon_style(IconName::FindReplace, "1.125rem")
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                        </button>
-                                                                    }
-                                                                        .into_any()
-                                                                } else {
-                                                                    view! { <span class=style::icon_slot aria-hidden="true"/> }
-                                                                        .into_any()
-                                                                }}
+                view! {
+                    <div class=style::table_wrap>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>{tr(TextKey::Kind)}</th>
+                                    <th>{tr(TextKey::Server)}</th>
+                                    <th>{tr(TextKey::Name)}</th>
+                                    <th>{tr(TextKey::MediaKind)}</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows
+                                    .into_iter()
+                                    .map(|lib| {
+                                        let id = lib.id;
+                                        let kind = lib.kind.clone();
+                                        let display_kind = library_kind_label(&kind);
+                                        let display_media_kind = media_kind_label(lib.media_kind);
+                                        let is_remote = kind != "Local";
+                                        let kind_scan = kind.clone();
+                                        let kind_deep = kind.clone();
+                                        let srv = lib.source_name.clone().unwrap_or_default();
+                                        let search_href = format!("/search?query=library_id%3a{id}");
+                                        view! {
+                                            <tr>
+                                                <td>{display_kind}</td>
+                                                <td class=style::cell_muted>{srv}</td>
+                                                <td>{lib.name.clone()}</td>
+                                                <td class=style::cell_muted>{display_media_kind}</td>
+                                                <td>
+                                                    <div class=style::actions>
+                                                        // Scan indicator goes first (left) so it occupies the
+                                                        // free space at the start of the right-justified action
+                                                        // row instead of pushing the icon column wider on the
+                                                        // right. Mirrors ETV's Libraries.razor, where the
+                                                        // percent + spinner appear before the trailing controls.
+                                                        <ScanIndicator
+                                                            visible=Signal::derive(move || is_locked(id))
+                                                            fraction=Signal::derive(move || progress_for(id))
+                                                        />
+                                                        {if is_remote {
+                                                            view! {
                                                                 <button
                                                                     class=style::icon_btn
                                                                     disabled=move || scanning() || is_locked(id)
-                                                                    title=tr(TextKey::ScanLibrary)
-                                                                    aria-label=tr(TextKey::ScanLibrary)
+                                                                    title=tr(TextKey::DeepScanLibrary)
+                                                                    aria-label=tr(TextKey::DeepScanLibrary)
                                                                     on:click=move |_| {
-                                                                        scan_action.dispatch((id, kind_scan.clone(), false));
+                                                                        scan_action.dispatch((id, kind_deep.clone(), true));
                                                                     }
                                                                 >
                                                                     <span
-                                                                        style=icon_style(IconName::Refresh, "1.125rem")
+                                                                        style=icon_style(IconName::FindReplace, "1.125rem")
                                                                         aria-hidden="true"
                                                                     />
                                                                 </button>
-                                                                <a
-                                                                    class=style::icon_btn
-                                                                    href=search_href
-                                                                    title=tr(TextKey::SearchMedia)
-                                                                    aria-label=tr(TextKey::SearchMedia)
-                                                                >
-                                                                    <span
-                                                                        style=icon_style(IconName::Search, "1.125rem")
-                                                                        aria-hidden="true"
-                                                                    />
-                                                                </a>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            })
-                                            .collect_view()}
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
-            <Suspense fallback=|| ()>
-                {move || {
-                    externals.get().map(|rows| {
-                        if rows.is_empty() {
-                            return view! { <span/> }.into_any();
-                        }
+                                                            }
+                                                                .into_any()
+                                                        } else {
+                                                            view! { <span class=style::icon_slot aria-hidden="true"/> }
+                                                                .into_any()
+                                                        }}
+                                                        <button
+                                                            class=style::icon_btn
+                                                            disabled=move || scanning() || is_locked(id)
+                                                            title=tr(TextKey::ScanLibrary)
+                                                            aria-label=tr(TextKey::ScanLibrary)
+                                                            on:click=move |_| {
+                                                                scan_action.dispatch((id, kind_scan.clone(), false));
+                                                            }
+                                                        >
+                                                            <span
+                                                                style=icon_style(IconName::Refresh, "1.125rem")
+                                                                aria-hidden="true"
+                                                            />
+                                                        </button>
+                                                        <a
+                                                            class=style::icon_btn
+                                                            href=search_href
+                                                            title=tr(TextKey::SearchMedia)
+                                                            aria-label=tr(TextKey::SearchMedia)
+                                                        >
+                                                            <span
+                                                                style=icon_style(IconName::Search, "1.125rem")
+                                                                aria-hidden="true"
+                                                            />
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                .into_any()
+            }}
+            {move || {
+                let rows = current_externals.get();
+                if rows.is_empty() {
+                    return view! { <span/> }.into_any();
+                }
                         view! {
                             <h2 class=style::section_title>{tr(TextKey::ExternalCollections)}</h2>
                             <div class=style::table_wrap>
@@ -302,9 +333,7 @@ fn LibrariesIsland() -> impl IntoView {
                             </div>
                         }
                             .into_any()
-                    })
-                }}
-            </Suspense>
+            }}
         </div>
     }
 }

@@ -69,7 +69,7 @@ mod windows_launcher {
             }
         };
 
-        let mut tray = match TrayItem::new("ErsatzRS", IconSource::Resource("ersatzrs-icon")) {
+        let mut tray = match TrayItem::new("ErsatzRS", IconSource::Resource("ERSATZRS_ICON")) {
             Ok(tray) => tray,
             Err(error) => {
                 show_error(&format!(

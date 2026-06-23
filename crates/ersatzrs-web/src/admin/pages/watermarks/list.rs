@@ -35,19 +35,17 @@ pub fn WatermarksListPage() -> impl IntoView {
 fn WatermarksListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
-    let rows_resource: Resource<Vec<WatermarkListRow>> = Resource::new(
-        move || params.get(),
-        |p| async move {
+    let rows_resource: LocalResource<Vec<WatermarkListRow>> = LocalResource::new(move || {
+        let p = params.get();
+        async move {
             list_watermark_rows(p.page, p.page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
 
-    let count_resource: Resource<u64> = Resource::new(
-        || (),
-        |()| async move { count_watermarks().await.unwrap_or(0) },
-    );
+    let count_resource: LocalResource<u64> =
+        LocalResource::new(|| async { count_watermarks().await.unwrap_or(0) });
 
     let total = Signal::derive(move || count_resource.get());
 

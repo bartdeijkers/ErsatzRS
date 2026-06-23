@@ -37,19 +37,52 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn SmartCollectionsPage() -> impl IntoView {
-    view! { <SmartCollectionsIsland/> }
+    let initial: Resource<(Vec<CollectionListRow>, u64)> = Resource::new_blocking(
+        || (),
+        |()| async {
+            list_smart_collections(String::new(), 0, 10)
+                .await
+                .unwrap_or_default()
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_rows, initial_total)| {
+                    view! {
+                        <SmartCollectionsIsland
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn SmartCollectionsIsland() -> impl IntoView {
+fn SmartCollectionsIsland(
+    initial_rows: Vec<CollectionListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(10u32);
 
-    let data: Resource<(Vec<CollectionListRow>, u64)> = Resource::new(
-        move || (search.get(), page.get(), page_size.get()),
-        move |(q, p, size)| async move { list_smart_collections(q, p, size).await.unwrap_or_default() },
-    );
+    let current_data = RwSignal::new((initial_rows, initial_total));
+    let data: LocalResource<(Vec<CollectionListRow>, u64)> = LocalResource::new(move || {
+        let q = search.get();
+        let p = page.get();
+        let size = page_size.get();
+        async move { list_smart_collections(q, p, size).await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
+        }
+    });
 
     let delete_target: RwSignal<Option<CollectionListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
@@ -78,138 +111,135 @@ fn SmartCollectionsIsland() -> impl IntoView {
                 <h1 class=style::page_title>{tr(TextKey::SmartCollections)}</h1>
                 <div class=style::divider/>
 
-                <Suspense fallback=move || view! { <p class=style::empty_cell>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                                .unwrap_or(u32::MAX)
-                                .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+                {move || {
+                    let (rows, total) = current_data.get();
+                    let size = page_size.get().max(1);
+                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                        .unwrap_or(u32::MAX)
+                        .max(1);
+                    let current_page = page.get().min(total_pages.saturating_sub(1));
+                    let range_start = if total == 0 {
+                        0
+                    } else {
+                        u64::from(current_page) * u64::from(size) + 1
+                    };
+                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
-                            view! {
-                                <div class=style::table_wrap>
-                                    <div class=style::table_toolbar>
-                                        <label class=style::search_field>
-                                            <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
-                                            <input
-                                                class=style::search
-                                                type="search"
-                                                placeholder=tr(TextKey::SearchForSmartCollections)
-                                                prop:value=move || search.get()
-                                                on:input=move |e| {
-                                                    search.set(event_target_value(&e));
-                                                    page.set(0);
-                                                }
-                                            />
-                                        </label>
-                                    </div>
-                                    <table class=style::smart_table>
-                                        <tbody>
-                                            {rows.into_iter().map(|row| {
-                                                let id = row.id;
-                                                let name = row.name.clone();
-                                                let query = row.query.clone().unwrap_or_default();
-                                                let search_href = format!("/search?query={}", urlencoding::encode(&query));
-                                                let row_for_delete = row.clone();
-                                                view! {
-                                                    <tr>
-                                                        <td>{name}</td>
-                                                        <td>
-                                                            <div class=style::row_actions>
-                                                                <a
-                                                                    class=style::icon_button
-                                                                    href=format!("/media/smart-collections/{id}/edit")
-                                                                    title=tr(TextKey::EditSmartCollection)
-                                                                    aria-label=tr(TextKey::EditSmartCollection)
-                                                                >
-                                                                    <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
-                                                                </a>
-                                                                <a
-                                                                    class=style::icon_button
-                                                                    href=search_href
-                                                                    title=tr(TextKey::SearchSmartCollection)
-                                                                    aria-label=tr(TextKey::SearchSmartCollection)
-                                                                >
-                                                                    <span style=icon_style(IconName::Search, "1.25rem") aria-hidden="true"></span>
-                                                                </a>
-                                                                <button
-                                                                    type="button"
-                                                                    class=style::icon_button
-                                                                    title=tr(TextKey::DeleteSmartCollection)
-                                                                    aria-label=tr(TextKey::DeleteSmartCollection)
-                                                                    on:click=move |_| {
-                                                                        delete_target.set(Some(row_for_delete.clone()));
-                                                                        delete_open.set(true);
-                                                                    }
-                                                                >
-                                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            }).collect_view()}
-                                            <tr style:display=move || if total == 0 { "" } else { "none" }>
-                                                <td colspan="2" class=style::empty_cell>{tr(TextKey::NoItems)}</td>
+                    view! {
+                        <div class=style::table_wrap>
+                            <div class=style::table_toolbar>
+                                <label class=style::search_field>
+                                    <span style=icon_style(IconName::FilterList, "1.125rem") aria-hidden="true"></span>
+                                    <input
+                                        class=style::search
+                                        type="search"
+                                        placeholder=tr(TextKey::SearchForSmartCollections)
+                                        prop:value=move || search.get()
+                                        on:input=move |e| {
+                                            search.set(event_target_value(&e));
+                                            page.set(0);
+                                        }
+                                    />
+                                </label>
+                            </div>
+                            <table class=style::smart_table>
+                                <tbody>
+                                    {rows.into_iter().map(|row| {
+                                        let id = row.id;
+                                        let name = row.name.clone();
+                                        let query = row.query.clone().unwrap_or_default();
+                                        let search_href = format!("/search?query={}", urlencoding::encode(&query));
+                                        let row_for_delete = row.clone();
+                                        view! {
+                                            <tr>
+                                                <td>{name}</td>
+                                                <td>
+                                                    <div class=style::row_actions>
+                                                        <a
+                                                            class=style::icon_button
+                                                            href=format!("/media/smart-collections/{id}/edit")
+                                                            title=tr(TextKey::EditSmartCollection)
+                                                            aria-label=tr(TextKey::EditSmartCollection)
+                                                        >
+                                                            <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                        </a>
+                                                        <a
+                                                            class=style::icon_button
+                                                            href=search_href
+                                                            title=tr(TextKey::SearchSmartCollection)
+                                                            aria-label=tr(TextKey::SearchSmartCollection)
+                                                        >
+                                                            <span style=icon_style(IconName::Search, "1.25rem") aria-hidden="true"></span>
+                                                        </a>
+                                                        <button
+                                                            type="button"
+                                                            class=style::icon_button
+                                                            title=tr(TextKey::DeleteSmartCollection)
+                                                            aria-label=tr(TextKey::DeleteSmartCollection)
+                                                            on:click=move |_| {
+                                                                delete_target.set(Some(row_for_delete.clone()));
+                                                                delete_open.set(true);
+                                                            }
+                                                        >
+                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                        </button>
+                                                    </div>
+                                                </td>
                                             </tr>
-                                        </tbody>
-                                    </table>
-                                    <div class=style::pager>
-                                        <span>{tr(TextKey::RowsPerPage)}</span>
-                                        <select
-                                            class=style::page_size
-                                            prop:value=move || page_size.get().to_string()
-                                            on:change=move |event| {
-                                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                    page_size.set(value.max(1));
-                                                    page.set(0);
-                                                }
-                                            }
-                                        >
-                                            <option value="10" selected=move || page_size.get() == 10>"10"</option>
-                                            <option value="25" selected=move || page_size.get() == 25>"25"</option>
-                                            <option value="50" selected=move || page_size.get() == 50>"50"</option>
-                                        </select>
-                                        <span class=style::pager_status>
-                                            {range_of(
-                                                u32::try_from(range_start).unwrap_or(u32::MAX),
-                                                u32::try_from(range_end).unwrap_or(u32::MAX),
-                                                total,
-                                            )}
-                                        </span>
-                                        <span class=style::pager_status>{page_of(current_page + 1, total_pages)}</span>
-                                        <div class=style::pager_buttons>
-                                            <button
-                                                type="button"
-                                                class=style::pager_btn
-                                                disabled={current_page == 0}
-                                                on:click=move |_| page.update(|p| *p = p.saturating_sub(1))
-                                            >
-                                                "‹"
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class=style::pager_btn
-                                                disabled={current_page + 1 >= total_pages}
-                                                on:click=move |_| page.update(|p| *p = (*p + 1).min(total_pages.saturating_sub(1)))
-                                            >
-                                                "›"
-                                            </button>
-                                        </div>
-                                    </div>
+                                        }
+                                    }).collect_view()}
+                                    <tr style:display=move || if total == 0 { "" } else { "none" }>
+                                        <td colspan="2" class=style::empty_cell>{tr(TextKey::NoItems)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class=style::pager>
+                                <span>{tr(TextKey::RowsPerPage)}</span>
+                                <select
+                                    class=style::page_size
+                                    prop:value=move || page_size.get().to_string()
+                                    on:change=move |event| {
+                                        if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                            page_size.set(value.max(1));
+                                            page.set(0);
+                                        }
+                                    }
+                                >
+                                    <option value="10" selected=move || page_size.get() == 10>"10"</option>
+                                    <option value="25" selected=move || page_size.get() == 25>"25"</option>
+                                    <option value="50" selected=move || page_size.get() == 50>"50"</option>
+                                </select>
+                                <span class=style::pager_status>
+                                    {range_of(
+                                        u32::try_from(range_start).unwrap_or(u32::MAX),
+                                        u32::try_from(range_end).unwrap_or(u32::MAX),
+                                        total,
+                                    )}
+                                </span>
+                                <span class=style::pager_status>{page_of(current_page + 1, total_pages)}</span>
+                                <div class=style::pager_buttons>
+                                    <button
+                                        type="button"
+                                        class=style::pager_btn
+                                        disabled={current_page == 0}
+                                        on:click=move |_| page.update(|p| *p = p.saturating_sub(1))
+                                    >
+                                        "‹"
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class=style::pager_btn
+                                        disabled={current_page + 1 >= total_pages}
+                                        on:click=move |_| page.update(|p| *p = (*p + 1).min(total_pages.saturating_sub(1)))
+                                    >
+                                        "›"
+                                    </button>
                                 </div>
-                            }
-                            .into_any()
-                        })
-                    }}
-                </Suspense>
+                            </div>
+                        </div>
+                    }
+                    .into_any()
+                }}
             </section>
 
             <DeleteDialog

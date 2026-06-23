@@ -23,10 +23,8 @@ pub fn LocalLibrariesPage() -> impl IntoView {
 
 #[island]
 fn LocalLibrariesIsland() -> impl IntoView {
-    let rows: Resource<Vec<LocalLibraryRow>> = Resource::new(
-        || (),
-        |()| async { list_local_libraries().await.unwrap_or_default() },
-    );
+    let rows: LocalResource<Vec<LocalLibraryRow>> =
+        LocalResource::new(|| async { list_local_libraries().await.unwrap_or_default() });
 
     let total = Signal::derive(move || rows.get().map(|r| r.len() as u64));
     let params = RwSignal::new(PageParams::new(50));
@@ -78,7 +76,6 @@ fn LocalLibrariesIsland() -> impl IntoView {
     });
 
     view! {
-        <Suspense fallback=|| ()>
         <div class=style::page>
             <div class=style::toolbar>
                 <h1 class=style::page_title>{tr(TextKey::LocalLibraries)}</h1>
@@ -111,7 +108,6 @@ fn LocalLibrariesIsland() -> impl IntoView {
                 })
             />
         </div>
-        </Suspense>
     }
 }
 

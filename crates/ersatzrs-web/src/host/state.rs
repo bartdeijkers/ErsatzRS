@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{
     atomic::{AtomicI32, Ordering},
     Arc, Mutex,
@@ -29,6 +29,27 @@ pub struct EntityLocker {
 pub struct LibraryLockGuard {
     locker: EntityLocker,
     library_id: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibraryScanJob {
+    pub library_id: i64,
+    pub kind: String,
+    pub deep_scan: bool,
+}
+
+#[derive(Default)]
+struct LibraryScanQueueState {
+    active: bool,
+    pending: VecDeque<LibraryScanJob>,
+}
+
+/// FIFO queue for library scans. ErsatzTV serializes scans through its hosted
+/// scanner queue; this keeps repeated admin clicks ordered instead of racing
+/// provider scans or dropping requests while one scan is already active.
+#[derive(Clone, Default)]
+pub struct LibraryScanQueue {
+    inner: Arc<Mutex<LibraryScanQueueState>>,
 }
 
 /// In-process map of `library_id -> fractional progress in [0.0, 1.0]`.
@@ -153,6 +174,40 @@ impl Drop for LibraryLockGuard {
     }
 }
 
+impl LibraryScanQueue {
+    /// Enqueue `job`. Returns true only when a worker should be spawned.
+    pub fn enqueue(&self, job: LibraryScanJob) -> bool {
+        self.inner.lock().is_ok_and(|mut state| {
+            state.pending.push_back(job);
+            if state.active {
+                false
+            } else {
+                state.active = true;
+                true
+            }
+        })
+    }
+
+    pub fn pop_next_or_stop(&self) -> Option<LibraryScanJob> {
+        self.inner.lock().ok().and_then(|mut state| {
+            if let Some(job) = state.pending.pop_front() {
+                Some(job)
+            } else {
+                state.active = false;
+                None
+            }
+        })
+    }
+
+    #[must_use]
+    pub fn queued_libraries(&self) -> Vec<i64> {
+        self.inner
+            .lock()
+            .map(|state| state.pending.iter().map(|job| job.library_id).collect())
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SystemStartup {
     pub database_ready: bool,
@@ -190,6 +245,7 @@ pub struct AppState {
     /// locks live in [`Self::playout_locker`] because the scheduler owns and
     /// shares that registry across the process boundary.
     pub entity_locker: EntityLocker,
+    pub library_scan_queue: LibraryScanQueue,
     pub scan_progress: ScanProgressMap,
     pub playout_build_tx: mpsc::Sender<PlayoutBuildRequest>,
     /// Playout lock registry, the same instance the scheduler builds with, so
@@ -235,6 +291,7 @@ impl AppState {
             hls_direct_indices,
             iptv_access_token_verifier,
             entity_locker: EntityLocker::default(),
+            library_scan_queue: LibraryScanQueue::default(),
             scan_progress: ScanProgressMap::default(),
             playout_build_tx,
             playout_locker,
@@ -286,7 +343,10 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::{AppState, EntityLocker, IptvAccessTokenVerifier, ScanProgressMap, SystemStartup};
+    use super::{
+        AppState, EntityLocker, IptvAccessTokenVerifier, LibraryScanJob, LibraryScanQueue,
+        ScanProgressMap, SystemStartup,
+    };
     use ersatzrs_domain::ScanProgressSink;
     use ersatzrs_infra::db::DatabaseSchemaStatus;
 
@@ -342,6 +402,34 @@ mod tests {
         drop(guard);
 
         assert!(locker.try_lock_library(42).is_some());
+    }
+
+    #[test]
+    fn library_scan_queue_runs_jobs_fifo_and_stops_when_empty() {
+        let queue = LibraryScanQueue::default();
+
+        assert!(queue.enqueue(LibraryScanJob {
+            library_id: 2,
+            kind: "Plex".to_owned(),
+            deep_scan: false,
+        }));
+        assert!(!queue.enqueue(LibraryScanJob {
+            library_id: 1,
+            kind: "Local".to_owned(),
+            deep_scan: true,
+        }));
+        assert_eq!(queue.queued_libraries(), [2, 1]);
+
+        assert_eq!(queue.pop_next_or_stop().expect("first job").library_id, 2);
+        assert_eq!(queue.queued_libraries(), [1]);
+        assert_eq!(queue.pop_next_or_stop().expect("second job").library_id, 1);
+        assert!(queue.pop_next_or_stop().is_none());
+
+        assert!(queue.enqueue(LibraryScanJob {
+            library_id: 3,
+            kind: "Emby".to_owned(),
+            deep_scan: false,
+        }));
     }
 
     #[tokio::test]

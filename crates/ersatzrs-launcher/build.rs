@@ -1,11 +1,13 @@
 fn main() {
-    // On Windows, embed the tray icon (a named resource `ersatzrs-icon` that
-    // tray-item loads at runtime) and version info from the .rc file, and
-    // statically link the MSVC CRT. Everything else is a no-op so the crate
-    // builds cleanly on non-Windows hosts.
-    #[cfg(windows)]
-    {
-        let _ = embed_resource::compile("ersatzrs_launcher.rc", embed_resource::NONE);
+    println!("cargo:rerun-if-changed=ersatzrs_launcher.rc");
+    println!("cargo:rerun-if-changed=../../artwork/Ersatzrs.ico");
+
+    // Build scripts are compiled for the host, so `#[cfg(windows)]` misses WSL
+    // and Linux-hosted Windows cross builds. Use Cargo's target cfg instead.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        embed_resource::compile("ersatzrs_launcher.rc", embed_resource::NONE)
+            .manifest_optional()
+            .expect("compile Windows launcher resources");
         static_vcruntime::metabuild();
     }
 }

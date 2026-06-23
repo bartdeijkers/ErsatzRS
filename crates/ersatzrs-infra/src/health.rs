@@ -111,8 +111,12 @@ pub fn make_health_check_service(
     ffmpeg_runtime: FfmpegRuntimeReport,
     schema_status: DatabaseSchemaStatus,
 ) -> HealthCheckService {
+    let downgrade_schema_status = schema_status.clone();
+    let dirty_schema_status = schema_status.clone();
     HealthCheckService::new(vec![
-        Box::new(DowngradeHealthCheck::new(schema_status)),
+        Box::new(DowngradeHealthCheck::new(downgrade_schema_status)),
+        Box::new(DirtyMigrationHealthCheck::new(dirty_schema_status)),
+        Box::new(MigrationChecksumHealthCheck::new(schema_status)),
         Box::new(FFmpegVersionHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegRuntimeAcquisitionHealthCheck::new(
             ffmpeg_runtime.clone(),
@@ -658,8 +662,9 @@ impl HealthCheck for ZeroDurationHealthCheck {
             r#"SELECT mf."Path"
                FROM "MediaVersion" mv
                INNER JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-               WHERE mv."Duration" = '00:00:00'
-                  OR mv."Duration" LIKE '00:00:00.%'
+               WHERE (mv."Duration" = '00:00:00'
+                  OR mv."Duration" LIKE '00:00:00.%')
+                 AND mv."RemoteStreamId" IS NULL
                ORDER BY mf."Path", mf."Id""#,
         )
         .fetch_all(&self.pool)
@@ -764,17 +769,85 @@ impl HealthCheck for DowngradeHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
-        if self.schema_status.failure_count() == 0 {
+        if self.schema_status.unknown_migrations.is_empty() {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
+
+        let versions = format_versions(&self.schema_status.unknown_migrations);
+        Ok(HealthCheckResult::new(
+            self.title(),
+            HealthCheckStatus::Fail,
+            format!(
+                "Database contains migration version(s) unknown to this build: {versions}. Downgrading is NOT supported and WILL impact stability."
+            ),
+            "Downgrade detected",
+        )
+        .with_link("https://ersatztv.org/docs/installation/#downgrading"))
+    }
+}
+
+struct DirtyMigrationHealthCheck {
+    schema_status: DatabaseSchemaStatus,
+}
+
+impl DirtyMigrationHealthCheck {
+    fn new(schema_status: DatabaseSchemaStatus) -> Self {
+        Self { schema_status }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for DirtyMigrationHealthCheck {
+    fn title(&self) -> &'static str {
+        "Database Migration"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        let Some(version) = self.schema_status.dirty_version else {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        };
 
         Ok(HealthCheckResult::new(
             self.title(),
             HealthCheckStatus::Fail,
-            "Downgrade detected; THIS IS NOT SUPPORTED AND WILL IMPACT STABILITY",
-            "Downgrade detected",
-        )
-        .with_link("https://ersatztv.org/docs/installation/#downgrading"))
+            format!(
+                "Database migration version {version} was partially applied. Restore from backup or rerun a build that can complete that migration before continuing."
+            ),
+            "Database migration is partially applied",
+        ))
+    }
+}
+
+struct MigrationChecksumHealthCheck {
+    schema_status: DatabaseSchemaStatus,
+}
+
+impl MigrationChecksumHealthCheck {
+    fn new(schema_status: DatabaseSchemaStatus) -> Self {
+        Self { schema_status }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for MigrationChecksumHealthCheck {
+    fn title(&self) -> &'static str {
+        "Database Migration Checksum"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        if self.schema_status.mismatched_migrations.is_empty() {
+            return Ok(HealthCheckResult::not_applicable(self.title()));
+        }
+
+        let versions = format_versions(&self.schema_status.mismatched_migrations);
+        Ok(HealthCheckResult::new(
+            self.title(),
+            HealthCheckStatus::Fail,
+            format!(
+                "Database migration checksum mismatch for version(s): {versions}. The database was created by a build whose migration text differs from this build."
+            ),
+            "Database migration checksum mismatch",
+        ))
     }
 }
 
@@ -1198,6 +1271,14 @@ fn parent_folder(path: &str) -> Option<String> {
     Some(stripped.to_owned())
 }
 
+fn format_versions(versions: &[i64]) -> String {
+    versions
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[allow(clippy::needless_pass_by_value)]
 fn sqlx_error(error: sqlx::Error) -> HealthCheckError {
     HealthCheckError::Database(error.to_string())
@@ -1245,6 +1326,51 @@ mod tests {
             store.load_results().await.expect("load results").len(),
             run.results.len()
         );
+    }
+
+    #[tokio::test]
+    async fn checksum_mismatch_reports_schema_drift_not_downgrade() {
+        let schema_status = DatabaseSchemaStatus {
+            dirty_version: None,
+            unknown_migrations: Vec::new(),
+            mismatched_migrations: vec![1],
+        };
+
+        let downgrade = DowngradeHealthCheck::new(schema_status.clone())
+            .check()
+            .await
+            .expect("downgrade check");
+        assert_eq!(downgrade.status, HealthCheckStatus::NotApplicable);
+
+        let checksum = MigrationChecksumHealthCheck::new(schema_status)
+            .check()
+            .await
+            .expect("checksum check");
+        assert_eq!(checksum.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            checksum.brief_message,
+            "Database migration checksum mismatch"
+        );
+        assert!(checksum.message.contains("version(s): 1"));
+    }
+
+    #[tokio::test]
+    async fn dirty_migration_reports_partial_migration() {
+        let result = DirtyMigrationHealthCheck::new(DatabaseSchemaStatus {
+            dirty_version: Some(42),
+            unknown_migrations: Vec::new(),
+            mismatched_migrations: Vec::new(),
+        })
+        .check()
+        .await
+        .expect("dirty migration check");
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            result.brief_message,
+            "Database migration is partially applied"
+        );
+        assert!(result.message.contains("version 42"));
     }
 
     #[tokio::test]
@@ -1383,6 +1509,18 @@ mod tests {
             .await
             .expect("seed connectivity results");
         let result = check.check().await.expect("pass check");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn zero_duration_check_ignores_remote_stream_placeholders() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_remote_stream_with_zero_duration(&pool).await;
+
+        let check = ZeroDurationHealthCheck::new(pool);
+        let result = check.check().await.expect("zero duration check");
+
         assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
@@ -1539,6 +1677,37 @@ mod tests {
         )
         .await
         .expect("seed media file");
+    }
+
+    async fn seed_remote_stream_with_zero_duration(pool: &Pool<Db>) {
+        pool.execute(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (22, 10, 1)"#,
+        )
+        .await
+        .expect("seed remote stream media item");
+        pool.execute(
+            r#"INSERT INTO "RemoteStream" ("Id", "Duration", "Url", "IsLive")
+               VALUES (22, '00:00:00', 'https://example.test/live.m3u8', 1)"#,
+        )
+        .await
+        .expect("seed remote stream");
+        pool.execute(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "DateAdded", "DateUpdated", "Duration", "Height", "RemoteStreamId",
+                "VideoScanKind", "Width"
+               ) VALUES (
+                22, '2026-04-26T00:00:00Z', '2026-04-26T00:00:00Z',
+                '00:00:00', 0, 22, 1, 0
+               )"#,
+        )
+        .await
+        .expect("seed remote stream media version");
+        pool.execute(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+               VALUES (22, 'https://example.test/live.m3u8', 'hash22')"#,
+        )
+        .await
+        .expect("seed remote stream media file");
     }
 
     async fn seed_empty_schedule(pool: &Pool<Db>) {

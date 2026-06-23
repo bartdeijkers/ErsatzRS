@@ -14,9 +14,9 @@ For build commands and the dev loop, see [BUILD.md](BUILD.md).
 | Snapshot         | `insta` in `ersatzrs-ffmpeg`, `ersatzrs-infra`           | Generated FFmpeg argv, filter graphs, playout build round-trips.                |
 | Integration      | `tests/` per crate                                       | Database repositories, external clients (Plex/Jellyfin/Emby/Trakt), ffprobe.    |
 | MySQL backend    | `--features mysql-integration`                           | Same integration tests, run against MariaDB via testcontainers.                 |
-| Hydration smoke  | Playwright specs or browser probes (see below).          | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
+| Hydration smoke  | CI-gated lint plus Playwright specs or browser probes.    | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
 | Runtime smoke    | `cargo xtask smoke`                                      | Real web host, seeded SQLite fixture, IPTV MPEG-TS and HLS startup playback.    |
-| CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, cargo-deny, commitlint, docker bake.                         |
+| CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, hydration lint, scoped hydration smoke, cargo-deny, commitlint, docs. |
 
 References:
 
@@ -29,8 +29,11 @@ References:
 
 ## What runs where
 
-- **CI (every push and PR)**: layers 1–4. The `mysql-integration` feature is
-  enabled there, so the testcontainers MariaDB run is part of CI.
+- **CI (every push and PR)**: layers 1–4 plus `cargo xtask hydration-lint -p
+  ersatzrs-web`. The browser island hydration smoke also runs in CI when the
+  diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
+  files. The `mysql-integration` feature is enabled there, so the
+  testcontainers MariaDB run is part of CI.
 - **Local dev**: layers 1–3 by default (`cargo test --workspace`). Add
   `--all-features` to include the MySQL integration locally — it pulls a
   MariaDB image so it is slow on a cold cache.
@@ -67,16 +70,13 @@ stabilisation. Apply them every time you wire interactive UI:
    `BlockEditorIsland`). The `Modal` and `DeleteDialog` primitives use `style:display`
    internally — never reintroduce `<Show>` in them.
    Reference: `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs`.
-3. **No prop-bearing islands across `Suspense` boundaries.** If the parent
-   page hydrates props from a server resource, have the island own a
-   `Resource::new_blocking` internally and read from `data.get_untracked()` to
-   seed signals — the blocking resource is resolved before HTML streams on SSR
-   and deserialized immediately on the client. Pass only a plain id (e.g. `i64`)
-   from the page wrapper to the island. Reference:
-   `FfmpegProfileEditorIsland`.
-   `ChannelEditorPage` is intentionally an SSR multipart form now because the
-   broader app still has an island marker mismatch; do not use it as an island
-   reference pattern.
+3. **No prop-bearing islands across unresolved `Suspense` boundaries.** A
+   wrapper may resolve data before rendering an island, or the island may own a
+   `Resource::new_blocking` and seed its signals from `data.get_untracked()`.
+   The invariant is the boundary shape: do not render a prop-bearing `#[island]`
+   while the parent `Suspense` can swap fallback/resolved DOM around it. When in
+   doubt, pass only stable scalar props (for example an `i64` id) and keep the
+   async boundary inside the island. Reference: `FfmpegProfileEditorIsland`.
 4. **`DeleteDialog` always rendered.** `DeleteDialog` takes `entity_name: Signal<String>`
    (a reactive signal, not a `String`). Keep the dialog in the DOM at all times — control
    visibility via the `open: RwSignal<bool>` signal. Never conditionally render a dialog via
@@ -135,7 +135,9 @@ Rules enforced (v1):
 
 - **rule-1** — `<Show>` inside `#[island]` (rule 2 above).
 - **rule-2** — Prop-bearing call to a known `#[island]` function inside a
-  `<Suspense>` region (rule 3 above).
+  `<Suspense>` region (rule 3 above). The lint guards only the known lexical
+  boundary hazard; whole-app marker mismatches still require the browser smoke
+  because list/table DOM shape is not statically provable here.
 
 Known pre-existing findings are listed in `.hydration-lint-baseline` at the
 repo root. When you fix one, delete its line — new findings in files not
@@ -218,6 +220,39 @@ Workflow:
    inspect console output.
 3. Check browser console for `failed_to_cast_marker_node` or other hydration
    errors; any such error is a product bug in the affected island.
+
+### Whole-app island hydration smoke (CI/release gate)
+
+`tests/e2e/island-hydration.spec.ts` visits every route that renders an
+`#[island]` and proves, per route, that island hydration ran to completion.
+This is the durable guard against the recurring class of regression where a
+shell-level island, a shared primitive, the router, or a Cargo dependency
+aborts hydration and silently kills the click handlers on otherwise-unrelated
+pages (e.g. the stop/delete buttons on `/channels`, refresh/row-select on
+`/playouts`). CI runs the smoke when the diff touches web, Leptos, E2E,
+workflow, Cargo, Node, or hydration policy files; run it manually before every
+release and before closing broad admin UI hydration work:
+
+```bash
+scripts/e2e/hydration-smoke.sh
+```
+
+The runner is self-contained: it builds the Leptos hydration assets, boots
+`ersatzrs-web` on a throwaway SQLite database (isolated `HOME`, never touches
+`~/.ersatzrs`), waits for `/healthz`, runs the spec, and tears everything down.
+An FFmpeg operator override (`~/.local/ffmpeg-8.1`, like `run.sh`) is used when
+present so startup skips the managed runtime download. Useful env knobs:
+`ERSATZRS_SKIP_LEPTOS_BUILD=1` (reuse existing assets), `ERSATZRS_E2E_KEEP_TEMP=1`
+(keep the temp DB/log), `ERSATZRS_E2E_PORT=NNNN`.
+
+Detection signals per route: `window.__ersatzrs_hydrated === true` (set in
+`crates/ersatzrs-web/src/lib.rs::hydrate` right after `hydrate_islands()`, so a
+marker-mismatch panic in any island leaves it unset), no uncaught page errors,
+no hydration-signature console errors, and the route did not fall through to the
+404 catch-all (`[data-not-found]`). The spec covers islands reachable without
+seeded data (list / add / settings / system / source routes); detail and editor
+routes that need a real `:id` belong in their own seeded specs. When you add a
+new island route, add it to the `ISLAND_ROUTES` table in the spec.
 
 Support page parity criteria are captured from the live ErsatzTV Legacy
 Support pages in `tests/e2e/support-page-criteria.ts`. The support spec can

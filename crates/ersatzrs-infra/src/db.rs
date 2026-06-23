@@ -76,7 +76,7 @@ const SQLITE_BUSY_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Trakt Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
 const DEFAULT_CHANNEL_NUMBER: &str = "1";
-const DEFAULT_CHANNEL_NAME: &str = "ErsatzTV";
+const DEFAULT_CHANNEL_NAME: &str = "ErsatzRS";
 const CONFIG_KEY_FFMPEG_DEFAULT_PROFILE_ID: &str = "ffmpeg.default_profile_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_RESOLUTION_ID: &str = "ffmpeg.default_resolution_id";
 const CONFIG_KEY_FFMPEG_DEFAULT_MPEG_TS_SCRIPT: &str = "ffmpeg.default_mpegts_script";
@@ -875,15 +875,16 @@ async fn ensure_default_channel(pool: &DbPool, ffmpeg_profile_id: i64) -> Result
 
     sqlx::query(
         r#"INSERT INTO "Channel" (
-            "UniqueId", "Number", "SortNumber", "Name", "FFmpegProfileId",
+            "UniqueId", "Number", "SortNumber", "Name", "Group", "FFmpegProfileId",
             "StreamingMode", "StreamSelectorMode", "SubtitleMode",
             "MusicVideoCreditsMode", "SongVideoMode", "PlayoutSource",
             "PlayoutMode", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-           ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)"#,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)"#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(DEFAULT_CHANNEL_NUMBER)
     .bind(1.0_f64)
+    .bind(DEFAULT_CHANNEL_NAME)
     .bind(DEFAULT_CHANNEL_NAME)
     .bind(ffmpeg_profile_id)
     .bind(5_i32)
@@ -1042,8 +1043,8 @@ mod tests {
         .fetch_one(&pool)
         .await
         .expect("load default profile id");
-        let channel_name: String =
-            sqlx::query_scalar(r#"SELECT "Name" FROM "Channel" ORDER BY "Id" LIMIT 1"#)
+        let (channel_name, channel_group): (String, String) =
+            sqlx::query_as(r#"SELECT "Name", "Group" FROM "Channel" ORDER BY "Id" LIMIT 1"#)
                 .fetch_one(&pool)
                 .await
                 .expect("load default channel");
@@ -1093,7 +1094,8 @@ mod tests {
 
         assert_eq!(resolution_count, 4);
         assert_default_ffmpeg_profiles(&profiles);
-        assert_eq!(channel_name, "ErsatzTV");
+        assert_eq!(channel_name, "ErsatzRS");
+        assert_eq!(channel_group, "ErsatzRS");
         assert_eq!(group_name, "Trakt Lists");
         let config_rows: std::collections::HashMap<String, String> = config_rows
             .into_iter()

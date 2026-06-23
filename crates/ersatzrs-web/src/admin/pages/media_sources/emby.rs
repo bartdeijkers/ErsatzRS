@@ -132,11 +132,6 @@ pub fn EmbySourcesPage() -> impl IntoView {
 
 #[component]
 pub fn EmbyConnectionPage() -> impl IntoView {
-    view! { <EmbyConnectionEditorIsland/> }
-}
-
-#[island]
-fn EmbyConnectionEditorIsland() -> impl IntoView {
     let initial: Resource<ConnectionForm> = Resource::new_blocking(
         || (),
         |()| async { get_emby_connection().await.unwrap_or_default() },
@@ -145,12 +140,17 @@ fn EmbyConnectionEditorIsland() -> impl IntoView {
     view! {
         <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
             {move || {
-                initial.get().map(|form| view! {
-                    <EmbyConnectionEditorForm initial_form=form/>
+                initial.get().map(|initial_form| {
+                    view! { <EmbyConnectionEditorIsland initial_form=initial_form/> }
                 })
             }}
         </Suspense>
     }
+}
+
+#[island]
+fn EmbyConnectionEditorIsland(initial_form: ConnectionForm) -> impl IntoView {
+    view! { <EmbyConnectionEditorForm initial_form=initial_form/> }
 }
 
 #[component]

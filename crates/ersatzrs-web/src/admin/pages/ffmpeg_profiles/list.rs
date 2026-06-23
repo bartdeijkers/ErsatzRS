@@ -24,19 +24,17 @@ pub fn FfmpegProfilesListPage() -> impl IntoView {
 fn FfmpegProfilesListIsland() -> impl IntoView {
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
 
-    let rows_resource: Resource<Vec<FfmpegProfileListRow>> = Resource::new(
-        move || params.get(),
-        |p| async move {
+    let rows_resource: LocalResource<Vec<FfmpegProfileListRow>> = LocalResource::new(move || {
+        let p = params.get();
+        async move {
             list_ffmpeg_profile_rows(p.page, p.page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
 
-    let count_resource: Resource<u64> = Resource::new(
-        || (),
-        |()| async move { count_ffmpeg_profiles().await.unwrap_or(0) },
-    );
+    let count_resource: LocalResource<u64> =
+        LocalResource::new(|| async { count_ffmpeg_profiles().await.unwrap_or(0) });
 
     let total = Signal::derive(move || count_resource.get());
 

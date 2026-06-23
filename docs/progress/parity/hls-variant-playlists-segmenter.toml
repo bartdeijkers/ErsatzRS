@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0015', '0016']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
@@ -60,6 +60,10 @@ slot frees.
 Runtime proof: TSDuck / `cargo xtask smoke` captures through 2026-06-16 showed
 zero transport, sync-loss, continuity-counter, or PTS/DTS/PCR faults across
 MPEG-TS and HLS segmenter paths. Slice history lives in `sessions.ndjson`/git.
+
+Current 2026-06-22 status: a user-reported playback stutter around 40-50
+seconds remains open until live HLS playback/TSDuck proof confirms the normalized
+append fix below removes the visible generation-boundary stutter.
 '''
 
 [[debt]]
@@ -114,3 +118,10 @@ description = 'ADR 0016 (decision points 3.4 and 4) specifies that when the tran
 discovered  = '2026-06-21'
 evidence    = 'Resolved 2026-06-21: crates/ersatzrs-infra/src/hls_worker.rs reuses the existing generated error-slate primitive to append a 4s all-streams-in-use HLS slate while admission is full, passing no active transcode slot to the slate process; crates/ersatzrs-web/src/transport/iptv/hls.rs waits for the slate playlist instead of immediately returning the old at-capacity 503. crates/ersatzrs-web/src/transport/iptv/stream.rs builds the same visible slate as paced MPEG-TS and emits it without a reservation until reserve_mpeg_ts_capacity succeeds, then switches the response body to real content. Focused tests cover slate command generation/assets, HLS capacity wait behavior, MPEG-TS slate-before-content switching after slot release, and peak active count staying at the configured limit.'
 resolved    = true
+
+[[debt]]
+id          = 'segmenter-normalized-append-stutter'
+description = 'HLS segmenter video playback can visibly stutter after roughly 40-50 seconds; segment transitions are sometimes noticeable at the first independently spawned FFmpeg generation boundary.'
+discovered  = '2026-06-22'
+evidence    = 'In progress 2026-06-22: `crates/ersatzrs-infra/src/hls_worker.rs` now treats non-first MPEG-TS appends with a non-zero `-output_ts_offset` as seamless and passes `end_with_discontinuity = false` into playlist trimming; `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` emits `discont_start` only when the HLS worker marks the append as a real discontinuity. Focused tests passed for `hls_output_discontinuity_is_skipped_for_normalized_mpegts_appends` and `build_hls_slug_command_uses_pts_offset_for_subsequent_segments`, but live HLS playback/TSDuck proof is still required before returning this feature to `Ported`.'
+resolved    = false

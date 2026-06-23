@@ -34,31 +34,58 @@ fn set_browser_location(_path: &str) {}
 pub fn TraktListsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <TraktListsIsland initial_error=error/> }
+    let initial: Resource<(u32, (Vec<TraktListRow>, u64))> = Resource::new_blocking(
+        || (),
+        |()| async {
+            let page_size = get_trakt_lists_page_size().await.unwrap_or(10);
+            let rows = list_trakt_lists(0, page_size).await.unwrap_or_default();
+            (page_size, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                    view! {
+                        <TraktListsIsland
+                            initial_error=error.clone()
+                            initial_page_size=initial_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn TraktListsIsland(initial_error: String) -> impl IntoView {
+fn TraktListsIsland(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<TraktListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size);
+    let current_data = RwSignal::new((initial_rows, initial_total));
     let add_value = RwSignal::new(String::new());
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
 
-    let saved_page_size = Resource::new_blocking(
-        || (),
-        |()| async { get_trakt_lists_page_size().await.unwrap_or(10) },
-    );
+    let data: LocalResource<(Vec<TraktListRow>, u64)> = LocalResource::new(move || {
+        let p = page.get();
+        let size = page_size.get();
+        async move { list_trakt_lists(p, size).await.unwrap_or_default() }
+    });
     Effect::new(move |_| {
-        if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved);
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
         }
     });
-
-    let data: Resource<(Vec<TraktListRow>, u64)> = Resource::new_blocking(
-        move || (page.get(), page_size.get()),
-        move |(p, size)| async move { list_trakt_lists(p, size).await.unwrap_or_default() },
-    );
 
     let add_action = Action::new(|value: &String| {
         let value = value.clone();
@@ -148,22 +175,21 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                     {tr(TextKey::TraktListActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                                .unwrap_or(u32::MAX)
-                                .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+                {move || {
+                    let (rows, total) = current_data.get();
+                    let size = page_size.get().max(1);
+                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                        .unwrap_or(u32::MAX)
+                        .max(1);
+                    let current_page = page.get().min(total_pages.saturating_sub(1));
+                    let range_start = if total == 0 {
+                        0
+                    } else {
+                        u64::from(current_page) * u64::from(size) + 1
+                    };
+                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
-                            view! {
+                    view! {
                                 <div class=style::table_wrap>
                                     <table>
                                         <colgroup>
@@ -314,9 +340,7 @@ fn TraktListsIsland(initial_error: String) -> impl IntoView {
                                     </div>
                                 </div>
                             }.into_any()
-                        })
-                    }}
-                </Suspense>
+                }}
             </section>
 
             <AddTraktListDialog

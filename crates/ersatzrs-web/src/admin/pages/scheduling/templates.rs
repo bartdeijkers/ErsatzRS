@@ -26,20 +26,55 @@ mod style {
 
 #[component]
 pub fn TemplatesPage() -> impl IntoView {
-    view! { <TemplatesIsland/> }
+    let initial: Resource<(Vec<TemplateGroupRow>, Vec<TemplateRow>)> = Resource::new_blocking(
+        || (),
+        |()| async move {
+            let (groups, templates) =
+                tokio::join!(list_template_groups(), list_templates(String::new()));
+            (groups.unwrap_or_default(), templates.unwrap_or_default())
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|(initial_groups, initial_templates)| {
+                    view! {
+                        <TemplatesIsland
+                            initial_groups=initial_groups
+                            initial_templates=initial_templates
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn TemplatesIsland() -> impl IntoView {
-    let groups: Resource<Vec<TemplateGroupRow>> = Resource::new(
-        || (),
-        |()| async { list_template_groups().await.unwrap_or_default() },
-    );
+fn TemplatesIsland(
+    initial_groups: Vec<TemplateGroupRow>,
+    initial_templates: Vec<TemplateRow>,
+) -> impl IntoView {
+    let current_groups = RwSignal::new(initial_groups);
+    let groups: LocalResource<Vec<TemplateGroupRow>> =
+        LocalResource::new(|| async { list_template_groups().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(rows) = groups.get() {
+            current_groups.set(rows);
+        }
+    });
     let search = RwSignal::new(String::new());
-    let templates: Resource<Vec<TemplateRow>> = Resource::new(
-        move || search.get(),
-        |query| async move { list_templates(query).await.unwrap_or_default() },
-    );
+    let current_templates = RwSignal::new(initial_templates);
+    let templates: LocalResource<Vec<TemplateRow>> = LocalResource::new(move || {
+        let query = search.get();
+        async move { list_templates(query).await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(rows) = templates.get() {
+            current_templates.set(rows);
+        }
+    });
 
     let new_group_name = RwSignal::new(String::new());
     let new_template_group_id = RwSignal::new(0i64);
@@ -208,26 +243,28 @@ fn TemplatesIsland() -> impl IntoView {
                     <div class=style::divider></div>
                     <form method="post" action="/api/templates/create" class=style::form_grid>
                         <label class=style::label for="template-group">{tr(TextKey::TemplateGroup)}</label>
-                        <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                            {move || groups.get().map(|rows| view! {
-                                <select
-                                    id="template-group"
-                                    class=style::select
-                                    name="group_id"
-                                    prop:value=move || new_template_group_id.get().to_string()
-                                    on:change=move |event| {
-                                        if let Ok(id) = event_target_value(&event).parse::<i64>() {
-                                            new_template_group_id.set(id);
-                                        }
-                                    }
-                                >
-                                    <option value="0"></option>
-                                    {rows.into_iter().map(|group| {
+                        <select
+                            id="template-group"
+                            class=style::select
+                            name="group_id"
+                            prop:value=move || new_template_group_id.get().to_string()
+                            on:change=move |event| {
+                                if let Ok(id) = event_target_value(&event).parse::<i64>() {
+                                    new_template_group_id.set(id);
+                                }
+                            }
+                        >
+                            <option value="0"></option>
+                            {move || {
+                                current_groups
+                                    .get()
+                                    .into_iter()
+                                    .map(|group| {
                                         view! { <option value=group.id.to_string()>{group.name}</option> }
-                                    }).collect_view()}
-                                </select>
-                            })}
-                        </Suspense>
+                                    })
+                                    .collect_view()
+                            }}
+                        </select>
 
                         <label class=style::label for="template-name">{tr(TextKey::TemplateName)}</label>
                         <input
@@ -269,8 +306,9 @@ fn TemplatesIsland() -> impl IntoView {
                     />
                 </div>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || templates.get().map(|rows| view! {
+                {move || {
+                    let rows = current_templates.get();
+                    view! {
                         <TemplateTable
                             rows=rows
                             copy_open=copy_open
@@ -282,8 +320,8 @@ fn TemplatesIsland() -> impl IntoView {
                             delete_template_open=delete_template_open
                             delete_template_target=delete_template_target
                         />
-                    })}
-                </Suspense>
+                    }
+                }}
             </div>
 
             <div
@@ -304,26 +342,28 @@ fn TemplatesIsland() -> impl IntoView {
                         value=move || copy_target.get().map(|row| row.id.to_string()).unwrap_or_default()
                     />
                     <label class=style::label for="copy-template-group">{tr(TextKey::NewTemplateGroup)}</label>
-                    <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                        {move || groups.get().map(|rows| view! {
-                            <select
-                                id="copy-template-group"
-                                name="group_id"
-                                class=style::select
-                                prop:value=move || copy_group_id.get().to_string()
-                                on:change=move |event| {
-                                    if let Ok(id) = event_target_value(&event).parse::<i64>() {
-                                        copy_group_id.set(id);
-                                    }
-                                }
-                            >
-                                <option value="0"></option>
-                                {rows.into_iter().map(|group| {
+                    <select
+                        id="copy-template-group"
+                        name="group_id"
+                        class=style::select
+                        prop:value=move || copy_group_id.get().to_string()
+                        on:change=move |event| {
+                            if let Ok(id) = event_target_value(&event).parse::<i64>() {
+                                copy_group_id.set(id);
+                            }
+                        }
+                    >
+                        <option value="0"></option>
+                        {move || {
+                            current_groups
+                                .get()
+                                .into_iter()
+                                .map(|group| {
                                     view! { <option value=group.id.to_string()>{group.name}</option> }
-                                }).collect_view()}
-                            </select>
-                        })}
-                    </Suspense>
+                                })
+                                .collect_view()
+                        }}
+                    </select>
                     <label class=style::label for="copy-template-name">{tr(TextKey::NewTemplateName)}</label>
                     <input
                         id="copy-template-name"

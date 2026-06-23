@@ -433,6 +433,8 @@ impl HlsSessionWorker {
                     None
                 };
                 let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+                let discontinuity =
+                    hls_output_discontinuity(self.output_format, is_first, output_ts_offset);
                 let command = build_hls_slug_command(
                     self.output_format,
                     is_first,
@@ -448,7 +450,7 @@ impl HlsSessionWorker {
                     },
                     runtime_capabilities.clone(),
                 );
-                let _ = self.trim_playlist_for_append().await;
+                let _ = self.trim_playlist_for_append(discontinuity).await;
                 let outcome = self
                     .run_hls_process(
                         command,
@@ -693,6 +695,8 @@ impl HlsSessionWorker {
                 }
             };
             let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+            let discontinuity =
+                hls_output_discontinuity(self.output_format, is_first, output_ts_offset);
             let source_stream_for_denial = source_stream.clone();
             let opacity_clock = watermark_opacity_clock_at_spawn(
                 decision.request_time,
@@ -728,7 +732,7 @@ impl HlsSessionWorker {
                 &runtime_capabilities,
                 source_stream_for_denial.as_ref(),
             );
-            let _ = self.trim_playlist_for_append().await;
+            let _ = self.trim_playlist_for_append(discontinuity).await;
             let outcome = self
                 .run_hls_process(
                     command,
@@ -818,7 +822,7 @@ impl HlsSessionWorker {
                     else {
                         break;
                     };
-                    if self.trim_playlist_for_append().await.is_none() {
+                    if self.trim_playlist_for_append(discontinuity).await.is_none() {
                         tracing::debug!(
                             channel_number = %self.channel_number,
                             "hls playlist not ready to trim before error fallback append"
@@ -909,6 +913,8 @@ impl HlsSessionWorker {
             None
         };
         let output_ts_offset = self.probe_output_ts_offset(is_first_transcode).await;
+        let discontinuity =
+            hls_output_discontinuity(self.output_format, is_first_transcode, output_ts_offset);
         let Some(command) = build_hls_error_command(HlsErrorProcessRequest {
             working_dir: &self.working_dir,
             output_format: self.output_format,
@@ -933,7 +939,7 @@ impl HlsSessionWorker {
             );
         };
 
-        if self.trim_playlist_for_append().await.is_none() {
+        if self.trim_playlist_for_append(discontinuity).await.is_none() {
             tracing::debug!(
                 channel_number = %self.channel_number,
                 "hls playlist not ready to trim before capacity slate append"
@@ -1191,8 +1197,11 @@ impl HlsSessionWorker {
             .await
     }
 
-    async fn trim_playlist_for_append(&self) -> Option<TrimmedPlaylist> {
-        self.trim_playlist(true, None, true).await
+    async fn trim_playlist_for_append(
+        &self,
+        end_with_discontinuity: bool,
+    ) -> Option<TrimmedPlaylist> {
+        self.trim_playlist(end_with_discontinuity, None, true).await
     }
 
     async fn trim_playlist(
@@ -1508,6 +1517,11 @@ pub fn build_hls_command_with_opacity_clock(
             playback_profile.profile.audio_format,
         ),
         is_first_transcode,
+        discontinuity: hls_output_discontinuity(
+            output_format,
+            is_first_transcode,
+            output_ts_offset,
+        ),
         troubleshooting,
     });
 
@@ -1609,6 +1623,11 @@ pub fn build_hls_slug_command(
             request.desired.audio_format,
         ),
         is_first_transcode,
+        discontinuity: hls_output_discontinuity(
+            output_format,
+            is_first_transcode,
+            output_ts_offset,
+        ),
         troubleshooting: false,
     });
 
@@ -1823,6 +1842,11 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
             pipeline_request.desired.audio_format,
         ),
         is_first_transcode: request.is_first_transcode,
+        discontinuity: hls_output_discontinuity(
+            request.output_format,
+            request.is_first_transcode,
+            request.output_ts_offset,
+        ),
         troubleshooting: false,
     });
 
@@ -1987,6 +2011,18 @@ fn hls_segment_options(
     }
 
     (!mpegts_flags.is_empty()).then(|| format!("mpegts_flags={}", mpegts_flags.join("")))
+}
+
+fn hls_output_discontinuity(
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    output_ts_offset: Option<Duration>,
+) -> bool {
+    if is_first_transcode {
+        return false;
+    }
+
+    output_format != OutputFormat::Hls || output_ts_offset.is_none_or(|offset| offset.is_zero())
 }
 
 #[allow(clippy::match_same_arms)]
@@ -4403,6 +4439,26 @@ mod tests {
     }
 
     #[test]
+    fn hls_output_discontinuity_is_skipped_for_normalized_mpegts_appends() {
+        assert!(!hls_output_discontinuity(
+            OutputFormat::Hls,
+            false,
+            Some(Duration::from_secs(12))
+        ));
+        assert!(hls_output_discontinuity(OutputFormat::Hls, false, None));
+        assert!(hls_output_discontinuity(
+            OutputFormat::Hls,
+            false,
+            Some(Duration::ZERO)
+        ));
+        assert!(hls_output_discontinuity(
+            OutputFormat::HlsMp4,
+            false,
+            Some(Duration::from_secs(12))
+        ));
+    }
+
+    #[test]
     fn build_hls_command_emits_initial_discontinuity_segment_options() {
         let command = build_hls_command(
             "/media/test.mkv",
@@ -4562,7 +4618,10 @@ mod tests {
         let arguments = command.arguments.join(" ");
 
         assert!(arguments.contains("-output_ts_offset 7.5s"));
-        assert!(arguments.contains("-hls_flags program_date_time+omit_endlist+append_list+discont_start+independent_segments"));
+        assert!(arguments.contains(
+            "-hls_flags program_date_time+omit_endlist+append_list+independent_segments"
+        ));
+        assert!(!arguments.contains("discont_start"));
         assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
     }
 

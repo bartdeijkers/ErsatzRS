@@ -357,7 +357,19 @@ pub async fn load_ffmpeg_settings_with_state(
     state: &crate::host::state::AppState,
 ) -> Result<FfmpegSettingsPageData, ServerFnError> {
     let runtime = state.ffmpeg_runtime.read().await;
-    load_ffmpeg_settings_with_capabilities(&state.pool, &runtime.capabilities).await
+    let capabilities = runtime.capabilities.clone();
+    let runtime_ffmpeg_path = runtime.ffmpeg.path.clone();
+    let runtime_ffprobe_path = runtime.ffprobe.path.clone();
+    drop(runtime);
+
+    let mut data = load_ffmpeg_settings_with_capabilities(&state.pool, &capabilities).await?;
+    if !runtime_ffmpeg_path.is_empty() {
+        data.ffmpeg_resolved = runtime_ffmpeg_path;
+    }
+    if !runtime_ffprobe_path.is_empty() {
+        data.ffprobe_resolved = runtime_ffprobe_path;
+    }
+    Ok(data)
 }
 
 #[allow(clippy::too_many_lines)]

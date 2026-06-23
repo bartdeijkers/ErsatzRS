@@ -40,32 +40,59 @@ const COLLECTION_TYPE_PLAYLIST: i32 = 6;
 pub fn FillerPresetsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <FillerPresetsIsland initial_error=error/> }
+    let initial: Resource<(u32, (Vec<FillerPresetListRow>, u64))> = Resource::new_blocking(
+        || (),
+        |()| async {
+            let page_size = get_filler_presets_page_size().await.unwrap_or(10);
+            let rows = list_filler_presets(0, page_size).await.unwrap_or_default();
+            (page_size, rows)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_page_size, (initial_rows, initial_total))| {
+                    view! {
+                        <FillerPresetsIsland
+                            initial_error=error.clone()
+                            initial_page_size=initial_page_size
+                            initial_rows=initial_rows
+                            initial_total=initial_total
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
+fn FillerPresetsIsland(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<FillerPresetListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let page = RwSignal::new(0u32);
-    let page_size = RwSignal::new(10u32);
+    let page_size = RwSignal::new(initial_page_size);
+    let current_data = RwSignal::new((initial_rows, initial_total));
 
-    let saved_page_size = Resource::new_blocking(
-        || (),
-        |()| async { get_filler_presets_page_size().await.unwrap_or(10) },
-    );
-    Effect::new(move |_| {
-        if let Some(saved) = saved_page_size.get() {
-            page_size.set(saved);
-        }
-    });
-
-    let data: Resource<(Vec<FillerPresetListRow>, u64)> = Resource::new_blocking(
-        move || (page.get(), page_size.get()),
-        move |(page, page_size)| async move {
+    let data: LocalResource<(Vec<FillerPresetListRow>, u64)> = LocalResource::new(move || {
+        let page = page.get();
+        let page_size = page_size.get();
+        async move {
             list_filler_presets(page, page_size)
                 .await
                 .unwrap_or_default()
-        },
-    );
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_data) = data.get() {
+            current_data.set(next_data);
+        }
+    });
     let delete_action = Action::new(|id: &i64| delete_filler_preset(*id));
     let delete_target: RwSignal<Option<FillerPresetListRow>> = RwSignal::new(None);
     let delete_open = RwSignal::new(false);
@@ -101,139 +128,136 @@ fn FillerPresetsIsland(initial_error: String) -> impl IntoView {
                     {tr(TextKey::FillerPresetActionFailed)}
                 </p>
 
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || {
-                        data.get().map(|(rows, total)| {
-                            let size = page_size.get().max(1);
-                            let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                                .unwrap_or(u32::MAX)
-                                .max(1);
-                            let current_page = page.get().min(total_pages.saturating_sub(1));
-                            let range_start = if total == 0 {
-                                0
-                            } else {
-                                u64::from(current_page) * u64::from(size) + 1
-                            };
-                            let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
+                {move || {
+                    let (rows, total) = current_data.get();
+                    let size = page_size.get().max(1);
+                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
+                        .unwrap_or(u32::MAX)
+                        .max(1);
+                    let current_page = page.get().min(total_pages.saturating_sub(1));
+                    let range_start = if total == 0 {
+                        0
+                    } else {
+                        u64::from(current_page) * u64::from(size) + 1
+                    };
+                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
-                            view! {
-                                <div class=style::table_wrap>
-                                    <table>
-                                        <thead>
+                    view! {
+                        <div class=style::table_wrap>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>{tr(TextKey::Name)}</th>
+                                        <th>{tr(TextKey::FillerKind)}</th>
+                                        <th/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {if rows.is_empty() {
+                                        view! {
                                             <tr>
-                                                <th>{tr(TextKey::Name)}</th>
-                                                <th>{tr(TextKey::FillerKind)}</th>
-                                                <th/>
+                                                <td class=style::empty_cell colspan="3">{tr(TextKey::NoFillerPresets)}</td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {if rows.is_empty() {
-                                                view! {
-                                                    <tr>
-                                                        <td class=style::empty_cell colspan="3">{tr(TextKey::NoFillerPresets)}</td>
-                                                    </tr>
-                                                }.into_any()
-                                            } else {
-                                                rows.into_iter().map(|row| {
-                                                    let id = row.id;
-                                                    let name = row.name.clone();
-                                                    let row_for_delete = row.clone();
-                                                    view! {
-                                                        <tr>
-                                                            <td>{name}</td>
-                                                            <td>{filler_kind_label(row.filler_kind)}</td>
-                                                            <td>
-                                                                <div class=style::row_actions>
-                                                                    <a
-                                                                        class=style::icon_button
-                                                                        href=format!("/media/filler/presets/{id}/edit")
-                                                                        title=tr(TextKey::EditFillerPreset)
-                                                                        aria-label=tr(TextKey::EditFillerPreset)
-                                                                    >
-                                                                        <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
-                                                                    </a>
-                                                                    <form method="post" action="/api/filler-presets/delete">
-                                                                        <input type="hidden" name="id" value=id.to_string()/>
-                                                                        <button
-                                                                            type="submit"
-                                                                            class=style::icon_button
-                                                                            title=tr(TextKey::DeleteFillerPreset)
-                                                                            aria-label=tr(TextKey::DeleteFillerPreset)
-                                                                            on:click=move |event| {
-                                                                                event.prevent_default();
-                                                                                delete_target.set(Some(row_for_delete.clone()));
-                                                                                delete_open.set(true);
-                                                                            }
-                                                                        >
-                                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                                        </button>
-                                                                    </form>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                }).collect_view().into_any()
-                                            }}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class=style::pager>
-                                    <span>{tr(TextKey::RowsPerPage)} ":"</span>
-                                    <select
-                                        class=style::page_size
-                                        aria-label=tr(TextKey::RowsPerPage)
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                page_size.set(value.max(1));
-                                                page.set(0);
+                                        }.into_any()
+                                    } else {
+                                        rows.into_iter().map(|row| {
+                                            let id = row.id;
+                                            let name = row.name.clone();
+                                            let row_for_delete = row.clone();
+                                            view! {
+                                                <tr>
+                                                    <td>{name}</td>
+                                                    <td>{filler_kind_label(row.filler_kind)}</td>
+                                                    <td>
+                                                        <div class=style::row_actions>
+                                                            <a
+                                                                class=style::icon_button
+                                                                href=format!("/media/filler/presets/{id}/edit")
+                                                                title=tr(TextKey::EditFillerPreset)
+                                                                aria-label=tr(TextKey::EditFillerPreset)
+                                                            >
+                                                                <span style=icon_style(IconName::Edit, "1.25rem") aria-hidden="true"></span>
+                                                            </a>
+                                                            <form method="post" action="/api/filler-presets/delete">
+                                                                <input type="hidden" name="id" value=id.to_string()/>
+                                                                <button
+                                                                    type="submit"
+                                                                    class=style::icon_button
+                                                                    title=tr(TextKey::DeleteFillerPreset)
+                                                                    aria-label=tr(TextKey::DeleteFillerPreset)
+                                                                    on:click=move |event| {
+                                                                        event.prevent_default();
+                                                                        delete_target.set(Some(row_for_delete.clone()));
+                                                                        delete_open.set(true);
+                                                                    }
+                                                                >
+                                                                    <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </td>
+                                                </tr>
                                             }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                        <option value="100">"100"</option>
-                                    </select>
-                                    <span class=style::pager_status>
-                                        {range_of(
-                                            u32::try_from(range_start).unwrap_or(u32::MAX),
-                                            u32::try_from(range_end).unwrap_or(u32::MAX),
-                                            total,
-                                        )}
-                                    </span>
-                                    <div class=style::pager_buttons>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || page.get() == 0
-                                            title=tr(TextKey::PreviousPage)
-                                            aria-label=tr(TextKey::PreviousPage)
-                                            on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
-                                        >
-                                            <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || { page.get() + 1 >= total_pages }
-                                            title=tr(TextKey::NextPage)
-                                            aria-label=tr(TextKey::NextPage)
-                                            on:click=move |_| {
-                                                page.update(|page| {
-                                                    *page = (*page + 1).min(total_pages.saturating_sub(1));
-                                                });
-                                            }
-                                        >
-                                            <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                            .into_any()
-                        })
-                    }}
-                </Suspense>
+                                        }).collect_view().into_any()
+                                    }}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class=style::pager>
+                            <span>{tr(TextKey::RowsPerPage)} ":"</span>
+                            <select
+                                class=style::page_size
+                                aria-label=tr(TextKey::RowsPerPage)
+                                prop:value=move || page_size.get().to_string()
+                                on:change=move |event| {
+                                    if let Ok(value) = event_target_value(&event).parse::<u32>() {
+                                        page_size.set(value.max(1));
+                                        page.set(0);
+                                    }
+                                }
+                            >
+                                <option value="10">"10"</option>
+                                <option value="25">"25"</option>
+                                <option value="50">"50"</option>
+                                <option value="100">"100"</option>
+                            </select>
+                            <span class=style::pager_status>
+                                {range_of(
+                                    u32::try_from(range_start).unwrap_or(u32::MAX),
+                                    u32::try_from(range_end).unwrap_or(u32::MAX),
+                                    total,
+                                )}
+                            </span>
+                            <div class=style::pager_buttons>
+                                <button
+                                    type="button"
+                                    class=style::icon_button
+                                    disabled=move || page.get() == 0
+                                    title=tr(TextKey::PreviousPage)
+                                    aria-label=tr(TextKey::PreviousPage)
+                                    on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
+                                >
+                                    <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class=style::icon_button
+                                    disabled=move || { page.get() + 1 >= total_pages }
+                                    title=tr(TextKey::NextPage)
+                                    aria-label=tr(TextKey::NextPage)
+                                    on:click=move |_| {
+                                        page.update(|page| {
+                                            *page = (*page + 1).min(total_pages.saturating_sub(1));
+                                        });
+                                    }
+                                >
+                                    <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    .into_any()
+                }}
             </section>
             <DeleteDialog
                 open=delete_open
@@ -262,106 +286,106 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
     let query = use_query_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <FillerPresetEditorIsland id initial_error=error/> }
+    let new_filler_preset_name = tr(TextKey::NewFillerPreset).to_owned();
+    let initial: Resource<(FillerPresetForm, FillerPresetEditorOptions)> = Resource::new_blocking(
+        move || (id, new_filler_preset_name.clone()),
+        move |(id, new_filler_preset_name)| async move {
+            let form = if id == 0 {
+                FillerPresetForm {
+                    name: new_filler_preset_name,
+                    ..FillerPresetForm::default()
+                }
+            } else {
+                get_filler_preset_form(id)
+                    .await
+                    .unwrap_or_default()
+                    .unwrap_or_default()
+            };
+            let options = get_filler_preset_editor_options().await.unwrap_or_default();
+            (form, options)
+        },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |(initial_form, editor_options)| {
+                    view! {
+                        <FillerPresetEditorIsland
+                            id=id
+                            initial_error=error.clone()
+                            initial_form=initial_form
+                            editor_options=editor_options
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
-    let new_filler_preset_name = tr(TextKey::NewFillerPreset).to_owned();
-    let initial: Resource<FillerPresetForm> = Resource::new_blocking(
-        move || id,
-        move |id| {
-            let new_filler_preset_name = new_filler_preset_name.clone();
-            async move {
-                if id == 0 {
-                    FillerPresetForm {
-                        name: new_filler_preset_name,
-                        ..FillerPresetForm::default()
-                    }
-                } else {
-                    get_filler_preset_form(id)
-                        .await
-                        .unwrap_or_default()
-                        .unwrap_or_default()
-                }
-            }
-        },
+fn FillerPresetEditorIsland(
+    id: i64,
+    initial_error: String,
+    initial_form: FillerPresetForm,
+    editor_options: FillerPresetEditorOptions,
+) -> impl IntoView {
+    let form_id = RwSignal::new(initial_form.id);
+    let name = RwSignal::new(initial_form.name);
+    let filler_kind = RwSignal::new(initial_form.filler_kind);
+    let filler_mode = RwSignal::new(initial_form.filler_mode);
+    let duration_hours = RwSignal::new(initial_form.duration_hours);
+    let duration_minutes = RwSignal::new(initial_form.duration_minutes);
+    let duration_seconds = RwSignal::new(initial_form.duration_seconds);
+    let count = RwSignal::new(
+        initial_form
+            .count
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
     );
-    let options: Resource<FillerPresetEditorOptions> = Resource::new_blocking(
-        || (),
-        |()| async { get_filler_preset_editor_options().await.unwrap_or_default() },
+    let pad_to_nearest_minute = RwSignal::new(
+        initial_form
+            .pad_to_nearest_minute
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
     );
-
-    let form_id = RwSignal::new(id);
-    let name = RwSignal::new(String::new());
-    let filler_kind = RwSignal::new(FILLER_KIND_PRE_ROLL);
-    let filler_mode = RwSignal::new(FILLER_MODE_DURATION);
-    let duration_hours = RwSignal::new(0_i32);
-    let duration_minutes = RwSignal::new(0_i32);
-    let duration_seconds = RwSignal::new(1_i32);
-    let count = RwSignal::new(String::new());
-    let pad_to_nearest_minute = RwSignal::new(String::new());
-    let allow_watermarks = RwSignal::new(false);
-    let collection_type = RwSignal::new(COLLECTION_TYPE_COLLECTION);
-    let collection_id = RwSignal::new(String::new());
-    let media_item_id = RwSignal::new(String::new());
-    let multi_collection_id = RwSignal::new(String::new());
-    let smart_collection_id = RwSignal::new(String::new());
+    let allow_watermarks = RwSignal::new(initial_form.allow_watermarks);
+    let collection_type = RwSignal::new(initial_form.collection_type);
+    let collection_id = RwSignal::new(
+        initial_form
+            .collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let media_item_id = RwSignal::new(
+        initial_form
+            .media_item_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let multi_collection_id = RwSignal::new(
+        initial_form
+            .multi_collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let smart_collection_id = RwSignal::new(
+        initial_form
+            .smart_collection_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
     let playlist_group_id = RwSignal::new(String::new());
-    let playlist_id = RwSignal::new(String::new());
-    let expression = RwSignal::new(String::new());
-    let use_chapters_as_media_items = RwSignal::new(false);
-
-    Effect::new(move |_| {
-        if let Some(form) = initial.get() {
-            form_id.set(form.id);
-            name.set(form.name);
-            filler_kind.set(form.filler_kind);
-            filler_mode.set(form.filler_mode);
-            duration_hours.set(form.duration_hours);
-            duration_minutes.set(form.duration_minutes);
-            duration_seconds.set(form.duration_seconds);
-            count.set(
-                form.count
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            pad_to_nearest_minute.set(
-                form.pad_to_nearest_minute
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            allow_watermarks.set(form.allow_watermarks);
-            collection_type.set(form.collection_type);
-            collection_id.set(
-                form.collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            media_item_id.set(
-                form.media_item_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            multi_collection_id.set(
-                form.multi_collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            smart_collection_id.set(
-                form.smart_collection_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            playlist_id.set(
-                form.playlist_id
-                    .map(|value| value.to_string())
-                    .unwrap_or_default(),
-            );
-            expression.set(form.expression);
-            use_chapters_as_media_items.set(form.use_chapters_as_media_items);
-        }
-    });
+    let playlist_id = RwSignal::new(
+        initial_form
+            .playlist_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    );
+    let expression = RwSignal::new(initial_form.expression);
+    let use_chapters_as_media_items = RwSignal::new(initial_form.use_chapters_as_media_items);
     Effect::new(move |_| {
         let kind = filler_kind.get();
         if matches!(kind, FILLER_KIND_FALLBACK | FILLER_KIND_TAIL)
@@ -388,17 +412,15 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
             filler_mode.set(FILLER_MODE_COUNT);
         }
     });
+    let options_for_group = editor_options.clone();
     Effect::new(move |_| {
         if !playlist_group_id.get().is_empty() {
             return;
         }
-        let Some(options) = options.get() else {
-            return;
-        };
         let Some(playlist_id) = parse_optional_i64(&playlist_id.get()) else {
             return;
         };
-        if let Some(playlist) = options
+        if let Some(playlist) = options_for_group
             .playlists
             .iter()
             .find(|playlist| playlist.id == playlist_id)
@@ -406,15 +428,13 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
             playlist_group_id.set(playlist.playlist_group_id.to_string());
         }
     });
+    let options_for_playlist = editor_options.clone();
     Effect::new(move |_| {
         let group_id = parse_optional_i64(&playlist_group_id.get()).unwrap_or(0);
         let Some(selected_playlist_id) = parse_optional_i64(&playlist_id.get()) else {
             return;
         };
-        let Some(options) = options.get() else {
-            return;
-        };
-        let playlist_matches_group = options.playlists.iter().any(|playlist| {
+        let playlist_matches_group = options_for_playlist.playlists.iter().any(|playlist| {
             playlist.id == selected_playlist_id && playlist.playlist_group_id == group_id
         });
         if !playlist_matches_group {
@@ -497,12 +517,9 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
     let chapters_disabled = Signal::derive(move || filler_kind.get() == FILLER_KIND_FALLBACK);
     let expression_disabled = Signal::derive(move || filler_kind.get() != FILLER_KIND_MID_ROLL);
 
+    let opts = editor_options.clone();
+
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                let opts = options.get().unwrap_or_default();
-                let on_save = on_save;
-                view! {
                     <div class=style::page>
                         <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                             {tr(TextKey::FillerPresetCouldNotBeSaved)}
@@ -599,9 +616,6 @@ fn FillerPresetEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                             </div>
                         </form>
                     </div>
-                }
-            }}
-        </Suspense>
     }
 }
 

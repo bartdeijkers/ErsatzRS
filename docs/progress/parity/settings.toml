@@ -14,3 +14,10 @@ description = 'Full admin-route text coverage and four-language browser proof re
 discovered  = '2026-06-10'
 evidence    = 'docs/progress/parity/settings.toml summary and plans/settings-parity-slice.md track active i18n ParityDebt.'
 resolved    = true
+
+[[debt]]
+id          = 'managed-ffmpeg-windows-settings-paths'
+description = 'On win-x64 the managed FFmpeg runtime downloaded under `%USERPROFILE%\\.ersatzrs\\ffmpeg`, but the runtime was not copied next to `ErsatzRS.exe` and `/settings/ffmpeg` continued to display a generic PATH/Chocolatey tool path instead of the freshly acquired ffmpeg/ffprobe pair.'
+discovered  = '2026-06-22'
+evidence    = 'Fixed 2026-06-22: `crates/ersatzrs-web/src/host/bootstrap.rs` copies managed/downloaded runtime files into the current executable directory on Windows, persists the accepted ffmpeg/ffprobe paths to `ConfigElement`, and leaves explicit overrides/PATH fallback untouched. `/settings/ffmpeg` now uses the startup runtime report as the resolved-path display source. Focused bootstrap tests cover companion-file copy, managed-path persistence, and PATH fallback preservation.'
+resolved    = true

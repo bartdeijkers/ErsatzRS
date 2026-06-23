@@ -1,4 +1,12 @@
 # Admin UI hydration parity. status: one of the verbatim markers below.
+# Route-level entries below record the last focused proof for each page. They
+# are paired with WholeAppIslandHydrationSmokeGate for release-level no-fixture
+# browser proof that every listed island route hydrates.
+
+[[page]]
+name   = 'WholeAppIslandHydrationSmokeGate'
+status = '✅'
+notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard.'
 
 [[page]]
 name   = 'LibrariesPage'
@@ -33,7 +41,7 @@ notes  = ''
 [[page]]
 name   = 'TimelinePage` (`/playouts`)'
 status = '✅'
-notes  = 'Read-only SVG island; selection is the gap (Slice F).'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Seeded browser spot-check proved row selection opens Playout Detail and the per-row Refresh Playout control attaches without hydration/page errors.'
 
 [[page]]
 name   = 'CollectionsPage'
@@ -63,7 +71,7 @@ notes  = 'Detail page island wired; `/media/music/artists/2355` modal-open smoke
 [[page]]
 name   = 'ChannelsListPage'
 status = '✅'
-notes  = 'Delete dialog server fn smoke clean.'
+notes  = 'Whole-app smoke passed 56/56 on 2026-06-23. Browser spot-check proved the row Delete Channel button opens and closes the Confirm Delete dialog without hydration/page errors.'
 
 [[page]]
 name   = 'FfmpegProfilesListPage'
@@ -97,8 +105,8 @@ notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
 
 [[page]]
 name   = 'PlayoutsPage` row selection'
-status = '⏳'
-notes  = 'Slice F — lift selection to URL query param.'
+status = '✅'
+notes  = 'Seeded browser spot-check on 2026-06-23 proved row selection populates the detail section and Refresh Playout dispatches; covered by the 56/56 whole-app island hydration smoke.'
 
 [[page]]
 name   = 'BlocksPage'

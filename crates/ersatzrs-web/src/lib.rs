@@ -24,4 +24,19 @@ pub use host::bootstrap::run;
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn hydrate() {
     leptos::mount::hydrate_islands();
+
+    // Positive, machine-checkable signal that island hydration ran to
+    // completion. A marker-mismatch panic in any island (e.g. a shell-level
+    // island streaming a resource that desyncs sibling islands) aborts
+    // `hydrate_islands()` before this line, so the flag stays unset. The
+    // release hydration smoke (`tests/e2e/island-hydration.spec.ts`) waits for
+    // `window.__ersatzrs_hydrated === true` on every island route, turning the
+    // whole-page hydration aborts we keep regressing into a hard test failure.
+    if let Some(window) = web_sys::window() {
+        let _ = js_sys::Reflect::set(
+            &window,
+            &wasm_bindgen::JsValue::from_str("__ersatzrs_hydrated"),
+            &wasm_bindgen::JsValue::TRUE,
+        );
+    }
 }

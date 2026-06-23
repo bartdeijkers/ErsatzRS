@@ -128,7 +128,7 @@ CREATE TABLE "Channel" (
     "Categories" TEXT NULL,
     "FFmpegProfileId" INTEGER NOT NULL,
     "FallbackFillerId" INTEGER NULL,
-    "Group" TEXT NOT NULL DEFAULT 'ErsatzTV',
+    "Group" TEXT NOT NULL DEFAULT 'ErsatzRS',
     "IdleBehavior" INTEGER NOT NULL,
     "IsEnabled" INTEGER NOT NULL DEFAULT 1,
     "MirrorSourceChannelId" INTEGER NULL,

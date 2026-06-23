@@ -32,16 +32,35 @@ struct TrashSection {
 
 #[component]
 pub fn TrashPage() -> impl IntoView {
-    view! { <TrashIsland/> }
+    let initial: Resource<TrashPageData> = Resource::new_blocking(
+        || (),
+        |()| async move { list_trash_items().await.unwrap_or_default() },
+    );
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|initial_data| {
+                    view! { <TrashIsland initial_data=initial_data/> }
+                })
+            }}
+        </Suspense>
+    }
 }
 
 #[island]
-fn TrashIsland() -> impl IntoView {
+fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
     let media_revision = RwSignal::new(String::new());
-    let data: Resource<TrashPageData> = Resource::new(
-        move || media_revision.get(),
-        |_| async move { list_trash_items().await.unwrap_or_default() },
-    );
+    let current_data = RwSignal::new(initial_data);
+    let data: LocalResource<TrashPageData> = LocalResource::new(move || {
+        let _ = media_revision.get();
+        async move { list_trash_items().await.unwrap_or_default() }
+    });
+    Effect::new(move |_| {
+        if let Some(trash) = data.get() {
+            current_data.set(trash);
+        }
+    });
 
     let selected_ids = RwSignal::new(HashSet::<i64>::new());
     let single_delete_target = RwSignal::new(None::<(i64, String)>);
@@ -146,103 +165,99 @@ fn TrashIsland() -> impl IntoView {
                 </div>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    data.get().map(|trash| {
-                        let sections = build_sections(trash);
-                        if sections.is_empty() {
-                            return view! {
-                                <p class=style::empty>{tr(TextKey::TrashEmpty)}</p>
+            {move || {
+                let sections = build_sections(current_data.get());
+                if sections.is_empty() {
+                    return view! {
+                        <p class=style::empty>{tr(TextKey::TrashEmpty)}</p>
+                    }
+                    .into_any();
+                }
+
+                let nav_sections = sections.clone();
+                view! {
+                    <div class=style::section_links>
+                        {nav_sections.into_iter().map(|section| {
+                            let section_title = tr(section.title_key);
+                            view! {
+                                <a href=format!("#{}", section.key) class=style::section_link>
+                                    {format!("{} ({})", section_title, section.rows.len())}
+                                </a>
                             }
-                            .into_any();
-                        }
+                        }).collect_view()}
+                    </div>
 
-                        let nav_sections = sections.clone();
+                    {sections.into_iter().map(|section| {
+                        let section_key = section.key;
+                        let section_title = tr(section.title_key);
+                        let browse_href = section.browse_href;
+                        let rows = section.rows;
                         view! {
-                            <div class=style::section_links>
-                                {nav_sections.into_iter().map(|section| {
-                                    let section_title = tr(section.title_key);
-                                    view! {
-                                        <a href=format!("#{}", section.key) class=style::section_link>
-                                            {format!("{} ({})", section_title, section.rows.len())}
-                                        </a>
-                                    }
-                                }).collect_view()}
-                            </div>
-
-                            {sections.into_iter().map(|section| {
-                                let section_key = section.key;
-                                let section_title = tr(section.title_key);
-                                let browse_href = section.browse_href;
-                                let rows = section.rows;
-                                view! {
-                                    <section id=section_key class=style::section>
-                                        <div class=style::section_header>
-                                            <h2 class=style::section_title>
-                                                {format!("{} ({})", section_title, rows.len())}
-                                            </h2>
-                                            <a href=browse_href class=style::browse_link>
-                                                {tr(TextKey::OpenBrowser)}
-                                            </a>
-                                        </div>
-                                        <div class=style::grid>
-                                            {rows.into_iter().map(|row| {
-                                                let item_id = row.id;
-                                                let item_title = row.title.clone();
-                                                let subtitle = row.subtitle.clone();
-                                                let artwork_path = row.artwork_path.clone();
-                                                let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&row.sort_title);
-                                                view! {
-                                                    <div class=style::card_shell>
-                                                        <MediaCard
-                                                            title=item_title.clone()
-                                                            subtitle=subtitle
-                                                            artwork_url=artwork_path
-                                                            placeholder=placeholder
+                            <section id=section_key class=style::section>
+                                <div class=style::section_header>
+                                    <h2 class=style::section_title>
+                                        {format!("{} ({})", section_title, rows.len())}
+                                    </h2>
+                                    <a href=browse_href class=style::browse_link>
+                                        {tr(TextKey::OpenBrowser)}
+                                    </a>
+                                </div>
+                                <div class=style::grid>
+                                    {rows.into_iter().map(|row| {
+                                        let item_id = row.id;
+                                        let item_title = row.title.clone();
+                                        let subtitle = row.subtitle.clone();
+                                        let artwork_path = row.artwork_path.clone();
+                                        let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&row.sort_title);
+                                        view! {
+                                            <div class=style::card_shell>
+                                                <MediaCard
+                                                    title=item_title.clone()
+                                                    subtitle=subtitle
+                                                    artwork_url=artwork_path
+                                                    placeholder=placeholder
+                                                />
+                                                <div class=style::card_actions>
+                                                    <label class=style::checkbox_label>
+                                                        <input
+                                                            type="checkbox"
+                                                            prop:checked=move || {
+                                                                selected_ids.with(|ids| ids.contains(&item_id))
+                                                            }
+                                                            on:change=move |event| {
+                                                                let checked = event_target_checked(&event);
+                                                                selected_ids.update(|ids| {
+                                                                    if checked {
+                                                                        ids.insert(item_id);
+                                                                    } else {
+                                                                        ids.remove(&item_id);
+                                                                    }
+                                                                });
+                                                            }
                                                         />
-                                                        <div class=style::card_actions>
-                                                            <label class=style::checkbox_label>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    prop:checked=move || {
-                                                                        selected_ids.with(|ids| ids.contains(&item_id))
-                                                                    }
-                                                                    on:change=move |event| {
-                                                                        let checked = event_target_checked(&event);
-                                                                        selected_ids.update(|ids| {
-                                                                            if checked {
-                                                                                ids.insert(item_id);
-                                                                            } else {
-                                                                                ids.remove(&item_id);
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                />
-                                                                {tr(TextKey::Select)}
-                                                            </label>
-                                                            <button
-                                                                class=style::btn_delete_item
-                                                                on:click=move |_| {
-                                                                    single_delete_target
-                                                                        .set(Some((item_id, item_title.clone())));
-                                                                    single_delete_open.set(true);
-                                                                }
-                                                            >
-                                                                {tr(TextKey::Delete)}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                    </section>
-                                }
-                            }).collect_view()}
+                                                        {tr(TextKey::Select)}
+                                                    </label>
+                                                    <button
+                                                        class=style::btn_delete_item
+                                                        on:click=move |_| {
+                                                            single_delete_target
+                                                                .set(Some((item_id, item_title.clone())));
+                                                            single_delete_open.set(true);
+                                                        }
+                                                    >
+                                                        {tr(TextKey::Delete)}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            </section>
                         }
-                        .into_any()
-                    })
-                }}
-            </Suspense>
+                    }).collect_view()}
+                }
+                .into_any()
+            }}
 
             <DeleteDialog
                 open=single_delete_open

@@ -168,6 +168,17 @@ pub fn SearchPage() -> impl IntoView {
     let query_map = use_query_map();
     let initial_query = query_map.with(|params| params.get("query").unwrap_or_default());
     let input_value = initial_query.clone();
+    let query_for_resource = initial_query.clone();
+    let data: Resource<SearchResults> = Resource::new_blocking(
+        move || query_for_resource.clone(),
+        move |query| async move {
+            if query.trim().is_empty() {
+                SearchResults::default()
+            } else {
+                search_results(query).await.unwrap_or_default()
+            }
+        },
+    );
 
     view! {
         <div class=shell::page>
@@ -183,46 +194,41 @@ pub fn SearchPage() -> impl IntoView {
                 <button type="submit" class=shell::btn_add>{tr(TextKey::Search)}</button>
             </form>
 
-            <SearchIsland query=initial_query/>
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+                {move || {
+                    data.get().map(|results| {
+                        view! {
+                            <SearchIsland query=initial_query.clone() results=results/>
+                        }
+                    })
+                }}
+            </Suspense>
             <SearchCardActionFallback/>
         </div>
     }
 }
 
 #[island]
-fn SearchIsland(query: String) -> impl IntoView {
-    let query_for_resource = query.clone();
-    let data: Resource<(String, SearchResults)> = Resource::new_blocking(
-        move || query_for_resource.clone(),
-        move |query| async move {
-            let results = search_results(query.clone()).await.unwrap_or_default();
-            (query, results)
-        },
-    );
-
+fn SearchIsland(query: String, results: SearchResults) -> impl IntoView {
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                data.get().map(|(query, results)| {
-                    if query.trim().is_empty() {
-                        return view! {
-                            <p class=style::empty>{tr(TextKey::EnterSearchQuery)}</p>
-                        }
-                        .into_any();
-                    }
-                    let any = SECTIONS
-                        .iter()
-                        .any(|m| !section_for(&results, m.kind).cards.is_empty());
-                    if !any {
-                        return view! {
-                            <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
-                        }
-                        .into_any();
-                    }
-                    view! { <SearchResultsView query=query results=results/> }.into_any()
-                })
-            }}
-        </Suspense>
+        {if query.trim().is_empty() {
+            view! {
+                <p class=style::empty>{tr(TextKey::EnterSearchQuery)}</p>
+            }
+            .into_any()
+        } else {
+            let any = SECTIONS
+                .iter()
+                .any(|m| !section_for(&results, m.kind).cards.is_empty());
+            if any {
+                view! { <SearchResultsView query=query results=results/> }.into_any()
+            } else {
+                view! {
+                    <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
+                }
+                .into_any()
+            }
+        }}
     }
 }
 
