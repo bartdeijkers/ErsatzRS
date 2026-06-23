@@ -187,4 +187,3 @@ starting points an admin can edit or delete per channel.
 - [`crates/ersatzrs-infra/src/db.rs`](../../crates/ersatzrs-infra/src/db.rs) — default profile/resolution seed
 - [`crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`](../../crates/ersatzrs-ffmpeg/src/pipeline/mod.rs) — `hls_output`, `add_output_options`
 - [`crates/ersatzrs-domain/src/ffmpeg.rs`](../../crates/ersatzrs-domain/src/ffmpeg.rs) — profile/codec/HW enums
-- [Implementation plan](../../plans/hls-transcode-capacity-and-admission.md)

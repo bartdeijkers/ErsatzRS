@@ -170,8 +170,7 @@ the graphics-engine contract that generated drawvg artifacts are VGS scripts.
 
 ## Alternatives Considered
 
-- Bundle FFmpeg into every ErsatzRS release archive/image (the prior decision and
-  [`plans/release-self-built-ffmpeg.md`](../../plans/release-self-built-ffmpeg.md)):
+- Bundle FFmpeg into every ErsatzRS release archive/image (the prior decision):
   superseded — it bloats artifacts with six per-RID payloads and couples FFmpeg
   updates to ErsatzRS releases. Replaced by startup download/update from
   `ErsatzRS-ffmpeg` releases.

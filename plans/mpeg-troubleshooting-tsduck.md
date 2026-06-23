@@ -1,7 +1,9 @@
 # MPEG-TS troubleshooting with TSDuck
 
-> **Status: Completed / historical.** Shipped as ADR 0013 plus the TSDuck
-> playback gate (`scripts/e2e/tsduck-playback-gate.sh`). Kept for context.
+> **Status: Active / proposed.** ADR 0013 is still `Proposed` /
+> `Not implemented` for the in-app `/system/troubleshooting/mpeg` Support tool.
+> The manual TSDuck playback gate (`scripts/e2e/tsduck-playback-gate.sh`) exists,
+> but it is separate tooling and does not satisfy this plan.
 
 ## Summary
 

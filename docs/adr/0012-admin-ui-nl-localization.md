@@ -88,4 +88,4 @@ parity contract.
 - `$ERSATZTV_SRC/ErsatzTV/Localization.cs`
 - `$ERSATZTV_SRC/ErsatzTV/DatabaseRequestCultureProvider.cs`
 - `$ERSATZTV_SRC/ErsatzTV/Pages/Settings/UISettings.razor`
-- [Settings parity slice](../../plans/settings-parity-slice.md)
+- [Settings parity tracker](../progress/parity/settings.toml)

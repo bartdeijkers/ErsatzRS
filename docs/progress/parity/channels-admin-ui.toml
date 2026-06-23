@@ -1,9 +1,18 @@
 feature    = 'Channels admin UI'
 etv_source = '`ErsatzTV/Pages/Channel*.razor`, `ErsatzTV/ViewModels/ChannelEditViewModel.cs`, `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, `ErsatzTV/Locals/Pages/Channels*.resx`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/channels/`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-core/src/repositories/channel.rs`, `crates/ersatzrs-infra/src/repositories/channel.rs`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 
 summary    = '''
 Ported in the current Phase 7 slice: `/channels` paged table + delete/show-disabled toggle; generated and stored logo images; disabled/hidden channel number markers; ErsatzTV-like top action bar/content/divider/icon row actions; per-row "Stop Transcode Session" button (between preview and edit) that ports `IFFmpegSegmenterService.IsActive`/`StopChannel` and `IHlsSessionWorker.Cancel` — visibility is driven by a client-side poll of the in-memory HLS session registry (mirrors ErsatzTV's `OnWorkersChanged` re-render) and clicking it cancels the live worker, which kills FFmpeg and removes itself so the icon clears on the next poll; Troubleshoot is visible and linked only when the channel is enabled and has a playout, with blank reserved action space otherwise, matching `Channels.razor`; `/channels/add` and `/channels/:id` SSR multipart editor exposing the full channel edit contract (basics, runtime behavior, playout source/mirror, flags, streaming, stream selection, subtitle/music-video behavior, logo, watermark, fallback filler); repository-backed defaults, supporting lists, validation, full-field persistence, stored/external/remove logo semantics, playlist/list logo preference, subtitle-extraction save side effect, and form-level validation errors. Visible list/editor labels, actions, help text, options, streaming-mode values, and preferred audio/subtitle language values now use the persisted-language i18n layer with per-culture translation modules; the shared language selector is populated from `MediaStream.Language`, `Subtitle.Language`, and `Channel.PreferredAudioLanguageCode` with ISO alias expansion, matching ErsatzTV's `GetAllLanguageCodes` path. Music Video Credits Template now lists the bundled ErsatzTV preset stems from `assets/templates` plus user-editable `data/templates/music-video-credits/*.sbntxt`, mirrors ErsatzTV's browser disabled state when Music Video Credits Mode is not `GenerateSubtitles` while preserving the SSR multipart fallback, persists the selected stem only when Music Video Credits Mode is `GenerateSubtitles`, and IPTV/HLS streaming renders the configured music-video credits template into an ephemeral forced/default ASS subtitle before FFmpeg command generation, falling back to `_default.ass` when the selected template is missing. Startup now extracts the bundled ErsatzTV fonts (`OPTIKabel-Heavy`, `Roboto`, `Sen`) into the FFmpeg `fontsdir`, so `_default.ass` and the other music-video credits presets burn with the same title font as ErsatzTV instead of a libass fallback.
+Current 2026-06-23 status: the `/channels` list/editor surface remains open
+because the Edit Numbers top action does not reach the channel-number editor.
 '''
+
+[[debt]]
+id          = 'channels-edit-numbers-routes-to-add'
+description = 'The `/channels` Edit Numbers button should open the channel-number editor, but currently navigating to the button target shows the Add Channel editor instead.'
+discovered  = '2026-06-23'
+evidence    = 'User report 2026-06-23: clicking Edit Numbers on `/channels` lands on the Add Channel page instead of an Edit Numbers page. Local source confirms the list button points at `/channels/numbers`; no implementation or browser proof has closed this route behavior yet.'
+resolved    = false

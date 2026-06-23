@@ -10,7 +10,7 @@ ParityDebt:
 - Prompt-requested route-local remote-stream editor: intentionally not implemented because pinned ErsatzTV exposes `RemoteStreamList.razor` only and has no admin editor/validator for remote stream URL/script save/delete. Add only if the ErsatzTV baseline advances to include such a route.
 
 Evidence:
-- Source/visual map: `plans/remote-streams-browser-parity-slice.md`.
+- Source/visual map: pruned with completed plan docs; current proof is this tracker plus `tests/e2e/remote-streams.spec.ts`.
 - Focused tests: `cargo test -p ersatzrs-web --features ssr remote_stream`.
 - Hydration lint: `cargo xtask hydration-lint -p ersatzrs-web`.
 - Browser spec: `E2E_DB_PATH=.tmp/remote-streams-e2e.db npx playwright test tests/e2e/remote-streams.spec.ts --project=chromium`.

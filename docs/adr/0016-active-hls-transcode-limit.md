@@ -177,7 +177,6 @@ everything else is opportunistic and reclaimable.*
 - [ADR 0003: Invoke FFmpeg through the CLI](0003-ffmpeg-cli-spawn.md)
 - [ADR 0014: Runtime-learned hardware capability fallback](0014-runtime-learned-hardware-capability-fallback.md)
 - [ADR 0015: HLS / MPEG-TS continuity normalization](0015-hls-mpeg-ts-continuity-normalization.md)
-- [Implementation plan](../../plans/hls-transcode-capacity-and-admission.md)
 - [ADR 0017: Default FFmpeg profiles for multi-resolution streaming](0017-default-ffmpeg-profile-1080p60.md)
 - [`crates/ersatzrs-infra/src/hls_worker.rs`](../../crates/ersatzrs-infra/src/hls_worker.rs)
 - [`docs/progress/parity/hls-variant-playlists-segmenter.toml`](../progress/parity/hls-variant-playlists-segmenter.toml)

@@ -103,85 +103,52 @@ public open-source project.
 
 ## Plan Documents
 
-Feature-level plans live alongside this index. Completed plans are kept for
-historical context; the authoritative live state is always `docs/progress/`
-(query with `cargo xtask progress …`), not these files.
+Feature-level plans live alongside this index only while they are still
+actionable. Once a plan is fully implemented, superseded, or reduced to history,
+prune the standalone plan document and rely on `docs/progress/`, ADRs, the
+changelog, and git history for evidence. The authoritative live state is always
+`docs/progress/` (query with `cargo xtask progress …`), not these files.
 
-### Active
+### Active / actionable
 
-- `hls-transcode-capacity-and-admission.md` — implements ADR 0016 (hard transcode
-  capacity ceiling + admission/preemption ladder) and ADR 0017 (default 1080p60 /
-  AC-3 6ch FFmpeg profile + `-max_delay`). Open debts on
-  `hls-variant-playlists-segmenter` and `ffmpeg-command-generation`.
-- `goal-nvenc-pipeline-parity.md` — close the remaining NVENC/CUDA pipeline gaps
-  (`ffmpeg-command-generation` debt `nvenc-filter-gate-live-proof`).
-- `goal-hls-segmenter-mpegts-wrapper-parity.md` — HLS segmenter state machine and
-  MPEG-TS wrapper orchestration (`hls-variant-playlists-segmenter`, In progress).
-- `release-self-built-ffmpeg.md` — replace public FFmpeg downloads in the release
-  workflow with first-party FFmpeg 8.1 builds and bundled runtimes per RID.
-- `ffmpeg-zscale-runtime-remediation.md` — ensure self-built/release FFmpeg ship
-  `zscale` (`--enable-libzimg`) for the fail-fast startup capability check.
-- `island_hydration_durable_fix.md` + `island-hydration-smoke-gate.md` —
-  closed admin island hydration audit after the wasm checksum/build-consistency
-  release bug was fixed and gated; current proof is tracked in
-  `docs/progress/hydration.toml`.
-- `module-split-survey.md` — standing refactoring backlog: large files to split,
-  with ready-to-run prompts (lift items one at a time).
-- `workflow-review.md` — review of the parity-progress pipeline; its
-  recommendations are tracked under Deferred Contract Work below.
 - `extras-alternate-versions-and-stream-roles.md` — implements ADR 0018
   (special features/extras, alternate versions, and stream-role/commentary
   selection): additive `MediaItem` content-variant columns, new search tokens
   (`content_kind`/`sub_kind`/`parent_title`/`audio_title`/`subtitle_title`),
   default `content_kind:primary` exclusion, `/media/*` surfacing, and scanner
-  import of extras ErsatzTV discards. Parity slug `content-variants` (to be
-  created at the first slice).
-
-### Completed / historical
-
-These slices shipped (target feature is `Ported`) or their investigation
-concluded; kept for context, with live state in `docs/progress/`.
-
-- `graphics-engine-parity-slice.md` + `goal-graphics-engine.md` — drawvg graphics
-  engine within ADR 0005, no external process (`drawvg-graphics-engine`, Ported).
-- `colorspace-normalization-parity.md` — software + GPU-resident colorspace
-  normalization (`hardware-colorspace-normalization`, Ported).
-- `settings-parity-slice.md` — settings route family + file-driven i18n
-  (`settings`, Ported).
-- `remote-streams-browser-parity-slice.md` — remote-streams browser
-  (`remote-streams-browser`, Ported).
-- `media-sources-hydration-anomaly.md` — Emby/Plex media-source hydration
-  investigation (`media-source-configuration`, Ported).
-- `hls-mpegts-review-fixes.md` — HLS/MPEG-TS review fixes
-  (`mpeg-ts-channel-streaming`, Ported).
-- `mpeg-troubleshooting-tsduck.md` — TSDuck MPEG-TS diagnostics (ADR 0013;
-  `scripts/e2e/tsduck-playback-gate.sh`).
-- `ffmpeg-path-parity.md` — FFmpeg/ffprobe locator + DB-path resolution
-  investigation (shipped).
-- `launcher-releasing.md` — Windows tray launcher + graceful shutdown
-  (`ersatzrs-launcher`, shipped; code signing researched but deferred).
+  import of extras ErsatzTV discards. Parity slug `content-variants` will be
+  created at the first implementation slice.
+- `mpeg-troubleshooting-tsduck.md` — implements ADR 0013's **in-app** optional
+  TSDuck Support tool for MPEG-TS troubleshooting at
+  `/system/troubleshooting/mpeg`. The manual
+  `scripts/e2e/tsduck-playback-gate.sh` gate exists, but the ADR-backed
+  Support surface is still proposed / not implemented.
+- `module-split-survey.md` — standing refactoring backlog: large files to split,
+  with ready-to-run prompts. Lift items one at a time and keep each refactor
+  behavior-preserving.
 
 ## Deferred Contract Work
 
-These are intentionally deferred until code exists:
+These are intentionally deferred or still open after pruning completed plan
+documents:
 
-- Root `Cargo.toml` workspace lints.
-- Real crate-level CI runs.
+- Purpose-built `ersatzrs-healthcheck` binary to replace the Docker bash
+  `/dev/tcp` health check.
+- Docker dependency layer caching (copy manifests first, build deps, then copy
+  sources) to reduce image build time.
 - mdBook or another documentation build system.
-- Release artifact publishing.
-- Docker multi-arch release flow.
+- macOS release archives (`osx-x64`, `osx-arm64`) are intentionally omitted from
+  the active release line to preserve hosted-runner credits; CI still builds and
+  tests the six-RID platform matrix.
 - Claude hook automation in `.claude/settings.json`; hook schema should be
   validated before enabling it.
-- Workflow improvements from the parity-progress pipeline review
-  (`workflow-review.md`): LLM-agnostic skills/contracts, summary hygiene plus
-  runtime-triage routine, evidence-gated parity status, and a
-  `cargo xtask smoke` runtime gate.
 
 ## Acceptance Checks
 
 - Repository-bound documents are English.
 - Root contract index exists in `AGENTS.md`.
-- The authoritative implementation plan is English.
+- The authoritative live state is `docs/progress/` plus ADRs, not pruned plan
+  history.
 - ADRs 0001 through 0007 record the back-filled decisions.
-- CI jobs skip Rust checks until `Cargo.toml` exists.
+- CI runs the workspace Rust gates and validates `docs/progress/`.
 - Skills refer to contracts instead of duplicating long policy text.
