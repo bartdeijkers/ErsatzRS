@@ -468,6 +468,70 @@ async fn scheduling_repository_searches_documented_lucene_smart_collection_field
 }
 
 #[tokio::test]
+async fn scheduling_repository_searches_content_variants_and_stream_roles() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+
+    sqlx::query(
+        r#"INSERT INTO "MediaItem" (
+            "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
+         ) VALUES (40, 1, 0, 1, 'Featurettes', 20)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "OtherVideo" ("Id") VALUES (40)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "OtherVideoMetadata" (
+            "Id", "OtherVideoId", "Title", "SortTitle", "DateAdded", "DateUpdated", "MetadataKind"
+         ) VALUES (
+            400, 40, 'Making The Escape', 'making the escape',
+            '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0
+         )"#,
+    )
+    .await
+    .unwrap();
+
+    let default_search = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search("title:Making".to_owned()))
+        .await
+        .unwrap();
+    assert!(default_search.is_empty());
+
+    let explicit_variant = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "content_kind:extra AND sub_kind:featurette AND parent_title:Feature".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        explicit_variant
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![40]
+    );
+
+    let commentary = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Search(
+            "has_commentary AND audio_title:commentary AND subtitle_title:commentary".to_owned(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        commentary.iter().map(|item| item.id).collect::<Vec<_>>(),
+        vec![20]
+    );
+}
+
+#[tokio::test]
 async fn scheduling_repository_search_documents_page_returns_page_map() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -1029,11 +1093,11 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
         r#"INSERT INTO "MediaStream" (
             "Id", "Index", "Codec", "MediaStreamKind", "Language", "Channels",
             "Default", "Forced", "MediaVersionId", "PixelFormat", "BitsPerRawSample",
-            "ColorTransfer"
+            "ColorTransfer", "Title"
          ) VALUES
-            (1, 0, 'h264', 1, NULL, 0, 1, 0, 200, 'yuv420p10le', 0, 'smpte2084'),
-            (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200, NULL, 0, NULL),
-            (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200, NULL, 0, NULL)"#,
+            (1, 0, 'h264', 1, NULL, 0, 1, 0, 200, 'yuv420p10le', 0, 'smpte2084', NULL),
+            (2, 1, 'aac', 2, 'eng', 2, 1, 0, 200, NULL, 0, NULL, 'Director Commentary'),
+            (3, 2, 'ass', 3, 'nld', 0, 0, 0, 200, NULL, 0, NULL, 'Commentary Subtitles')"#,
     )
     .await
     .unwrap();
@@ -1062,10 +1126,10 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
         r#"INSERT INTO "Subtitle" (
             "Id", "Codec", "DateAdded", "DateUpdated", "Default", "Forced",
             "IsExtracted", "Language", "MovieMetadataId", "SDH", "StreamIndex",
-            "SubtitleKind"
+            "SubtitleKind", "Title"
          ) VALUES (
             1, 'srt', '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0, 0,
-            0, 'nld', 200, 0, 3, 0
+            0, 'nld', 200, 0, 3, 0, 'Commentary Sidecar'
          )"#,
     )
     .await

@@ -5,14 +5,14 @@ use ersatzrs_domain::{
     ArtworkKind, BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode,
     ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode,
     ChannelSubtitleMode, ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode,
-    CollectionType, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
-    FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
-    FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
-    HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
-    MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
-    PlaybackOrder, PlayoutMode, PlayoutScheduleKind, ScalingBehavior, StartType, StreamingMode,
-    SubtitleKind, TailMode, TraktListItemKind, VaapiDriver, VideoScanKind, WatermarkLocation,
-    WatermarkSize,
+    CollectionType, ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat,
+    FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat,
+    FillWithGroupMode, FillerKind, FillerMode, FilterMode, FixedStartTimeBehavior,
+    GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy,
+    MediaItemState, MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
+    NormalizeLoudnessMode, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, ScalingBehavior,
+    StartType, StreamingMode, SubtitleKind, TailMode, TraktListItemKind, VaapiDriver,
+    VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -303,6 +303,11 @@ db_enum!(CollectionType {
     70 => CollectionType::RemoteStream,
     100 => CollectionType::FakeCollection,
     101 => CollectionType::FakePlaylistItem,
+});
+db_enum!(ContentKind {
+    0 => ContentKind::Primary,
+    1 => ContentKind::Extra,
+    2 => ContentKind::AlternateVersion,
 });
 db_enum!(DecoBreakPlacement {
     0 => DecoBreakPlacement::BlockStart,

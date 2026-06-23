@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
+use ersatzrs_domain::{normalize_sub_kind_token, ContentKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchExpression {
@@ -42,7 +43,10 @@ pub enum SearchField {
     VideoBitDepth,
     VideoDynamicRange,
     AudioCodec,
+    AudioTitle,
     SubtitleCodec,
+    SubtitleTitle,
+    HasCommentary,
     Width,
     Height,
     Chapters,
@@ -51,6 +55,9 @@ pub enum SearchField {
     MediaKind,
     LibraryName,
     LibraryFolderId,
+    ContentKind,
+    SubKind,
+    ParentTitle,
     ContentRating,
     ShowTitle,
     ShowGenre,
@@ -122,13 +129,19 @@ pub struct SearchDocument {
     pub video_bit_depths: Vec<i32>,
     pub video_dynamic_ranges: Vec<String>,
     pub audio_codecs: Vec<String>,
+    pub audio_titles: Vec<String>,
     pub subtitle_codecs: Vec<String>,
+    pub subtitle_titles: Vec<String>,
+    pub has_commentary: bool,
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub chapter_counts: Vec<i32>,
     pub durations_seconds: Vec<i64>,
     pub library_name: Option<String>,
     pub library_folder_ids: Vec<i64>,
+    pub content_kind: ContentKind,
+    pub sub_kind: Option<String>,
+    pub parent_title: Option<String>,
     pub content_ratings: Vec<String>,
     pub show_title: Option<String>,
     pub show_genres: Vec<String>,
@@ -162,7 +175,9 @@ pub struct SearchPageMap {
 impl SearchExpression {
     #[must_use]
     pub fn parse(query: &str) -> Self {
-        SearchParser::new(query).parse()
+        SearchParser::new(query)
+            .parse()
+            .with_default_content_kind_filter()
     }
 
     #[must_use]
@@ -177,6 +192,36 @@ impl SearchExpression {
                 .iter()
                 .any(|expression| expression.matches(document)),
             Self::Not(expression) => !expression.matches(document),
+        }
+    }
+
+    fn with_default_content_kind_filter(self) -> Self {
+        if self.references_variant_selector() {
+            return self;
+        }
+
+        let primary = Self::Term(SearchTerm {
+            field: SearchField::ContentKind,
+            value: SearchValue::Text(ContentKind::Primary.search_token().to_owned()),
+        });
+
+        match self {
+            Self::MatchAll => primary,
+            expression => Self::And(vec![primary, expression]),
+        }
+    }
+
+    fn references_variant_selector(&self) -> bool {
+        match self {
+            Self::MatchAll => false,
+            Self::Term(term) => matches!(
+                term.field,
+                SearchField::ContentKind | SearchField::SubKind | SearchField::ParentTitle
+            ),
+            Self::And(expressions) | Self::Or(expressions) => {
+                expressions.iter().any(Self::references_variant_selector)
+            }
+            Self::Not(expression) => expression.references_variant_selector(),
         }
     }
 }
@@ -262,7 +307,16 @@ impl SearchField {
                 .collect(),
             Self::VideoDynamicRange => document.video_dynamic_ranges.clone(),
             Self::AudioCodec => document.audio_codecs.clone(),
+            Self::AudioTitle => document.audio_titles.clone(),
             Self::SubtitleCodec => document.subtitle_codecs.clone(),
+            Self::SubtitleTitle => document.subtitle_titles.clone(),
+            Self::HasCommentary => {
+                if document.has_commentary {
+                    vec!["true".to_owned(), "yes".to_owned(), "1".to_owned()]
+                } else {
+                    vec!["false".to_owned(), "no".to_owned(), "0".to_owned()]
+                }
+            }
             Self::Width => document
                 .width
                 .map(|width| width.to_string())
@@ -295,6 +349,9 @@ impl SearchField {
                 .iter()
                 .map(ToString::to_string)
                 .collect(),
+            Self::ContentKind => vec![document.content_kind.search_token().to_owned()],
+            Self::SubKind => option_values([document.sub_kind.as_deref()]),
+            Self::ParentTitle => option_values([document.parent_title.as_deref()]),
             Self::ContentRating => document.content_ratings.clone(),
             Self::ShowTitle => option_values([document.show_title.as_deref()]),
             Self::ShowGenre => document.show_genres.clone(),
@@ -372,7 +429,10 @@ impl SearchField {
             "video_bit_depth" => Self::VideoBitDepth,
             "video_dynamic_range" => Self::VideoDynamicRange,
             "audio_codec" => Self::AudioCodec,
+            "audio_title" | "audio_stream_title" => Self::AudioTitle,
             "subtitle_codec" | "sub_codec" => Self::SubtitleCodec,
+            "subtitle_title" | "sub_title" | "subtitle_stream_title" => Self::SubtitleTitle,
+            "has_commentary" | "commentary" => Self::HasCommentary,
             "chapters" => Self::Chapters,
             "minutes" => Self::Minutes,
             "seconds" => Self::Seconds,
@@ -381,6 +441,9 @@ impl SearchField {
             "type" | "kind" | "media_kind" => Self::MediaKind,
             "library_name" | "libraryname" => Self::LibraryName,
             "library_folder_id" | "libraryfolderid" => Self::LibraryFolderId,
+            "content_kind" | "contentkind" => Self::ContentKind,
+            "sub_kind" | "subkind" => Self::SubKind,
+            "parent_title" | "parenttitle" => Self::ParentTitle,
             "content_rating" => Self::ContentRating,
             "show_title" => Self::ShowTitle,
             "show_genre" => Self::ShowGenre,
@@ -430,6 +493,18 @@ impl SearchField {
     }
 
     fn text_matches(&self, actual: &str, expected: &str, wildcard: bool) -> bool {
+        if matches!(self, Self::ContentKind) {
+            return ContentKind::from_search_token(actual)
+                .zip(ContentKind::from_search_token(expected))
+                .is_some_and(|(actual, expected)| actual == expected);
+        }
+
+        if matches!(self, Self::SubKind) {
+            return normalize_sub_kind_token(actual)
+                .zip(normalize_sub_kind_token(expected))
+                .is_some_and(|(actual, expected)| actual == expected);
+        }
+
         if self.is_numeric() && !wildcard {
             return actual
                 .parse::<i64>()
@@ -859,6 +934,11 @@ impl SearchParser {
                 || self.consume_word("contains")
             {
                 (SearchField::parse(field_name), self.advance())
+            } else if field_name.eq_ignore_ascii_case("has_commentary") {
+                (
+                    SearchField::HasCommentary,
+                    Some(Token::Word("true".to_owned())),
+                )
             } else {
                 (SearchField::Default, Some(token))
             }
@@ -1215,6 +1295,35 @@ mod tests {
             )
             .matches(&doc)
         );
+    }
+
+    #[test]
+    fn defaults_to_primary_content_kind_unless_variant_query_opts_in() {
+        let primary = document();
+        let mut extra = document();
+        extra.content_kind = ContentKind::Extra;
+        extra.sub_kind = Some("featurette".to_owned());
+        extra.parent_title = Some("The Great Escape".to_owned());
+
+        assert!(SearchExpression::parse("title:Great").matches(&primary));
+        assert!(!SearchExpression::parse("title:Great").matches(&extra));
+        assert!(
+            SearchExpression::parse("content_kind:extra AND sub_kind:featurettes").matches(&extra)
+        );
+        assert!(SearchExpression::parse("parent_title:\"Great Escape\"").matches(&extra));
+    }
+
+    #[test]
+    fn matches_stream_titles_and_commentary_role() {
+        let mut doc = document();
+        doc.audio_titles = vec!["Director Commentary".to_owned()];
+        doc.subtitle_titles = vec!["Commentary subtitles".to_owned()];
+        doc.has_commentary = true;
+
+        assert!(SearchExpression::parse("audio_title:commentary").matches(&doc));
+        assert!(SearchExpression::parse("subtitle_title:commentary").matches(&doc));
+        assert!(SearchExpression::parse("has_commentary").matches(&doc));
+        assert!(!SearchExpression::parse("has_commentary:false").matches(&doc));
     }
 
     #[test]

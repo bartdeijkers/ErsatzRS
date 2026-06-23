@@ -38,13 +38,15 @@ hydration audit closed the stale marker-mismatch TODO with a clean 56/56
 whole-app smoke plus `/channels` Delete and seeded `/playouts`
 row-select/refresh browser proof. HLS segmenter playback stutter around the
 first normalized append is open again until live playback/TSDuck proof verifies
-the no-discontinuity MPEG-TS append fix. After that proof, the next spec-backed
-candidates are ADR 0018 (Proposed / Not implemented) — special
-features/extras, alternate versions, and stream roles, whose parity slug
-`content-variants` will be created at its first implementation slice (see
-plans/extras-alternate-versions-and-stream-roles.md); the open
-`ersatzrs-healthcheck` binary TODO; and ADR 0013 in-app TSDuck MPEG-TS
-troubleshooting (Proposed / Not implemented).
+the no-discontinuity MPEG-TS append fix. ADR 0018 `content-variants` Phase 0
+landed on 2026-06-23: schema, domain, search contract, scheduling projection,
+and health-check readiness are in place, with UI surfacing, scanner import,
+alternate-version linking, commentary render acceptance, and scheduling
+examples tracked as unresolved debt in
+`docs/progress/parity/content-variants.toml`. The next spec-backed candidates
+are the remaining `content-variants` phases, the open `ersatzrs-healthcheck`
+binary TODO, and ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed /
+Not implemented).
 '''
 
 # Phase 0 checklist (all complete).

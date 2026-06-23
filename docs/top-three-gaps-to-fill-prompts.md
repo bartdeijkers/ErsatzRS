@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-22
-last_processed_commit: 596a2fc08fee8cf416c3c95167a54ae88c8ae195
+generated: 2026-06-23
+last_processed_commit: 52f28a16ab8a70371f50ec94afccd984a463f8af
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -17,8 +17,9 @@ by the [progress routine](automation/daily-progress-routine.md).
 
 `cargo xtask progress gaps` is **one** input, not the whole backlog: it inspects
 only whole-feature parity status and goes clear long before the specs are fully
-implemented. The chores below come from the wider spec sweep (unimplemented
-ADRs, active plans, open phase TODOs) that the routine now performs.
+implemented. The chores below come from the wider spec sweep (open debt,
+unimplemented ADRs, active plans, and open phase TODOs) that the routine
+performs.
 
 **Parity baseline:** ErsatzTV *parity* chores are measured against ErsatzTV
 commit
@@ -26,158 +27,169 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-22): `cargo xtask progress gaps` is clear and every tracked
-`[[debt]]` is `resolved`, so the top three come from the spec backlog. The
-2026-06-22 reconcile window (`7901e3a..596a2fc`) landed only docs/CI/runtime
-fixes — ADR 0008 managed FFmpeg acquisition is now implemented (with a Windows
-stale-bundled-path follow-up fix) and the release line intentionally drops the
-macOS archives — so **no commit touched the three chores below; all three are
-carried over unchanged and remain actionable today**. Ranking:
-(1) **content-variants** — named in `phase.toml` `next_steps` as the next
-capability and backed by an explicit maintainer request (ADR 0018), so it leads;
-(2) **ersatzrs-healthcheck binary** — open `phase.toml` `[[known_todo]]`,
-release/runtime hardening that every container deployment depends on; (3)
-**in-app TSDuck MPEG-TS troubleshooting** — ADR 0013, `Proposed` /
-`Not implemented` (only the manual script gate shipped; the `/system/
-troubleshooting/mpeg` Support tool is unbuilt).
+Selection (2026-06-23): `cargo xtask progress gaps` reports three open
+features: `hls-variant-playlists-segmenter`, `channels-admin-ui`, and
+`content-variants`. Completed-scope replacement removed the old ADR 0018 Phase
+0 foundation prompt because the schema/search foundation and
+`content-variants` slug now exist. Ranking: (1) **HLS segmenter normalized
+append stutter** — named in `phase.toml` `current_focus` and backed by
+user-visible playback evidence; (2) **Channels Edit Numbers** — confirmed
+admin-route parity bug in an `In progress` pinned-baseline UI surface; (3)
+**content-variants Phase 1 UI surfacing** — the next coherent slice of ADR 0018
+after Phase 0, with remaining debt already structured under the new slug.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: special-features / alternate-versions / stream-roles, Phase 0 foundation (creates slug `content-variants`)
+## 1. Fix the next ErsatzRS parity/runtime gap: HLS segmenter normalized append stutter (slug `hls-variant-playlists-segmenter`)
+
+Use the repo workflow from AGENTS.md and the parity/runtime guidance in
+`skills/parity-slice.md`. The goal is a genuinely smooth HLS segmenter path:
+the first normalized MPEG-TS append must not visibly stutter or emit an
+unjustified discontinuity. Do not hide a partial proof in prose; if a runtime
+shortfall remains, keep `segmenter-normalized-append-stutter` open in
+`docs/progress/parity/hls-variant-playlists-segmenter.toml`.
+
+Before editing:
+1. Read the current `hls-variant-playlists-segmenter` parity file and its open
+   `segmenter-normalized-append-stutter` debt.
+2. Inspect `crates/ersatzrs-infra/src/hls_worker.rs`,
+   `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`, and the playlist trimming /
+   discontinuity tests around normalized append offsets.
+3. Build a Source Map for HLS worker decision points, FFmpeg output flags,
+   playlist writer/trim behavior, and the live validation scripts
+   (`cargo xtask smoke`, `scripts/e2e/tsduck-playback-gate.sh`).
+4. Diagnose why the current focused tests are not enough: capture the runtime
+   segment/playlist shape and decide whether the fix is command generation,
+   worker append state, playlist metadata, timestamp normalization, or proof
+   coverage.
+
+Implement the slice end-to-end:
+- Fix the runtime path that still permits visible stutter around the first
+  normalized append; preserve real discontinuity markers when content actually
+  requires them.
+- Add or tighten focused tests that fail on the runtime shape that caused the
+  stutter, not only on a narrow argv snapshot.
+- Update `docs/progress/parity/hls-variant-playlists-segmenter.toml`,
+  `docs/progress/phase.toml`, and `CHANGELOG.md` only when the runtime proof is
+  strong enough to change status/debt.
+
+Verification:
+- Focused HLS worker / FFmpeg pipeline tests for the changed path.
+- `cargo xtask smoke`.
+- `scripts/e2e/tsduck-playback-gate.sh gate` unless the environment lacks
+  TSDuck; if skipped, keep the debt open and say exactly why.
+- `cargo xtask progress check`.
+
+Report the Source Map, root cause, behavior implemented, runtime proof, any
+remaining `ParityDebt`, verification run, and changed files.
+
+---
+
+## 2. Fix the next ErsatzTV parity gap in ErsatzRS: Channels Edit Numbers route (slug `channels-admin-ui`)
+
+Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is a
+pinned-baseline admin UI parity bug: the `/channels` Edit Numbers action should
+open the ErsatzTV channel-number editor, but it currently lands on the Add
+Channel page. The goal is a fully working list action and editor workflow with
+SSR/browser-safe fallbacks; do not close the debt without visible browser proof.
+
+Before editing:
+1. Read `docs/progress/parity/channels-admin-ui.toml`, especially
+   `channels-edit-numbers-routes-to-add`.
+2. Read the ErsatzTV channel-number source under `$ERSATZTV_SRC` from the
+   channel page family (`ErsatzTV/Pages/Channel*.razor` and related handlers /
+   view models).
+3. Inspect current ErsatzRS `/channels` routes, nav/action targets, channel
+   server functions, repository save semantics, i18n strings, and HTML POST
+   fallbacks.
+4. Build both a Source Map and Visual Source Map for the list action,
+   channel-number editor route, validation, persistence, redirects, and mobile
+   layout.
+
+Implement the slice end-to-end:
+- Route `/channels/numbers` (or the ErsatzTV-equivalent target) to a real
+  channel-number editor instead of the Add Channel editor.
+- Port the expected fields/actions/validation/persistence and no-JS fallback
+  semantics from ErsatzTV.
+- Localize every new visible string in all supported cultures under
+  `crates/ersatzrs-web/src/admin/languages/`.
+- Add focused server-function/component tests and a Playwright regression that
+  clicks Edit Numbers from `/channels` and proves the editor saves or rejects
+  invalid input correctly.
+- Update `docs/progress/parity/channels-admin-ui.toml`, `CHANGELOG.md`, and the
+  prompt file if the debt ranking changes.
+
+Visual verification:
+- Rebuild Leptos assets, serve via `./run.sh serve`, and capture the
+  `/channels` action plus channel-number editor at desktop and mobile widths.
+- Compare layout, spacing, table/action behavior, and validation states against
+  the ErsatzTV reference; do not claim parity complete with a visible mismatch.
+
+Verification:
+- Focused `ersatzrs-web` tests for the channel-number route and save path.
+- `npx playwright test <added-or-updated-channels-spec>`.
+- `cargo xtask parity-check web`.
+- `cargo xtask progress check`.
+
+Report the Source Map, Visual Source Map, behavior implemented, remaining
+`ParityDebt`, verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
 [ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
 [`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-Do **not** force `skills/parity-slice.md`; there is no pinned ErsatzTV behavior
-to port. The goal is the fully working **Phase 0 — Foundation** slice (schema +
-search contract) with no stopgaps; any shortfall must be recorded as visible
-`ParityDebt` in the new parity file, not hidden in prose.
+Do **not** force `skills/parity-slice.md`; there is no pinned ErsatzTV UI to
+port. The goal is the complete **Phase 1 — `/media/*` UI surfacing** slice on
+top of the Phase 0 schema/search foundation.
 
-Scope is **only Phase 0** from the plan's "Phases" section — do not attempt the
-UI, scanner-import, alternate-version linking, stream-role, or scheduling
-phases. Build exactly the data-model and search-contract foundation those later
-slices depend on.
-
-Before editing:
-1. Read ADR 0018 and the plan in full; reread the plan's **Data Model**,
-   **Search Contract**, and **Phase 0** sections.
-2. Read the ErsatzTV files the plan's **Source Map** names under `$ERSATZTV_SRC/`
-   (`LocalFolderScanner.cs` `ExtraFiles`/`ExtraDirectories`,
-   `MovieFolderScanner.cs` filter call site) so the schema can later *reverse*
-   the discard — but do not change scanner behavior in this slice.
-3. Inspect the current ErsatzRS schema/migrations, search index, and
-   `docs/progress/` to confirm no `content-variants` slug exists yet.
-4. Identify the `ParityDebt` you are deferring to later phases.
-
-Implement the Phase 0 slice end-to-end:
-- Add the migration(s) and model fields the Data Model section specifies
-  (subordinate/alternate linkage, e.g. `ParentMediaItemId`, role/kind columns),
-  following STYLE.md SQL rules (EF-style `PK_/FK_/IX_` names, identifier casing).
-- Wire the Search Contract additions so extras/alternate-versions/roles are
-  *representable and queryable*, even though no scanner imports them yet.
-- Register the new parity slug: create
-  `docs/progress/parity/content-variants.toml` (status `In progress`, accurate
-  `summary`, `adr = [18]`, structured `[[debt]]` for every later phase) and add
-  any health-check touchpoint required by the Health Check Parity contract.
-- Add focused tests for the schema/search additions.
-
-Verification (backend/pipeline — no UI in this slice):
-- Focused crate tests for the new schema/search code.
-- `cargo xtask progress check` — must pass with the new slug registered.
-- `cargo test --workspace --all-features` for the touched crates.
-
-Report the Source Map, the Phase 0 behavior implemented, the `ParityDebt` left
-open for Phases 1–5, the verification run, and changed files.
-
----
-
-## 2. Fix the next ErsatzRS parity-infrastructure gap: purpose-built `ersatzrs-healthcheck` binary
-
-Use the repo workflow from AGENTS.md. This is an open hardening TODO recorded in
-`docs/progress/phase.toml` (`[[known_todo]]`: "Replace bash /dev/tcp HEALTHCHECK
-with a purpose-built ersatzrs-healthcheck binary"). The goal is a real, working
-healthcheck binary that the container image uses, with no stopgaps; record any
-shortfall as visible debt in `phase.toml`, not in prose.
+Scope is **only Phase 1** from the plan. Do not implement scanner import,
+alternate-version linking, commentary render acceptance, or scheduling examples
+in this slice. Any shortfall must remain visible in
+`docs/progress/parity/content-variants.toml`.
 
 Before editing:
-1. Read the current Docker `HEALTHCHECK` and the bash `/dev/tcp` probe it runs,
-   plus the `/healthz` handler in `ersatzrs-web`.
-2. Inspect `ARCHITECTURE.md` for crate-boundary rules and how the existing
-   binaries (`ersatzrs-web`, `ersatzrs-scanner`) are structured.
-3. Confirm the supported-platform matrix in AGENTS.md — the binary must build on
-   all six targets (no hard-coded OS/arch outside `cfg` guards).
-4. Identify the debt: a bash/`/dev/tcp` probe is fragile, shell-dependent, and
-   not present on minimal images.
+1. Read ADR 0018, the plan's Phase 1 section, and
+   `docs/progress/parity/content-variants.toml`.
+2. Inspect the current media browse/detail pages, shared media-card/list
+   primitives, media browser server functions, search result/action surfaces,
+   persisted page preferences, routes, and all four language modules.
+3. Build a Source Map and Visual Source Map for the `/media/*` browse pages,
+   detail pages, variant toggle, variant badges, Extras / Special Features
+   sections, Versions sections, and search-field reference text.
+4. Identify the remaining Phase 2-5 debt you are explicitly deferring.
 
 Implement the slice end-to-end:
-- Add an `ersatzrs-healthcheck` binary (smallest crate that fits the workspace
-  layout) that probes the server's health endpoint and exits 0/non-0.
-- Point the Docker `HEALTHCHECK` at the new binary; drop the bash `/dev/tcp`
-  probe.
-- Keep it dependency-light and static-binary friendly (single static binary is a
-  core project goal).
-- Add a focused test for the probe's success/failure exit codes.
-- Tick or update the `phase.toml` `[[known_todo]]` once it is genuinely closed.
+- Add the persisted "Show special features / versions" browse toggle, defaulted
+  off so existing browse pages remain primary-only.
+- Render variant badges and detail-page Extras / Special Features / Versions
+  sections from the Phase 0 `ContentKind`, `SubKind`, and parent linkage.
+- Document or surface the new smart-collection/search tokens where the existing
+  UI exposes search-field help.
+- Preserve SSR and no-JS fallbacks; follow TEST.md hydration rules for any
+  island changes.
+- Localize all new visible strings in every supported culture.
+- Add focused server-function/component tests and Playwright coverage using
+  seeded variant rows.
+- Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
+  prompt file if the debt ranking changes.
 
-Verification (backend — no UI):
-- `cargo build --workspace` and the focused binary test.
-- `cargo clippy --workspace --all-targets -- -D warnings` (mirror CI; also the
-  `--features mysql` pass).
-- `cargo xtask progress check`.
-
-Report what changed in the image and workspace, the probe behavior, the
-verification run, and changed files.
-
----
-
-## 3. Build the next ErsatzRS spec chore: in-app TSDuck MPEG-TS troubleshooting at `/system/troubleshooting/mpeg`
-
-Use the repo workflow from AGENTS.md. This is a **spec-backed chore** governed by
-[ADR 0013](adr/0013-tsduck-mpeg-troubleshooting.md) (`Proposed` /
-`Not implemented`) and
-[`plans/mpeg-troubleshooting-tsduck.md`](../plans/mpeg-troubleshooting-tsduck.md).
-Only the **manual** `scripts/e2e/tsduck-playback-gate.sh` gate exists today; the
-**in-app** Support tool the ADR/plan describe is unbuilt. Do not force
-`skills/parity-slice.md` — TSDuck is an intentional ErsatzRS diagnostic
-extension with no ErsatzTV equivalent (confirmed by the ADR's `$ERSATZTV_SRC`
-search). The goal is the fully working Support tool with no stopgaps; normal
-IPTV/HLS/HDHomeRun/FFmpeg/startup paths must not depend on TSDuck.
-
-Before editing:
-1. Read ADR 0013 and the plan; reread the plan's first-target section for
-   `/system/troubleshooting/mpeg` and the structured-report requirements
-   (PSI/SI, PAT/PMT/service/PID, continuity counters, PCR validity, bitrate).
-2. Inspect the existing `/system/troubleshooting` Support surface and its
-   server functions in `ersatzrs-web` so the new tool reuses that page's
-   structure, styling, and i18n boundary (ADR 0012).
-3. Build a Source Map (route, server fn, TSDuck spawn, report model, archive)
-   and a light Visual Source Map against the existing Support page.
-4. Identify `ParityDebt` (e.g. platforms where TSDuck is absent — degrade
-   gracefully, never crash the page).
-
-Implement the slice end-to-end:
-- Add the `/system/troubleshooting/mpeg` route + server function that spawns
-  TSDuck on a bounded sample of a selected channel's TS output (ADR 0003 CLI
-  spawn rules), parses it into a structured report, and offers the archive.
-- Detect missing TSDuck at runtime and surface a clear "not installed" state
-  rather than failing; keep all normal streaming paths TSDuck-free.
-- Localize new user-facing strings for every supported culture
-  (`crates/ersatzrs-web/src/admin/languages/`), per the Language Contract.
-- Follow TEST.md hydration rules; add focused tests for report parsing and the
-  not-installed fallback.
-
-Visual verification (UI route):
-- Rebuild Leptos assets, serve via `./run.sh serve`, open
-  `/system/troubleshooting/mpeg`, and compare its layout to the existing
-  `/system/troubleshooting` Support page (same containers, spacing, typography).
-- Do not claim parity complete with a visible mismatch; record it as
-  `ParityDebt`.
+Visual verification:
+- Rebuild Leptos assets, serve via `./run.sh serve`, and verify representative
+  movie/show/season/music media pages with variants hidden by default and shown
+  when toggled.
+- Capture desktop and mobile screenshots and compare layout to the existing
+  media surfaces; do not ship overlapping or untranslated UI.
 
 Verification:
-- `cargo xtask parity-check web` and focused `ersatzrs-web` tests.
-- Any added Playwright spec (`npx playwright test ...`).
+- Focused `ersatzrs-web` tests for the media browse/detail server functions and
+  persisted toggle.
+- `npx playwright test <added-or-updated-content-variants-spec>`.
+- `cargo xtask parity-check web`.
 - `cargo xtask progress check`.
 
-Report the Source Map, Visual Source Map, behavior implemented, remaining
-`ParityDebt`, verification run, and changed files.
+Report the Source Map, Visual Source Map, Phase 1 behavior implemented,
+remaining Phase 2-5 `ParityDebt`, verification run, and changed files.

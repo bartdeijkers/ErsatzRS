@@ -53,11 +53,16 @@ impl MediaItemRepository for SqliteMediaItemRepository {
 
     async fn upsert(&self, item: &MediaItem) -> Result<()> {
         sqlx::query(
-            r#"REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, ?)"#,
+            r#"REPLACE INTO "MediaItem" (
+                "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
+            ) VALUES (?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.id)
         .bind(item.library_path_id)
         .bind(encode_enum(item.state))
+        .bind(encode_enum(item.content_kind))
+        .bind(item.sub_kind.as_deref())
+        .bind(item.parent_media_item_id)
         .execute(&self.0)
         .await?;
         Ok(())
@@ -71,5 +76,8 @@ fn map_media_item(row: &DbRow) -> Result<MediaItem> {
         collection_ids: Vec::new(),
         trakt_list_item_ids: Vec::new(),
         state: decode_enum_column("media item state", row, "State")?,
+        content_kind: decode_enum_column("content kind", row, "ContentKind")?,
+        sub_kind: row.try_get("SubKind")?,
+        parent_media_item_id: row.try_get("ParentMediaItemId")?,
     })
 }

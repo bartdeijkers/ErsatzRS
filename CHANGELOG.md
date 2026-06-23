@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- Content-variant search foundation for ADR 0018: `MediaItem` can now store
+  primary/extra/alternate-version identity, subtype, and parent linkage, and
+  smart-collection/search evaluation can query `content_kind`, `sub_kind`,
+  `parent_title`, `audio_title`, `subtitle_title`, and `has_commentary` while
+  defaulting existing searches to primary items.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

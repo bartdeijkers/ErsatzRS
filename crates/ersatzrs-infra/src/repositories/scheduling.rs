@@ -20,9 +20,9 @@ use ersatzrs_core::search::{
     SearchProviderGuid,
 };
 use ersatzrs_domain::{
-    CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
-    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    normalize_sub_kind_token, CollectionEnumeratorState, CollectionType, DecoMode, EntityId,
+    PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    ProgramScheduleAlternate, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
     CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
@@ -105,6 +105,9 @@ const SEARCH_NEED_MOODS: u64 = 1 << 31;
 const SEARCH_NEED_ALBUMS: u64 = 1 << 32;
 const SEARCH_NEED_ARTISTS: u64 = 1 << 33;
 const SEARCH_NEED_ALBUM_ARTISTS: u64 = 1 << 34;
+const SEARCH_NEED_PARENT_TITLE: u64 = 1 << 35;
+const SEARCH_NEED_AUDIO_TITLES: u64 = 1 << 36;
+const SEARCH_NEED_SUBTITLE_TITLES: u64 = 1 << 37;
 
 const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_LANGUAGE_TAGS
@@ -119,7 +122,9 @@ const SEARCH_NEED_STREAM_FIELDS: u64 = SEARCH_NEED_LANGUAGES
     | SEARCH_NEED_DURATIONS
     | SEARCH_NEED_VIDEO_BIT_DEPTHS
     | SEARCH_NEED_VIDEO_DYNAMIC_RANGES
-    | SEARCH_NEED_LIBRARY_FOLDER_IDS;
+    | SEARCH_NEED_LIBRARY_FOLDER_IDS
+    | SEARCH_NEED_AUDIO_TITLES
+    | SEARCH_NEED_SUBTITLE_TITLES;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct SearchHydrationNeeds {
@@ -170,6 +175,8 @@ impl SearchHydrationNeeds {
             | SearchField::EpisodeNumber
             | SearchField::MetadataKind
             | SearchField::LibraryId
+            | SearchField::ContentKind
+            | SearchField::SubKind
             | SearchField::ReleasedOnThisDay
             | SearchField::ReleasedInTheLast
             | SearchField::ReleasedNotInTheLast
@@ -191,12 +198,19 @@ impl SearchHydrationNeeds {
             SearchField::VideoBitDepth => self.insert(SEARCH_NEED_VIDEO_BIT_DEPTHS),
             SearchField::VideoDynamicRange => self.insert(SEARCH_NEED_VIDEO_DYNAMIC_RANGES),
             SearchField::AudioCodec => self.insert(SEARCH_NEED_AUDIO_CODECS),
+            SearchField::AudioTitle => self.insert(SEARCH_NEED_AUDIO_TITLES),
             SearchField::SubtitleCodec => self.insert(SEARCH_NEED_SUBTITLE_CODECS),
+            SearchField::SubtitleTitle => self.insert(SEARCH_NEED_SUBTITLE_TITLES),
+            SearchField::HasCommentary => {
+                self.insert(SEARCH_NEED_AUDIO_TITLES);
+                self.insert(SEARCH_NEED_SUBTITLE_TITLES);
+            }
             SearchField::Width => self.insert(SEARCH_NEED_WIDTH),
             SearchField::Height => self.insert(SEARCH_NEED_HEIGHT),
             SearchField::Chapters => self.insert(SEARCH_NEED_CHAPTERS),
             SearchField::Minutes | SearchField::Seconds => self.insert(SEARCH_NEED_DURATIONS),
             SearchField::LibraryFolderId => self.insert(SEARCH_NEED_LIBRARY_FOLDER_IDS),
+            SearchField::ParentTitle => self.insert(SEARCH_NEED_PARENT_TITLE),
             SearchField::ContentRating => self.insert(SEARCH_NEED_CONTENT_RATINGS),
             SearchField::ShowGenre => self.insert(SEARCH_NEED_SHOW_GENRES),
             SearchField::ShowTag => self.insert(SEARCH_NEED_SHOW_TAGS),
@@ -1195,6 +1209,7 @@ impl SqliteSchedulingContentRepository {
             .map(|value| parse_datetime("search added_date", &value))
             .transpose()?;
         let item_id = row.try_get::<EntityId, _>("item_id")?;
+        let parent_media_item_id = row.try_get::<Option<EntityId>, _>("parent_media_item_id")?;
         let stream_fields = if hydration.contains(SEARCH_NEED_STREAM_FIELDS) {
             self.stream_search_fields(&metadata_kind, metadata_id, item_id)
                 .await?
@@ -1322,11 +1337,22 @@ impl SqliteSchedulingContentRepository {
             } else {
                 Vec::new()
             },
+            audio_titles: if hydration.contains(SEARCH_NEED_AUDIO_TITLES) {
+                stream_fields.audio_titles.clone()
+            } else {
+                Vec::new()
+            },
             subtitle_codecs: if hydration.contains(SEARCH_NEED_SUBTITLE_CODECS) {
                 stream_fields.subtitle_codecs.clone()
             } else {
                 Vec::new()
             },
+            subtitle_titles: if hydration.contains(SEARCH_NEED_SUBTITLE_TITLES) {
+                stream_fields.subtitle_titles.clone()
+            } else {
+                Vec::new()
+            },
+            has_commentary: stream_fields.has_commentary,
             width: hydration
                 .contains(SEARCH_NEED_WIDTH)
                 .then_some(stream_fields.width)
@@ -1350,6 +1376,18 @@ impl SqliteSchedulingContentRepository {
                 stream_fields.library_folder_ids.clone()
             } else {
                 Vec::new()
+            },
+            content_kind: decode_enum_column("content kind", row, "content_kind")?,
+            sub_kind: row
+                .try_get::<Option<String>, _>("sub_kind")?
+                .and_then(|value| normalize_sub_kind_token(&value)),
+            parent_title: if hydration.contains(SEARCH_NEED_PARENT_TITLE) {
+                match parent_media_item_id {
+                    Some(parent_id) => self.media_item_title(parent_id).await?,
+                    None => None,
+                }
+            } else {
+                None
             },
             content_ratings: if hydration.contains(SEARCH_NEED_CONTENT_RATINGS) {
                 split_content_ratings(row.try_get::<Option<String>, _>("content_rating")?)
@@ -1508,6 +1546,35 @@ impl SqliteSchedulingContentRepository {
         .map_err(Into::into)
     }
 
+    async fn media_item_title(&self, item_id: EntityId) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT COALESCE(
+                   "mm"."Title", "sm"."Title", "sem"."Title", "em"."Title",
+                   "mvm"."Title", "am"."Title", "ovm"."Title", "som"."Title",
+                   "im"."Title", "rsm"."Title"
+               )
+               FROM "MediaItem" AS "mi"
+               LEFT JOIN "MovieMetadata" AS "mm" ON "mm"."MovieId" = "mi"."Id"
+               LEFT JOIN "ShowMetadata" AS "sm" ON "sm"."ShowId" = "mi"."Id"
+               LEFT JOIN "SeasonMetadata" AS "sem" ON "sem"."SeasonId" = "mi"."Id"
+               LEFT JOIN "EpisodeMetadata" AS "em" ON "em"."EpisodeId" = "mi"."Id"
+               LEFT JOIN "MusicVideoMetadata" AS "mvm" ON "mvm"."MusicVideoId" = "mi"."Id"
+               LEFT JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "mi"."Id"
+               LEFT JOIN "OtherVideoMetadata" AS "ovm" ON "ovm"."OtherVideoId" = "mi"."Id"
+               LEFT JOIN "SongMetadata" AS "som" ON "som"."SongId" = "mi"."Id"
+               LEFT JOIN "ImageMetadata" AS "im" ON "im"."ImageId" = "mi"."Id"
+               LEFT JOIN "RemoteStreamMetadata" AS "rsm" ON "rsm"."RemoteStreamId" = "mi"."Id"
+               WHERE "mi"."Id" = ?
+               ORDER BY "mi"."Id"
+               LIMIT 1"#,
+        )
+        .bind(item_id)
+        .fetch_optional(&self.0)
+        .await
+        .map_err(ersatzrs_core::repositories::RepositoryError::from)?
+        .flatten())
+    }
+
     async fn metadata_actor_values(
         &self,
         metadata_kind: &str,
@@ -1642,7 +1709,7 @@ impl SqliteSchedulingContentRepository {
                 .push(i32::try_from(chapter_count).unwrap_or(i32::MAX));
 
             let rows = sqlx::query(
-                r#"SELECT "MediaStreamKind", "Codec", "Language", "PixelFormat",
+                r#"SELECT "MediaStreamKind", "Codec", "Language", "Title", "PixelFormat",
                           "BitsPerRawSample", "ColorTransfer"
                  FROM "MediaStream"
                  WHERE "MediaVersionId" = ?
@@ -1655,6 +1722,7 @@ impl SqliteSchedulingContentRepository {
                 let kind = media_stream_kind_from_row(&row);
                 let codec = row.try_get::<Option<String>, _>("Codec")?;
                 let language = row.try_get::<Option<String>, _>("Language")?;
+                let title = row.try_get::<Option<String>, _>("Title")?;
                 match kind.as_deref() {
                     Some("video") => {
                         push_unique_optional(&mut result.video_codecs, codec);
@@ -1669,10 +1737,20 @@ impl SqliteSchedulingContentRepository {
                     Some("audio") => {
                         push_unique_optional(&mut result.audio_codecs, codec);
                         push_unique_optional(&mut result.audio_languages, language);
+                        push_stream_title(
+                            &mut result.audio_titles,
+                            &mut result.has_commentary,
+                            title,
+                        );
                     }
                     Some("subtitle" | "external_subtitle") => {
                         push_unique_optional(&mut result.subtitle_codecs, codec);
                         push_unique_optional(&mut result.subtitle_languages, language);
+                        push_stream_title(
+                            &mut result.subtitle_titles,
+                            &mut result.has_commentary,
+                            title,
+                        );
                     }
                     _ => {}
                 }
@@ -1682,7 +1760,7 @@ impl SqliteSchedulingContentRepository {
         let subtitle_fk = metadata_fk(metadata_kind);
         if let Some(subtitle_fk) = subtitle_fk {
             let subtitle_sql = format!(
-                r#"SELECT "Codec", "Language"
+                r#"SELECT "Codec", "Language", "Title"
                  FROM "Subtitle"
                  WHERE "{subtitle_fk}" = ?
                  ORDER BY "StreamIndex", "Id""#
@@ -1699,6 +1777,11 @@ impl SqliteSchedulingContentRepository {
                 push_unique_optional(
                     &mut result.subtitle_languages,
                     row.try_get::<Option<String>, _>("Language")?,
+                );
+                push_stream_title(
+                    &mut result.subtitle_titles,
+                    &mut result.has_commentary,
+                    row.try_get::<Option<String>, _>("Title")?,
                 );
             }
         }
@@ -2553,7 +2636,10 @@ const SEARCH_DOCUMENT_SQL: &str = r#"
 SELECT
     "documents".*,
     "lp"."LibraryId" AS "library_id",
-    "l"."Name" AS "library_name"
+    "l"."Name" AS "library_name",
+    "mi"."ContentKind" AS "content_kind",
+    "mi"."SubKind" AS "sub_kind",
+    "mi"."ParentMediaItemId" AS "parent_media_item_id"
 FROM (
     SELECT
         "mm"."MovieId" AS "item_id",
@@ -3057,7 +3143,10 @@ struct StreamSearchFields {
     video_bit_depths: Vec<i32>,
     video_dynamic_ranges: Vec<String>,
     audio_codecs: Vec<String>,
+    audio_titles: Vec<String>,
     subtitle_codecs: Vec<String>,
+    subtitle_titles: Vec<String>,
+    has_commentary: bool,
     library_folder_ids: Vec<i64>,
     width: Option<i32>,
     height: Option<i32>,
@@ -3111,6 +3200,15 @@ fn media_stream_kind_from_row(row: &DbRow) -> Option<String> {
 
 fn push_unique_optional(target: &mut Vec<String>, value: Option<String>) {
     if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        push_unique(target, value);
+    }
+}
+
+fn push_stream_title(target: &mut Vec<String>, has_commentary: &mut bool, value: Option<String>) {
+    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        if value.to_ascii_lowercase().contains("commentary") {
+            *has_commentary = true;
+        }
         push_unique(target, value);
     }
 }

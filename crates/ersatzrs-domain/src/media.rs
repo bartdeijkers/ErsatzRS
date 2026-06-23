@@ -13,6 +13,95 @@ pub enum MediaItemState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ContentKind {
+    #[default]
+    Primary,
+    Extra,
+    AlternateVersion,
+}
+
+impl ContentKind {
+    /// Database integer for `MediaItem.ContentKind`.
+    #[must_use]
+    pub const fn db_value(self) -> i32 {
+        match self {
+            Self::Primary => 0,
+            Self::Extra => 1,
+            Self::AlternateVersion => 2,
+        }
+    }
+
+    /// Stable token exposed through the search contract.
+    #[must_use]
+    pub const fn search_token(self) -> &'static str {
+        match self {
+            Self::Primary => "primary",
+            Self::Extra => "extra",
+            Self::AlternateVersion => "alternate_version",
+        }
+    }
+
+    /// Parse a search token or friendly alias into a content kind.
+    #[must_use]
+    pub fn from_search_token(value: &str) -> Option<Self> {
+        let token = normalize_sub_kind_token(value)?;
+        match token.as_str() {
+            "primary" => Some(Self::Primary),
+            "extra" | "special_feature" | "special_features" => Some(Self::Extra),
+            "alternate" | "alternateversion" | "alternate_version" | "version" | "versions" => {
+                Some(Self::AlternateVersion)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Normalize an open content-variant subtype token.
+#[must_use]
+pub fn normalize_sub_kind_token(value: &str) -> Option<String> {
+    let mut token = String::new();
+    let mut last_was_separator = false;
+    for ch in value.trim().chars().flat_map(char::to_lowercase) {
+        if ch.is_ascii_alphanumeric() {
+            token.push(ch);
+            last_was_separator = false;
+        } else if !token.is_empty() && !last_was_separator {
+            token.push('_');
+            last_was_separator = true;
+        }
+    }
+    while token.ends_with('_') {
+        let _ = token.pop();
+    }
+
+    if token.is_empty() {
+        return None;
+    }
+
+    let canonical = match token.as_str() {
+        "behindthescenes" | "behind_the_scenes" => "behind_the_scenes",
+        "deleted" | "deleted_scene" | "deleted_scenes" => "deleted_scene",
+        "featurettes" | "featurette" => "featurette",
+        "interviews" | "interview" => "interview",
+        "scenes" | "scene" => "scene",
+        "shorts" | "short" => "short",
+        "trailers" | "trailer" => "trailer",
+        "extras" | "specials" | "other" => "other",
+        "officialvideo" | "official_video" => "official_video",
+        "live" => "live",
+        "unplugged" => "unplugged",
+        "acoustic" => "acoustic",
+        "remix" => "remix",
+        "remaster" => "remaster",
+        "extended" => "extended",
+        "directors_cut" | "director_s_cut" => "directors_cut",
+        _ => token.as_str(),
+    };
+
+    Some(canonical.to_owned())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum MediaStreamKind {
     #[default]
     Video,
@@ -52,6 +141,9 @@ pub struct MediaItem {
     pub collection_ids: Vec<EntityId>,
     pub trakt_list_item_ids: Vec<EntityId>,
     pub state: MediaItemState,
+    pub content_kind: ContentKind,
+    pub sub_kind: Option<String>,
+    pub parent_media_item_id: Option<EntityId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

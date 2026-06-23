@@ -117,6 +117,7 @@ pub fn make_health_check_service(
         Box::new(DowngradeHealthCheck::new(downgrade_schema_status)),
         Box::new(DirtyMigrationHealthCheck::new(dirty_schema_status)),
         Box::new(MigrationChecksumHealthCheck::new(schema_status)),
+        Box::new(SearchProjectionHealthCheck::new(pool.clone())),
         Box::new(FFmpegVersionHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegRuntimeAcquisitionHealthCheck::new(
             ffmpeg_runtime.clone(),
@@ -851,6 +852,43 @@ impl HealthCheck for MigrationChecksumHealthCheck {
     }
 }
 
+struct SearchProjectionHealthCheck {
+    pool: Pool<Db>,
+}
+
+impl SearchProjectionHealthCheck {
+    fn new(pool: Pool<Db>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl HealthCheck for SearchProjectionHealthCheck {
+    fn title(&self) -> &'static str {
+        "Search Projection"
+    }
+
+    async fn check(&self) -> Result<HealthCheckResult> {
+        for sql in [
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId" FROM "MediaItem" LIMIT 1"#,
+            r#"SELECT "Title" FROM "MediaStream" LIMIT 1"#,
+            r#"SELECT "Title" FROM "Subtitle" LIMIT 1"#,
+        ] {
+            sqlx::query(sql)
+                .execute(&self.pool)
+                .await
+                .map_err(sqlx_error)?;
+        }
+
+        Ok(HealthCheckResult::new(
+            self.title(),
+            HealthCheckStatus::Pass,
+            "Search projection includes content variant, parent linkage, and stream-title fields.",
+            "Search projection ready",
+        ))
+    }
+}
+
 struct VaapiDeviceHealthCheck {
     pool: Pool<Db>,
     runtime: FfmpegRuntimeReport,
@@ -1371,6 +1409,18 @@ mod tests {
             "Database migration is partially applied"
         );
         assert!(result.message.contains("version 42"));
+    }
+
+    #[tokio::test]
+    async fn search_projection_health_check_requires_variant_and_stream_title_fields() {
+        let pool = test_pool().await;
+        let result = SearchProjectionHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("search projection check");
+
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+        assert_eq!(result.brief_message, "Search projection ready");
     }
 
     #[tokio::test]

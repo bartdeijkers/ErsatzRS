@@ -1,0 +1,68 @@
+feature    = 'Content variants, alternate versions, and stream roles'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, ADR 0018'
+rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::health`'
+status     = 'In progress'
+adr        = ['0018']
+
+summary    = '''
+Phase 0 foundation is implemented. `MediaItem` now has additive
+`ContentKind`, `SubKind`, and `ParentMediaItemId` columns (SQLite and MySQL
+migrations) so later scanner/provider slices can represent primary items,
+extras, and alternate versions without changing existing rows. The domain model
+has a closed `ContentKind` enum plus an open subtype normalizer that canonicalizes
+the ErsatzTV extra suffix/directory vocabulary and common alternate-version
+tokens.
+
+The SQL-backed search contract now understands `content_kind`, `sub_kind`,
+`parent_title`, `audio_title`, `subtitle_title`, and the derived
+`has_commentary` predicate. Search evaluation implicitly adds
+`content_kind:primary` unless a query explicitly references `content_kind`,
+`sub_kind`, or `parent_title`, preserving ErsatzTV's default-invisible behavior
+for extras and versions. Scheduling search projection populates the new fields
+from `MediaItem`, parent metadata titles, `MediaStream.Title`, and
+`Subtitle.Title`; commentary classification is deliberately conservative and
+matches titles containing `commentary`, mirroring ErsatzTV's stream-selector
+substring behavior. `/system/health` now includes a Search Projection readiness
+row that fails if the database/build cannot support the variant and stream-role
+fields.
+'''
+
+[[debt]]
+id          = 'media-browse-ui-surfacing'
+adr         = '0018'
+description = 'Phase 1 remains open: `/media/*` browse/detail pages do not yet expose the persisted "Show special features / versions" toggle, variant badges, Extras / Special Features sections, Versions sections, or localized smart-collection search-field reference for the new tokens.'
+discovered  = '2026-06-23'
+evidence    = 'Phase 0 intentionally did not touch admin UI routes or i18n. ADR 0018 and plans/extras-alternate-versions-and-stream-roles.md define this as the next UI slice.'
+resolved    = false
+
+[[debt]]
+id          = 'local-scanner-import-classify-extras'
+adr         = '0018'
+description = 'Phase 2 remains open: the local scanner still follows ErsatzTV behavior by discarding extra files/directories instead of importing them as `OtherVideo` rows with `ContentKind=Extra`, normalized `SubKind`, and parent linkage.'
+discovered  = '2026-06-23'
+evidence    = 'Upstream `LocalFolderScanner.ExtraFiles` / `ExtraDirectories` and `MovieFolderScanner` discard logic were read for the Source Map; this slice adds the schema/search foundation only and leaves scanner behavior unchanged.'
+resolved    = false
+
+[[debt]]
+id          = 'alternate-version-linking'
+adr         = '0018'
+description = 'Phase 3 remains open: music-video/song/movie alternate-version detection, subtype normalization from title/folder tokens, and canonical-parent linking are not implemented.'
+discovered  = '2026-06-23'
+evidence    = 'The Phase 0 migration can store `ContentKind=AlternateVersion`, `SubKind`, and `ParentMediaItemId`, but no scanner/provider code writes those values yet.'
+resolved    = false
+
+[[debt]]
+id          = 'commentary-render-acceptance'
+adr         = '0018'
+description = 'Phase 4 remains open: stream-title search can select commentary-bearing items, but the end-to-end commentary channel acceptance still needs verification/completion of the channel `PreferredAudioTitle` and custom stream-selector allow/blocklist render path.'
+discovered  = '2026-06-23'
+evidence    = 'Phase 0 indexes `MediaStream.Title` and `Subtitle.Title` for selection. The playback acceptance described in ADR 0018 Phase 4 was intentionally left for a later render-path slice.'
+resolved    = false
+
+[[debt]]
+id          = 'scheduling-examples-and-preroll'
+adr         = '0018'
+description = 'Phase 5 remains open: templated smart collections and schedule/filler examples for unplugged renditions, commentary channels, and featurette-before-movie pre-roll are not shipped.'
+discovered  = '2026-06-23'
+evidence    = 'Search tokens are now representable/queryable, but no example collections, filler presets, or schedule consumer examples were added in this foundation slice.'
+resolved    = false
