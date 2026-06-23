@@ -4,72 +4,43 @@ rs_target  = '`crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatz
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported for the direct FFmpeg process path: `/iptv/channel/{number}.ts`
-resolves the active PlayoutItem through `MediaVersion`/`MediaFile`, applies
-provider path replacements, selects subtitles from persisted `Subtitle` rows
-using playout-item override values falling back to channel preferred subtitle
-language/mode, expands ISO language aliases (`nl`/`nld`/`dut`, etc.), honors
-`ffmpeg.use_embedded_subtitles`, requires extracted text embedded subtitles
-outside HLS-direct, and pipes an FFmpeg MPEG-TS stream with `kill_on_drop`
-cleanup. Text subtitles burn through FFmpeg's `subtitles=` filter with the
-extracted font cache; image subtitles are scaled/padded and centered over
-video.
+Ported: `/iptv/channel/{number}.ts` resolves the active PlayoutItem through
+`MediaVersion`/`MediaFile`, applies provider path replacements, selects
+persisted subtitles with playout-item overrides falling back to channel
+language/mode preferences, expands ISO aliases (`nl`/`nld`/`dut`, etc.),
+honors `ffmpeg.use_embedded_subtitles`, requires extracted text embedded
+subtitles outside HLS-direct, and streams MPEG-TS from FFmpeg with
+`kill_on_drop` cleanup. Text subtitles burn through FFmpeg `subtitles=` with
+the extracted font cache; image subtitles are scaled/padded and centered.
 
-Reopened audit (2026-06-08): ErsatzTV exposes two different `.ts` behaviors.
-`StreamingMode.TransportStream` / `mode=ts-legacy` uses
-`GetConcatProcessByChannelNumber` and `FFmpegProcessService.ConcatChannel`.
-`StreamingMode.TransportStreamHybrid` / `mode=ts` uses
-`GetWrappedProcessByChannelNumber` and `FFmpegProcessService.WrapSegmenter`,
-which wraps the live HLS segmenter URL
-`/iptv/channel/{n}.m3u8?mode=segmenter` into an MPEG-TS output and can execute
-the configured MPEG-TS script. The dispatch/wrapper slice now parses the `.ts`
-`mode` query: empty/mixed mode resolves the channel setting, HLS-configured
-channels redirect back to `.m3u8`, `mode=ts` selects the modern wrapper, and
-`mode=ts-legacy` selects the legacy direct branch. The default hybrid wrapper
-starts/touches the HLS segmenter, reads
-`/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, and emits the
-upstream copy-all/readrate/mpegts stdout pipe shape, with AAC-LATM decoder
-selection when the profile needs it.
+Both ErsatzTV `.ts` behaviors are ported. Empty/mixed `.ts` mode resolves the
+channel streaming setting, HLS-configured channels redirect to `.m3u8`,
+`mode=ts` selects the modern hybrid wrapper, and `mode=ts-legacy` selects the
+legacy concat branch. The modern wrapper starts/touches the HLS segmenter,
+reads `/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, emits the
+upstream copy-all/readrate/mpegts stdout shape, and selects the AAC-LATM
+decoder when the profile requires it. The legacy branch ports ErsatzTV's
+`ConcatChannel` model with a realtime concat-demuxer command over internal
+`/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes, preserving the upstream
+initial-discontinuity output shape. Command snapshots prove the wrapper and
+legacy concat paths stay observably different.
 
-The legacy concat slice ports ErsatzTV's `ConcatChannel` process model:
-`StreamingMode.TransportStream` and `mode=ts-legacy` now spawn a concat-demuxer
-FFmpeg command that reads `/ffmpeg/concat/{n}?mode=ts-legacy`, loops that
-playlist in realtime, copies all streams, and emits MPEG-TS to stdout with the
-upstream initial-discontinuity output shape. ErsatzRS now exposes internal
-`/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes; the concat playlist
-repeats `/ffmpeg/stream/{n}?mode=ts-legacy`, and the internal stream route uses
-the existing direct playout-item process with `StreamingMode.TransportStream`
-semantics. Command snapshots prove the modern wrapper and legacy concat paths
-are observably different.
+The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
+`assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed
+`<AppDataFolder>/scripts/mpegts/default` without overwriting user edits;
+`ffmpeg.default_mpegts_script` resolves
+`<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`; the ErsatzTV YAML shape is
+parsed with `serde_yaml`; `HlsUrl`, `ChannelName`, and `FFmpegPath` render into
+the platform script; Unix executes through `bash`; Windows executes the
+rendered `.bat`; invalid scripts warn and fall back to the default wrapper.
 
-The MPEG-TS script runtime now mirrors ErsatzTV's default-script hook for the
-modern wrapper path: packaged `assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}`
-resources are seeded to `<AppDataFolder>/scripts/mpegts/default` without
-overwriting user edits, the configured `ffmpeg.default_mpegts_script` is
-resolved against `<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`, the ErsatzTV
-YAML shape (`name`, `linux_script`, `windows_script`) is parsed with
-`serde_yaml`, `HlsUrl`, `ChannelName`, and `FFmpegPath` are rendered into the
-platform script, and the rendered script replaces the default wrapper command.
-Unix executes the rendered script through `bash`; Windows executes the rendered
-`.bat` path directly. Missing, invalid, or platform-incomplete custom scripts
-warn and fall back to the default wrapper command.
-
-Runtime proof (2026-06-08): bounded 65-second captures of both the modern
-wrapper (`mode=ts`) and the legacy concat (`mode=ts-legacy`) branches on channel
-1 each yielded readable HEVC video plus AAC audio under ffprobe, proving the
-legacy branch remains readable and observably distinct from the modern segmenter
-wrapper.
-
-Runtime proof (2026-06-15): the legacy concat/internal stream now bounds
-`StreamingMode.TransportStream` FFmpeg processes to the selected
-`PlayoutItem`'s remaining duration, capped by both persisted `Finish` and
-`OutPoint`. `scripts/e2e/tsduck-playback-gate.sh --seconds 24 --item-seconds 6
---frames --keep gate` seeded channel 1 as a 1->2->3 cyclic calibration timeline
-and passed all 85 TSDuck/container checks across `mode=ts-legacy`, `mode=ts`,
-HLS Segmenter, and HLS Direct. The kept legacy frame sheet in
-`/tmp/tsduck-gate.zj8xKb` showed `mode=ts-legacy` advancing from clip 1 to clip
-2 and clip 3 at the 6-second item boundaries (for example
-`frame_tslegacy_t7.png` = `CLIP 2/3`, `frame_tslegacy_t10.png` = `CLIP 3/3`),
-closing the content-boundary gap without changing the modern wrapper or HLS
-paths.
+Runtime proof: 2026-06-08 bounded 65-second captures of channel 1 modern
+wrapper (`mode=ts`) and legacy concat (`mode=ts-legacy`) each produced readable
+HEVC video plus AAC audio under ffprobe. 2026-06-15 TSDuck proof verified the
+legacy concat/internal stream bounds `StreamingMode.TransportStream` FFmpeg
+processes to the selected `PlayoutItem` remaining duration, capped by persisted
+`Finish` and `OutPoint`: `scripts/e2e/tsduck-playback-gate.sh --seconds 24
+--item-seconds 6 --frames --keep gate` passed all 85 TSDuck/container checks
+across `mode=ts-legacy`, `mode=ts`, HLS Segmenter, and HLS Direct, with kept
+legacy frames advancing from clip 1 to clips 2 and 3 at 6-second boundaries.
 '''

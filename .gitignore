@@ -54,7 +54,6 @@ config.local.toml
 
 # Generated frontend/package artifacts
 node_modules/
-package-lock.json
 dist/
 pkg/
 test-results/

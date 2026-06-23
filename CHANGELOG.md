@@ -57,6 +57,10 @@ release section when tagging a release.
   all 56 no-fixture island routes, and browser spot-checks prove `/channels`
   Delete plus `/playouts` row-select/refresh controls attach without marker
   mismatches.
+- CI hydration smoke installs Node tools from a committed `package-lock.json`
+  so `npm ci` no longer fails on clean runners.
+- Linux-hosted clippy now accepts the Windows launcher build script target
+  detection without weakening the repository-wide environment-access lint.
 
 ## [1.0.14-alpha] - 2026-06-21
 
