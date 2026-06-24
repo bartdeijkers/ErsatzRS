@@ -60,6 +60,11 @@ const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const HLS_AT_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
+const TS_PACKET_SIZE: usize = 188;
+const TS_SYNC_BYTE: u8 = 0x47;
+const TS_NULL_PID: u16 = 0x1fff;
+const PCR_MODULUS_TICKS: i128 = (1_i128 << 33) * 300;
+const PCR_LEAP_TOLERANCE_TICKS: i128 = 27_000_000;
 
 static HLS_WORK_AHEAD_COUNT: AtomicI32 = AtomicI32::new(0);
 
@@ -246,6 +251,7 @@ impl HlsSessionWorker {
         self.touch();
 
         let mut is_first = true;
+        let mut last_playout_item_id = None::<i64>;
         let mut transcoded_until = Utc::now();
         *self.playlist_start.lock().await = transcoded_until;
         let mut runtime_capabilities = self.runtime_capabilities.clone();
@@ -366,6 +372,7 @@ impl HlsSessionWorker {
                 {
                     HlsProcessOutcome::Success => {
                         is_first = false;
+                        last_playout_item_id = None;
                     }
                     HlsProcessOutcome::Cancelled => break,
                     HlsProcessOutcome::Reclaimed => {}
@@ -434,7 +441,7 @@ impl HlsSessionWorker {
                 };
                 let output_ts_offset = self.probe_output_ts_offset(is_first).await;
                 let discontinuity =
-                    hls_output_discontinuity(self.output_format, is_first, output_ts_offset);
+                    hls_output_discontinuity(self.output_format, is_first, output_ts_offset, true);
                 let command = build_hls_slug_command(
                     self.output_format,
                     is_first,
@@ -479,6 +486,7 @@ impl HlsSessionWorker {
                             has_slug,
                         ));
                         is_first = false;
+                        last_playout_item_id = None;
                         continue;
                     }
                     HlsProcessOutcome::Reclaimed => {
@@ -695,8 +703,14 @@ impl HlsSessionWorker {
                 }
             };
             let output_ts_offset = self.probe_output_ts_offset(is_first).await;
-            let discontinuity =
-                hls_output_discontinuity(self.output_format, is_first, output_ts_offset);
+            let append_requires_discontinuity =
+                last_playout_item_id != Some(active.playout_item_id);
+            let discontinuity = hls_output_discontinuity(
+                self.output_format,
+                is_first,
+                output_ts_offset,
+                append_requires_discontinuity,
+            );
             let source_stream_for_denial = source_stream.clone();
             let opacity_clock = watermark_opacity_clock_at_spawn(
                 decision.request_time,
@@ -704,7 +718,7 @@ impl HlsSessionWorker {
                 active.content_duration,
                 active.playout_start,
             );
-            let command = build_hls_command_with_opacity_clock(
+            let command = build_hls_command_with_explicit_discontinuity(
                 &active.media_path,
                 &self.working_dir,
                 self.output_format,
@@ -724,6 +738,7 @@ impl HlsSessionWorker {
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
+                HlsDiscontinuity::from(discontinuity),
                 Some(opacity_clock),
             );
             log_hls_av1_spawn_diagnostics(
@@ -764,6 +779,7 @@ impl HlsSessionWorker {
                             item_complete(&active, transcoded_until),
                             has_slug,
                         ));
+                        last_playout_item_id = Some(active.playout_item_id);
                     }
                 }
                 HlsProcessOutcome::Failed(error_message) => {
@@ -846,6 +862,7 @@ impl HlsSessionWorker {
                                 false,
                                 has_slug,
                             ));
+                            last_playout_item_id = None;
                         }
                         HlsProcessOutcome::Reclaimed => {
                             self.set_admission_status(HlsAdmissionStatus::Waiting);
@@ -913,8 +930,12 @@ impl HlsSessionWorker {
             None
         };
         let output_ts_offset = self.probe_output_ts_offset(is_first_transcode).await;
-        let discontinuity =
-            hls_output_discontinuity(self.output_format, is_first_transcode, output_ts_offset);
+        let discontinuity = hls_output_discontinuity(
+            self.output_format,
+            is_first_transcode,
+            output_ts_offset,
+            true,
+        );
         let Some(command) = build_hls_error_command(HlsErrorProcessRequest {
             working_dir: &self.working_dir,
             output_format: self.output_format,
@@ -1260,7 +1281,7 @@ impl HlsSessionWorker {
                 tracing::warn!(
                     %error,
                     channel_number = %self.channel_number,
-                    "failed to normalize hls mpeg-ts continuity counters"
+                    "failed to normalize hls mpeg-ts continuity counters and PCR"
                 );
             }
         }
@@ -1429,6 +1450,82 @@ pub fn build_hls_command(
 #[must_use]
 pub fn build_hls_command_with_opacity_clock(
     media_path: &str,
+    working_dir: &Path,
+    output_format: OutputFormat,
+    is_first_transcode: bool,
+    troubleshooting: bool,
+    hls_realtime: bool,
+    start_position: Duration,
+    duration: Option<Duration>,
+    output_ts_offset: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    selected_audio_stream_index: Option<usize>,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+) -> FfmpegCommand {
+    build_hls_command_with_explicit_discontinuity(
+        media_path,
+        working_dir,
+        output_format,
+        is_first_transcode,
+        troubleshooting,
+        hls_realtime,
+        start_position,
+        duration,
+        output_ts_offset,
+        playback_profile,
+        target_frame_rate,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        selected_audio_stream_index,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        HlsDiscontinuity::from(hls_output_discontinuity(
+            output_format,
+            is_first_transcode,
+            output_ts_offset,
+            false,
+        )),
+        opacity_clock,
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HlsDiscontinuity {
+    Present,
+    Absent,
+}
+
+impl HlsDiscontinuity {
+    const fn enabled(self) -> bool {
+        matches!(self, Self::Present)
+    }
+}
+
+impl From<bool> for HlsDiscontinuity {
+    fn from(enabled: bool) -> Self {
+        if enabled {
+            Self::Present
+        } else {
+            Self::Absent
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+fn build_hls_command_with_explicit_discontinuity(
+    media_path: &str,
     _working_dir: &Path,
     output_format: OutputFormat,
     is_first_transcode: bool,
@@ -1447,6 +1544,7 @@ pub fn build_hls_command_with_opacity_clock(
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> FfmpegCommand {
     let input = InputFile::video(media_path.to_string());
@@ -1517,11 +1615,7 @@ pub fn build_hls_command_with_opacity_clock(
             playback_profile.profile.audio_format,
         ),
         is_first_transcode,
-        discontinuity: hls_output_discontinuity(
-            output_format,
-            is_first_transcode,
-            output_ts_offset,
-        ),
+        discontinuity: hls_discontinuity.enabled(),
         troubleshooting,
     });
 
@@ -1627,6 +1721,7 @@ pub fn build_hls_slug_command(
             output_format,
             is_first_transcode,
             output_ts_offset,
+            true,
         ),
         troubleshooting: false,
     });
@@ -1846,6 +1941,7 @@ fn build_hls_error_command_from_assets(request: HlsErrorCommandRequest<'_>) -> F
             request.output_format,
             request.is_first_transcode,
             request.output_ts_offset,
+            true,
         ),
         troubleshooting: false,
     });
@@ -2017,12 +2113,15 @@ fn hls_output_discontinuity(
     output_format: OutputFormat,
     is_first_transcode: bool,
     output_ts_offset: Option<Duration>,
+    append_requires_discontinuity: bool,
 ) -> bool {
     if is_first_transcode {
         return false;
     }
 
-    output_format != OutputFormat::Hls || output_ts_offset.is_none_or(|offset| offset.is_zero())
+    append_requires_discontinuity
+        || output_format != OutputFormat::Hls
+        || output_ts_offset.is_none_or(|offset| offset.is_zero())
 }
 
 #[allow(clippy::match_same_arms)]
@@ -3066,6 +3165,8 @@ struct TrimmedPlaylist {
 #[derive(Debug, Default)]
 struct TsContinuityState {
     next_counters: HashMap<u16, u8>,
+    pcr_offsets: HashMap<u16, i128>,
+    last_pcr: HashMap<u16, i128>,
     normalized_sequences: HashSet<u64>,
 }
 
@@ -3420,10 +3521,6 @@ async fn normalize_ts_file_continuity(
     path: &Path,
     state: &mut TsContinuityState,
 ) -> io::Result<()> {
-    const TS_PACKET_SIZE: usize = 188;
-    const TS_SYNC_BYTE: u8 = 0x47;
-    const NULL_PID: u16 = 0x1fff;
-
     let mut body = tokio::fs::read(path).await?;
     if body.len() % TS_PACKET_SIZE != 0 {
         return Ok(());
@@ -3436,11 +3533,12 @@ async fn normalize_ts_file_continuity(
         }
 
         let pid = (u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2]);
-        if pid == NULL_PID {
+        if pid == TS_NULL_PID {
             continue;
         }
 
         let adaptation_field_control = (packet[3] >> 4) & 0x03;
+        let has_adaptation = matches!(adaptation_field_control, 0x02 | 0x03);
         let has_payload = matches!(adaptation_field_control, 0x01 | 0x03);
         let original_counter = packet[3] & 0x0f;
         let counter = state
@@ -3458,6 +3556,14 @@ async fn normalize_ts_file_continuity(
         } else {
             state.next_counters.insert(pid, counter);
         }
+
+        if let Some(pcr) = packet_pcr(packet, has_adaptation) {
+            let normalized = normalize_pcr(pid, pcr, state);
+            if normalized != pcr {
+                write_packet_pcr(packet, normalized);
+                changed = true;
+            }
+        }
     }
 
     if changed {
@@ -3465,6 +3571,64 @@ async fn normalize_ts_file_continuity(
     }
 
     Ok(())
+}
+
+fn packet_pcr(packet: &[u8], has_adaptation: bool) -> Option<u64> {
+    if !has_adaptation {
+        return None;
+    }
+
+    let adaptation_len = usize::from(*packet.get(4)?);
+    if adaptation_len < 7 || 5 + adaptation_len > packet.len() {
+        return None;
+    }
+    if packet[5] & 0x10 == 0 {
+        return None;
+    }
+
+    let base = (u64::from(packet[6]) << 25)
+        | (u64::from(packet[7]) << 17)
+        | (u64::from(packet[8]) << 9)
+        | (u64::from(packet[9]) << 1)
+        | (u64::from(packet[10]) >> 7);
+    let extension = (u64::from(packet[10] & 0x01) << 8) | u64::from(packet[11]);
+    Some(base * 300 + extension)
+}
+
+fn write_packet_pcr(packet: &mut [u8], pcr: u64) {
+    let pcr = pcr % u64::try_from(PCR_MODULUS_TICKS).expect("PCR modulus fits u64");
+    let base = pcr / 300;
+    let extension = pcr % 300;
+
+    packet[6] = low_byte(base >> 25);
+    packet[7] = low_byte(base >> 17);
+    packet[8] = low_byte(base >> 9);
+    packet[9] = low_byte(base >> 1);
+    packet[10] = (low_byte(base & 0x01) << 7) | 0x7e | low_byte(extension >> 8);
+    packet[11] = low_byte(extension);
+}
+
+fn low_byte(value: u64) -> u8 {
+    u8::try_from(value & 0xff).expect("masked value fits in u8")
+}
+
+fn normalize_pcr(pid: u16, pcr: u64, state: &mut TsContinuityState) -> u64 {
+    let offset = state.pcr_offsets.entry(pid).or_default();
+    let mut adjusted = i128::from(pcr) + *offset;
+    if let Some(last) = state.last_pcr.get(&pid).copied() {
+        if adjusted <= last {
+            let delta = last + 1 - adjusted;
+            *offset += delta;
+            adjusted += delta;
+        } else if adjusted - last > PCR_LEAP_TOLERANCE_TICKS {
+            let delta = adjusted - (last + 1);
+            *offset -= delta;
+            adjusted -= delta;
+        }
+    }
+
+    state.last_pcr.insert(pid, adjusted);
+    u64::try_from(adjusted.rem_euclid(PCR_MODULUS_TICKS)).expect("PCR remainder fits in u64")
 }
 
 async fn delete_old_segments(
@@ -4443,18 +4607,32 @@ mod tests {
         assert!(!hls_output_discontinuity(
             OutputFormat::Hls,
             false,
-            Some(Duration::from_secs(12))
+            Some(Duration::from_secs(12)),
+            false
         ));
-        assert!(hls_output_discontinuity(OutputFormat::Hls, false, None));
         assert!(hls_output_discontinuity(
             OutputFormat::Hls,
             false,
-            Some(Duration::ZERO)
+            None,
+            false
+        ));
+        assert!(hls_output_discontinuity(
+            OutputFormat::Hls,
+            false,
+            Some(Duration::ZERO),
+            false
+        ));
+        assert!(hls_output_discontinuity(
+            OutputFormat::Hls,
+            false,
+            Some(Duration::from_secs(12)),
+            true
         ));
         assert!(hls_output_discontinuity(
             OutputFormat::HlsMp4,
             false,
-            Some(Duration::from_secs(12))
+            Some(Duration::from_secs(12)),
+            false
         ));
     }
 
@@ -4511,6 +4689,47 @@ mod tests {
         );
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-output_ts_offset 12.5s"));
+        assert!(!arguments.contains("discont_start"), "{arguments}");
+        assert!(
+            !arguments.contains("mpegts_flags=+initial_discontinuity"),
+            "{arguments}"
+        );
+    }
+
+    #[test]
+    fn build_hls_command_can_preserve_real_discontinuity_with_output_ts_offset() {
+        let command = build_hls_command_with_explicit_discontinuity(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/1"),
+            OutputFormat::Hls,
+            false,
+            false,
+            false,
+            Duration::ZERO,
+            None,
+            Some(Duration::from_millis(12_500)),
+            &playback_profile(),
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            HlsDiscontinuity::Present,
+            None,
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-output_ts_offset 12.5s"));
+        assert!(
+            arguments.contains(
+                "-hls_flags program_date_time+omit_endlist+append_list+discont_start+independent_segments"
+            ),
+            "{arguments}"
+        );
         assert!(
             !arguments.contains("mpegts_flags=+initial_discontinuity"),
             "{arguments}"
@@ -4603,7 +4822,7 @@ mod tests {
     }
 
     #[test]
-    fn build_hls_slug_command_uses_pts_offset_for_subsequent_segments() {
+    fn build_hls_slug_command_keeps_real_discontinuity_with_pts_offset() {
         let command = build_hls_slug_command(
             OutputFormat::Hls,
             false,
@@ -4619,9 +4838,8 @@ mod tests {
 
         assert!(arguments.contains("-output_ts_offset 7.5s"));
         assert!(arguments.contains(
-            "-hls_flags program_date_time+omit_endlist+append_list+independent_segments"
+            "-hls_flags program_date_time+omit_endlist+append_list+discont_start+independent_segments"
         ));
-        assert!(!arguments.contains("discont_start"));
         assert!(!arguments.contains("mpegts_flags=+initial_discontinuity"));
     }
 
@@ -5344,6 +5562,60 @@ mod tests {
             .await
             .expect("read second segment");
         assert_eq!(packet_continuity_counters(&second, 0), vec![6, 7]);
+        assert_eq!(packet_continuity_counters(&second, 0x0100), vec![10, 11]);
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
+    #[tokio::test]
+    async fn normalize_hls_ts_continuity_rewrites_restart_pcr() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+
+        tokio::fs::write(
+            working_dir.join("live000010.ts"),
+            [
+                ts_packet_with_pcr(0x0100, 8, 27_000_000),
+                ts_packet_with_pcr(0x0100, 9, 27_090_000),
+            ]
+            .concat(),
+        )
+        .await
+        .expect("write first segment");
+        tokio::fs::write(
+            working_dir.join("live000011.ts"),
+            [
+                ts_packet_with_pcr(0x0100, 0, 1_000),
+                ts_packet_with_pcr(0x0100, 1, 91_000),
+            ]
+            .concat(),
+        )
+        .await
+        .expect("write second segment");
+
+        let trim_result = test_trim_result(10, None, ["live000010.ts", "live000011.ts"]);
+        let mut state = TsContinuityState::default();
+        normalize_hls_ts_continuity(&working_dir, &trim_result, &mut state)
+            .await
+            .expect("normalize continuity");
+
+        let first = tokio::fs::read(working_dir.join("live000010.ts"))
+            .await
+            .expect("read first segment");
+        let second = tokio::fs::read(working_dir.join("live000011.ts"))
+            .await
+            .expect("read second segment");
+        assert_eq!(
+            packet_pcr_values(&first, 0x0100),
+            vec![27_000_000, 27_090_000]
+        );
+        assert_eq!(
+            packet_pcr_values(&second, 0x0100),
+            vec![27_090_001, 27_180_001]
+        );
         assert_eq!(packet_continuity_counters(&second, 0x0100), vec![10, 11]);
 
         let _ = tokio::fs::remove_dir_all(&working_dir).await;
@@ -6464,6 +6736,15 @@ mod tests {
         packet
     }
 
+    fn ts_packet_with_pcr(pid: u16, continuity_counter: u8, pcr: u64) -> Vec<u8> {
+        let mut packet = ts_packet(pid, continuity_counter);
+        packet[3] = 0x30 | (continuity_counter & 0x0f);
+        packet[4] = 7;
+        packet[5] = 0x10;
+        write_packet_pcr(&mut packet, pcr);
+        packet
+    }
+
     fn packet_continuity_counters(body: &[u8], pid: u16) -> Vec<u8> {
         body.chunks_exact(188)
             .filter(|packet| {
@@ -6471,6 +6752,16 @@ mod tests {
                 packet_pid == pid
             })
             .map(|packet| packet[3] & 0x0f)
+            .collect()
+    }
+
+    fn packet_pcr_values(body: &[u8], pid: u16) -> Vec<u64> {
+        body.chunks_exact(188)
+            .filter(|packet| {
+                let packet_pid = (u16::from(packet[1] & 0x1f) << 8) | u16::from(packet[2]);
+                packet_pid == pid
+            })
+            .filter_map(|packet| packet_pcr(packet, true))
             .collect()
     }
 }

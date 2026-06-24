@@ -132,8 +132,8 @@ changelog, and git history for evidence. The authoritative live state is always
 These are intentionally deferred or still open after pruning completed plan
 documents:
 
-- Purpose-built `ersatzrs-healthcheck` binary to replace the Docker bash
-  `/dev/tcp` health check.
+- Purpose-built `ersatzrs-healthcheck` binary to replace the Docker image
+  `curl` health check.
 - Docker dependency layer caching (copy manifests first, build deps, then copy
   sources) to reduce image build time.
 - mdBook or another documentation build system.

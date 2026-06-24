@@ -2,7 +2,7 @@
 # parity/*.toml; query everything with `cargo xtask progress next`.
 
 current_phase = 'Phase 7 — Hardening and Parity Completion'
-current_focus = 'Phase 7 regression hardening and HLS segmenter stutter proof'
+current_focus = 'Phase 7 regression hardening and parity completion'
 
 summary = '''
 Phases 0–6 are complete: the Cargo workspace, FFmpeg pipeline, playout
@@ -36,13 +36,16 @@ channel branding, serialized library scan queueing, schedule item add-button
 hydration, and remote-stream zero-duration health noise. The 2026-06-23 island
 hydration audit closed the stale marker-mismatch TODO with a clean 56/56
 whole-app smoke plus `/channels` Delete and seeded `/playouts`
-row-select/refresh browser proof. HLS segmenter playback stutter around the
-first normalized append is open again until live playback/TSDuck proof verifies
-the no-discontinuity MPEG-TS append fix. ADR 0018 `content-variants` Phase 0
-landed on 2026-06-23: schema, domain, search contract, scheduling projection,
-and health-check readiness are in place, with UI surfacing, scanner import,
-alternate-version linking, commentary render acceptance, and scheduling
-examples tracked as unresolved debt in
+row-select/refresh browser proof. The 2026-06-24 HLS segmenter regression
+closeout returned HLS variant playlists / segmenter to `Ported`: normalized
+same-item appends no longer emit unjustified discontinuities, MPEG-TS HLS
+segments normalize PCR as well as continuity counters, and the default hybrid
+MPEG-TS wrapper script/fallback uses a profile-derived CBR mux rate; the live
+TSDuck gate passed all 86 checks with HLS Segmenter audio pip cadence proof.
+ADR 0018 `content-variants` Phase 0 landed on 2026-06-23: schema, domain,
+search contract, scheduling projection, and health-check readiness are in
+place, with UI surfacing, scanner import, alternate-version linking,
+commentary render acceptance, and scheduling examples tracked as unresolved debt in
 `docs/progress/parity/content-variants.toml`. The next spec-backed candidates
 are the remaining `content-variants` phases, the open `ersatzrs-healthcheck`
 binary TODO, and ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed /
@@ -97,7 +100,7 @@ done = true
 [[known_todo]]
 note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
 [[known_todo]]
-note = 'Replace bash /dev/tcp HEALTHCHECK with a purpose-built ersatzrs-healthcheck binary.'
+note = 'Replace the Docker image curl HEALTHCHECK with a purpose-built ersatzrs-healthcheck binary.'
 [[known_todo]]
 note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
 [[known_todo]]

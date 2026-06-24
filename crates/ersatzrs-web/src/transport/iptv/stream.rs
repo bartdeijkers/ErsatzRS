@@ -63,6 +63,10 @@ const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const DEFAULT_MPEG_TS_SCRIPT_ID: &str = "default";
 const MPEG_TS_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const MPEG_TS_CAPACITY_RETRY_INTERVAL: Duration = Duration::from_millis(250);
+const MPEG_TS_WRAPPER_FALLBACK_MUXRATE_KBPS: i64 = 10_000;
+const MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_NUMERATOR: i64 = 12;
+const MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_DENOMINATOR: i64 = 10;
+const MPEG_TS_WRAPPER_MAX_MUXRATE_BPS: i64 = 1_500_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct MpegTsScriptDefinition {
@@ -85,6 +89,7 @@ struct MpegTsScriptRenderData {
     hls_url: String,
     channel_name: String,
     ffmpeg_path: String,
+    muxrate_bps: i64,
 }
 
 pub async fn serve_transport_stream(
@@ -591,14 +596,16 @@ async fn serve_segmenter_wrapper_stream(
         &access_token,
     );
     let metadata = channel_stream_metadata(channel);
-    let (command, cleanup_paths) =
-        match configured_mpegts_script_command(state, channel, &hls_url).await {
-            Some(command) => command,
-            None => (
-                build_mpegts_segmenter_wrapper_command(hls_url, &metadata, aac_latm_audio),
-                Vec::new(),
-            ),
-        };
+    let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
+    let (command, cleanup_paths) = segmenter_wrapper_command(
+        state,
+        channel,
+        hls_url,
+        &metadata,
+        aac_latm_audio,
+        wrapper_muxrate_bps,
+    )
+    .await;
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
         Some(reservation) => Some(reservation),
@@ -640,6 +647,28 @@ async fn serve_segmenter_wrapper_stream(
             tracing::error!(%error, channel_number = %channel.number, "failed to spawn ffmpeg for wrapped segmenter");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+async fn segmenter_wrapper_command(
+    state: &AppState,
+    channel: &Channel,
+    hls_url: String,
+    metadata: &OutputMetadata,
+    aac_latm_audio: bool,
+    wrapper_muxrate_bps: i64,
+) -> (FfmpegCommand, Vec<PathBuf>) {
+    match configured_mpegts_script_command(state, channel, &hls_url, wrapper_muxrate_bps).await {
+        Some(command) => command,
+        None => (
+            build_mpegts_segmenter_wrapper_command(
+                hls_url,
+                metadata,
+                aac_latm_audio,
+                Some(wrapper_muxrate_bps),
+            ),
+            Vec::new(),
+        ),
     }
 }
 
@@ -892,10 +921,25 @@ fn mpeg_ts_capacity_slate_dir(channel_id: i64) -> PathBuf {
         .join(format!("request-{request_id}"))
 }
 
+fn mpeg_ts_wrapper_muxrate_bps(playback_profile: &PlaybackProfile) -> i64 {
+    let video_kbps = i64::from(playback_profile.profile.video_bitrate).max(0);
+    let audio_kbps = i64::from(playback_profile.profile.audio_bitrate).max(0);
+    let total_kbps = video_kbps
+        .checked_add(audio_kbps)
+        .filter(|total| *total > 0)
+        .unwrap_or(MPEG_TS_WRAPPER_FALLBACK_MUXRATE_KBPS);
+    let bps = total_kbps
+        .saturating_mul(1_000)
+        .saturating_mul(MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_NUMERATOR)
+        / MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_DENOMINATOR;
+    bps.min(MPEG_TS_WRAPPER_MAX_MUXRATE_BPS)
+}
+
 async fn configured_mpegts_script_command(
     state: &AppState,
     channel: &Channel,
     hls_url: &str,
+    muxrate_bps: i64,
 ) -> Option<(FfmpegCommand, Vec<PathBuf>)> {
     let configured = match state
         .repositories
@@ -931,6 +975,7 @@ async fn configured_mpegts_script_command(
             hls_url: hls_url.to_owned(),
             channel_name: channel.name.clone(),
             ffmpeg_path: ersatzrs_ffmpeg::ffmpeg_path(),
+            muxrate_bps,
         },
     )
     .await
@@ -1043,6 +1088,7 @@ fn temp_mpegts_script_path(windows: bool) -> PathBuf {
 }
 
 fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) -> String {
+    let muxrate = data.muxrate_bps.to_string();
     template
         .replace("{{ HlsUrl }}", &data.hls_url)
         .replace("{{HlsUrl}}", &data.hls_url)
@@ -1050,6 +1096,8 @@ fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) 
         .replace("{{ChannelName}}", &data.channel_name)
         .replace("{{ FFmpegPath }}", &data.ffmpeg_path)
         .replace("{{FFmpegPath}}", &data.ffmpeg_path)
+        .replace("{{ MuxRate }}", &muxrate)
+        .replace("{{MuxRate}}", &muxrate)
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -2429,6 +2477,16 @@ mod tests {
     }
 
     #[test]
+    fn mpeg_ts_wrapper_muxrate_uses_profile_bandwidth_overhead() {
+        let mut profile = playback_profile();
+        assert_eq!(mpeg_ts_wrapper_muxrate_bps(&profile), 9_830_400);
+
+        profile.profile.video_bitrate = 0;
+        profile.profile.audio_bitrate = 0;
+        assert_eq!(mpeg_ts_wrapper_muxrate_bps(&profile), 12_000_000);
+    }
+
+    #[test]
     fn mpegts_script_yaml_uses_ersatztv_field_names() {
         let script: MpegTsScriptDefinition = serde_yaml::from_str(
             "name: Default\nlinux_script: mpegts.sh\nwindows_script: mpegts.bat\n",
@@ -2443,17 +2501,18 @@ mod tests {
     #[test]
     fn mpegts_script_renderer_substitutes_known_scriban_variables() {
         let rendered = render_mpegts_script_template(
-            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -metadata service_name="{{ ChannelName }}""#,
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -metadata service_name="{{ ChannelName }}""#,
             &MpegTsScriptRenderData {
                 hls_url: "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter".to_owned(),
                 channel_name: "Channel One".to_owned(),
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
+                muxrate_bps: 9_830_400,
             },
         );
 
         assert_eq!(
             rendered,
-            r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -metadata service_name="Channel One""#
+            r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -muxrate 9830400 -metadata service_name="Channel One""#
         );
     }
 
@@ -2538,7 +2597,7 @@ mod tests {
         let script_name = if cfg!(windows) { "run.bat" } else { "run.sh" };
         std::fs::write(
             folder.join(script_name),
-            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -metadata service_name="{{ ChannelName }}""#,
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -metadata service_name="{{ ChannelName }}""#,
         )
         .expect("write script template");
         let script = MpegTsScript {
@@ -2557,6 +2616,7 @@ mod tests {
                 hls_url: "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter".to_owned(),
                 channel_name: "Channel One".to_owned(),
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
+                muxrate_bps: 9_830_400,
             },
         )
         .await
@@ -2566,6 +2626,7 @@ mod tests {
         let rendered = std::fs::read_to_string(rendered_path).expect("read rendered script");
         assert!(rendered.contains("/opt/ffmpeg/bin/ffmpeg"));
         assert!(rendered.contains("Channel One"));
+        assert!(rendered.contains("-muxrate 9830400"));
         if cfg!(windows) {
             assert_eq!(
                 command.executable,

@@ -43,13 +43,14 @@ impl FfmpegCommand {
 /// `FFmpegLibraryProcessService.WrapSegmenter`.
 ///
 /// The input is the live HLS segmenter URL. The wrapper does not transcode; it
-/// paces reads from the segmenter playlist and copies every stream into an
-/// MPEG-TS stdout pipe.
+/// paces reads from the segmenter playlist, copies every stream, and may use a
+/// channel-derived constant mux rate so the MPEG-TS muxer emits regular PCR.
 #[must_use]
 pub fn build_mpegts_segmenter_wrapper_command(
     hls_url: impl Into<String>,
     metadata: &OutputMetadata,
     aac_latm_audio: bool,
+    muxrate_bps: Option<i64>,
 ) -> FfmpegCommand {
     let mut input = InputFile::video(hls_url);
     if aac_latm_audio {
@@ -69,6 +70,12 @@ pub fn build_mpegts_segmenter_wrapper_command(
         map_all_streams(),
         copy_all_streams(),
     ];
+    if let Some(muxrate_bps) = muxrate_bps {
+        steps.push(PipelineStep::generic(
+            "muxrate",
+            ["-muxrate".to_owned(), muxrate_bps.to_string()],
+        ));
+    }
     add_service_metadata_steps(&mut steps, metadata);
     steps.push(mpegts_output(false));
     steps.push(pipe_output());
@@ -287,7 +294,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mpegts_segmenter_wrapper_matches_upstream_default_shape() {
+    fn mpegts_segmenter_wrapper_uses_cbr_muxrate_for_pcr_stability() {
         let metadata = OutputMetadata {
             service_provider: Some("ErsatzTV".to_owned()),
             service_name: Some("Channel One".to_owned()),
@@ -297,6 +304,7 @@ mod tests {
             "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter",
             &metadata,
             false,
+            Some(9_830_400),
         );
 
         insta::assert_snapshot!(
@@ -312,6 +320,7 @@ mod tests {
             "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter",
             &metadata,
             true,
+            Some(9_830_400),
         );
 
         let arguments = command.arguments.join(" ");

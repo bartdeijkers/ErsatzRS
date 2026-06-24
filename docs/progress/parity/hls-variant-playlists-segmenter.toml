@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0015', '0016']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
@@ -21,9 +21,9 @@ OnDemand time-shift / `OnDemandCheckpoint`, slug black-video + silent-audio
 generation, and failed-transcode error-ASS fallback. MPEG-TS HLS
 output emits `-hls_segment_options mpegts_flags=+initial_discontinuity` for the
 first / zero PTS-offset transcode (`+latm` for AAC-LATM); fMP4 omits those.
-Synthesized `#EXT-X-PROGRAM-DATE-TIME` and media-sequence-order continuity
-normalization keep timestamps and PSI/PID continuity stable across FFmpeg
-process boundaries (ADR 0015).
+Synthesized `#EXT-X-PROGRAM-DATE-TIME` plus media-sequence-order continuity
+and PCR normalization keep timestamps, PSI/PID continuity, and the transport
+clock stable across FFmpeg process boundaries (ADR 0015).
 
 Access control ports `ConditionalIptvAuthorizeFilter`: `/iptv/*` route-scoped
 middleware active only when `JWT:IssuerSigningKey` is set, validating HS256 +
@@ -57,13 +57,11 @@ over-capacity 503 paths with a generated, looping all-streams-in-use slate that
 holds no `transcode_capacity` reservation and switches to real content when a
 slot frees.
 
-Runtime proof: TSDuck / `cargo xtask smoke` captures through 2026-06-16 showed
+Runtime proof: TSDuck / `cargo xtask smoke` captures through 2026-06-24 show
 zero transport, sync-loss, continuity-counter, or PTS/DTS/PCR faults across
-MPEG-TS and HLS segmenter paths. Slice history lives in `sessions.ndjson`/git.
-
-Current 2026-06-22 status: a user-reported playback stutter around 40-50
-seconds remains open until live HLS playback/TSDuck proof confirms the normalized
-append fix below removes the visible generation-boundary stutter.
+MPEG-TS and HLS segmenter paths. The 2026-06-24 proof also verifies decoded
+audio pip cadence through normalized HLS segmenter appends. Slice history lives
+in `sessions.ndjson`/git.
 '''
 
 [[debt]]
@@ -123,5 +121,5 @@ resolved    = true
 id          = 'segmenter-normalized-append-stutter'
 description = 'HLS segmenter video playback can visibly stutter after roughly 40-50 seconds; segment transitions are sometimes noticeable at the first independently spawned FFmpeg generation boundary.'
 discovered  = '2026-06-22'
-evidence    = 'In progress 2026-06-22: `crates/ersatzrs-infra/src/hls_worker.rs` now treats non-first MPEG-TS appends with a non-zero `-output_ts_offset` as seamless and passes `end_with_discontinuity = false` into playlist trimming; `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs` emits `discont_start` only when the HLS worker marks the append as a real discontinuity. Focused tests passed for `hls_output_discontinuity_is_skipped_for_normalized_mpegts_appends` and `build_hls_slug_command_uses_pts_offset_for_subsequent_segments`, but live HLS playback/TSDuck proof is still required before returning this feature to `Ported`.'
-resolved    = false
+evidence    = 'Resolved 2026-06-24: `crates/ersatzrs-infra/src/hls_worker.rs` now distinguishes same-playout-item normalized respawns from real content/slate/error/slug boundaries, so non-first MPEG-TS appends with a non-zero `-output_ts_offset` omit `discont_start` only when they continue the same PlayoutItem; real boundaries still preserve `#EXT-X-DISCONTINUITY`. The retained MPEG-TS HLS segment files now normalize PCR as well as continuity counters across appended FFmpeg generations. The bundled/default MPEG-TS wrapper script and fallback wrapper add a profile-derived CBR `-muxrate` so the hybrid `.ts` wrapper remux emits regular PCR. Focused tests cover seamless normalized appends, forced real discontinuities, PCR normalization, wrapper mux-rate math, script rendering, and legacy default-script upgrade. Runtime proof: `scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks on 2026-06-24, including zero continuity-counter/PTS/DTS/PCR faults on `mode=ts-legacy`, `mode=ts`, HLS Segmenter, and HLS Direct, plus HLS Segmenter audio pip cadence max gap deviation 20 ms.'
+resolved    = true

@@ -29,20 +29,31 @@ const LEGACY_CONFIG_KEY_HDHR_UUID: &str = "HDHR.DeviceUuid";
 const LEGACY_CONFIG_KEY_HDHR_TUNER_COUNT: &str = "HDHR.TunerCount";
 const DEFAULT_TUNER_COUNT: i32 = 2;
 const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
-const DEFAULT_MPEGTS_SCRIPT_FILES: &[(&str, &[u8])] = &[
-    (
-        "mpegts.yml",
-        include_bytes!("../../../../assets/Scripts/MpegTs/mpegts.yml"),
-    ),
-    (
-        "run.sh",
-        include_bytes!("../../../../assets/Scripts/MpegTs/run.sh"),
-    ),
-    (
-        "run.bat",
-        include_bytes!("../../../../assets/Scripts/MpegTs/run.bat"),
-    ),
+const LEGACY_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
+const LEGACY_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
+const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
+    DefaultMpegTsScriptFile {
+        name: "mpegts.yml",
+        contents: include_bytes!("../../../../assets/Scripts/MpegTs/mpegts.yml"),
+        legacy_contents: &[],
+    },
+    DefaultMpegTsScriptFile {
+        name: "run.sh",
+        contents: include_bytes!("../../../../assets/Scripts/MpegTs/run.sh"),
+        legacy_contents: &[LEGACY_DEFAULT_MPEGTS_RUN_SH],
+    },
+    DefaultMpegTsScriptFile {
+        name: "run.bat",
+        contents: include_bytes!("../../../../assets/Scripts/MpegTs/run.bat"),
+        legacy_contents: &[LEGACY_DEFAULT_MPEGTS_RUN_BAT],
+    },
 ];
+
+struct DefaultMpegTsScriptFile {
+    name: &'static str,
+    contents: &'static [u8],
+    legacy_contents: &'static [&'static [u8]],
+}
 // Bundled streaming resources extracted into `<AppData>/cache/resources` at
 // startup, mirroring ErsatzTV's `ResourceExtractorService`. Extraction
 // overwrites (ErsatzTV uses `File.Create`) so shipped resources stay current;
@@ -484,12 +495,22 @@ async fn seed_default_mpegts_script() -> io::Result<()> {
 
 async fn seed_default_mpegts_script_in(folder: &std::path::Path) -> io::Result<()> {
     tokio::fs::create_dir_all(folder).await?;
-    for (name, contents) in DEFAULT_MPEGTS_SCRIPT_FILES {
-        let path = folder.join(name);
+    for script_file in DEFAULT_MPEGTS_SCRIPT_FILES {
+        let path = folder.join(script_file.name);
         if tokio::fs::try_exists(&path).await? {
+            if !script_file.legacy_contents.is_empty() {
+                let existing = tokio::fs::read(&path).await?;
+                if script_file
+                    .legacy_contents
+                    .iter()
+                    .any(|legacy| existing == *legacy)
+                {
+                    tokio::fs::write(path, script_file.contents).await?;
+                }
+            }
             continue;
         }
-        tokio::fs::write(path, contents).await?;
+        tokio::fs::write(path, script_file.contents).await?;
     }
     Ok(())
 }
@@ -1035,7 +1056,38 @@ mod tests {
 
         assert!(yaml.contains("linux_script"));
         assert_eq!(run_sh, "custom");
-        assert!(String::from_utf8_lossy(&run_bat).contains("FFmpegPath"));
+        let run_bat = String::from_utf8_lossy(&run_bat);
+        assert!(run_bat.contains("FFmpegPath"));
+        assert!(run_bat.contains("MuxRate"));
+    }
+
+    #[tokio::test]
+    async fn seed_default_mpegts_script_upgrades_unchanged_legacy_defaults() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("default");
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .expect("create script folder");
+        tokio::fs::write(folder.join("run.sh"), LEGACY_DEFAULT_MPEGTS_RUN_SH)
+            .await
+            .expect("write old shell script");
+        tokio::fs::write(folder.join("run.bat"), LEGACY_DEFAULT_MPEGTS_RUN_BAT)
+            .await
+            .expect("write old batch script");
+
+        seed_default_mpegts_script_in(&folder)
+            .await
+            .expect("seed scripts");
+
+        let run_sh = tokio::fs::read_to_string(folder.join("run.sh"))
+            .await
+            .expect("read shell script");
+        let run_bat = tokio::fs::read_to_string(folder.join("run.bat"))
+            .await
+            .expect("read batch script");
+
+        assert!(run_sh.contains("MuxRate"));
+        assert!(run_bat.contains("MuxRate"));
     }
 
     #[test]

@@ -27,80 +27,32 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24): change window `52f28a1..f5eb4e5` is the single commit
-`feat(core): add content variant search foundation` (ADR 0018 `content-variants`
-Phase 0). That commit already self-reconciled `content-variants.toml`,
-`phase.toml`, and `sessions.ndjson`, so this run advances the
-`last_processed_commit` pointer over it and re-confirms the top three; no
-parity status changed. `cargo xtask progress gaps` still reports the same three
-open features: `hls-variant-playlists-segmenter`, `channels-admin-ui`, and
-`content-variants`. None flipped to `Ported`/`Deferred`/`Dropped`, so the
-completed-scope rule refilled no slots; the `content-variants` prompt continues
-to target Phase 1 because Phase 0 is now done. Ranking: (1) **HLS segmenter
-normalized append stutter** — named in `phase.toml` `current_focus` and backed
-by user-visible playback evidence; (2) **Channels Edit Numbers** — confirmed
-admin-route parity bug in an `In progress` pinned-baseline UI surface; (3)
-**content-variants Phase 1 UI surfacing** — the next coherent slice of ADR 0018
-after Phase 0, with remaining debt already structured under the slug.
+Selection (2026-06-24, after the HLS segmenter closeout): the previous #1 HLS
+segmenter normalized append stutter is now resolved and
+`hls-variant-playlists-segmenter` is back to `Ported` after live TSDuck proof.
+`cargo xtask progress gaps` now reports two in-progress parity/spec features:
+`channels-admin-ui` and `content-variants`. The completed-scope rule refills
+the third slot from open phase/spec TODOs. Ranking: (1) **Channels Edit
+Numbers** — confirmed admin-route parity bug in an `In progress`
+pinned-baseline UI surface; (2) **content-variants Phase 1 UI surfacing** —
+the next coherent slice of ADR 0018 after Phase 0, with remaining debt already
+structured under the slug; (3) **ersatzrs-healthcheck binary** — open Phase 7
+runtime hardening TODO to replace the Docker image's tool-based health check
+with a purpose-built binary.
 
 Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
 (org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
 `github.com/ErsatzTV/ErsatzTV`), so the baseline could not be re-pinned. No
-parity-file edits were made and the two pinned-baseline parity prompts (#1, #2)
-are carried over unchanged rather than re-derived from upstream. This does not
-affect this window: the only merged change is `content-variants` spec work
-(ADR 0018), which has no ErsatzTV-parity dimension. A future window containing
-real pinned-baseline parity work must not be reconciled until the pin is
-reachable again.
+new pinned-baseline parity prompt was re-derived from upstream. This manual
+HLS closeout removes the completed HLS prompt, carries the existing Channels
+Edit Numbers parity prompt forward, and refills the remaining slots with
+spec-backed chores that have no ErsatzTV baseline dimension. A future window
+containing new pinned-baseline parity work must not be reconciled until the pin
+is reachable again.
 
 ---
 
-## 1. Fix the next ErsatzRS parity/runtime gap: HLS segmenter normalized append stutter (slug `hls-variant-playlists-segmenter`)
-
-Use the repo workflow from AGENTS.md and the parity/runtime guidance in
-`skills/parity-slice.md`. The goal is a genuinely smooth HLS segmenter path:
-the first normalized MPEG-TS append must not visibly stutter or emit an
-unjustified discontinuity. Do not hide a partial proof in prose; if a runtime
-shortfall remains, keep `segmenter-normalized-append-stutter` open in
-`docs/progress/parity/hls-variant-playlists-segmenter.toml`.
-
-Before editing:
-1. Read the current `hls-variant-playlists-segmenter` parity file and its open
-   `segmenter-normalized-append-stutter` debt.
-2. Inspect `crates/ersatzrs-infra/src/hls_worker.rs`,
-   `crates/ersatzrs-ffmpeg/src/pipeline/mod.rs`, and the playlist trimming /
-   discontinuity tests around normalized append offsets.
-3. Build a Source Map for HLS worker decision points, FFmpeg output flags,
-   playlist writer/trim behavior, and the live validation scripts
-   (`cargo xtask smoke`, `scripts/e2e/tsduck-playback-gate.sh`).
-4. Diagnose why the current focused tests are not enough: capture the runtime
-   segment/playlist shape and decide whether the fix is command generation,
-   worker append state, playlist metadata, timestamp normalization, or proof
-   coverage.
-
-Implement the slice end-to-end:
-- Fix the runtime path that still permits visible stutter around the first
-  normalized append; preserve real discontinuity markers when content actually
-  requires them.
-- Add or tighten focused tests that fail on the runtime shape that caused the
-  stutter, not only on a narrow argv snapshot.
-- Update `docs/progress/parity/hls-variant-playlists-segmenter.toml`,
-  `docs/progress/phase.toml`, and `CHANGELOG.md` only when the runtime proof is
-  strong enough to change status/debt.
-
-Verification:
-- Focused HLS worker / FFmpeg pipeline tests for the changed path.
-- `cargo xtask smoke`.
-- `scripts/e2e/tsduck-playback-gate.sh gate` unless the environment lacks
-  TSDuck; if skipped, keep the debt open and say exactly why.
-- `cargo xtask progress check`.
-
-Report the Source Map, root cause, behavior implemented, runtime proof, any
-remaining `ParityDebt`, verification run, and changed files.
-
----
-
-## 2. Fix the next ErsatzTV parity gap in ErsatzRS: Channels Edit Numbers route (slug `channels-admin-ui`)
+## 1. Fix the next ErsatzTV parity gap in ErsatzRS: Channels Edit Numbers route (slug `channels-admin-ui`)
 
 Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is a
 pinned-baseline admin UI parity bug: the `/channels` Edit Numbers action should
@@ -151,7 +103,7 @@ Report the Source Map, Visual Source Map, behavior implemented, remaining
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
+## 2. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
@@ -208,3 +160,58 @@ Verification:
 
 Report the Source Map, Visual Source Map, Phase 1 behavior implemented,
 remaining Phase 2-5 `ParityDebt`, verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
+
+Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 runtime
+hardening chore**, not an ErsatzTV parity port: it is governed by the open
+Phase 7 TODO in `docs/progress/phase.toml` and the deferred-contract entry in
+`plans/INDEX.md`. The goal is to replace the Docker image's current external
+tool health check with a small `ersatzrs-healthcheck` binary that probes
+ErsatzRS readiness without requiring shell, curl, or platform-specific TCP
+tricks in the runtime image.
+
+Before editing:
+1. Read `Dockerfile`, `docs/progress/phase.toml`, `plans/INDEX.md`,
+   `ARCHITECTURE.md`, and `BUILD.md`.
+2. Inspect the existing `/healthz` route, startup health/readiness reporting,
+   release archive binary layout, Docker runtime stage, and CI/release Docker
+   checks.
+3. Build a Source Map for health endpoint semantics, binary packaging, Docker
+   `HEALTHCHECK`, release archive inclusion, and cross-platform build targets.
+4. Decide whether the binary should call only `/healthz` or also expose a local
+   diagnostics mode; keep the first slice narrow unless the contracts require
+   more.
+
+Implement the slice end-to-end:
+- Add an `ersatzrs-healthcheck` binary in the existing workspace style with no
+  secrets, no local-path assumptions, and no OS-specific behavior outside
+  documented `cfg` guards.
+- Have it probe the configured host/port or URL with sensible defaults for the
+  Docker image (`127.0.0.1:8409/healthz`) and return standard process exit
+  codes for healthy/unhealthy states.
+- Update the Dockerfile to copy and use the new binary in `HEALTHCHECK`,
+  keeping the runtime image compatible with Linux Docker and the existing
+  managed FFmpeg runtime.
+- Include the binary in release/archive packaging if the release scripts expect
+  all supported service binaries to ship together.
+- Update docs/progress, `plans/INDEX.md`, and `CHANGELOG.md` once the Docker
+  health check no longer depends on external tools.
+
+Verification:
+- Focused tests for argument/default URL handling and exit-code mapping.
+- `cargo fmt --all -- --check`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
+- `cargo test --workspace --all-features`.
+- A Docker build or the repo's Docker check script, proving the image contains
+  and runs `ersatzrs-healthcheck`.
+- At least `cargo check` or the existing platform matrix script for Linux,
+  Windows, and macOS targets touched by the new binary.
+- `cargo xtask progress check`.
+
+Report the Source Map, implemented healthcheck behavior, Docker proof,
+Windows/Linux/macOS compatibility proof, remaining runtime-hardening TODOs,
+verification run, and changed files.

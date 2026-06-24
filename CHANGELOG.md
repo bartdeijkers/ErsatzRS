@@ -53,8 +53,11 @@ release section when tagging a release.
   new editable row reliably.
 - Remote stream placeholders with zero duration no longer trigger Zero Duration
   warnings on `/system/health`.
-- HLS segmenter MPEG-TS appends with normalized timestamp offsets no longer
-  force an HLS discontinuity marker at the FFmpeg generation boundary.
+- HLS segmenter playback is smooth across normalized FFmpeg generation
+  boundaries: same-item appends now omit only unjustified discontinuities,
+  retained MPEG-TS HLS segments normalize PCR as well as continuity counters,
+  and the default MPEG-TS hybrid wrapper emits profile-derived CBR output so
+  strict clients no longer see PCR leaps.
 - Windows launcher builds made from Linux/WSL now embed the tray icon resources
   correctly, preventing `ErsatzRS.exe` from failing at startup with
   `Error setting icon from resource: 1812`.

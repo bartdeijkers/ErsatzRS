@@ -18,8 +18,9 @@ channel streaming setting, HLS-configured channels redirect to `.m3u8`,
 `mode=ts` selects the modern hybrid wrapper, and `mode=ts-legacy` selects the
 legacy concat branch. The modern wrapper starts/touches the HLS segmenter,
 reads `/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, emits the
-upstream copy-all/readrate/mpegts stdout shape, and selects the AAC-LATM
-decoder when the profile requires it. The legacy branch ports ErsatzTV's
+upstream copy-all/readrate/mpegts stdout shape with an ErsatzRS CBR mux-rate
+hardening so FFmpeg emits regular PCR, and selects the AAC-LATM decoder when
+the profile requires it. The legacy branch ports ErsatzTV's
 `ConcatChannel` model with a realtime concat-demuxer command over internal
 `/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes, preserving the upstream
 initial-discontinuity output shape. Command snapshots prove the wrapper and
@@ -30,9 +31,11 @@ The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
 `<AppDataFolder>/scripts/mpegts/default` without overwriting user edits;
 `ffmpeg.default_mpegts_script` resolves
 `<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`; the ErsatzTV YAML shape is
-parsed with `serde_yaml`; `HlsUrl`, `ChannelName`, and `FFmpegPath` render into
-the platform script; Unix executes through `bash`; Windows executes the
-rendered `.bat`; invalid scripts warn and fall back to the default wrapper.
+parsed with `serde_yaml`; `HlsUrl`, `ChannelName`, `FFmpegPath`, and `MuxRate`
+render into the platform script; Unix executes through `bash`; Windows executes
+the rendered `.bat`; invalid scripts warn and fall back to the default wrapper.
+Startup upgrades only byte-for-byte unchanged legacy default `run.sh`/`run.bat`
+files to the mux-rate-aware script, preserving user edits.
 
 Runtime proof: 2026-06-08 bounded 65-second captures of channel 1 modern
 wrapper (`mode=ts`) and legacy concat (`mode=ts-legacy`) each produced readable
@@ -43,4 +46,8 @@ processes to the selected `PlayoutItem` remaining duration, capped by persisted
 --item-seconds 6 --frames --keep gate` passed all 85 TSDuck/container checks
 across `mode=ts-legacy`, `mode=ts`, HLS Segmenter, and HLS Direct, with kept
 legacy frames advancing from clip 1 to clips 2 and 3 at 6-second boundaries.
+On 2026-06-24, after adding the profile-derived default wrapper mux rate,
+`scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks: the hybrid
+wrapper reported zero continuity-counter/PTS/DTS/PCR faults and `pcrverify`
+reported 1,030 PCR OK / 0 jitter faults.
 '''
