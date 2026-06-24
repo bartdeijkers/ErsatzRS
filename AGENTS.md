@@ -97,7 +97,20 @@ cargo test --workspace --all-features
 
 # Inner-loop verification
 # Use focused commands while iterating; reserve the full parity gate for
-# closeout. For admin UI work, start with route/module filters such as:
+# closeout. The build target-dir is the 9p scratch disk (/mnt/f), where Rust's
+# many-small-files I/O is ~20-100x slower than ext4, so each recompile is
+# expensive. Cargo keys its cache on (features x targets x profile x
+# check-vs-build), so flipping --features / --all-features / --all-targets /
+# the wasm target between runs re-runs rustc over the whole tree. Keep the loop
+# in ONE configuration:
+#   ./run.sh check -p <crate>        # fast type-check, no codegen/link
+#   cargo nextest run -p <crate>     # focused tests
+#   ./run.sh dev                     # UI work (leptos watch, SSR+WASM in sync)
+# Run the full multi-config gate (two clippy passes, cargo test --all-features,
+# cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.
+# Machine-local sccache (cache on ext4) is recommended to make the unavoidable
+# config switches cheap; see BUILD.md "Inner-loop strategy". For admin UI work,
+# start with route/module filters such as:
 #   cargo test -p ersatzrs-web --all-targets <route_or_module_filter>
 #   cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 #   cargo xtask hydration-lint -p ersatzrs-web

@@ -308,9 +308,16 @@ Record measurements here when you change profile flags or `run.sh`. Format:
 
 ### Linker investigation (negative result, 2026-05-17)
 
+> These numbers were measured when `target-dir` was the default `./target` on
+> ext4. `target-dir` was later moved to the `/mnt/f` (9p) scratch disk, where
+> small-file I/O is ~20–100x slower, so cold/warm costs are now dominated by
+> disk I/O and config-switch recompiles — see "Inner-loop strategy" above for
+> the current mitigation (sccache + one-config loop). The linker conclusion
+> still holds; the baseline figures below do not.
+
 The reported "10+ minute" builds are the **cold-rebuild path forced by an
 oversized `target/`** (observed at 102–136 GB), not a linker problem — on a
-healthy `target/` the cold cost is ~2.5 min and warm rebuilds are seconds.
+healthy ext4 `target/` the cold cost is ~2.5 min and warm rebuilds are seconds.
 Keep `target/` pruned: run `cargo sweep --time 30` routinely (prunes only
 artifacts older than 30 days, preserves the warm cache) and reserve the heavy
 `cargo clean` for when `target/` exceeds 40 GiB or when reclaiming all space.
