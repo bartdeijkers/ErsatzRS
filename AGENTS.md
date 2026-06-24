@@ -108,9 +108,11 @@ cargo test --workspace --all-features
 #   ./run.sh dev                     # UI work (leptos watch, SSR+WASM in sync)
 # Run the full multi-config gate (two clippy passes, cargo test --all-features,
 # cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.
-# Machine-local sccache (cache on ext4) is recommended to make the unavoidable
-# config switches cheap; see BUILD.md "Inner-loop strategy". For admin UI work,
-# start with route/module filters such as:
+# sccache (cache on ext4) makes the unavoidable config switches cheap, but it is
+# the maintainer's local shell optimization and is enabled per-shell/run.sh, not
+# machine-wide — agents need not (and under a sandboxed uid cannot) enable it, so
+# do not set RUSTC_WRAPPER yourself. See BUILD.md "Inner-loop strategy". For
+# admin UI work, start with route/module filters such as:
 #   cargo test -p ersatzrs-web --all-targets <route_or_module_filter>
 #   cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 #   cargo xtask hydration-lint -p ersatzrs-web

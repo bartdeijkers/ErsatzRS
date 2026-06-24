@@ -148,7 +148,7 @@ cargo clippy -p ersatzrs-web --all-targets -- -D warnings
 # Build/run the binary only when you need the browser loop (step 19): ./run.sh serve.
 ```
 
-Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build` inside your loop. Those are the user's pre-commit gate. Running them per iteration burns minutes the user wants spent on coding. The build target-dir is the `/mnt/f` (9p) scratch disk, where Rust's small-file I/O is ~20-100x slower than ext4, and Cargo re-runs rustc over the whole tree whenever you flip features/targets/profile — so stay in ONE configuration while iterating. Machine-local sccache (cache on ext4) is recommended to make the unavoidable config switches cheap; see BUILD.md "Inner-loop strategy".
+Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build` inside your loop. Those are the user's pre-commit gate. Running them per iteration burns minutes the user wants spent on coding. The build target-dir is the `/mnt/f` (9p) scratch disk, where Rust's small-file I/O is ~20-100x slower than ext4, and Cargo re-runs rustc over the whole tree whenever you flip features/targets/profile — so stay in ONE configuration while iterating. (sccache is the maintainer's local shell optimization for the config switches and is not something you need to enable — do not set `RUSTC_WRAPPER`; you cannot write the owner's cache. See BUILD.md "Inner-loop strategy".)
 
 19. Run the visual browser loop for admin UI routes before claiming parity:
    - Start the app with `./run.sh serve`.
