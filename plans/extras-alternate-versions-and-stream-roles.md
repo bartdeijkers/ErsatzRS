@@ -1,10 +1,11 @@
 # Special Features, Alternate Versions, and Stream Roles
 
-> **Status: Active / proposed.** Implements
+> **Status: Ported for the local scanner/search/UI/playback/scheduling scope.** Implements
 > [ADR 0018](../docs/adr/0018-extras-alternate-versions-and-stream-roles.md).
 > Deliberate, parity-safe enhancement with no ErsatzTV equivalent. Live state
-> will move to `docs/progress/` under the `content-variants` parity slug once
-> the first slice lands.
+> lives in `docs/progress/parity/content-variants.toml`. Provider-specific
+> Plex/Jellyfin/Emby extras or version imports remain deferred until a provider
+> API mapping slice is selected.
 
 ## Goal
 
@@ -55,8 +56,10 @@ Three maintainer use cases are the acceptance yardstick:
     `admin/routes.rs`, `admin/languages/*` (four cultures), `admin/i18n.rs`.
   - Health: `ersatzrs-core::health`, `ersatzrs-infra::health`.
   - Channel stream selector (U2 render half): `crates/ersatzrs-infra/src/playback.rs`,
-    `condition.rs`, `repositories/channel.rs` — verify/complete the
-    `PreferredAudioTitle` / `CustomStreamSelector` allow/blocklist port.
+    `condition.rs`, `repositories/channel.rs`.
+  - Phase 5 examples: `crates/ersatzrs-core/src/content_variants.rs`,
+    `crates/ersatzrs-infra/tests/scheduling_repository.rs`, and
+    `docs/reference/content-variant-scheduling-examples.md`.
 
 ## Data Model
 
@@ -103,6 +106,8 @@ collections (id-referenced) are untouched.
 Each phase is independently shippable and leaves the tree green.
 
 ### Phase 0 — Foundation (schema + search contract)
+**Status: complete.**
+
 - Migration `0004_content_variants.sql` (+ MySQL variant); confirm collapsed
   schema parity rules and EF-style names.
 - Core domain: `ContentKind` enum, `SubKind` normalizer (canonical token map),
@@ -116,6 +121,8 @@ Each phase is independently shippable and leaves the tree green.
 - No UI, no scanner change yet. Existing behavior provably unchanged.
 
 ### Phase 1 — `/media/*` UI surfacing
+**Status: complete.**
+
 - Browse pages default to primaries; persisted "Show special features /
   versions" toggle (pattern: playouts `Show Filler`); variant badge on cards.
 - Detail pages: **Extras / Special Features** section (movie/show/season,
@@ -125,6 +132,8 @@ Each phase is independently shippable and leaves the tree green.
 - i18n strings for all four cultures; hydration rules per TEST.md.
 
 ### Phase 2 — Local scanner: import + classify extras (reverse the discard)
+**Status: complete for local libraries.**
+
 - Replace the `ExtraFiles`/`ExtraDirectories` *skip* with *import-and-classify*
   for movie/show libraries; store as `OtherVideo` with `ContentKind=Extra`,
   `SubKind`, and `ParentMediaItemId` resolved by folder ownership.
@@ -135,6 +144,8 @@ Each phase is independently shippable and leaves the tree green.
   unchanged after a rescan.
 
 ### Phase 3 — Alternate-version linking (music videos / songs) → **U1**
+**Status: complete for local libraries.**
+
 - Detect version tokens from title/folder (`(Live)`, `- Live`, `/Unplugged/`,
   `(Acoustic)`, `(Official Video)`, "MTV Unplugged", …); normalize to `SubKind`.
 - Link renditions of the same work (same artist + matched base title) to a
@@ -144,6 +155,8 @@ Each phase is independently shippable and leaves the tree green.
   `album:"MTV Unplugged"` for songs) resolves to unplugged renditions only.
 
 ### Phase 4 — Stream roles (commentary) → **U2**
+**Status: complete.**
+
 - Index audio/subtitle titles (Phase 0 projection) and finalize the
   `commentary` classifier; expose `audio_title`/`subtitle_title`/
   `has_commentary`.
@@ -154,10 +167,18 @@ Each phase is independently shippable and leaves the tree green.
   channel whose stream selector pins the commentary audio + subtitles.
 
 ### Phase 5 — Scheduling consumers → **U3** + examples
+**Status: complete.**
+
 - Featurette-before-movie: a pre-roll filler preset pointed at an extras smart
   collection (`content_kind:extra AND sub_kind:featurette`, optionally
   `parent_title:"…"`), attached as `PreRoll` filler on the movie schedule item.
 - Ship example/templated smart collections for U1–U3 and document them.
+- Evidence: `ersatzrs-core::content_variants` ships examples and builders for
+  unplugged renditions, commentary movies, featurette pre-roll filler, and
+  primary movie schedule items. `scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll`
+  proves the saved example smart collections resolve intended rows, keep
+  extras out of primary movie schedules by default, persist the pre-roll
+  filler, and feed Classic playout inputs.
 
 ### Cross-cutting
 - Health check extension (search projection includes variant + stream-role
@@ -171,18 +192,18 @@ Each phase is independently shippable and leaves the tree green.
 
 ## Acceptance
 
-- [ ] U1: unplugged smart collection selects only alternate `unplugged`
+- [x] U1: unplugged smart collection selects only alternate `unplugged`
       renditions; originals excluded.
-- [ ] U2: commentary smart collection selects items with a commentary audio
+- [x] U2: commentary smart collection selects items with a commentary audio
       track; paired channel plays commentary audio (+ subtitles where present).
-- [ ] U3: a featurette plays before its movie via pre-roll filler.
-- [ ] Default-exclusion proven: existing channels/collections/browse pages are
+- [x] U3: a featurette plays before its movie via pre-roll filler.
+- [x] Default-exclusion proven: existing channels/collections/browse pages are
       unchanged after importing extras/versions (regression test + rescan).
-- [ ] New search tokens parse, match, project, and snapshot-test cleanly.
-- [ ] `/media/*` browse + detail surfaces match the toggle/section design; i18n
+- [x] New search tokens parse, match, project, and snapshot-test cleanly.
+- [x] `/media/*` browse + detail surfaces match the toggle/section design; i18n
       complete for four cultures; hydration-clean.
-- [ ] Health check reports variant/stream-role index readiness.
-- [ ] Schema migration applies on SQLite and MySQL; existing rows default to
+- [x] Health check reports variant/stream-role index readiness.
+- [x] Schema migration applies on SQLite and MySQL; existing rows default to
       `Primary`/no parent.
 
 ## ParityDebt
@@ -192,24 +213,24 @@ Each phase is independently shippable and leaves the tree green.
   deviation record.
 - **Provider extras/versions (Plex/Jellyfin/Emby):** deferred until the
   provider API surface for extras/versions is mapped; local libraries first.
-- **Commentary render half:** depends on completing the channel
-  `CustomStreamSelector` allow/blocklist port; record exact gap when Phase 4
-  starts.
 - **Version-detection heuristics:** title/folder token matching is best-effort;
   ambiguous cases fall back to `Primary` (no false subordination).
 
 ## Verification
 
-- [ ] `cargo test -p ersatzrs-core search` (parser/matcher/default-exclusion)
+- [x] `cargo test -p ersatzrs-core search` (parser/matcher/default-exclusion)
+- [x] `cargo test -p ersatzrs-infra scheduling_repository` (projection + scheduling examples)
 - [ ] `cargo test -p ersatzrs-infra` (projection + migration round-trip, both
       backends: default + `--features mysql`)
 - [ ] `cargo test -p ersatzrs-scanner` (extras import + version linking)
-- [ ] `cargo test -p ersatzrs-web --features ssr` (media browse/detail + smart
+- [x] `cargo test -p ersatzrs-web admin::server_fns::media_browser` (media browse/detail + smart
       collection server fns)
-- [ ] `cargo xtask hydration-lint -p ersatzrs-web`
-- [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` and
+- [x] `cargo xtask hydration-lint -p ersatzrs-web`
+- [x] `cargo fmt --all -- --check`
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` and
       `--features mysql` (mirror CI: two passes, neither `--all-features`)
 - [ ] `cargo xtask parity-check web` (before claiming UI parity)
 - [ ] `cargo xtask smoke` (playback-sensitive: Phase 4/5)
-- [ ] `cargo xtask progress check`
+- [x] `cargo test --workspace --all-features`
+- [x] `cargo deny check`
+- [x] `cargo xtask progress check`

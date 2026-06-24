@@ -57,11 +57,16 @@ coverage. Phase 3 alternate-version linking landed on 2026-06-24: local
 music-video, song, and movie scans classify live/unplugged/acoustic/remix/
 remaster/extended/director-cut renditions, keep deterministic canonical
 primaries, link same-work alternates, and leave lone alternates typed but
-unlinked. Commentary render acceptance and scheduling examples remain tracked
-as unresolved debt in `docs/progress/parity/content-variants.toml`. The next
-spec-backed candidates are the remaining `content-variants` phases, the open
-`ersatzrs-healthcheck` binary TODO, and ADR 0013 in-app TSDuck MPEG-TS
-troubleshooting (Proposed / Not implemented).
+unlinked. Phase 4 commentary render acceptance landed on 2026-06-24:
+commentary-bearing smart collections now feed channels whose preferred audio
+title or custom stream selector pins commentary audio/subtitles in direct
+IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
+2026-06-24: repo-owned templates and docs cover unplugged rendition smart
+collections, commentary movie channels, and featurette pre-roll filler attached
+to primary movie schedule items while default schedules stay unchanged. The
+next spec-backed candidates are the open `ersatzrs-healthcheck` binary TODO,
+ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
+and remaining FFmpeg filter-graph live proof.
 '''
 
 # Phase 0 checklist (all complete).

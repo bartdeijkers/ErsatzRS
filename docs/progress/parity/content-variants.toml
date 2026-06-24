@@ -1,69 +1,39 @@
 feature    = 'Content variants, alternate versions, and stream roles'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, ADR 0018'
 rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::playback`, `crates/ersatzrs-web::transport::iptv`, `crates/ersatzrs-infra::hls_worker`, `crates/ersatzrs-infra::health`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0018']
 
 summary    = '''
-Phase 0 foundation, Phase 1 media UI surfacing, Phase 2 local scanner extra
-import/classification, Phase 3 alternate-version linking, and Phase 4
-commentary render acceptance are implemented.
-`MediaItem` now has additive `ContentKind`, `SubKind`, and
-`ParentMediaItemId` columns (SQLite and MySQL migrations) so scanner/provider
-slices can represent primary items, extras, and alternate versions without
-changing existing rows. The domain model has a closed `ContentKind` enum plus
-an open subtype normalizer that canonicalizes the ErsatzTV extra
-suffix/directory vocabulary and common alternate-version tokens.
+ADR 0018's local/search/UI/playback/scheduling scope is implemented through
+Phase 5. `MediaItem` has additive `ContentKind`, `SubKind`, and
+`ParentMediaItemId` columns (SQLite and MySQL), a closed `ContentKind` enum,
+and normalized subtype tokens for ErsatzTV extras plus common alternate-version
+markers.
 
-The SQL-backed search contract now understands `content_kind`, `sub_kind`,
-`parent_title`, `audio_title`, `subtitle_title`, and the derived
-`has_commentary` predicate. Search evaluation implicitly adds
-`content_kind:primary` unless a query explicitly references `content_kind`,
-`sub_kind`, or `parent_title`, preserving ErsatzTV's default-invisible behavior
-for extras and versions. Scheduling search projection populates the new fields
-from `MediaItem`, parent metadata titles, `MediaStream.Title`, and
-`Subtitle.Title`; commentary classification is deliberately conservative and
-matches titles containing `commentary`, mirroring ErsatzTV's stream-selector
-substring behavior. `/system/health` now includes a Search Projection readiness
-row that fails if the database/build cannot support the variant and stream-role
-fields.
+Search and scheduling projection understand `content_kind`, `sub_kind`,
+`parent_title`, `audio_title`, `subtitle_title`, and `has_commentary`, with an
+implicit `content_kind:primary` filter unless a query opts into variant fields.
+The health engine reports Search Projection readiness for these fields.
 
-The admin media UI now preserves the default-invisible behavior while allowing
-operators to opt into variants: `/media/*` browse pages have a persisted "Show
-special features / versions" toggle, variant cards render localized badges, and
-movie/show/season detail pages expose linked Extras / Special Features while
-artist detail pages expose linked Versions. Search and smart-collection editing
-surface the new variant tokens. Server-function coverage and seeded Playwright
-coverage prove hidden-by-default browse behavior, opt-in listing, detail
-sections, localized badges, search help, mobile layout, and SSR/no-JS rendering.
+The admin media UI preserves hidden-by-default behavior behind a persisted
+"Show special features / versions" toggle, renders localized variant badges,
+links Extras / Special Features or Versions sections from detail pages, and
+surfaces the search tokens. The local scanner imports movie/show extras as
+typed `OtherVideo` rows, links owner folders/stems when unambiguous, and
+classifies local music-video, song, and movie alternates such as unplugged,
+live, acoustic, remix, remaster, extended, and director-cut renditions while
+keeping canonical primaries unchanged.
 
-The local scanner now imports ErsatzTV-classified extra suffixes and directories
-for movie/show libraries instead of treating them as primary movies/episodes:
-movie sibling suffixes such as `-trailer` and extra directories such as
-`Featurettes/` become `OtherVideo` rows with `ContentKind=Extra`, normalized
-`SubKind`, and folder/stem-derived `ParentMediaItemId` when a single owner is
-known. Show-level extras link to the show, season-level extras link to the
-season, and ambiguous/library-level extras stay typed but orphaned with
-`ParentMediaItemId = NULL`.
-
-The local scanner now also detects alternate-version title and folder tokens
-for music videos, songs, and movies, including live, unplugged, acoustic, remix,
-remaster, extended, director's cut, and official/studio canonical markers.
-Same-work renditions are grouped by normalized base title and artist where
-available; an unmarked or official/studio row remains the canonical primary,
-other renditions are written as `ContentKind=AlternateVersion` with normalized
-`SubKind` and `ParentMediaItemId`, and lone alternates stay typed but unlinked
-instead of guessing a parent. Default-exclusion search still keeps alternate
-versions hidden unless a query opts into variant fields.
-
-Commentary-bearing items can now complete the ADR 0018 U2 path: smart
-collections select them through `audio_title`, `subtitle_title`, and
-`has_commentary`; channel and playout-item `PreferredAudioTitle` values select
-matching audio streams by case-insensitive title substring; custom channel
-stream-selector YAML applies audio/subtitle title allowlists and blocklists;
-and both direct MPEG-TS/IPTV and HLS segmenter command generation map the
-selected audio stream while preserving the existing first-audio behavior for
-channels without selector settings.
+Commentary-bearing smart collections now feed channels whose preferred audio
+title or custom stream selector pins commentary audio/subtitles in direct
+IPTV/MPEG-TS and HLS segmenter playback. Phase 5 adds repo-owned examples and
+docs for unplugged renditions, commentary movie channels, featurette pre-roll
+filler, and primary movie schedule items; focused repository coverage proves
+the examples resolve the intended rows, keep primaries/extras separated by
+default, persist pre-roll filler wiring, and feed Classic playout inputs without
+changing normal schedules. Provider-specific Plex/Jellyfin/Emby extras or
+version imports remain deferred until a provider API mapping slice is selected.
 '''
 
 [[debt]]
@@ -103,5 +73,5 @@ id          = 'scheduling-examples-and-preroll'
 adr         = '0018'
 description = 'Phase 5 remains open: templated smart collections and schedule/filler examples for unplugged renditions, commentary channels, and featurette-before-movie pre-roll are not shipped.'
 discovered  = '2026-06-23'
-evidence    = 'Search tokens are now representable/queryable, but no example collections, filler presets, or schedule consumer examples were added in this foundation slice.'
-resolved    = false
+evidence    = 'Resolved 2026-06-24: `ersatzrs-core::content_variants` now ships smart-collection examples for unplugged renditions, commentary movies, featurette pre-roll, and primary movies, plus builders for the featurette pre-roll filler preset and movie schedule item. `docs/reference/content-variant-scheduling-examples.md` documents the operator workflow. Covered by content_variants::tests::examples_use_variant_tokens_that_opt_into_hidden_rows, content_variants::tests::featurette_pre_roll_templates_do_not_attach_to_a_schedule_by_default, and scheduling_repository::scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll; focused gates passed.'
+resolved    = true

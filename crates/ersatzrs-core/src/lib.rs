@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod content_variants;
 pub mod health;
 pub mod hls;
 pub mod language_codes;

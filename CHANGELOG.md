@@ -41,6 +41,10 @@ release section when tagging a release.
   can feed commentary-bearing items into channels whose preferred audio title
   or custom stream selector pins commentary audio and matching subtitles in
   direct IPTV/MPEG-TS and HLS segmenter playback.
+- Content-variant scheduling examples for ADR 0018: built-in templates and
+  operator docs now cover unplugged rendition smart collections, commentary
+  movie channels, and featurette pre-roll filler attached to primary movie
+  schedule items without changing default schedules.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

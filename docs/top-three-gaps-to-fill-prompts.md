@@ -27,21 +27,18 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the content-variants Phase 4 commentary render
-acceptance closeout): the previous #1 Phase 4 commentary prompt is now resolved
-after focused search/projection coverage, playback selector tests, and direct
-IPTV/HLS selected-audio command coverage.
-`cargo xtask progress gaps` still reports `content-variants` as an in-progress
-parity/spec feature because Phase 5 remains open. The completed-scope rule
-keeps the next bounded ADR 0018 slice at the top. Ranking: (1)
-**content-variants Phase 5 scheduling consumers and examples** — ship the
-operator-facing examples that demonstrate unplugged renditions, commentary
-channels, and featurette pre-roll scheduling; (2)
-**ersatzrs-healthcheck binary** — open Phase 7 runtime hardening TODO to
-replace the Docker image's tool-based health check with a purpose-built binary;
-(3) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed /
-Not implemented and would turn the manual TSDuck gate into an optional Support
-tool.
+Selection (2026-06-24, after the content-variants Phase 5 scheduling examples
+closeout): ADR 0018's remaining bounded local/search/UI/playback/scheduling
+scope is now resolved with shipped examples for unplugged renditions,
+commentary channels, and featurette pre-roll. `cargo xtask progress gaps` no
+longer needs a `content-variants` prompt for the completed Phase 0-5 scope.
+Ranking: (1) **ersatzrs-healthcheck binary** — open Phase 7 runtime hardening
+TODO to replace the Docker image's tool-based health check with a purpose-built
+binary; (2) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains
+Proposed / Not implemented and would turn the manual TSDuck gate into an
+optional Support tool; (3) **FFmpeg filter graph live proof** — remaining
+parity debt needs real IPTV/HLS runtime proof for wall-clock, in-point, and
+duration expression bindings.
 
 Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
 (org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
@@ -57,74 +54,7 @@ next spec-backed ADR 0018 phase.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: content-variants Phase 5 scheduling consumers and examples (slug `content-variants`)
-
-Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
-ErsatzTV parity port: it is governed by
-[ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
-[`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-This slice intentionally completes the operator-facing examples and scheduling
-consumer proof that ADR 0018 layers on top of the implemented search, scanner,
-UI, alternate-version, and commentary render foundations. The goal is the
-complete **Phase 5 — Scheduling consumers** acceptance slice.
-
-Scope is **only Phase 5** from the plan. Do not expand provider extras import,
-change the core scheduling engines, or add repair/mutation workflows in this
-slice. Any shortfall must remain visible in
-`docs/progress/parity/content-variants.toml`.
-
-Before editing:
-1. Read ADR 0018, the plan's Phase 5 section, PORTING.md, STYLE.md, and
-   `docs/progress/parity/content-variants.toml`.
-2. Inspect ErsatzRS smart collections, filler presets, program schedule items,
-   playout build inputs, media browse/detail links, and any existing seeded
-   examples or templates.
-3. Inspect the implemented Phase 0-4 surfaces: `content_kind`,
-   `sub_kind`, `parent_title`, `audio_title`, `subtitle_title`,
-   `has_commentary`, alternate-version linking, and channel commentary render
-   selection.
-4. Build a Source Map for example smart collections, filler preset attachment,
-   pre-roll schedule items, commentary-channel setup, unplugged rendition
-   examples, default-exclusion safety, and docs/i18n surfaces touched by the
-   examples.
-5. Identify any provider extras/version import debt you are explicitly
-   deferring.
-
-Implement the slice end-to-end:
-- Ship example/templated smart collections for unplugged renditions, commentary
-  channels, and featurette pre-roll using the implemented variant/search tokens.
-- Verify or complete filler preset and schedule-item wiring so a featurette
-  smart collection can be attached as pre-roll ahead of a movie item without
-  changing existing schedules by default.
-- Verify or complete commentary-channel setup guidance/examples that combine a
-  `has_commentary`/`audio_title:commentary` smart collection with channel
-  preferred-title or custom stream-selector settings.
-- Verify or complete unplugged-rendition examples that select
-  `content_kind:alternate_version` + `sub_kind:unplugged` without selecting the
-  canonical primary rows.
-- Add focused tests for example creation/loading, schedule/filler pre-roll
-  persistence, default-exclusion safety, and playout build inputs.
-- Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
-  prompt file if the debt ranking changes.
-
-Verification:
-- Focused core/infra/web tests proving the example smart collections resolve
-  the intended variant/commentary rows and keep primaries hidden by default.
-- Focused scheduling/playout tests proving featurette pre-roll filler wiring and
-  unchanged normal schedule behavior.
-- `cargo test -p ersatzrs-core search`.
-- `cargo test -p ersatzrs-infra scheduling_repository`.
-- `cargo test -p ersatzrs-web admin::server_fns::media_browser`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo test --workspace --all-features`.
-- `cargo xtask progress check`.
-
-Report the Source Map, Phase 5 behavior implemented, remaining
-`content-variants` `ParityDebt`, verification run, and changed files.
-
----
-
-## 2. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
+## 1. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 runtime
 hardening chore**, not an ErsatzTV parity port: it is governed by the open
@@ -179,7 +109,7 @@ verification run, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
+## 2. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed diagnostic
 extension**, not an ErsatzTV parity port: it is governed by
@@ -205,8 +135,8 @@ Before editing:
    report parsing, archive writing, Support route rendering, health reporting,
    and redaction boundaries.
 4. Identify which follow-ups remain out of scope: TSDuck packaging, raw sample
-   retention by default, repair tools, deeper HLS/fMP4 analysis, and any normal
-   playback-path dependency.
+   retention by default, repair tools, deeper HLS/fMP4 analysis, teletext analysis
+   and any normal playback-path dependency.
 
 Implement the slice end-to-end:
 - Add a small TSDuck diagnostic service that detects `tsp --version`, builds
@@ -244,3 +174,50 @@ Verification:
 Report the Source Map, diagnostic behavior implemented, unsupported/missing
 TSDuck behavior, archive/redaction proof, verification run, remaining
 diagnostic follow-ups, and changed files.
+
+---
+
+## 3. Prove the remaining FFmpeg filter graph runtime parity debt (slug `ffmpeg-filter-graph`)
+
+Use the repo workflow from AGENTS.md. This is an ErsatzTV parity/runtime proof
+slice governed by `docs/progress/parity/ffmpeg-filter-graph.toml`, the FFmpeg
+pipeline contracts in PORTING.md, and the active IPTV/HLS runtime gates. The
+snapshot-covered expression semantics exist, but the feature still carries
+debt because no live IPTV/HLS capture has proven the same bindings in a real
+stream.
+
+Scope is the proof and any narrow fix needed for the proof. Do not redesign the
+graphics engine, replace `drawvg`, or broaden unrelated FFmpeg command
+generation work.
+
+Before editing:
+1. Read `docs/progress/parity/ffmpeg-filter-graph.toml`, PORTING.md,
+   STYLE.md, TEST.md, and the relevant FFmpeg pipeline/filter graph code.
+2. Inspect the snapshot tests for `content_seconds`, `channel_seconds`,
+   `time_of_day_seconds`, and `content_total_seconds`.
+3. Build a Source Map for direct IPTV `.ts`, HLS segmenter, troubleshooting
+   preview command generation, graphics/template variable binding, and runtime
+   proof scripts.
+
+Implement the slice end-to-end:
+- Add or update a live proof path that captures direct IPTV and HLS segmenter
+  output with filter graph expressions exercising wall-clock, in-point, and
+  duration bindings.
+- If the live proof exposes a mismatch, fix the narrow binding/argv/runtime
+  path and add focused regression coverage.
+- Keep cross-platform assumptions documented; any host-specific proof helper
+  must be opt-in and not part of normal startup or playback.
+- Update `docs/progress/parity/ffmpeg-filter-graph.toml`, `CHANGELOG.md`, and
+  this prompt file if the debt ranking changes.
+
+Verification:
+- Focused FFmpeg/filter graph tests covering any changed command generation.
+- The live IPTV/HLS proof command or script, with captured evidence that the
+  expressions bind to the expected wall-clock, in-point, and duration values.
+- `cargo fmt --all -- --check`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo test --workspace --all-features`.
+- `cargo xtask progress check`.
+
+Report the Source Map, runtime proof method, any fixes made, remaining
+`ffmpeg-filter-graph` `ParityDebt`, verification run, and changed files.

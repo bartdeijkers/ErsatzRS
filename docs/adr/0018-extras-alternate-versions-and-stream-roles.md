@@ -11,10 +11,13 @@ by ADR NNNN | Deprecated. It must NOT be read as "the code exists".
 
 ## Implementation
 
-Partial — Phase 0 schema/search/health foundation, Phase 1 media UI surfacing,
-and Phase 2 local scanner extra import/classification are implemented; Phase 3
-alternate-version linking, Phase 4 commentary render acceptance, and Phase 5
-scheduling examples remain tracked in `docs/progress/parity/content-variants.toml`.
+Implemented for the local scanner/search/UI/playback/scheduling scope tracked
+by `docs/progress/parity/content-variants.toml`: Phase 0 schema/search/health
+foundation, Phase 1 media UI surfacing, Phase 2 local scanner extra
+import/classification, Phase 3 alternate-version linking, Phase 4 commentary
+render acceptance, and Phase 5 scheduling examples are complete.
+Provider-specific Plex/Jellyfin/Emby extras or version imports remain deferred
+until a provider API mapping slice is selected.
 
 <!--
 Tracked by `plans/extras-alternate-versions-and-stream-roles.md`. Parity slug
@@ -258,6 +261,8 @@ an accurate port-completeness indicator.
 ## References
 
 - `plans/extras-alternate-versions-and-stream-roles.md` — implementation plan.
+- `docs/reference/content-variant-scheduling-examples.md` — operator examples
+  for unplugged renditions, commentary channels, and featurette pre-roll.
 - [ADR 0004: collapsed initial schema](0004-collapsed-initial-schema.md) —
   "collapse then evolve" migration rule this change follows.
 - [ADR 0009: SQL-backed search](0009-sql-backed-search-and-no-elasticsearch.md)

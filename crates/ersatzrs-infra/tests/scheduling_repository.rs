@@ -2,7 +2,8 @@
 mod common;
 
 use chrono::{Duration, TimeZone, Utc};
-use ersatzrs_core::repositories::ProgramScheduleRepository;
+use ersatzrs_core::content_variants;
+use ersatzrs_core::repositories::{FillerRepository, ProgramScheduleRepository};
 use ersatzrs_core::scheduling::{
     classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
     PlayoutSchedulingEngine, SchedulingCollectionKey, SchedulingContentGuid,
@@ -13,7 +14,7 @@ use ersatzrs_domain::{
     ProgramSchedule, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
     CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
 };
-use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
 
 #[tokio::test]
@@ -528,6 +529,116 @@ async fn scheduling_repository_searches_content_variants_and_stream_roles() {
     assert_eq!(
         commentary.iter().map(|item| item.id).collect::<Vec<_>>(),
         vec![20]
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_search_enrichment(&pool).await;
+    seed_content_variant_example_rows(&pool).await;
+
+    insert_content_variant_example_smart_collections(&pool).await;
+
+    assert_smart_collection_source_ids(&repos, content_variants::UNPLUGGED_RENDITIONS.name, &[31])
+        .await;
+    assert_smart_collection_source_ids(&repos, content_variants::COMMENTARY_MOVIES.name, &[20])
+        .await;
+    assert_smart_collection_source_ids(&repos, content_variants::MOVIE_PRIMARIES.name, &[21, 20])
+        .await;
+
+    let filler = content_variants::featurette_pre_roll_filler(77, 53);
+    repos.filler.upsert(&filler).await.unwrap();
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 302,
+            name: "Example - Featurette Before Movie".to_owned(),
+            item_ids: vec![402],
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    let schedule_item =
+        content_variants::movie_schedule_item_with_featurette_pre_roll(402, 302, 54, 77);
+    repos
+        .program_schedule
+        .upsert_item(&schedule_item)
+        .await
+        .unwrap();
+    common::seed_profile_and_channel(&repos, 902).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed")
+           VALUES (902, 902, 302, 'Classic', 123)"#,
+    )
+    .await
+    .unwrap();
+
+    let start = Utc.with_ymd_and_hms(2026, 4, 15, 8, 0, 0).unwrap();
+    let reference_data = repos
+        .scheduling
+        .classic_reference_data(902, start, Duration::hours(1))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        reference_data.classic_schedule_items[0].pre_roll_filler_id,
+        Some(77)
+    );
+    assert_eq!(
+        reference_data
+            .media_by_key
+            .get(&classic_schedule_item_key(
+                &reference_data.classic_schedule_items[0]
+            ))
+            .unwrap()
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>(),
+        vec![21, 20]
+    );
+
+    let result = ClassicSchedulingEngine
+        .schedule(SchedulingRequest {
+            playout: Playout {
+                id: 902,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 123,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: ersatzrs_core::scheduling::PlayoutBuildMode::Continue,
+            reference_data,
+        })
+        .unwrap();
+
+    assert_eq!(
+        result
+            .added_items
+            .iter()
+            .take(2)
+            .map(|item| (item.media_item_id, item.filler_kind))
+            .collect::<Vec<_>>(),
+        vec![(40, FillerKind::PreRoll), (20, FillerKind::None)]
+    );
+}
+
+async fn assert_smart_collection_source_ids(
+    repos: &Repositories,
+    name: &str,
+    expected_ids: &[i64],
+) {
+    let items = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::SmartCollection(name.to_owned()))
+        .await
+        .unwrap();
+    assert_eq!(
+        items.iter().map(|item| item.id).collect::<Vec<_>>(),
+        expected_ids
     );
 }
 
@@ -1185,6 +1296,72 @@ async fn seed_search_enrichment(pool: &SqlitePool) {
     .await
     .unwrap();
     insert_version(pool, 31, 240_000, "MusicVideoId").await;
+}
+
+async fn seed_content_variant_example_rows(pool: &SqlitePool) {
+    common::seed_media_item(pool, 32, 1).await;
+    pool.execute(r#"INSERT INTO "MusicVideo" ("Id", "ArtistId") VALUES (32, 30)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "MusicVideoMetadata" (
+            "Id", "MusicVideoId", "MetadataKind", "Title", "SortTitle",
+            "DateAdded", "DateUpdated", "Album"
+         ) VALUES (
+            320, 32, 0, 'The Hit', 'hit',
+            '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 'Hits'
+         )"#,
+    )
+    .await
+    .unwrap();
+    insert_version(pool, 32, 240_000, "MusicVideoId").await;
+    pool.execute(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = 2, "SubKind" = 'Unplugged', "ParentMediaItemId" = 32
+           WHERE "Id" = 31"#,
+    )
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"INSERT INTO "MediaItem" (
+            "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
+         ) VALUES (40, 1, 0, 1, 'Featurettes', 20)"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    pool.execute(r#"INSERT INTO "OtherVideo" ("Id") VALUES (40)"#)
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "OtherVideoMetadata" (
+            "Id", "OtherVideoId", "Title", "SortTitle", "DateAdded", "DateUpdated", "MetadataKind"
+         ) VALUES (
+            400, 40, 'Making The Escape', 'making the escape',
+            '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z', 0
+         )"#,
+    )
+    .await
+    .unwrap();
+    insert_version(pool, 40, 600_000, "OtherVideoId").await;
+}
+
+async fn insert_content_variant_example_smart_collections(pool: &SqlitePool) {
+    for (id, example) in [
+        (51, content_variants::UNPLUGGED_RENDITIONS),
+        (52, content_variants::COMMENTARY_MOVIES),
+        (53, content_variants::FEATURETTE_PRE_ROLL),
+        (54, content_variants::MOVIE_PRIMARIES),
+    ] {
+        sqlx::query(r#"INSERT INTO "SmartCollection" ("Id", "Name", "Query") VALUES (?, ?, ?)"#)
+            .bind(id)
+            .bind(example.name)
+            .bind(example.query)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
 }
 
 async fn seed_collection_fixture(pool: &SqlitePool) {
