@@ -1,9 +1,8 @@
 # Publish a release without GitHub-hosted minutes
 
-Use this guide for the current Linux/Windows release path. macOS archives are
-intentionally omitted until a future macOS-targeted release, so the release
-still runs through GitHub Actions without spending GitHub-hosted macOS runner
-credits.
+Use this guide for the current Linux/Windows release path. macOS archives and
+Docker/GHCR images are intentionally omitted so the active release line stays
+focused on Linux and Windows artifacts.
 
 This produces:
 
@@ -17,9 +16,7 @@ It intentionally does not produce:
 
 - `ersatzrs-<tag>-osx-arm64.tar.gz`
 - `ersatzrs-<tag>-osx-x64.tar.gz`
-
-Docker publication is currently disabled in `.github/workflows/release.yml`
-until image publishing is re-enabled.
+- Docker/GHCR images
 
 ## Prepare the runners
 
@@ -56,10 +53,11 @@ rustup target add wasm32-unknown-unknown
 cargo install cargo-leptos --version 0.3.6 --locked
 cargo install stylance-cli --version 0.8.2 --locked
 cargo install cross --locked
-docker buildx version
+docker --version
 ```
 
-Docker must support `buildx` and QEMU for ARM Linux archives.
+Docker or Podman must be available for `cross` to build the ARM Linux archives;
+the release workflow does not publish a Docker image.
 
 On the Windows runner, install:
 
@@ -82,8 +80,8 @@ stylance --version
 ## Release workflow shape
 
 The committed `.github/workflows/release.yml` already uses the self-hosted
-Linux/Windows release runner shape and omits macOS archives. Keep that shape for
-this release line.
+Linux/Windows release runner shape and omits macOS archives and Docker
+publication. Keep that shape for this release line.
 
 In `.github/workflows/release.yml`:
 
@@ -166,17 +164,7 @@ Confirm the release has the expected non-macOS archives:
 gh release view "$tag" --json tagName,assets,url
 ```
 
-When Docker publication is re-enabled, confirm the Docker image manifest:
-
-```bash
-docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
-```
-
-The manifest should include:
-
-- `linux/amd64`
-- `linux/arm64`
-- `linux/arm/v7`
+There is no Docker/GHCR image for this release line.
 
 ## Restoring macOS archives later
 

@@ -97,6 +97,10 @@ pub fn build_app(app_state: AppState) -> Router {
         )
         .route("/api/channels/save", post(api::channels::save_channel_form))
         .route(
+            "/api/channels/numbers/save",
+            post(api::channels::save_channel_numbers_form),
+        )
+        .route(
             "/api/channels/save-multipart",
             post(api::channels::save_channel_multipart_form)
                 .layer(DefaultBodyLimit::max(api::watermarks::max_upload_bytes())),

@@ -64,9 +64,9 @@ jobs:
           path: release-web-assets/
 
   binaries:
-    # Build release binaries for every ErsatzTV-parity RID and attach them
-    # as archives to the GitHub release. CI stays on the self-hosted
-    # development checks; hosted platform builds run only for releases.
+    # Build active Linux/Windows release binaries and attach them as archives
+    # to the GitHub release. macOS and Docker publication are intentionally
+    # outside the active release line for now.
     name: Release archive (${{ matrix.rid }})
     needs: [release, web-assets]
     runs-on: ${{ fromJSON(matrix.runner) }}
@@ -263,61 +263,3 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh release upload "$VERSION" "$ARCHIVE_PATH" --clobber --repo "$REPO"
-
-  docker:
-    name: Publish Docker image
-    # Docker publication remains disabled until image publishing is re-enabled.
-    if: ${{ false }}
-    needs: [release, web-assets]
-    runs-on: [self-hosted, ersatzrs-linux-release]
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Normalize image metadata
-        run: |
-          echo "REGISTRY_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
-          echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Download web assets
-        uses: actions/download-artifact@v8
-        with:
-          name: web-assets
-          path: release-web-assets
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push multi-arch image
-        uses: docker/bake-action@v7
-        with:
-          # Build from the checked-out workspace instead of the default Git
-          # context: the downloaded `release-web-assets/` artifact only exists
-          # in the workspace and the Dockerfile COPYs it.
-          source: .
-          files: docker-bake.hcl
-          targets: ersatzrs-release
-          push: true
-
-      - name: Verify multi-arch manifest
-        run: |
-          docker buildx imagetools inspect "$REGISTRY_IMAGE:$VERSION" > manifest.txt
-          grep -q 'linux/amd64' manifest.txt
-          grep -q 'linux/arm64' manifest.txt
-          grep -q 'linux/arm/v7' manifest.txt
-
-      - name: Verify image does not package FFmpeg
-        run: |
-          for platform in linux/amd64 linux/arm64 linux/arm/v7; do
-            docker run --rm --platform "$platform" --entrypoint sh "$REGISTRY_IMAGE:$VERSION" -c \
-              '! command -v ffmpeg >/dev/null 2>&1 && ! command -v ffprobe >/dev/null 2>&1 && test ! -e /opt/ffmpeg/bin/ffmpeg && test ! -e /opt/ffmpeg/bin/ffprobe'
-          done

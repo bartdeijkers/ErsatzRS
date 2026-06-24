@@ -18,6 +18,20 @@ pub struct ChannelListRow {
     pub logo_url: String,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ChannelNumberEditorRow {
+    pub id: i64,
+    pub number: String,
+    pub original_number: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ChannelNumberFormUpdate {
+    pub id: i64,
+    pub number: String,
+}
+
 /// Form data for channel create / edit.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ChannelForm {
@@ -329,6 +343,26 @@ pub async fn count_channels(show_disabled: bool) -> Result<u64, ServerFnError> {
     Ok(u64::try_from(count).unwrap_or(0))
 }
 
+/// Loads all channels for the channel-number editor.
+#[server]
+pub async fn list_channel_number_rows() -> Result<Vec<ChannelNumberEditorRow>, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_core::repositories::ChannelRepository;
+
+    let state = expect_context::<AppState>();
+    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(state.pool.clone());
+    let rows = repo.list_number_rows().await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| ChannelNumberEditorRow {
+            id: row.id,
+            original_number: row.number.clone(),
+            number: row.number,
+            name: row.name,
+        })
+        .collect())
+}
+
 /// Loads a channel into `ChannelForm` for editing.
 #[server]
 pub async fn get_channel_form(id: i64) -> Result<ChannelForm, ServerFnError> {
@@ -392,6 +426,40 @@ pub async fn save_channel_with_pool(
     let result = repo.save_editor_form(form.into_core()).await?;
     if result.is_success() {
         Ok(result.id)
+    } else {
+        Err(ChannelSaveError::Validation(
+            result
+                .validation_errors
+                .into_iter()
+                .map(|error| format!("{}: {}", error.field, error.message))
+                .collect::<Vec<_>>()
+                .join("; "),
+        ))
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_channel_numbers_with_pool(
+    pool: &ersatzrs_infra::db::DbPool,
+    updates: Vec<ChannelNumberFormUpdate>,
+) -> Result<Vec<i64>, ChannelSaveError> {
+    use ersatzrs_core::repositories::{ChannelNumberUpdate, ChannelRepository};
+
+    let repo = ersatzrs_infra::repositories::SqliteChannelRepository(pool.clone());
+    let result = repo
+        .save_number_updates(
+            updates
+                .into_iter()
+                .map(|update| ChannelNumberUpdate {
+                    id: update.id,
+                    number: update.number,
+                })
+                .collect(),
+        )
+        .await?;
+
+    if result.is_success() {
+        Ok(result.changed_ids)
     } else {
         Err(ChannelSaveError::Validation(
             result

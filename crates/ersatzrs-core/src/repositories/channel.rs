@@ -125,6 +125,48 @@ impl ChannelSaveResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelNumberRow {
+    pub id: EntityId,
+    pub number: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelNumberUpdate {
+    pub id: EntityId,
+    pub number: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelNumberSaveResult {
+    pub validation_errors: Vec<ChannelValidationError>,
+    pub changed_ids: Vec<EntityId>,
+}
+
+impl ChannelNumberSaveResult {
+    #[must_use]
+    pub fn success(changed_ids: Vec<EntityId>) -> Self {
+        Self {
+            validation_errors: Vec::new(),
+            changed_ids,
+        }
+    }
+
+    #[must_use]
+    pub fn validation(errors: Vec<ChannelValidationError>) -> Self {
+        Self {
+            validation_errors: errors,
+            changed_ids: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn is_success(&self) -> bool {
+        self.validation_errors.is_empty()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelValidationError {
     pub field: String,
     pub message: String,
@@ -149,4 +191,9 @@ pub trait ChannelRepository: Send + Sync {
     async fn delete(&self, id: EntityId) -> Result<()>;
     async fn get_editor_state(&self, id: Option<EntityId>) -> Result<Option<ChannelEditorState>>;
     async fn save_editor_form(&self, form: ChannelEditorForm) -> Result<ChannelSaveResult>;
+    async fn list_number_rows(&self) -> Result<Vec<ChannelNumberRow>>;
+    async fn save_number_updates(
+        &self,
+        updates: Vec<ChannelNumberUpdate>,
+    ) -> Result<ChannelNumberSaveResult>;
 }

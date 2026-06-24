@@ -1,8 +1,8 @@
 # Releasing
 
 ErsatzRS publishes alpha releases while Phase 7 parity work continues. The
-release workflow builds binary archives and the Docker image from annotated
-version tags.
+release workflow builds Linux and Windows binary archives from annotated version
+tags.
 
 ## Versioning
 
@@ -31,7 +31,7 @@ git push origin v0.1.0
 4. Create a new empty `[Unreleased]` section.
 5. Add or update the compare links at the bottom of `CHANGELOG.md`.
 6. Tag the release.
-7. Let the release workflow create binary archives and publish the Docker image.
+7. Let the release workflow create the Linux and Windows binary archives.
 8. Verify the GitHub release notes match the changelog, which is the canonical
    release overview.
 

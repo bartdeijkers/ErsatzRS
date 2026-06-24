@@ -17,7 +17,10 @@ use crate::{
     admin::{
         i18n::{upload_error_text, UiLanguage},
         server_fns::{
-            channels::{save_channel_with_state, ChannelForm},
+            channels::{
+                save_channel_numbers_with_pool, save_channel_with_state, ChannelForm,
+                ChannelNumberFormUpdate,
+            },
             settings::load_ui_language_for_api,
         },
     },
@@ -185,6 +188,23 @@ pub async fn save_channel_multipart_form(
         Err(error) => {
             tracing::error!(%error, "failed to save channel from multipart HTML form");
             channel_save_error_redirect(id, &error)
+        }
+    }
+}
+
+pub async fn save_channel_numbers_form(
+    State(state): State<AppState>,
+    Form(fields): Form<HashMap<String, String>>,
+) -> Redirect {
+    let updates = channel_number_updates_from_fields(&fields);
+    match save_channel_numbers_with_pool(&state.pool, updates).await {
+        Ok(_) => Redirect::to("/channels"),
+        Err(error) => {
+            tracing::error!(%error, "failed to save channel numbers from HTML form");
+            Redirect::to(&format!(
+                "/channels/numbers?error={}",
+                urlencoding::encode(&error.to_string())
+            ))
         }
     }
 }
@@ -397,6 +417,23 @@ fn parse_bool(fields: &HashMap<String, String>, name: &str) -> bool {
         .is_some_and(|value| matches!(value.as_str(), "true" | "on" | "1" | "True"))
 }
 
+fn channel_number_updates_from_fields(
+    fields: &HashMap<String, String>,
+) -> Vec<ChannelNumberFormUpdate> {
+    let mut updates = fields
+        .iter()
+        .filter_map(|(name, value)| {
+            let id = name.strip_prefix("number_")?.parse::<i64>().ok()?;
+            Some(ChannelNumberFormUpdate {
+                id,
+                number: value.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    updates.sort_by_key(|update| update.id);
+    updates
+}
+
 pub async fn serve_channel_logo(Path(filename): Path<String>) -> Response {
     let path = channel_logo_dir().join(&filename);
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("bin");
@@ -490,5 +527,24 @@ mod tests {
         assert_eq!(form.logo_path, "stored.png");
         assert_eq!(form.logo_content_type, "image/png");
         assert_eq!(form.external_logo_url, "https://example.test/logo.png");
+    }
+
+    #[test]
+    fn channel_number_form_collects_sorted_number_updates() {
+        let fields = HashMap::from([
+            ("number_12".to_string(), "12.1".to_string()),
+            ("number_4".to_string(), "4".to_string()),
+            ("not_a_number".to_string(), "ignored".to_string()),
+        ]);
+
+        let updates = channel_number_updates_from_fields(&fields);
+
+        assert_eq!(
+            updates
+                .iter()
+                .map(|update| (update.id, update.number.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(4, "4"), (12, "12.1")]
+        );
     }
 }

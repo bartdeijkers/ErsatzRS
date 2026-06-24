@@ -21,8 +21,8 @@ mod template;
 pub use block::BlockRepository;
 pub use channel::{
     ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
-    ChannelMirrorOption, ChannelRepository, ChannelSaveResult, ChannelSelectOption,
-    ChannelValidationError,
+    ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult, ChannelNumberUpdate,
+    ChannelRepository, ChannelSaveResult, ChannelSelectOption, ChannelValidationError,
 };
 pub use collection::CollectionRepository;
 pub use config::ConfigRepository;

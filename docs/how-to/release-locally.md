@@ -6,10 +6,9 @@ to the GitHub release.
 
 This guide assumes you are intentionally producing only the Windows archive.
 Pushing the tag still triggers `.github/workflows/release.yml`; if Actions
-minutes are unavailable, GitHub will not produce the Linux/macOS archives or the
-Docker image.
+minutes are unavailable, GitHub will not produce the Linux archives.
 
-For a normal release that produces all GitHub assets and the Docker image, use
+For a normal release that produces the Linux and Windows GitHub assets, use
 [Publish a full release](publish-release.md). Do not use `./run.ps1 build` for
 release packaging; it builds local dev assets and starts the server, but it does
 not create release archives or a `build/` directory.

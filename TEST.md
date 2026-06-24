@@ -273,6 +273,7 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/playlists`       | TODO   | Browser smoke covered add group, add playlist, edit/save redirect, preview empty state, delete playlist/group, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/media/rerun-collections` | TODO | Browser smoke covered list render, add/save redirect, delete dialog, cleanup, route geometry screenshot, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/channels`              | ✅     | Stable DOM shape, `DeleteDialog` always rendered. Stop-transcode button always in DOM, visibility toggled via `style:visibility` from the live HLS-session poll. |
+| `/channels/numbers`      | ✅     | SSR channel-number editor; `tests/e2e/channels-edit-numbers.spec.ts` covers Edit Numbers navigation, validation, atomic swap persistence, mobile actions, and no-JS POST fallback. |
 | `/channels/:id`          | ✅     | SSR multipart form; mode-specific fields visible without hydration.     |
 | `/media/trakt/lists`     | TODO   | Browser smoke should cover Add dialog, row Search/Match/Delete, pager, editor save POST fallback, visual geometry, and console warning/error check; see `plans/trakt-lists-parity-slice.md`. |
 | `/channels/add`          | ✅     | Same SSR form as `/channels/:id` (id=0), with logo upload/remove smoke. |

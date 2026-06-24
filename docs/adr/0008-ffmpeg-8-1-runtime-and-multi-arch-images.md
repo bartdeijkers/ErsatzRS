@@ -6,14 +6,15 @@ Accepted 2026-06-21
 
 ## Implementation
 
-Implemented — ErsatzRS release archives and Docker images ship without
-FFmpeg/ffprobe. Startup resolves explicit overrides first, then validates the
-managed runtime, auto-updates it from `ErsatzRS-ffmpeg` releases when a newer
-release is available, downloads a managed runtime when none is usable, and only
-then falls back to `PATH` if managed acquisition fails or is disabled. Downloaded
-archives are checksum-verified, staged, validated with the normal FFmpeg 8.1
-capability gate plus drawvg/zscale smoke transcodes, and promoted only after
-validation succeeds. `/system/health` and a startup admin toast report successful
+Implemented — ErsatzRS release archives ship without FFmpeg/ffprobe, and any
+future Docker image publishing must follow the same managed-runtime model.
+Startup resolves explicit overrides first, then validates the managed runtime,
+auto-updates it from `ErsatzRS-ffmpeg` releases when a newer release is
+available, downloads a managed runtime when none is usable, and only then falls
+back to `PATH` if managed acquisition fails or is disabled. Downloaded archives
+are checksum-verified, staged, validated with the normal FFmpeg 8.1 capability
+gate plus drawvg/zscale smoke transcodes, and promoted only after validation
+succeeds. `/system/health` and a startup admin toast report successful
 downloads/updates and failed update attempts. First-party FFmpeg builds are
 produced by the separate `ErsatzRS-ffmpeg` repository.
 
@@ -73,8 +74,9 @@ enable `--enable-nonfree`, bundle the CUDA toolkit, include libnpp, or rely on
 non-redistributable FFmpeg components. That repository remains the source of
 truth for the official FFmpeg 8.1 source pin and its SHA-256.
 
-**Application packaging.** ErsatzRS application artifacts (release archives and
-container images) ship **without** FFmpeg/ffprobe.
+**Application packaging.** ErsatzRS release archives ship **without**
+FFmpeg/ffprobe. If Docker image publishing returns, container images must also
+ship without FFmpeg/ffprobe and rely on the same startup runtime manager.
 
 **Startup runtime manager.** On startup ErsatzRS resolves an FFmpeg/ffprobe
 runtime in this order:

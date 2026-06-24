@@ -135,11 +135,13 @@ documents:
 - Purpose-built `ersatzrs-healthcheck` binary to replace the Docker image
   `curl` health check.
 - Docker dependency layer caching (copy manifests first, build deps, then copy
-  sources) to reduce image build time.
+  sources) to reduce local image build time if Docker image publishing returns.
 - mdBook or another documentation build system.
 - macOS release archives (`osx-x64`, `osx-arm64`) are intentionally omitted from
   the active release line to preserve hosted-runner credits; CI still builds and
   tests the six-RID platform matrix.
+- Docker/GHCR image publication is intentionally omitted from the active release
+  line; releases currently ship Linux and Windows GitHub archives only.
 - Claude hook automation in `.claude/settings.json`; hook schema should be
   validated before enabling it.
 

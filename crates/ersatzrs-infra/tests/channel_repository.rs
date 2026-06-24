@@ -3,7 +3,8 @@ mod common;
 
 use chrono::Duration;
 use ersatzrs_core::repositories::{
-    ChannelEditorForm, ChannelLogoForm, ChannelRepository, FfmpegProfileRepository,
+    ChannelEditorForm, ChannelLogoForm, ChannelNumberUpdate, ChannelRepository,
+    FfmpegProfileRepository,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::{Executor, Row};
@@ -264,6 +265,149 @@ async fn channel_editor_save_validates_parity_rules() {
     mirror.playout_offset = Some(Duration::hours(13));
     let mirror = repos.channel.save_editor_form(mirror).await.unwrap();
     assert_has_error(&mirror.validation_errors, "playout_offset");
+}
+
+#[tokio::test]
+async fn channel_number_editor_lists_and_swaps_numbers_atomically() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let first_id = repos
+        .channel
+        .save_editor_form(editor_form("1", "First"))
+        .await
+        .unwrap()
+        .id;
+    let second_id = repos
+        .channel
+        .save_editor_form(editor_form("2", "Second"))
+        .await
+        .unwrap()
+        .id;
+    let tenth_id = repos
+        .channel
+        .save_editor_form(editor_form("10", "Tenth"))
+        .await
+        .unwrap()
+        .id;
+
+    let rows = repos.channel.list_number_rows().await.unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| (row.id, row.number.as_str(), row.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (first_id, "1", "First"),
+            (second_id, "2", "Second"),
+            (tenth_id, "10", "Tenth"),
+        ]
+    );
+
+    let result = repos
+        .channel
+        .save_number_updates(vec![
+            ChannelNumberUpdate {
+                id: first_id,
+                number: "2".to_owned(),
+            },
+            ChannelNumberUpdate {
+                id: second_id,
+                number: "1".to_owned(),
+            },
+            ChannelNumberUpdate {
+                id: tenth_id,
+                number: "10".to_owned(),
+            },
+        ])
+        .await
+        .unwrap();
+    assert!(result.is_success(), "{:?}", result.validation_errors);
+    assert_eq!(result.changed_ids, vec![first_id, second_id]);
+
+    let rows = repos.channel.list_number_rows().await.unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| (row.id, row.number.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(second_id, "1"), (first_id, "2"), (tenth_id, "10")]
+    );
+
+    let saved = sqlx::query(
+        r#"SELECT "Id", "Number", "SortNumber"
+           FROM "Channel"
+           WHERE "Id" IN (?, ?)
+           ORDER BY "Id""#,
+    )
+    .bind(first_id)
+    .bind(second_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(saved[0].try_get::<String, _>("Number").unwrap(), "2");
+    assert!((saved[0].try_get::<f64, _>("SortNumber").unwrap() - 2.0).abs() < f64::EPSILON);
+    assert_eq!(saved[1].try_get::<String, _>("Number").unwrap(), "1");
+    assert!((saved[1].try_get::<f64, _>("SortNumber").unwrap() - 1.0).abs() < f64::EPSILON);
+}
+
+#[tokio::test]
+async fn channel_number_editor_rejects_invalid_and_duplicate_numbers() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+
+    let first_id = repos
+        .channel
+        .save_editor_form(editor_form("3", "First"))
+        .await
+        .unwrap()
+        .id;
+    let second_id = repos
+        .channel
+        .save_editor_form(editor_form("4", "Second"))
+        .await
+        .unwrap()
+        .id;
+
+    let invalid = repos
+        .channel
+        .save_number_updates(vec![
+            ChannelNumberUpdate {
+                id: first_id,
+                number: "abc".to_owned(),
+            },
+            ChannelNumberUpdate {
+                id: second_id,
+                number: "4".to_owned(),
+            },
+        ])
+        .await
+        .unwrap();
+    assert_has_error(&invalid.validation_errors, &format!("number_{first_id}"));
+
+    let duplicate = repos
+        .channel
+        .save_number_updates(vec![
+            ChannelNumberUpdate {
+                id: first_id,
+                number: "5".to_owned(),
+            },
+            ChannelNumberUpdate {
+                id: second_id,
+                number: "5".to_owned(),
+            },
+        ])
+        .await
+        .unwrap();
+    assert_has_error(&duplicate.validation_errors, &format!("number_{second_id}"));
+
+    let rows = repos.channel.list_number_rows().await.unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|row| row.number.as_str())
+            .collect::<Vec<_>>(),
+        vec!["3", "4"]
+    );
 }
 
 #[tokio::test]

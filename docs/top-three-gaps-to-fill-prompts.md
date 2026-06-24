@@ -27,83 +27,31 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the HLS segmenter closeout): the previous #1 HLS
-segmenter normalized append stutter is now resolved and
-`hls-variant-playlists-segmenter` is back to `Ported` after live TSDuck proof.
-`cargo xtask progress gaps` now reports two in-progress parity/spec features:
-`channels-admin-ui` and `content-variants`. The completed-scope rule refills
-the third slot from open phase/spec TODOs. Ranking: (1) **Channels Edit
-Numbers** — confirmed admin-route parity bug in an `In progress`
-pinned-baseline UI surface; (2) **content-variants Phase 1 UI surfacing** —
-the next coherent slice of ADR 0018 after Phase 0, with remaining debt already
-structured under the slug; (3) **ersatzrs-healthcheck binary** — open Phase 7
+Selection (2026-06-24, after the Channels Edit Numbers closeout): the previous
+#1 Channels route gap is now resolved and `channels-admin-ui` is back to
+`Ported` after focused Rust tests, hydration smoke, and seeded Playwright proof.
+`cargo xtask progress gaps` now reports only `content-variants` as an
+in-progress parity/spec feature. The completed-scope rule refills from open
+phase/spec TODOs. Ranking: (1) **content-variants Phase 1 UI surfacing** — the
+next coherent slice of ADR 0018 after Phase 0, with remaining debt already
+structured under the slug; (2) **ersatzrs-healthcheck binary** — open Phase 7
 runtime hardening TODO to replace the Docker image's tool-based health check
-with a purpose-built binary.
+with a purpose-built binary; (3) **in-app TSDuck MPEG-TS troubleshooting** —
+ADR 0013 remains Proposed / Not implemented and would turn the manual TSDuck
+gate into an optional Support tool.
 
 Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
 (org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
 `github.com/ErsatzTV/ErsatzTV`), so the baseline could not be re-pinned. No
 new pinned-baseline parity prompt was re-derived from upstream. This manual
-HLS closeout removes the completed HLS prompt, carries the existing Channels
-Edit Numbers parity prompt forward, and refills the remaining slots with
-spec-backed chores that have no ErsatzTV baseline dimension. A future window
-containing new pinned-baseline parity work must not be reconciled until the pin
-is reachable again.
+closeout removes the completed Channels prompt and refills with spec-backed
+chores that have no ErsatzTV baseline dimension. A future window containing new
+pinned-baseline parity work must not be reconciled until the pin is reachable
+again.
 
 ---
 
-## 1. Fix the next ErsatzTV parity gap in ErsatzRS: Channels Edit Numbers route (slug `channels-admin-ui`)
-
-Use the repo workflow from AGENTS.md and `skills/parity-slice.md`. This is a
-pinned-baseline admin UI parity bug: the `/channels` Edit Numbers action should
-open the ErsatzTV channel-number editor, but it currently lands on the Add
-Channel page. The goal is a fully working list action and editor workflow with
-SSR/browser-safe fallbacks; do not close the debt without visible browser proof.
-
-Before editing:
-1. Read `docs/progress/parity/channels-admin-ui.toml`, especially
-   `channels-edit-numbers-routes-to-add`.
-2. Read the ErsatzTV channel-number source under `$ERSATZTV_SRC` from the
-   channel page family (`ErsatzTV/Pages/Channel*.razor` and related handlers /
-   view models).
-3. Inspect current ErsatzRS `/channels` routes, nav/action targets, channel
-   server functions, repository save semantics, i18n strings, and HTML POST
-   fallbacks.
-4. Build both a Source Map and Visual Source Map for the list action,
-   channel-number editor route, validation, persistence, redirects, and mobile
-   layout.
-
-Implement the slice end-to-end:
-- Route `/channels/numbers` (or the ErsatzTV-equivalent target) to a real
-  channel-number editor instead of the Add Channel editor.
-- Port the expected fields/actions/validation/persistence and no-JS fallback
-  semantics from ErsatzTV.
-- Localize every new visible string in all supported cultures under
-  `crates/ersatzrs-web/src/admin/languages/`.
-- Add focused server-function/component tests and a Playwright regression that
-  clicks Edit Numbers from `/channels` and proves the editor saves or rejects
-  invalid input correctly.
-- Update `docs/progress/parity/channels-admin-ui.toml`, `CHANGELOG.md`, and the
-  prompt file if the debt ranking changes.
-
-Visual verification:
-- Rebuild Leptos assets, serve via `./run.sh serve`, and capture the
-  `/channels` action plus channel-number editor at desktop and mobile widths.
-- Compare layout, spacing, table/action behavior, and validation states against
-  the ErsatzTV reference; do not claim parity complete with a visible mismatch.
-
-Verification:
-- Focused `ersatzrs-web` tests for the channel-number route and save path.
-- `npx playwright test <added-or-updated-channels-spec>`.
-- `cargo xtask parity-check web`.
-- `cargo xtask progress check`.
-
-Report the Source Map, Visual Source Map, behavior implemented, remaining
-`ParityDebt`, verification run, and changed files.
-
----
-
-## 2. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
+## 1. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
@@ -163,7 +111,7 @@ remaining Phase 2-5 `ParityDebt`, verification run, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
+## 2. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 runtime
 hardening chore**, not an ErsatzTV parity port: it is governed by the open
@@ -215,3 +163,71 @@ Verification:
 Report the Source Map, implemented healthcheck behavior, Docker proof,
 Windows/Linux/macOS compatibility proof, remaining runtime-hardening TODOs,
 verification run, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
+
+Use the repo workflow from AGENTS.md. This is a **spec-backed diagnostic
+extension**, not an ErsatzTV parity port: it is governed by
+[ADR 0013](adr/0013-tsduck-mpeg-troubleshooting.md) and
+[`plans/mpeg-troubleshooting-tsduck.md`](../plans/mpeg-troubleshooting-tsduck.md).
+The manual `scripts/e2e/tsduck-playback-gate.sh` gate exists, but it does not
+satisfy the in-app Support tool. Normal IPTV, HLS, HDHomeRun, FFmpeg spawning,
+startup readiness, Docker, and `/healthz` must not depend on TSDuck.
+
+Scope v1 narrowly to channel-level MPEG-TS diagnostics at
+`/system/troubleshooting/mpeg`. Do not add repair/mutation tools, replace
+production streams, bundle TSDuck into Docker/release images, or implement
+non-MPEG-TS container analysis in this slice.
+
+Before editing:
+1. Read ADR 0013, `plans/mpeg-troubleshooting-tsduck.md`,
+   `docs/progress/phase.toml`, `plans/INDEX.md`, `ARCHITECTURE.md`, `STYLE.md`,
+   and `TEST.md`.
+2. Inspect the current IPTV/HLS MPEG-TS output paths, troubleshooting page
+   routes, archive/sample helpers, health-check engine, language modules, and
+   the existing manual TSDuck playback gate.
+3. Build a Source Map for command construction, bounded sample capture,
+   report parsing, archive writing, Support route rendering, health reporting,
+   and redaction boundaries.
+4. Identify which follow-ups remain out of scope: TSDuck packaging, raw sample
+   retention by default, repair tools, deeper HLS/fMP4 analysis, and any normal
+   playback-path dependency.
+
+Implement the slice end-to-end:
+- Add a small TSDuck diagnostic service that detects `tsp --version`, builds
+  structured `tsp`/`tsbitrate` argv without a shell, and reports
+  `NotAvailable` without failing startup.
+- Capture bounded MPEG-TS samples for a selected channel/mode/duration, with a
+  20 second default, 120 second maximum, sample-size guard, unique run id, and
+  explicit raw-sample archive opt-in.
+- Run read-only analysis with `continuity`, `pcrverify`, and `analyze --json`;
+  parse PAT/PMT/service/PID summaries, continuity findings, PCR findings, and
+  optional bitrate estimates.
+- Produce a structured, redacted report and archive metadata, excluding raw
+  `.ts` samples unless the user opted in.
+- Add `/system/troubleshooting/mpeg`, link it from the Support Tools panel, and
+  render an SSR-safe form plus latest report tables/excerpts.
+- Localize every new visible label, status, help text, and error in all
+  supported cultures.
+- Add a non-blocking health-check row that reports TSDuck availability as
+  informational or not applicable.
+- Update docs/progress, plans/ADR implementation status if accepted, and
+  `CHANGELOG.md` when the tool is usable.
+
+Verification:
+- Focused tests for argv construction, detection, report parsing, redaction,
+  status mapping, and archive contents.
+- Focused web tests for the Support link, `/system/troubleshooting/mpeg` SSR
+  form, missing-TSDuck `NotAvailable`, and non-MPEG-TS `NotApplicable` states.
+- `cargo fmt --all -- --check`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
+- `cargo test --workspace --all-features`.
+- A Playwright or browser proof for the troubleshooting route.
+- `cargo xtask progress check`.
+
+Report the Source Map, diagnostic behavior implemented, unsupported/missing
+TSDuck behavior, archive/redaction proof, verification run, remaining
+diagnostic follow-ups, and changed files.

@@ -43,6 +43,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- The `/channels` Edit Numbers action now opens a real `/channels/numbers`
+  editor with localized desktop/mobile actions, SSR/no-JS save fallback,
+  validation, and atomic channel-number swaps that preserve `SortNumber`.
+- Release publishing now focuses on Linux and Windows archives only: the
+  inactive Docker/GHCR publication job was removed, matching the existing
+  macOS archive omission for the active release line.
 - Managed FFmpeg startup on Windows now copies downloaded first-party
   ffmpeg/ffprobe files next to `ErsatzRS.exe` and persists those paths so
   `/settings/ffmpeg` shows the acquired runtime instead of a generic PATH tool.

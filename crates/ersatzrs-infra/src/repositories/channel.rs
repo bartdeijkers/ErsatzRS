@@ -3,12 +3,15 @@ use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
     ChannelEditorForm, ChannelEditorOptions, ChannelEditorState, ChannelLogoForm,
-    ChannelMirrorOption, ChannelRepository, ChannelSaveResult, ChannelSelectOption,
-    ChannelValidationError, Result,
+    ChannelMirrorOption, ChannelNumberRow, ChannelNumberSaveResult, ChannelNumberUpdate,
+    ChannelRepository, ChannelSaveResult, ChannelSelectOption, ChannelValidationError, Result,
 };
 use ersatzrs_domain::{Channel, EntityId};
 use sqlx::{Pool, Row};
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 use uuid::Uuid;
 
 use crate::music_video_credits::list_music_video_credit_template_names;
@@ -276,6 +279,159 @@ impl ChannelRepository for SqliteChannelRepository {
         tx.commit().await?;
         Ok(ChannelSaveResult::success(id))
     }
+
+    async fn list_number_rows(&self) -> Result<Vec<ChannelNumberRow>> {
+        let rows = sqlx::query(
+            r#"SELECT "Id", "Number", "Name"
+               FROM "Channel"
+               ORDER BY "SortNumber", "Number", "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(ChannelNumberRow {
+                    id: row.try_get("Id")?,
+                    number: row.try_get("Number")?,
+                    name: row.try_get("Name")?,
+                })
+            })
+            .collect()
+    }
+
+    async fn save_number_updates(
+        &self,
+        updates: Vec<ChannelNumberUpdate>,
+    ) -> Result<ChannelNumberSaveResult> {
+        save_number_updates(&self.0, updates).await
+    }
+}
+
+async fn save_number_updates(
+    pool: &Pool<crate::db::Db>,
+    updates: Vec<ChannelNumberUpdate>,
+) -> Result<ChannelNumberSaveResult> {
+    let normalized = normalize_number_updates(updates);
+    let validation_errors = validate_number_updates(pool, &normalized).await?;
+    if !validation_errors.is_empty() {
+        return Ok(ChannelNumberSaveResult::validation(validation_errors));
+    }
+
+    let current = load_channel_numbers(pool).await?;
+    let changed = normalized
+        .into_iter()
+        .filter(|update| {
+            current
+                .get(&update.id)
+                .is_some_and(|current_number| current_number != &update.number)
+        })
+        .collect::<Vec<_>>();
+
+    if changed.is_empty() {
+        return Ok(ChannelNumberSaveResult::success(Vec::new()));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    for update in &changed {
+        sqlx::query(r#"UPDATE "Channel" SET "Number" = ? WHERE "Id" = ?"#)
+            .bind(format!("-{}", update.id))
+            .bind(update.id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    for update in &changed {
+        let sort_number = update.number.parse::<f64>().map_err(|source| {
+            ersatzrs_core::repositories::RepositoryError::Decode {
+                kind: "channel number",
+                value: format!("{} ({source})", update.number),
+            }
+        })?;
+        sqlx::query(r#"UPDATE "Channel" SET "Number" = ?, "SortNumber" = ? WHERE "Id" = ?"#)
+            .bind(&update.number)
+            .bind(sort_number)
+            .bind(update.id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(ChannelNumberSaveResult::success(
+        changed.iter().map(|update| update.id).collect(),
+    ))
+}
+
+fn normalize_number_updates(updates: Vec<ChannelNumberUpdate>) -> Vec<ChannelNumberUpdate> {
+    updates
+        .into_iter()
+        .map(|update| ChannelNumberUpdate {
+            id: update.id,
+            number: update.number.trim().to_owned(),
+        })
+        .collect()
+}
+
+async fn validate_number_updates(
+    pool: &Pool<crate::db::Db>,
+    updates: &[ChannelNumberUpdate],
+) -> Result<Vec<ChannelValidationError>> {
+    let mut errors = Vec::new();
+    let mut numbers = HashMap::<String, EntityId>::new();
+    let current = load_channel_numbers(pool).await?;
+    let submitted_ids = updates
+        .iter()
+        .map(|update| update.id)
+        .collect::<HashSet<_>>();
+
+    for update in updates {
+        if update.id <= 0 || !current.contains_key(&update.id) {
+            errors.push(ChannelValidationError::new(
+                format!("number_{}", update.id),
+                "Channel does not exist.",
+            ));
+            continue;
+        }
+
+        if !is_valid_channel_number(&update.number) {
+            errors.push(ChannelValidationError::new(
+                format!("number_{}", update.id),
+                "Invalid channel number; two decimals are allowed for subchannels",
+            ));
+            continue;
+        }
+
+        if let Some(existing_id) = numbers.insert(update.number.clone(), update.id) {
+            if existing_id != update.id {
+                errors.push(ChannelValidationError::new(
+                    format!("number_{}", update.id),
+                    "Channel number must be unique",
+                ));
+            }
+        }
+
+        if current.iter().any(|(id, number)| {
+            *id != update.id && !submitted_ids.contains(id) && number == &update.number
+        }) {
+            errors.push(ChannelValidationError::new(
+                format!("number_{}", update.id),
+                "Channel number must be unique",
+            ));
+        }
+    }
+
+    Ok(errors)
+}
+
+async fn load_channel_numbers(pool: &Pool<crate::db::Db>) -> Result<HashMap<EntityId, String>> {
+    let rows = sqlx::query(r#"SELECT "Id", "Number" FROM "Channel""#)
+        .fetch_all(pool)
+        .await?;
+
+    rows.iter()
+        .map(|row| Ok((row.try_get("Id")?, row.try_get("Number")?)))
+        .collect()
 }
 
 async fn load_editor_form(

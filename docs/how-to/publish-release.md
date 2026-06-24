@@ -9,15 +9,13 @@ matrix currently produces the GitHub release archives:
 - `ersatzrs-<tag>-win-x64.zip`
 - GitHub-generated source archives
 
-macOS archives are intentionally omitted for now to avoid spending
-GitHub-hosted runner credits on this release line; restore the two `osx-*`
-matrix entries in `.github/workflows/release.yml` for a future macOS-targeted
-release. Docker publication is currently disabled in the workflow until image
-publishing is re-enabled.
+macOS archives and Docker/GHCR images are intentionally omitted for now. Keep
+this release line focused on Linux and Windows archives; restore the two
+`osx-*` matrix entries only in a future macOS-targeted release.
 
 Do not use `./run.ps1 build` for release packaging. That command is a local dev
 one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create a
-`build/` directory, per-RID release archives, or a Docker image.
+`build/` directory or per-RID release archives.
 
 ## Prepare the release commit
 
@@ -72,18 +70,7 @@ Confirm the release has the active binary archives:
 gh release view "$tag" --json tagName,assets,url
 ```
 
-When Docker publication is re-enabled, confirm the Docker image manifest
-includes the expected Linux platforms:
-
-```bash
-docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
-```
-
-The manifest should include:
-
-- `linux/amd64`
-- `linux/arm64`
-- `linux/arm/v7`
+There is no Docker/GHCR image for this release line.
 
 ## When GitHub-hosted minutes are exhausted
 
@@ -96,4 +83,4 @@ minutes.
 
 Use [Build and publish a local Windows release](release-locally.md) only as a
 fallback for the Windows archive. A local Windows fallback does not produce the
-Linux archives, macOS archives, or Docker image.
+Linux archives.
