@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Repo-local `hydration-islands` skill for Leptos WASM island and SSR HTML
+  development, capturing the project-specific boundary rules, fallback
+  expectations, and browser smoke gates that protect admin UI hydration.
 - Content-variant search foundation for ADR 0018: `MediaItem` can now store
   primary/extra/alternate-version identity, subtype, and parent linkage, and
   smart-collection/search evaluation can query `content_kind`, `sub_kind`,
