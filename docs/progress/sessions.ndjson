@@ -1,3 +1,4 @@
+{"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 2 local scanner extra import/classification with default-exclusion coverage"}
 {"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 1 media UI surfacing with hidden-by-default browse toggle, variant badges, detail sections, search token help, and seeded browser proof"}
 {"agent":"codex","date":"2026-06-24","summary":"Ported /channels/numbers channel-number editor parity"}
 {"agent":"codex","date":"2026-06-24","summary":"Removed Docker/GHCR release publication and documented the Linux/Windows-only release line"}

@@ -34,9 +34,10 @@ use tracing::warn;
 use crate::library_folder;
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
 use crate::{
-    encode_datetime, insert_media_item, insert_media_version_with_owner, path_hash,
-    replace_chapters, replace_streams, update_media_version, LocalLibraryPath, Result,
-    ScannerError,
+    classify_extra_directory_name, classify_extra_video, encode_datetime, insert_media_item,
+    insert_media_version_with_owner, path_hash, replace_chapters, replace_streams,
+    update_media_version, upsert_local_extra_video, ExtraVideoClassification, LocalLibraryPath,
+    Result, ScannerError,
 };
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];
@@ -51,12 +52,19 @@ struct SeasonWork {
     folder: PathBuf,
     season_number: i32,
     episode_files: Vec<PathBuf>,
+    extra_files: Vec<ExtraVideoWork>,
 }
 
 /// One show folder discovered under a library root.
 struct ShowWork {
     folder: PathBuf,
     seasons: Vec<SeasonWork>,
+    extra_files: Vec<ExtraVideoWork>,
+}
+
+struct ExtraVideoWork {
+    path: PathBuf,
+    extra: ExtraVideoClassification,
 }
 
 struct LocalEpisodeScan {
@@ -93,45 +101,65 @@ fn collect_show_work(root: &str) -> Vec<ShowWork> {
             continue;
         }
 
-        let Ok(season_entries) = std::fs::read_dir(&show_folder) else {
+        let Ok(show_entries) = std::fs::read_dir(&show_folder) else {
             continue;
         };
-        let mut season_folders: Vec<PathBuf> =
-            season_entries.flatten().map(|entry| entry.path()).collect();
-        season_folders.sort();
+        let mut show_children: Vec<PathBuf> =
+            show_entries.flatten().map(|entry| entry.path()).collect();
+        show_children.sort();
 
         let mut seasons = Vec::new();
-        for season_folder in season_folders {
-            if !season_folder.is_dir() {
+        let mut show_extra_files = Vec::new();
+        for child in show_children {
+            if child.is_file() {
+                if is_video_file(&child) {
+                    if let Some(extra) = classify_extra_video(Path::new(root), &child) {
+                        show_extra_files.push(ExtraVideoWork { path: child, extra });
+                    }
+                }
                 continue;
             }
-            if file_name_starts_with_dot(&season_folder) {
+            if !child.is_dir() || file_name_starts_with_dot(&child) {
                 continue;
             }
-            let Some(season_number) = parse_season_number_for_folder(&season_folder) else {
+            if child
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(classify_extra_directory_name)
+                .is_some()
+            {
+                show_extra_files.extend(collect_extra_video_files(Path::new(root), &child));
+                continue;
+            }
+            let Some(season_number) = parse_season_number_for_folder(&child) else {
                 continue;
             };
 
-            let mut episode_files = collect_video_files(&season_folder);
+            let (mut episode_files, mut extra_files) =
+                collect_episode_and_extra_files(Path::new(root), &child);
             episode_files.sort();
-            if episode_files.is_empty() {
+            extra_files.sort_by(|left, right| left.path.cmp(&right.path));
+            if episode_files.is_empty() && extra_files.is_empty() {
                 continue;
             }
 
             seasons.push(SeasonWork {
-                folder: season_folder,
+                folder: child,
                 season_number,
                 episode_files,
+                extra_files,
             });
         }
 
-        if seasons.is_empty() {
+        show_extra_files.sort_by(|left, right| left.path.cmp(&right.path));
+        if seasons.is_empty() && show_extra_files.is_empty() {
             continue;
         }
 
         shows.push(ShowWork {
             folder: show_folder,
             seasons,
+            extra_files: show_extra_files,
         });
     }
 
@@ -144,8 +172,12 @@ fn file_name_starts_with_dot(path: &Path) -> bool {
         .is_some_and(|name| name.starts_with('.'))
 }
 
-fn collect_video_files(root: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
+fn collect_episode_and_extra_files(
+    library_root: &Path,
+    root: &Path,
+) -> (Vec<PathBuf>, Vec<ExtraVideoWork>) {
+    let mut episode_files = Vec::new();
+    let mut extra_files = Vec::new();
     let mut queue = VecDeque::from([root.to_path_buf()]);
     while let Some(path) = queue.pop_front() {
         let Ok(entries) = std::fs::read_dir(&path) else {
@@ -154,6 +186,15 @@ fn collect_video_files(root: &Path) -> Vec<PathBuf> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                if path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .and_then(classify_extra_directory_name)
+                    .is_some()
+                {
+                    extra_files.extend(collect_extra_video_files(library_root, &path));
+                    continue;
+                }
                 queue.push_back(path);
                 continue;
             }
@@ -164,19 +205,54 @@ fn collect_video_files(root: &Path) -> Vec<PathBuf> {
             {
                 continue;
             }
-            let extension = path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(str::to_ascii_lowercase);
-            if extension
-                .as_deref()
-                .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext))
-            {
-                files.push(path);
+            if is_video_file(&path) {
+                if let Some(extra) = classify_extra_video(library_root, &path) {
+                    extra_files.push(ExtraVideoWork { path, extra });
+                } else {
+                    episode_files.push(path);
+                }
+            }
+        }
+    }
+    (episode_files, extra_files)
+}
+
+fn collect_extra_video_files(library_root: &Path, root: &Path) -> Vec<ExtraVideoWork> {
+    let mut files = Vec::new();
+    let mut queue = VecDeque::from([root.to_path_buf()]);
+    while let Some(path) = queue.pop_front() {
+        let Ok(entries) = std::fs::read_dir(&path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                queue.push_back(path);
+            } else if is_video_file(&path) {
+                if let Some(extra) = classify_extra_video(library_root, &path) {
+                    files.push(ExtraVideoWork { path, extra });
+                }
             }
         }
     }
     files
+}
+
+fn is_video_file(path: &Path) -> bool {
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("._"))
+    {
+        return false;
+    }
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+    extension
+        .as_deref()
+        .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext))
 }
 
 /// Parse a season number from a folder name. Mirrors
@@ -461,6 +537,7 @@ fn season_etag_match(
 /// by the etag fast path (`count == skipped episodes`), so the progress sink
 /// still reaches 100% even though skipped episodes are not probed. Skipped
 /// episodes do not contribute to the returned count.
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn sync_local_show_library(
     pool: &DbPool,
     library_path: &LocalLibraryPath,
@@ -503,6 +580,22 @@ pub(crate) async fn sync_local_show_library(
             }
         };
 
+        for extra in &show.extra_files {
+            match sync_extra_video(pool, library_path, show_id, extra, extractor).await {
+                Ok(()) => {
+                    episode_count += 1;
+                    on_episode(1);
+                }
+                Err(err) => {
+                    warn!(
+                        path = %extra.path.display(),
+                        error = %err,
+                        "failed to upsert show extra; skipping"
+                    );
+                }
+            }
+        }
+
         for season in &show.seasons {
             // Create the season LibraryFolder before the season upsert,
             // mirroring ErsatzTV's `ScanSeasons`. Episodes link their
@@ -535,6 +628,22 @@ pub(crate) async fn sync_local_show_library(
                         continue;
                     }
                 };
+
+            for extra in &season.extra_files {
+                match sync_extra_video(pool, library_path, season_id, extra, extractor).await {
+                    Ok(()) => {
+                        episode_count += 1;
+                        on_episode(1);
+                    }
+                    Err(err) => {
+                        warn!(
+                            path = %extra.path.display(),
+                            error = %err,
+                            "failed to upsert season extra; skipping"
+                        );
+                    }
+                }
+            }
 
             // Etag fast path: skip all episode probing/upsert work for an
             // unchanged season, but still advance progress for the skipped
@@ -605,12 +714,34 @@ pub(crate) fn count_episode_files(root: &str) -> usize {
     collect_show_work(root)
         .iter()
         .map(|show| {
-            show.seasons
-                .iter()
-                .map(|s| s.episode_files.len())
-                .sum::<usize>()
+            show.extra_files.len()
+                + show
+                    .seasons
+                    .iter()
+                    .map(|s| s.episode_files.len() + s.extra_files.len())
+                    .sum::<usize>()
         })
         .sum()
+}
+
+async fn sync_extra_video(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+    parent_media_item_id: i64,
+    extra: &ExtraVideoWork,
+    extractor: &FfprobeExtractor,
+) -> Result<()> {
+    let probed = extractor.extract(&extra.path).await?;
+    upsert_local_extra_video(
+        pool,
+        library_path,
+        &extra.path,
+        probed,
+        &extra.extra.sub_kind,
+        Some(parent_media_item_id),
+    )
+    .await?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1426,6 +1557,32 @@ mod tests {
         );
         assert_eq!(parse_year_from_folder_name("Show.2020.4K"), Some(2020));
         assert_eq!(parse_year_from_folder_name("NoYearShow"), None);
+    }
+
+    #[test]
+    fn show_work_splits_featurettes_from_episodes() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let show = temp.path().join("Example Show");
+        let season = show.join("Season 01");
+        let show_extra = show.join("Featurettes");
+        let season_extra = season.join("Trailers");
+        std::fs::create_dir_all(&season).expect("season");
+        std::fs::create_dir_all(&show_extra).expect("show extra");
+        std::fs::create_dir_all(&season_extra).expect("season extra");
+        std::fs::write(season.join("Example.S01E01.mkv"), b"episode").expect("episode");
+        std::fs::write(show_extra.join("Making Of.mkv"), b"show extra").expect("show extra file");
+        std::fs::write(season_extra.join("Season One Trailer.mkv"), b"season extra")
+            .expect("season extra file");
+
+        let shows = collect_show_work(&temp.path().display().to_string());
+        assert_eq!(shows.len(), 1);
+        assert_eq!(shows[0].extra_files.len(), 1);
+        assert_eq!(shows[0].extra_files[0].extra.sub_kind, "featurette");
+        assert_eq!(shows[0].seasons.len(), 1);
+        assert_eq!(shows[0].seasons[0].episode_files.len(), 1);
+        assert_eq!(shows[0].seasons[0].extra_files.len(), 1);
+        assert_eq!(shows[0].seasons[0].extra_files[0].extra.sub_kind, "trailer");
+        assert_eq!(count_episode_files(&temp.path().display().to_string()), 3);
     }
 
     #[test]

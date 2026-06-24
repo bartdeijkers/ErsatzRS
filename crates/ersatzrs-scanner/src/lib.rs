@@ -8,7 +8,8 @@ use std::time::Duration as StdDuration;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::RepositoryError;
 use ersatzrs_domain::{
-    LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind, ScanProgressSink,
+    normalize_sub_kind_token, ContentKind, LibraryMediaKind, MediaChapter, MediaStream,
+    MediaStreamKind, ScanProgressSink,
 };
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
 use ersatzrs_infra::ffprobe::{FfprobeError, FfprobeExtractor, FfprobeMediaVersion};
@@ -61,6 +62,13 @@ pub struct LocalScanReport {
 /// full work list up front lets the with-progress variant report a true
 /// fraction.
 enum LocalScanWork {
+    MoviePrimary {
+        path: PathBuf,
+    },
+    ExtraVideo {
+        path: PathBuf,
+        extra: ExtraVideoClassification,
+    },
     MusicVideo {
         artist_folder: String,
         file_path: PathBuf,
@@ -71,6 +79,23 @@ enum LocalScanWork {
     Generic {
         path: PathBuf,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ExtraParentHint {
+    Sibling {
+        folder: PathBuf,
+        primary_stem: String,
+    },
+    Folder {
+        owner_folder: PathBuf,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExtraVideoClassification {
+    pub sub_kind: String,
+    pub parent_hint: ExtraParentHint,
 }
 
 enum LocalScanBucketKind {
@@ -166,6 +191,11 @@ async fn scan_local_library_with_progress_once(
                 total_items = total_items.saturating_add(items.len());
                 LocalScanBucketKind::Items(items)
             }
+            LibraryMediaKind::Movies => {
+                let items = collect_movie_files(&library_path.path);
+                total_items = total_items.saturating_add(items.len());
+                LocalScanBucketKind::Items(items)
+            }
             _ => {
                 let items: Vec<LocalScanWork> =
                     collect_scannable_files(&library_path.path, library_path.media_kind)
@@ -192,6 +222,24 @@ async fn scan_local_library_with_progress_once(
             LocalScanBucketKind::Items(items) => {
                 for work in items {
                     match work {
+                        LocalScanWork::ExtraVideo { path, extra } => {
+                            let parent_media_item_id =
+                                resolve_movie_extra_parent(pool, &library_path, &extra).await?;
+                            let probed = extractor.extract(&path).await?;
+                            upsert_local_extra_video(
+                                pool,
+                                &library_path,
+                                &path,
+                                probed,
+                                &extra.sub_kind,
+                                parent_media_item_id,
+                            )
+                            .await?;
+                        }
+                        LocalScanWork::MoviePrimary { path } | LocalScanWork::Generic { path } => {
+                            let probed = extractor.extract(&path).await?;
+                            upsert_local_file(pool, &library_path, &path, probed).await?;
+                        }
                         LocalScanWork::MusicVideo {
                             artist_folder,
                             file_path,
@@ -213,10 +261,6 @@ async fn scan_local_library_with_progress_once(
                         }
                         LocalScanWork::RemoteStream { path } => {
                             upsert_local_remote_stream(pool, &library_path, &path).await?;
-                        }
-                        LocalScanWork::Generic { path } => {
-                            let probed = extractor.extract(&path).await?;
-                            upsert_local_file(pool, &library_path, &path, probed).await?;
                         }
                     }
                     report.scanned_files += 1;
@@ -379,6 +423,45 @@ fn collect_remote_stream_files(root: &str) -> Vec<PathBuf> {
     files
 }
 
+fn collect_movie_files(root: &str) -> Vec<LocalScanWork> {
+    let mut primary_files = Vec::new();
+    let mut extra_files = Vec::new();
+    let mut queue = VecDeque::from([PathBuf::from(root)]);
+
+    while let Some(path) = queue.pop_front() {
+        let Ok(entries) = std::fs::read_dir(&path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                queue.push_back(path);
+            } else if is_scannable_for_kind(&path, LibraryMediaKind::Movies) {
+                if let Some(extra) = classify_extra_video(Path::new(root), &path) {
+                    extra_files.push(LocalScanWork::ExtraVideo { path, extra });
+                } else {
+                    primary_files.push(LocalScanWork::MoviePrimary { path });
+                }
+            }
+        }
+    }
+
+    primary_files.sort_by(|left, right| work_path(left).cmp(work_path(right)));
+    extra_files.sort_by(|left, right| work_path(left).cmp(work_path(right)));
+    primary_files.extend(extra_files);
+    primary_files
+}
+
+fn work_path(work: &LocalScanWork) -> &Path {
+    match work {
+        LocalScanWork::MoviePrimary { path }
+        | LocalScanWork::ExtraVideo { path, .. }
+        | LocalScanWork::RemoteStream { path }
+        | LocalScanWork::Generic { path } => path,
+        LocalScanWork::MusicVideo { file_path, .. } => file_path,
+    }
+}
+
 fn collect_scannable_files(root: &str, media_kind: LibraryMediaKind) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut queue = VecDeque::from([PathBuf::from(root)]);
@@ -399,6 +482,81 @@ fn collect_scannable_files(root: &str, media_kind: LibraryMediaKind) -> Vec<Path
 
     files.sort();
     files
+}
+
+pub(crate) fn classify_extra_video(
+    library_root: &Path,
+    path: &Path,
+) -> Option<ExtraVideoClassification> {
+    let stem = path.file_stem()?.to_str()?;
+    if let Some((primary_stem, sub_kind)) = classify_extra_file_stem(stem) {
+        return Some(ExtraVideoClassification {
+            sub_kind,
+            parent_hint: ExtraParentHint::Sibling {
+                folder: path.parent().unwrap_or(library_root).to_path_buf(),
+                primary_stem,
+            },
+        });
+    }
+
+    let relative_parent = path.parent()?.strip_prefix(library_root).ok()?;
+    let mut owner = library_root.to_path_buf();
+    for component in relative_parent.components() {
+        let component_text = component.as_os_str().to_string_lossy();
+        if let Some(sub_kind) = classify_extra_directory_name(&component_text) {
+            return Some(ExtraVideoClassification {
+                sub_kind,
+                parent_hint: ExtraParentHint::Folder {
+                    owner_folder: owner,
+                },
+            });
+        }
+        owner.push(component.as_os_str());
+    }
+
+    None
+}
+
+fn classify_extra_file_stem(stem: &str) -> Option<(String, String)> {
+    const EXTRA_FILE_SUFFIXES: &[&str] = &[
+        "behindthescenes",
+        "deleted",
+        "featurette",
+        "interview",
+        "scene",
+        "short",
+        "trailer",
+        "other",
+    ];
+
+    let lower = stem.to_ascii_lowercase();
+    EXTRA_FILE_SUFFIXES.iter().find_map(|suffix| {
+        if !lower.ends_with(suffix) {
+            return None;
+        }
+        let primary = stem[..stem.len().saturating_sub(suffix.len())]
+            .trim_end_matches([' ', '.', '-', '_'])
+            .trim()
+            .to_owned();
+        if primary.is_empty() {
+            return None;
+        }
+        normalize_sub_kind_token(suffix).map(|sub_kind| (primary, sub_kind))
+    })
+}
+
+pub(crate) fn classify_extra_directory_name(name: &str) -> Option<String> {
+    match name.to_ascii_lowercase().as_str() {
+        "behind the scenes" => normalize_sub_kind_token("behind_the_scenes"),
+        "deleted scenes" => normalize_sub_kind_token("deleted_scene"),
+        "featurettes" => normalize_sub_kind_token("featurette"),
+        "interviews" => normalize_sub_kind_token("interview"),
+        "scenes" => normalize_sub_kind_token("scene"),
+        "shorts" => normalize_sub_kind_token("short"),
+        "trailers" => normalize_sub_kind_token("trailer"),
+        "other" | "extras" | "specials" => normalize_sub_kind_token("other"),
+        _ => None,
+    }
 }
 
 fn is_scannable_for_kind(path: &Path, media_kind: LibraryMediaKind) -> bool {
@@ -1180,6 +1338,216 @@ async fn upsert_local_file(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn upsert_local_extra_video(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+    probed: FfprobeMediaVersion,
+    sub_kind: &str,
+    parent_media_item_id: Option<i64>,
+) -> Result<i64> {
+    let mut tx = pool.begin().await?;
+    let path_text = path.display().to_string();
+    let path_hash = path_hash(&path_text);
+
+    let maybe_existing = sqlx::query(
+        r#"SELECT "mf"."MediaVersionId",
+                  COALESCE(
+                    "mv"."OtherVideoId", "mv"."MovieId", "mv"."EpisodeId",
+                    "mv"."MusicVideoId", "mv"."SongId", "mv"."ImageId"
+                  ) AS "MediaItemId",
+                  "mv"."OtherVideoId" AS "OtherVideoId"
+           FROM "MediaFile" AS "mf"
+           JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
+           WHERE "mf"."PathHash" = ?"#,
+    )
+    .bind(&path_hash)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (item_id, version_id) = if let Some(row) = maybe_existing {
+        let item_id = row.get::<Option<i64>, _>("MediaItemId").unwrap_or_default();
+        let version_id = row.get::<i64, _>("MediaVersionId");
+        if item_id != 0 && row.get::<Option<i64>, _>("OtherVideoId").is_none() {
+            convert_existing_video_to_other_video(&mut tx, item_id, version_id).await?;
+        }
+        insert_fallback_metadata_for_kind(
+            &mut tx,
+            item_id,
+            LibraryMediaKind::OtherVideos,
+            library_path,
+            path,
+        )
+        .await?;
+        (item_id, version_id)
+    } else {
+        let item_id = insert_media_item(&mut tx, library_path.id).await?;
+        insert_media_subtype(&mut tx, item_id, LibraryMediaKind::OtherVideos).await?;
+        insert_fallback_metadata_for_kind(
+            &mut tx,
+            item_id,
+            LibraryMediaKind::OtherVideos,
+            library_path,
+            path,
+        )
+        .await?;
+        let version_id =
+            insert_media_version(&mut tx, item_id, &probed, LibraryMediaKind::OtherVideos).await?;
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(version_id)
+        .bind(&path_text)
+        .bind(&path_hash)
+        .execute(&mut *tx)
+        .await?;
+        (item_id, version_id)
+    };
+
+    let normalized_sub_kind = normalize_sub_kind_token(sub_kind);
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "LibraryPathId" = ?, "State" = 0, "ContentKind" = ?,
+               "SubKind" = ?, "ParentMediaItemId" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(library_path.id)
+    .bind(ContentKind::Extra.db_value())
+    .bind(&normalized_sub_kind)
+    .bind(parent_media_item_id)
+    .bind(item_id)
+    .execute(&mut *tx)
+    .await?;
+    update_media_version(&mut tx, version_id, &probed).await?;
+    replace_streams(&mut tx, version_id, &probed.streams).await?;
+    replace_chapters(&mut tx, version_id, &probed.chapters).await?;
+    if let Some(owner) =
+        local_file_subtitle_owner(&mut tx, item_id, LibraryMediaKind::OtherVideos).await?
+    {
+        update_local_file_subtitles(&mut tx, owner, &probed.streams, path, true).await?;
+    }
+
+    tx.commit().await?;
+    Ok(item_id)
+}
+
+async fn convert_existing_video_to_other_video(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    version_id: i64,
+) -> Result<()> {
+    ensure_other_video_row(tx, item_id).await?;
+    sqlx::query(
+        r#"UPDATE "MediaVersion"
+           SET "EpisodeId" = NULL, "ImageId" = NULL, "MovieId" = NULL,
+               "MusicVideoId" = NULL, "SongId" = NULL, "OtherVideoId" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(item_id)
+    .bind(version_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(r#"DELETE FROM "Movie" WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "Episode" WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "MusicVideo" WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "Song" WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(r#"DELETE FROM "Image" WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn ensure_other_video_row(tx: &mut Transaction<'_, Db>, item_id: i64) -> Result<()> {
+    let exists: i64 =
+        sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "OtherVideo" WHERE "Id" = ?)"#)
+            .bind(item_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    if exists == 0 {
+        sqlx::query(r#"INSERT INTO "OtherVideo" ("Id") VALUES (?)"#)
+            .bind(item_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn resolve_movie_extra_parent(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+    extra: &ExtraVideoClassification,
+) -> Result<Option<i64>> {
+    match &extra.parent_hint {
+        ExtraParentHint::Sibling {
+            folder,
+            primary_stem,
+        } => find_movie_parent_by_folder(pool, library_path.id, folder, Some(primary_stem)).await,
+        ExtraParentHint::Folder { owner_folder } => {
+            find_movie_parent_by_folder(pool, library_path.id, owner_folder, None).await
+        }
+    }
+}
+
+async fn find_movie_parent_by_folder(
+    pool: &DbPool,
+    library_path_id: i64,
+    owner_folder: &Path,
+    primary_stem: Option<&str>,
+) -> Result<Option<i64>> {
+    let rows = sqlx::query(
+        r#"SELECT "m"."Id" AS "MovieId", "mf"."Path" AS "Path"
+           FROM "Movie" AS "m"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "m"."Id"
+           JOIN "MediaVersion" AS "mv" ON "mv"."MovieId" = "m"."Id"
+           JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id"
+           WHERE "mi"."LibraryPathId" = ?
+             AND COALESCE("mi"."ContentKind", 0) = 0"#,
+    )
+    .bind(library_path_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut matches = Vec::new();
+    for row in rows {
+        let path_text: Option<String> = row.get("Path");
+        let Some(path_text) = path_text else {
+            continue;
+        };
+        let candidate_path = Path::new(&path_text);
+        if candidate_path.parent() != Some(owner_folder) {
+            continue;
+        }
+        if let Some(primary_stem) = primary_stem {
+            let candidate_stem = candidate_path.file_stem().and_then(|stem| stem.to_str());
+            if candidate_stem != Some(primary_stem) {
+                continue;
+            }
+        }
+        matches.push(row.get::<i64, _>("MovieId"));
+    }
+
+    if matches.len() == 1 {
+        Ok(matches.into_iter().next())
+    } else {
+        Ok(None)
+    }
+}
+
 pub(crate) async fn insert_media_item(
     tx: &mut Transaction<'_, Db>,
     library_path_id: i64,
@@ -1300,7 +1668,18 @@ async fn insert_fallback_metadata(
     library_path: &LocalLibraryPath,
     path: &Path,
 ) -> Result<()> {
-    if fallback_metadata_exists(tx, item_id, library_path.media_kind).await? {
+    insert_fallback_metadata_for_kind(tx, item_id, library_path.media_kind, library_path, path)
+        .await
+}
+
+async fn insert_fallback_metadata_for_kind(
+    tx: &mut Transaction<'_, Db>,
+    item_id: i64,
+    media_kind: LibraryMediaKind,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+) -> Result<()> {
+    if fallback_metadata_exists(tx, item_id, media_kind).await? {
         return Ok(());
     }
 
@@ -1316,7 +1695,7 @@ async fn insert_fallback_metadata(
         .map(str::to_owned);
     let now = encode_datetime(Utc::now());
 
-    match library_path.media_kind {
+    match media_kind {
         LibraryMediaKind::Movies => {
             sqlx::query(
                 r#"INSERT INTO "MovieMetadata" (
@@ -1912,7 +2291,10 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_scannable_for_kind, path_hash, retry_sqlite_busy};
+    use super::{
+        classify_extra_directory_name, classify_extra_video, is_scannable_for_kind, path_hash,
+        retry_sqlite_busy, ExtraParentHint,
+    };
     use ersatzrs_domain::LibraryMediaKind;
     use std::path::Path;
 
@@ -1944,6 +2326,44 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn classifies_extra_suffixes_and_directories() {
+        let suffix = classify_extra_video(
+            Path::new("/library"),
+            Path::new("/library/The Movie/The Movie-trailer.mkv"),
+        )
+        .expect("trailer suffix");
+        assert_eq!(suffix.sub_kind, "trailer");
+        assert_eq!(
+            suffix.parent_hint,
+            ExtraParentHint::Sibling {
+                folder: Path::new("/library/The Movie").to_path_buf(),
+                primary_stem: "The Movie".to_owned()
+            }
+        );
+
+        let directory = classify_extra_video(
+            Path::new("/library"),
+            Path::new("/library/The Movie/Featurettes/Making Of.mkv"),
+        )
+        .expect("featurette directory");
+        assert_eq!(directory.sub_kind, "featurette");
+        assert_eq!(
+            directory.parent_hint,
+            ExtraParentHint::Folder {
+                owner_folder: Path::new("/library/The Movie").to_path_buf()
+            }
+        );
+
+        assert_eq!(
+            classify_extra_directory_name("Deleted Scenes").as_deref(),
+            Some("deleted_scene")
+        );
+        assert!(
+            classify_extra_video(Path::new("/library"), Path::new("/library/Movie.mkv")).is_none()
+        );
+    }
+
     #[tokio::test]
     async fn sqlite_busy_retry_preserves_non_busy_errors() {
         let attempts = std::cell::Cell::new(0usize);
@@ -1960,6 +2380,162 @@ mod tests {
             error,
             super::ScannerError::MissingLibraryPaths(42)
         ));
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn movie_extra_imports_as_linked_other_video_and_stays_hidden_by_default() {
+        use super::{
+            resolve_movie_extra_parent, upsert_local_extra_video, upsert_local_file,
+            LocalLibraryPath,
+        };
+        use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::{Executor, Row};
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let library_root = temp.path().join("library");
+        let movie_folder = library_root.join("The Movie");
+        std::fs::create_dir_all(&movie_folder).expect("movie folder");
+        let movie_path = movie_folder.join("The Movie.mkv");
+        let extra_path = movie_folder.join("Featurettes").join("Making Of.mkv");
+        std::fs::create_dir_all(extra_path.parent().expect("extra parent")).expect("extra folder");
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        seed_movie_library(&pool, &library_root).await;
+        let library_path = LocalLibraryPath {
+            id: 1,
+            path: library_root.display().to_string(),
+            media_kind: LibraryMediaKind::Movies,
+        };
+
+        upsert_local_file(&pool, &library_path, &movie_path, probed_version())
+            .await
+            .expect("primary movie");
+        upsert_local_file(&pool, &library_path, &extra_path, probed_version())
+            .await
+            .expect("pre-existing primary-shaped extra");
+        let extra = classify_extra_video(&library_root, &extra_path).expect("extra classified");
+        let parent_id = resolve_movie_extra_parent(&pool, &library_path, &extra)
+            .await
+            .expect("resolve parent");
+        let extra_id = upsert_local_extra_video(
+            &pool,
+            &library_path,
+            &extra_path,
+            probed_version(),
+            &extra.sub_kind,
+            parent_id,
+        )
+        .await
+        .expect("extra import");
+
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(extra_id)
+        .fetch_one(&pool)
+        .await
+        .expect("extra media item");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::Extra.db_value()
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("featurette")
+        );
+        assert_eq!(row.get::<Option<i64>, _>("ParentMediaItemId"), parent_id);
+        assert_eq!(count_table(&pool, "Movie").await, 1);
+        assert_eq!(count_table(&pool, "OtherVideo").await, 1);
+
+        let repository = SqliteSchedulingContentRepository::new(pool.clone());
+        let hidden = search_ids(&repository, "Making").await;
+        assert!(
+            !hidden.contains(&extra_id),
+            "implicit content_kind:primary should hide imported extras"
+        );
+        let visible = search_ids(&repository, "content_kind:extra AND sub_kind:featurette").await;
+        assert_eq!(visible, vec![extra_id]);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn search_ids(
+        repository: &ersatzrs_infra::repositories::SqliteSchedulingContentRepository,
+        query: &str,
+    ) -> Vec<i64> {
+        let (hits, _, _) = repository
+            .search_documents_page(query, 0, 0)
+            .await
+            .expect("search page");
+        hits.into_iter()
+            .map(|ersatzrs_core::search::SearchDocument { media_item_id, .. }| media_item_id)
+            .collect()
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+        ersatzrs_infra::ffprobe::FfprobeMediaVersion {
+            version: ersatzrs_domain::MediaVersion {
+                name: "Main".to_owned(),
+                duration: chrono::Duration::seconds(180),
+                video_scan_kind: ersatzrs_domain::VideoScanKind::Progressive,
+                width: 1920,
+                height: 1080,
+                ..ersatzrs_domain::MediaVersion::default()
+            },
+            streams: Vec::new(),
+            chapters: Vec::new(),
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_movie_library(pool: &sqlx::SqlitePool, path: &Path) {
+        use sqlx::Executor;
+
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .await
+            .expect("media source");
+        pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .await
+            .expect("local source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Movies', 1, 1)"#,
+        )
+        .execute(pool)
+        .await
+        .expect("library");
+        pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .await
+            .expect("local library");
+        sqlx::query(r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#)
+            .bind(path.display().to_string())
+            .execute(pool)
+            .await
+            .expect("library path");
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn count_table(pool: &sqlx::SqlitePool, table: &str) -> i64 {
+        let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
+        sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(sql))
+            .fetch_one(pool)
+            .await
+            .expect("count")
     }
 
     #[cfg(not(feature = "mysql"))]

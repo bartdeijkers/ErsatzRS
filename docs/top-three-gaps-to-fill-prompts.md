@@ -27,14 +27,15 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the content-variants Phase 1 UI surfacing
-closeout): the previous #1 Phase 1 UI prompt is now resolved after focused
-Rust tests, seeded Playwright proof, and `cargo xtask parity-check web`.
+Selection (2026-06-24, after the content-variants Phase 2 local scanner
+closeout): the previous #1 Phase 2 scanner prompt is now resolved after
+focused scanner tests, focused media-browser server-function coverage, and the
+scanner crate test suite.
 `cargo xtask progress gaps` still reports `content-variants` as an in-progress
-parity/spec feature because Phase 2-5 remain open. The completed-scope rule
+parity/spec feature because Phase 3-5 remain open. The completed-scope rule
 keeps the next bounded ADR 0018 slice at the top. Ranking: (1)
-**content-variants Phase 2 local scanner import/classification** — reverse the
-current extra-skip behavior while preserving default invisibility; (2)
+**content-variants Phase 3 alternate-version linking** — detect and link
+alternate renditions while preserving default invisibility; (2)
 **ersatzrs-healthcheck binary** — open Phase 7 runtime hardening TODO to
 replace the Docker image's tool-based health check with a purpose-built binary;
 (3) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed /
@@ -48,68 +49,69 @@ new pinned-baseline parity prompt was re-derived from upstream. This manual
 closeout removes the completed Channels prompt and refills with spec-backed
 chores that have no ErsatzTV baseline dimension. A future window containing new
 pinned-baseline parity work must not be reconciled until the pin is reachable
-again. The earlier manual closeout removed the completed Channels prompt; this
-closeout removes the completed Phase 1 UI prompt and refills with the next
-spec-backed ADR 0018 phase.
+again. The earlier manual closeouts removed the completed Channels and Phase 1
+UI prompts; this closeout removes the completed Phase 2 scanner prompt and
+refills with the next spec-backed ADR 0018 phase.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: content-variants Phase 2 local scanner import/classification (slug `content-variants`)
+## 1. Build the next ErsatzRS spec chore: content-variants Phase 3 alternate-version linking (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
 [ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
 [`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-This slice intentionally diverges from ErsatzTV's current scanner behavior by
-importing extras that ErsatzTV skips; the deviation is already governed by ADR
-0018. The goal is the complete **Phase 2 — Local scanner: import + classify
-extras** slice on top of the Phase 0 schema/search foundation and Phase 1 UI
-surfacing.
+This slice intentionally extends ErsatzTV's current scanner behavior by linking
+alternate renditions that ErsatzTV imports as unrelated primary media; the
+deviation is already governed by ADR 0018. The goal is the complete
+**Phase 3 — Alternate-version linking** slice on top of the Phase 0
+schema/search foundation, Phase 1 UI surfacing, and Phase 2 local extra import.
 
-Scope is **only Phase 2** from the plan. Do not implement alternate-version
-linking, commentary render acceptance, or scheduling examples in this slice.
-Any shortfall must remain visible in
+Scope is **only Phase 3** from the plan. Do not implement commentary render
+acceptance or scheduling examples in this slice. Any shortfall must remain visible in
 `docs/progress/parity/content-variants.toml`.
 
 Before editing:
-1. Read ADR 0018, the plan's Phase 2 section, PORTING.md, STYLE.md, and
+1. Read ADR 0018, the plan's Phase 3 section, PORTING.md, STYLE.md, and
    `docs/progress/parity/content-variants.toml`.
-2. Inspect the local scanner, media-item persistence path, scanner tests,
-   subtype normalizer, search projection, and the upstream ErsatzTV skip logic
-   in `LocalFolderScanner.ExtraFiles` / `ExtraDirectories` and
-   `MovieFolderScanner`.
-3. Build a Source Map for scanner traversal, extra file/directory detection,
-   parent resolution, `OtherVideo` row creation, `MediaItem.ContentKind` /
+2. Inspect the local scanner music-video, song, and movie persistence paths,
+   scanner tests, subtype normalizer, search projection, and the upstream
+   ErsatzTV behavior that leaves alternate renditions independent.
+3. Build a Source Map for version-token detection, title/folder normalization,
+   canonical parent selection, `MediaItem.ContentKind=AlternateVersion` /
    `SubKind` / `ParentMediaItemId` persistence, and default-exclusion safety.
-4. Identify the remaining Phase 3-5 debt you are explicitly deferring.
+4. Identify the remaining Phase 4-5 debt you are explicitly deferring.
 
 Implement the slice end-to-end:
-- Replace the local scanner's extra file/directory skip path with
-  import-and-classify behavior for movie/show libraries.
-- Persist imported extras as `OtherVideo` rows with `ContentKind=Extra`,
-  normalized `SubKind`, and a `ParentMediaItemId` resolved from folder
-  ownership when available.
-- Preserve library-level/orphan extras with `ParentMediaItemId = NULL` while
-  keeping them typed and searchable.
-- Cover representative folder layouts including sibling `-trailer` files and
-  `Featurettes/` subfolders.
+- Detect alternate-version tokens from title/folder conventions such as
+  `(Live)`, `- Live`, `/Unplugged/`, `(Acoustic)`, `(Official Video)`,
+  `MTV Unplugged`, remix/remaster/extended/directors-cut style labels, and
+  normalize them through the existing subtype normalizer.
+- Persist alternate versions as their natural media kind (`MusicVideo`, `Song`,
+  or `Movie`) with `ContentKind=AlternateVersion`, normalized `SubKind`, and a
+  `ParentMediaItemId` pointing at the canonical primary when one can be chosen.
+- Choose a deterministic canonical primary for same-work renditions (official /
+  studio / unmarked version first, otherwise first-seen) and leave genuinely
+  orphaned alternates typed but unlinked rather than guessing.
+- Cover representative folder layouts for music videos/songs/movies, including
+  folder-level and title-suffix tokens.
 - Prove default-exclusion still keeps existing browse/search/channel behavior
   primary-only unless a query or UI toggle opts into variants.
 - Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
   prompt file if the debt ranking changes.
 
 Verification:
-- Focused scanner tests for extra import, subtype normalization, parent
-  linkage, and orphan behavior.
-- Focused search/media-browser tests proving imported extras remain hidden by
-  default and visible when explicitly opted in.
+- Focused scanner tests for alternate-version detection, subtype normalization,
+  canonical parent linkage, and orphan behavior.
+- Focused search/media-browser tests proving imported alternate versions remain
+  hidden by default and visible when explicitly opted in.
 - `cargo test -p ersatzrs-scanner`.
 - `cargo test -p ersatzrs-web admin::server_fns::media_browser`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, Phase 2 behavior implemented, remaining Phase 3-5
+Report the Source Map, Phase 3 behavior implemented, remaining Phase 4-5
 `ParityDebt`, verification run, and changed files.
 
 ---

@@ -49,9 +49,12 @@ search contract, scheduling projection, and health-check readiness are in
 place. Phase 1 UI surfacing landed on 2026-06-24: `/media/*` browse pages keep
 variants hidden by default behind a persisted "Show special features /
 versions" toggle, render localized badges, expose linked Extras / Special
-Features and Versions sections, and surface the new search tokens. Scanner
-import, alternate-version linking, commentary render acceptance, and scheduling
-examples remain tracked as unresolved debt in
+Features and Versions sections, and surface the new search tokens. Phase 2
+local scanner import/classification also landed on 2026-06-24: movie/show
+library extras are imported as typed `OtherVideo` rows with normalized subkind,
+folder/stem-derived parent linkage when available, and default-exclusion search
+coverage. Alternate-version linking, commentary render acceptance, and
+scheduling examples remain tracked as unresolved debt in
 `docs/progress/parity/content-variants.toml`. The next spec-backed candidates
 are the remaining `content-variants` phases, the open `ersatzrs-healthcheck`
 binary TODO, and ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed /

@@ -11,7 +11,10 @@ by ADR NNNN | Deprecated. It must NOT be read as "the code exists".
 
 ## Implementation
 
-Not implemented
+Partial — Phase 0 schema/search/health foundation, Phase 1 media UI surfacing,
+and Phase 2 local scanner extra import/classification are implemented; Phase 3
+alternate-version linking, Phase 4 commentary render acceptance, and Phase 5
+scheduling examples remain tracked in `docs/progress/parity/content-variants.toml`.
 
 <!--
 Tracked by `plans/extras-alternate-versions-and-stream-roles.md`. Parity slug

@@ -5,8 +5,8 @@ status     = 'In progress'
 adr        = ['0018']
 
 summary    = '''
-Phase 0 foundation and Phase 1 media UI surfacing are implemented. `MediaItem`
-now has additive
+Phase 0 foundation, Phase 1 media UI surfacing, and Phase 2 local scanner
+extra import/classification are implemented. `MediaItem` now has additive
 `ContentKind`, `SubKind`, and `ParentMediaItemId` columns (SQLite and MySQL
 migrations) so later scanner/provider slices can represent primary items,
 extras, and alternate versions without changing existing rows. The domain model
@@ -35,6 +35,15 @@ artist detail pages expose linked Versions. Search and smart-collection editing
 surface the new variant tokens. Server-function coverage and seeded Playwright
 coverage prove hidden-by-default browse behavior, opt-in listing, detail
 sections, localized badges, search help, mobile layout, and SSR/no-JS rendering.
+
+The local scanner now imports ErsatzTV-classified extra suffixes and directories
+for movie/show libraries instead of treating them as primary movies/episodes:
+movie sibling suffixes such as `-trailer` and extra directories such as
+`Featurettes/` become `OtherVideo` rows with `ContentKind=Extra`, normalized
+`SubKind`, and folder/stem-derived `ParentMediaItemId` when a single owner is
+known. Show-level extras link to the show, season-level extras link to the
+season, and ambiguous/library-level extras stay typed but orphaned with
+`ParentMediaItemId = NULL`.
 '''
 
 [[debt]]
@@ -50,8 +59,8 @@ id          = 'local-scanner-import-classify-extras'
 adr         = '0018'
 description = 'Phase 2 remains open: the local scanner still follows ErsatzTV behavior by discarding extra files/directories instead of importing them as `OtherVideo` rows with `ContentKind=Extra`, normalized `SubKind`, and parent linkage.'
 discovered  = '2026-06-23'
-evidence    = 'Upstream `LocalFolderScanner.ExtraFiles` / `ExtraDirectories` and `MovieFolderScanner` discard logic were read for the Source Map; this slice adds the schema/search foundation only and leaves scanner behavior unchanged.'
-resolved    = false
+evidence    = 'Resolved 2026-06-24: movie scanning splits primary files from `ExtraFiles` suffixes and `ExtraDirectories`, imports extras as `OtherVideo` with `ContentKind=Extra`, normalized `SubKind`, and folder/stem-derived parent linkage; show scanning splits show/season extras from episodes and links them to the show or season. Covered by crates/ersatzrs-scanner tests classifies_extra_suffixes_and_directories, movie_extra_imports_as_linked_other_video_and_stays_hidden_by_default, and local_television::tests::show_work_splits_featurettes_from_episodes; `cargo test -p ersatzrs-scanner` and `cargo test -p ersatzrs-web admin::server_fns::media_browser` passed.'
+resolved    = true
 
 [[debt]]
 id          = 'alternate-version-linking'

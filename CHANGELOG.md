@@ -28,6 +28,10 @@ release section when tagging a release.
   variant cards show localized badges, detail pages expose linked Extras /
   Special Features and Versions sections, and search/smart-collection editing
   shows the new token reference.
+- Content-variant local scanner import for ADR 0018: movie/show library extras
+  matching ErsatzTV's extra suffix and directory taxonomy are now imported as
+  typed `OtherVideo` rows with normalized sub-kinds and parent linkage while
+  remaining hidden from default browse/search behavior.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in
