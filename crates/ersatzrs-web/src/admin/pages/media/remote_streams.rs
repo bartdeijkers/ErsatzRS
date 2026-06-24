@@ -176,7 +176,11 @@ fn RemoteStreamsIsland(
     });
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
-            current_rows.set(next_rows);
+            current_rows.update(|current| {
+                if *current != next_rows {
+                    *current = next_rows;
+                }
+            });
         }
     });
 
@@ -192,7 +196,11 @@ fn RemoteStreamsIsland(
     });
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
-            current_page_map.set(next_page_map);
+            current_page_map.update(|current| {
+                if *current != next_page_map {
+                    *current = next_page_map;
+                }
+            });
         }
     });
 
@@ -276,37 +284,46 @@ fn RemoteStreamsContent(
                     <ActionLabel query=query.clone() total=total selected_count=selected_count/>
                     <Pager query=query.clone() page=page total=total/>
                     <div class=style::actions>
-                        {move || if selected_count.get() == 0 {
-                            view! {
-                                <button
-                                    type="button"
-                                    class=style::btn_primary
-                                    disabled=select_all_disabled
-                                    on:click=move |e| select_all.run(e)
-                                >
-                                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                                    <span>{tr(TextKey::SelectAll)}</span>
-                                </button>
-                            }.into_any()
-                        } else {
-                            view! {
-                                <button type="button" class=style::btn_primary on:click=move |_| collection_open.set(true)>
-                                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                                    <span>{tr(TextKey::AddToCollection)}</span>
-                                </button>
-                                <button type="button" class=style::btn_primary on:click=move |_| playlist_open.set(true)>
-                                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                                    <span>{tr(TextKey::AddToPlaylist)}</span>
-                                </button>
-                                <button type="button" class=style::btn_secondary on:click=move |_| {
-                                    selected.update(HashSet::clear);
-                                    last_selected.set(None);
-                                }>
-                                    <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
-                                    <span>{tr(TextKey::ClearSelection)}</span>
-                                </button>
-                            }.into_any()
-                        }}
+                        <button
+                            type="button"
+                            class=style::btn_primary
+                            disabled=select_all_disabled
+                            style:display=move || if selected_count.get() == 0 { "" } else { "none" }
+                            on:click=move |e| select_all.run(e)
+                        >
+                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::SelectAll)}</span>
+                        </button>
+                        <button
+                            type="button"
+                            class=style::btn_primary
+                            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                            on:click=move |_| collection_open.set(true)
+                        >
+                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::AddToCollection)}</span>
+                        </button>
+                        <button
+                            type="button"
+                            class=style::btn_primary
+                            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                            on:click=move |_| playlist_open.set(true)
+                        >
+                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::AddToPlaylist)}</span>
+                        </button>
+                        <button
+                            type="button"
+                            class=style::btn_secondary
+                            style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                            on:click=move |_| {
+                                selected.update(HashSet::clear);
+                                last_selected.set(None);
+                            }
+                        >
+                            <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::ClearSelection)}</span>
+                        </button>
                     </div>
                     <MobileActionMenu
                         selected_count=selected_count
@@ -324,12 +341,20 @@ fn RemoteStreamsContent(
                 <section class=style::content>
                     <h1 class=style::title>{tr(TextKey::RemoteStreams)}</h1>
                     <div class=style::divider></div>
-                    {if rows.is_empty() {
-                        view! { <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p> }.into_any()
-                    } else {
+                    {
+                        let rows_empty = rows.is_empty();
                         let sorted_ids: Vec<i64> = rows.iter().map(|row| row.id).collect();
                         view! {
-                            <div class=style::grid>
+                            <p
+                                class=style::empty
+                                style:display=move || if rows_empty { "" } else { "none" }
+                            >
+                                {tr(TextKey::NoItemsToDisplay)}
+                            </p>
+                            <div
+                                class=style::grid
+                                style:display=move || if rows_empty { "none" } else { "" }
+                            >
                                 <FragmentLetterAnchor
                                     cards=rows
                                     sort_title=|row: &MediaCardRow| row.sort_title.as_str()
@@ -347,8 +372,8 @@ fn RemoteStreamsContent(
                                     }
                                 />
                             </div>
-                        }.into_any()
-                    }}
+                        }
+                    }
                 </section>
             </div>
 
@@ -365,16 +390,24 @@ fn RemoteStreamsContent(
 #[component]
 fn ActionLabel(query: String, total: u64, selected_count: Signal<usize>) -> impl IntoView {
     view! {
-        {move || if selected_count.get() == 0 {
+        {
             let label = format_remote_stream_count(&query, total);
-            view! { <span class=style::query_label title=label.clone()>{label.clone()}</span> }.into_any()
-        } else {
             view! {
-                <span class=style::selection_label>
-                    {selected_items_count(selected_count.get())}
+                <span
+                    class=style::query_label
+                    title=label.clone()
+                    style:display=move || if selected_count.get() == 0 { "" } else { "none" }
+                >
+                    {label.clone()}
                 </span>
-            }.into_any()
-        }}
+                <span
+                    class=style::selection_label
+                    style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                >
+                    {move || selected_items_count(selected_count.get())}
+                </span>
+            }
+        }
     }
 }
 
@@ -412,17 +445,33 @@ fn Pager(query: String, page: u32, total: u64) -> impl IntoView {
 
     view! {
         <div class=style::pager>
-            {if prev_disabled {
-                view! { <span class=disabled_class.clone()> {chevron(IconName::ChevronLeft)} </span> }.into_any()
-            } else {
-                view! { <a class=style::pager_btn href=prev_href>{chevron(IconName::ChevronLeft)}</a> }.into_any()
-            }}
+            <span
+                class=disabled_class.clone()
+                style:display=move || if prev_disabled { "" } else { "none" }
+            >
+                {chevron(IconName::ChevronLeft)}
+            </span>
+            <a
+                class=style::pager_btn
+                href=prev_href
+                style:display=move || if prev_disabled { "none" } else { "" }
+            >
+                {chevron(IconName::ChevronLeft)}
+            </a>
             <span>{summary}</span>
-            {if next_disabled {
-                view! { <span class=disabled_class>{chevron(IconName::ChevronRight)}</span> }.into_any()
-            } else {
-                view! { <a class=style::pager_btn href=next_href>{chevron(IconName::ChevronRight)}</a> }.into_any()
-            }}
+            <span
+                class=disabled_class
+                style:display=move || if next_disabled { "" } else { "none" }
+            >
+                {chevron(IconName::ChevronRight)}
+            </span>
+            <a
+                class=style::pager_btn
+                href=next_href
+                style:display=move || if next_disabled { "none" } else { "" }
+            >
+                {chevron(IconName::ChevronRight)}
+            </a>
         </div>
     }
 }
@@ -472,48 +521,60 @@ fn MobileActionMenu(
                 role="menu"
                 style:display=move || if open.get() { "" } else { "none" }
             >
-                {move || if selected_count.get() == 0 {
-                    view! {
-                        <button
-                            type="button"
-                            role="menuitem"
-                            class=style::mobile_menu_entry
-                            disabled=select_all_disabled
-                            on:click=move |e| {
-                                open.set(false);
-                                select_all.run(e);
-                            }
-                        >
-                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::SelectAll)}</span>
-                        </button>
-                    }.into_any()
-                } else {
-                    view! {
-                        <button type="button" role="menuitem" class=style::mobile_menu_entry on:click=move |_| {
-                            open.set(false);
-                            open_collection.set(true);
-                        }>
-                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::AddToCollection)}</span>
-                        </button>
-                        <button type="button" role="menuitem" class=style::mobile_menu_entry on:click=move |_| {
-                            open.set(false);
-                            open_playlist.set(true);
-                        }>
-                            <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::AddToPlaylist)}</span>
-                        </button>
-                        <button type="button" role="menuitem" class=style::mobile_menu_entry on:click=move |_| {
-                            open.set(false);
-                            selected.update(HashSet::clear);
-                            last_selected.set(None);
-                        }>
-                            <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::ClearSelection)}</span>
-                        </button>
-                    }.into_any()
-                }}
+                <button
+                    type="button"
+                    role="menuitem"
+                    class=style::mobile_menu_entry
+                    disabled=select_all_disabled
+                    style:display=move || if selected_count.get() == 0 { "" } else { "none" }
+                    on:click=move |e| {
+                        open.set(false);
+                        select_all.run(e);
+                    }
+                >
+                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::SelectAll)}</span>
+                </button>
+                <button
+                    type="button"
+                    role="menuitem"
+                    class=style::mobile_menu_entry
+                    style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                    on:click=move |_| {
+                        open.set(false);
+                        open_collection.set(true);
+                    }
+                >
+                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToCollection)}</span>
+                </button>
+                <button
+                    type="button"
+                    role="menuitem"
+                    class=style::mobile_menu_entry
+                    style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                    on:click=move |_| {
+                        open.set(false);
+                        open_playlist.set(true);
+                    }
+                >
+                    <span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToPlaylist)}</span>
+                </button>
+                <button
+                    type="button"
+                    role="menuitem"
+                    class=style::mobile_menu_entry
+                    style:display=move || if selected_count.get() == 0 { "none" } else { "" }
+                    on:click=move |_| {
+                        open.set(false);
+                        selected.update(HashSet::clear);
+                        last_selected.set(None);
+                    }
+                >
+                    <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::ClearSelection)}</span>
+                </button>
             </div>
         </div>
     }
@@ -529,7 +590,8 @@ fn RemoteStreamCard(
 ) -> impl IntoView {
     let item_id = row.id;
     let title = row.title.clone();
-    let subtitle = row.subtitle.clone();
+    let subtitle = row.subtitle.clone().unwrap_or_default();
+    let has_subtitle = !subtitle.is_empty();
     let artwork = row.artwork_path.clone();
     let placeholder = first_letter_placeholder(&row.sort_title);
     let is_selected = Signal::derive(move || selected.with(|items| items.contains(&item_id)));
@@ -629,9 +691,13 @@ fn RemoteStreamCard(
                 </div>
                 <div class=card_style::caption>
                     <p class=card_style::caption_title title=title.clone()>{title.clone()}</p>
-                    {subtitle.map(|value| view! {
-                        <p class=card_style::caption_sub title=value.clone()>{value.clone()}</p>
-                    })}
+                    <p
+                        class=card_style::caption_sub
+                        title=subtitle.clone()
+                        style:display=move || if has_subtitle { "" } else { "none" }
+                    >
+                        {subtitle.clone()}
+                    </p>
                 </div>
             </div>
         </div>

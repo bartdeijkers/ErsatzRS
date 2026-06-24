@@ -4,6 +4,15 @@ function uniqueName(prefix: string): string {
   return `${prefix} ${Date.now()} ${Math.floor(Math.random() * 10_000)}`;
 }
 
+async function waitForHydration(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () => page.evaluate(() => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
 async function createCollection(page: Page, name: string): Promise<void> {
   await page.goto('/media/collections/add');
   await expect(page.getByRole('heading', { name: 'Collection' })).toBeVisible();
@@ -11,6 +20,10 @@ async function createCollection(page: Page, name: string): Promise<void> {
   await page.locator('input[name="name"]').fill(name);
   await page.getByRole('button', { name: /add collection/i }).first().click();
   await expect(page).toHaveURL(/\/media\/collections$/);
+  await waitForHydration(page);
+  const search = page.getByPlaceholder('Search for manual collections');
+  await search.fill(name);
+  await expect(search).toHaveValue(name);
   await expect(page.getByRole('link', { name }).first()).toBeVisible();
 }
 
@@ -38,6 +51,10 @@ test.describe('collections parity', () => {
     await context.close();
 
     await page.goto('/media/collections');
+    await waitForHydration(page);
+    const search = page.getByPlaceholder('Search for manual collections');
+    await search.fill(name);
+    await expect(search).toHaveValue(name);
     await expect(page.getByRole('link', { name }).first()).toBeVisible();
   });
 

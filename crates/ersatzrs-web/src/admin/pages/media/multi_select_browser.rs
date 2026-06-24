@@ -272,7 +272,11 @@ fn MultiSelectIsland(
     });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
-            current_data.set(rows);
+            current_data.update(|current| {
+                if *current != rows {
+                    *current = rows;
+                }
+            });
         }
     });
 
@@ -284,7 +288,11 @@ fn MultiSelectIsland(
     });
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
-            current_page_map.set(next_page_map);
+            current_page_map.update(|current| {
+                if *current != next_page_map {
+                    *current = next_page_map;
+                }
+            });
         }
     });
 
@@ -498,14 +506,21 @@ fn GridWithSelection(
             </button>
         </div>
 
-        {if rows.is_empty() {
-            view! { <p class=style::empty>{tr(TextKey::NoItemsToDisplay)}</p> }.into_any()
-        } else {
-            let rows_for_grid = rows;
+        {
+            let rows_empty = rows.is_empty();
             view! {
-                <div class=style::grid>
+                <p
+                    class=style::empty
+                    style:display=move || if rows_empty { "" } else { "none" }
+                >
+                    {tr(TextKey::NoItemsToDisplay)}
+                </p>
+                <div
+                    class=style::grid
+                    style:display=move || if rows_empty { "none" } else { "" }
+                >
                     <FragmentLetterAnchor
-                        cards=rows_for_grid
+                        cards=rows
                         sort_title=|r: &MediaCardRow| r.sort_title.as_str()
                         render=move |r: MediaCardRow| {
                             view! {
@@ -521,8 +536,7 @@ fn GridWithSelection(
                     />
                 </div>
             }
-            .into_any()
-        }}
+        }
 
         <AddToCollectionModal
             open=collection_open
@@ -563,6 +577,8 @@ fn SelectableCard(
     } else {
         row.subtitle.clone()
     };
+    let subtitle_text = subtitle.unwrap_or_default();
+    let has_subtitle = !subtitle_text.is_empty();
     let artwork = row.artwork_path.clone();
     let href = format!("{}/{}", config.base_path, item_id);
     let placeholder = config.placeholder_icon;
@@ -618,9 +634,12 @@ fn SelectableCard(
                     </div>
                     <div class=card_style::caption>
                         <p class=card_style::caption_title>{title}</p>
-                        {subtitle.map(|s| view! {
-                            <p class=card_style::caption_sub>{s}</p>
-                        })}
+                        <p
+                            class=card_style::caption_sub
+                            style:display=move || if has_subtitle { "" } else { "none" }
+                        >
+                            {subtitle_text}
+                        </p>
                     </div>
                 </div>
             </a>
@@ -702,25 +721,28 @@ fn ItemMenu(
                     <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                     <span>{tr(TextKey::AddToCollection)}</span>
                 </button>
-                {has_media_info.then(|| view! {
-                    <button
-                        type="button"
-                        class=style::item_menu_entry
-                        role="menuitem"
-                        on:click={
-                            let target = target_for_info.clone();
-                            move |e| {
-                                e.prevent_default();
-                                e.stop_propagation();
-                                open.set(false);
-                                item_menu_command.set(Some(MenuCommand::ShowMediaInfo(target.clone())));
+                <button
+                    type="button"
+                    class=style::item_menu_entry
+                    role="menuitem"
+                    disabled=!has_media_info
+                    style:display=move || if has_media_info { "" } else { "none" }
+                    on:click={
+                        let target = target_for_info.clone();
+                        move |e| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                            if !has_media_info {
+                                return;
                             }
+                            open.set(false);
+                            item_menu_command.set(Some(MenuCommand::ShowMediaInfo(target.clone())));
                         }
-                    >
-                        <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
-                        <span>{tr(TextKey::ShowMediaInfo)}</span>
-                    </button>
-                })}
+                    }
+                >
+                    <span style=icon_style(IconName::Info, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::ShowMediaInfo)}</span>
+                </button>
                 <a
                     class=style::item_menu_entry
                     role="menuitem"
@@ -760,6 +782,9 @@ pub(crate) fn AddToCollectionModal(
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
+        if !open.get() {
+            return;
+        }
         let _ = refresh.get();
         leptos::task::spawn_local(async move {
             let loaded = list_all_collections().await.unwrap_or_default();
@@ -909,6 +934,9 @@ pub(crate) fn AddToPlaylistModal(
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
+        if !open.get() {
+            return;
+        }
         leptos::task::spawn_local(async move {
             groups.set(list_all_playlist_groups().await.unwrap_or_default());
         });
@@ -916,6 +944,9 @@ pub(crate) fn AddToPlaylistModal(
 
     #[cfg(target_arch = "wasm32")]
     Effect::new(move |_| {
+        if !open.get() {
+            return;
+        }
         let gid = group_id.get();
         playlists.set(Vec::new());
         if gid == 0 {
@@ -1058,23 +1089,33 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
 
     view! {
         <div class=card_style::pager_right>
-            {if prev_disabled {
-                view! {
-                    <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"‹"</span>
-                }
-                .into_any()
-            } else {
-                view! { <a class=card_style::pager_btn href=prev_href>"‹"</a> }.into_any()
-            }}
+            <span
+                class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)
+                style:display=move || if prev_disabled { "" } else { "none" }
+            >
+                "‹"
+            </span>
+            <a
+                class=card_style::pager_btn
+                href=prev_href
+                style:display=move || if prev_disabled { "none" } else { "" }
+            >
+                "‹"
+            </a>
             <span>{summary}</span>
-            {if next_disabled {
-                view! {
-                    <span class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)>"›"</span>
-                }
-                .into_any()
-            } else {
-                view! { <a class=card_style::pager_btn href=next_href>"›"</a> }.into_any()
-            }}
+            <span
+                class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)
+                style:display=move || if next_disabled { "" } else { "none" }
+            >
+                "›"
+            </span>
+            <a
+                class=card_style::pager_btn
+                href=next_href
+                style:display=move || if next_disabled { "none" } else { "" }
+            >
+                "›"
+            </a>
         </div>
     }
 }

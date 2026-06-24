@@ -55,7 +55,7 @@ where
 }
 
 /// Row for a media-card grid (movies/shows/images share this shape).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MediaCardRow {
     pub id: i64,
     pub title: String,
@@ -73,7 +73,7 @@ pub struct MediaCardRow {
 /// Stored as a 27-element vector indexed by [`bucket_index`] (0 = '#',
 /// 1 = 'a', …, 26 = 'z') so the type is `Serialize`/`Deserialize`-friendly
 /// for `server_fn`.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LetterPageMap {
     pub pages: Vec<u32>,
 }
