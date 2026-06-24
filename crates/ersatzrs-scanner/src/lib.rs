@@ -877,7 +877,6 @@ fn detect_folder_version_token(value: &str) -> Option<VersionToken> {
 
 fn detect_alternate_token(normalized: &str) -> Option<VersionToken> {
     [
-        ("mtv unplugged", "unplugged"),
         ("unplugged", "unplugged"),
         ("acoustic", "acoustic"),
         ("director s cut", "directors_cut"),
@@ -925,7 +924,6 @@ fn title_has_version_marker(original: &str, normalized: &str) -> bool {
         .iter()
         .any(|separator| trimmed.contains(separator));
     let explicit_phrase = [
-        "mtv unplugged",
         "official music video",
         "official video",
         "directors cut",
@@ -947,7 +945,6 @@ fn strip_version_tokens(value: &str) -> String {
     let phrases = [
         "official music video",
         "official video",
-        "mtv unplugged",
         "director s cut",
         "directors cut",
         "director cut",
@@ -2843,7 +2840,7 @@ mod tests {
     }
 
     #[test]
-    fn classifies_alternate_version_tokens_without_rewriting_unmarked_titles() {
+    fn classifies_unplugged_alternate_version_tokens_without_rewriting_unmarked_titles() {
         let live = classify_alternate_version(Path::new("/library"), "Song (Live)", None);
         assert_eq!(live.base_title, "song");
         assert_eq!(live.sub_kind.as_deref(), Some("live"));
@@ -2852,7 +2849,7 @@ mod tests {
         let folder = classify_alternate_version(
             Path::new("/library"),
             "Song",
-            Some(Path::new("/library/Artist/MTV Unplugged/Song.mkv")),
+            Some(Path::new("/library/Artist/Unplugged Sessions/Song.mkv")),
         );
         assert_eq!(folder.base_title, "Song");
         assert_eq!(folder.sub_kind.as_deref(), Some("unplugged"));
@@ -2980,7 +2977,7 @@ mod tests {
 
     #[cfg(not(feature = "mysql"))]
     #[tokio::test]
-    async fn music_video_versions_link_to_official_primary_and_stay_hidden_by_default() {
+    async fn music_video_unplugged_versions_link_to_official_primary_and_stay_hidden_by_default() {
         use super::{
             link_alternate_versions_for_library_path, upsert_artist_for_folder,
             upsert_local_music_video,
@@ -2991,7 +2988,7 @@ mod tests {
 
         let temp = TempDir::new().expect("temp dir");
         let artist_dir = temp.path().join("Talking Heads");
-        let unplugged_dir = artist_dir.join("MTV Unplugged");
+        let unplugged_dir = artist_dir.join("Unplugged Sessions");
         std::fs::create_dir_all(&unplugged_dir).expect("artist dirs");
         let official_path = artist_dir.join("Once in a Lifetime (Official Video).mkv");
         let unplugged_path = unplugged_dir.join("Once in a Lifetime.mkv");

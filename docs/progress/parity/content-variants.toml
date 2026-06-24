@@ -46,14 +46,14 @@ season, and ambiguous/library-level extras stay typed but orphaned with
 `ParentMediaItemId = NULL`.
 
 The local scanner now also detects alternate-version title and folder tokens
-for music videos, songs, and movies, including live, MTV Unplugged, acoustic,
-remix, remaster, extended, director's cut, and official/studio canonical
-markers. Same-work renditions are grouped by normalized base title and artist
-where available; an unmarked or official/studio row remains the canonical
-primary, other renditions are written as `ContentKind=AlternateVersion` with
-normalized `SubKind` and `ParentMediaItemId`, and lone alternates stay typed but
-unlinked instead of guessing a parent. Default-exclusion search still keeps
-alternate versions hidden unless a query opts into variant fields.
+for music videos, songs, and movies, including live, unplugged, acoustic, remix,
+remaster, extended, director's cut, and official/studio canonical markers.
+Same-work renditions are grouped by normalized base title and artist where
+available; an unmarked or official/studio row remains the canonical primary,
+other renditions are written as `ContentKind=AlternateVersion` with normalized
+`SubKind` and `ParentMediaItemId`, and lone alternates stay typed but unlinked
+instead of guessing a parent. Default-exclusion search still keeps alternate
+versions hidden unless a query opts into variant fields.
 '''
 
 [[debt]]
@@ -77,7 +77,7 @@ id          = 'alternate-version-linking'
 adr         = '0018'
 description = 'Phase 3 remains open: music-video/song/movie alternate-version detection, subtype normalization from title/folder tokens, and canonical-parent linking are not implemented.'
 discovered  = '2026-06-23'
-evidence    = 'Resolved 2026-06-24: the local scanner classifies title/folder alternate-version tokens for music videos, songs, and movies; chooses deterministic canonical primaries from unmarked or official/studio rows, otherwise first-seen same-work renditions; writes non-canonical versions as `ContentKind=AlternateVersion` with normalized `SubKind` and parent linkage when available; leaves lone alternates typed but unlinked. Covered by crates/ersatzrs-scanner tests classifies_alternate_version_tokens_without_rewriting_unmarked_titles, music_video_versions_link_to_official_primary_and_stay_hidden_by_default, orphan_song_alternate_is_typed_but_unlinked, and movie_directors_cut_links_to_unmarked_primary; `cargo test -p ersatzrs-scanner` passed.'
+evidence    = 'Resolved 2026-06-24: the local scanner classifies title/folder alternate-version tokens for music videos, songs, and movies; chooses deterministic canonical primaries from unmarked or official/studio rows, otherwise first-seen same-work renditions; writes non-canonical versions as `ContentKind=AlternateVersion` with normalized `SubKind` and parent linkage when available; leaves lone alternates typed but unlinked. Covered by crates/ersatzrs-scanner tests classifies_unplugged_alternate_version_tokens_without_rewriting_unmarked_titles, music_video_unplugged_versions_link_to_official_primary_and_stay_hidden_by_default, orphan_song_alternate_is_typed_but_unlinked, and movie_directors_cut_links_to_unmarked_primary; `cargo test -p ersatzrs-scanner` passed.'
 resolved    = true
 
 [[debt]]
