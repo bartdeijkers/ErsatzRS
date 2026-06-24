@@ -20,13 +20,15 @@ changes the ErsatzTV parity contract.
 
 ## Development Setup
 
-The Rust workspace has not been created yet. Once it exists, the baseline setup
-is:
+The baseline setup is:
 
 ```bash
 rustup show
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+# Lint mirrors CI: two passes, neither with --all-features, so feature-gated
+# test files do not escape lint.
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --features mysql -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 ```
@@ -109,8 +111,7 @@ explicitly in the relevant changelog entry.
 - The relevant contract files were followed.
 - Tests were added or the absence of tests is explained.
 - Snapshots were reviewed when generated output changed.
-- `cargo fmt`, `cargo clippy`, `cargo test`, and `cargo deny check` were run
-  once the workspace exists.
+- `cargo fmt`, `cargo clippy`, `cargo test`, and `cargo deny check` were run.
 - `CHANGELOG.md` was updated.
 - `docs/progress/` parity files were updated for ported behavior.
 - An ADR is linked when the change affects architecture or deviates from

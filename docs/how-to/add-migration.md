@@ -1,6 +1,6 @@
 # Add a Migration
 
-Migrations live under `migrations/` once the workspace exists.
+Migrations live under `migrations/`.
 
 ## Naming
 

@@ -32,7 +32,7 @@
 - [ ] Snapshots were reviewed when generated output changed.
 - [ ] `cargo xtask parity-check <scope>` was run where applicable.
 - [ ] `cargo fmt --all -- --check` was run where applicable.
-- [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings` was run where applicable.
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` and `cargo clippy --workspace --all-targets --features mysql -- -D warnings` were run where applicable (mirror CI; neither pass uses `--all-features`).
 - [ ] `cargo test --workspace --all-features` was run where applicable.
 - [ ] `cargo deny check` was run where applicable.
 

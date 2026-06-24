@@ -195,7 +195,9 @@ The **porter** produces:
 The **human** runs, before committing:
 
 - `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo clippy --workspace --all-targets --features mysql -- -D warnings`
+  (mirror CI: two passes, neither with `--all-features`).
 - `cargo test --workspace --all-features`
 - `cargo leptos build` from `crates/ersatzrs-web` (rebuilds hydration assets).
 - A runnable Playwright spec for the touched page when one exists or is added;

@@ -5,12 +5,10 @@ description: Scaffold a new ErsatzRS workspace crate according to the architectu
 
 # New Crate
 
-Use this only after the root Cargo workspace exists.
-
 ## Workflow
 
 1. Read [ARCHITECTURE.md](../ARCHITECTURE.md).
-2. Confirm the crate belongs in the planned workspace layout.
+2. Confirm the crate belongs in the workspace layout.
 3. Create `crates/<name>/Cargo.toml`.
 4. Create `crates/<name>/src/lib.rs`.
 5. Add `crates/<name>/src/error.rs` when the crate has typed errors.

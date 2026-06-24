@@ -21,7 +21,8 @@ this file. Do not create a second style document.
 
 ## Naming (Rust)
 
-- Crates use `ErsatzRS-*`.
+- Crates use lowercase `ersatzrs-*` (for example `ersatzrs-core`,
+  `ersatzrs-web`).
 - Modules, functions, variables, and fields use `snake_case`.
 - Types, traits, and enum variants use `PascalCase`.
 - Constants use `SCREAMING_SNAKE_CASE`.

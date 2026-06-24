@@ -13,12 +13,14 @@ project context, architecture, porting workflow, and contract index.
 - **Plan:** [plans/INDEX.md](../../plans/INDEX.md)
 - **ErsatzTV source:** `$ERSATZTV_SRC/`
 
-## Key Commands (once Cargo workspace exists)
+## Key Commands
 
 ```bash
 cargo build --workspace
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+# Lint mirrors CI: two passes, neither with --all-features.
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --features mysql -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 ```

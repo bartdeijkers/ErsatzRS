@@ -3,18 +3,20 @@
 ErsatzRS is a Rust workspace that ports ErsatzTV behavior while keeping crate
 boundaries explicit.
 
-## Planned Workspace
+## Workspace
 
 ```text
 crates/
-  ersatzrs-domain/   entities, enums, value objects
-  ersatzrs-core/     business logic, scheduling traits, repository traits
-  ersatzrs-hwprobe/  native OS/GPU capability probes behind a safe API
-  ersatzrs-ffmpeg/   FFmpeg argument and filter-graph builders
-  ersatzrs-infra/    sqlx repositories, migrations, provider clients
-  ersatzrs-app/      use-case handlers
-  ersatzrs-web/      axum + Leptos host, IPTV, HLS, HDHR, API routes
-  ersatzrs-scanner/  scanner binary
+  ersatzrs-domain/    entities, enums, value objects
+  ersatzrs-core/      business logic, scheduling traits, repository traits
+  ersatzrs-hwprobe/   native OS/GPU capability probes behind a safe API
+  ersatzrs-ffmpeg/    FFmpeg argument and filter-graph builders
+  ersatzrs-infra/     sqlx repositories, migrations, provider clients
+  ersatzrs-app/       use-case handlers
+  ersatzrs-scheduler/ playout scheduling engines and background scheduling work
+  ersatzrs-web/       axum + Leptos host, IPTV, HLS, HDHR, API routes
+  ersatzrs-scanner/   scanner binary
+  ersatzrs-launcher/  Windows-only system-tray launcher (no-op on other targets)
 migrations/       sqlx migrations
 assets/           drawvg source templates, VGS scripts, and related assets
 ```
@@ -49,8 +51,15 @@ Rules:
   `host` for runtime, `transport` for IPTV/HDHomeRun-style protocols, `api` for
   plain axum admin APIs, and `admin` for the Leptos UI.
 - `ersatzrs-scanner` owns scanner CLI concerns.
+- `ersatzrs-scheduler` owns the playout scheduling engines and background
+  scheduling work; it depends on `ersatzrs-core` traits, not concrete storage.
 - `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction, and consumes
   safe hardware capability rows from `ersatzrs-hwprobe`.
+- `ersatzrs-launcher` is the Windows-only system-tray launcher. Its real logic
+  is under `#[cfg(windows)]`; on every other target it compiles to a no-op
+  `main`. It is the single crate that opts out of the workspace
+  `unsafe_code = "forbid"` lint for a few small Win32 FFI calls (see
+  [AGENTS.md](AGENTS.md) for the documented exception).
 - Cycles are forbidden.
 
 ## Porting Rule
