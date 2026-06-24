@@ -35,7 +35,7 @@ Critical hydration rules for this project, from `TEST.md`:
 - Use Codex as a targeted worker agent. Own implementation for the UI slice the parent assigned, edit files directly, and report changed paths plus verification results. Do not spawn more agents unless the parent explicitly asks you to coordinate a fan-out.
 - Use `rg`, `rg --files`, and parallel file reads for source analysis. Prefer `apply_patch` for manual edits.
 - Use `tool_search` to load Context7 or other documentation tooling before relying on memory for Leptos, leptos_router, cargo-leptos, Axum, or other version-sensitive library APIs. If no documentation tool is available, fall back to local project docs and official upstream docs only.
-- Use browser or Playwright tooling only when it is already available in the parent session and browser evidence is needed for a hydration/UI regression, or when the parent explicitly asks for an interactive smoke. Keep the normal implementation loop scoped to `cargo xtask hydration-lint -p ersatzrs-web`, `cargo build -p ersatzrs-web`, and `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`.
+- Use browser or Playwright tooling only when it is already available in the parent session and browser evidence is needed for a hydration/UI regression, or when the parent explicitly asks for an interactive smoke. Keep the normal implementation loop scoped to `cargo xtask hydration-lint -p ersatzrs-web`, `cargo check -p ersatzrs-web` (fast; build only for the browser loop), and `cargo clippy -p ersatzrs-web --all-targets -- -D warnings`.
 - For admin UI visual parity, browser evidence is required before claiming a route matches ErsatzTV. Use same-viewport screenshots, fresh browser contexts, and bounding boxes/computed styles when layout is suspect. CSS module edits are not proven until the running app serves the rebuilt `/public/bundle.css`.
 - In the final report, distinguish commands you ran from pre-commit gates left for the user. Include exact touched page URLs and interactions for any Playwright hand-off.
 
@@ -143,11 +143,12 @@ The linter enforces `TEST.md` hydration rules statically, including `<Show>` ins
 18. Compile-clean the web crate only:
 
 ```bash
-cargo build -p ersatzrs-web
+cargo check -p ersatzrs-web                          # fast: no codegen/link
 cargo clippy -p ersatzrs-web --all-targets -- -D warnings
+# Build/run the binary only when you need the browser loop (step 19): ./run.sh serve.
 ```
 
-Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build` inside your loop. Those are the user's pre-commit gate. Running them per iteration burns minutes the user wants spent on coding.
+Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build` inside your loop. Those are the user's pre-commit gate. Running them per iteration burns minutes the user wants spent on coding. The build target-dir is the `/mnt/f` (9p) scratch disk, where Rust's small-file I/O is ~20-100x slower than ext4, and Cargo re-runs rustc over the whole tree whenever you flip features/targets/profile — so stay in ONE configuration while iterating. Machine-local sccache (cache on ext4) is recommended to make the unavoidable config switches cheap; see BUILD.md "Inner-loop strategy".
 
 19. Run the visual browser loop for admin UI routes before claiming parity:
    - Start the app with `./run.sh serve`.
@@ -164,7 +165,7 @@ Do not run `--workspace`, `--all-features`, `cargo test`, or `cargo leptos build
 22. Final report hand-off checklist. The last message must include source map evidence, visual source map evidence for UI routes, `ParityDebt`, commands run, and a "Pre-commit gates for the user" section listing exactly:
 
 - `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo clippy --workspace --all-targets -- -D warnings` and `cargo clippy --workspace --all-targets --features mysql -- -D warnings` (mirror CI: two passes, neither with `--all-features`)
 - `cargo test --workspace --all-features`
 - `cargo leptos build` from `crates/ersatzrs-web`
 - Playwright MCP smoke for the touched page(s): which URLs to visit and what interactions to verify.
