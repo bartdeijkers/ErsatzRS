@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-23
-last_processed_commit: 52f28a16ab8a70371f50ec94afccd984a463f8af
+generated: 2026-06-24
+last_processed_commit: f5eb4e50a7f8d1129791e6bc57c35c01fe57abd5
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,16 +27,31 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-23): `cargo xtask progress gaps` reports three open
-features: `hls-variant-playlists-segmenter`, `channels-admin-ui`, and
-`content-variants`. Completed-scope replacement removed the old ADR 0018 Phase
-0 foundation prompt because the schema/search foundation and
-`content-variants` slug now exist. Ranking: (1) **HLS segmenter normalized
-append stutter** — named in `phase.toml` `current_focus` and backed by
-user-visible playback evidence; (2) **Channels Edit Numbers** — confirmed
+Selection (2026-06-24): change window `52f28a1..f5eb4e5` is the single commit
+`feat(core): add content variant search foundation` (ADR 0018 `content-variants`
+Phase 0). That commit already self-reconciled `content-variants.toml`,
+`phase.toml`, and `sessions.ndjson`, so this run advances the
+`last_processed_commit` pointer over it and re-confirms the top three; no
+parity status changed. `cargo xtask progress gaps` still reports the same three
+open features: `hls-variant-playlists-segmenter`, `channels-admin-ui`, and
+`content-variants`. None flipped to `Ported`/`Deferred`/`Dropped`, so the
+completed-scope rule refilled no slots; the `content-variants` prompt continues
+to target Phase 1 because Phase 0 is now done. Ranking: (1) **HLS segmenter
+normalized append stutter** — named in `phase.toml` `current_focus` and backed
+by user-visible playback evidence; (2) **Channels Edit Numbers** — confirmed
 admin-route parity bug in an `In progress` pinned-baseline UI surface; (3)
 **content-variants Phase 1 UI surfacing** — the next coherent slice of ADR 0018
-after Phase 0, with remaining debt already structured under the new slug.
+after Phase 0, with remaining debt already structured under the slug.
+
+Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
+(org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
+`github.com/ErsatzTV/ErsatzTV`), so the baseline could not be re-pinned. No
+parity-file edits were made and the two pinned-baseline parity prompts (#1, #2)
+are carried over unchanged rather than re-derived from upstream. This does not
+affect this window: the only merged change is `content-variants` spec work
+(ADR 0018), which has no ErsatzTV-parity dimension. A future window containing
+real pinned-baseline parity work must not be reconciled until the pin is
+reachable again.
 
 ---
 
