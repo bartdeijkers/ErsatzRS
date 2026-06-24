@@ -176,9 +176,12 @@ fn RemoteStreamsIsland(
     });
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
-            current_rows.update(|current| {
-                if *current != next_rows {
+            current_rows.maybe_update(|current| {
+                if *current == next_rows {
+                    false
+                } else {
                     *current = next_rows;
+                    true
                 }
             });
         }
@@ -196,9 +199,12 @@ fn RemoteStreamsIsland(
     });
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
-            current_page_map.update(|current| {
-                if *current != next_page_map {
+            current_page_map.maybe_update(|current| {
+                if *current == next_page_map {
+                    false
+                } else {
                     *current = next_page_map;
+                    true
                 }
             });
         }

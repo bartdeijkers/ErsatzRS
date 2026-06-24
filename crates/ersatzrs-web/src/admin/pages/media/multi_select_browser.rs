@@ -272,9 +272,12 @@ fn MultiSelectIsland(
     });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
-            current_data.update(|current| {
-                if *current != rows {
+            current_data.maybe_update(|current| {
+                if *current == rows {
+                    false
+                } else {
                     *current = rows;
+                    true
                 }
             });
         }
@@ -288,9 +291,12 @@ fn MultiSelectIsland(
     });
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
-            current_page_map.update(|current| {
-                if *current != next_page_map {
+            current_page_map.maybe_update(|current| {
+                if *current == next_page_map {
+                    false
+                } else {
                     *current = next_page_map;
+                    true
                 }
             });
         }
