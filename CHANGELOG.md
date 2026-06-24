@@ -23,6 +23,11 @@ release section when tagging a release.
   smart-collection/search evaluation can query `content_kind`, `sub_kind`,
   `parent_title`, `audio_title`, `subtitle_title`, and `has_commentary` while
   defaulting existing searches to primary items.
+- Content-variant UI surfacing for ADR 0018: media browse pages keep variants
+  hidden by default but can persistently show special features / versions,
+  variant cards show localized badges, detail pages expose linked Extras /
+  Special Features and Versions sections, and search/smart-collection editing
+  shows the new token reference.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

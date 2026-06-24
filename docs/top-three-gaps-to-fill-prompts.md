@@ -27,18 +27,19 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the Channels Edit Numbers closeout): the previous
-#1 Channels route gap is now resolved and `channels-admin-ui` is back to
-`Ported` after focused Rust tests, hydration smoke, and seeded Playwright proof.
-`cargo xtask progress gaps` now reports only `content-variants` as an
-in-progress parity/spec feature. The completed-scope rule refills from open
-phase/spec TODOs. Ranking: (1) **content-variants Phase 1 UI surfacing** — the
-next coherent slice of ADR 0018 after Phase 0, with remaining debt already
-structured under the slug; (2) **ersatzrs-healthcheck binary** — open Phase 7
-runtime hardening TODO to replace the Docker image's tool-based health check
-with a purpose-built binary; (3) **in-app TSDuck MPEG-TS troubleshooting** —
-ADR 0013 remains Proposed / Not implemented and would turn the manual TSDuck
-gate into an optional Support tool.
+Selection (2026-06-24, after the content-variants Phase 1 UI surfacing
+closeout): the previous #1 Phase 1 UI prompt is now resolved after focused
+Rust tests, seeded Playwright proof, and `cargo xtask parity-check web`.
+`cargo xtask progress gaps` still reports `content-variants` as an in-progress
+parity/spec feature because Phase 2-5 remain open. The completed-scope rule
+keeps the next bounded ADR 0018 slice at the top. Ranking: (1)
+**content-variants Phase 2 local scanner import/classification** — reverse the
+current extra-skip behavior while preserving default invisibility; (2)
+**ersatzrs-healthcheck binary** — open Phase 7 runtime hardening TODO to
+replace the Docker image's tool-based health check with a purpose-built binary;
+(3) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed /
+Not implemented and would turn the manual TSDuck gate into an optional Support
+tool.
 
 Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
 (org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
@@ -47,67 +48,69 @@ new pinned-baseline parity prompt was re-derived from upstream. This manual
 closeout removes the completed Channels prompt and refills with spec-backed
 chores that have no ErsatzTV baseline dimension. A future window containing new
 pinned-baseline parity work must not be reconciled until the pin is reachable
-again.
+again. The earlier manual closeout removed the completed Channels prompt; this
+closeout removes the completed Phase 1 UI prompt and refills with the next
+spec-backed ADR 0018 phase.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: content-variants Phase 1 UI surfacing (slug `content-variants`)
+## 1. Build the next ErsatzRS spec chore: content-variants Phase 2 local scanner import/classification (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
 [ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
 [`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-Do **not** force `skills/parity-slice.md`; there is no pinned ErsatzTV UI to
-port. The goal is the complete **Phase 1 — `/media/*` UI surfacing** slice on
-top of the Phase 0 schema/search foundation.
+This slice intentionally diverges from ErsatzTV's current scanner behavior by
+importing extras that ErsatzTV skips; the deviation is already governed by ADR
+0018. The goal is the complete **Phase 2 — Local scanner: import + classify
+extras** slice on top of the Phase 0 schema/search foundation and Phase 1 UI
+surfacing.
 
-Scope is **only Phase 1** from the plan. Do not implement scanner import,
-alternate-version linking, commentary render acceptance, or scheduling examples
-in this slice. Any shortfall must remain visible in
+Scope is **only Phase 2** from the plan. Do not implement alternate-version
+linking, commentary render acceptance, or scheduling examples in this slice.
+Any shortfall must remain visible in
 `docs/progress/parity/content-variants.toml`.
 
 Before editing:
-1. Read ADR 0018, the plan's Phase 1 section, and
+1. Read ADR 0018, the plan's Phase 2 section, PORTING.md, STYLE.md, and
    `docs/progress/parity/content-variants.toml`.
-2. Inspect the current media browse/detail pages, shared media-card/list
-   primitives, media browser server functions, search result/action surfaces,
-   persisted page preferences, routes, and all four language modules.
-3. Build a Source Map and Visual Source Map for the `/media/*` browse pages,
-   detail pages, variant toggle, variant badges, Extras / Special Features
-   sections, Versions sections, and search-field reference text.
-4. Identify the remaining Phase 2-5 debt you are explicitly deferring.
+2. Inspect the local scanner, media-item persistence path, scanner tests,
+   subtype normalizer, search projection, and the upstream ErsatzTV skip logic
+   in `LocalFolderScanner.ExtraFiles` / `ExtraDirectories` and
+   `MovieFolderScanner`.
+3. Build a Source Map for scanner traversal, extra file/directory detection,
+   parent resolution, `OtherVideo` row creation, `MediaItem.ContentKind` /
+   `SubKind` / `ParentMediaItemId` persistence, and default-exclusion safety.
+4. Identify the remaining Phase 3-5 debt you are explicitly deferring.
 
 Implement the slice end-to-end:
-- Add the persisted "Show special features / versions" browse toggle, defaulted
-  off so existing browse pages remain primary-only.
-- Render variant badges and detail-page Extras / Special Features / Versions
-  sections from the Phase 0 `ContentKind`, `SubKind`, and parent linkage.
-- Document or surface the new smart-collection/search tokens where the existing
-  UI exposes search-field help.
-- Preserve SSR and no-JS fallbacks; follow TEST.md hydration rules for any
-  island changes.
-- Localize all new visible strings in every supported culture.
-- Add focused server-function/component tests and Playwright coverage using
-  seeded variant rows.
+- Replace the local scanner's extra file/directory skip path with
+  import-and-classify behavior for movie/show libraries.
+- Persist imported extras as `OtherVideo` rows with `ContentKind=Extra`,
+  normalized `SubKind`, and a `ParentMediaItemId` resolved from folder
+  ownership when available.
+- Preserve library-level/orphan extras with `ParentMediaItemId = NULL` while
+  keeping them typed and searchable.
+- Cover representative folder layouts including sibling `-trailer` files and
+  `Featurettes/` subfolders.
+- Prove default-exclusion still keeps existing browse/search/channel behavior
+  primary-only unless a query or UI toggle opts into variants.
 - Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
   prompt file if the debt ranking changes.
 
-Visual verification:
-- Rebuild Leptos assets, serve via `./run.sh serve`, and verify representative
-  movie/show/season/music media pages with variants hidden by default and shown
-  when toggled.
-- Capture desktop and mobile screenshots and compare layout to the existing
-  media surfaces; do not ship overlapping or untranslated UI.
-
 Verification:
-- Focused `ersatzrs-web` tests for the media browse/detail server functions and
-  persisted toggle.
-- `npx playwright test <added-or-updated-content-variants-spec>`.
-- `cargo xtask parity-check web`.
+- Focused scanner tests for extra import, subtype normalization, parent
+  linkage, and orphan behavior.
+- Focused search/media-browser tests proving imported extras remain hidden by
+  default and visible when explicitly opted in.
+- `cargo test -p ersatzrs-scanner`.
+- `cargo test -p ersatzrs-web admin::server_fns::media_browser`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, Visual Source Map, Phase 1 behavior implemented,
-remaining Phase 2-5 `ParityDebt`, verification run, and changed files.
+Report the Source Map, Phase 2 behavior implemented, remaining Phase 3-5
+`ParityDebt`, verification run, and changed files.
 
 ---
 

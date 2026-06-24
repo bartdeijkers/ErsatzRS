@@ -10,7 +10,7 @@ pub fn SongsPage() -> impl IntoView {
     view! {
         <MediaBrowserPage
             title=TextKey::Songs
-            loader=move |q, p, ps| list_songs(q, p, ps)
+            loader=move |q, p, ps, show_variants| list_songs(q, p, ps, show_variants)
         />
     }
 }

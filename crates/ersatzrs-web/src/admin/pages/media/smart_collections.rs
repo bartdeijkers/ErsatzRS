@@ -368,7 +368,6 @@ fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl Int
             }
         >
             <input type="hidden" name="id" value=move || id_signal.get().to_string()/>
-            <input type="hidden" name="query" value=move || query.get()/>
             <div class=style::editor_action_bar>
                 <button
                     type="submit"
@@ -390,6 +389,13 @@ fn SmartCollectionEditorIsland(collection_id: i64, save_error: bool) -> impl Int
                     max_length=Some(50)
                     error=Some(name_err_signal)
                 />
+                <TextField
+                    label=tr(TextKey::SearchQuery)
+                    value=query
+                    name=Some("query")
+                    placeholder=tr(TextKey::SmartCollectionQueryPlaceholder)
+                />
+                <p class=style::help_text>{tr(TextKey::ContentVariantSearchHelp)}</p>
             </div>
         </form>
     }

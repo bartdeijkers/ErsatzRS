@@ -237,6 +237,7 @@ fn RemoteStreamsIsland(
             let jump = LetterJump {
                 base_uri: BASE_PATH.to_owned(),
                 query: query_for_view.clone(),
+                show_variants: false,
                 page_map: current_page_map.get(),
             };
 

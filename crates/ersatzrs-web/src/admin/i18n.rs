@@ -138,6 +138,28 @@ pub enum TextKey {
     Confirm,
     ConfirmDelete,
     Content,
+    ContentVariantAcoustic,
+    ContentVariantAlternateVersion,
+    ContentVariantBehindTheScenes,
+    ContentVariantDeletedScene,
+    ContentVariantDirectorsCut,
+    ContentVariantExtended,
+    ContentVariantExtra,
+    ContentVariantFeaturette,
+    ContentVariantInterview,
+    ContentVariantLive,
+    ContentVariantOfficialVideo,
+    ContentVariantOther,
+    ContentVariantRemaster,
+    ContentVariantRemix,
+    ContentVariantScene,
+    ContentVariantSearchHelp,
+    ContentVariantShort,
+    ContentVariantShowToggle,
+    ContentVariantSpecialFeatures,
+    ContentVariantTrailer,
+    ContentVariantUnplugged,
+    ContentVariantVersions,
     ContentRatings,
     CustomResolutionHeight,
     CustomResolutionWidth,
@@ -1224,6 +1246,28 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Confirm,
     TextKey::ConfirmDelete,
     TextKey::Content,
+    TextKey::ContentVariantAcoustic,
+    TextKey::ContentVariantAlternateVersion,
+    TextKey::ContentVariantBehindTheScenes,
+    TextKey::ContentVariantDeletedScene,
+    TextKey::ContentVariantDirectorsCut,
+    TextKey::ContentVariantExtended,
+    TextKey::ContentVariantExtra,
+    TextKey::ContentVariantFeaturette,
+    TextKey::ContentVariantInterview,
+    TextKey::ContentVariantLive,
+    TextKey::ContentVariantOfficialVideo,
+    TextKey::ContentVariantOther,
+    TextKey::ContentVariantRemaster,
+    TextKey::ContentVariantRemix,
+    TextKey::ContentVariantScene,
+    TextKey::ContentVariantSearchHelp,
+    TextKey::ContentVariantShort,
+    TextKey::ContentVariantShowToggle,
+    TextKey::ContentVariantSpecialFeatures,
+    TextKey::ContentVariantTrailer,
+    TextKey::ContentVariantUnplugged,
+    TextKey::ContentVariantVersions,
     TextKey::ContentRatings,
     TextKey::CustomResolutionHeight,
     TextKey::CustomResolutionWidth,
@@ -2572,6 +2616,52 @@ pub fn use_i18n() -> UiLanguage {
 
 pub fn tr(key: TextKey) -> &'static str {
     text(use_i18n(), key)
+}
+
+pub fn content_variant_badge_label(
+    content_kind: ersatzrs_domain::ContentKind,
+    sub_kind: Option<&str>,
+) -> Option<String> {
+    let prefix = match content_kind {
+        ersatzrs_domain::ContentKind::Primary => return None,
+        ersatzrs_domain::ContentKind::Extra => tr(TextKey::ContentVariantExtra),
+        ersatzrs_domain::ContentKind::AlternateVersion => {
+            tr(TextKey::ContentVariantAlternateVersion)
+        }
+    };
+    let Some(sub_kind) = sub_kind
+        .and_then(ersatzrs_domain::normalize_sub_kind_token)
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Some(prefix.to_owned());
+    };
+    Some(format!(
+        "{prefix}: {}",
+        content_variant_sub_kind_label(&sub_kind)
+    ))
+}
+
+pub fn content_variant_sub_kind_label(token: &str) -> String {
+    let key = match token {
+        "trailer" => Some(TextKey::ContentVariantTrailer),
+        "behind_the_scenes" => Some(TextKey::ContentVariantBehindTheScenes),
+        "deleted_scene" => Some(TextKey::ContentVariantDeletedScene),
+        "featurette" => Some(TextKey::ContentVariantFeaturette),
+        "interview" => Some(TextKey::ContentVariantInterview),
+        "scene" => Some(TextKey::ContentVariantScene),
+        "short" => Some(TextKey::ContentVariantShort),
+        "other" => Some(TextKey::ContentVariantOther),
+        "official_video" => Some(TextKey::ContentVariantOfficialVideo),
+        "live" => Some(TextKey::ContentVariantLive),
+        "unplugged" => Some(TextKey::ContentVariantUnplugged),
+        "acoustic" => Some(TextKey::ContentVariantAcoustic),
+        "remix" => Some(TextKey::ContentVariantRemix),
+        "remaster" => Some(TextKey::ContentVariantRemaster),
+        "extended" => Some(TextKey::ContentVariantExtended),
+        "directors_cut" => Some(TextKey::ContentVariantDirectorsCut),
+        _ => None,
+    };
+    key.map_or_else(|| token.replace('_', " "), |key| tr(key).to_owned())
 }
 
 pub fn text(language: UiLanguage, key: TextKey) -> &'static str {

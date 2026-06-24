@@ -10,7 +10,7 @@ pub fn ImagesPage() -> impl IntoView {
     view! {
         <MediaBrowserPage
             title=TextKey::Images
-            loader=move |q, p, ps| list_images(q, p, ps)
+            loader=move |q, p, ps, show_variants| list_images(q, p, ps, show_variants)
         />
     }
 }

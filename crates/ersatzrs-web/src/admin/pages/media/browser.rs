@@ -8,10 +8,12 @@ use std::future::Future;
 
 use leptos::prelude::*;
 
-use crate::admin::i18n::{season_display_name, tr, TextKey};
+use crate::admin::i18n::{content_variant_badge_label, season_display_name, tr, TextKey};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
-use crate::admin::server_fns::media_browser::MediaCardRow;
+use crate::admin::server_fns::media_browser::{
+    get_show_content_variants_pref, set_show_content_variants_pref, MediaCardRow,
+};
 use crate::admin::ui::primitives::card::{MediaCard, MediaCardPager};
 use crate::admin::ui::primitives::letter_bar::{letter_bucket, FragmentLetterAnchor, LetterBar};
 
@@ -25,6 +27,7 @@ pub type Loader = fn(
     String,
     u32,
     u32,
+    bool,
 ) -> std::pin::Pin<
     Box<
         dyn Future<Output = Result<(Vec<MediaCardRow>, u64), leptos::prelude::ServerFnError>>
@@ -44,11 +47,12 @@ pub fn MediaBrowserPage<L, Fut>(
     href_prefix: &'static str,
 ) -> impl IntoView
 where
-    L: Fn(String, u32, u32) -> Fut + Clone + Send + Sync + 'static,
+    L: Fn(String, u32, u32, bool) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Result<(Vec<MediaCardRow>, u64), ServerFnError>> + Send + 'static,
 {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let show_variants = RwSignal::new(false);
     let media_revision = RwSignal::new(String::new());
 
     Effect::new(move |_| {
@@ -57,12 +61,31 @@ where
     });
 
     let data: Resource<(Vec<MediaCardRow>, u64)> = Resource::new(
-        move || (search.get(), page.get(), media_revision.get()),
-        move |(q, p, _)| {
+        move || {
+            (
+                search.get(),
+                page.get(),
+                show_variants.get(),
+                media_revision.get(),
+            )
+        },
+        move |(q, p, variants, _)| {
             let loader = loader.clone();
-            async move { loader(q, p, PAGE_SIZE).await.unwrap_or_default() }
+            async move { loader(q, p, PAGE_SIZE, variants).await.unwrap_or_default() }
         },
     );
+
+    let pref: LocalResource<bool> =
+        LocalResource::new(
+            || async move { get_show_content_variants_pref().await.unwrap_or(false) },
+        );
+    Effect::new(move |_| {
+        if let Some(value) = pref.get() {
+            show_variants.set(value);
+        }
+    });
+
+    let save_variants_action = Action::new(|value: &bool| set_show_content_variants_pref(*value));
 
     Effect::new(move |_| {
         #[cfg(target_arch = "wasm32")]
@@ -102,6 +125,25 @@ where
                     on:input=move |e| search.set(event_target_value(&e))
                 />
             </div>
+            <form method="get" class=style::variant_toggle>
+                <input type="hidden" name="query" value=move || search.get()/>
+                <label class=style::variant_toggle_label>
+                    <input
+                        type="checkbox"
+                        name="show_variants"
+                        value="1"
+                        prop:checked=move || show_variants.get()
+                        on:change=move |e| {
+                            let value = event_target_checked(&e);
+                            show_variants.set(value);
+                            page.set(0);
+                            save_variants_action.dispatch(value);
+                        }
+                    />
+                    <span>{tr(TextKey::ContentVariantShowToggle)}</span>
+                </label>
+                <button type="submit" class=style::variant_apply>{tr(TextKey::Search)}</button>
+            </form>
 
             <LetterBar present=present/>
 
@@ -135,13 +177,17 @@ where
                                                 .map(season_display_name)
                                                 .unwrap_or(r.title);
                                             view! {
-                                                <MediaCard
-                                                    title=title
-                                                    subtitle=r.subtitle
-                                                    artwork_url=r.artwork_path
-                                                    href=href
-                                                    placeholder=placeholder
-                                                />
+                                            <MediaCard
+                                                title=title
+                                                subtitle=r.subtitle
+                                                artwork_url=r.artwork_path
+                                                href=href
+                                                placeholder=placeholder
+                                                badge=content_variant_badge_label(
+                                                    r.variant.content_kind,
+                                                    r.variant.sub_kind.as_deref(),
+                                                )
+                                            />
                                             }
                                             .into_any()
                                         }

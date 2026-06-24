@@ -9,7 +9,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{tr, TextKey};
+use crate::admin::i18n::{content_variant_badge_label, tr, TextKey};
 use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
 use crate::admin::server_fns::media_browser::{get_movie_details, MovieDetailRow};
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
@@ -85,6 +85,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         directors,
         writers,
         actors,
+        extras,
     } = movie;
 
     let title_for_poster = title.clone();
@@ -146,6 +147,11 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
     } else {
         ""
     };
+    let extras_style = if extras.is_empty() {
+        "display:none"
+    } else {
+        ""
+    };
 
     view! {
         <div class=detail_style::page>
@@ -196,6 +202,33 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     {linked_fact_row(tr(TextKey::Genres), "genre", &genres, true)}
                     {linked_fact_row(tr(TextKey::Tags), "tag", &tags, true)}
                 </dl>
+
+                <section class=detail_style::actors_section style=extras_style>
+                    <h2 class=detail_style::section_title>
+                        {tr(TextKey::ContentVariantSpecialFeatures)}
+                    </h2>
+                    <div class=detail_style::actor_grid>
+                        {extras.into_iter().map(|extra| {
+                            let extra_id = extra.id;
+                            let title = extra.title.clone();
+                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
+                            view! {
+                                <MediaCard
+                                    title=title
+                                    subtitle=extra.subtitle
+                                    artwork_url=extra.artwork_path
+                                    href=Some(format!("/media/other/videos/{extra_id}"))
+                                    placeholder=placeholder
+                                    state=MediaItemState::Normal
+                                    badge=content_variant_badge_label(
+                                        extra.variant.content_kind,
+                                        extra.variant.sub_kind.as_deref(),
+                                    )
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                </section>
 
                 <section class=detail_style::actors_section style=actors_style>
                     <h2 class=detail_style::section_title>{tr(TextKey::Actors)}</h2>

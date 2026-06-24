@@ -58,6 +58,7 @@ pub fn MediaCard(
     #[prop(default = None)] subtitle: Option<String>,
     #[prop(default = None)] artwork_url: Option<String>,
     #[prop(default = None)] href: Option<String>,
+    #[prop(default = None)] badge: Option<String>,
     #[prop(into, default = String::new())] placeholder: String,
     #[prop(default = MediaItemState::Normal)] state: MediaItemState,
     #[prop(default = Signal::derive(|| false))] select_mode: Signal<bool>,
@@ -238,6 +239,9 @@ pub fn MediaCard(
                             })}
                         </div>
                     </details>
+                })}
+                {badge.map(|label| view! {
+                    <span class=style::variant_badge>{label}</span>
                 })}
                 {state_overlay}
             </div>

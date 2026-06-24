@@ -17,6 +17,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::admin::server_fns::media_browser::ContentVariantInfo;
+
 /// Bulk-id payload returned by the `search_all_ids` query (ported from
 /// `ErsatzTV`'s `QuerySearchIndexAllItems`) and consumed by mixed-kind bulk
 /// actions like `add_media_items_to_playlist_mixed`. One `Vec<i64>` per
@@ -136,6 +138,8 @@ pub struct SearchCard {
     pub placeholder: String,
     pub state: ersatzrs_domain::MediaItemState,
     pub href: String,
+    #[serde(default)]
+    pub variant: ContentVariantInfo,
 }
 
 /// Per-kind card-results section. Equals `Cards` + `TotalCount` in
@@ -536,6 +540,11 @@ fn build_card(
         placeholder,
         state,
         href,
+        variant: ContentVariantInfo {
+            content_kind: hit.content_kind,
+            sub_kind: hit.sub_kind.clone(),
+            parent_title: hit.parent_title.clone(),
+        },
     }
 }
 

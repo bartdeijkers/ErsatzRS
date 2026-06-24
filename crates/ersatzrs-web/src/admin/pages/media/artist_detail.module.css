@@ -50,6 +50,13 @@
     margin-top: 2rem;
 }
 
+.section-title {
+    margin: 0 0 1rem;
+    color: var(--color-gray-100);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
 .music-video-stack {
     display: flex;
     flex-direction: column;

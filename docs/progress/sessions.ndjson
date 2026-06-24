@@ -1,3 +1,4 @@
+{"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 1 media UI surfacing with hidden-by-default browse toggle, variant badges, detail sections, search token help, and seeded browser proof"}
 {"agent":"codex","date":"2026-06-24","summary":"Ported /channels/numbers channel-number editor parity"}
 {"agent":"codex","date":"2026-06-24","summary":"Removed Docker/GHCR release publication and documented the Linux/Windows-only release line"}
 {"agent":"Codex (GPT-5)","date":"2026-06-24","summary":"Closed the HLS segmenter normalized append regression with semantic discontinuity handling, HLS PCR normalization, and profile-derived MPEG-TS wrapper muxrate proof; refreshed progress, ADR, changelog, and top-three prompts."}

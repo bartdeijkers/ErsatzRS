@@ -30,7 +30,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{season_display_name, tr, TextKey};
+use crate::admin::i18n::{content_variant_badge_label, season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
 use crate::admin::server_fns::libraries::scan_show;
@@ -120,14 +120,18 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
         networks,
         actors,
         seasons,
+        extras,
     } = show;
 
     let is_remote = matches!(media_source_kind.as_str(), "Plex" | "Jellyfin" | "Emby");
 
     // Single-item selection set reused by the shared Add-To modals.
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
+    let extra_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let collection_open = RwSignal::new(false);
     let playlist_open = RwSignal::new(false);
+    let extra_collection_open = RwSignal::new(false);
+    let extra_playlist_open = RwSignal::new(false);
     let schedule_open = RwSignal::new(false);
 
     let open_with_selection = move |target: RwSignal<bool>| {
@@ -266,6 +270,41 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                     }).collect_view()}
                 </div>
 
+                {(!extras.is_empty()).then(|| view! {
+                    <h2 class=style::section_title>{tr(TextKey::ContentVariantSpecialFeatures)}</h2>
+                    <div class=style::divider/>
+                    <div class=style::grid>
+                        {extras.into_iter().map(|extra| {
+                            let extra_id = extra.id;
+                            let title = extra.title.clone();
+                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
+                            view! {
+                                <MediaCard
+                                    title=title
+                                    subtitle=extra.subtitle
+                                    artwork_url=extra.artwork_path
+                                    href=Some(format!("/media/other/videos/{extra_id}"))
+                                    placeholder=placeholder
+                                    state=MediaItemState::Normal
+                                    badge=content_variant_badge_label(
+                                        extra.variant.content_kind,
+                                        extra.variant.sub_kind.as_deref(),
+                                    )
+                                    on_add_to_collection=Some(Callback::new(move |()| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_collection_open.set(true);
+                                    }))
+                                    on_add_to_playlist=Some(Callback::new(move |()| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_playlist_open.set(true);
+                                    }))
+                                    menu_media_item_id=Some(extra_id)
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                })}
+
                 {(!actors.is_empty()).then(|| view! {
                     <h2 class=style::section_title>{tr(TextKey::Actors)}</h2>
                     <div class=style::divider/>
@@ -290,6 +329,12 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
 
             <AddToCollectionModal open=collection_open selected=selected/>
             <AddToPlaylistModal open=playlist_open selected=selected kind=MediaBrowserKind::Show/>
+            <AddToCollectionModal open=extra_collection_open selected=extra_selected/>
+            <AddToPlaylistModal
+                open=extra_playlist_open
+                selected=extra_selected
+                kind=MediaBrowserKind::OtherVideo
+            />
             <AddToScheduleModal
                 open=schedule_open
                 media_item_id=id

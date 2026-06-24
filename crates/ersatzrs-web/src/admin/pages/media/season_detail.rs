@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{season_display_name, tr, TextKey};
+use crate::admin::i18n::{content_variant_badge_label, season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
@@ -20,6 +20,7 @@ use crate::admin::pages::media::multi_select_browser::{
 use crate::admin::server_fns::media_browser::{
     get_media_item_info_json, get_season_details, EpisodeCardRow, MediaBrowserKind, SeasonDetailRow,
 };
+use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 #[allow(dead_code)]
@@ -85,17 +86,21 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
         fanart_url,
         episode_count: _,
         episodes,
+        extras,
     } = season;
 
     let season_collection_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
     let season_playlist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
     let episode_collection_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
     let episode_playlist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
+    let extra_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
 
     let season_collection_open = RwSignal::new(false);
     let season_playlist_open = RwSignal::new(false);
     let episode_collection_open = RwSignal::new(false);
     let episode_playlist_open = RwSignal::new(false);
+    let extra_collection_open = RwSignal::new(false);
+    let extra_playlist_open = RwSignal::new(false);
     let schedule_open = RwSignal::new(false);
 
     let media_info_open = RwSignal::new(false);
@@ -215,6 +220,41 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                         }
                     }).collect_view()}
                 </div>
+
+                {(!extras.is_empty()).then(|| view! {
+                    <h2 class=show_style::section_title>{tr(TextKey::ContentVariantSpecialFeatures)}</h2>
+                    <div class=show_style::divider/>
+                    <div class=show_style::grid>
+                        {extras.into_iter().map(|extra| {
+                            let extra_id = extra.id;
+                            let title = extra.title.clone();
+                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
+                            view! {
+                                <MediaCard
+                                    title=title
+                                    subtitle=extra.subtitle
+                                    artwork_url=extra.artwork_path
+                                    href=Some(format!("/media/other/videos/{extra_id}"))
+                                    placeholder=placeholder
+                                    state=MediaItemState::Normal
+                                    badge=content_variant_badge_label(
+                                        extra.variant.content_kind,
+                                        extra.variant.sub_kind.as_deref(),
+                                    )
+                                    on_add_to_collection=Some(Callback::new(move |()| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_collection_open.set(true);
+                                    }))
+                                    on_add_to_playlist=Some(Callback::new(move |()| {
+                                        extra_selected.set(HashSet::from([extra_id]));
+                                        extra_playlist_open.set(true);
+                                    }))
+                                    menu_media_item_id=Some(extra_id)
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                })}
             </div>
 
             <AddToCollectionModal open=season_collection_open selected=season_collection_selected/>
@@ -228,6 +268,12 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                 open=episode_playlist_open
                 selected=episode_playlist_selected
                 kind=MediaBrowserKind::Episode
+            />
+            <AddToCollectionModal open=extra_collection_open selected=extra_selected/>
+            <AddToPlaylistModal
+                open=extra_playlist_open
+                selected=extra_selected
+                kind=MediaBrowserKind::OtherVideo
             />
             <AddToScheduleModal
                 open=schedule_open

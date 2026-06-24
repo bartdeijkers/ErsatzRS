@@ -89,6 +89,7 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
         moods,
         languages,
         music_videos,
+        versions,
     } = artist;
 
     let artist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
@@ -129,6 +130,11 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
         "display:none"
     };
     let music_video_style = if music_videos.is_empty() {
+        "display:none"
+    } else {
+        ""
+    };
+    let versions_style = if versions.is_empty() {
         "display:none"
     } else {
         ""
@@ -186,6 +192,24 @@ fn ArtistDetailView(artist: ArtistDetailRow) -> impl IntoView {
                 <section class=style::music_video_section style=music_video_style>
                     <div class=style::music_video_stack>
                         {music_videos.into_iter().map(|video| {
+                            let video_id = video.id;
+                            view! {
+                                <MusicVideoRow
+                                    video=video
+                                    on_add_collection=Callback::new(move |(): ()| {
+                                        music_video_selected.set(HashSet::from([video_id]));
+                                        music_video_collection_open.set(true);
+                                    })
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                </section>
+
+                <section class=style::music_video_section style=versions_style>
+                    <h2 class=style::section_title>{tr(TextKey::ContentVariantVersions)}</h2>
+                    <div class=style::music_video_stack>
+                        {versions.into_iter().map(|video| {
                             let video_id = video.id;
                             view! {
                                 <MusicVideoRow

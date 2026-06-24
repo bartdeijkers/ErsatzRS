@@ -24,18 +24,18 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, episode_display_subtitle, item_count, range_of, season_display_name,
-    select_collection_to_add_selected_items, select_playlist_to_add_selected_items,
-    selected_items_count, tr, TextKey,
+    added_items_to_playlist, content_variant_badge_label, episode_display_subtitle, item_count,
+    range_of, season_display_name, select_collection_to_add_selected_items,
+    select_playlist_to_add_selected_items, selected_items_count, tr, TextKey,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
-    get_media_item_info_json, list_artists, list_episodes, list_movies, list_music_videos,
-    list_other_videos, list_remote_streams, list_seasons, list_shows, media_page_map,
-    CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow, PlaylistGroupOption,
-    PlaylistOption,
+    get_media_item_info_json, get_show_content_variants_pref, list_artists, list_episodes,
+    list_movies, list_music_videos, list_other_videos, list_remote_streams, list_seasons,
+    list_shows, media_page_map, set_show_content_variants_pref, CollectionOption, LetterPageMap,
+    MediaBrowserKind, MediaCardRow, PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -190,26 +190,37 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     use leptos_router::hooks::use_query_map;
 
     let query_map = use_query_map();
-    let (initial_query, initial_page) = query_map.with_untracked(|p| {
-        let q = p.get("query").unwrap_or_default();
-        let pg = p
-            .get("page")
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(1)
-            .saturating_sub(1);
-        (q, pg)
-    });
+    let (initial_query, initial_page, initial_show_variants, show_variants_from_url) = query_map
+        .with_untracked(|p| {
+            let q = p.get("query").unwrap_or_default();
+            let pg = p
+                .get("page")
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(1)
+                .saturating_sub(1);
+            let explicit_variants = p.get("show_variants");
+            let show_variants = explicit_variants
+                .as_deref()
+                .is_some_and(|value| matches!(value, "1" | "true" | "on"));
+            (q, pg, show_variants, explicit_variants.is_some())
+        });
 
     let toolbar_query = initial_query.clone();
     let title = config.title;
     let base_path = config.base_path;
     let initial_query_for_resource = initial_query.clone();
     let initial: Resource<((Vec<MediaCardRow>, u64), LetterPageMap)> = Resource::new_blocking(
-        move || (initial_query_for_resource.clone(), initial_page),
-        move |(q, p)| async move {
+        move || {
+            (
+                initial_query_for_resource.clone(),
+                initial_page,
+                initial_show_variants,
+            )
+        },
+        move |(q, p, show_variants)| async move {
             let (rows, page_map) = tokio::join!(
-                load_browser_rows(config.kind, q.clone(), p),
-                load_browser_page_map(config.kind, q),
+                load_browser_rows(config.kind, q.clone(), p, show_variants),
+                load_browser_page_map(config.kind, q, show_variants),
             );
             (rows, page_map)
         },
@@ -240,6 +251,8 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                                 initial_rows=initial_rows
                                 initial_total=initial_total
                                 initial_page_map=initial_page_map
+                                initial_show_variants=initial_show_variants
+                                show_variants_from_url=show_variants_from_url
                             />
                         }
                     })
@@ -257,18 +270,23 @@ fn MultiSelectIsland(
     initial_rows: Vec<MediaCardRow>,
     initial_total: u64,
     initial_page_map: LetterPageMap,
+    initial_show_variants: bool,
+    show_variants_from_url: bool,
 ) -> impl IntoView {
     let config = BrowserKindConfig::from_kind_code(kind_code);
     let kind = config.kind;
     let media_revision = RwSignal::new(String::new());
+    let show_variants = RwSignal::new(initial_show_variants);
     let current_data = RwSignal::new((initial_rows, initial_total));
     let current_page_map = RwSignal::new(initial_page_map);
+    let save_variants_action = Action::new(|value: &bool| set_show_content_variants_pref(*value));
 
     let q_for_resource = query.clone();
     let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
         let q = q_for_resource.clone();
         let _ = media_revision.get();
-        async move { load_browser_rows(kind, q, page).await }
+        let variants = show_variants.get();
+        async move { load_browser_rows(kind, q, page, variants).await }
     });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
@@ -287,7 +305,8 @@ fn MultiSelectIsland(
     let page_map: LocalResource<LetterPageMap> = LocalResource::new(move || {
         let q = q_for_map.clone();
         let _ = media_revision.get();
-        async move { load_browser_page_map(kind, q).await }
+        let variants = show_variants.get();
+        async move { load_browser_page_map(kind, q, variants).await }
     });
     Effect::new(move |_| {
         if let Some(next_page_map) = page_map.get() {
@@ -318,6 +337,19 @@ fn MultiSelectIsland(
         }
     });
 
+    let pref: LocalResource<bool> =
+        LocalResource::new(
+            || async move { get_show_content_variants_pref().await.unwrap_or(false) },
+        );
+    Effect::new(move |_| {
+        if show_variants_from_url {
+            return;
+        }
+        if let Some(value) = pref.get() {
+            show_variants.set(value);
+        }
+    });
+
     view! {
         {move || {
             let query_for_links = query.clone();
@@ -329,10 +361,29 @@ fn MultiSelectIsland(
             let jump = LetterJump {
                 base_uri: config.base_path.to_string(),
                 query: query.clone(),
+                show_variants: show_variants.get(),
                 page_map: current_page_map.get(),
             };
 
             view! {
+                <form method="get" action=config.base_path class=style::variant_toggle>
+                    <input type="hidden" name="query" value=query.clone()/>
+                    <label class=style::variant_toggle_label>
+                        <input
+                            type="checkbox"
+                            name="show_variants"
+                            value="1"
+                            prop:checked=move || show_variants.get()
+                            on:change=move |e| {
+                                let value = event_target_checked(&e);
+                                show_variants.set(value);
+                                save_variants_action.dispatch(value);
+                            }
+                        />
+                        <span>{tr(TextKey::ContentVariantShowToggle)}</span>
+                    </label>
+                    <button type="submit" class=style::variant_apply>{tr(TextKey::Search)}</button>
+                </form>
                 <LetterBar present=present jump=jump/>
                 <GridWithSelection
                     rows=rows
@@ -340,6 +391,7 @@ fn MultiSelectIsland(
                     page=page
                     query=query_for_links
                     config=config
+                    show_variants=show_variants.get()
                 />
             }
         }}
@@ -350,22 +402,31 @@ async fn load_browser_rows(
     kind: MediaBrowserKind,
     query: String,
     page: u32,
+    show_variants: bool,
 ) -> (Vec<MediaCardRow>, u64) {
     match kind {
-        MediaBrowserKind::Movie => list_movies(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::Show => list_shows(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::Artist => list_artists(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::OtherVideo => list_other_videos(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::Season => list_seasons(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::Episode => list_episodes(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::MusicVideo => list_music_videos(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Movie => list_movies(query, page, PAGE_SIZE, show_variants).await,
+        MediaBrowserKind::Show => list_shows(query, page, PAGE_SIZE, show_variants).await,
+        MediaBrowserKind::Artist => list_artists(query, page, PAGE_SIZE, show_variants).await,
+        MediaBrowserKind::OtherVideo => {
+            list_other_videos(query, page, PAGE_SIZE, show_variants).await
+        }
+        MediaBrowserKind::Season => list_seasons(query, page, PAGE_SIZE, show_variants).await,
+        MediaBrowserKind::Episode => list_episodes(query, page, PAGE_SIZE, show_variants).await,
+        MediaBrowserKind::MusicVideo => {
+            list_music_videos(query, page, PAGE_SIZE, show_variants).await
+        }
         MediaBrowserKind::RemoteStream => list_remote_streams(query, page, PAGE_SIZE).await,
     }
     .unwrap_or_default()
 }
 
-async fn load_browser_page_map(kind: MediaBrowserKind, query: String) -> LetterPageMap {
-    media_page_map(kind, query, PAGE_SIZE)
+async fn load_browser_page_map(
+    kind: MediaBrowserKind,
+    query: String,
+    show_variants: bool,
+) -> LetterPageMap {
+    media_page_map(kind, query, PAGE_SIZE, show_variants)
         .await
         .unwrap_or_default()
 }
@@ -377,6 +438,7 @@ fn GridWithSelection(
     page: u32,
     query: String,
     config: BrowserKindConfig,
+    show_variants: bool,
 ) -> impl IntoView {
     let kind = config.kind;
     let selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
@@ -471,6 +533,7 @@ fn GridWithSelection(
                 query=query.clone()
                 page=page
                 total=total
+                show_variants=show_variants
             />
             <div style="flex: 1; display: flex; justify-content: flex-end;">
                 <button
@@ -575,6 +638,8 @@ fn SelectableCard(
     let title_for_link = title.clone();
     let title_for_collection = title.clone();
     let title_for_info = title.clone();
+    let variant_badge =
+        content_variant_badge_label(row.variant.content_kind, row.variant.sub_kind.as_deref());
     let subtitle = if config.kind == MediaBrowserKind::Episode {
         row.subtitle
             .as_deref()
@@ -637,6 +702,9 @@ fn SelectableCard(
                                 <div class=card_style::poster_placeholder>{placeholder}</div>
                             }.into_any(),
                         }}
+                        {variant_badge.map(|label| view! {
+                            <span class=style::variant_badge>{label}</span>
+                        })}
                     </div>
                     <div class=card_style::caption>
                         <p class=card_style::caption_title>{title}</p>
@@ -1056,7 +1124,13 @@ pub(crate) fn AddToPlaylistModal(
 }
 
 #[component]
-fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) -> impl IntoView {
+fn PagerCenter(
+    base_path: &'static str,
+    query: String,
+    page: u32,
+    total: u64,
+    show_variants: bool,
+) -> impl IntoView {
     let max_page = if total == 0 {
         0
     } else {
@@ -1082,6 +1156,9 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
         }
         if p > 0 {
             params.push(format!("page={}", p + 1));
+        }
+        if show_variants {
+            params.push("show_variants=1".to_string());
         }
         if !params.is_empty() {
             url.push('?');

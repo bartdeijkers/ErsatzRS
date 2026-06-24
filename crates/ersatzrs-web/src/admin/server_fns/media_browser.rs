@@ -29,6 +29,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+const SHOW_CONTENT_VARIANTS_PREF_KEY: &str = "pages.media.show_content_variants";
+
 #[cfg(feature = "ssr")]
 async fn inserted_id<'e, E>(
     executor: E,
@@ -64,6 +66,27 @@ pub struct MediaCardRow {
     pub artwork_path: Option<String>,
     #[serde(default)]
     pub season_number: Option<i64>,
+    #[serde(default)]
+    pub variant: ContentVariantInfo,
+}
+
+/// Shared ADR 0018 content-variant display metadata carried by cards and
+/// detail-page sections.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContentVariantInfo {
+    #[serde(default)]
+    pub content_kind: ersatzrs_domain::ContentKind,
+    #[serde(default)]
+    pub sub_kind: Option<String>,
+    #[serde(default)]
+    pub parent_title: Option<String>,
+}
+
+impl ContentVariantInfo {
+    #[must_use]
+    pub const fn is_primary(&self) -> bool {
+        matches!(self.content_kind, ersatzrs_domain::ContentKind::Primary)
+    }
 }
 
 /// Page-map for the alphabetic jump-bar. Mirrors `ErsatzTV`'s
@@ -114,6 +137,7 @@ pub struct MovieDetailRow {
     pub directors: Vec<String>,
     pub writers: Vec<String>,
     pub actors: Vec<ActorCardRow>,
+    pub extras: Vec<MediaCardRow>,
 }
 
 /// Detailed projection for the other-video details page. ErsatzTV only ships
@@ -190,6 +214,7 @@ pub struct ShowDetailRow {
     pub networks: Vec<String>,
     pub actors: Vec<ActorCardRow>,
     pub seasons: Vec<SeasonCardRow>,
+    pub extras: Vec<MediaCardRow>,
 }
 
 /// One episode row on the TV season details page. Mirrors
@@ -230,6 +255,7 @@ pub struct SeasonDetailRow {
     pub fanart_url: Option<String>,
     pub episode_count: i64,
     pub episodes: Vec<EpisodeCardRow>,
+    pub extras: Vec<MediaCardRow>,
 }
 
 /// One music-video row on the artist details page. Mirrors
@@ -264,6 +290,7 @@ pub struct ArtistDetailRow {
     pub moods: Vec<String>,
     pub languages: Vec<String>,
     pub music_videos: Vec<ArtistMusicVideoRow>,
+    pub versions: Vec<ArtistMusicVideoRow>,
 }
 
 #[cfg(feature = "ssr")]
@@ -580,6 +607,80 @@ fn short_date(value: Option<&str>) -> String {
     value.to_string()
 }
 
+#[cfg(feature = "ssr")]
+fn content_kind_from_db(value: i32) -> ersatzrs_domain::ContentKind {
+    match value {
+        1 => ersatzrs_domain::ContentKind::Extra,
+        2 => ersatzrs_domain::ContentKind::AlternateVersion,
+        _ => ersatzrs_domain::ContentKind::Primary,
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn content_variant_from_row(row: &ersatzrs_infra::db::DbRow) -> ContentVariantInfo {
+    use sqlx::Row;
+
+    ContentVariantInfo {
+        content_kind: content_kind_from_db(row.try_get("ContentKind").unwrap_or(0)),
+        sub_kind: row.try_get::<Option<String>, _>("SubKind").unwrap_or(None),
+        parent_title: row
+            .try_get::<Option<String>, _>("ParentTitle")
+            .unwrap_or(None),
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn load_extra_cards(
+    pool: &ersatzrs_infra::db::DbPool,
+    parent_media_item_id: i64,
+) -> Result<Vec<MediaCardRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT ov."Id" AS "Id",
+                  COALESCE(ovm."Title", '') AS "Title",
+                  COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
+                  ovm."Year" AS "Year",
+                  COALESCE(thumb."Path", poster."Path") AS "Artwork",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind",
+                  NULL AS "ParentTitle"
+           FROM "OtherVideo" ov
+           JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           JOIN "MediaItem" mi ON mi."Id" = ov."Id"
+           LEFT JOIN "Artwork" thumb
+               ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
+           LEFT JOIN "Artwork" poster
+               ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
+           WHERE mi."ParentMediaItemId" = ?
+             AND COALESCE(mi."ContentKind", 0) = 1
+           ORDER BY COALESCE(mi."SubKind", ''), ovm."SortTitle", ovm."Title""#,
+    )
+    .bind(parent_media_item_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .iter()
+        .map(|r| MediaCardRow {
+            id: r.try_get("Id").unwrap_or(0),
+            title: r.try_get("Title").unwrap_or_default(),
+            sort_title: r.try_get("SortTitle").unwrap_or_default(),
+            subtitle: r
+                .try_get::<Option<i64>, _>("Year")
+                .unwrap_or(None)
+                .map(|year| year.to_string()),
+            artwork_path: r
+                .try_get::<Option<String>, _>("Artwork")
+                .unwrap_or(None)
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+            season_number: None,
+            variant: content_variant_from_row(r),
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Movies
 // ---------------------------------------------------------------------------
@@ -595,6 +696,7 @@ pub async fn list_movies(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -606,10 +708,13 @@ pub async fn list_movies(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "MovieMetadata" mm
-           WHERE (? = '' OR mm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = mm."MovieId"
+           WHERE (? = '' OR mm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -618,17 +723,22 @@ pub async fn list_movies(
                   COALESCE(mm."Title", '') AS "Title",
                   COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
                   mm."Year" AS "Year",
-                  a."Path" AS "Poster"
+                  a."Path" AS "Poster",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Movie" m
            JOIN "MovieMetadata" mm ON mm."MovieId" = m."Id"
+           JOIN "MediaItem" mi ON mi."Id" = m."Id"
            LEFT JOIN "Artwork" a
                ON a."MovieMetadataId" = mm."Id" AND a."ArtworkKind" = 0
            WHERE (? = '' OR mm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY mm."SortTitle", mm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -649,6 +759,7 @@ pub async fn list_movies(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -779,6 +890,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
         })
         .collect();
+    let extras = load_extra_cards(&state.pool, id).await?;
 
     Ok(Some(MovieDetailRow {
         id: row.try_get("Id").unwrap_or(0),
@@ -802,6 +914,7 @@ pub async fn get_movie_details(id: i64) -> Result<Option<MovieDetailRow>, Server
         directors,
         writers,
         actors,
+        extras,
     }))
 }
 
@@ -975,6 +1088,7 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
             }
         })
         .collect();
+    let extras = load_extra_cards(&state.pool, id).await?;
 
     Ok(Some(ShowDetailRow {
         id: row.try_get("Id").unwrap_or(0),
@@ -994,6 +1108,7 @@ pub async fn get_show_details(id: i64) -> Result<Option<ShowDetailRow>, ServerFn
         networks,
         actors,
         seasons,
+        extras,
     }))
 }
 
@@ -1019,6 +1134,7 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
     };
     let episode_count = repo.get_episode_count(id).await?;
     let episodes = repo.get_paged_episodes(id, PAGE_NUMBER, PAGE_SIZE).await?;
+    let extras = load_extra_cards(&state.pool, id).await?;
 
     let season_number = i64::from(season.season_number);
     Ok(Some(SeasonDetailRow {
@@ -1058,6 +1174,7 @@ pub async fn get_season_details(id: i64) -> Result<Option<SeasonDetailRow>, Serv
                 local_path: episode.local_path,
             })
             .collect(),
+        extras,
     }))
 }
 
@@ -2093,6 +2210,7 @@ pub async fn list_shows(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2104,10 +2222,13 @@ pub async fn list_shows(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ShowMetadata" sm
-           WHERE (? = '' OR sm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = sm."ShowId"
+           WHERE (? = '' OR sm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2116,17 +2237,22 @@ pub async fn list_shows(
                   COALESCE(sm."Title", '') AS "Title",
                   COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
                   sm."Year" AS "Year",
-                  a."Path" AS "Poster"
+                  a."Path" AS "Poster",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Show" s
            JOIN "ShowMetadata" sm ON sm."ShowId" = s."Id"
+           JOIN "MediaItem" mi ON mi."Id" = s."Id"
            LEFT JOIN "Artwork" a
                ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
            WHERE (? = '' OR sm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY sm."SortTitle", sm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2147,6 +2273,7 @@ pub async fn list_shows(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -2163,6 +2290,7 @@ pub async fn list_images(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2174,10 +2302,13 @@ pub async fn list_images(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ImageMetadata" im
-           WHERE (? = '' OR im."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = im."ImageId"
+           WHERE (? = '' OR im."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2186,17 +2317,22 @@ pub async fn list_images(
                   COALESCE(im."Title", '') AS "Title",
                   COALESCE(im."SortTitle", im."Title", '') AS "SortTitle",
                   im."ReleaseDate" AS "ReleaseDate",
-                  a."Path" AS "Thumb"
+                  a."Path" AS "Thumb",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Image" i
            JOIN "ImageMetadata" im ON im."ImageId" = i."Id"
+           JOIN "MediaItem" mi ON mi."Id" = i."Id"
            LEFT JOIN "Artwork" a
                ON a."ImageMetadataId" = im."Id"
            WHERE (? = '' OR im."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY im."SortTitle", im."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2216,6 +2352,7 @@ pub async fn list_images(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -2232,6 +2369,7 @@ pub async fn list_artists(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2243,10 +2381,13 @@ pub async fn list_artists(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "ArtistMetadata" am
-           WHERE (? = '' OR am."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = am."ArtistId"
+           WHERE (? = '' OR am."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2255,17 +2396,22 @@ pub async fn list_artists(
                   COALESCE(am."Title", '') AS "Title",
                   COALESCE(am."SortTitle", am."Title", '') AS "SortTitle",
                   am."Disambiguation" AS "Subtitle",
-                  art."Path" AS "Thumb"
+                  art."Path" AS "Thumb",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Artist" a
            JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
+           JOIN "MediaItem" mi ON mi."Id" = a."Id"
            LEFT JOIN "Artwork" art
                ON art."ArtistMetadataId" = am."Id" AND art."ArtworkKind" = 1
            WHERE (? = '' OR am."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY am."SortTitle", am."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2283,6 +2429,7 @@ pub async fn list_artists(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -2339,7 +2486,8 @@ pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, Serv
     moods.sort();
 
     let languages = load_artist_languages(&state.pool, id).await?;
-    let music_videos = load_artist_music_videos(&state.pool, id).await?;
+    let music_videos = load_artist_music_videos(&state.pool, id, false).await?;
+    let versions = load_artist_music_videos(&state.pool, id, true).await?;
 
     Ok(Some(ArtistDetailRow {
         id,
@@ -2365,6 +2513,7 @@ pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, Serv
         moods,
         languages,
         music_videos,
+        versions,
     }))
 }
 
@@ -2372,6 +2521,7 @@ pub async fn get_artist_details(id: i64) -> Result<Option<ArtistDetailRow>, Serv
 async fn load_artist_music_videos(
     pool: &ersatzrs_infra::db::DbPool,
     artist_id: i64,
+    versions: bool,
 ) -> Result<Vec<ArtistMusicVideoRow>, ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use sqlx::Row;
@@ -2408,10 +2558,12 @@ async fn load_artist_music_videos(
                   LIMIT 1
               )
            WHERE mv."ArtistId" = ?
+             AND COALESCE(mi."ContentKind", 0) = ?
            ORDER BY mvm."SortTitle", mvm."Title"
            LIMIT 100"#,
     )
     .bind(artist_id)
+    .bind(if versions { 2_i64 } else { 0_i64 })
     .fetch_all(pool)
     .await?;
 
@@ -2457,6 +2609,7 @@ pub async fn list_other_videos(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2468,10 +2621,13 @@ pub async fn list_other_videos(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "OtherVideoMetadata" ovm
-           WHERE (? = '' OR ovm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = ovm."OtherVideoId"
+           WHERE (? = '' OR ovm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2480,19 +2636,24 @@ pub async fn list_other_videos(
                   COALESCE(ovm."Title", '') AS "Title",
                   COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
                   ovm."OriginalTitle" AS "Subtitle",
-                  COALESCE(thumb."Path", poster."Path") AS "Artwork"
+                  COALESCE(thumb."Path", poster."Path") AS "Artwork",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "OtherVideo" ov
            JOIN "OtherVideoMetadata" ovm ON ovm."OtherVideoId" = ov."Id"
+           JOIN "MediaItem" mi ON mi."Id" = ov."Id"
            LEFT JOIN "Artwork" thumb
                ON thumb."OtherVideoMetadataId" = ovm."Id" AND thumb."ArtworkKind" = 1
            LEFT JOIN "Artwork" poster
                ON poster."OtherVideoMetadataId" = ovm."Id" AND poster."ArtworkKind" = 0
            WHERE (? = '' OR ovm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY ovm."SortTitle", ovm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2510,6 +2671,7 @@ pub async fn list_other_videos(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -2717,6 +2879,7 @@ pub async fn list_seasons(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2732,10 +2895,13 @@ pub async fn list_seasons(
         r#"SELECT COUNT(*) FROM "Season" s
            JOIN "Show" sh ON sh."Id" = s."ShowId"
            JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
-           WHERE (? = '' OR shm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = s."Id"
+           WHERE (? = '' OR shm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2744,21 +2910,26 @@ pub async fn list_seasons(
                   s."SeasonNumber" AS "SeasonNumber",
                   COALESCE(shm."Title", '') AS "ShowTitle",
                   COALESCE(shm."SortTitle", shm."Title", '') AS "ShowSortTitle",
-                  COALESCE(sa."Path", sha."Path") AS "Poster"
+                  COALESCE(sa."Path", sha."Path") AS "Poster",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Season" s
            JOIN "Show" sh ON sh."Id" = s."ShowId"
            JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
+           JOIN "MediaItem" mi ON mi."Id" = s."Id"
            LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
            LEFT JOIN "Artwork" sa
                ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
            LEFT JOIN "Artwork" sha
                ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
            WHERE (? = '' OR shm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY shm."SortTitle", shm."Title", s."SeasonNumber"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2787,6 +2958,7 @@ pub async fn list_seasons(
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
                 season_number: Some(number),
+                variant: content_variant_from_row(r),
             }
         })
         .collect();
@@ -2807,6 +2979,7 @@ pub async fn list_episodes(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2818,10 +2991,13 @@ pub async fn list_episodes(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "EpisodeMetadata" em
-           WHERE (? = '' OR em."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = em."EpisodeId"
+           WHERE (? = '' OR em."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2832,9 +3008,12 @@ pub async fn list_episodes(
                   em."EpisodeNumber" AS "EpisodeNumber",
                   s."SeasonNumber" AS "SeasonNumber",
                   COALESCE(shm."Title", '') AS "ShowTitle",
-                  COALESCE(ea."Path", sa."Path", sha."Path") AS "Poster"
+                  COALESCE(ea."Path", sa."Path", sha."Path") AS "Poster",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Episode" e
            JOIN "EpisodeMetadata" em ON em."EpisodeId" = e."Id"
+           JOIN "MediaItem" mi ON mi."Id" = e."Id"
            JOIN "Season" s ON s."Id" = e."SeasonId"
            JOIN "Show" sh ON sh."Id" = s."ShowId"
            JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
@@ -2846,11 +3025,13 @@ pub async fn list_episodes(
            LEFT JOIN "Artwork" sha
                ON sha."ShowMetadataId" = shm."Id" AND sha."ArtworkKind" = 0
            WHERE (? = '' OR em."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY em."SortTitle", em."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2874,6 +3055,7 @@ pub async fn list_episodes(
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
                 season_number: None,
+                variant: content_variant_from_row(r),
             }
         })
         .collect();
@@ -2893,6 +3075,7 @@ pub async fn list_music_videos(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -2904,10 +3087,13 @@ pub async fn list_music_videos(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "MusicVideoMetadata" mvm
-           WHERE (? = '' OR mvm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = mvm."MusicVideoId"
+           WHERE (? = '' OR mvm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -2916,19 +3102,24 @@ pub async fn list_music_videos(
                   COALESCE(mvm."Title", '') AS "Title",
                   COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
                   am."Title" AS "ArtistName",
-                  art."Path" AS "Thumb"
+                  art."Path" AS "Thumb",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "MusicVideo" mv
            JOIN "MusicVideoMetadata" mvm ON mvm."MusicVideoId" = mv."Id"
+           JOIN "MediaItem" mi ON mi."Id" = mv."Id"
            LEFT JOIN "Artist" a ON a."Id" = mv."ArtistId"
            LEFT JOIN "ArtistMetadata" am ON am."ArtistId" = a."Id"
            LEFT JOIN "Artwork" art
                ON art."MusicVideoMetadataId" = mvm."Id" AND art."ArtworkKind" = 1
            WHERE (? = '' OR mvm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY mvm."SortTitle", mvm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -2949,6 +3140,7 @@ pub async fn list_music_videos(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -3064,6 +3256,11 @@ pub async fn list_remote_streams(
                     .get(&hit.media_item_id)
                     .and_then(|p| artwork_url(p, ArtworkUrlKind::Poster)),
                 season_number: None,
+                variant: ContentVariantInfo {
+                    content_kind: hit.content_kind,
+                    sub_kind: hit.sub_kind,
+                    parent_title: hit.parent_title,
+                },
             }
         })
         .collect();
@@ -3080,6 +3277,7 @@ pub async fn list_songs(
     search: String,
     page: u32,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use crate::api::artwork::{artwork_url, ArtworkUrlKind};
     use crate::host::state::AppState;
@@ -3091,10 +3289,13 @@ pub async fn list_songs(
 
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "SongMetadata" sm
-           WHERE (? = '' OR sm."Title" LIKE ?)"#,
+           JOIN "MediaItem" mi ON mi."Id" = sm."SongId"
+           WHERE (? = '' OR sm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .fetch_one(&state.pool)
     .await?;
 
@@ -3104,17 +3305,22 @@ pub async fn list_songs(
                   COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
                   sm."Artists",
                   sm."Album",
-                  art."Path" AS "Thumb"
+                  art."Path" AS "Thumb",
+                  COALESCE(mi."ContentKind", 0) AS "ContentKind",
+                  mi."SubKind" AS "SubKind"
            FROM "Song" s
            JOIN "SongMetadata" sm ON sm."SongId" = s."Id"
+           JOIN "MediaItem" mi ON mi."Id" = s."Id"
            LEFT JOIN "Artwork" art
                ON art."SongMetadataId" = sm."Id" AND art."ArtworkKind" = 1
            WHERE (? = '' OR sm."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY sm."SortTitle", sm."Title"
            LIMIT ? OFFSET ?"#,
     )
     .bind(search.trim())
     .bind(&like)
+    .bind(i64::from(show_variants))
     .bind(i64::from(page_size))
     .bind(offset)
     .fetch_all(&state.pool)
@@ -3135,6 +3341,7 @@ pub async fn list_songs(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: content_variant_from_row(r),
         })
         .collect();
 
@@ -3260,6 +3467,7 @@ async fn load_trash_movies(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3302,6 +3510,7 @@ async fn load_trash_shows(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3349,6 +3558,7 @@ async fn load_trash_seasons(
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
                 season_number: Some(number),
+                variant: ContentVariantInfo::default(),
             }
         })
         .collect())
@@ -3405,6 +3615,7 @@ async fn load_trash_episodes(
                     .unwrap_or(None)
                     .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
                 season_number: None,
+                variant: ContentVariantInfo::default(),
             }
         })
         .collect())
@@ -3445,6 +3656,7 @@ async fn load_trash_artists(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3489,6 +3701,7 @@ async fn load_trash_music_videos(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3530,6 +3743,7 @@ async fn load_trash_other_videos(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3573,6 +3787,7 @@ async fn load_trash_songs(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3613,6 +3828,7 @@ async fn load_trash_images(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -3652,6 +3868,7 @@ async fn load_trash_remote_streams(
                 .unwrap_or(None)
                 .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
             season_number: None,
+            variant: ContentVariantInfo::default(),
         })
         .collect())
 }
@@ -6489,6 +6706,41 @@ impl MediaBrowserKind {
     }
 }
 
+/// Reads the persisted ADR 0018 media-browse variant preference.
+#[server]
+pub async fn get_show_content_variants_pref() -> Result<bool, ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_core::repositories::ConfigRepository;
+
+    let state = expect_context::<AppState>();
+    let value = state
+        .repositories
+        .config
+        .get(SHOW_CONTENT_VARIANTS_PREF_KEY)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(value.is_some_and(|value| value.trim().eq_ignore_ascii_case("true")))
+}
+
+/// Persists the ADR 0018 media-browse variant preference.
+#[server]
+pub async fn set_show_content_variants_pref(show_variants: bool) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+    use ersatzrs_core::repositories::ConfigRepository;
+
+    let state = expect_context::<AppState>();
+    state
+        .repositories
+        .config
+        .set(
+            SHOW_CONTENT_VARIANTS_PREF_KEY,
+            if show_variants { "true" } else { "false" },
+        )
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(())
+}
+
 /// Page map for any browser kind. Ports the
 /// `LuceneSearchIndex.GetSearchPageMap` algorithm:
 ///
@@ -6502,6 +6754,7 @@ pub async fn media_page_map(
     kind: MediaBrowserKind,
     search: String,
     page_size: u32,
+    show_variants: bool,
 ) -> Result<LetterPageMap, ServerFnError> {
     use crate::host::state::AppState;
     use sqlx::Row;
@@ -6520,13 +6773,16 @@ pub async fn media_page_map(
         r#"SELECT COALESCE(m."SortTitle", m."Title", '') AS "SortTitle"
            FROM "{item_table}" i
            JOIN "{metadata_table}" m ON m."{fk_column}" = i."Id"
+           JOIN "MediaItem" mi ON mi."Id" = i."Id"
            WHERE (? = '' OR m."Title" LIKE ?)
+             AND (? = 1 OR COALESCE(mi."ContentKind", 0) = 0)
            ORDER BY m."SortTitle", m."Title""#
     );
 
     let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
         .bind(search.trim())
         .bind(&like)
+        .bind(i64::from(show_variants))
         .fetch_all(&state.pool)
         .await?;
 
@@ -7027,7 +7283,9 @@ mod playlist_tests {
 
 #[cfg(test)]
 mod season_detail_tests {
-    use super::{get_media_item_info_json, get_season_details, list_trash_items};
+    use super::{
+        get_media_item_info_json, get_season_details, list_other_videos, list_trash_items,
+    };
     use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use ersatzrs_infra::db::{self, DatabaseBackend, DatabaseSchemaStatus};
@@ -7154,6 +7412,62 @@ mod season_detail_tests {
         owner.cleanup();
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn linked_extras_load_on_detail_and_stay_hidden_until_browse_opt_in() {
+        let (_db_file, pool) = test_pool().await;
+        seed_season_detail_fixture(&pool).await;
+
+        let (playout_build_tx, _playout_build_rx) = mpsc::channel(4);
+        let state = AppState::new(
+            pool,
+            DatabaseBackend::Sqlite,
+            SystemStartup {
+                database_ready: true,
+                schema_status: DatabaseSchemaStatus::default(),
+            },
+            FfmpegRuntimeReport::for_tests(),
+            Uuid::nil(),
+            1,
+            IptvAccessTokenVerifier::disabled(),
+            playout_build_tx,
+            ersatzrs_core::locking::EntityLocker::default(),
+        );
+
+        let owner = Owner::new();
+        owner.with(|| provide_context(state));
+        owner.set();
+
+        let season = get_season_details(20).await.unwrap().unwrap();
+        assert_eq!(season.extras.len(), 1);
+        assert_eq!(season.extras[0].id, 40);
+        assert_eq!(season.extras[0].title, "Featurette");
+        assert_eq!(
+            season.extras[0].variant.content_kind,
+            ersatzrs_domain::ContentKind::Extra
+        );
+        assert_eq!(
+            season.extras[0].variant.sub_kind.as_deref(),
+            Some("featurette")
+        );
+
+        let (hidden_cards, hidden_total) = list_other_videos(String::new(), 0, 50, false)
+            .await
+            .unwrap();
+        assert_eq!(hidden_total, 0);
+        assert!(hidden_cards.is_empty());
+
+        let (visible_cards, visible_total) =
+            list_other_videos(String::new(), 0, 50, true).await.unwrap();
+        assert_eq!(visible_total, 1);
+        assert_eq!(visible_cards[0].id, 40);
+        assert_eq!(
+            visible_cards[0].variant.content_kind,
+            ersatzrs_domain::ContentKind::Extra
+        );
+
+        owner.cleanup();
+    }
+
     async fn test_pool() -> (NamedTempFile, ersatzrs_infra::db::DbPool) {
         let file = NamedTempFile::new().unwrap();
         let database_url = format!("sqlite:{}", file.path().display());
@@ -7196,6 +7510,14 @@ mod season_detail_tests {
             .await
             .unwrap();
         }
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" (
+                   "Id", "LibraryPathId", "State", "ContentKind", "SubKind", "ParentMediaItemId"
+               ) VALUES (40, 10, 0, 1, 'featurette', 20)"#,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
 
         pool.execute(r#"INSERT INTO "Show" ("Id") VALUES (10)"#)
             .await
@@ -7204,6 +7526,9 @@ mod season_detail_tests {
             .await
             .unwrap();
         pool.execute(r#"INSERT INTO "Episode" ("Id", "SeasonId") VALUES (30, 20), (31, 20)"#)
+            .await
+            .unwrap();
+        pool.execute(r#"INSERT INTO "OtherVideo" ("Id") VALUES (40)"#)
             .await
             .unwrap();
 
@@ -7244,16 +7569,33 @@ mod season_detail_tests {
         .execute(pool)
         .await
         .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "OtherVideoMetadata" (
+                   "Id", "OtherVideoId", "MetadataKind", "Title", "OriginalTitle",
+                   "SortTitle", "Year", "DateAdded", "DateUpdated"
+               ) VALUES (
+                   400, 40, 0, 'Featurette', 'Behind the scenes', 'featurette',
+                   2026, ?, ?
+               )"#,
+        )
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             r#"INSERT INTO "Artwork" (
                    "Id", "ArtworkKind", "Path", "SeasonMetadataId", "ShowMetadataId",
-                   "EpisodeMetadataId", "DateAdded", "DateUpdated"
+                   "EpisodeMetadataId", "OtherVideoMetadataId", "DateAdded", "DateUpdated"
                ) VALUES
-                   (1, 0, 'season-poster.jpg', 200, NULL, NULL, ?, ?),
-                   (2, 3, 'show-fanart.jpg', NULL, 100, NULL, ?, ?),
-                   (3, 1, 'pilot-thumb.jpg', NULL, NULL, 300, ?, ?)"#,
+                   (1, 0, 'season-poster.jpg', 200, NULL, NULL, NULL, ?, ?),
+                   (2, 3, 'show-fanart.jpg', NULL, 100, NULL, NULL, ?, ?),
+                   (3, 1, 'pilot-thumb.jpg', NULL, NULL, 300, NULL, ?, ?),
+                   (4, 1, 'featurette-thumb.jpg', NULL, NULL, NULL, 400, ?, ?)"#,
         )
+        .bind(now)
+        .bind(now)
         .bind(now)
         .bind(now)
         .bind(now)

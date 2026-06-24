@@ -26,8 +26,8 @@ use leptos_router::hooks::use_query_map;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, episode_display_subtitle, search_count, season_display_name,
-    selected_items_count, tr, TextKey,
+    added_items_to_playlist, content_variant_badge_label, episode_display_subtitle, search_count,
+    season_display_name, selected_items_count, tr, TextKey,
 };
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist_mixed, CollectionOption,
@@ -193,6 +193,7 @@ pub fn SearchPage() -> impl IntoView {
                 />
                 <button type="submit" class=shell::btn_add>{tr(TextKey::Search)}</button>
             </form>
+            <p class=style::query_help>{tr(TextKey::ContentVariantSearchHelp)}</p>
 
             <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
@@ -555,6 +556,10 @@ fn SearchResultCard(
                 subtitle=subtitle
                 href=href
                 artwork_url=card.artwork_url
+                badge=content_variant_badge_label(
+                    card.variant.content_kind,
+                    card.variant.sub_kind.as_deref(),
+                )
                 placeholder=card.placeholder
                 state=card.state
                 select_mode=select_mode
