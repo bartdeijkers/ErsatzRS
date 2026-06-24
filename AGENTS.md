@@ -77,6 +77,11 @@ always respect the build target-dir defined in `/config.toml` or `/.cargo/config
 this could mean elevated rights are needed. ask/apply elevated rights, since the path
 is added on purpose. Never use a different cargo build path.
 
+> **Stale-binary trap:** the real binary lives under the configured target-dir
+> (resolve it from `config.toml` / `.cargo/config.toml`). A leftover binary at
+> the default `./target/debug/` path will still run but silently mislead — always
+> invoke and inspect the binary under the configured target-dir.
+
 ```bash
 # Build
 cargo build --workspace
@@ -147,6 +152,10 @@ DATABASE_URL='mysql://user:pass@127.0.0.1:3306/ersatzrs' cargo run --features my
 # Run a one-shot media scan against the same database.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
 cargo run --bin ersatzrs-scanner -- --provider local --library-id 1
+
+# The ignored scanner integration tests need LD_LIBRARY_PATH pointed at the
+# FFmpeg 8.1 libs, or they silently skip exercising ffprobe:
+#   LD_LIBRARY_PATH=<ffmpeg-8.1>/lib cargo test -p ersatzrs-scanner -- --ignored
 
 # Dependency audit
 cargo deny check
@@ -254,7 +263,14 @@ Read the relevant contract before changing that area:
 - [`docs/progress/`](docs/progress/README.md) for current phase, per-feature
   parity, route/hydration coverage, and the session log (query via
   `cargo xtask progress …`). [STATUS.md](STATUS.md) is a slim pointer at it.
-- [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow.
+- **[CONTRIBUTING.md](CONTRIBUTING.md) — mandatory for all development, not an
+  area-specific contract.** Every change must respect its Ground Rules and PR
+  checklist: English-only repository content; no secrets, tokens, private media
+  paths, or personal library data in source, fixtures, logs, snapshots, or docs;
+  **no maintainer-machine absolute paths** (`/home/<user>/...`, `/Users/<user>/...`,
+  `C:\Users\...`, or other local mount paths) — use repo-relative paths and the
+  `$ERSATZTV_SRC` env var; small reviewable changes; Conventional Commits; and
+  ErsatzTV behavior preserved unless an ADR records the deviation.
 - [CHANGELOG.md](CHANGELOG.md) for the main release overview; keep
   `[Unreleased]` current for notable changes.
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags,
