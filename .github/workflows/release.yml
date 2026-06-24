@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
@@ -28,7 +28,7 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
       LEPTOS_HASH_FILES: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -135,7 +135,7 @@ jobs:
             cross: false
             archive: zip
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Prefer Git Bash on Windows
         if: ${{ matrix.rid == 'win-x64' }}
         shell: pwsh
