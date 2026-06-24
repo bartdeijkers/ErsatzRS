@@ -191,6 +191,7 @@ async fn start_playback_preview(state: &AppState, query: &PlaybackPreviewQuery) 
         selector_channel.preferred_audio_language_code.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
+        None,
     );
     let spawn_time = Utc::now();
     let opacity_clock = watermark_opacity_clock_at_spawn(
@@ -409,6 +410,7 @@ async fn start_channel_playback_preview(
         channel.preferred_audio_language_code.as_deref(),
         &source_audio_streams,
         no_subtitle.as_ref(),
+        None,
     );
     let opacity_clock = watermark_opacity_clock_at_spawn(
         start_time,

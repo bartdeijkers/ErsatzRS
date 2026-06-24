@@ -1,12 +1,13 @@
 feature    = 'Content variants, alternate versions, and stream roles'
-etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, ADR 0018'
-rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::health`'
+etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, ADR 0018'
+rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::playback`, `crates/ersatzrs-web::transport::iptv`, `crates/ersatzrs-infra::hls_worker`, `crates/ersatzrs-infra::health`'
 status     = 'In progress'
 adr        = ['0018']
 
 summary    = '''
 Phase 0 foundation, Phase 1 media UI surfacing, Phase 2 local scanner extra
-import/classification, and Phase 3 alternate-version linking are implemented.
+import/classification, Phase 3 alternate-version linking, and Phase 4
+commentary render acceptance are implemented.
 `MediaItem` now has additive `ContentKind`, `SubKind`, and
 `ParentMediaItemId` columns (SQLite and MySQL migrations) so scanner/provider
 slices can represent primary items, extras, and alternate versions without
@@ -54,6 +55,15 @@ other renditions are written as `ContentKind=AlternateVersion` with normalized
 `SubKind` and `ParentMediaItemId`, and lone alternates stay typed but unlinked
 instead of guessing a parent. Default-exclusion search still keeps alternate
 versions hidden unless a query opts into variant fields.
+
+Commentary-bearing items can now complete the ADR 0018 U2 path: smart
+collections select them through `audio_title`, `subtitle_title`, and
+`has_commentary`; channel and playout-item `PreferredAudioTitle` values select
+matching audio streams by case-insensitive title substring; custom channel
+stream-selector YAML applies audio/subtitle title allowlists and blocklists;
+and both direct MPEG-TS/IPTV and HLS segmenter command generation map the
+selected audio stream while preserving the existing first-audio behavior for
+channels without selector settings.
 '''
 
 [[debt]]
@@ -85,8 +95,8 @@ id          = 'commentary-render-acceptance'
 adr         = '0018'
 description = 'Phase 4 remains open: stream-title search can select commentary-bearing items, but the end-to-end commentary channel acceptance still needs verification/completion of the channel `PreferredAudioTitle` and custom stream-selector allow/blocklist render path.'
 discovered  = '2026-06-23'
-evidence    = 'Phase 0 indexes `MediaStream.Title` and `Subtitle.Title` for selection. The playback acceptance described in ADR 0018 Phase 4 was intentionally left for a later render-path slice.'
-resolved    = false
+evidence    = 'Resolved 2026-06-24: `PreferredAudioTitle` now selects commentary audio by title substring in the built-in playback selector, custom stream-selector YAML title allowlists/blocklists select commentary audio and subtitles, and direct IPTV/MPEG-TS plus HLS segmenter command generation maps the selected audio stream. Covered by playback::tests::playback_audio_selector_prefers_title_within_language_candidates, playback_audio_selector_falls_back_when_title_is_missing, playback_audio_selector_leaves_unconfigured_channels_on_pipeline_default, custom_stream_selector_matches_commentary_allowlists, and transport::iptv::stream::tests::build_stream_command_maps_selected_audio_stream.'
+resolved    = true
 
 [[debt]]
 id          = 'scheduling-examples-and-preroll'

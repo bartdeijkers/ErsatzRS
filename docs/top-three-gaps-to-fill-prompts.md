@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-24
-last_processed_commit: f5eb4e50a7f8d1129791e6bc57c35c01fe57abd5
+last_processed_commit: dbfb60e21a9870842c95e1ae507a84cd7ef055d1
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,15 +27,16 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the content-variants Phase 3 alternate-version
-linking closeout): the previous #1 Phase 3 scanner prompt is now resolved after
-focused alternate-version scanner tests, the scanner crate test suite, and
-default-exclusion search coverage.
+Selection (2026-06-24, after the content-variants Phase 4 commentary render
+acceptance closeout): the previous #1 Phase 4 commentary prompt is now resolved
+after focused search/projection coverage, playback selector tests, and direct
+IPTV/HLS selected-audio command coverage.
 `cargo xtask progress gaps` still reports `content-variants` as an in-progress
-parity/spec feature because Phase 4-5 remain open. The completed-scope rule
+parity/spec feature because Phase 5 remains open. The completed-scope rule
 keeps the next bounded ADR 0018 slice at the top. Ranking: (1)
-**content-variants Phase 4 commentary render acceptance** — prove/complete the
-channel stream-selector playback half for commentary-bearing items; (2)
+**content-variants Phase 5 scheduling consumers and examples** — ship the
+operator-facing examples that demonstrate unplugged renditions, commentary
+channels, and featurette pre-roll scheduling; (2)
 **ersatzrs-healthcheck binary** — open Phase 7 runtime hardening TODO to
 replace the Docker image's tool-based health check with a purpose-built binary;
 (3) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed /
@@ -50,71 +51,67 @@ closeout removes the completed Channels prompt and refills with spec-backed
 chores that have no ErsatzTV baseline dimension. A future window containing new
 pinned-baseline parity work must not be reconciled until the pin is reachable
 again. The earlier manual closeouts removed the completed Channels and Phase 1
-UI prompts; the previous closeout removed the completed Phase 2 scanner prompt,
-and this closeout removes the completed Phase 3 alternate-version prompt and
-refills with the next spec-backed ADR 0018 phase.
+UI prompts; later closeouts removed the completed Phase 2 scanner, Phase 3
+alternate-version, and Phase 4 commentary render prompts and refilled with the
+next spec-backed ADR 0018 phase.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: content-variants Phase 4 commentary render acceptance (slug `content-variants`)
+## 1. Build the next ErsatzRS spec chore: content-variants Phase 5 scheduling consumers and examples (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
 [ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
 [`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-This slice intentionally completes the commentary selection-to-render path that
-ADR 0018 layers on top of ErsatzTV's existing stream-title selector behavior.
-The goal is the complete **Phase 4 — Stream roles (commentary)** acceptance
-slice on top of the Phase 0 schema/search foundation, Phase 1 UI surfacing,
-Phase 2 local extra import, and Phase 3 alternate-version linking.
+This slice intentionally completes the operator-facing examples and scheduling
+consumer proof that ADR 0018 layers on top of the implemented search, scanner,
+UI, alternate-version, and commentary render foundations. The goal is the
+complete **Phase 5 — Scheduling consumers** acceptance slice.
 
-Scope is **only Phase 4** from the plan. Do not implement scheduling examples,
-pre-roll filler templates, or Phase 5 consumer examples in this slice. Any
-shortfall must remain visible in `docs/progress/parity/content-variants.toml`.
+Scope is **only Phase 5** from the plan. Do not expand provider extras import,
+change the core scheduling engines, or add repair/mutation workflows in this
+slice. Any shortfall must remain visible in
+`docs/progress/parity/content-variants.toml`.
 
 Before editing:
-1. Read ADR 0018, the plan's Phase 4 section, PORTING.md, STYLE.md, and
+1. Read ADR 0018, the plan's Phase 5 section, PORTING.md, STYLE.md, and
    `docs/progress/parity/content-variants.toml`.
-2. Inspect ErsatzTV's channel stream selector and FFmpeg stream-selection path:
-   `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`,
-   `FFmpegStreamSelector.cs`, `Domain/Channel.cs`,
-   `Domain/ChannelStreamSelectorMode.cs`, and
-   `Domain/ChannelSubtitleMode.cs`.
-3. Inspect the ErsatzRS search projection, smart-collection search tests,
-   channel repository, playback stream selector, FFmpeg argv generation, and
-   any current `PreferredAudioTitle` / allowlist / blocklist / subtitle-mode
-   handling.
-4. Build a Source Map for `audio_title` / `subtitle_title` /
-   `has_commentary` selection, channel selector persistence, render-path argv
-   generation, subtitle mode behavior, and runtime/default-exclusion safety.
-5. Identify the remaining Phase 5 scheduling/example debt you are explicitly
+2. Inspect ErsatzRS smart collections, filler presets, program schedule items,
+   playout build inputs, media browse/detail links, and any existing seeded
+   examples or templates.
+3. Inspect the implemented Phase 0-4 surfaces: `content_kind`,
+   `sub_kind`, `parent_title`, `audio_title`, `subtitle_title`,
+   `has_commentary`, alternate-version linking, and channel commentary render
+   selection.
+4. Build a Source Map for example smart collections, filler preset attachment,
+   pre-roll schedule items, commentary-channel setup, unplugged rendition
+   examples, default-exclusion safety, and docs/i18n surfaces touched by the
+   examples.
+5. Identify any provider extras/version import debt you are explicitly
    deferring.
 
 Implement the slice end-to-end:
-- Verify or complete search selection for commentary-bearing items with
-  `audio_title`, `subtitle_title`, and `has_commentary`, preserving the existing
-  implicit `content_kind:primary` default unless a variant field opts in.
-- Verify or complete channel persistence for `PreferredAudioTitle`,
-  `StreamSelector`, `StreamSelectorMode`, audio/subtitle allowlists and
-  blocklists, and `SubtitleMode` values needed to pin commentary audio and
-  subtitles.
-- Verify or complete FFmpeg render selection so a channel fed by a commentary
-  smart collection can actually select the commentary audio stream and matching
-  commentary subtitles by title substring, matching ErsatzTV's selector
-  behavior.
-- Add focused tests for selection and render-path argv/stream choice, including
-  allowlist, blocklist, preferred-title, subtitle-title, and fallback behavior
-  when no matching commentary stream exists.
-- Prove that normal channels without commentary selectors keep today's primary
-  audio/subtitle behavior.
+- Ship example/templated smart collections for unplugged renditions, commentary
+  channels, and featurette pre-roll using the implemented variant/search tokens.
+- Verify or complete filler preset and schedule-item wiring so a featurette
+  smart collection can be attached as pre-roll ahead of a movie item without
+  changing existing schedules by default.
+- Verify or complete commentary-channel setup guidance/examples that combine a
+  `has_commentary`/`audio_title:commentary` smart collection with channel
+  preferred-title or custom stream-selector settings.
+- Verify or complete unplugged-rendition examples that select
+  `content_kind:alternate_version` + `sub_kind:unplugged` without selecting the
+  canonical primary rows.
+- Add focused tests for example creation/loading, schedule/filler pre-roll
+  persistence, default-exclusion safety, and playout build inputs.
 - Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
   prompt file if the debt ranking changes.
 
 Verification:
-- Focused core/infra/web tests proving `audio_title`, `subtitle_title`, and
-  `has_commentary` smart-collection selection.
-- Focused FFmpeg/playback tests proving commentary audio/subtitle stream
-  selection by title substring and normal-channel fallback behavior.
+- Focused core/infra/web tests proving the example smart collections resolve
+  the intended variant/commentary rows and keep primaries hidden by default.
+- Focused scheduling/playout tests proving featurette pre-roll filler wiring and
+  unchanged normal schedule behavior.
 - `cargo test -p ersatzrs-core search`.
 - `cargo test -p ersatzrs-infra scheduling_repository`.
 - `cargo test -p ersatzrs-web admin::server_fns::media_browser`.
@@ -122,8 +119,8 @@ Verification:
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, Phase 4 behavior implemented, remaining Phase 5
-`ParityDebt`, verification run, and changed files.
+Report the Source Map, Phase 5 behavior implemented, remaining
+`content-variants` `ParityDebt`, verification run, and changed files.
 
 ---
 

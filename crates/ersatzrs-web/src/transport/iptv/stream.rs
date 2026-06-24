@@ -18,8 +18,8 @@ use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, MediaSourceRepository};
 use ersatzrs_domain::{
-    Channel, ChannelSubtitleMode, EmbyMediaSource, FFmpegProfileAudioFormat, JellyfinMediaSource,
-    PlexMediaSource, StreamingMode,
+    Channel, ChannelStreamSelectorMode, ChannelSubtitleMode, EmbyMediaSource,
+    FFmpegProfileAudioFormat, JellyfinMediaSource, PlexMediaSource, StreamingMode,
 };
 use ersatzrs_ffmpeg::{
     build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
@@ -38,9 +38,11 @@ use ersatzrs_infra::hls_worker::{
 use ersatzrs_infra::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
-    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
+    render_playback_graphics_overlays, select_channel_playback_subtitle,
+    select_custom_playback_streams, select_playback_audio_stream_index, select_playback_graphics,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    watermark_inputs_for_stream, CustomStreamSelection, PlaybackGraphicsRenderContext,
+    PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
@@ -298,22 +300,52 @@ async fn serve_channel_stream_with_channel(
         .or(channel.preferred_subtitle_language_code.as_deref());
     let start_position = active.content_seek_position(now);
     let start_seconds = duration_as_i64_seconds(start_position);
-    let subtitle = match select_channel_playback_subtitle(
+    let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
+    let custom_selection = select_channel_custom_streams(
         &state.pool,
+        active.media_version_id,
         active.media_item_id,
-        preferred_subtitle_language,
-        subtitle_mode,
-        effective_streaming_mode,
         &channel,
-        &playback_profile.resolution,
-        start_seconds,
+        content_start_time,
+        effective_streaming_mode,
     )
-    .await
-    {
-        Ok(subtitle) => subtitle,
-        Err(error) => {
-            tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select playback subtitle");
-            None
+    .await;
+    let selected_audio_stream_index = custom_selection
+        .as_ref()
+        .and_then(|selection| selection.audio_stream_index)
+        .or_else(|| {
+            select_playback_audio_stream_index(
+                &source_audio_streams,
+                active
+                    .preferred_audio_language_code
+                    .as_deref()
+                    .or(channel.preferred_audio_language_code.as_deref()),
+                active
+                    .preferred_audio_title
+                    .as_deref()
+                    .or(channel.preferred_audio_title.as_deref()),
+            )
+        });
+    let subtitle = if let Some(selection) = custom_selection {
+        selection.subtitle
+    } else {
+        match select_channel_playback_subtitle(
+            &state.pool,
+            active.media_item_id,
+            preferred_subtitle_language,
+            subtitle_mode,
+            effective_streaming_mode,
+            &channel,
+            &playback_profile.resolution,
+            start_seconds,
+        )
+        .await
+        {
+            Ok(subtitle) => subtitle,
+            Err(error) => {
+                tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select playback subtitle");
+                None
+            }
         }
     };
     let metadata = playback_output_metadata(
@@ -325,6 +357,7 @@ async fn serve_channel_stream_with_channel(
             .or(channel.preferred_audio_language_code.as_deref()),
         &source_audio_streams,
         subtitle.as_ref(),
+        selected_audio_stream_index,
     );
     let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
         subtitle_input_for_stream(subtitle, &resolved, output_format, effective_streaming_mode)
@@ -426,6 +459,7 @@ async fn serve_channel_stream_with_channel(
         runtime_capabilities.clone(),
         source_stream.clone(),
         source_audio_streams.clone(),
+        selected_audio_stream_index,
         subtitle_input.clone(),
         watermark_inputs.clone(),
         graphics_overlays.clone(),
@@ -459,6 +493,7 @@ async fn serve_channel_stream_with_channel(
                     capabilities,
                     source_stream,
                     source_audio_streams,
+                    selected_audio_stream_index,
                     subtitle_input,
                     watermark_inputs,
                     graphics_overlays,
@@ -1121,6 +1156,7 @@ pub(crate) struct ActivePlayoutItem {
     pub(crate) playout_finish: String,
     pub(crate) disable_watermarks: bool,
     pub(crate) preferred_audio_language_code: Option<String>,
+    pub(crate) preferred_audio_title: Option<String>,
     pub(crate) preferred_subtitle_language_code: Option<String>,
     pub(crate) subtitle_mode: Option<ChannelSubtitleMode>,
 }
@@ -1178,6 +1214,7 @@ pub(crate) async fn load_active_media_path(
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
                   pi."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+                  pi."PreferredAudioTitle" AS "PreferredAudioTitle",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode"
            FROM "PlayoutItem" pi
@@ -1229,6 +1266,10 @@ pub(crate) async fn load_active_media_path(
             .is_ok_and(|value| value != 0),
         preferred_audio_language_code: row
             .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+            .ok()
+            .flatten(),
+        preferred_audio_title: row
+            .try_get::<Option<String>, _>("PreferredAudioTitle")
             .ok()
             .flatten(),
         preferred_subtitle_language_code: row
@@ -1320,6 +1361,41 @@ pub(crate) fn content_type_for_output_format(output_format: OutputFormat) -> &'s
     }
 }
 
+async fn select_channel_custom_streams(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+) -> Option<CustomStreamSelection> {
+    if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom
+        || channel
+            .stream_selector
+            .as_deref()
+            .is_none_or(|selector| selector.trim().is_empty())
+    {
+        return None;
+    }
+
+    match select_custom_playback_streams(
+        pool,
+        media_version_id,
+        media_item_id,
+        channel,
+        content_start_time,
+        streaming_mode,
+    )
+    .await
+    {
+        Ok(selection) => selection,
+        Err(error) => {
+            tracing::warn!(%error, media_item_id, "failed to execute channel stream selector");
+            None
+        }
+    }
+}
+
 pub(crate) fn extension_for_output_format(output_format: OutputFormat) -> &'static str {
     match output_format {
         OutputFormat::MpegTs => ".ts",
@@ -1342,6 +1418,7 @@ fn build_stream_command(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    selected_audio_stream_index: Option<usize>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -1358,6 +1435,7 @@ fn build_stream_command(
         runtime_capabilities,
         source_stream,
         source_audio_streams,
+        selected_audio_stream_index,
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
@@ -1378,6 +1456,7 @@ fn build_stream_command_with_opacity_clock(
     runtime_capabilities: FfmpegCapabilityReport,
     source_stream: Option<SourceVideoStream>,
     source_audio_streams: Vec<ersatzrs_ffmpeg::SourceAudioStream>,
+    selected_audio_stream_index: Option<usize>,
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
@@ -1398,6 +1477,15 @@ fn build_stream_command_with_opacity_clock(
     }
     if let Some(source_stream) = source_stream {
         request = request.with_source_video_stream(source_stream);
+    }
+    if let Some(stream_index) = selected_audio_stream_index {
+        if let Some(audio_input) = request
+            .inputs
+            .iter_mut()
+            .find(|input| input.kind == ersatzrs_ffmpeg::InputKind::Audio)
+        {
+            *audio_input = audio_input.clone().with_stream_index(stream_index);
+        }
     }
     request = request.with_source_audio_streams(source_audio_streams);
     if let Some(subtitle_input) = subtitle_input {
@@ -1458,9 +1546,17 @@ pub(crate) fn playback_output_metadata(
     preferred_audio_language: Option<&str>,
     source_audio_streams: &[SourceAudioStream],
     subtitle: Option<&PlaybackSubtitle>,
+    selected_audio_stream_index: Option<usize>,
 ) -> OutputMetadata {
-    let audio_language = preferred_audio_language
-        .and_then(trimmed_string)
+    let audio_language = selected_audio_stream_index
+        .and_then(|index| {
+            source_audio_streams
+                .iter()
+                .find(|stream| stream.index == index)
+                .and_then(|stream| stream.language.as_deref())
+                .and_then(trimmed_string)
+        })
+        .or_else(|| preferred_audio_language.and_then(trimmed_string))
         .or_else(|| first_audio_language(source_audio_streams));
 
     OutputMetadata {
@@ -2063,6 +2159,7 @@ mod tests {
             None,
             Vec::new(),
             None,
+            None,
             Vec::new(),
             Vec::new(),
         );
@@ -2070,6 +2167,34 @@ mod tests {
         assert!(arguments.contains("-f mpegts"));
         assert!(arguments.ends_with("pipe:1"));
         assert!(!arguments.contains("-progress pipe:1"));
+    }
+
+    #[test]
+    fn build_stream_command_maps_selected_audio_stream() {
+        let profile = playback_profile();
+        let command = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            Some(3),
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(
+            arguments.contains("[0:3]aresample=async=1,apad[a]"),
+            "{arguments}"
+        );
+        assert!(arguments.contains("-map [a]"), "{arguments}");
     }
 
     #[test]
@@ -2095,6 +2220,7 @@ mod tests {
                 capabilities,
                 Some(source.clone()),
                 Vec::new(),
+                None,
                 None,
                 Vec::new(),
                 Vec::new(),
@@ -2140,6 +2266,7 @@ mod tests {
             None,
             Vec::new(),
             None,
+            None,
             Vec::new(),
             Vec::new(),
         );
@@ -2162,6 +2289,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             None,
             Vec::new(),
             Vec::new(),
@@ -2205,6 +2333,7 @@ mod tests {
             None,
             Vec::new(),
             None,
+            None,
             Vec::new(),
             Vec::new(),
         );
@@ -2246,10 +2375,11 @@ mod tests {
             &profile,
             None,
             StreamingMode::TransportStream,
-            playback_output_metadata(None, None, None, &[], Some(&subtitle)),
+            playback_output_metadata(None, None, None, &[], Some(&subtitle), None),
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             subtitle_input,
             Vec::new(),
             Vec::new(),
@@ -2281,6 +2411,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             None,
             Vec::new(),
             vec![GraphicsPipelineOverlay::drawvg(
@@ -2315,6 +2446,7 @@ mod tests {
             playout_finish: playout_finish.to_owned(),
             disable_watermarks: false,
             preferred_audio_language_code: None,
+            preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
         }
@@ -2371,6 +2503,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             None,
             Vec::new(),
             Vec::new(),
@@ -3019,6 +3152,7 @@ mod tests {
             None,
             Vec::new(),
             None,
+            None,
             Vec::new(),
             Vec::new(),
         );
@@ -3044,6 +3178,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "requires ffmpeg on PATH and the Big Buck Bunny fixture under testdata/"]
+    #[allow(clippy::too_many_lines)]
     async fn stream_body_composites_watermark_from_fixture() {
         use tokio::io::AsyncReadExt;
         use tokio::time::timeout;
@@ -3083,6 +3218,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             None,
             vec![(
                 InputFile::watermark(logo.to_string_lossy().into_owned()),
@@ -3194,6 +3330,7 @@ mod tests {
             Some(source_320p()),
             Vec::new(),
             None,
+            None,
             vec![(
                 InputFile::watermark_looped(logo.to_string_lossy().into_owned()),
                 opacity_clock_watermark(expression),
@@ -3295,6 +3432,7 @@ mod tests {
             FfmpegCapabilityReport::default(),
             None,
             Vec::new(),
+            None,
             None,
             Vec::new(),
             vec![GraphicsPipelineOverlay::drawvg(

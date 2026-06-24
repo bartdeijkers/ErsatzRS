@@ -37,6 +37,10 @@ release section when tagging a release.
   remaster, extended, and director-cut renditions, keep deterministic canonical
   primaries, link same-work alternates through `ParentMediaItemId`, and leave
   orphan alternates typed but unlinked.
+- Content-variant commentary render acceptance for ADR 0018: smart collections
+  can feed commentary-bearing items into channels whose preferred audio title
+  or custom stream selector pins commentary audio and matching subtitles in
+  direct IPTV/MPEG-TS and HLS segmenter playback.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

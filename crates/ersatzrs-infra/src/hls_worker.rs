@@ -16,8 +16,8 @@ use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_domain::{
-    Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, FFmpegProfileAudioFormat,
-    FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
+    Channel, ChannelMusicVideoCreditsMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
+    FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffprobe_path, DesiredVideoState, FfmpegCapabilityReport,
@@ -30,9 +30,11 @@ use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream,
-    render_playback_graphics_overlays, select_channel_playback_subtitle, select_playback_graphics,
+    render_playback_graphics_overlays, select_channel_playback_subtitle,
+    select_custom_playback_streams, select_playback_audio_stream_index, select_playback_graphics,
     select_playback_watermarks, subtitle_fonts_dir, subtitle_input_for_stream,
-    watermark_inputs_for_stream, PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+    watermark_inputs_for_stream, CustomStreamSelection, PlaybackGraphicsRenderContext,
+    PlaybackProfile, PlaybackSubtitle,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -578,24 +580,53 @@ impl HlsSessionWorker {
                 .preferred_subtitle_language_code
                 .as_deref()
                 .or(active.channel_preferred_subtitle_language_code.as_deref());
-            let channel_for_subtitles =
-                active.channel_for_runtime_subtitles(self.channel_id, self.channel_number.clone());
-            let subtitle = match select_channel_playback_subtitle(
+            let channel_for_streams =
+                active.channel_for_runtime_streams(self.channel_id, self.channel_number.clone());
+            let custom_selection = select_channel_custom_streams(
                 &pool,
+                active.media_version_id,
                 active.media_item_id,
-                preferred_subtitle_language,
-                subtitle_mode,
+                &channel_for_streams,
+                active.playout_start,
                 StreamingMode::HttpLiveStreamingSegmenter,
-                &channel_for_subtitles,
-                &playback_profile.resolution,
-                start_seconds,
             )
-            .await
-            {
-                Ok(subtitle) => subtitle,
-                Err(error) => {
-                    tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select HLS subtitle");
-                    None
+            .await;
+            let selected_audio_stream_index = custom_selection
+                .as_ref()
+                .and_then(|selection| selection.audio_stream_index)
+                .or_else(|| {
+                    select_playback_audio_stream_index(
+                        &source_audio_streams,
+                        active
+                            .preferred_audio_language_code
+                            .as_deref()
+                            .or(active.channel_preferred_audio_language_code.as_deref()),
+                        active
+                            .preferred_audio_title
+                            .as_deref()
+                            .or(active.channel_preferred_audio_title.as_deref()),
+                    )
+                });
+            let subtitle = if let Some(selection) = custom_selection {
+                selection.subtitle
+            } else {
+                match select_channel_playback_subtitle(
+                    &pool,
+                    active.media_item_id,
+                    preferred_subtitle_language,
+                    subtitle_mode,
+                    StreamingMode::HttpLiveStreamingSegmenter,
+                    &channel_for_streams,
+                    &playback_profile.resolution,
+                    start_seconds,
+                )
+                .await
+                {
+                    Ok(subtitle) => subtitle,
+                    Err(error) => {
+                        tracing::warn!(%error, media_item_id = active.media_item_id, "failed to select HLS subtitle");
+                        None
+                    }
                 }
             };
             let subtitle_input = subtitle.as_ref().and_then(|subtitle| {
@@ -615,7 +646,7 @@ impl HlsSessionWorker {
                     .or(active.channel_preferred_audio_language_code.as_deref()),
                 &source_audio_streams,
                 subtitle.as_ref(),
-                None,
+                selected_audio_stream_index,
             );
             let subtitle_input =
                 rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
@@ -734,7 +765,7 @@ impl HlsSessionWorker {
                 runtime_capabilities.clone(),
                 source_stream,
                 source_audio_streams,
-                None,
+                selected_audio_stream_index,
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
@@ -2874,6 +2905,41 @@ fn trimmed_string(value: &str) -> Option<String> {
     }
 }
 
+async fn select_channel_custom_streams(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+) -> Option<CustomStreamSelection> {
+    if channel.stream_selector_mode != ChannelStreamSelectorMode::Custom
+        || channel
+            .stream_selector
+            .as_deref()
+            .is_none_or(|selector| selector.trim().is_empty())
+    {
+        return None;
+    }
+
+    match select_custom_playback_streams(
+        pool,
+        media_version_id,
+        media_item_id,
+        channel,
+        content_start_time,
+        streaming_mode,
+    )
+    .await
+    {
+        Ok(selection) => selection,
+        Err(error) => {
+            tracing::warn!(%error, media_item_id, "failed to execute HLS channel stream selector");
+            None
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 async fn load_active_hls_item(
     pool: &DbPool,
@@ -2893,11 +2959,15 @@ async fn load_active_hls_item(
                   pi."Finish" AS "PlayoutFinish",
                   pi."DisableWatermarks" AS "DisableWatermarks",
                   pi."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+                  pi."PreferredAudioTitle" AS "PreferredAudioTitle",
                   pi."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
                   pi."SubtitleMode" AS "SubtitleMode",
                   c."Name" AS "ChannelName",
                   c."WatermarkId" AS "ChannelWatermarkId",
+                  c."StreamSelectorMode" AS "ChannelStreamSelectorMode",
+                  c."StreamSelector" AS "ChannelStreamSelector",
                   c."PreferredAudioLanguageCode" AS "ChannelPreferredAudioLanguageCode",
+                  c."PreferredAudioTitle" AS "ChannelPreferredAudioTitle",
                   c."PreferredSubtitleLanguageCode" AS "ChannelPreferredSubtitleLanguageCode",
                   c."SubtitleMode" AS "ChannelSubtitleMode",
                   c."MusicVideoCreditsMode" AS "ChannelMusicVideoCreditsMode",
@@ -2970,6 +3040,10 @@ async fn load_active_hls_item(
             .try_get::<Option<String>, _>("PreferredAudioLanguageCode")
             .ok()
             .flatten(),
+        preferred_audio_title: row
+            .try_get::<Option<String>, _>("PreferredAudioTitle")
+            .ok()
+            .flatten(),
         preferred_subtitle_language_code: row
             .try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
             .ok()
@@ -2984,6 +3058,19 @@ async fn load_active_hls_item(
             .unwrap_or_else(|_| String::new()),
         channel_preferred_audio_language_code: row
             .try_get::<Option<String>, _>("ChannelPreferredAudioLanguageCode")
+            .ok()
+            .flatten(),
+        channel_preferred_audio_title: row
+            .try_get::<Option<String>, _>("ChannelPreferredAudioTitle")
+            .ok()
+            .flatten(),
+        channel_stream_selector_mode: row
+            .try_get::<i64, _>("ChannelStreamSelectorMode")
+            .ok()
+            .and_then(decode_stream_selector_mode)
+            .unwrap_or(ChannelStreamSelectorMode::Default),
+        channel_stream_selector: row
+            .try_get::<Option<String>, _>("ChannelStreamSelector")
             .ok()
             .flatten(),
         channel_preferred_subtitle_language_code: row
@@ -3024,10 +3111,14 @@ struct ActiveHlsItem {
     playout_finish: Option<DateTime<Utc>>,
     disable_watermarks: bool,
     preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
     preferred_subtitle_language_code: Option<String>,
     subtitle_mode: Option<ChannelSubtitleMode>,
     channel_name: String,
     channel_preferred_audio_language_code: Option<String>,
+    channel_preferred_audio_title: Option<String>,
+    channel_stream_selector_mode: ChannelStreamSelectorMode,
+    channel_stream_selector: Option<String>,
     channel_preferred_subtitle_language_code: Option<String>,
     channel_subtitle_mode: ChannelSubtitleMode,
     channel_watermark_id: Option<i64>,
@@ -3036,11 +3127,15 @@ struct ActiveHlsItem {
 }
 
 impl ActiveHlsItem {
-    fn channel_for_runtime_subtitles(&self, id: i64, number: String) -> Channel {
+    fn channel_for_runtime_streams(&self, id: i64, number: String) -> Channel {
         Channel {
             id,
             number,
             name: self.channel_name.clone(),
+            stream_selector_mode: self.channel_stream_selector_mode,
+            stream_selector: self.channel_stream_selector.clone(),
+            preferred_audio_language_code: self.channel_preferred_audio_language_code.clone(),
+            preferred_audio_title: self.channel_preferred_audio_title.clone(),
             preferred_subtitle_language_code: self.channel_preferred_subtitle_language_code.clone(),
             subtitle_mode: self.channel_subtitle_mode,
             music_video_credits_mode: self.channel_music_video_credits_mode,
@@ -3060,6 +3155,15 @@ const fn decode_subtitle_mode(value: i64) -> Option<ChannelSubtitleMode> {
         1 => Some(ChannelSubtitleMode::Forced),
         2 => Some(ChannelSubtitleMode::Default),
         3 => Some(ChannelSubtitleMode::Any),
+        _ => None,
+    }
+}
+
+const fn decode_stream_selector_mode(value: i64) -> Option<ChannelStreamSelectorMode> {
+    match value {
+        0 => Some(ChannelStreamSelectorMode::Default),
+        1 => Some(ChannelStreamSelectorMode::Custom),
+        100 => Some(ChannelStreamSelectorMode::Troubleshooting),
         _ => None,
     }
 }
@@ -6289,10 +6393,14 @@ mod tests {
             playout_finish: Some(playout_finish),
             disable_watermarks: false,
             preferred_audio_language_code: None,
+            preferred_audio_title: None,
             preferred_subtitle_language_code: None,
             subtitle_mode: None,
             channel_name: "Channel One".to_owned(),
             channel_preferred_audio_language_code: None,
+            channel_preferred_audio_title: None,
+            channel_stream_selector_mode: ChannelStreamSelectorMode::Default,
+            channel_stream_selector: None,
             channel_preferred_subtitle_language_code: None,
             channel_subtitle_mode: ChannelSubtitleMode::None,
             channel_watermark_id: None,

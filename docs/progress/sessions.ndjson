@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-24","summary":"Closed content-variants Phase 4 commentary render acceptance with playback selector wiring, docs refresh, and CI gates."}
 {"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 3 alternate-version linking for local music videos, songs, and movies"}
 {"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 2 local scanner extra import/classification with default-exclusion coverage"}
 {"agent":"codex","date":"2026-06-24","summary":"Resolved content-variants Phase 1 media UI surfacing with hidden-by-default browse toggle, variant badges, detail sections, search token help, and seeded browser proof"}

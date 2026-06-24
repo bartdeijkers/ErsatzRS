@@ -390,6 +390,7 @@ pub struct SourceAudioStream {
     pub codec: SourceAudioCodec,
     pub channels: Option<u32>,
     pub sample_rate: Option<u32>,
+    pub default: bool,
     pub language: Option<String>,
     pub title: Option<String>,
 }
@@ -402,6 +403,7 @@ impl SourceAudioStream {
             codec,
             channels: None,
             sample_rate: None,
+            default: false,
             language: None,
             title: None,
         }

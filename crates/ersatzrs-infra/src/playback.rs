@@ -228,7 +228,7 @@ pub async fn load_source_audio_streams(
     media_version_id: i64,
 ) -> Vec<SourceAudioStream> {
     let rows = sqlx::query(
-        r#"SELECT "Index", "Codec", "Channels", "Language", "Title"
+        r#"SELECT "Index", "Codec", "Channels", "Default", "Language", "Title"
            FROM "MediaStream"
            WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 2
            ORDER BY "Index", "Id""#,
@@ -244,6 +244,10 @@ pub async fn load_source_audio_streams(
             let index = usize::try_from(index).ok()?;
             let codec: Option<String> = row.try_get("Codec").ok().flatten();
             let channels: Option<i32> = row.try_get("Channels").ok().flatten();
+            let default = row
+                .try_get::<i64, _>("Default")
+                .ok()
+                .is_some_and(|value| value != 0);
             let language: Option<String> = row.try_get("Language").ok().flatten();
             let title: Option<String> = row.try_get("Title").ok().flatten();
 
@@ -252,11 +256,77 @@ pub async fn load_source_audio_streams(
             ))
             .with_index(index);
             stream.channels = channels.and_then(|channels| u32::try_from(channels).ok());
+            stream.default = default;
             stream.language = language.as_deref().and_then(non_empty_string);
             stream.title = title.as_deref().and_then(non_empty_string);
             Some(stream)
         })
         .collect()
+}
+
+#[must_use]
+pub fn select_playback_audio_stream_index(
+    source_audio_streams: &[SourceAudioStream],
+    preferred_language: Option<&str>,
+    preferred_title: Option<&str>,
+) -> Option<usize> {
+    let language = preferred_language.and_then(non_empty_string);
+    let title = preferred_title.and_then(non_empty_string);
+    if language.is_none() && title.is_none() {
+        return None;
+    }
+
+    let candidates = language
+        .as_deref()
+        .and_then(|language| {
+            let codes = language_codes::all_language_codes([language]);
+            let matching = source_audio_streams
+                .iter()
+                .filter(|stream| {
+                    stream.language.as_deref().is_some_and(|candidate| {
+                        codes
+                            .iter()
+                            .any(|code| candidate.eq_ignore_ascii_case(code.as_str()))
+                    })
+                })
+                .collect::<Vec<_>>();
+            (!matching.is_empty()).then_some(matching)
+        })
+        .unwrap_or_else(|| source_audio_streams.iter().collect());
+
+    let candidates = title
+        .as_deref()
+        .and_then(|title| {
+            let matching = candidates
+                .iter()
+                .copied()
+                .filter(|stream| {
+                    stream
+                        .title
+                        .as_deref()
+                        .is_some_and(|candidate| contains_case_insensitive(candidate, title))
+                })
+                .collect::<Vec<_>>();
+            (!matching.is_empty()).then_some(matching)
+        })
+        .unwrap_or(candidates);
+
+    prioritize_audio_stream(&candidates).map(|stream| stream.index)
+}
+
+fn contains_case_insensitive(value: &str, needle: &str) -> bool {
+    value
+        .to_ascii_lowercase()
+        .contains(&needle.to_ascii_lowercase())
+}
+
+fn prioritize_audio_stream<'a>(streams: &[&'a SourceAudioStream]) -> Option<&'a SourceAudioStream> {
+    streams
+        .iter()
+        .copied()
+        .filter(|stream| stream.default)
+        .max_by_key(|stream| stream.channels.unwrap_or_default())
+        .or_else(|| streams.first().copied())
 }
 
 fn non_empty_string(value: &str) -> Option<String> {
@@ -2445,6 +2515,113 @@ mod tests {
 
         assert!(selected.passed);
         assert_eq!(selected.selected.map(|stream| stream.stream_index), Some(2));
+    }
+
+    #[test]
+    fn playback_audio_selector_prefers_title_within_language_candidates() {
+        let mut default_eng = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        default_eng.language = Some("eng".to_owned());
+        default_eng.title = Some("English 5.1".to_owned());
+        default_eng.default = true;
+        default_eng.channels = Some(6);
+        let mut commentary = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3);
+        commentary.language = Some("eng".to_owned());
+        commentary.title = Some("Director Commentary".to_owned());
+        commentary.channels = Some(2);
+        let mut japanese = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(4);
+        japanese.language = Some("jpn".to_owned());
+        japanese.title = Some("Japanese Commentary".to_owned());
+
+        let selected = select_playback_audio_stream_index(
+            &[default_eng, commentary, japanese],
+            Some("en"),
+            Some("commentary"),
+        );
+
+        assert_eq!(selected, Some(3));
+    }
+
+    #[test]
+    fn playback_audio_selector_falls_back_when_title_is_missing() {
+        let mut default_eng = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        default_eng.language = Some("eng".to_owned());
+        default_eng.title = Some("English 5.1".to_owned());
+        default_eng.default = true;
+        default_eng.channels = Some(6);
+        let mut stereo_eng = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(2);
+        stereo_eng.language = Some("eng".to_owned());
+        stereo_eng.title = Some("English stereo".to_owned());
+
+        let selected = select_playback_audio_stream_index(
+            &[stereo_eng, default_eng],
+            Some("eng"),
+            Some("commentary"),
+        );
+
+        assert_eq!(selected, Some(1));
+    }
+
+    #[test]
+    fn playback_audio_selector_leaves_unconfigured_channels_on_pipeline_default() {
+        let mut default_eng = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        default_eng.language = Some("eng".to_owned());
+
+        let selected = select_playback_audio_stream_index(&[default_eng], None, None);
+
+        assert_eq!(selected, None);
+    }
+
+    #[test]
+    fn custom_stream_selector_matches_commentary_allowlists() {
+        let item = StreamSelectorItem {
+            audio_title_allowlist: vec!["commentary".to_owned()],
+            subtitle_title_allowlist: vec!["commentary".to_owned()],
+            ..StreamSelectorItem::default()
+        };
+        let streams = vec![
+            PlaybackAudioStream {
+                stream_index: 1,
+                title: Some("English 5.1".to_owned()),
+                language: Some("eng".to_owned()),
+                default: true,
+                forced: false,
+                codec: Some("aac".to_owned()),
+                channels: Some(6),
+            },
+            PlaybackAudioStream {
+                stream_index: 2,
+                title: Some("Director Commentary".to_owned()),
+                language: Some("eng".to_owned()),
+                default: false,
+                forced: false,
+                codec: Some("aac".to_owned()),
+                channels: Some(2),
+            },
+        ];
+        let subtitles = [PlaybackSubtitle {
+            id: 1,
+            subtitle_kind: subtitle_kind::SIDECAR,
+            title: Some("Commentary subtitles".to_owned()),
+            stream_index: 4,
+            codec: Some("srt".to_owned()),
+            default: false,
+            forced: false,
+            sdh: false,
+            language: Some("eng".to_owned()),
+            is_extracted: false,
+            path: Some("commentary.srt".to_owned()),
+        }];
+
+        let audio = select_custom_audio(&streams, &item);
+        let subtitle = select_custom_subtitle(&subtitles, &item);
+
+        assert!(audio.passed);
+        assert_eq!(audio.selected.map(|stream| stream.stream_index), Some(2));
+        assert!(subtitle.passed);
+        assert_eq!(
+            subtitle.selected.map(|subtitle| subtitle.stream_index),
+            Some(4)
+        );
     }
 
     #[test]
