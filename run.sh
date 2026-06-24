@@ -4,10 +4,18 @@
 # Usage:
 #   ./run.sh           # alias for `dev`
 #   ./run.sh dev       # cargo leptos watch (hot-reload)
+#   ./run.sh check     # fast inner-loop type-check (one config; no codegen/link)
 #   ./run.sh build     # one-shot build + run (CI parity)
 #   ./run.sh serve     # rebuild once and serve (no watch loop)
 #   ./run.sh seed      # apply migrations + seed admin fixture data
 #   ./run.sh log       # tail ersatzrs.log
+#
+# Inner-loop tip: while iterating, prefer `./run.sh check [-p <crate>]` (or
+# `./run.sh dev` for UI work) and DO NOT flip --features / --all-features /
+# --all-targets between runs. Each flip is a separate compilation graph that
+# re-runs rustc across the whole tree. Run the full multi-config gate
+# (cargo xtask parity-check, the two clippy passes, cargo test --all-features,
+# cargo leptos build) once at closeout, not per edit.
 
 set -euo pipefail
 
@@ -72,6 +80,20 @@ case "$cmd" in
     cd crates/ersatzrs-web
     exec cargo leptos watch
     ;;
+  check)
+    # Fast inner-loop type-check: no codegen, no linking (linking the big binary
+    # to the 9p scratch disk is a major cost). Stays in ONE configuration so it
+    # does not invalidate other caches. Scope it with cargo args, e.g.
+    #   ./run.sh check -p ersatzrs-core
+    #   ./run.sh check -p ersatzrs-web --all-targets
+    # With no args it checks the whole workspace.
+    check_target_size
+    shift || true
+    if [[ $# -eq 0 ]]; then
+      set -- --workspace
+    fi
+    exec cargo check "$@"
+    ;;
   build)
     check_target_size
     (cd crates/ersatzrs-web && cargo leptos build)
@@ -97,7 +119,7 @@ case "$cmd" in
     exec tail -F ersatzrs.log
     ;;
   *)
-    echo "usage: $0 [dev|build|serve|seed|log]" >&2
+    echo "usage: $0 [dev|check|build|serve|seed|log]" >&2
     exit 1
     ;;
 esac

@@ -29,6 +29,7 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | ---------------- | ----------------------------------------------------------- |
 | `./run.sh`       | Alias for `dev`.                                            |
 | `./run.sh dev`   | `cargo leptos watch` — edit-save-refresh hot loop.          |
+| `./run.sh check` | Fast inner-loop `cargo check` (no codegen/link); scope with `-p <crate>`. |
 | `./run.sh build` | One-shot `cargo leptos build` + `cargo run`. Matches CI.    |
 | `./run.sh serve` | Rebuild once, serve via cargo-leptos (no watch).            |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
@@ -90,6 +91,59 @@ configured in `crates/ersatzrs-web/Cargo.toml` `[package.metadata.leptos]`.
 If the browser does not auto-refresh, check that nothing else is bound to port
 `3001` and that the page was loaded via `cargo leptos`'s server (not a stale
 `cargo run --bin ersatzrs-web` from a previous session).
+
+## Inner-loop strategy (don't recompile the source 5×)
+
+A single task often runs five *different* compilation graphs — and because Cargo
+keys its cache on `(features × targets × profile × check-vs-build)`, each one
+re-runs `rustc` over everything that differs, which is brutal on the `/mnt/f`
+(9p) scratch target:
+
+1. `cargo run --bin ersatzrs-web` — native, default features, binary.
+2. `cargo clippy --workspace --all-targets` — adds test/example targets.
+3. `cargo clippy … --features mysql` — different feature union → recompiles
+   `sqlx` and every downstream crate.
+4. `cargo test --workspace --all-features` — yet another feature union + test
+   harness codegen.
+5. `cargo leptos build` — the `wasm32` target, an entirely separate triple.
+
+Keep the edit loop cheap by **not** flipping configurations while iterating:
+
+- **Logic/crate work:** `./run.sh check -p <crate>` (skips codegen *and*
+  linking — linking the big binary to 9p is a major cost). Use
+  `cargo nextest run -p <crate>` for focused tests.
+- **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
+  WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
+  separate `cargo run` while iterating.
+- Run the full multi-config gate (the two clippy passes, `cargo test
+  --all-features`, `cargo leptos build`, `cargo xtask parity-check`) **once at
+  closeout**, not per edit.
+
+### Optional: sccache (recommended on the 9p-target setup)
+
+[`sccache`](https://github.com/mozilla/sccache) caches *dependency*
+compilations on a fast disk, so the unavoidable config switches above read
+cached objects instead of recompiling `sqlx`/`leptos`/`mlua` on the slow scratch
+target. Local workspace crates keep incremental compilation; sccache only caches
+the cacheable (dependency) units.
+
+It is **opt-in and machine-local** — deliberately *not* added to the repo's
+committed `.cargo/config.toml`, so CI runners and other contributors are never
+forced to install it. To enable it on your machine, install `sccache` and add to
+your global `~/.cargo/config.toml` (point the cache at a fast filesystem, not the
+9p scratch disk):
+
+```toml
+[build]
+rustc-wrapper = "sccache"
+
+[env]
+SCCACHE_DIR = "/path/on/fast/ext4/sccache"
+SCCACHE_CACHE_SIZE = "30G"
+```
+
+Check it is working with `sccache --show-stats` (compile requests climb; cache
+hit rate rises once the same dependency/feature union is built a second time).
 
 ## Profile tuning
 
