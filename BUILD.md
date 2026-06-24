@@ -129,18 +129,27 @@ the cacheable (dependency) units.
 
 It is **opt-in and machine-local** — deliberately *not* added to the repo's
 committed `.cargo/config.toml`, so CI runners and other contributors are never
-forced to install it. To enable it on your machine, install `sccache` and add to
-your global `~/.cargo/config.toml` (point the cache at a fast filesystem, not the
-9p scratch disk):
+forced to install it.
 
-```toml
-[build]
-rustc-wrapper = "sccache"
+Do **not** force it via a machine-global `[build] rustc-wrapper`: that applies
+the wrapper to *every* cargo process by every tool/user/sandbox on the machine,
+including agents (e.g. Codex) whose environment cannot reach the cache owner's
+`0700` cache dir — their builds then fail with permission errors. Scope it to
+where it is usable instead:
 
-[env]
-SCCACHE_DIR = "/path/on/fast/ext4/sccache"
-SCCACHE_CACHE_SIZE = "30G"
-```
+- `./run.sh` enables sccache for its subcommands automatically when `sccache` is
+  on `PATH` (it runs as the cache owner).
+- To also cache the manual closeout gate (the two clippy passes, `cargo test`),
+  `export RUSTC_WRAPPER=sccache` in your own interactive shell (`~/.bashrc`).
+- Keep only the cache location in your global `~/.cargo/config.toml` `[env]`
+  (inert unless `RUSTC_WRAPPER=sccache` is set), pointed at fast ext4, not the
+  9p scratch disk:
+
+  ```toml
+  [env]
+  SCCACHE_DIR = "/path/on/fast/ext4/sccache"
+  SCCACHE_CACHE_SIZE = "30G"
+  ```
 
 Check it is working with `sccache --show-stats` (compile requests climb; cache
 hit rate rises once the same dependency/feature union is built a second time).

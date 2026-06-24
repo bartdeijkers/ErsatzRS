@@ -25,6 +25,15 @@ export LD_LIBRARY_PATH="$HOME/.local/ffmpeg-8.1/lib${LD_LIBRARY_PATH:+:$LD_LIBRA
 export ErsatzRS_FFMPEG__PATH="$HOME/.local/ffmpeg-8.1/bin/ffmpeg"
 export ErsatzRS_FFPROBE__PATH="$HOME/.local/ffmpeg-8.1/bin/ffprobe"
 
+# Opt-in sccache (caches dependency compiles on fast ext4 so config switches
+# don't recompile on the slow 9p target). Enabled here only — NOT forced
+# machine-wide via ~/.cargo/config.toml — so sandboxed agents / other users are
+# never dragged into a cache they cannot write. No-op if sccache isn't installed
+# or the caller already set RUSTC_WRAPPER.
+if [[ -z "${RUSTC_WRAPPER:-}" ]] && command -v sccache >/dev/null 2>&1; then
+  export RUSTC_WRAPPER=sccache
+fi
+
 # Resolve the build target directory the way cargo itself does, so the size
 # guard inspects the real artifact dir (the scratch disk path configured in
 # .cargo/config.toml) instead of a stale local ./target. Precedence matches
