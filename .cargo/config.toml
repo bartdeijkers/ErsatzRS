@@ -1,5 +1,4 @@
 [build]
-target-dir = "/mnt/f/ErsatzRS/target"
 
 [env]
 SQLX_OFFLINE = "true"
