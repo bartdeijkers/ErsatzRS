@@ -27,15 +27,15 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the content-variants Phase 2 local scanner
-closeout): the previous #1 Phase 2 scanner prompt is now resolved after
-focused scanner tests, focused media-browser server-function coverage, and the
-scanner crate test suite.
+Selection (2026-06-24, after the content-variants Phase 3 alternate-version
+linking closeout): the previous #1 Phase 3 scanner prompt is now resolved after
+focused alternate-version scanner tests, the scanner crate test suite, and
+default-exclusion search coverage.
 `cargo xtask progress gaps` still reports `content-variants` as an in-progress
-parity/spec feature because Phase 3-5 remain open. The completed-scope rule
+parity/spec feature because Phase 4-5 remain open. The completed-scope rule
 keeps the next bounded ADR 0018 slice at the top. Ranking: (1)
-**content-variants Phase 3 alternate-version linking** — detect and link
-alternate renditions while preserving default invisibility; (2)
+**content-variants Phase 4 commentary render acceptance** — prove/complete the
+channel stream-selector playback half for commentary-bearing items; (2)
 **ersatzrs-healthcheck binary** — open Phase 7 runtime hardening TODO to
 replace the Docker image's tool-based health check with a purpose-built binary;
 (3) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed /
@@ -50,68 +50,79 @@ closeout removes the completed Channels prompt and refills with spec-backed
 chores that have no ErsatzTV baseline dimension. A future window containing new
 pinned-baseline parity work must not be reconciled until the pin is reachable
 again. The earlier manual closeouts removed the completed Channels and Phase 1
-UI prompts; this closeout removes the completed Phase 2 scanner prompt and
+UI prompts; the previous closeout removed the completed Phase 2 scanner prompt,
+and this closeout removes the completed Phase 3 alternate-version prompt and
 refills with the next spec-backed ADR 0018 phase.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: content-variants Phase 3 alternate-version linking (slug `content-variants`)
+## 1. Build the next ErsatzRS spec chore: content-variants Phase 4 commentary render acceptance (slug `content-variants`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed chore**, not an
 ErsatzTV parity port: it is governed by
 [ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md) and
 [`plans/extras-alternate-versions-and-stream-roles.md`](../plans/extras-alternate-versions-and-stream-roles.md).
-This slice intentionally extends ErsatzTV's current scanner behavior by linking
-alternate renditions that ErsatzTV imports as unrelated primary media; the
-deviation is already governed by ADR 0018. The goal is the complete
-**Phase 3 — Alternate-version linking** slice on top of the Phase 0
-schema/search foundation, Phase 1 UI surfacing, and Phase 2 local extra import.
+This slice intentionally completes the commentary selection-to-render path that
+ADR 0018 layers on top of ErsatzTV's existing stream-title selector behavior.
+The goal is the complete **Phase 4 — Stream roles (commentary)** acceptance
+slice on top of the Phase 0 schema/search foundation, Phase 1 UI surfacing,
+Phase 2 local extra import, and Phase 3 alternate-version linking.
 
-Scope is **only Phase 3** from the plan. Do not implement commentary render
-acceptance or scheduling examples in this slice. Any shortfall must remain visible in
-`docs/progress/parity/content-variants.toml`.
+Scope is **only Phase 4** from the plan. Do not implement scheduling examples,
+pre-roll filler templates, or Phase 5 consumer examples in this slice. Any
+shortfall must remain visible in `docs/progress/parity/content-variants.toml`.
 
 Before editing:
-1. Read ADR 0018, the plan's Phase 3 section, PORTING.md, STYLE.md, and
+1. Read ADR 0018, the plan's Phase 4 section, PORTING.md, STYLE.md, and
    `docs/progress/parity/content-variants.toml`.
-2. Inspect the local scanner music-video, song, and movie persistence paths,
-   scanner tests, subtype normalizer, search projection, and the upstream
-   ErsatzTV behavior that leaves alternate renditions independent.
-3. Build a Source Map for version-token detection, title/folder normalization,
-   canonical parent selection, `MediaItem.ContentKind=AlternateVersion` /
-   `SubKind` / `ParentMediaItemId` persistence, and default-exclusion safety.
-4. Identify the remaining Phase 4-5 debt you are explicitly deferring.
+2. Inspect ErsatzTV's channel stream selector and FFmpeg stream-selection path:
+   `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`,
+   `FFmpegStreamSelector.cs`, `Domain/Channel.cs`,
+   `Domain/ChannelStreamSelectorMode.cs`, and
+   `Domain/ChannelSubtitleMode.cs`.
+3. Inspect the ErsatzRS search projection, smart-collection search tests,
+   channel repository, playback stream selector, FFmpeg argv generation, and
+   any current `PreferredAudioTitle` / allowlist / blocklist / subtitle-mode
+   handling.
+4. Build a Source Map for `audio_title` / `subtitle_title` /
+   `has_commentary` selection, channel selector persistence, render-path argv
+   generation, subtitle mode behavior, and runtime/default-exclusion safety.
+5. Identify the remaining Phase 5 scheduling/example debt you are explicitly
+   deferring.
 
 Implement the slice end-to-end:
-- Detect alternate-version tokens from title/folder conventions such as
-  `(Live)`, `- Live`, `/Unplugged/`, `(Acoustic)`, `(Official Video)`,
-  `MTV Unplugged`, remix/remaster/extended/directors-cut style labels, and
-  normalize them through the existing subtype normalizer.
-- Persist alternate versions as their natural media kind (`MusicVideo`, `Song`,
-  or `Movie`) with `ContentKind=AlternateVersion`, normalized `SubKind`, and a
-  `ParentMediaItemId` pointing at the canonical primary when one can be chosen.
-- Choose a deterministic canonical primary for same-work renditions (official /
-  studio / unmarked version first, otherwise first-seen) and leave genuinely
-  orphaned alternates typed but unlinked rather than guessing.
-- Cover representative folder layouts for music videos/songs/movies, including
-  folder-level and title-suffix tokens.
-- Prove default-exclusion still keeps existing browse/search/channel behavior
-  primary-only unless a query or UI toggle opts into variants.
+- Verify or complete search selection for commentary-bearing items with
+  `audio_title`, `subtitle_title`, and `has_commentary`, preserving the existing
+  implicit `content_kind:primary` default unless a variant field opts in.
+- Verify or complete channel persistence for `PreferredAudioTitle`,
+  `StreamSelector`, `StreamSelectorMode`, audio/subtitle allowlists and
+  blocklists, and `SubtitleMode` values needed to pin commentary audio and
+  subtitles.
+- Verify or complete FFmpeg render selection so a channel fed by a commentary
+  smart collection can actually select the commentary audio stream and matching
+  commentary subtitles by title substring, matching ErsatzTV's selector
+  behavior.
+- Add focused tests for selection and render-path argv/stream choice, including
+  allowlist, blocklist, preferred-title, subtitle-title, and fallback behavior
+  when no matching commentary stream exists.
+- Prove that normal channels without commentary selectors keep today's primary
+  audio/subtitle behavior.
 - Update `docs/progress/parity/content-variants.toml`, `CHANGELOG.md`, and the
   prompt file if the debt ranking changes.
 
 Verification:
-- Focused scanner tests for alternate-version detection, subtype normalization,
-  canonical parent linkage, and orphan behavior.
-- Focused search/media-browser tests proving imported alternate versions remain
-  hidden by default and visible when explicitly opted in.
-- `cargo test -p ersatzrs-scanner`.
+- Focused core/infra/web tests proving `audio_title`, `subtitle_title`, and
+  `has_commentary` smart-collection selection.
+- Focused FFmpeg/playback tests proving commentary audio/subtitle stream
+  selection by title substring and normal-channel fallback behavior.
+- `cargo test -p ersatzrs-core search`.
+- `cargo test -p ersatzrs-infra scheduling_repository`.
 - `cargo test -p ersatzrs-web admin::server_fns::media_browser`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, Phase 3 behavior implemented, remaining Phase 4-5
+Report the Source Map, Phase 4 behavior implemented, remaining Phase 5
 `ParityDebt`, verification run, and changed files.
 
 ---

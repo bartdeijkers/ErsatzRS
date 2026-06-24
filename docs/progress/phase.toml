@@ -53,12 +53,15 @@ Features and Versions sections, and surface the new search tokens. Phase 2
 local scanner import/classification also landed on 2026-06-24: movie/show
 library extras are imported as typed `OtherVideo` rows with normalized subkind,
 folder/stem-derived parent linkage when available, and default-exclusion search
-coverage. Alternate-version linking, commentary render acceptance, and
-scheduling examples remain tracked as unresolved debt in
-`docs/progress/parity/content-variants.toml`. The next spec-backed candidates
-are the remaining `content-variants` phases, the open `ersatzrs-healthcheck`
-binary TODO, and ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed /
-Not implemented).
+coverage. Phase 3 alternate-version linking landed on 2026-06-24: local
+music-video, song, and movie scans classify live/unplugged/acoustic/remix/
+remaster/extended/director-cut renditions, keep deterministic canonical
+primaries, link same-work alternates, and leave lone alternates typed but
+unlinked. Commentary render acceptance and scheduling examples remain tracked
+as unresolved debt in `docs/progress/parity/content-variants.toml`. The next
+spec-backed candidates are the remaining `content-variants` phases, the open
+`ersatzrs-healthcheck` binary TODO, and ADR 0013 in-app TSDuck MPEG-TS
+troubleshooting (Proposed / Not implemented).
 '''
 
 # Phase 0 checklist (all complete).

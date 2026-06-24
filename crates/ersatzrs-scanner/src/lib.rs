@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::time::Duration as StdDuration;
@@ -106,6 +106,21 @@ enum LocalScanBucketKind {
 struct LocalScanBucket {
     library_path: LocalLibraryPath,
     kind: LocalScanBucketKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AlternateVersionClassification {
+    pub base_title: String,
+    pub sub_kind: Option<String>,
+    pub canonical_hint: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AlternateVersionRow {
+    item_id: i64,
+    disambiguator: String,
+    path: Option<String>,
+    classification: AlternateVersionClassification,
 }
 
 /// Scan a local `ErsatzTV` library path into media database rows.
@@ -271,6 +286,7 @@ async fn scan_local_library_with_progress_once(
                         }
                     }
                 }
+                link_alternate_versions_for_library_path(pool, &library_path).await?;
             }
             LocalScanBucketKind::Shows { expected_episodes } => {
                 let mut local_processed = 0usize;
@@ -557,6 +573,450 @@ pub(crate) fn classify_extra_directory_name(name: &str) -> Option<String> {
         "other" | "extras" | "specials" => normalize_sub_kind_token("other"),
         _ => None,
     }
+}
+
+pub(crate) fn classify_alternate_version(
+    library_root: &Path,
+    title: &str,
+    path: Option<&Path>,
+) -> AlternateVersionClassification {
+    let title_detection = detect_version_token(title);
+    let path_detection =
+        path.and_then(|path| detect_version_token_for_relative_path(library_root, path));
+    let detection = title_detection.clone().or(path_detection);
+
+    let base_source = if title.trim().is_empty() {
+        path.and_then(|p| p.file_stem())
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default()
+    } else {
+        title
+    };
+    let base_title = if title_detection.is_some() || title.trim().is_empty() {
+        strip_version_tokens(base_source)
+    } else {
+        base_source.trim().to_owned()
+    };
+
+    AlternateVersionClassification {
+        base_title,
+        sub_kind: detection
+            .as_ref()
+            .and_then(|token| (!token.canonical_hint).then(|| token.sub_kind.clone())),
+        canonical_hint: detection.is_none_or(|token| token.canonical_hint),
+    }
+}
+
+async fn link_alternate_versions_for_library_path(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+) -> Result<()> {
+    let rows = load_alternate_version_rows(pool, library_path).await?;
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    let mut groups: BTreeMap<(String, String), Vec<AlternateVersionRow>> = BTreeMap::new();
+    for row in rows {
+        let key = (
+            normalize_group_key(&row.disambiguator),
+            normalize_group_key(&row.classification.base_title),
+        );
+        if key.1.is_empty() {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+            continue;
+        }
+        groups.entry(key).or_default().push(row);
+    }
+
+    for (_, mut group) in groups {
+        group.sort_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then_with(|| left.item_id.cmp(&right.item_id))
+        });
+        apply_alternate_version_group(pool, &group).await?;
+    }
+
+    Ok(())
+}
+
+async fn apply_alternate_version_group(pool: &DbPool, group: &[AlternateVersionRow]) -> Result<()> {
+    let alternate_count = group
+        .iter()
+        .filter(|row| row.classification.sub_kind.is_some())
+        .count();
+    if alternate_count == 0 {
+        for row in group {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+        }
+        return Ok(());
+    }
+
+    if group.len() == 1 {
+        let row = &group[0];
+        if let Some(sub_kind) = &row.classification.sub_kind {
+            set_alternate_variant_fields(pool, row.item_id, sub_kind, None).await?;
+        } else {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+        }
+        return Ok(());
+    }
+
+    let canonical_id = group
+        .iter()
+        .find(|row| row.classification.sub_kind.is_none() && row.classification.canonical_hint)
+        .or_else(|| {
+            group
+                .iter()
+                .find(|row| row.classification.sub_kind.is_none())
+        })
+        .unwrap_or(&group[0])
+        .item_id;
+
+    for row in group {
+        if row.item_id == canonical_id {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+        } else if let Some(sub_kind) = &row.classification.sub_kind {
+            set_alternate_variant_fields(pool, row.item_id, sub_kind, Some(canonical_id)).await?;
+        } else {
+            reset_primary_variant_fields(pool, row.item_id).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn reset_primary_variant_fields(pool: &DbPool, item_id: i64) -> Result<()> {
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = ?, "SubKind" = NULL, "ParentMediaItemId" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(ContentKind::Primary.db_value())
+    .bind(item_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn set_alternate_variant_fields(
+    pool: &DbPool,
+    item_id: i64,
+    sub_kind: &str,
+    parent_media_item_id: Option<i64>,
+) -> Result<()> {
+    let normalized_sub_kind = normalize_sub_kind_token(sub_kind);
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = ?, "SubKind" = ?, "ParentMediaItemId" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(ContentKind::AlternateVersion.db_value())
+    .bind(&normalized_sub_kind)
+    .bind(parent_media_item_id)
+    .bind(item_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn load_alternate_version_rows(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+) -> Result<Vec<AlternateVersionRow>> {
+    match library_path.media_kind {
+        LibraryMediaKind::Movies => load_movie_alternate_version_rows(pool, library_path).await,
+        LibraryMediaKind::MusicVideos => {
+            load_music_video_alternate_version_rows(pool, library_path).await
+        }
+        LibraryMediaKind::Songs => load_song_alternate_version_rows(pool, library_path).await,
+        _ => Ok(Vec::new()),
+    }
+}
+
+async fn load_movie_alternate_version_rows(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+) -> Result<Vec<AlternateVersionRow>> {
+    let rows = sqlx::query(
+        r#"SELECT "m"."Id" AS "Id",
+                  COALESCE("mm"."Title", "mm"."SortTitle", "mm"."OriginalTitle", '') AS "Title",
+                  "mf"."Path" AS "Path"
+           FROM "Movie" AS "m"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "m"."Id"
+           JOIN "MovieMetadata" AS "mm" ON "mm"."MovieId" = "m"."Id"
+           LEFT JOIN "MediaVersion" AS "mv" ON "mv"."MovieId" = "m"."Id"
+           LEFT JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id"
+           WHERE "mi"."LibraryPathId" = ?
+             AND COALESCE("mi"."ContentKind", 0) <> ?
+           ORDER BY "mf"."Path", "m"."Id""#,
+    )
+    .bind(library_path.id)
+    .bind(ContentKind::Extra.db_value())
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| alternate_version_row_from_db_row(&row, library_path, ""))
+        .collect())
+}
+
+async fn load_music_video_alternate_version_rows(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+) -> Result<Vec<AlternateVersionRow>> {
+    let rows = sqlx::query(
+        r#"SELECT "mv"."Id" AS "Id",
+                  COALESCE("mvm"."Title", "mvm"."SortTitle", "mvm"."OriginalTitle", '') AS "Title",
+                  COALESCE("am"."Title", '') AS "Artist",
+                  "mf"."Path" AS "Path"
+           FROM "MusicVideo" AS "mv"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "mv"."Id"
+           JOIN "MusicVideoMetadata" AS "mvm" ON "mvm"."MusicVideoId" = "mv"."Id"
+           LEFT JOIN "ArtistMetadata" AS "am" ON "am"."ArtistId" = "mv"."ArtistId"
+           LEFT JOIN "MediaVersion" AS "ver" ON "ver"."MusicVideoId" = "mv"."Id"
+           LEFT JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "ver"."Id"
+           WHERE "mi"."LibraryPathId" = ?
+           ORDER BY "mf"."Path", "mv"."Id""#,
+    )
+    .bind(library_path.id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let artist = row.get::<Option<String>, _>("Artist").unwrap_or_default();
+            alternate_version_row_from_db_row(&row, library_path, &artist)
+        })
+        .collect())
+}
+
+async fn load_song_alternate_version_rows(
+    pool: &DbPool,
+    library_path: &LocalLibraryPath,
+) -> Result<Vec<AlternateVersionRow>> {
+    let rows = sqlx::query(
+        r#"SELECT "s"."Id" AS "Id",
+                  COALESCE("sm"."Title", "sm"."SortTitle", "sm"."OriginalTitle", '') AS "Title",
+                  COALESCE("sm"."Artists", "sm"."AlbumArtists", '') AS "Artist",
+                  "mf"."Path" AS "Path"
+           FROM "Song" AS "s"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "s"."Id"
+           JOIN "SongMetadata" AS "sm" ON "sm"."SongId" = "s"."Id"
+           LEFT JOIN "MediaVersion" AS "mv" ON "mv"."SongId" = "s"."Id"
+           LEFT JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id"
+           WHERE "mi"."LibraryPathId" = ?
+           ORDER BY "mf"."Path", "s"."Id""#,
+    )
+    .bind(library_path.id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let artist = row.get::<Option<String>, _>("Artist").unwrap_or_default();
+            alternate_version_row_from_db_row(&row, library_path, &artist)
+        })
+        .collect())
+}
+
+fn alternate_version_row_from_db_row(
+    row: &DbRow,
+    library_path: &LocalLibraryPath,
+    disambiguator: &str,
+) -> AlternateVersionRow {
+    let item_id = row.get::<i64, _>("Id");
+    let title = row.get::<Option<String>, _>("Title").unwrap_or_default();
+    let path = row.get::<Option<String>, _>("Path");
+    let path_ref = path.as_deref().map(Path::new);
+    let classification =
+        classify_alternate_version(Path::new(&library_path.path), &title, path_ref);
+    AlternateVersionRow {
+        item_id,
+        disambiguator: disambiguator.to_owned(),
+        path,
+        classification,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VersionToken {
+    sub_kind: String,
+    canonical_hint: bool,
+}
+
+fn detect_version_token_for_relative_path(
+    library_root: &Path,
+    path: &Path,
+) -> Option<VersionToken> {
+    let parent = path.parent()?;
+    let relative = parent.strip_prefix(library_root).unwrap_or(parent);
+    relative.components().find_map(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .and_then(detect_folder_version_token)
+    })
+}
+
+fn detect_version_token(value: &str) -> Option<VersionToken> {
+    let normalized = normalized_words(value);
+    detect_alternate_token(&normalized)
+        .or_else(|| detect_canonical_token(&normalized))
+        .filter(|_| title_has_version_marker(value, &normalized))
+}
+
+fn detect_folder_version_token(value: &str) -> Option<VersionToken> {
+    let normalized = normalized_words(value);
+    detect_alternate_token(&normalized).or_else(|| detect_canonical_token(&normalized))
+}
+
+fn detect_alternate_token(normalized: &str) -> Option<VersionToken> {
+    [
+        ("mtv unplugged", "unplugged"),
+        ("unplugged", "unplugged"),
+        ("acoustic", "acoustic"),
+        ("director s cut", "directors_cut"),
+        ("directors cut", "directors_cut"),
+        ("director cut", "directors_cut"),
+        ("extended mix", "extended"),
+        ("extended version", "extended"),
+        ("extended", "extended"),
+        ("remastered", "remaster"),
+        ("remaster", "remaster"),
+        ("remix", "remix"),
+        ("live", "live"),
+    ]
+    .into_iter()
+    .find_map(|(phrase, sub_kind)| {
+        contains_word_phrase(normalized, phrase).then(|| VersionToken {
+            sub_kind: normalize_sub_kind_token(sub_kind).unwrap_or_else(|| sub_kind.to_owned()),
+            canonical_hint: false,
+        })
+    })
+}
+
+fn detect_canonical_token(normalized: &str) -> Option<VersionToken> {
+    [
+        ("official music video", "official_video"),
+        ("official video", "official_video"),
+        ("studio version", "studio"),
+        ("studio", "studio"),
+    ]
+    .into_iter()
+    .find_map(|(phrase, sub_kind)| {
+        contains_word_phrase(normalized, phrase).then(|| VersionToken {
+            sub_kind: normalize_sub_kind_token(sub_kind).unwrap_or_else(|| sub_kind.to_owned()),
+            canonical_hint: true,
+        })
+    })
+}
+
+fn title_has_version_marker(original: &str, normalized: &str) -> bool {
+    let trimmed = original.trim();
+    let has_group_marker = (trimmed.contains('(') && trimmed.contains(')'))
+        || (trimmed.contains('[') && trimmed.contains(']'))
+        || (trimmed.contains('{') && trimmed.contains('}'));
+    let has_separator = [" - ", " – ", " — ", "_", " / "]
+        .iter()
+        .any(|separator| trimmed.contains(separator));
+    let explicit_phrase = [
+        "mtv unplugged",
+        "official music video",
+        "official video",
+        "directors cut",
+        "director cut",
+        "director s cut",
+        "extended version",
+        "extended mix",
+        "studio version",
+    ]
+    .iter()
+    .any(|phrase| contains_word_phrase(normalized, phrase));
+
+    has_group_marker || has_separator || explicit_phrase
+}
+
+fn strip_version_tokens(value: &str) -> String {
+    let normalized = normalized_words(value);
+    let words = normalized.split_whitespace().collect::<Vec<_>>();
+    let phrases = [
+        "official music video",
+        "official video",
+        "mtv unplugged",
+        "director s cut",
+        "directors cut",
+        "director cut",
+        "extended version",
+        "extended mix",
+        "studio version",
+        "remastered",
+        "remaster",
+        "remix",
+        "unplugged",
+        "acoustic",
+        "extended",
+        "studio",
+        "live",
+    ]
+    .map(normalized_words);
+
+    let mut kept = Vec::new();
+    let mut index = 0usize;
+    while index < words.len() {
+        if let Some(match_len) = phrases
+            .iter()
+            .map(|phrase| phrase.split_whitespace().collect::<Vec<_>>())
+            .find_map(|phrase_words| {
+                words[index..]
+                    .starts_with(&phrase_words)
+                    .then_some(phrase_words.len())
+            })
+        {
+            index += match_len;
+        } else {
+            kept.push(words[index]);
+            index += 1;
+        }
+    }
+
+    if kept.is_empty() {
+        value.trim().to_owned()
+    } else {
+        kept.join(" ")
+    }
+}
+
+fn contains_word_phrase(normalized: &str, phrase: &str) -> bool {
+    let haystack = format!(" {normalized} ");
+    let needle = format!(" {} ", normalized_words(phrase));
+    haystack.contains(&needle)
+}
+
+fn normalized_words(value: &str) -> String {
+    let mut out = String::new();
+    let mut last_was_space = true;
+    for ch in value.chars().flat_map(char::to_lowercase) {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch);
+            last_was_space = false;
+        } else if !last_was_space {
+            out.push(' ');
+            last_was_space = true;
+        }
+    }
+    out.trim().to_owned()
+}
+
+fn normalize_group_key(value: &str) -> String {
+    normalized_words(value)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn is_scannable_for_kind(path: &Path, media_kind: LibraryMediaKind) -> bool {
@@ -924,11 +1384,17 @@ async fn upsert_local_music_video(
         (item_id, version_id)
     };
 
-    sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
-        .bind(library_path.id)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "LibraryPathId" = ?, "State" = 0, "ContentKind" = ?,
+               "SubKind" = NULL, "ParentMediaItemId" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(library_path.id)
+    .bind(ContentKind::Primary.db_value())
+    .bind(item_id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(r#"UPDATE "MusicVideo" SET "ArtistId" = ? WHERE "Id" = ?"#)
         .bind(artist_id)
         .bind(item_id)
@@ -1258,11 +1724,17 @@ async fn upsert_local_remote_stream(
         item_id
     };
 
-    sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
-        .bind(library_path.id)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "LibraryPathId" = ?, "State" = 0, "ContentKind" = ?,
+               "SubKind" = NULL, "ParentMediaItemId" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(library_path.id)
+    .bind(ContentKind::Primary.db_value())
+    .bind(item_id)
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
     Ok(())
@@ -1317,11 +1789,17 @@ async fn upsert_local_file(
         (item_id, version_id)
     };
 
-    sqlx::query(r#"UPDATE "MediaItem" SET "LibraryPathId" = ?, "State" = 0 WHERE "Id" = ?"#)
-        .bind(library_path.id)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "LibraryPathId" = ?, "State" = 0, "ContentKind" = ?,
+               "SubKind" = NULL, "ParentMediaItemId" = NULL
+           WHERE "Id" = ?"#,
+    )
+    .bind(library_path.id)
+    .bind(ContentKind::Primary.db_value())
+    .bind(item_id)
+    .execute(&mut *tx)
+    .await?;
     update_media_version(&mut tx, version_id, &probed).await?;
     replace_streams(&mut tx, version_id, &probed.streams).await?;
     replace_chapters(&mut tx, version_id, &probed.chapters).await?;
@@ -2292,8 +2770,8 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_extra_directory_name, classify_extra_video, is_scannable_for_kind, path_hash,
-        retry_sqlite_busy, ExtraParentHint,
+        classify_alternate_version, classify_extra_directory_name, classify_extra_video,
+        is_scannable_for_kind, path_hash, retry_sqlite_busy, ExtraParentHint,
     };
     use ersatzrs_domain::LibraryMediaKind;
     use std::path::Path;
@@ -2362,6 +2840,34 @@ mod tests {
         assert!(
             classify_extra_video(Path::new("/library"), Path::new("/library/Movie.mkv")).is_none()
         );
+    }
+
+    #[test]
+    fn classifies_alternate_version_tokens_without_rewriting_unmarked_titles() {
+        let live = classify_alternate_version(Path::new("/library"), "Song (Live)", None);
+        assert_eq!(live.base_title, "song");
+        assert_eq!(live.sub_kind.as_deref(), Some("live"));
+        assert!(!live.canonical_hint);
+
+        let folder = classify_alternate_version(
+            Path::new("/library"),
+            "Song",
+            Some(Path::new("/library/Artist/MTV Unplugged/Song.mkv")),
+        );
+        assert_eq!(folder.base_title, "Song");
+        assert_eq!(folder.sub_kind.as_deref(), Some("unplugged"));
+        assert!(!folder.canonical_hint);
+
+        let official =
+            classify_alternate_version(Path::new("/library"), "Song (Official Video)", None);
+        assert_eq!(official.base_title, "song");
+        assert!(official.sub_kind.is_none());
+        assert!(official.canonical_hint);
+
+        let unmarked = classify_alternate_version(Path::new("/library"), "Live Wire", None);
+        assert_eq!(unmarked.base_title, "Live Wire");
+        assert!(unmarked.sub_kind.is_none());
+        assert!(unmarked.canonical_hint);
     }
 
     #[tokio::test]
@@ -2473,6 +2979,182 @@ mod tests {
     }
 
     #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn music_video_versions_link_to_official_primary_and_stay_hidden_by_default() {
+        use super::{
+            link_alternate_versions_for_library_path, upsert_artist_for_folder,
+            upsert_local_music_video,
+        };
+        use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let artist_dir = temp.path().join("Talking Heads");
+        let unplugged_dir = artist_dir.join("MTV Unplugged");
+        std::fs::create_dir_all(&unplugged_dir).expect("artist dirs");
+        let official_path = artist_dir.join("Once in a Lifetime (Official Video).mkv");
+        let unplugged_path = unplugged_dir.join("Once in a Lifetime.mkv");
+        std::fs::write(&official_path, b"not probed").expect("official video");
+        std::fs::write(&unplugged_path, b"not probed").expect("unplugged video");
+
+        let pool = test_db().await;
+        let library_path = seed_music_video_library_path(temp.path());
+        seed_music_video_library(&pool, &library_path).await;
+        let artist_id = upsert_artist_for_folder(&pool, &library_path, "Talking Heads")
+            .await
+            .expect("artist");
+
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &artist_dir,
+            &official_path,
+            probed_version(),
+        )
+        .await
+        .expect("official upsert");
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &artist_dir,
+            &unplugged_path,
+            probed_version(),
+        )
+        .await
+        .expect("unplugged upsert");
+
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let official_id = media_item_id_for_path(&pool, &official_path).await;
+        let unplugged_id = media_item_id_for_path(&pool, &unplugged_path).await;
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(unplugged_id)
+        .fetch_one(&pool)
+        .await
+        .expect("unplugged row");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("unplugged")
+        );
+        assert_eq!(
+            row.get::<Option<i64>, _>("ParentMediaItemId"),
+            Some(official_id)
+        );
+
+        let repository = SqliteSchedulingContentRepository::new(pool.clone());
+        assert_eq!(search_ids(&repository, "Once").await, vec![official_id]);
+        assert_eq!(
+            search_ids(
+                &repository,
+                "content_kind:alternate_version AND sub_kind:unplugged"
+            )
+            .await,
+            vec![unplugged_id]
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn orphan_song_alternate_is_typed_but_unlinked() {
+        use super::{link_alternate_versions_for_library_path, upsert_local_file};
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let song_path = temp.path().join("Track (Acoustic).flac");
+        std::fs::write(&song_path, b"not probed").expect("song file");
+
+        let pool = test_db().await;
+        let library_path = seed_song_library(&pool, temp.path()).await;
+        upsert_local_file(&pool, &library_path, &song_path, probed_version())
+            .await
+            .expect("song upsert");
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let song_id = media_item_id_for_path(&pool, &song_path).await;
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(song_id)
+        .fetch_one(&pool)
+        .await
+        .expect("song row");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("acoustic")
+        );
+        assert!(row.get::<Option<i64>, _>("ParentMediaItemId").is_none());
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn movie_directors_cut_links_to_unmarked_primary() {
+        use super::{link_alternate_versions_for_library_path, upsert_local_file};
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let primary_path = temp.path().join("Blade Runner.mkv");
+        let cut_path = temp.path().join("Blade Runner (Director's Cut).mkv");
+        std::fs::write(&primary_path, b"not probed").expect("primary movie");
+        std::fs::write(&cut_path, b"not probed").expect("directors cut");
+
+        let pool = test_db().await;
+        let library_path = seed_movie_library_path(&pool, temp.path()).await;
+        upsert_local_file(&pool, &library_path, &primary_path, probed_version())
+            .await
+            .expect("primary upsert");
+        upsert_local_file(&pool, &library_path, &cut_path, probed_version())
+            .await
+            .expect("cut upsert");
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let primary_id = media_item_id_for_path(&pool, &primary_path).await;
+        let cut_id = media_item_id_for_path(&pool, &cut_path).await;
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(cut_id)
+        .fetch_one(&pool)
+        .await
+        .expect("cut row");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("directors_cut")
+        );
+        assert_eq!(
+            row.get::<Option<i64>, _>("ParentMediaItemId"),
+            Some(primary_id)
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
     async fn search_ids(
         repository: &ersatzrs_infra::repositories::SqliteSchedulingContentRepository,
         query: &str,
@@ -2500,6 +3182,124 @@ mod tests {
             streams: Vec::new(),
             chapters: Vec::new(),
         }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn test_db() -> sqlx::SqlitePool {
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::Executor;
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    fn seed_music_video_library_path(path: &Path) -> super::LocalLibraryPath {
+        super::LocalLibraryPath {
+            id: 1,
+            path: path.display().to_string(),
+            media_kind: LibraryMediaKind::MusicVideos,
+        }
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_music_video_library(
+        pool: &sqlx::SqlitePool,
+        library_path: &super::LocalLibraryPath,
+    ) {
+        seed_local_library(pool, library_path, "Music Videos", 3).await;
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_song_library(pool: &sqlx::SqlitePool, path: &Path) -> super::LocalLibraryPath {
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: path.display().to_string(),
+            media_kind: LibraryMediaKind::Songs,
+        };
+        seed_local_library(pool, &library_path, "Songs", 5).await;
+        library_path
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_movie_library_path(
+        pool: &sqlx::SqlitePool,
+        path: &Path,
+    ) -> super::LocalLibraryPath {
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: path.display().to_string(),
+            media_kind: LibraryMediaKind::Movies,
+        };
+        seed_local_library(pool, &library_path, "Movies", 1).await;
+        library_path
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn seed_local_library(
+        pool: &sqlx::SqlitePool,
+        library_path: &super::LocalLibraryPath,
+        name: &str,
+        media_kind: i32,
+    ) {
+        use sqlx::Executor;
+
+        pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
+            .await
+            .expect("media source");
+        pool.execute(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (1)"#)
+            .await
+            .expect("local source");
+        sqlx::query(
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, ?, ?, 1)"#,
+        )
+        .bind(name)
+        .bind(media_kind)
+        .execute(pool)
+        .await
+        .expect("library");
+        pool.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+            .await
+            .expect("local library");
+        sqlx::query(r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path") VALUES (1, 1, ?)"#)
+            .bind(&library_path.path)
+            .execute(pool)
+            .await
+            .expect("library path");
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    async fn media_item_id_for_path(pool: &sqlx::SqlitePool, path: &Path) -> i64 {
+        use sqlx::Row;
+
+        let path_text = path.display().to_string();
+        let hash = path_hash(&path_text);
+        sqlx::query(
+            r#"SELECT COALESCE(
+                    "mv"."MovieId", "mv"."MusicVideoId", "mv"."SongId",
+                    "mv"."OtherVideoId", "mv"."ImageId"
+               ) AS "MediaItemId"
+               FROM "MediaFile" AS "mf"
+               JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
+               WHERE "mf"."PathHash" = ?"#,
+        )
+        .bind(hash)
+        .fetch_one(pool)
+        .await
+        .expect("media file")
+        .get::<i64, _>("MediaItemId")
     }
 
     #[cfg(not(feature = "mysql"))]

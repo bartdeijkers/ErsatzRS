@@ -32,6 +32,11 @@ release section when tagging a release.
   matching ErsatzTV's extra suffix and directory taxonomy are now imported as
   typed `OtherVideo` rows with normalized sub-kinds and parent linkage while
   remaining hidden from default browse/search behavior.
+- Content-variant alternate-version linking for ADR 0018: local music-video,
+  song, and movie scans now classify live, unplugged, acoustic, remix,
+  remaster, extended, and director-cut renditions, keep deterministic canonical
+  primaries, link same-work alternates through `ParentMediaItemId`, and leave
+  orphan alternates typed but unlinked.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

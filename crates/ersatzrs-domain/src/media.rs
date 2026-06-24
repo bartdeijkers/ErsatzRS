@@ -91,10 +91,10 @@ pub fn normalize_sub_kind_token(value: &str) -> Option<String> {
         "live" => "live",
         "unplugged" => "unplugged",
         "acoustic" => "acoustic",
-        "remix" => "remix",
-        "remaster" => "remaster",
-        "extended" => "extended",
-        "directors_cut" | "director_s_cut" => "directors_cut",
+        "remixes" | "remix" => "remix",
+        "remastered" | "remasters" | "remaster" => "remaster",
+        "extended_cut" | "extended_mix" | "extended_version" | "extended" => "extended",
+        "directorscut" | "director_cut" | "director_s_cut" | "directors_cut" => "directors_cut",
         _ => token.as_str(),
     };
 

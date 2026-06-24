@@ -5,14 +5,14 @@ status     = 'In progress'
 adr        = ['0018']
 
 summary    = '''
-Phase 0 foundation, Phase 1 media UI surfacing, and Phase 2 local scanner
-extra import/classification are implemented. `MediaItem` now has additive
-`ContentKind`, `SubKind`, and `ParentMediaItemId` columns (SQLite and MySQL
-migrations) so later scanner/provider slices can represent primary items,
-extras, and alternate versions without changing existing rows. The domain model
-has a closed `ContentKind` enum plus an open subtype normalizer that canonicalizes
-the ErsatzTV extra suffix/directory vocabulary and common alternate-version
-tokens.
+Phase 0 foundation, Phase 1 media UI surfacing, Phase 2 local scanner extra
+import/classification, and Phase 3 alternate-version linking are implemented.
+`MediaItem` now has additive `ContentKind`, `SubKind`, and
+`ParentMediaItemId` columns (SQLite and MySQL migrations) so scanner/provider
+slices can represent primary items, extras, and alternate versions without
+changing existing rows. The domain model has a closed `ContentKind` enum plus
+an open subtype normalizer that canonicalizes the ErsatzTV extra
+suffix/directory vocabulary and common alternate-version tokens.
 
 The SQL-backed search contract now understands `content_kind`, `sub_kind`,
 `parent_title`, `audio_title`, `subtitle_title`, and the derived
@@ -44,6 +44,16 @@ movie sibling suffixes such as `-trailer` and extra directories such as
 known. Show-level extras link to the show, season-level extras link to the
 season, and ambiguous/library-level extras stay typed but orphaned with
 `ParentMediaItemId = NULL`.
+
+The local scanner now also detects alternate-version title and folder tokens
+for music videos, songs, and movies, including live, MTV Unplugged, acoustic,
+remix, remaster, extended, director's cut, and official/studio canonical
+markers. Same-work renditions are grouped by normalized base title and artist
+where available; an unmarked or official/studio row remains the canonical
+primary, other renditions are written as `ContentKind=AlternateVersion` with
+normalized `SubKind` and `ParentMediaItemId`, and lone alternates stay typed but
+unlinked instead of guessing a parent. Default-exclusion search still keeps
+alternate versions hidden unless a query opts into variant fields.
 '''
 
 [[debt]]
@@ -67,8 +77,8 @@ id          = 'alternate-version-linking'
 adr         = '0018'
 description = 'Phase 3 remains open: music-video/song/movie alternate-version detection, subtype normalization from title/folder tokens, and canonical-parent linking are not implemented.'
 discovered  = '2026-06-23'
-evidence    = 'The Phase 0 migration can store `ContentKind=AlternateVersion`, `SubKind`, and `ParentMediaItemId`, but no scanner/provider code writes those values yet.'
-resolved    = false
+evidence    = 'Resolved 2026-06-24: the local scanner classifies title/folder alternate-version tokens for music videos, songs, and movies; chooses deterministic canonical primaries from unmarked or official/studio rows, otherwise first-seen same-work renditions; writes non-canonical versions as `ContentKind=AlternateVersion` with normalized `SubKind` and parent linkage when available; leaves lone alternates typed but unlinked. Covered by crates/ersatzrs-scanner tests classifies_alternate_version_tokens_without_rewriting_unmarked_titles, music_video_versions_link_to_official_primary_and_stay_hidden_by_default, orphan_song_alternate_is_typed_but_unlinked, and movie_directors_cut_links_to_unmarked_primary; `cargo test -p ersatzrs-scanner` passed.'
+resolved    = true
 
 [[debt]]
 id          = 'commentary-render-acceptance'
