@@ -1,5 +1,31 @@
 {
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/guard_contributing_contract.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/rustfmt_single_file.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

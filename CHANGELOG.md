@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Project-local Codex and Claude hooks now block maintainer-machine absolute
+  paths, private media paths, and likely secrets before repository writes, and
+  run `rustfmt` on a single edited Rust file after edit tools complete.
 - Repo-local `hydration-islands` skill for Leptos WASM island and SSR HTML
   development, capturing the project-specific boundary rules, fallback
   expectations, and browser smoke gates that protect admin UI hydration.
