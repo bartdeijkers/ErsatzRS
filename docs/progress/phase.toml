@@ -64,9 +64,11 @@ IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
 2026-06-24: repo-owned templates and docs cover unplugged rendition smart
 collections, commentary movie channels, and featurette pre-roll filler attached
 to primary movie schedule items while default schedules stay unchanged. The
+FFmpeg filter-graph opacity-expression live proof debt is now resolved, so the
 next spec-backed candidates are the open `ersatzrs-healthcheck` binary TODO,
 ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
-and remaining FFmpeg filter-graph live proof.
+and the deferred ADR 0018 provider-side (Plex/Jellyfin/Emby) extras and
+alternate-version import slice.
 '''
 
 # Phase 0 checklist (all complete).
