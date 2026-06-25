@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-25
-last_processed_commit: 7bf064dab02b9d058a732120fb56cf2b7a1d8020
+last_processed_commit: e06be38d0dbd6fb73c71190c879e102230b21d33
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,93 +27,20 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-25, change window
-[`dbfb60e..7bf064d`](https://github.com/bartdeijkers/ersatzrs/compare/dbfb60e...7bf064d),
-two commits): `a4117e1` closed `content-variants` Phase 4 commentary render
-acceptance and `7bf064d` closed Phase 5 scheduling examples, leaving the
-`content-variants` feature `Ported` with every structured `[[debt]]` resolved.
-`cargo xtask progress gaps` is now fully clear and **every** tracked parity
-`[[debt]]` is `resolved = true` — including the prior pick-3
-`ffmpeg-filter-graph` `opacity-expression-time-variable-semantics` debt, which
-was resolved at `eb4dfe1` (before this window) but published stale by the
-previous degraded run when the upstream pin was unreachable. That dead prompt is
-removed and refilled from the ranking. Ranking: (1) **ersatzrs-healthcheck
-binary** — open Phase 7 `phase.toml` `known_todo` and top `plans/INDEX.md`
-deferred item (phase focus first); (2) **in-app TSDuck MPEG-TS
-troubleshooting** — ADR 0013 remains Proposed / Not implemented, a
-maintainer-requested diagnostic capability; (3) **ADR 0018 provider-side extras
-/ alternate-version import** — the next coherent slice of the still-`Proposed`
-ADR 0018, explicitly deferred in `content-variants.toml` ("Provider-specific
-Plex/Jellyfin/Emby extras or version imports remain deferred"), with the pinned
-ErsatzTV provider scanners as the parity reference.
-
-Pin note (2026-06-25): the ErsatzTV `git clone` path is still blocked by the org
-egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
-was obtained via the `codeload.github.com` tarball at exactly
-`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the
-extracted tree is the commit's tree). Parity for this run was therefore measured
-against the pin; the baseline was **not** advanced. The provider-import prompt
-below names the exact pinned `$ERSATZTV_SRC` scanner paths to read.
+Selection (2026-06-25, current repo state plus the healthcheck closeout in this
+PR): `cargo xtask progress gaps` is clear, every tracked `[[debt]]` is resolved,
+and the previous healthcheck and provider-import prompts are closed. Ranking:
+(1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed / Not
+implemented and is the highest-value Support diagnostic; (2) **Docker
+dependency-layer caching** — still open in `phase.toml` and `plans/INDEX.md`,
+with fresh evidence from the healthcheck Docker proof that the release image
+spends about 24 minutes in the in-container Rust release build; (3) **startup
+configuration cleanup** — the remaining Phase 7 TODO to replace direct
+`DATABASE_URL` environment access with the repository configuration layer.
 
 ---
 
-## 1. Build the next ErsatzRS runtime hardening chore: purpose-built healthcheck binary (slug `ersatzrs-healthcheck`)
-
-Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 runtime
-hardening chore**, not an ErsatzTV parity port: it is governed by the open
-Phase 7 TODO in `docs/progress/phase.toml` and the deferred-contract entry in
-`plans/INDEX.md`. It will create a new tracked slug — register
-`docs/progress/parity/ersatzrs-healthcheck.toml` in the same slice. The goal is
-to replace the Docker image's current external tool health check with a small
-`ersatzrs-healthcheck` binary that probes ErsatzRS readiness without requiring
-shell, curl, or platform-specific TCP tricks in the runtime image.
-
-Before editing:
-1. Read `Dockerfile`, `docs/progress/phase.toml`, `plans/INDEX.md`,
-   `ARCHITECTURE.md`, and `BUILD.md`.
-2. Inspect the existing `/healthz` route, startup health/readiness reporting,
-   release archive binary layout, Docker runtime stage, and CI/release Docker
-   checks.
-3. Build a Source Map for health endpoint semantics, binary packaging, Docker
-   `HEALTHCHECK`, release archive inclusion, and cross-platform build targets.
-4. Decide whether the binary should call only `/healthz` or also expose a local
-   diagnostics mode; keep the first slice narrow unless the contracts require
-   more.
-
-Implement the slice end-to-end:
-- Add an `ersatzrs-healthcheck` binary in the existing workspace style with no
-  secrets, no local-path assumptions, and no OS-specific behavior outside
-  documented `cfg` guards.
-- Have it probe the configured host/port or URL with sensible defaults for the
-  Docker image (`127.0.0.1:8409/healthz`) and return standard process exit
-  codes for healthy/unhealthy states.
-- Update the Dockerfile to copy and use the new binary in `HEALTHCHECK`,
-  keeping the runtime image compatible with Linux Docker and the existing
-  managed FFmpeg runtime.
-- Include the binary in release/archive packaging if the release scripts expect
-  all supported service binaries to ship together.
-- Update docs/progress (register the new slug), `plans/INDEX.md`, and
-  `CHANGELOG.md` once the Docker health check no longer depends on external tools.
-
-Verification:
-- Focused tests for argument/default URL handling and exit-code mapping.
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
-- A Docker build or the repo's Docker check script, proving the image contains
-  and runs `ersatzrs-healthcheck`.
-- At least `cargo check` or the existing platform matrix script for Linux,
-  Windows, and macOS targets touched by the new binary.
-- `cargo xtask progress check`.
-
-Report the Source Map, implemented healthcheck behavior, Docker proof,
-Windows/Linux/macOS compatibility proof, remaining runtime-hardening TODOs,
-verification run, and changed files.
-
----
-
-## 2. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
+## 1. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed diagnostic
 extension**, not an ErsatzTV parity port: it is governed by
@@ -139,8 +66,8 @@ Before editing:
    report parsing, archive writing, Support route rendering, health reporting,
    and redaction boundaries.
 4. Identify which follow-ups remain out of scope: TSDuck packaging, raw sample
-   retention by default, repair tools, deeper HLS/fMP4 analysis, teletext analysis
-   and any normal playback-path dependency.
+   retention by default, repair tools, deeper HLS/fMP4 analysis, teletext
+   analysis, and any normal playback-path dependency.
 
 Implement the slice end-to-end:
 - Add a small TSDuck diagnostic service that detects `tsp --version`, builds
@@ -181,72 +108,106 @@ diagnostic follow-ups, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: ADR 0018 provider-side extras and alternate-version import (slug `content-variants`)
+## 2. Build the next ErsatzRS build hardening chore: Docker dependency-layer caching (slug `docker-build-caching`)
 
-Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`. This is the
-next coherent slice of the still-`Proposed`
-[ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md): extending
-content-variant handling from the local scanner to the Plex/Jellyfin/Emby
-provider scanners. The `content-variants` feature is currently `Ported` for the
-local-library / search / UI / playback / scheduling scope, but
-`docs/progress/parity/content-variants.toml` records the explicit shortfall:
-"Provider-specific Plex/Jellyfin/Emby extras or version imports remain deferred
-until a provider API mapping slice is selected." The goal is fully functional
-ErsatzTV parity for provider extras/alternate-version import — no stopgaps, with
-any remaining shortfall recorded as visible `[[debt]]`.
-
-This is genuine ErsatzTV parity work: do **not** invent provider behavior.
-Read ErsatzTV source **at the pinned commit**
-`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the
-[`parity-baseline`](automation/parity-baseline.md); `git clone` is blocked by
-egress, so fetch via the `codeload.github.com/ErsatzTV/legacy/tar.gz/<sha>`
-tarball and point `$ERSATZTV_SRC` at the extracted tree).
+Use the repo workflow from AGENTS.md. This is a **spec-backed build/runtime
+hardening chore**, not an ErsatzTV parity port: it is governed by the open
+`docs/progress/phase.toml` TODO and the `plans/INDEX.md` Deferred Contract Work
+entry. The goal is to make Docker image builds stop recompiling the full
+workspace after every source-only edit while preserving the release binary and
+hydration-bundle contracts.
 
 Before editing:
-1. Read `docs/progress/parity/content-variants.toml`, ADR 0018,
-   `plans/extras-alternate-versions-and-stream-roles.md`, PORTING.md, STYLE.md,
-   and TEST.md.
-2. Read these pinned ErsatzTV provider scanners to learn how extras /
-   other-video / alternate versions are discovered and persisted:
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexMovieLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexOtherVideoLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinMovieLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinTelevisionLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyMovieLibraryScanner.cs`, and
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyTelevisionLibraryScanner.cs`.
-3. Inspect the ErsatzRS local-scanner content-variant import path (the existing
-   `OtherVideo` / `ContentKind=Extra` / `AlternateVersion` / `SubKind` /
-   `ParentMediaItemId` handling proven by the resolved `content-variants` debts)
-   so the provider path reuses the same domain shapes.
-4. Build a Source Map for provider library scanning, item-kind classification,
-   parent linkage, and content-variant persistence. Identify the existing
-   `ParityDebt` (the provider-import deferral) you are closing or narrowing.
+1. Read `Dockerfile`, `BUILD.md`, `RELEASING.md`, `.github/workflows/release.yml`,
+   `docs/progress/phase.toml`, `plans/INDEX.md`, and
+   `docs/reference/release-bundle.md`.
+2. Inspect `.dockerignore`, workspace member manifests, `Cargo.lock`,
+   `.cargo/config.toml`, the Leptos/Stylance build behavior, and Docker runtime
+   asset copy paths.
+3. Build a Source Map for dependency-manifest staging, source-copy invalidation,
+   SQLX offline metadata, Leptos CSS/site assets, binary copy paths, and the
+   runtime image's managed FFmpeg expectations.
+4. Record the current timing baseline. The 2026-06-25 healthcheck proof saw
+   `docker build --target runtime` spend `24m 02s` in the in-container Rust
+   release build step before exporting the image.
 
 Implement the slice end-to-end:
-- Map provider extras / other-video / alternate-version items into the same
-  `ContentKind` / `SubKind` / `ParentMediaItemId` model the local scanner uses,
-  preserving ErsatzTV's discovery and linkage semantics at the pin.
-- Keep canonical primaries unchanged and variants hidden-by-default, matching
-  the already-ported local behavior and search projection.
-- Add focused scanner tests for each provider's extras/alternate-version import
-  and parent linkage; do not regress existing local-scanner coverage.
-- Update `docs/progress/parity/content-variants.toml`: refresh the summary,
-  and if the provider work is not fully complete in this slice, flip the
-  feature back to `In progress` and record the remaining provider scope as a
-  structured `[[debt]]` (a `Ported` feature must not carry open debt — `cargo
-  xtask progress check` fails that combination). Update `CHANGELOG.md`.
-- Decide whether any deliberate deviation from ErsatzTV needs a new ADR.
+- Restructure the builder stage so dependency layers are keyed by manifests and
+  lockfiles before copying the full source tree.
+- Keep `SQLX_OFFLINE=true`, workspace features, release profile, and binary
+  outputs equivalent to the current Dockerfile.
+- Preserve the `ersatzrs-web` plus `ersatzrs-healthcheck` runtime image layout
+  and the managed FFmpeg runtime behavior.
+- Avoid committing host-specific cache paths, absolute maintainer paths, or
+  machine-local `sccache` configuration.
+- Update `docs/progress` and `CHANGELOG.md`; register a new progress slug if the
+  build-cache behavior becomes a tracked runtime/build contract.
 
 Verification:
-- Focused provider-scanner tests (`cargo test -p ersatzrs-scanner <filter>`)
-  for extras/alternate-version classification and linkage.
+- `docker build --target runtime --progress=plain -t ersatzrs-docker-cache-proof .`
+  twice: one cold-ish build and one source-only rebuild after a harmless touched
+  source/doc input, reporting both timings.
+- `docker inspect` proves the runtime `HEALTHCHECK` still uses
+  `ersatzrs-healthcheck`.
+- `docker run --rm --entrypoint /usr/local/bin/ersatzrs-healthcheck
+  ersatzrs-docker-cache-proof --help` proves the binary still runs.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, ErsatzTV-vs-ErsatzRS provider mapping, behavior
-implemented, remaining `content-variants` `ParityDebt`, verification run, and
-changed files.
+Report the Source Map, before/after Docker timings, changed cache boundaries,
+runtime image proof, remaining Docker/GHCR release deferrals, verification run,
+and changed files.
+
+---
+
+## 3. Build the next ErsatzRS startup chore: route `DATABASE_URL` through configuration (slug `startup-runtime-config`)
+
+Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 startup
+cleanup**, not an ErsatzTV parity port: it is governed by the open
+`docs/progress/phase.toml` TODO:
+`std::env::var("DATABASE_URL") in main.rs uses #[allow(clippy::disallowed_methods)]
+— replace with a config crate in Phase 1.` The goal is to remove the direct
+environment read from startup without changing default database resolution,
+Docker behavior, MySQL support, or local developer commands.
+
+Before editing:
+1. Read `docs/progress/phase.toml`, `ARCHITECTURE.md`, `STYLE.md`, `BUILD.md`,
+   `docs/reference/configuration.md`, and `.cargo/config.toml`.
+2. Inspect startup database URL resolution in `crates/ersatzrs-web`,
+   `crates/ersatzrs-infra::db`, scanner startup, Docker `DATABASE_URL`, MySQL
+   feature handling, tests that cover database URL defaults, and logging/config
+   boundaries.
+3. Build a Source Map for config precedence: defaults, environment variables,
+   Docker defaults, CLI/binary startup, scanner startup, SQLite default home
+   path, and MySQL feature gates.
+4. Identify any user-visible config docs that must change, and decide whether a
+   dedicated progress slug is warranted for the startup-runtime config contract.
+
+Implement the slice end-to-end:
+- Replace direct `std::env::var("DATABASE_URL")` startup access with the
+  repository configuration layer or a small shared config helper that preserves
+  the existing precedence and error messages.
+- Keep default SQLite resolution unchanged when `DATABASE_URL` is unset.
+- Keep Docker's `DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db` behavior
+  unchanged.
+- Keep MySQL/MariaDB URL recognition behind the existing feature behavior.
+- Remove the no-longer-needed `#[allow(clippy::disallowed_methods)]` for this
+  specific startup access, without weakening the lint globally.
+- Update configuration docs, `docs/progress`, and `CHANGELOG.md` if behavior or
+  documented startup semantics change.
+
+Verification:
+- Focused tests for SQLite default, env override, non-UTF-8/invalid override,
+  Docker-style URL, and MySQL/MariaDB URL mapping.
+- `cargo fmt --all -- --check`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
+- `cargo test --workspace --all-features`.
+- `cargo xtask progress check`.
+
+Report the Source Map, preserved config precedence, removed lint allowance,
+Docker/Linux/Windows/macOS compatibility proof, verification run, remaining
+startup-runtime TODOs, and changed files.

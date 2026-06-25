@@ -14,6 +14,7 @@ level folder named `ersatzrs-<tag>-win-x64/`.
 | `ErsatzRS.exe` | `ersatzrs-launcher.exe` | Windows tray launcher and user-facing entry point. |
 | `ersatzrs-web.exe` | `ersatzrs-web` release binary | Server for the admin UI, IPTV endpoints, and HDHomeRun endpoints. |
 | `ersatzrs-scanner.exe` | `ersatzrs-scanner` release binary | One-shot scanner binary. |
+| `ersatzrs-healthcheck.exe` | `ersatzrs-healthcheck` release binary | Readiness probe for `/healthz`; also used by Docker images. |
 | `site/` | `cargo leptos build --release --frontend-only --lib-features hydrate` output | Leptos hydration assets. Must include `site/pkg/`. |
 | `public/` | `crates/ersatzrs-web/public` | Static public assets, including the generated CSS bundle. |
 | `assets/` | Repository `assets/` | Runtime graphics and template assets. |

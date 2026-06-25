@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- A purpose-built `ersatzrs-healthcheck` binary now probes `/healthz` without
+  curl or shell tooling, ships in release archives, and backs the Docker image
+  `HEALTHCHECK`.
 - Project-local Codex and Claude hooks now block maintainer-machine absolute
   paths, private media paths, and likely secrets before repository writes, and
   run `rustfmt` on a single edited Rust file after edit tools complete.

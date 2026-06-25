@@ -16,7 +16,7 @@ COPY . .
 # SQLX_OFFLINE=true skips the live database check during compilation.
 # A checked-in .sqlx/ directory with query metadata must exist; it is
 # produced by running `cargo sqlx prepare --workspace` locally.
-RUN SQLX_OFFLINE=true cargo build --release -p ersatzrs-web
+RUN SQLX_OFFLINE=true cargo build --release -p ersatzrs-web -p ersatzrs-healthcheck
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
@@ -24,12 +24,12 @@ FROM debian:bookworm-slim AS runtime
 # Runtime library dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
+COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
 
 # Run as a dedicated non-root service account
 RUN useradd -r -s /bin/false ersatzrs
@@ -47,7 +47,7 @@ ENV DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db
 EXPOSE 8409
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD [ "curl", "-fsS", "http://127.0.0.1:8409/healthz" ]
+    CMD [ "ersatzrs-healthcheck" ]
 
 USER ersatzrs
 

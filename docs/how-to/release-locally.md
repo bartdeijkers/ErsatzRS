@@ -21,8 +21,7 @@ not create release archives or a `build/` directory.
 - GitHub CLI (`gh`) authenticated for this repository.
 - 7-Zip available as `7z`.
 - The repository `.cargo/config.toml` target directory in use. Do not override
-  `CARGO_TARGET_DIR`; the committed config points release output at
-  `F:\ErsatzRS\target-win` on this machine.
+  `CARGO_TARGET_DIR`; use the configured target directory for this checkout.
 
 Check the tool versions before building:
 
@@ -31,6 +30,7 @@ cargo leptos --version
 stylance --version
 gh auth status
 rustup target list --installed | Select-String wasm32-unknown-unknown
+$TargetRoot = "<configured-target-dir>"
 ```
 
 ## Build the frontend assets
@@ -47,18 +47,19 @@ Confirm the expected outputs exist under the configured target directory and the
 web crate public assets:
 
 ```powershell
-Test-Path F:\ErsatzRS\target-win\site\pkg
+Test-Path "$TargetRoot\site\pkg"
 Test-Path crates\ersatzrs-web\public\bundle.css
 ```
 
 ## Build the release binaries
 
-Build the Windows server, scanner, and launcher binaries:
+Build the Windows server, scanner, healthcheck, and launcher binaries:
 
 ```powershell
 cargo build --release `
   --bin ersatzrs-web `
   --bin ersatzrs-scanner `
+  --bin ersatzrs-healthcheck `
   --bin ersatzrs-launcher `
   --target x86_64-pc-windows-msvc
 ```
@@ -77,15 +78,16 @@ New-Item -ItemType Directory $Stage | Out-Null
 Copy the binaries, naming the launcher as the user-facing entry point:
 
 ```powershell
-Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-web.exe $Stage\
-Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-scanner.exe $Stage\
-Copy-Item F:\ErsatzRS\target-win\x86_64-pc-windows-msvc\release\ersatzrs-launcher.exe $Stage\ErsatzRS.exe
+Copy-Item "$TargetRoot\x86_64-pc-windows-msvc\release\ersatzrs-web.exe" $Stage\
+Copy-Item "$TargetRoot\x86_64-pc-windows-msvc\release\ersatzrs-scanner.exe" $Stage\
+Copy-Item "$TargetRoot\x86_64-pc-windows-msvc\release\ersatzrs-healthcheck.exe" $Stage\
+Copy-Item "$TargetRoot\x86_64-pc-windows-msvc\release\ersatzrs-launcher.exe" $Stage\ErsatzRS.exe
 ```
 
 Copy the web assets and repository assets:
 
 ```powershell
-Copy-Item -Recurse F:\ErsatzRS\target-win\site $Stage\site
+Copy-Item -Recurse "$TargetRoot\site" $Stage\site
 Copy-Item -Recurse crates\ersatzrs-web\public $Stage\public
 Copy-Item -Recurse assets $Stage\assets
 Copy-Item LICENSE $Stage\
