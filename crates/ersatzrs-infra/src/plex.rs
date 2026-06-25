@@ -763,6 +763,7 @@ pub async fn sync_plex_movie_library_with_progress(
     let mut synced = 0;
     let mut start_index = 0;
     let mut present_item_ids = std::collections::HashSet::new();
+    let mut variant_candidates = Vec::new();
     let mut page = service
         .fetch_movie_page(config, library_key, start_index, PLEX_PAGE_SIZE)
         .await?;
@@ -775,7 +776,7 @@ pub async fn sync_plex_movie_library_with_progress(
     while start_index < total_size {
         for item in &page.items {
             present_item_ids.insert(item.key.clone());
-            if !deep_scan
+            let item_id = if !deep_scan
                 && item_etag_matches(
                     pool,
                     "PlexMovie",
@@ -786,10 +787,29 @@ pub async fn sync_plex_movie_library_with_progress(
                 .await?
             {
                 synced += 1;
+                crate::media_server::provider_media_item_id(
+                    pool,
+                    "PlexMovie",
+                    "Key",
+                    library_id,
+                    &item.key,
+                )
+                .await?
             } else {
-                upsert_plex_movie(pool, config, media_source_id, library_id, library_key, item)
-                    .await?;
+                let item_id =
+                    upsert_plex_movie(pool, config, media_source_id, library_id, library_key, item)
+                        .await?;
                 synced += 1;
+                Some(item_id)
+            };
+            if let Some(item_id) = item_id {
+                variant_candidates.push(crate::media_server::ProviderVariantCandidate {
+                    item_id,
+                    title: item.title.clone(),
+                    path: Some(item.path.clone()),
+                    disambiguator: String::new(),
+                    tags: Vec::new(),
+                });
             }
             if let Some(sink) = progress {
                 if total_size > 0 {
@@ -835,6 +855,7 @@ pub async fn sync_plex_movie_library_with_progress(
         true,
     )
     .await?;
+    crate::media_server::apply_provider_content_variants(pool, &variant_candidates).await?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -1183,7 +1204,7 @@ async fn upsert_plex_movie(
     library_id: i64,
     library_key: &str,
     item: &PlexMediaItem,
-) -> Result<()> {
+) -> Result<i64> {
     let mut tx = pool.begin().await?;
     ensure_plex_library(&mut tx, media_source_id, library_id, library_key).await?;
     let library_path_id =
@@ -1201,7 +1222,7 @@ async fn upsert_plex_movie(
     )
     .await?;
     tx.commit().await?;
-    Ok(())
+    Ok(item_id)
 }
 
 async fn upsert_plex_show(

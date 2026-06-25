@@ -63,6 +63,89 @@ async fn emby_sync_maps_mock_movie_response_to_media_rows() {
 }
 
 #[tokio::test]
+async fn emby_movie_sync_classifies_provider_extras_and_alternate_versions() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/Items")
+                .query_param("parentId", "library-variants")
+                .query_param("includeItemTypes", "Movie");
+            then.status(200).json_body(json!({
+                "TotalRecordCount": 3,
+                "Items": [
+                    {
+                        "Name": "Movie",
+                        "Id": "movie-primary",
+                        "Etag": "movie-primary-etag",
+                        "Path": "/srv/media/Movie.mkv",
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 120_000_000,
+                        "LocationType": "FileSystem"
+                    },
+                    {
+                        "Name": "Movie (Director's Cut)",
+                        "Id": "movie-directors-cut",
+                        "Etag": "movie-directors-cut-etag",
+                        "Path": "/srv/media/Movie (Director's Cut).mkv",
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 120_000_000,
+                        "LocationType": "FileSystem"
+                    },
+                    {
+                        "Name": "Making Of",
+                        "Id": "movie-featurette",
+                        "Etag": "movie-featurette-etag",
+                        "Path": "/srv/media/Movie/Featurettes/Making Of.mkv",
+                        "TagItems": [{ "Name": "Featurette" }],
+                        "DateCreated": "2026-04-17T10:00:00Z",
+                        "RunTimeTicks": 120_000_000,
+                        "LocationType": "FileSystem"
+                    }
+                ]
+            }));
+        })
+        .await;
+    let _primary_playback = mock_emby_playback(&server, "movie-primary").await;
+    let _alternate_playback = mock_emby_playback(&server, "movie-directors-cut").await;
+    let _extra_playback = mock_emby_playback(&server, "movie-featurette").await;
+    let pool = common::test_db().await;
+    let service = EmbyService::new();
+    let config = EmbyConnectionConfig {
+        address: server.base_url(),
+        api_key: "test".to_owned(),
+    };
+
+    sync_emby_movie_library(&pool, &service, &config, 1, 1, "library-variants", false)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        content_variant_rows(&pool, "MovieMetadata", "MovieId").await,
+        json!([
+            {
+                "content_kind": 0,
+                "parent_title": null,
+                "sub_kind": null,
+                "title": "Movie"
+            },
+            {
+                "content_kind": 2,
+                "parent_title": "Movie",
+                "sub_kind": "directors_cut",
+                "title": "Movie (Director's Cut)"
+            },
+            {
+                "content_kind": 1,
+                "parent_title": null,
+                "sub_kind": "featurette",
+                "title": "Making Of"
+            }
+        ])
+    );
+}
+
+#[tokio::test]
 async fn emby_sync_pages_movie_library_beyond_first_result_window() {
     let server = MockServer::start_async().await;
     let first_page = server
@@ -891,6 +974,40 @@ async fn media_file_path(pool: &SqlitePool) -> String {
         .await
         .unwrap()
         .get("Path")
+}
+
+async fn content_variant_rows(
+    pool: &SqlitePool,
+    metadata_table: &str,
+    metadata_fk: &str,
+) -> serde_json::Value {
+    let sql = format!(
+        r#"SELECT "mm"."Title" AS "Title",
+                  "mi"."ContentKind" AS "ContentKind",
+                  "mi"."SubKind" AS "SubKind",
+                  "pmm"."Title" AS "ParentTitle"
+           FROM "{metadata_table}" AS "mm"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "mm"."{metadata_fk}"
+           LEFT JOIN "MediaItem" AS "pmi" ON "pmi"."Id" = "mi"."ParentMediaItemId"
+           LEFT JOIN "{metadata_table}" AS "pmm" ON "pmm"."{metadata_fk}" = "pmi"."Id"
+           ORDER BY "mm"."Id""#
+    );
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    serde_json::Value::Array(
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "title": row.get::<String, _>("Title"),
+                    "content_kind": row.get::<i64, _>("ContentKind"),
+                    "sub_kind": row.get::<Option<String>, _>("SubKind"),
+                    "parent_title": row.get::<Option<String>, _>("ParentTitle"),
+                })
+            })
+            .collect(),
+    )
 }
 
 async fn media_item_state(pool: &SqlitePool) -> i64 {

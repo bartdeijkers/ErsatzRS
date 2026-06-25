@@ -22,6 +22,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::Utc;
+use ersatzrs_domain::{
+    classify_extra_directory_name, classify_extra_video, ExtraVideoClassification,
+};
 use ersatzrs_infra::db::{Db, DbPool};
 use ersatzrs_infra::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
 use ersatzrs_infra::metadata::{
@@ -34,10 +37,9 @@ use tracing::warn;
 use crate::library_folder;
 use crate::nfo::{self, EpisodeNfo, NfoActor, NfoGuid, TvShowNfo};
 use crate::{
-    classify_extra_directory_name, classify_extra_video, encode_datetime, insert_media_item,
-    insert_media_version_with_owner, path_hash, replace_chapters, replace_streams,
-    update_media_version, upsert_local_extra_video, ExtraVideoClassification, LocalLibraryPath,
-    Result, ScannerError,
+    encode_datetime, insert_media_item, insert_media_version_with_owner, path_hash,
+    replace_chapters, replace_streams, update_media_version, upsert_local_extra_video,
+    LocalLibraryPath, Result, ScannerError,
 };
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "mkv", "avi", "mov", "m4v", "webm"];

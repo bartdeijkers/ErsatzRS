@@ -5,8 +5,9 @@ status     = 'Ported'
 adr        = ['0018']
 
 summary    = '''
-ADR 0018's local/search/UI/playback/scheduling scope is implemented through
-Phase 5. `MediaItem` has additive `ContentKind`, `SubKind`, and
+ADR 0018's local/provider search/UI/playback/scheduling scope is implemented
+through Phase 5 plus the provider import follow-up. `MediaItem` has additive
+`ContentKind`, `SubKind`, and
 `ParentMediaItemId` columns (SQLite and MySQL), a closed `ContentKind` enum,
 and normalized subtype tokens for ErsatzTV extras plus common alternate-version
 markers.
@@ -32,9 +33,20 @@ docs for unplugged renditions, commentary movie channels, featurette pre-roll
 filler, and primary movie schedule items; focused repository coverage proves
 the examples resolve the intended rows, keep primaries/extras separated by
 default, persist pre-roll filler wiring, and feed Classic playout inputs without
-changing normal schedules. Provider-specific Plex/Jellyfin/Emby extras or
-version imports remain deferred until a provider API mapping slice is selected.
+changing normal schedules. Plex/Jellyfin/Emby movie-library sync now reuses the
+same classifier after each provider page, including ETag-skipped rows, so
+server-reported extras from title/path/tag signals are imported as hidden
+`ContentKind=Extra` rows and provider alternate versions are linked back to
+their canonical primary through `ParentMediaItemId`.
 '''
+
+[[debt]]
+id          = 'provider-extras-versions'
+adr         = '0018'
+description = 'Plex/Jellyfin/Emby provider sync needed to classify server-reported extras and alternate versions instead of leaving ADR 0018 limited to local libraries.'
+discovered  = '2026-06-25'
+evidence    = 'Resolved 2026-06-25: shared content-variant classifiers moved to ersatzrs-domain; Plex/Jellyfin/Emby movie-library sync applies provider variant fields after each page, including ETag-skipped rows; focused tests plex_movie_sync_classifies_provider_extras_and_alternate_versions, jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions, and emby_movie_sync_classifies_provider_extras_and_alternate_versions prove primary, extra, and alternate-version rows.'
+resolved    = true
 
 [[debt]]
 id          = 'media-browse-ui-surfacing'

@@ -449,6 +449,7 @@ where
     let mut start_index = 0;
     let mut reported_initial = false;
     let mut present_item_ids = std::collections::HashSet::new();
+    let mut variant_candidates = Vec::new();
 
     loop {
         let page = service
@@ -464,7 +465,7 @@ where
         }
         for item in &page.items {
             present_item_ids.insert(item.item_id.clone());
-            if !deep_scan
+            let item_id = if !deep_scan
                 && item_etag_matches(
                     pool,
                     "EmbyMovie",
@@ -475,9 +476,17 @@ where
                 .await?
             {
                 synced += 1;
+                crate::media_server::provider_media_item_id(
+                    pool,
+                    "EmbyMovie",
+                    "ItemId",
+                    library_id,
+                    &item.item_id,
+                )
+                .await?
             } else {
                 let playback = service.stream_metadata(config, &item.item_id).await?;
-                upsert_emby_movie(
+                let item_id = upsert_emby_movie(
                     pool,
                     media_source_id,
                     library_id,
@@ -487,6 +496,16 @@ where
                 )
                 .await?;
                 synced += 1;
+                Some(item_id)
+            };
+            if let Some(item_id) = item_id {
+                variant_candidates.push(crate::media_server::ProviderVariantCandidate {
+                    item_id,
+                    title: item.name.clone(),
+                    path: Some(item.path.clone()),
+                    disambiguator: String::new(),
+                    tags: item.tags.clone(),
+                });
             }
             if let Some(sink) = progress {
                 if total_record_count > 0 {
@@ -530,6 +549,7 @@ where
         true,
     )
     .await?;
+    crate::media_server::apply_provider_content_variants(pool, &variant_candidates).await?;
 
     if let Some(sink) = progress {
         sink.report(1.0);
@@ -1486,6 +1506,11 @@ fn project_movie(item: EmbyLibraryItemResponse) -> Option<EmbyMediaItem> {
             )
         });
     let provider_guids = guids_from_provider_ids(&item.provider_ids);
+    let genres = nonempty_strings(item.genres);
+    let tags = project_tag_names(item.tag_items);
+    let actors = project_actors(&item.people);
+    let directors = project_person_names(&item.people, "Director");
+    let writers = project_person_names(&item.people, "Writer");
     Some(EmbyMediaItem {
         item_id: item.id?,
         etag: item.etag,
@@ -1500,11 +1525,11 @@ fn project_movie(item: EmbyLibraryItemResponse) -> Option<EmbyMediaItem> {
         thumb_artwork_path: None,
         fanart_artwork_path,
         provider_guids,
-        genres: Vec::new(),
-        tags: Vec::new(),
-        actors: Vec::new(),
-        directors: Vec::new(),
-        writers: Vec::new(),
+        genres,
+        tags,
+        actors,
+        directors,
+        writers,
         name,
         path,
         date_created: item.date_created.unwrap_or_else(Utc::now),
@@ -1717,7 +1742,7 @@ async fn upsert_emby_movie(
     library_item_id: &str,
     item: &EmbyMediaItem,
     playback: &EmbyPlaybackMetadata,
-) -> Result<()> {
+) -> Result<i64> {
     let mut tx = pool.begin().await?;
     ensure_emby_library(&mut tx, media_source_id, library_id, library_item_id).await?;
     let library_path_id =
@@ -1736,7 +1761,7 @@ async fn upsert_emby_movie(
     .await?;
     replace_chapters(&mut tx, version_id, &item.chapters).await?;
     tx.commit().await?;
-    Ok(())
+    Ok(item_id)
 }
 
 async fn upsert_emby_show(

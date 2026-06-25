@@ -9,10 +9,14 @@
 //! moved/deleted media-server items stayed `Normal` forever — never surfacing
 //! in `/media/trash` or the File Not Found / Unavailable health checks.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
+use ersatzrs_domain::{
+    classify_alternate_version, classify_extra_file_stem, classify_extra_video_path,
+    normalize_group_key, normalize_sub_kind_token, ContentKind,
+};
 use sqlx::Row;
 
 use crate::db::{assert_sql_safe, DbPool};
@@ -22,6 +26,15 @@ pub(crate) const STATE_NORMAL: i64 = 0;
 pub(crate) const STATE_FILE_NOT_FOUND: i64 = 1;
 pub(crate) const STATE_UNAVAILABLE: i64 = 2;
 pub(crate) const STATE_REMOTE_ONLY: i64 = 3;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProviderVariantCandidate {
+    pub item_id: i64,
+    pub title: String,
+    pub path: Option<String>,
+    pub disambiguator: String,
+    pub tags: Vec<String>,
+}
 
 /// Platform whose separator conventions the running host uses, for resolving
 /// a replaced local path before the existence check.
@@ -211,6 +224,224 @@ pub async fn load_media_server_path_replacements(
         }
     }
     Ok(replacements)
+}
+
+/// Classify and link ADR 0018 content variants for provider-backed rows.
+///
+/// This intentionally runs after the normal provider sync pass and uses only
+/// server metadata already present in the page response. It keeps existing
+/// browse/search defaults intact by writing `MediaItem.ContentKind` /
+/// `SubKind` / `ParentMediaItemId`, the same columns the local scanner uses.
+///
+/// # Errors
+///
+/// Returns an error when a database write fails.
+pub(crate) async fn apply_provider_content_variants(
+    pool: &DbPool,
+    candidates: &[ProviderVariantCandidate],
+) -> Result<(), sqlx::Error> {
+    let mut alternate_rows = Vec::new();
+
+    for candidate in candidates {
+        if let Some(sub_kind) = provider_extra_sub_kind(candidate) {
+            update_content_variant(
+                pool,
+                candidate.item_id,
+                ContentKind::Extra,
+                Some(&sub_kind),
+                None,
+            )
+            .await?;
+            continue;
+        }
+
+        let path_ref = candidate.path.as_deref().map(Path::new);
+        let classification = classify_alternate_version(Path::new("/"), &candidate.title, path_ref);
+        alternate_rows.push((candidate, classification));
+    }
+
+    let mut groups = BTreeMap::<(String, String), Vec<_>>::new();
+    for (candidate, classification) in alternate_rows {
+        let key = (
+            normalize_group_key(&candidate.disambiguator),
+            normalize_group_key(&classification.base_title),
+        );
+        if key.1.is_empty() {
+            update_content_variant(pool, candidate.item_id, ContentKind::Primary, None, None)
+                .await?;
+            continue;
+        }
+        groups
+            .entry(key)
+            .or_default()
+            .push((candidate, classification));
+    }
+
+    for (_, mut group) in groups {
+        group.sort_by(|left, right| {
+            left.0
+                .path
+                .cmp(&right.0.path)
+                .then_with(|| left.0.item_id.cmp(&right.0.item_id))
+        });
+        apply_alternate_group(pool, &group).await?;
+    }
+
+    Ok(())
+}
+
+/// Resolve a provider media row id in a library from its server-side id.
+///
+/// # Errors
+///
+/// Returns an error when the database read fails.
+pub(crate) async fn provider_media_item_id(
+    pool: &DbPool,
+    table: &str,
+    id_column: &str,
+    library_id: i64,
+    provider_id: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    let sql = format!(
+        r#"SELECT "t"."Id" AS "Id"
+           FROM "{table}" AS "t"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "t"."Id"
+           JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
+           WHERE "lp"."LibraryId" = ? AND "t"."{id_column}" = ?
+           LIMIT 1"#
+    );
+    sqlx::query(assert_sql_safe(&sql))
+        .bind(library_id)
+        .bind(provider_id)
+        .fetch_optional(pool)
+        .await?
+        .map(|row| row.try_get("Id"))
+        .transpose()
+}
+
+fn provider_extra_sub_kind(candidate: &ProviderVariantCandidate) -> Option<String> {
+    candidate
+        .tags
+        .iter()
+        .find_map(|tag| known_extra_sub_kind(tag))
+        .or_else(|| classify_extra_file_stem(&candidate.title).map(|(_, sub_kind)| sub_kind))
+        .or_else(|| {
+            candidate
+                .path
+                .as_deref()
+                .and_then(|path| classify_extra_video_path(Path::new(path)))
+        })
+}
+
+fn known_extra_sub_kind(value: &str) -> Option<String> {
+    let token = normalize_sub_kind_token(value)?;
+    matches!(
+        token.as_str(),
+        "trailer"
+            | "behind_the_scenes"
+            | "deleted_scene"
+            | "featurette"
+            | "interview"
+            | "scene"
+            | "short"
+            | "other"
+    )
+    .then_some(token)
+}
+
+async fn apply_alternate_group(
+    pool: &DbPool,
+    group: &[(
+        &ProviderVariantCandidate,
+        ersatzrs_domain::AlternateVersionClassification,
+    )],
+) -> Result<(), sqlx::Error> {
+    let alternate_count = group
+        .iter()
+        .filter(|(_, classification)| classification.sub_kind.is_some())
+        .count();
+    if alternate_count == 0 {
+        for (candidate, _) in group {
+            update_content_variant(pool, candidate.item_id, ContentKind::Primary, None, None)
+                .await?;
+        }
+        return Ok(());
+    }
+
+    if group.len() == 1 {
+        let (candidate, classification) = &group[0];
+        if let Some(sub_kind) = &classification.sub_kind {
+            update_content_variant(
+                pool,
+                candidate.item_id,
+                ContentKind::AlternateVersion,
+                Some(sub_kind),
+                None,
+            )
+            .await?;
+        } else {
+            update_content_variant(pool, candidate.item_id, ContentKind::Primary, None, None)
+                .await?;
+        }
+        return Ok(());
+    }
+
+    let canonical_id = group
+        .iter()
+        .find(|(_, classification)| {
+            classification.sub_kind.is_none() && classification.canonical_hint
+        })
+        .or_else(|| {
+            group
+                .iter()
+                .find(|(_, classification)| classification.sub_kind.is_none())
+        })
+        .unwrap_or(&group[0])
+        .0
+        .item_id;
+
+    for (candidate, classification) in group {
+        if candidate.item_id == canonical_id {
+            update_content_variant(pool, candidate.item_id, ContentKind::Primary, None, None)
+                .await?;
+        } else if let Some(sub_kind) = &classification.sub_kind {
+            update_content_variant(
+                pool,
+                candidate.item_id,
+                ContentKind::AlternateVersion,
+                Some(sub_kind),
+                Some(canonical_id),
+            )
+            .await?;
+        } else {
+            update_content_variant(pool, candidate.item_id, ContentKind::Primary, None, None)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn update_content_variant(
+    pool: &DbPool,
+    item_id: i64,
+    content_kind: ContentKind,
+    sub_kind: Option<&str>,
+    parent_media_item_id: Option<i64>,
+) -> Result<(), sqlx::Error> {
+    let sub_kind = sub_kind.and_then(normalize_sub_kind_token);
+    sqlx::query(
+        r#"UPDATE "MediaItem"
+           SET "ContentKind" = ?, "SubKind" = ?, "ParentMediaItemId" = ?
+           WHERE "Id" = ?"#,
+    )
+    .bind(content_kind.db_value())
+    .bind(sub_kind)
+    .bind(parent_media_item_id)
+    .bind(item_id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Set `MediaItem.State` for the given primary keys, building an `IN (...)`
