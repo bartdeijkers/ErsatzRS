@@ -39,7 +39,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 # Keep axum aligned with leptos_axum and enable Multipart extraction for image upload routes.
 axum = { version = "0.8", features = ["multipart"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace", "fs"] }
+tower-http = { version = "0.7", features = ["trace", "fs"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 leptos_axum = "0.8"
 sqlx = { workspace = true }
