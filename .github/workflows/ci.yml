@@ -37,7 +37,7 @@ jobs:
     name: Format
     runs-on: [self-hosted, Linux]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
 
@@ -48,7 +48,7 @@ jobs:
     # clippy build on the serial self-hosted runner.
     needs: fmt
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -70,7 +70,7 @@ jobs:
     # test build on the serial self-hosted runner.
     needs: fmt
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -92,7 +92,7 @@ jobs:
     # smoke build on the serial self-hosted runner.
     needs: fmt
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
@@ -153,7 +153,7 @@ jobs:
     name: Cargo deny
     runs-on: [self-hosted, Linux]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.19.6 --locked
@@ -168,7 +168,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: wagoid/commitlint-github-action@v6
@@ -179,7 +179,7 @@ jobs:
     name: Documentation links
     runs-on: [self-hosted, Linux]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check Markdown files exist
         run: |
           test -f README.md
