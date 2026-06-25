@@ -38,6 +38,81 @@ async fn plex_sync_maps_mock_movie_response_to_media_rows() {
 }
 
 #[tokio::test]
+async fn plex_movie_sync_classifies_provider_extras_and_alternate_versions() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/library/sections/9/all")
+                .header("Accept", "application/json")
+                .header("X-Plex-Token", "plex-token");
+            then.status(200).json_body(json!({
+                "MediaContainer": {
+                    "totalSize": 3,
+                    "Metadata": [
+                        media_json_with_title(
+                            "/library/metadata/900",
+                            "/library/parts/90",
+                            "/media/Movie.mkv",
+                            900,
+                            "Movie"
+                        ),
+                        media_json_with_title(
+                            "/library/metadata/901",
+                            "/library/parts/91",
+                            "/media/Movie (Director's Cut).mkv",
+                            901,
+                            "Movie (Director's Cut)"
+                        ),
+                        media_json_with_title(
+                            "/library/metadata/902",
+                            "/library/parts/92",
+                            "/media/Movie-trailer.mkv",
+                            902,
+                            "Movie Trailer"
+                        )
+                    ]
+                }
+            }));
+        })
+        .await;
+    let pool = common::test_db().await;
+    let service = PlexService::new();
+    let config = PlexConnectionConfig {
+        uri: server.base_url(),
+        token: "plex-token".to_owned(),
+    };
+
+    sync_plex_movie_library(&pool, &service, &config, 1, 9, "9", false)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        content_variant_rows(&pool, "MovieMetadata", "MovieId").await,
+        json!([
+            {
+                "content_kind": 0,
+                "parent_title": null,
+                "sub_kind": null,
+                "title": "Movie"
+            },
+            {
+                "content_kind": 2,
+                "parent_title": "Movie",
+                "sub_kind": "directors_cut",
+                "title": "Movie (Director's Cut)"
+            },
+            {
+                "content_kind": 1,
+                "parent_title": null,
+                "sub_kind": "trailer",
+                "title": "Movie Trailer"
+            }
+        ])
+    );
+}
+
+#[tokio::test]
 async fn plex_movie_sync_writes_metadata_subtitle_rows() {
     let server = MockServer::start_async().await;
     server
@@ -829,6 +904,18 @@ fn media_json(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Val
     })
 }
 
+fn media_json_with_title(
+    key: &str,
+    part_key: &str,
+    path: &str,
+    id: i32,
+    title: &str,
+) -> serde_json::Value {
+    let mut value = media_json(key, part_key, path, id);
+    value["title"] = json!(title);
+    value
+}
+
 fn media_json_with_subtitles(key: &str, part_key: &str, path: &str, id: i32) -> serde_json::Value {
     let mut value = media_json(key, part_key, path, id);
     let streams = value["media"][0]["part"][0]["stream"]
@@ -966,6 +1053,40 @@ async fn media_file_path(pool: &SqlitePool) -> String {
         .await
         .unwrap()
         .get("Path")
+}
+
+async fn content_variant_rows(
+    pool: &SqlitePool,
+    metadata_table: &str,
+    metadata_fk: &str,
+) -> serde_json::Value {
+    let sql = format!(
+        r#"SELECT "mm"."Title" AS "Title",
+                  "mi"."ContentKind" AS "ContentKind",
+                  "mi"."SubKind" AS "SubKind",
+                  "pmm"."Title" AS "ParentTitle"
+           FROM "{metadata_table}" AS "mm"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "mm"."{metadata_fk}"
+           LEFT JOIN "MediaItem" AS "pmi" ON "pmi"."Id" = "mi"."ParentMediaItemId"
+           LEFT JOIN "{metadata_table}" AS "pmm" ON "pmm"."{metadata_fk}" = "pmi"."Id"
+           ORDER BY "mm"."Id""#
+    );
+    let rows = sqlx::query(ersatzrs_infra::db::assert_sql_safe(&sql))
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    serde_json::Value::Array(
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "title": row.get::<String, _>("Title"),
+                    "content_kind": row.get::<i64, _>("ContentKind"),
+                    "sub_kind": row.get::<Option<String>, _>("SubKind"),
+                    "parent_title": row.get::<Option<String>, _>("ParentTitle"),
+                })
+            })
+            .collect(),
+    )
 }
 
 async fn plex_movie_rows(pool: &SqlitePool) -> serde_json::Value {

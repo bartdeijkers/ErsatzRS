@@ -48,6 +48,9 @@ release section when tagging a release.
   operator docs now cover unplugged rendition smart collections, commentary
   movie channels, and featurette pre-roll filler attached to primary movie
   schedule items without changing default schedules.
+- Content-variant provider imports for ADR 0018: Plex, Jellyfin, and Emby movie
+  library sync now classify server-reported extras and alternate versions into
+  the same hidden-by-default search/scheduling fields used by local libraries.
 - Release gate against the recurring "wasm checksum mismatch" that has broken
   several releases (`scripts/release/verify-web-bundle.sh`, wired into the
   release workflow). The Leptos SSR binary and the WASM bundle are built in

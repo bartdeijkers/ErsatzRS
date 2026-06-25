@@ -1,11 +1,9 @@
 # Special Features, Alternate Versions, and Stream Roles
 
-> **Status: Ported for the local scanner/search/UI/playback/scheduling scope.** Implements
+> **Status: Ported for the local and provider scanner/search/UI/playback/scheduling scope.** Implements
 > [ADR 0018](../docs/adr/0018-extras-alternate-versions-and-stream-roles.md).
 > Deliberate, parity-safe enhancement with no ErsatzTV equivalent. Live state
-> lives in `docs/progress/parity/content-variants.toml`. Provider-specific
-> Plex/Jellyfin/Emby extras or version imports remain deferred until a provider
-> API mapping slice is selected.
+> lives in `docs/progress/parity/content-variants.toml`.
 
 ## Goal
 
@@ -49,6 +47,9 @@ Three maintainer use cases are the acceptance yardstick:
     (`SearchDocument` build), plus stream-title joins.
   - Scanner: `crates/ersatzrs-scanner/src/lib.rs`,
     `local_television.rs`, `library_folder.rs`, `nfo.rs`.
+  - Provider import: `crates/ersatzrs-domain/src/content_variants.rs`,
+    `crates/ersatzrs-infra/src/media_server.rs`, `plex.rs`, `jellyfin.rs`,
+    `emby.rs`.
   - UI: `crates/ersatzrs-web/src/admin/pages/media/*`
     (`movies.rs`, `shows.rs`, `season_detail.rs`, music video / artist /
     songs / other_videos pages, `smart_collections.rs`),
@@ -144,12 +145,16 @@ Each phase is independently shippable and leaves the tree green.
   unchanged after a rescan.
 
 ### Phase 3 — Alternate-version linking (music videos / songs) → **U1**
-**Status: complete for local libraries.**
+**Status: complete for local libraries and provider movie libraries.**
 
 - Detect version tokens from title/folder (`(Live)`, `- Live`, `/Unplugged/`,
   `(Acoustic)`, `(Official Video)`, "MTV Unplugged", …); normalize to `SubKind`.
 - Link renditions of the same work (same artist + matched base title) to a
   canonical primary (official/studio, else first-seen) via `ParentMediaItemId`.
+- Provider movie-library sync for Plex/Jellyfin/Emby reuses the same classifier
+  after the normal sync page, including ETag-skipped rows, so provider alternates
+  become hidden/searchable `AlternateVersion` rows without requiring a full
+  rewrite of every media row.
 - Acceptance: an "MTV Unplugged" smart collection
   (`content_kind:alternate_version AND sub_kind:unplugged`, or
   `album:"MTV Unplugged"` for songs) resolves to unplugged renditions only.
@@ -181,6 +186,9 @@ Each phase is independently shippable and leaves the tree green.
   filler, and feed Classic playout inputs.
 
 ### Cross-cutting
+- Plex/Jellyfin/Emby provider movie-library sync now classifies server-reported
+  extras from title/path/tag signals and writes `ContentKind=Extra` plus
+  normalized `SubKind`.
 - Health check extension (search projection includes variant + stream-role
   fields).
 - `docs/progress/parity/content-variants.toml` created at Phase 0; updated each
@@ -211,8 +219,6 @@ Each phase is independently shippable and leaves the tree green.
 - **Deliberate divergence (scanner):** ErsatzRS imports extras that ErsatzTV
   discards. Tracked in `content-variants` parity slice; ADR 0018 is the
   deviation record.
-- **Provider extras/versions (Plex/Jellyfin/Emby):** deferred until the
-  provider API surface for extras/versions is mapped; local libraries first.
 - **Version-detection heuristics:** title/folder token matching is best-effort;
   ambiguous cases fall back to `Primary` (no false subordination).
 
@@ -222,6 +228,9 @@ Each phase is independently shippable and leaves the tree green.
 - [x] `cargo test -p ersatzrs-infra scheduling_repository` (projection + scheduling examples)
 - [ ] `cargo test -p ersatzrs-infra` (projection + migration round-trip, both
       backends: default + `--features mysql`)
+- [x] `cargo test -p ersatzrs-infra plex_movie_sync_classifies_provider_extras_and_alternate_versions`
+- [x] `cargo test -p ersatzrs-infra jellyfin_movie_sync_classifies_provider_extras_and_alternate_versions`
+- [x] `cargo test -p ersatzrs-infra emby_movie_sync_classifies_provider_extras_and_alternate_versions`
 - [ ] `cargo test -p ersatzrs-scanner` (extras import + version linking)
 - [x] `cargo test -p ersatzrs-web admin::server_fns::media_browser` (media browse/detail + smart
       collection server fns)
