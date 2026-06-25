@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-24
-last_processed_commit: dbfb60e21a9870842c95e1ae507a84cd7ef055d1
+generated: 2026-06-25
+last_processed_commit: 7bf064dab02b9d058a732120fb56cf2b7a1d8020
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,30 +27,33 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-24, after the content-variants Phase 5 scheduling examples
-closeout): ADR 0018's remaining bounded local/search/UI/playback/scheduling
-scope is now resolved with shipped examples for unplugged renditions,
-commentary channels, and featurette pre-roll. `cargo xtask progress gaps` no
-longer needs a `content-variants` prompt for the completed Phase 0-5 scope.
-Ranking: (1) **ersatzrs-healthcheck binary** — open Phase 7 runtime hardening
-TODO to replace the Docker image's tool-based health check with a purpose-built
-binary; (2) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains
-Proposed / Not implemented and would turn the manual TSDuck gate into an
-optional Support tool; (3) **FFmpeg filter graph live proof** — remaining
-parity debt needs real IPTV/HLS runtime proof for wall-clock, in-point, and
-duration expression bindings.
+Selection (2026-06-25, change window
+[`dbfb60e..7bf064d`](https://github.com/bartdeijkers/ersatzrs/compare/dbfb60e...7bf064d),
+two commits): `a4117e1` closed `content-variants` Phase 4 commentary render
+acceptance and `7bf064d` closed Phase 5 scheduling examples, leaving the
+`content-variants` feature `Ported` with every structured `[[debt]]` resolved.
+`cargo xtask progress gaps` is now fully clear and **every** tracked parity
+`[[debt]]` is `resolved = true` — including the prior pick-3
+`ffmpeg-filter-graph` `opacity-expression-time-variable-semantics` debt, which
+was resolved at `eb4dfe1` (before this window) but published stale by the
+previous degraded run when the upstream pin was unreachable. That dead prompt is
+removed and refilled from the ranking. Ranking: (1) **ersatzrs-healthcheck
+binary** — open Phase 7 `phase.toml` `known_todo` and top `plans/INDEX.md`
+deferred item (phase focus first); (2) **in-app TSDuck MPEG-TS
+troubleshooting** — ADR 0013 remains Proposed / Not implemented, a
+maintainer-requested diagnostic capability; (3) **ADR 0018 provider-side extras
+/ alternate-version import** — the next coherent slice of the still-`Proposed`
+ADR 0018, explicitly deferred in `content-variants.toml` ("Provider-specific
+Plex/Jellyfin/Emby extras or version imports remain deferred"), with the pinned
+ErsatzTV provider scanners as the parity reference.
 
-Pin note (2026-06-24): the ErsatzTV upstream checkout was unreachable this run
-(org egress policy returned `403` for `github.com/ErsatzTV/legacy` and
-`github.com/ErsatzTV/ErsatzTV`), so the baseline could not be re-pinned. No
-new pinned-baseline parity prompt was re-derived from upstream. This manual
-closeout removes the completed Channels prompt and refills with spec-backed
-chores that have no ErsatzTV baseline dimension. A future window containing new
-pinned-baseline parity work must not be reconciled until the pin is reachable
-again. The earlier manual closeouts removed the completed Channels and Phase 1
-UI prompts; later closeouts removed the completed Phase 2 scanner, Phase 3
-alternate-version, and Phase 4 commentary render prompts and refilled with the
-next spec-backed ADR 0018 phase.
+Pin note (2026-06-25): the ErsatzTV `git clone` path is still blocked by the org
+egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
+was obtained via the `codeload.github.com` tarball at exactly
+`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the
+extracted tree is the commit's tree). Parity for this run was therefore measured
+against the pin; the baseline was **not** advanced. The provider-import prompt
+below names the exact pinned `$ERSATZTV_SRC` scanner paths to read.
 
 ---
 
@@ -59,10 +62,11 @@ next spec-backed ADR 0018 phase.
 Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 runtime
 hardening chore**, not an ErsatzTV parity port: it is governed by the open
 Phase 7 TODO in `docs/progress/phase.toml` and the deferred-contract entry in
-`plans/INDEX.md`. The goal is to replace the Docker image's current external
-tool health check with a small `ersatzrs-healthcheck` binary that probes
-ErsatzRS readiness without requiring shell, curl, or platform-specific TCP
-tricks in the runtime image.
+`plans/INDEX.md`. It will create a new tracked slug — register
+`docs/progress/parity/ersatzrs-healthcheck.toml` in the same slice. The goal is
+to replace the Docker image's current external tool health check with a small
+`ersatzrs-healthcheck` binary that probes ErsatzRS readiness without requiring
+shell, curl, or platform-specific TCP tricks in the runtime image.
 
 Before editing:
 1. Read `Dockerfile`, `docs/progress/phase.toml`, `plans/INDEX.md`,
@@ -88,8 +92,8 @@ Implement the slice end-to-end:
   managed FFmpeg runtime.
 - Include the binary in release/archive packaging if the release scripts expect
   all supported service binaries to ship together.
-- Update docs/progress, `plans/INDEX.md`, and `CHANGELOG.md` once the Docker
-  health check no longer depends on external tools.
+- Update docs/progress (register the new slug), `plans/INDEX.md`, and
+  `CHANGELOG.md` once the Docker health check no longer depends on external tools.
 
 Verification:
 - Focused tests for argument/default URL handling and exit-code mapping.
@@ -177,47 +181,72 @@ diagnostic follow-ups, and changed files.
 
 ---
 
-## 3. Prove the remaining FFmpeg filter graph runtime parity debt (slug `ffmpeg-filter-graph`)
+## 3. Build the next ErsatzRS spec chore: ADR 0018 provider-side extras and alternate-version import (slug `content-variants`)
 
-Use the repo workflow from AGENTS.md. This is an ErsatzTV parity/runtime proof
-slice governed by `docs/progress/parity/ffmpeg-filter-graph.toml`, the FFmpeg
-pipeline contracts in PORTING.md, and the active IPTV/HLS runtime gates. The
-snapshot-covered expression semantics exist, but the feature still carries
-debt because no live IPTV/HLS capture has proven the same bindings in a real
-stream.
+Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`. This is the
+next coherent slice of the still-`Proposed`
+[ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md): extending
+content-variant handling from the local scanner to the Plex/Jellyfin/Emby
+provider scanners. The `content-variants` feature is currently `Ported` for the
+local-library / search / UI / playback / scheduling scope, but
+`docs/progress/parity/content-variants.toml` records the explicit shortfall:
+"Provider-specific Plex/Jellyfin/Emby extras or version imports remain deferred
+until a provider API mapping slice is selected." The goal is fully functional
+ErsatzTV parity for provider extras/alternate-version import — no stopgaps, with
+any remaining shortfall recorded as visible `[[debt]]`.
 
-Scope is the proof and any narrow fix needed for the proof. Do not redesign the
-graphics engine, replace `drawvg`, or broaden unrelated FFmpeg command
-generation work.
+This is genuine ErsatzTV parity work: do **not** invent provider behavior.
+Read ErsatzTV source **at the pinned commit**
+`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the
+[`parity-baseline`](automation/parity-baseline.md); `git clone` is blocked by
+egress, so fetch via the `codeload.github.com/ErsatzTV/legacy/tar.gz/<sha>`
+tarball and point `$ERSATZTV_SRC` at the extracted tree).
 
 Before editing:
-1. Read `docs/progress/parity/ffmpeg-filter-graph.toml`, PORTING.md,
-   STYLE.md, TEST.md, and the relevant FFmpeg pipeline/filter graph code.
-2. Inspect the snapshot tests for `content_seconds`, `channel_seconds`,
-   `time_of_day_seconds`, and `content_total_seconds`.
-3. Build a Source Map for direct IPTV `.ts`, HLS segmenter, troubleshooting
-   preview command generation, graphics/template variable binding, and runtime
-   proof scripts.
+1. Read `docs/progress/parity/content-variants.toml`, ADR 0018,
+   `plans/extras-alternate-versions-and-stream-roles.md`, PORTING.md, STYLE.md,
+   and TEST.md.
+2. Read these pinned ErsatzTV provider scanners to learn how extras /
+   other-video / alternate versions are discovered and persisted:
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexMovieLibraryScanner.cs`,
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexOtherVideoLibraryScanner.cs`,
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs`,
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinMovieLibraryScanner.cs`,
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinTelevisionLibraryScanner.cs`,
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyMovieLibraryScanner.cs`, and
+   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyTelevisionLibraryScanner.cs`.
+3. Inspect the ErsatzRS local-scanner content-variant import path (the existing
+   `OtherVideo` / `ContentKind=Extra` / `AlternateVersion` / `SubKind` /
+   `ParentMediaItemId` handling proven by the resolved `content-variants` debts)
+   so the provider path reuses the same domain shapes.
+4. Build a Source Map for provider library scanning, item-kind classification,
+   parent linkage, and content-variant persistence. Identify the existing
+   `ParityDebt` (the provider-import deferral) you are closing or narrowing.
 
 Implement the slice end-to-end:
-- Add or update a live proof path that captures direct IPTV and HLS segmenter
-  output with filter graph expressions exercising wall-clock, in-point, and
-  duration bindings.
-- If the live proof exposes a mismatch, fix the narrow binding/argv/runtime
-  path and add focused regression coverage.
-- Keep cross-platform assumptions documented; any host-specific proof helper
-  must be opt-in and not part of normal startup or playback.
-- Update `docs/progress/parity/ffmpeg-filter-graph.toml`, `CHANGELOG.md`, and
-  this prompt file if the debt ranking changes.
+- Map provider extras / other-video / alternate-version items into the same
+  `ContentKind` / `SubKind` / `ParentMediaItemId` model the local scanner uses,
+  preserving ErsatzTV's discovery and linkage semantics at the pin.
+- Keep canonical primaries unchanged and variants hidden-by-default, matching
+  the already-ported local behavior and search projection.
+- Add focused scanner tests for each provider's extras/alternate-version import
+  and parent linkage; do not regress existing local-scanner coverage.
+- Update `docs/progress/parity/content-variants.toml`: refresh the summary,
+  and if the provider work is not fully complete in this slice, flip the
+  feature back to `In progress` and record the remaining provider scope as a
+  structured `[[debt]]` (a `Ported` feature must not carry open debt — `cargo
+  xtask progress check` fails that combination). Update `CHANGELOG.md`.
+- Decide whether any deliberate deviation from ErsatzTV needs a new ADR.
 
 Verification:
-- Focused FFmpeg/filter graph tests covering any changed command generation.
-- The live IPTV/HLS proof command or script, with captured evidence that the
-  expressions bind to the expected wall-clock, in-point, and duration values.
+- Focused provider-scanner tests (`cargo test -p ersatzrs-scanner <filter>`)
+  for extras/alternate-version classification and linkage.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, runtime proof method, any fixes made, remaining
-`ffmpeg-filter-graph` `ParityDebt`, verification run, and changed files.
+Report the Source Map, ErsatzTV-vs-ErsatzRS provider mapping, behavior
+implemented, remaining `content-variants` `ParityDebt`, verification run, and
+changed files.
