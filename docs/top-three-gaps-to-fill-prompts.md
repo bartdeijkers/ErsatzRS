@@ -1,5 +1,5 @@
 <!--
-generated: 2026-06-25
+generated: 2026-06-26
 last_processed_commit: e06be38d0dbd6fb73c71190c879e102230b21d33
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
@@ -27,16 +27,41 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-25, current repo state plus the healthcheck closeout in this
-PR): `cargo xtask progress gaps` is clear, every tracked `[[debt]]` is resolved,
-and the previous healthcheck and provider-import prompts are closed. Ranking:
-(1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains Proposed / Not
-implemented and is the highest-value Support diagnostic; (2) **Docker
-dependency-layer caching** — still open in `phase.toml` and `plans/INDEX.md`,
-with fresh evidence from the healthcheck Docker proof that the release image
-spends about 24 minutes in the in-container Rust release build; (3) **startup
-configuration cleanup** — the remaining Phase 7 TODO to replace direct
-`DATABASE_URL` environment access with the repository configuration layer.
+Selection (2026-06-26, current repo state plus change window
+[`7bf064d..e06be38`](https://github.com/bartdeijkers/ersatzrs/compare/7bf064d...e06be38)):
+the substantive commit in the window is `c978cd1` *"feat(infra): classify
+provider content variants"*, which closed the previous pick-3
+(`content-variants` `provider-extras-versions` debt): Plex/Jellyfin/Emby
+movie-library sync now reuses a shared `ersatzrs-domain` content-variant
+classifier after each provider page (including ETag-skipped rows), importing
+server-reported extras as hidden `ContentKind=Extra` rows and linking provider
+alternate versions to their canonical primary via `ParentMediaItemId`. That
+commit already reconciled `content-variants.toml` (debt `resolved = true`,
+summary + plan updated, session line appended); `cargo xtask progress gaps` is
+clear, **every** tracked parity `[[debt]]` is `resolved = true`, and ADR 0018 is
+now `Implemented`. The remaining window commits are tooling/dependency noise
+(agent hooks, contributing-contract reviewer, dependabot bumps) with no parity
+impact. The dead ADR-0018 provider-import prompt is removed and the slot
+refilled from the ranking. Current `main` also closed the
+`ersatzrs-healthcheck` chore on 2026-06-25, so healthcheck is not carried
+forward.
+
+Ranking: (1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains
+Proposed / Not implemented and is the highest-value Support diagnostic. (2)
+**Docker dependency-layer caching** — still open in `phase.toml` and
+`plans/INDEX.md`, with fresh evidence from the healthcheck Docker proof that
+the release image spends about 24 minutes in the in-container Rust release
+build. (3) **startup configuration cleanup** — the remaining Phase 7 TODO to
+replace direct `DATABASE_URL` environment access with the repository
+configuration layer.
+
+Pin note (2026-06-26): the ErsatzTV `git clone` path is still blocked by the org
+egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
+was obtained via the `codeload.github.com` tarball at exactly
+`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the
+extracted tree is the commit's tree) and `$ERSATZTV_SRC` was pointed at it.
+Parity for this run was therefore measured against the pin; the baseline was
+**not** advanced.
 
 ---
 

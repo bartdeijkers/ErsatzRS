@@ -64,7 +64,14 @@ IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
 2026-06-24: repo-owned templates and docs cover unplugged rendition smart
 collections, commentary movie channels, and featurette pre-roll filler attached
 to primary movie schedule items while default schedules stay unchanged. The
-FFmpeg filter-graph opacity-expression live proof debt is now resolved, and the
+ADR 0018 provider-side import slice landed on 2026-06-25 (`c978cd1`):
+Plex/Jellyfin/Emby movie-library sync reuses a shared `ersatzrs-domain`
+content-variant classifier after each provider page (including ETag-skipped
+rows), so server-reported extras become hidden `ContentKind=Extra` rows and
+provider alternate versions link to their canonical primary via
+`ParentMediaItemId`; `content-variants` is now fully `Ported` with every
+structured `[[debt]]` resolved and ADR 0018 marked implemented. The FFmpeg
+filter-graph opacity-expression live proof debt is now resolved, and the
 2026-06-25 healthcheck closeout replaced Docker's curl readiness probe with the
 purpose-built `ersatzrs-healthcheck` binary. The next spec-backed candidates are
 ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
