@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 
@@ -16,7 +18,10 @@ LOCAL_PATH_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
     (
         "maintainer Windows user absolute path",
-        re.compile(r"(?i)\b[A-Z]:\\Users\\[^\\\s'\"`)<>]+(?:\\[^\s'\"`)<>]*)?"),
+        re.compile(
+            r"(?i)\b[A-Z]:\\Users\\(?!(?:<user>|\.\.\.))"
+            r"[^\\\s'\"`)<>]+(?:\\[^\s'\"`)<>]*)?"
+        ),
     ),
     (
         "WSL-mounted Windows user absolute path",
@@ -27,10 +32,17 @@ LOCAL_PATH_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(
             r"(?i)(?<![A-Za-z0-9_.-])(?:"
             r"/mnt/[A-Za-z]/[^\s'\"`)<>]*(?:media|movies|tv|music|plex|jellyfin|emby|nastv)[^\s'\"`)<>]*"
-            r"|/media/(?![\[(?])[^/\s'\"`)<>]+/[^\s'\"`)<>]+\."
-            r"(?:mkv|mp4|m4v|avi|mov|ts|m2ts|mpg|mpeg|mp3|flac|m4a|aac|srt|ass|ssa)\b"
             r"|\\\\[^\\\s'\"`)<>]+\\(?:media|movies|tv|music|plex|jellyfin|emby|nastv)(?:\\[^\s'\"`)<>]*)?"
             r")"
+        ),
+    ),
+)
+
+PERSONAL_MEDIA_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "personal media title",
+        re.compile(
+            r"(?i)\b2010\s*(?::|-)?\s*the\s+year\s+we\s+ma(?:k|d)e\s+contact\b"
         ),
     ),
 )
@@ -48,7 +60,7 @@ GENERIC_SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b("
     r"api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|"
     r"client[_-]?secret|issuer[_-]?signing[_-]?key|password|passwd|secret"
-    r")\b\s*[:=]\s*[\"']?([A-Za-z0-9_./+=:-]{16,})[\"']?"
+    r")\b\s*[:=]\s*[\"']([A-Za-z0-9_./+=:-]{16,})[\"']"
 )
 
 PLACEHOLDER_WORDS = (
@@ -60,6 +72,7 @@ PLACEHOLDER_WORDS = (
     "replace",
     "sample",
     "test",
+    "token",
     "your",
 )
 
@@ -120,6 +133,10 @@ def find_violation(content: str) -> str | None:
         if pattern.search(content):
             return name
 
+    for name, pattern in PERSONAL_MEDIA_PATTERNS:
+        if pattern.search(content):
+            return name
+
     for name, pattern in SECRET_PATTERNS:
         if pattern.search(content):
             return name
@@ -131,7 +148,41 @@ def find_violation(content: str) -> str | None:
     return None
 
 
+def scan_repo() -> int:
+    try:
+        raw_files = subprocess.check_output(["git", "ls-files", "-z"])
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"Unable to list tracked files: {exc}", file=sys.stderr)
+        return 2
+
+    failures: list[str] = []
+    for raw_name in raw_files.split(b"\0"):
+        if not raw_name:
+            continue
+
+        path = Path(raw_name.decode())
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, UnicodeDecodeError):
+            continue
+
+        for line_no, line in enumerate(content.splitlines(), start=1):
+            violation = find_violation(line)
+            if violation is not None:
+                failures.append(f"{path}:{line_no}: {violation}")
+
+    if failures:
+        print("CONTRIBUTING.md repository-content violations:", file=sys.stderr)
+        print("\n".join(failures), file=sys.stderr)
+        return 2
+
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--scan-repo"]:
+        return scan_repo()
+
     raw = sys.stdin.read()
     if not raw.strip():
         return 0

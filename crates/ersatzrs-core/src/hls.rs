@@ -39,7 +39,7 @@ impl HlsAdmissionStatus {
 /// Wider behaviour — cancellation and state reporting — remains for later
 /// slices.
 ///
-/// [`IHlsSessionWorker`]: /home/bart/ErsatzTV/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
+/// [`IHlsSessionWorker`]: $ERSATZTV_SRC/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
 #[async_trait]
 pub trait HlsSessionHandle: Send + Sync {
     fn channel_number(&self) -> &str;
@@ -55,7 +55,7 @@ pub trait HlsSessionHandle: Send + Sync {
     /// Ports [`IHlsSessionWorker.Cancel`]; the concrete worker kills its
     /// `FFmpeg` process and removes itself from the registry.
     ///
-    /// [`IHlsSessionWorker.Cancel`]: /home/bart/ErsatzTV/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
+    /// [`IHlsSessionWorker.Cancel`]: $ERSATZTV_SRC/ErsatzTV.Core/Interfaces/FFmpeg/IHlsSessionWorker.cs
     async fn cancel(&self);
 
     /// Marks the active playout as modified so the segmenter seeks on its next
@@ -64,7 +64,7 @@ pub trait HlsSessionHandle: Send + Sync {
     ///
     /// Ports [`IHlsSessionWorker.PlayoutUpdated`].
     ///
-    /// [`IHlsSessionWorker.PlayoutUpdated`]: /home/bart/ErsatzTV/ErsatzTV.Core/Interfaces/Streaming/IHlsSessionWorker.cs
+    /// [`IHlsSessionWorker.PlayoutUpdated`]: $ERSATZTV_SRC/ErsatzTV.Core/Interfaces/Streaming/IHlsSessionWorker.cs
     fn playout_updated(&self);
 }
 

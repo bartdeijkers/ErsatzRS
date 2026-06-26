@@ -936,8 +936,8 @@ mod tests {
         let repo = TestConfigRepository::default();
         let mut report = ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests();
         report.acquisition.source = ersatzrs_ffmpeg::FfmpegRuntimeSource::Downloaded;
-        report.ffmpeg.path = r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffmpeg.exe".to_owned();
-        report.ffprobe.path = r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffprobe.exe".to_owned();
+        report.ffmpeg.path = r"C:\ErsatzRS\ffmpeg\current\ffmpeg.exe".to_owned();
+        report.ffprobe.path = r"C:\ErsatzRS\ffmpeg\current\ffprobe.exe".to_owned();
 
         persist_managed_ffmpeg_runtime_paths_to_repo(&repo, &report)
             .await
@@ -948,14 +948,14 @@ mod tests {
                 .await
                 .expect("ffmpeg path")
                 .as_deref(),
-            Some(r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffmpeg.exe")
+            Some(r"C:\ErsatzRS\ffmpeg\current\ffmpeg.exe")
         );
         assert_eq!(
             repo.get(ersatzrs_domain::CONFIG_KEY_FFPROBE_PATH)
                 .await
                 .expect("ffprobe path")
                 .as_deref(),
-            Some(r"C:\Users\Bart\.ersatzrs\ffmpeg\current\ffprobe.exe")
+            Some(r"C:\ErsatzRS\ffmpeg\current\ffprobe.exe")
         );
     }
 

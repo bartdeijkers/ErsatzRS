@@ -7,7 +7,7 @@ body:
     id: ersatztv-source
     attributes:
       label: ErsatzTV source
-      description: Path to the source file or directory under `/home/bart/ErsatzTV/`.
+      description: Path to the source file or directory under `$ERSATZTV_SRC`.
     validations:
       required: true
   - type: input

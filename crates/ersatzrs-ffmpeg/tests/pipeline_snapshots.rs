@@ -913,9 +913,9 @@ fn software_pipeline_burns_text_subtitle_with_libass_filter() {
 #[test]
 fn software_pipeline_escapes_windows_subtitle_paths_for_libass_filter() {
     let mut request = h264_request(DesiredVideoState::h264_1080p())
-        .with_subtitle_fonts_dir(r"C:\Users\Bart\AppData\Local\ErsatzRS\cache\streams\fonts");
+        .with_subtitle_fonts_dir(r"C:\ErsatzRS\cache\streams\fonts");
     request.inputs.push(InputFile::text_subtitle(
-        r"C:\Users\Bart\AppData\Local\ErsatzRS\cache\streams\subtitles\seek\subtitle.srt",
+        r"C:\ErsatzRS\cache\streams\subtitles\seek\subtitle.srt",
         ersatzrs_ffmpeg::SubtitleMethod::Burn,
     ));
 
@@ -924,7 +924,7 @@ fn software_pipeline_escapes_windows_subtitle_paths_for_libass_filter() {
 
     assert!(
         args.contains(
-            r"subtitles=C\\:/Users/Bart/AppData/Local/ErsatzRS/cache/streams/subtitles/seek/subtitle.srt:fontsdir=C\\:/Users/Bart/AppData/Local/ErsatzRS/cache/streams/fonts"
+            r"subtitles=C\\:/ErsatzRS/cache/streams/subtitles/seek/subtitle.srt:fontsdir=C\\:/ErsatzRS/cache/streams/fonts"
         ),
         "expected Windows subtitles filter paths to normalize backslashes and double-escape the drive colon for both ffmpeg parse levels, got: {args}"
     );

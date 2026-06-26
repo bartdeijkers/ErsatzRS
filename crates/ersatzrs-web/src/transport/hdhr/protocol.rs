@@ -1,5 +1,5 @@
 //! `HDHomeRun` wire protocol primitives shared between the UDP discovery
-//! responder and its tests. See `/home/bart/ErsatzTV/hdhr.md` for the packet
+//! responder and its tests. See `$ERSATZTV_SRC/hdhr.md` for the packet
 //! format reference.
 
 pub const UDP_DISCOVERY_PORT: u16 = 65001;

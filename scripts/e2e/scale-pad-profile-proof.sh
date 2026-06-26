@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Live Scale and Pad FFmpeg-profile proof for ErsatzRS (E2E, NOT part of CI).
 #
-# The proof generates a calibration clip at the real local-library geometry of
-# "2010 - The Year We Make Contact (1984)" (ffprobe: 1920x800, SAR 1:1,
-# DAR 12:5), boots ersatzrs-web on a throwaway SQLite database, seeds that clip
-# as channel content, forces a software H.264 1920x1080 Scale and Pad profile,
-# captures the live MPEG-TS stream, then samples decoded pixels to prove the
-# output is 1920x1080 with black top/bottom padding and visible source content.
+# The proof generates a synthetic 1920x800 scope-ratio calibration clip, boots
+# ersatzrs-web on a throwaway SQLite database, seeds that clip as channel
+# content, forces a software H.264 1920x1080 Scale and Pad profile, captures the
+# live MPEG-TS stream, then samples decoded pixels to prove the output is
+# 1920x1080 with black top/bottom padding and visible source content.
 
 set -euo pipefail
 
@@ -24,7 +23,7 @@ CLIP_SECONDS="${SCALE_PAD_PROOF_CLIP_SECONDS:-8}"
 CAPTURE_SECONDS="${SCALE_PAD_PROOF_CAPTURE_SECONDS:-5}"
 CALIB_DIR="${SCALE_PAD_PROOF_CALIB_DIR:-${TMPDIR:-/tmp}/ersatzrs-scale-pad-proof-clips}"
 CALIB_FPS="${SCALE_PAD_PROOF_FPS:-30}"
-CALIB_SIZE_PRESET="${SCALE_PAD_PROOF_SIZE_PRESET:-2010}"
+CALIB_SIZE_PRESET="${SCALE_PAD_PROOF_SIZE_PRESET:-cinema-1920x800}"
 CALIB_SIZE="${SCALE_PAD_PROOF_SIZE:-}"
 TARGET_WIDTH="${SCALE_PAD_PROOF_TARGET_WIDTH:-1920}"
 TARGET_HEIGHT="${SCALE_PAD_PROOF_TARGET_HEIGHT:-1080}"
@@ -104,7 +103,7 @@ wait_http() {
 ensure_calibration() {
   mkdir -p "$CALIB_DIR"
   if [ ! -f "$CALIB_DIR/cal_1.mkv" ]; then
-    info "generating 2010-sized SDR calibration clip in $CALIB_DIR"
+    info "generating cinema-1920x800 SDR calibration clip in $CALIB_DIR"
     if [ -n "$CALIB_SIZE" ]; then
       CAL_OUT="$CALIB_DIR" \
       CAL_CLIPS=1 \
@@ -145,7 +144,7 @@ assert_generated_source_geometry() {
   [ "$height" = 800 ] || die "generated source height is $height, expected 800"
   [ "$sar" = "1:1" ] || die "generated source SAR is $sar, expected 1:1"
   [ "$dar" = "12:5" ] || die "generated source DAR is $dar, expected 12:5"
-  pass "generated source matches 2010 geometry: ${width}x${height} SAR $sar DAR $dar"
+  pass "generated source matches cinema-1920x800 geometry: ${width}x${height} SAR $sar DAR $dar"
 }
 
 seed_db() {
@@ -179,13 +178,13 @@ INSERT INTO "LibraryPath" ("Id","Path","LibraryId","LastScan") VALUES (1,'$calib
 INSERT INTO "MediaItem" ("Id","LibraryPathId","State") VALUES (1,1,0);
 INSERT INTO "Movie" ("Id") VALUES (1);
 INSERT INTO "MovieMetadata" ("DateAdded","DateUpdated","MetadataKind","MovieId","Title")
-  VALUES (datetime('now'),datetime('now'),0,1,'2010 Scale Pad Calibration');
+  VALUES (datetime('now'),datetime('now'),0,1,'Cinema Scale Pad Calibration');
 INSERT INTO "MediaVersion" (
     "Id","DateAdded","DateUpdated","DisplayAspectRatio","Duration","Height",
     "MovieId","Name","RFrameRate","SampleAspectRatio","VideoScanKind","Width"
   ) VALUES (
     1,datetime('now'),datetime('now'),'12:5','$item_seconds',800,
-    1,'2010 Scale Pad Calibration','$CALIB_FPS/1','1:1',1,1920
+    1,'Cinema Scale Pad Calibration','$CALIB_FPS/1','1:1',1,1920
   );
 INSERT INTO "MediaFile" ("Id","MediaVersionId","Path","PathHash")
   VALUES (1,1,'$src_db_path','scale-pad-proof');
@@ -303,11 +302,11 @@ usage() {
   cat <<EOF
 Usage: scripts/e2e/scale-pad-profile-proof.sh
 
-Generates a 2010-sized calibration source, boots ErsatzRS on a throwaway DB,
+Generates a cinema-1920x800 calibration source, boots ErsatzRS on a throwaway DB,
 and proves the 1920x1080 Scale and Pad profile emits letterboxed output.
 
 Environment:
-  SCALE_PAD_PROOF_SIZE_PRESET=2010  named generator size preset (default)
+  SCALE_PAD_PROOF_SIZE_PRESET=cinema-1920x800  named generator size preset (default)
   SCALE_PAD_PROOF_SIZE=1920x800      explicit generator size override
   SCALE_PAD_PROOF_CLIP_SECONDS=8
   SCALE_PAD_PROOF_CAPTURE_SECONDS=5

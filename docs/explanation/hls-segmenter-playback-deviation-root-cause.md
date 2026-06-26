@@ -25,7 +25,7 @@ content timing drift:
   next item already at `ABS 00:00:00.517` by decoded second 117. The segmenter
   switched content early by about 0.5 seconds instead of preserving the media
   timeline through the playout seam.
-- `C:\Users\Bart\AppData\Local\ErsatzRS\logs\ErsatzRS.log` contained no
+- `C:\ErsatzRS\logs\ErsatzRS.log` contained no
   WARN/ERROR/FFmpeg failure/no-active-playout lines during the capture. The
   only channel 5 line was an informational idle-session stop after capture.
 
@@ -168,7 +168,7 @@ generated calibration clips.
 
    ```powershell
    Select-String `
-     -Path C:\Users\Bart\AppData\Local\ErsatzRS\logs\ErsatzRS.log `
+     -Path C:\ErsatzRS\logs\ErsatzRS.log `
      -Pattern "hls_worker|ERROR|WARN|error|warn|failed|ffmpeg|channel_number=5|stopping idle" `
      -CaseSensitive:$false
    ```

@@ -38,9 +38,8 @@
 #   CAL_DURATION=180              seconds per clip
 #   CAL_FPS=60                    frame rate
 #   CAL_SIZE=1920x1080            WxH
-#   CAL_SIZE_PRESET=              named WxH preset; use 2010 for the local
-#                                  2010: The Year We Make Contact source size
-#                                  proven by ffprobe as 1920x800 SAR 1:1
+#   CAL_SIZE_PRESET=              named WxH preset; use cinema-1920x800 for
+#                                  1920x800 SAR 1:1 scope-ratio proof clips
 #   CAL_CRF=14                    libx264 quality (lower = better/larger)
 #   CAL_PRESET=medium             libx264 preset
 #   CAL_CLIPS="1 2 3"             which clips to build
@@ -92,14 +91,12 @@ TONEMAP_DESAT="${CAL_TONEMAP_DESAT:-2}"
 
 size_preset() {
   case "$1" in
-    2010|2010-year-we-make-contact|2010-year-we-made-contact|2010-the-year-we-make-contact|2010-the-year-we-made-contact)
-      # Local library source:
-      #   2010 - The Year We Make Contact (1984)
-      #   ffprobe: 1920x800, SAR 1:1, DAR 12:5, yuv420p
+    cinema-1920x800|scope-1920x800)
+      # Synthetic scope-ratio proof geometry: 1920x800, SAR 1:1, DAR 12:5.
       echo "1920x800"
       ;;
     *)
-      echo "ERROR: unsupported CAL_SIZE_PRESET '$1' (known: 2010)" >&2
+      echo "ERROR: unsupported CAL_SIZE_PRESET '$1' (known: cinema-1920x800)" >&2
       exit 2
       ;;
   esac
@@ -108,7 +105,7 @@ size_preset() {
 resolve_size() {
   local value="$1"
   case "$value" in
-    2010|2010-year-we-make-contact|2010-year-we-made-contact|2010-the-year-we-make-contact|2010-the-year-we-made-contact)
+    cinema-1920x800|scope-1920x800)
       size_preset "$value"
       ;;
     *)

@@ -1210,8 +1210,8 @@ mod tests {
     #[test]
     fn local_library_path_normalization_accepts_file_uri_input() {
         assert_eq!(
-            normalize_local_library_path("file:///mnt/d/downloads/movies/"),
-            Some("/mnt/d/downloads/movies".to_string())
+            normalize_local_library_path("file:///library/downloads/movies/"),
+            Some("/library/downloads/movies".to_string())
         );
     }
 }

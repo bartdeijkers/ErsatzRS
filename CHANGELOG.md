@@ -136,11 +136,11 @@ release section when tagging a release.
   checksums, runs drawvg/zscale smoke validation, and reports successful
   downloads or failed update attempts through `/system/health` and an admin
   toast.
-- Calibration clip generation now includes a `CAL_SIZE_PRESET=2010` mode for
-  the local `2010 - The Year We Make Contact (1984)` source geometry
-  (`1920x800`, SAR `1:1`, DAR `12:5`) plus a live Scale and Pad proof script
-  that boots ErsatzRS, streams the generated source through a 1080p FFmpeg
-  profile, and verifies black top/bottom padding in the captured output.
+- Calibration clip generation now includes a `CAL_SIZE_PRESET=cinema-1920x800`
+  mode for synthetic scope-ratio proof geometry (`1920x800`, SAR `1:1`, DAR
+  `12:5`) plus a live Scale and Pad proof script that boots ErsatzRS, streams
+  the generated source through a 1080p FFmpeg profile, and verifies black
+  top/bottom padding in the captured output.
 
 ### Changed
 

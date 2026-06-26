@@ -45,6 +45,7 @@ deep sync (mirrors `QueueShowScanByLibraryIdHandler` success && deepScan).
 **Testing notes:** the full extract-and-flip-to-IsExtracted=1 path writes to the
 real `data_local_dir()` cache (no override hook), so CI tests cover only the
 config gate + empty-work early return; the flip is a manual verification step.
-ffmpeg-touching tests need `LD_LIBRARY_PATH=/home/bart/.local/ffmpeg-8.1/lib`.
+ffmpeg-touching tests need `LD_LIBRARY_PATH` pointed at the FFmpeg 8.1 `lib`
+directory.
 Provider show snapshot tests assert `StreamCount` — adding subtitle streams to a
 mock bumps it (had to hand-edit two `.snap` files; cargo-insta is NOT installed).
