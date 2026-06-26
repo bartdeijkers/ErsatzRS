@@ -1011,6 +1011,10 @@ mod nvidia {
     }
 
     struct Library {
+        // NVIDIA's Linux/WSL driver stack can fault from `dlclose` after
+        // CUDA/NVENC probing. Keep these process-global driver handles resident
+        // once opened; the probe only loads a bounded set of well-known
+        // libraries.
         handle: *mut c_void,
     }
 
@@ -1027,12 +1031,6 @@ mod nvidia {
 
         fn symbol_any<T: Copy>(&self, names: &[&str]) -> Option<T> {
             names.iter().find_map(|name| self.symbol(name))
-        }
-    }
-
-    impl Drop for Library {
-        fn drop(&mut self) {
-            close_library(self.handle);
         }
     }
 
@@ -1058,14 +1056,6 @@ mod nvidia {
     unsafe extern "C" {
         fn dlopen(path: *const c_char, mode: c_int) -> *mut c_void;
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
-        fn dlclose(handle: *mut c_void) -> c_int;
-    }
-
-    #[cfg(unix)]
-    fn close_library(handle: *mut c_void) {
-        unsafe {
-            let _ = dlclose(handle);
-        }
     }
 
     #[cfg(windows)]
@@ -1089,14 +1079,6 @@ mod nvidia {
     unsafe extern "system" {
         fn LoadLibraryA(name: *const c_char) -> *mut c_void;
         fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
-        fn FreeLibrary(module: *mut c_void) -> c_int;
-    }
-
-    #[cfg(windows)]
-    fn close_library(handle: *mut c_void) {
-        unsafe {
-            let _ = FreeLibrary(handle);
-        }
     }
 
     #[cfg(test)]

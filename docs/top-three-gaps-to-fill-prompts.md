@@ -1,6 +1,6 @@
 <!--
 generated: 2026-06-26
-last_processed_commit: e06be38d0dbd6fb73c71190c879e102230b21d33
+last_processed_commit: 6e0bc4bc196d230ec2e089d12fa11449b67ecf52
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -48,12 +48,13 @@ forward.
 
 Ranking: (1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 remains
 Proposed / Not implemented and is the highest-value Support diagnostic. (2)
-**Docker dependency-layer caching** — still open in `phase.toml` and
-`plans/INDEX.md`, with fresh evidence from the healthcheck Docker proof that
-the release image spends about 24 minutes in the in-container Rust release
-build. (3) **startup configuration cleanup** — the remaining Phase 7 TODO to
-replace direct `DATABASE_URL` environment access with the repository
-configuration layer.
+**startup configuration cleanup** — the remaining Phase 7 TODO to replace
+direct `DATABASE_URL` environment access with the repository configuration
+layer. (3) **module split survey Tier 1 pilot** — the next active plan chore
+after Docker caching is the behavior-preserving health-check module split from
+`plans/module-split-survey.md`, which validates the repo's scalable registry
+pattern on the lowest-risk oversized file before larger admin/server-function
+and YAML scheduling splits.
 
 Pin note (2026-06-26): the ErsatzTV `git clone` path is still blocked by the org
 egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
@@ -133,62 +134,7 @@ diagnostic follow-ups, and changed files.
 
 ---
 
-## 2. Build the next ErsatzRS build hardening chore: Docker dependency-layer caching (slug `docker-build-caching`)
-
-Use the repo workflow from AGENTS.md. This is a **spec-backed build/runtime
-hardening chore**, not an ErsatzTV parity port: it is governed by the open
-`docs/progress/phase.toml` TODO and the `plans/INDEX.md` Deferred Contract Work
-entry. The goal is to make Docker image builds stop recompiling the full
-workspace after every source-only edit while preserving the release binary and
-hydration-bundle contracts.
-
-Before editing:
-1. Read `Dockerfile`, `BUILD.md`, `RELEASING.md`, `.github/workflows/release.yml`,
-   `docs/progress/phase.toml`, `plans/INDEX.md`, and
-   `docs/reference/release-bundle.md`.
-2. Inspect `.dockerignore`, workspace member manifests, `Cargo.lock`,
-   `.cargo/config.toml`, the Leptos/Stylance build behavior, and Docker runtime
-   asset copy paths.
-3. Build a Source Map for dependency-manifest staging, source-copy invalidation,
-   SQLX offline metadata, Leptos CSS/site assets, binary copy paths, and the
-   runtime image's managed FFmpeg expectations.
-4. Record the current timing baseline. The 2026-06-25 healthcheck proof saw
-   `docker build --target runtime` spend `24m 02s` in the in-container Rust
-   release build step before exporting the image.
-
-Implement the slice end-to-end:
-- Restructure the builder stage so dependency layers are keyed by manifests and
-  lockfiles before copying the full source tree.
-- Keep `SQLX_OFFLINE=true`, workspace features, release profile, and binary
-  outputs equivalent to the current Dockerfile.
-- Preserve the `ersatzrs-web` plus `ersatzrs-healthcheck` runtime image layout
-  and the managed FFmpeg runtime behavior.
-- Avoid committing host-specific cache paths, absolute maintainer paths, or
-  machine-local `sccache` configuration.
-- Update `docs/progress` and `CHANGELOG.md`; register a new progress slug if the
-  build-cache behavior becomes a tracked runtime/build contract.
-
-Verification:
-- `docker build --target runtime --progress=plain -t ersatzrs-docker-cache-proof .`
-  twice: one cold-ish build and one source-only rebuild after a harmless touched
-  source/doc input, reporting both timings.
-- `docker inspect` proves the runtime `HEALTHCHECK` still uses
-  `ersatzrs-healthcheck`.
-- `docker run --rm --entrypoint /usr/local/bin/ersatzrs-healthcheck
-  ersatzrs-docker-cache-proof --help` proves the binary still runs.
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
-- `cargo xtask progress check`.
-
-Report the Source Map, before/after Docker timings, changed cache boundaries,
-runtime image proof, remaining Docker/GHCR release deferrals, verification run,
-and changed files.
-
----
-
-## 3. Build the next ErsatzRS startup chore: route `DATABASE_URL` through configuration (slug `startup-runtime-config`)
+## 2. Build the next ErsatzRS startup chore: route `DATABASE_URL` through configuration (slug `startup-runtime-config`)
 
 Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 startup
 cleanup**, not an ErsatzTV parity port: it is governed by the open
@@ -236,3 +182,57 @@ Verification:
 Report the Source Map, preserved config precedence, removed lint allowance,
 Docker/Linux/Windows/macOS compatibility proof, verification run, remaining
 startup-runtime TODOs, and changed files.
+
+---
+
+## 3. Build the next ErsatzRS refactor chore: split health checks into registry submodules (slug `module-split-survey`)
+
+Use the repo workflow from AGENTS.md. This is a **spec-backed
+behavior-preserving refactor chore**, not an ErsatzTV parity port: it is
+governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md).
+Scope this slice to the Tier 1 pilot only:
+`crates/ersatzrs-infra/src/health.rs` -> `crates/ersatzrs-infra/src/health/`.
+Do not bundle the much larger `media_browser.rs` or `yaml.rs` splits into this
+first PR.
+
+Before editing:
+1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
+   `docs/how-to/testing.md`.
+2. Inspect `crates/ersatzrs-infra/src/health.rs`,
+   `crates/ersatzrs-core/src/health.rs`, health-check tests, and all callers of
+   `make_health_check_service`.
+3. Build a Source Map for the service factory registry, shared helpers,
+   each concrete `HealthCheck` implementation, result persistence callers, and
+   test seams.
+4. List every public item and registered check before moving code so the
+   refactor can prove the public surface and registered set are unchanged.
+
+Implement the slice end-to-end:
+- Convert `crates/ersatzrs-infra/src/health.rs` into
+  `crates/ersatzrs-infra/src/health/mod.rs` plus
+  `health/checks/<name>.rs`, with one concrete health-check struct and impl per
+  file.
+- Keep `make_health_check_service()` as the thin registry in `mod.rs`; preserve
+  all check titles, IDs, severities, ordering, repository calls, and result
+  mapping.
+- Keep `HealthCheck` and `HealthCheckService` in `ersatzrs-core`; do not move
+  trait or run-loop ownership across crate boundaries.
+- Add a focused completeness test that proves every registered check has a
+  non-empty title and that the registered set/order matches the pre-split
+  contract.
+- Avoid behavior changes, SQL changes, public import churn, new dependencies,
+  or unrelated cleanup.
+- Update docs/progress and `CHANGELOG.md` only if the refactor changes a tracked
+  contract or materially improves maintainer workflow.
+
+Verification:
+- Focused `ersatzrs-infra` health-check tests.
+- `cargo fmt --all -- --check`.
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
+- `cargo test --workspace --all-features`.
+- `cargo xtask progress check`.
+
+Report the Source Map, before/after layout and line counts, preserved registered
+health-check set, verification run, remaining Tier 1 split follow-ups, and
+changed files.

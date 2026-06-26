@@ -244,7 +244,11 @@ pub async fn run_maintenance_once(
         record_loop_run(&pool, "search_index", now).await?;
     }
 
-    match ersatzrs_ffmpeg::version::check_ffmpeg_runtime().await {
+    let ffmpeg_check_config = ersatzrs_ffmpeg::FfmpegRuntimeCheckConfig::with_paths(
+        ersatzrs_ffmpeg::ffmpeg_path(),
+        ersatzrs_ffmpeg::ffprobe_path(),
+    );
+    match ersatzrs_ffmpeg::check_ffmpeg_runtime_with_config(&ffmpeg_check_config).await {
         Ok(runtime) => {
             let health = run_and_persist_health_checks(pool, runtime, schema_status).await?;
             report.health_summary = Some(health.summary);

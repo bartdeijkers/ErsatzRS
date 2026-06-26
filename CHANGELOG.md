@@ -74,6 +74,17 @@ release section when tagging a release.
 
 ### Fixed
 
+- Docker runtime images now include the admin UI public assets, Leptos
+  hydration bundle, and runtime assets so the UI renders and hydrates from the
+  image instead of starting with missing `/public` and `/pkg` files.
+- Automatic maintenance health runs now reuse the managed FFmpeg paths resolved
+  at startup instead of probing bare `ffmpeg` / `ffprobe` from `PATH`.
+- Docker containers no longer crash during startup after the NVIDIA native
+  hardware probe unloads CUDA/NVENC driver libraries.
+- Docker runtime image builds now cache Rust dependency compilation behind a
+  manifest/lockfile layer, so source-only edits rebuild workspace crates
+  without recompiling the full third-party dependency graph while preserving
+  the `ersatzrs-web` and `ersatzrs-healthcheck` runtime layout.
 - The `/channels` Edit Numbers action now opens a real `/channels/numbers`
   editor with localized desktop/mobile actions, SSR/no-JS save fallback,
   validation, and atomic channel-number swaps that preserve `SortNumber`.
