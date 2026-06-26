@@ -74,6 +74,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Docker containers no longer crash during startup after the NVIDIA native
+  hardware probe unloads CUDA/NVENC driver libraries.
 - Docker runtime image builds now cache Rust dependency compilation behind a
   manifest/lockfile layer, so source-only edits rebuild workspace crates
   without recompiling the full third-party dependency graph while preserving
