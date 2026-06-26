@@ -74,6 +74,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Docker runtime image builds now cache Rust dependency compilation behind a
+  manifest/lockfile layer, so source-only edits rebuild workspace crates
+  without recompiling the full third-party dependency graph while preserving
+  the `ersatzrs-web` and `ersatzrs-healthcheck` runtime layout.
 - The `/channels` Edit Numbers action now opens a real `/channels/numbers`
   editor with localized desktop/mobile actions, SSR/no-JS save fallback,
   validation, and atomic channel-number swaps that preserve `SortNumber`.

@@ -236,6 +236,29 @@ Notes:
   Linux host that ships the release. The other RIDs ship the SSR binary
   plus the prebuilt `target/site/` assets from that host build.
 
+## Docker image builds
+
+The Dockerfile uses BuildKit cache mounts and builds the local runtime image in
+two Cargo steps:
+
+1. Copy only workspace manifests, `Cargo.lock`, `rust-toolchain.toml`, and
+   `.cargo/config.toml`, then create temporary placeholder crate sources inside
+   the image and run the release build for `ersatzrs-web` and
+   `ersatzrs-healthcheck`. This fills Docker-managed Cargo registry/git and
+   target caches keyed by manifests and lockfiles, then discards the placeholder
+   workspace crate artifacts and fingerprints.
+2. Copy the real workspace source and run the same release build again. Source
+   edits then reuse the Docker-managed target cache, rebuild only the affected
+   workspace crate graph, and copy the two shipped binaries out of the cache
+   mount into `/workspace/target/release` for the runtime image.
+
+Do not commit host-local Cargo cache paths or sccache settings into the
+Dockerfile. The image build keeps `SQLX_OFFLINE=true` through
+`.cargo/config.toml`, preserves the release profile, and still copies only
+`ersatzrs-web` plus `ersatzrs-healthcheck` into the runtime stage. Managed
+FFmpeg is not bundled in the image; startup uses the same state-directory
+download/update path documented in [Configuration Reference](docs/reference/configuration.md).
+
 ## Compile-cost notes
 
 The two crates that dominate cold build time:
@@ -314,6 +337,19 @@ policy changes; release CI always keeps the structural web-bundle gate above.
 
 Record measurements here when you change profile flags or `run.sh`. Format:
 `<date> — <command> — <cold s> / <warm s>`.
+
+### Docker dependency layer cache (2026-06-26)
+
+The 2026-06-25 healthcheck closeout measured
+`docker build --target runtime` spending `24m02s` in the single in-container
+Rust release build after the full source tree was copied. The Dockerfile now
+primes Docker-managed Cargo registry/git and target caches before copying
+source.
+
+2026-06-26 — `docker build --target runtime --progress=plain -t
+ersatzrs-docker-cache-proof .` — `1458.13s` / `7.52s` after a source-only
+`ersatzrs-healthcheck` edit. The source-only rebuild reused the manifest prime
+step and rebuilt only `ersatzrs-healthcheck` (`2.55s` Cargo time).
 
 ### Linker investigation (negative result, 2026-05-17)
 

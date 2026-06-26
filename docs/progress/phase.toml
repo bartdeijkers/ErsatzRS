@@ -73,11 +73,13 @@ provider alternate versions link to their canonical primary via
 structured `[[debt]]` resolved and ADR 0018 marked implemented. The FFmpeg
 filter-graph opacity-expression live proof debt is now resolved, and the
 2026-06-25 healthcheck closeout replaced Docker's curl readiness probe with the
-purpose-built `ersatzrs-healthcheck` binary. The next spec-backed candidates are
-ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
-Docker dependency-layer caching for the slow release-image build path, and the
-remaining startup configuration cleanup around direct `DATABASE_URL`
-environment access.
+purpose-built `ersatzrs-healthcheck` binary. The 2026-06-26 Docker build
+hardening slice added manifest-keyed dependency-layer caching for local runtime
+image builds while preserving the `ersatzrs-web` plus `ersatzrs-healthcheck`
+runtime layout. The next spec-backed candidates are ADR 0013 in-app TSDuck
+MPEG-TS troubleshooting (Proposed / Not implemented), the remaining startup
+configuration cleanup around direct `DATABASE_URL` environment access, and the
+module-split survey's first behavior-preserving refactor slice.
 '''
 
 # Phase 0 checklist (all complete).
@@ -125,8 +127,6 @@ item = 'Health endpoint (/healthz → 200)'
 done = true
 
 # Known TODOs carried forward.
-[[known_todo]]
-note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
 [[known_todo]]
 note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
 [[known_todo]]

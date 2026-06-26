@@ -132,8 +132,6 @@ changelog, and git history for evidence. The authoritative live state is always
 These are intentionally deferred or still open after pruning completed plan
 documents:
 
-- Docker dependency layer caching (copy manifests first, build deps, then copy
-  sources) to reduce local image build time if Docker image publishing returns.
 - mdBook or another documentation build system.
 - macOS release archives (`osx-x64`, `osx-arm64`) are intentionally omitted from
   the active release line to preserve hosted-runner credits; CI still builds and
