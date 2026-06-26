@@ -239,11 +239,13 @@ Notes:
 ## Docker image builds
 
 The Dockerfile uses BuildKit cache mounts and builds the local runtime image in
-two Cargo steps:
+three build steps:
 
-1. Copy only workspace manifests, `Cargo.lock`, `rust-toolchain.toml`, and
-   `.cargo/config.toml`, then create temporary placeholder crate sources inside
-   the image and run the release build for `ersatzrs-web` and
+1. Use the current stable Rust slim image, matching the CI/release toolchain,
+   then install the `wasm32-unknown-unknown` target and the pinned web asset
+   tools. Copy only workspace manifests, `Cargo.lock`, `rust-toolchain.toml`,
+   and `.cargo/config.toml`, then create temporary placeholder crate sources
+   inside the image and run the release build for `ersatzrs-web` and
    `ersatzrs-healthcheck`. This fills Docker-managed Cargo registry/git and
    target caches keyed by manifests and lockfiles, then discards the placeholder
    workspace crate artifacts and fingerprints.
@@ -251,13 +253,22 @@ two Cargo steps:
    edits then reuse the Docker-managed target cache, rebuild only the affected
    workspace crate graph, and copy the two shipped binaries out of the cache
    mount into `/workspace/target/release` for the runtime image.
+3. Build the Leptos frontend with the same pinned toolchain used by the release
+   workflow (`stylance-cli 0.8.2`, `cargo-leptos 0.3.6`,
+   `wasm32-unknown-unknown`, `cargo leptos build --release --frontend-only
+   --lib-features hydrate`) and verify that `public/bundle.css` plus
+   `target/site/pkg` exist before the runtime stage is assembled.
 
 Do not commit host-local Cargo cache paths or sccache settings into the
 Dockerfile. The image build keeps `SQLX_OFFLINE=true` through
-`.cargo/config.toml`, preserves the release profile, and still copies only
-`ersatzrs-web` plus `ersatzrs-healthcheck` into the runtime stage. Managed
-FFmpeg is not bundled in the image; startup uses the same state-directory
-download/update path documented in [Configuration Reference](docs/reference/configuration.md).
+`.cargo/config.toml`, preserves the release profile, and copies
+`ersatzrs-web`, `ersatzrs-healthcheck`, `public/`, `site/`, and `assets/` into
+the runtime stage. The Leptos runtime environment is set to
+`LEPTOS_SITE_ROOT=/usr/local/bin/site`, `LEPTOS_SITE_PKG_DIR=pkg`, and
+`LEPTOS_OUTPUT_NAME=ersatzrs-web` so the SSR binary references the bundled
+hydration scripts. Managed FFmpeg is not bundled in the image; startup uses the
+same state-directory download/update path documented in
+[Configuration Reference](docs/reference/configuration.md).
 
 ## Compile-cost notes
 

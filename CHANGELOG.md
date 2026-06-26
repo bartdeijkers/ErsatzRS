@@ -74,6 +74,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Docker runtime images now include the admin UI public assets, Leptos
+  hydration bundle, and runtime assets so the UI renders and hydrates from the
+  image instead of starting with missing `/public` and `/pkg` files.
+- Automatic maintenance health runs now reuse the managed FFmpeg paths resolved
+  at startup instead of probing bare `ffmpeg` / `ffprobe` from `PATH`.
 - Docker containers no longer crash during startup after the NVIDIA native
   hardware probe unloads CUDA/NVENC driver libraries.
 - Docker runtime image builds now cache Rust dependency compilation behind a

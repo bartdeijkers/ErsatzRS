@@ -1,14 +1,25 @@
 # syntax=docker/dockerfile:1.7
 
 # ─── Stage 1: builder ────────────────────────────────────────────────────────
-# Pin to the same Rust version declared in rust-toolchain.toml (stable / 1.85).
-FROM rust:1.85-slim-bookworm AS builder
+# Match the stable Rust toolchain used by CI and release jobs.
+FROM rust:slim-bookworm AS builder
 
 # Build-time dependencies for ring / openssl crates used by axum/sqlx
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake \
+    make \
+    perl \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
+
+RUN rustup target add wasm32-unknown-unknown
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    set -eux; \
+    cargo install stylance-cli --version 0.8.2 --locked; \
+    cargo install cargo-leptos --version 0.3.6 --locked
 
 WORKDIR /workspace
 
@@ -55,6 +66,7 @@ RUN set -eux; \
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/workspace/target-cache \
+    set -eux; \
     SQLX_OFFLINE=true ERSATZRS_SKIP_STYLANCE=1 \
         CARGO_TARGET_DIR=/workspace/target-cache \
         cargo build --release -p ersatzrs-web -p ersatzrs-healthcheck; \
@@ -76,11 +88,21 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/workspace/target-cache \
+    set -eux; \
     SQLX_OFFLINE=true CARGO_TARGET_DIR=/workspace/target-cache \
         cargo build --release -p ersatzrs-web -p ersatzrs-healthcheck; \
     mkdir -p /workspace/target/release; \
     cp /workspace/target-cache/release/ersatzrs-web /workspace/target/release/ersatzrs-web; \
     cp /workspace/target-cache/release/ersatzrs-healthcheck /workspace/target/release/ersatzrs-healthcheck
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    set -eux; \
+    rustup target add wasm32-unknown-unknown; \
+    cd crates/ersatzrs-web; \
+    SQLX_OFFLINE=true cargo leptos build --release --frontend-only --lib-features hydrate; \
+    cd /workspace; \
+    test -f crates/ersatzrs-web/public/bundle.css; \
+    test -d target/site/pkg
 
 # ─── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
@@ -94,6 +116,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
+COPY --from=builder /workspace/crates/ersatzrs-web/public /usr/local/bin/public
+COPY --from=builder /workspace/target/site /usr/local/bin/site
+COPY --from=builder /workspace/assets /usr/local/bin/assets
 
 # Run as a dedicated non-root service account
 RUN useradd -r -s /bin/false ersatzrs
@@ -106,6 +131,9 @@ WORKDIR /data
 # Default database location; override with -e DATABASE_URL=... at runtime
 ENV HOME=/data
 ENV DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db
+ENV LEPTOS_SITE_ROOT=/usr/local/bin/site
+ENV LEPTOS_SITE_PKG_DIR=pkg
+ENV LEPTOS_OUTPUT_NAME=ersatzrs-web
 
 # HTTP port exposed by the axum server
 EXPOSE 8409
