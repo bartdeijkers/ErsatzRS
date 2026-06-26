@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-25
-last_processed_commit: 7bf064dab02b9d058a732120fb56cf2b7a1d8020
+generated: 2026-06-26
+last_processed_commit: e06be38d0dbd6fb73c71190c879e102230b21d33
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,33 +27,42 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-25, change window
-[`dbfb60e..7bf064d`](https://github.com/bartdeijkers/ersatzrs/compare/dbfb60e...7bf064d),
-two commits): `a4117e1` closed `content-variants` Phase 4 commentary render
-acceptance and `7bf064d` closed Phase 5 scheduling examples, leaving the
-`content-variants` feature `Ported` with every structured `[[debt]]` resolved.
-`cargo xtask progress gaps` is now fully clear and **every** tracked parity
-`[[debt]]` is `resolved = true` — including the prior pick-3
-`ffmpeg-filter-graph` `opacity-expression-time-variable-semantics` debt, which
-was resolved at `eb4dfe1` (before this window) but published stale by the
-previous degraded run when the upstream pin was unreachable. That dead prompt is
-removed and refilled from the ranking. Ranking: (1) **ersatzrs-healthcheck
-binary** — open Phase 7 `phase.toml` `known_todo` and top `plans/INDEX.md`
-deferred item (phase focus first); (2) **in-app TSDuck MPEG-TS
-troubleshooting** — ADR 0013 remains Proposed / Not implemented, a
-maintainer-requested diagnostic capability; (3) **ADR 0018 provider-side extras
-/ alternate-version import** — the next coherent slice of the still-`Proposed`
-ADR 0018, explicitly deferred in `content-variants.toml` ("Provider-specific
-Plex/Jellyfin/Emby extras or version imports remain deferred"), with the pinned
-ErsatzTV provider scanners as the parity reference.
+Selection (2026-06-26, change window
+[`7bf064d..e06be38`](https://github.com/bartdeijkers/ersatzrs/compare/7bf064d...e06be38)):
+the substantive commit in the window is `c978cd1` *"feat(infra): classify
+provider content variants"*, which closed the previous pick-3
+(`content-variants` `provider-extras-versions` debt): Plex/Jellyfin/Emby
+movie-library sync now reuses a shared `ersatzrs-domain` content-variant
+classifier after each provider page (including ETag-skipped rows), importing
+server-reported extras as hidden `ContentKind=Extra` rows and linking provider
+alternate versions to their canonical primary via `ParentMediaItemId`. That
+commit already reconciled `content-variants.toml` (debt `resolved = true`,
+summary + plan updated, session line appended); `cargo xtask progress gaps` is
+clear, **every** tracked parity `[[debt]]` is `resolved = true`, and ADR 0018 is
+now `Implemented`. The remaining window commits are tooling/dependency noise
+(agent hooks, contributing-contract reviewer, dependabot bumps) with no parity
+impact. The dead ADR-0018 provider-import prompt is removed and the slot
+refilled from the ranking.
 
-Pin note (2026-06-25): the ErsatzTV `git clone` path is still blocked by the org
+Ranking: (1) **ersatzrs-healthcheck binary** — open Phase 7 `phase.toml`
+`known_todo` and top `plans/INDEX.md` deferred item (phase focus first); carried
+over, no commits against it this window. (2) **in-app TSDuck MPEG-TS
+troubleshooting** — ADR 0013 remains Proposed / Not implemented, a
+maintainer-requested diagnostic capability and the only `Proposed`/`Not
+implemented` ADR left; carried over, no commits against it this window. (3)
+**module-split Tier-1 `infra/health.rs` registry split** — the next coherent
+slice of the active `plans/module-split-survey.md` backlog (its own suggested
+first/pilot item), replacing the now-closed ADR-0018 provider-import pick; a
+foundational, behavior-preserving refactor of the health-check port-completeness
+contract.
+
+Pin note (2026-06-26): the ErsatzTV `git clone` path is still blocked by the org
 egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
 was obtained via the `codeload.github.com` tarball at exactly
 `0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the
-extracted tree is the commit's tree). Parity for this run was therefore measured
-against the pin; the baseline was **not** advanced. The provider-import prompt
-below names the exact pinned `$ERSATZTV_SRC` scanner paths to read.
+extracted tree is the commit's tree) and `$ERSATZTV_SRC` was pointed at it.
+Parity for this run was therefore measured against the pin; the baseline was
+**not** advanced.
 
 ---
 
@@ -181,72 +190,65 @@ diagnostic follow-ups, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS spec chore: ADR 0018 provider-side extras and alternate-version import (slug `content-variants`)
+## 3. Build the next ErsatzRS spec chore: module-split Tier-1 `infra/health.rs` registry split (plan `plans/module-split-survey.md`)
 
-Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`. This is the
-next coherent slice of the still-`Proposed`
-[ADR 0018](adr/0018-extras-alternate-versions-and-stream-roles.md): extending
-content-variant handling from the local scanner to the Plex/Jellyfin/Emby
-provider scanners. The `content-variants` feature is currently `Ported` for the
-local-library / search / UI / playback / scheduling scope, but
-`docs/progress/parity/content-variants.toml` records the explicit shortfall:
-"Provider-specific Plex/Jellyfin/Emby extras or version imports remain deferred
-until a provider API mapping slice is selected." The goal is fully functional
-ErsatzTV parity for provider extras/alternate-version import — no stopgaps, with
-any remaining shortfall recorded as visible `[[debt]]`.
+Use the repo workflow from AGENTS.md. This is a **spec-backed refactoring
+chore**, not an ErsatzTV parity port: it is governed by the active
+[`plans/module-split-survey.md`](../plans/module-split-survey.md) backlog. Do
+the **single first/pilot slice only** — candidate 3, `infra/health.rs` — not the
+whole Tier-1 roadmap (the other two Tier-1 files, `media_browser.rs` and
+`yaml.rs`, are separate future slices). The goal is a behavior-preserving
+refactor with **no stopgaps**: zero logic, SQL, serialized-shape, or public-name
+changes, mirroring the i18n split (`admin/i18n.rs` + `admin/languages/*.rs`) — a
+thin registry/orchestrator in `mod.rs` re-exporting per-item submodules, plus a
+completeness gate. Record any shortfall as visible plan/implementation debt
+rather than hiding it in prose.
 
-This is genuine ErsatzTV parity work: do **not** invent provider behavior.
-Read ErsatzTV source **at the pinned commit**
-`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the
-[`parity-baseline`](automation/parity-baseline.md); `git clone` is blocked by
-egress, so fetch via the `codeload.github.com/ErsatzTV/legacy/tar.gz/<sha>`
-tarball and point `$ERSATZTV_SRC` at the extracted tree).
+This is a deliberate ErsatzRS decision with **no ErsatzTV equivalent** — do not
+invent an `etv_source`. The health-check engine is a port-completeness contract
+(AGENTS.md "Health Check Parity") that must grow as parity expands, which is the
+scaling argument for the split.
 
 Before editing:
-1. Read `docs/progress/parity/content-variants.toml`, ADR 0018,
-   `plans/extras-alternate-versions-and-stream-roles.md`, PORTING.md, STYLE.md,
-   and TEST.md.
-2. Read these pinned ErsatzTV provider scanners to learn how extras /
-   other-video / alternate versions are discovered and persisted:
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexMovieLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexOtherVideoLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Plex/PlexTelevisionLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinMovieLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Jellyfin/JellyfinTelevisionLibraryScanner.cs`,
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyMovieLibraryScanner.cs`, and
-   `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Emby/EmbyTelevisionLibraryScanner.cs`.
-3. Inspect the ErsatzRS local-scanner content-variant import path (the existing
-   `OtherVideo` / `ContentKind=Extra` / `AlternateVersion` / `SubKind` /
-   `ParentMediaItemId` handling proven by the resolved `content-variants` debts)
-   so the provider path reuses the same domain shapes.
-4. Build a Source Map for provider library scanning, item-kind classification,
-   parent linkage, and content-variant persistence. Identify the existing
-   `ParityDebt` (the provider-import deferral) you are closing or narrowing.
+1. Read `plans/module-split-survey.md` (the reference pattern, candidate 3, the
+   "Suggested order" and per-candidate verification sections), `ARCHITECTURE.md`,
+   and `STYLE.md`.
+2. Read `crates/ersatzrs-infra/src/health.rs` and map its sections: the
+   `make_health_check_service()` factory/registry and each `HealthCheck` struct +
+   `impl`. Confirm the `HealthCheck` trait and `HealthCheckService` run-loop live
+   in `crates/ersatzrs-core/src/health.rs` and must **stay put**.
+3. Enumerate the public surface (every `pub` item re-exported from the module) so
+   you can prove it is preserved after the split.
 
 Implement the slice end-to-end:
-- Map provider extras / other-video / alternate-version items into the same
-  `ContentKind` / `SubKind` / `ParentMediaItemId` model the local scanner uses,
-  preserving ErsatzTV's discovery and linkage semantics at the pin.
-- Keep canonical primaries unchanged and variants hidden-by-default, matching
-  the already-ported local behavior and search projection.
-- Add focused scanner tests for each provider's extras/alternate-version import
-  and parent linkage; do not regress existing local-scanner coverage.
-- Update `docs/progress/parity/content-variants.toml`: refresh the summary,
-  and if the provider work is not fully complete in this slice, flip the
-  feature back to `In progress` and record the remaining provider scope as a
-  structured `[[debt]]` (a `Ported` feature must not carry open debt — `cargo
-  xtask progress check` fails that combination). Update `CHANGELOG.md`.
-- Decide whether any deliberate deviation from ErsatzTV needs a new ADR.
+- Convert `crates/ersatzrs-infra/src/health.rs` → `infra/health/`: `mod.rs` keeps
+  `make_health_check_service()` as the registry (the `ALL_TEXT_KEYS` analogue),
+  shared imports/helpers, and `pub use` re-exports so every external import path
+  stays identical.
+- `checks/<name>.rs` — move each health-check struct + `impl HealthCheck`
+  verbatim into its own file (e.g. `ffmpeg_version`, `ffmpeg_capabilities`,
+  `ffmpeg_reports`, `hardware_acceleration`, `vaapi_driver`, `vaapi_device`,
+  `file_not_found`, `unavailable`, `empty_schedule`, `zero_duration`,
+  `movie_metadata`, `episode_metadata`, `downgrade`, `provider_connectivity`).
+- Leave `crates/ersatzrs-core/src/health.rs` (trait + run-loop) untouched.
+- Add a completeness gate: a test asserting every check the factory registers has
+  a non-empty title and is runnable; the `health.results` / `health.summary`
+  `ConfigElement` output must be unchanged.
+- Match surrounding style; add no new dependencies.
+- If the split cannot be fully completed in this slice, record the remaining
+  scope in `plans/module-split-survey.md` rather than leaving it implicit.
 
 Verification:
-- Focused provider-scanner tests (`cargo test -p ersatzrs-scanner <filter>`)
-  for extras/alternate-version classification and linkage.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
+- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`
+  (feature-gated test files escape lint otherwise).
+- `cargo build --workspace && cargo test --workspace`.
+- Focused health proof: `cargo test -p ersatzrs-infra health` — the registered
+  check set and `health.results` / `health.summary` output must not change.
 - `cargo xtask progress check`.
 
-Report the Source Map, ErsatzTV-vs-ErsatzRS provider mapping, behavior
-implemented, remaining `content-variants` `ParityDebt`, verification run, and
-changed files.
+Report the before/after layout and line counts, the preserved public surface
+(proof nothing was renamed), the completeness-gate test added, the verification
+runs, and changed files. Stop and report if any health output, registered-check
+set, or test result changes — that means the refactor altered behavior.

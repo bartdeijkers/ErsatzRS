@@ -64,11 +64,19 @@ IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
 2026-06-24: repo-owned templates and docs cover unplugged rendition smart
 collections, commentary movie channels, and featurette pre-roll filler attached
 to primary movie schedule items while default schedules stay unchanged. The
-FFmpeg filter-graph opacity-expression live proof debt is now resolved, so the
-next spec-backed candidates are the open `ersatzrs-healthcheck` binary TODO,
-ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
-and the deferred ADR 0018 provider-side (Plex/Jellyfin/Emby) extras and
-alternate-version import slice.
+ADR 0018 provider-side import slice landed on 2026-06-25 (`c978cd1`):
+Plex/Jellyfin/Emby movie-library sync reuses a shared `ersatzrs-domain`
+content-variant classifier after each provider page (including ETag-skipped
+rows), so server-reported extras become hidden `ContentKind=Extra` rows and
+provider alternate versions link to their canonical primary via
+`ParentMediaItemId`; `content-variants` is now fully `Ported` with every
+structured `[[debt]]` resolved and ADR 0018 marked implemented. With the FFmpeg
+filter-graph opacity-expression live proof and the ADR 0018 provider import both
+resolved, the next spec-backed candidates are the open `ersatzrs-healthcheck`
+binary TODO, ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not
+implemented), and the `plans/module-split-survey.md` Tier-1 `infra/health.rs` →
+`infra/health/` registry split (lowest-risk pilot of the i18n-style per-item
+module pattern).
 '''
 
 # Phase 0 checklist (all complete).
