@@ -64,11 +64,13 @@ IPTV/MPEG-TS and HLS segmenter playback. Phase 5 scheduling examples landed on
 2026-06-24: repo-owned templates and docs cover unplugged rendition smart
 collections, commentary movie channels, and featurette pre-roll filler attached
 to primary movie schedule items while default schedules stay unchanged. The
-FFmpeg filter-graph opacity-expression live proof debt is now resolved, so the
-next spec-backed candidates are the open `ersatzrs-healthcheck` binary TODO,
+FFmpeg filter-graph opacity-expression live proof debt is now resolved, and the
+2026-06-25 healthcheck closeout replaced Docker's curl readiness probe with the
+purpose-built `ersatzrs-healthcheck` binary. The next spec-backed candidates are
 ADR 0013 in-app TSDuck MPEG-TS troubleshooting (Proposed / Not implemented),
-and the deferred ADR 0018 provider-side (Plex/Jellyfin/Emby) extras and
-alternate-version import slice.
+Docker dependency-layer caching for the slow release-image build path, and the
+remaining startup configuration cleanup around direct `DATABASE_URL`
+environment access.
 '''
 
 # Phase 0 checklist (all complete).
@@ -118,8 +120,6 @@ done = true
 # Known TODOs carried forward.
 [[known_todo]]
 note = 'Docker dependency layer caching (copy manifests first, build deps, then copy src) — improves CI build times.'
-[[known_todo]]
-note = 'Replace the Docker image curl HEALTHCHECK with a purpose-built ersatzrs-healthcheck binary.'
 [[known_todo]]
 note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
 [[known_todo]]

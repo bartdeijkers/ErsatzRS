@@ -85,5 +85,6 @@ OIDC Azure login. The workflow mirrors that.
 
 Once the secrets exist, the `Azure login for signing` and `Sign Windows binaries`
 steps in the `binaries` job run automatically for the win-x64 build (signing
-`ErsatzRS.exe`, `ersatzrs-web.exe`, `ersatzrs-scanner.exe` before they are zipped).
+`ErsatzRS.exe`, `ersatzrs-web.exe`, `ersatzrs-scanner.exe`, and
+`ersatzrs-healthcheck.exe` before they are zipped).
 No workflow change is needed to turn signing on.

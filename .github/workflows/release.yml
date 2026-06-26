@@ -171,7 +171,7 @@ jobs:
           set -euo pipefail
           # win-x64 also ships the tray launcher; build it in this single cargo
           # invocation instead of a separate one to avoid a redundant build.
-          bins=(--bin ersatzrs-web --bin ersatzrs-scanner)
+          bins=(--bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck)
           if [ "$RID" = "win-x64" ]; then
             bins+=(--bin ersatzrs-launcher)
           fi
@@ -180,7 +180,7 @@ jobs:
         if: ${{ matrix.cross }}
         env:
           ERSATZRS_SKIP_STYLANCE: "1"
-        run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --target ${{ matrix.target }}
+        run: cross build --release --bin ersatzrs-web --bin ersatzrs-scanner --bin ersatzrs-healthcheck --target ${{ matrix.target }}
       # Boot the assembled bundle (this RID's freshly built SSR binary + the
       # web-assets artifact) and fail the release if any `/pkg` hydration asset
       # 404s. This is the structural catch for the recurring "wasm checksum
@@ -214,7 +214,7 @@ jobs:
           trusted-signing-account-name: ErsatzRS
           certificate-profile-name: ErsatzRS
           files-folder: ${{ github.workspace }}/target/${{ matrix.target }}/release
-          files-folder-filter: ersatzrs-web.exe,ersatzrs-scanner.exe,ersatzrs-launcher.exe
+          files-folder-filter: ersatzrs-web.exe,ersatzrs-scanner.exe,ersatzrs-healthcheck.exe,ersatzrs-launcher.exe
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
@@ -233,11 +233,13 @@ jobs:
           if [ "$RID" = "win-x64" ]; then
             cp "target/${TARGET}/release/ersatzrs-web.exe" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner.exe" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-healthcheck.exe" "$stage/"
             # The launcher is the user-facing entry point; ship it as ErsatzRS.exe.
             cp "target/${TARGET}/release/ersatzrs-launcher.exe" "$stage/ErsatzRS.exe"
           else
             cp "target/${TARGET}/release/ersatzrs-web" "$stage/"
             cp "target/${TARGET}/release/ersatzrs-scanner" "$stage/"
+            cp "target/${TARGET}/release/ersatzrs-healthcheck" "$stage/"
           fi
           cp -R release-web-assets/public "$stage/public"
           cp -R release-web-assets/site "$stage/site"

@@ -1112,6 +1112,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ersatzrs-healthcheck"
+version = "0.1.0"
+
+[[package]]
 name = "ersatzrs-hwprobe"
 version = "0.1.0"
 
