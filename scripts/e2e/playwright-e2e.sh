@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Full admin Playwright E2E runner.
+#
+# Builds matched Leptos SSR/WASM assets, boots ersatzrs-web on an isolated
+# SQLite database, runs the configured Playwright suite, and writes diagnostics
+# under test-results/.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$REPO_ROOT"
+
+PORT="${ERSATZRS_E2E_PORT:-8409}"
+BASE_URL="http://127.0.0.1:${PORT}"
+WEB_CRATE="crates/ersatzrs-web"
+RESULT_DIR="${ERSATZRS_E2E_RESULT_DIR:-test-results}"
+RESULT_JSON="$RESULT_DIR/playwright-results.json"
+SERVER_LOG="$RESULT_DIR/ersatzrs-web.log"
+
+log() { printf '\033[1;34m[playwright-e2e]\033[0m %s\n' "$*"; }
+err() { printf '\033[1;31m[playwright-e2e]\033[0m %s\n' "$*" >&2; }
+
+LOCAL_FFMPEG_DIR="${ERSATZRS_FFMPEG_DIR:-$HOME/.local/ffmpeg-8.1}"
+if [[ -x "$LOCAL_FFMPEG_DIR/bin/ffmpeg" ]]; then
+  export LD_LIBRARY_PATH="$LOCAL_FFMPEG_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export ErsatzRS_FFMPEG__PATH="$LOCAL_FFMPEG_DIR/bin/ffmpeg"
+  export ErsatzRS_FFPROBE__PATH="$LOCAL_FFMPEG_DIR/bin/ffprobe"
+  log "using FFmpeg override at $LOCAL_FFMPEG_DIR"
+else
+  log "no FFmpeg override at $LOCAL_FFMPEG_DIR; startup may acquire the managed runtime"
+fi
+
+resolve_target_dir() {
+  if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    printf '%s\n' "$CARGO_TARGET_DIR"
+    return
+  fi
+
+  local config_target=""
+  if [[ -f .cargo/config.toml ]]; then
+    config_target="$(awk '
+      /^[[:space:]]*\[/ { section=$0; gsub(/[[:space:]]/,"",section); next }
+      section=="[build]" && /^[[:space:]]*target-dir[[:space:]]*=/ {
+        sub(/^[^=]*=[[:space:]]*/,"",$0); gsub(/^["'"'"']|["'"'"'][[:space:]]*$/,"",$0); print; exit
+      }' .cargo/config.toml)"
+  fi
+
+  printf '%s\n' "${config_target:-target}"
+}
+
+TARGET_DIR="$(resolve_target_dir)"
+case "$TARGET_DIR" in
+  /*) TARGET_DIR_ABS="$TARGET_DIR" ;;
+  *) TARGET_DIR_ABS="$REPO_ROOT/$TARGET_DIR" ;;
+esac
+
+command -v cargo >/dev/null 2>&1 || { err "cargo not found"; exit 1; }
+command -v cargo-leptos >/dev/null 2>&1 || { err "cargo-leptos not found"; exit 1; }
+command -v npx >/dev/null 2>&1 || { err "npx not found"; exit 1; }
+command -v sqlite3 >/dev/null 2>&1 || { err "sqlite3 not found"; exit 1; }
+command -v curl >/dev/null 2>&1 || { err "curl not found"; exit 1; }
+
+if curl -fsS -m 2 "$BASE_URL/healthz" >/dev/null 2>&1; then
+  err "$BASE_URL already serves an ErsatzRS health endpoint; stop it or set ERSATZRS_E2E_PORT"
+  exit 1
+fi
+
+mkdir -p "$RESULT_DIR"
+
+if [[ "${ERSATZRS_SKIP_LEPTOS_BUILD:-0}" != "1" ]]; then
+  log "building Leptos hydration assets with cargo leptos build"
+  (cd "$WEB_CRATE" && cargo leptos build)
+else
+  log "ERSATZRS_SKIP_LEPTOS_BUILD=1; reusing existing hydration assets"
+fi
+
+SERVER_BIN="$TARGET_DIR_ABS/debug/ersatzrs-web"
+if [[ ! -x "$SERVER_BIN" ]]; then
+  err "server binary not found at $SERVER_BIN"
+  exit 1
+fi
+
+PKG_JS="$(find "$REPO_ROOT/target" "$TARGET_DIR_ABS" "$WEB_CRATE/target" \
+  -type f -name 'ersatzrs-web.js' -path '*/site/pkg/*' -printf '%T@ %p\n' 2>/dev/null \
+  | sort -rn | head -1 | cut -d' ' -f2- || true)"
+if [[ -z "$PKG_JS" ]]; then
+  err "could not find built hydration bundle (pkg/ersatzrs-web.js)"
+  exit 1
+fi
+SITE_ROOT="$(cd "$(dirname "$(dirname "$PKG_JS")")" && pwd)"
+
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-playwright-e2e.XXXXXX")"
+mkdir -p "$TMP_ROOT/home"
+DB_PATH="$TMP_ROOT/ErsatzRS.db"
+TMP_LOG="$TMP_ROOT/ersatzrs-web.log"
+SERVER_PID=""
+
+cleanup() {
+  if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  if [[ -f "$TMP_LOG" ]]; then
+    cp "$TMP_LOG" "$SERVER_LOG" 2>/dev/null || true
+  fi
+  if [[ "${ERSATZRS_E2E_KEEP_TEMP:-0}" == "1" ]]; then
+    log "kept temp dir $TMP_ROOT"
+  else
+    rm -rf "$TMP_ROOT"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+log "starting ersatzrs-web on $BASE_URL"
+log "database: $DB_PATH"
+log "site root: $SITE_ROOT"
+HOME="$TMP_ROOT/home" \
+DATABASE_URL="sqlite:$DB_PATH" \
+LEPTOS_SITE_ROOT="$SITE_ROOT" \
+LEPTOS_OUTPUT_NAME="ersatzrs-web" \
+LEPTOS_SITE_ADDR="127.0.0.1:$PORT" \
+RUST_LOG="${RUST_LOG:-warn,ersatzrs_web=info}" \
+  "$SERVER_BIN" >"$TMP_LOG" 2>&1 &
+SERVER_PID=$!
+
+log "waiting for $BASE_URL/healthz"
+HEALTHY=0
+for _ in $(seq 1 180); do
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    err "server exited during startup; last log lines:"
+    tail -n 80 "$TMP_LOG" >&2 || true
+    exit 1
+  fi
+  if curl -fsS -m 2 "$BASE_URL/healthz" >/dev/null 2>&1; then
+    HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$HEALTHY" != "1" ]]; then
+  err "/healthz never became reachable; last log lines:"
+  tail -n 80 "$TMP_LOG" >&2 || true
+  exit 1
+fi
+
+if [[ "${ERSATZRS_SKIP_PW_INSTALL:-0}" != "1" ]]; then
+  npx --yes playwright install chromium firefox >/dev/null 2>&1 || \
+    log "playwright browser install skipped or failed; assuming browsers are present"
+fi
+
+log "running Playwright suite"
+set +e
+ERSATZRS_BASE_URL="$BASE_URL" \
+E2E_BASE_URL="$BASE_URL" \
+E2E_DB_PATH="$DB_PATH" \
+ERSATZRS_DB_PATH="$DB_PATH" \
+PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULT_JSON" \
+  npx --yes playwright test "$@" --reporter=line,json
+STATUS=$?
+set -e
+
+if [[ "$STATUS" -eq 0 ]]; then
+  log "PASS - Playwright suite completed"
+else
+  err "FAIL - Playwright suite failed"
+fi
+log "result json: $RESULT_JSON"
+log "server log: $SERVER_LOG"
+exit "$STATUS"

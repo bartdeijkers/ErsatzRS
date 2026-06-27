@@ -68,9 +68,9 @@ release section when tagging a release.
   boots the host and verifies every route rendering a Leptos `#[island]`
   actually hydrates (sets `window.__ersatzrs_hydrated`, no marker-mismatch
   panics). Documents the build-consistency requirement in BUILD.md.
-- CI now runs `cargo xtask hydration-lint -p ersatzrs-web` and runs the
-  whole-app browser hydration smoke when web, Leptos, E2E, workflow, Cargo,
-  Node, or hydration policy files change.
+- CI now runs `cargo xtask hydration-lint -p ersatzrs-web` and the full
+  Playwright admin E2E suite by default, booting `ersatzrs-web` against an
+  isolated SQLite database with matched Leptos SSR/WASM assets.
 
 ### Fixed
 

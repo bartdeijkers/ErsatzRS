@@ -210,7 +210,14 @@ hydration-asset rebuilds happen once at commit time, not on every iteration.
 
 ## Admin UI E2E
 
-Scripted admin parity checks live under `tests/e2e/` and run with
+Scripted admin parity checks live under `tests/e2e/`. CI runs the full
+configured Playwright suite by default through:
+
+```bash
+scripts/e2e/playwright-e2e.sh
+```
+
+For focused local probes against an already-running server, use
 `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test tests/e2e/<spec>.ts`.
 When no spec exists yet, use Playwright MCP or another attached browser tool
 for the immediate probe and add a `TODO` row below for durable coverage.
@@ -231,8 +238,8 @@ This is the durable guard against the recurring class of regression where a
 shell-level island, a shared primitive, the router, or a Cargo dependency
 aborts hydration and silently kills the click handlers on otherwise-unrelated
 pages (e.g. the stop/delete buttons on `/channels`, refresh/row-select on
-`/playouts`). CI runs the smoke when the diff touches web, Leptos, E2E,
-workflow, Cargo, Node, or hydration policy files; run it manually before every
+`/playouts`). The default CI Playwright job includes this spec in both
+configured browser projects; run the narrower smoke manually before every
 release and before closing broad admin UI hydration work:
 
 ```bash

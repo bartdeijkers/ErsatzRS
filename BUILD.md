@@ -339,10 +339,11 @@ ERSATZRS_SITE_ROOT=target/site \
   scripts/release/verify-web-bundle.sh
 ```
 
-For a deeper, browser-level check (every island actually hydrates), use
-`scripts/e2e/hydration-smoke.sh` (see [TEST.md](TEST.md)). Normal CI runs that
-browser smoke only for web, Leptos, E2E, workflow, Cargo, Node, and hydration
-policy changes; release CI always keeps the structural web-bundle gate above.
+For a deeper, browser-level check, normal CI runs the full Playwright admin E2E
+suite by default through `scripts/e2e/playwright-e2e.sh` (see
+[TEST.md](TEST.md)). For a narrower island-only local smoke, use
+`scripts/e2e/hydration-smoke.sh`. Release CI always keeps the structural
+web-bundle gate above.
 
 ## Performance baseline
 
