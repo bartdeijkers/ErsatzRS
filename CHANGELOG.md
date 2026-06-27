@@ -74,6 +74,17 @@ release section when tagging a release.
 
 ### Fixed
 
+- Admin route-family Playwright coverage now has stable hydrated startup state:
+  library scan actions expose queued/failure status, media collection editors
+  keep their SSR data through hydration, and scheduling editors load their
+  initial data before the island boundary instead of panicking on marker-node
+  mismatches.
+- FFmpeg profile editing now serves its no-JS fallback from already-resolved
+  SSR data and keeps `<noscript>` free of hydration resources, so the H.264
+  profile select remains available without client JavaScript.
+- The Playwright E2E wrapper now runs serially by default unless
+  `ERSATZRS_E2E_WORKERS` or an explicit `--workers` argument is supplied,
+  preventing shared-database route specs from racing in the default CI suite.
 - Docker runtime images now include the admin UI public assets, Leptos
   hydration bundle, and runtime assets so the UI renders and hydrates from the
   image instead of starting with missing `/public` and `/pkg` files.

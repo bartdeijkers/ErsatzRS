@@ -13,6 +13,7 @@ use crate::admin::server_fns::libraries::{
     list_locked_collections, list_locked_libraries, list_scan_progress,
 };
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
 stylance::import_crate_style!(style, "src/admin/pages/libraries/libraries.module.css");
 
@@ -65,6 +66,26 @@ fn LibrariesIsland(
         let deep_scan = *deep_scan;
         async move { scan_library(id, kind, deep_scan).await }
     });
+    let toast = use_toast();
+    let scan_status = RwSignal::new(String::new());
+    let scan_failed = RwSignal::new(false);
+    Effect::new(move |_| {
+        if let Some(result) = scan_action.value().get() {
+            match result {
+                Ok(_) => {
+                    scan_status.set(tr(TextKey::ScanQueued).to_string());
+                    scan_failed.set(false);
+                    toast.push(tr(TextKey::ScanQueued), ToastSeverity::Success);
+                }
+                Err(error) => {
+                    let message = format!("{}: {error}", tr(TextKey::ScanFailed));
+                    scan_status.set(message.clone());
+                    scan_failed.set(true);
+                    toast.push(message, ToastSeverity::Error);
+                }
+            }
+        }
+    });
 
     let current_externals = RwSignal::new(initial_externals);
     let externals: LocalResource<Vec<ExternalCollectionRow>> = LocalResource::new(move || {
@@ -83,6 +104,24 @@ fn LibrariesIsland(
             let deep_scan = *deep_scan;
             async move { scan_external_collections(media_source_id, kind, deep_scan).await }
         });
+    let collections_toast = use_toast();
+    Effect::new(move |_| {
+        if let Some(result) = collections_action.value().get() {
+            match result {
+                Ok(_) => {
+                    scan_status.set(tr(TextKey::ScanQueued).to_string());
+                    scan_failed.set(false);
+                    collections_toast.push(tr(TextKey::ScanQueued), ToastSeverity::Success);
+                }
+                Err(error) => {
+                    let message = format!("{}: {error}", tr(TextKey::ScanFailed));
+                    scan_status.set(message.clone());
+                    scan_failed.set(true);
+                    collections_toast.push(message, ToastSeverity::Error);
+                }
+            }
+        }
+    });
 
     // Poll the entity locker so each row knows whether its scan task is still
     // running. Mirrors ETV's `IEntityLocker.OnLibraryChanged` poll loop, but
@@ -136,6 +175,14 @@ fn LibrariesIsland(
     view! {
         <div class=style::page>
             <h1 class=style::page_title>{tr(TextKey::Libraries)}</h1>
+            <p
+                role="status"
+                class=style::scan_status
+                style:display=move || if scan_status.get().is_empty() { "none" } else { "" }
+                style:color=move || if scan_failed.get() { "var(--color-error)" } else { "var(--color-success)" }
+            >
+                {move || scan_status.get()}
+            </p>
             {move || {
                 let rows = current_libraries.get();
                 if rows.is_empty() {

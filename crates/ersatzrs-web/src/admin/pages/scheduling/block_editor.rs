@@ -3,7 +3,7 @@
 //! The entire editor is a single `#[island]` so all item-list mutations
 //! (add, remove, reorder, field changes) and the preview modal happen
 //! client-side without round-trips. The `#[server]` functions are called only
-//! for the initial data load (SSR) and for the save / preview actions.
+//! before hydration and for the save / preview actions.
 #![allow(clippy::too_many_lines, dead_code)]
 use std::fmt::Write;
 
@@ -29,29 +29,10 @@ pub fn BlockEditorPage() -> impl IntoView {
     let params = use_params_map();
     let block_id =
         move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
-    let no_script_data = load_block_editor_no_script_data(block_id());
-
-    view! {
-        <style>".block-editor-noscript { display: none; }"</style>
-        <noscript>
-            <style>".block-editor-noscript { display: block; } .block-editor-js { display: none; }"</style>
-            <div class="block-editor-noscript" inner_html=block_editor_no_script_html(no_script_data)></div>
-        </noscript>
-        <div class="block-editor-js">
-            <BlockEditorIsland block_id=block_id()/>
-        </div>
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Island — owns the blocking resource; inner component is the fully hydrated editor
-// ---------------------------------------------------------------------------
-
-#[island]
-fn BlockEditorIsland(block_id: i64) -> impl IntoView {
+    let block_id_value = block_id();
     let data: Resource<(Option<BlockForm>, Vec<BlockItemForm>, BlockEditorOptions)> =
         Resource::new_blocking(
-            move || block_id,
+            move || block_id_value,
             |id| async move {
                 let block_fut = async move { get_block(id).await.unwrap_or(None) };
                 let items_fut = async move { get_block_items(id).await.unwrap_or_default() };
@@ -61,24 +42,53 @@ fn BlockEditorIsland(block_id: i64) -> impl IntoView {
                 (block, items, options)
             },
         );
+    let no_script_data = load_block_editor_no_script_data(block_id_value);
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+        <style>".block-editor-noscript { display: none; }"</style>
+        <noscript>
+            <style>".block-editor-noscript { display: block; } .block-editor-js { display: none; }"</style>
+            <div class="block-editor-noscript" inner_html=block_editor_no_script_html(no_script_data)></div>
+        </noscript>
+        <div class="block-editor-js">
             {move || {
-                data.get().map(|(maybe_block, items, options)| match maybe_block {
-                    Some(block) => view! {
-                        <BlockEditorForm
-                            initial_block=block
-                            initial_items=items
-                            options=options
-                        />
-                    }.into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
-                    }.into_any(),
-                })
+                data.get()
+                    .map_or_else(
+                        || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
+                        |(maybe_block, items, options)| match maybe_block {
+                        Some(block) => view! {
+                            <BlockEditorIsland
+                                initial_block=block
+                                initial_items=items
+                                options=options
+                            />
+                        }.into_any(),
+                        None => view! {
+                            <p class=style::empty>{tr(TextKey::BlockNotFound)}</p>
+                        }.into_any(),
+                    },
+                )
             }}
-        </Suspense>
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Island — owns the hydrated editor state
+// ---------------------------------------------------------------------------
+
+#[island]
+fn BlockEditorIsland(
+    initial_block: BlockForm,
+    initial_items: Vec<BlockItemForm>,
+    options: BlockEditorOptions,
+) -> impl IntoView {
+    view! {
+        <BlockEditorForm
+            initial_block=initial_block
+            initial_items=initial_items
+            options=options
+        />
     }
 }
 
@@ -219,11 +229,6 @@ fn BlockEditorForm(
 
     view! {
         <div class=style::page>
-            <noscript inner_html=block_editor_fallback_html(
-                &initial_block,
-                &items.get_untracked(),
-                &options,
-            )></noscript>
             // ── Sticky action bar ───────────────────────────────────────
             <div class=style::action_bar>
                 <span class=style::action_bar_title>

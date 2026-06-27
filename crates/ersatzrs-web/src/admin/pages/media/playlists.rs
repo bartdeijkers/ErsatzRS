@@ -354,11 +354,6 @@ fn playlist_row(
 pub fn PlaylistEditorPage() -> impl IntoView {
     let params = use_params_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
-    view! { <PlaylistEditorIsland id/> }
-}
-
-#[island]
-fn PlaylistEditorIsland(id: i64) -> impl IntoView {
     let initial = Resource::new_blocking(
         move || id,
         |id| async move { get_playlist_editor(id).await.unwrap_or_default() },
@@ -367,25 +362,57 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
         || (),
         |()| async { get_playlist_editor_options().await.unwrap_or_default() },
     );
-    let name = RwSignal::new(String::new());
-    let is_system = RwSignal::new(false);
-    let items: RwSignal<Vec<PlaylistItemForm>> = RwSignal::new(Vec::new());
+
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || match (initial.get(), options.get()) {
+                (Some(initial_form), Some(initial_options)) => {
+                    view! {
+                        <PlaylistEditorIsland
+                            id
+                            initial_form=initial_form
+                            initial_options=initial_options
+                        />
+                    }
+                    .into_any()
+                }
+                _ => ().into_any(),
+            }}
+        </Suspense>
+    }
+}
+
+#[island]
+fn PlaylistEditorIsland(
+    id: i64,
+    initial_form: Option<PlaylistEditorForm>,
+    initial_options: PlaylistEditorOptions,
+) -> impl IntoView {
+    let playlist_group_id = initial_form
+        .as_ref()
+        .map_or(0, |form| form.playlist_group_id);
+    let name = RwSignal::new(
+        initial_form
+            .as_ref()
+            .map(|form| form.name.clone())
+            .unwrap_or_default(),
+    );
+    let is_system = RwSignal::new(initial_form.as_ref().is_some_and(|form| form.is_system));
+    let items: RwSignal<Vec<PlaylistItemForm>> = RwSignal::new(
+        initial_form
+            .as_ref()
+            .map(|form| form.items.clone())
+            .unwrap_or_default(),
+    );
+    let options = RwSignal::new(initial_options);
     let selected = RwSignal::new(None::<usize>);
     let preview_rows: RwSignal<Vec<PlaylistPreviewRow>> = RwSignal::new(Vec::new());
     let preview_message = RwSignal::new(String::new());
-
-    Effect::new(move |_| {
-        if let Some(Some(form)) = initial.get() {
-            name.set(form.name);
-            is_system.set(form.is_system);
-            items.set(form.items);
-            selected.set(None);
-        }
-    });
+    let not_found = initial_form.is_none();
 
     let current_form = move || PlaylistEditorForm {
         id,
-        playlist_group_id: 0,
+        playlist_group_id,
         name: name.get_untracked(),
         is_system: is_system.get_untracked(),
         items: normalized_items(items.get_untracked()),
@@ -444,14 +471,10 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                 </button>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    let opts = options.get().unwrap_or_default();
-                    initial.get().map(move |maybe| {
-                        if maybe.is_none() {
-                            return view! { <p class=style::empty>{tr(TextKey::PlaylistNotFound)}</p> }.into_any();
-                        }
-                        view! {
+            {if not_found {
+                view! { <p class=style::empty>{tr(TextKey::PlaylistNotFound)}</p> }.into_any()
+            } else {
+                view! {
                             <section class=style::editor>
                                 <h1 class=style::page_title>{tr(TextKey::Playlist)}</h1>
                                 <label>
@@ -581,6 +604,7 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                         selected
                                             .get()
                                             .and_then(|idx| {
+                                                let opts = options.get();
                                                 items
                                                     .get()
                                                     .get(idx)
@@ -628,10 +652,8 @@ fn PlaylistEditorIsland(id: i64) -> impl IntoView {
                                     </table>
                                 </div>
                             </section>
-                        }.into_any()
-                    })
-                }}
-            </Suspense>
+                }.into_any()
+            }}
         </form>
     }
 }

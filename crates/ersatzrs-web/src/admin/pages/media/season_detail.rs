@@ -18,7 +18,7 @@ use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
 };
 use crate::admin::server_fns::media_browser::{
-    get_media_item_info_json, get_season_details, EpisodeCardRow, MediaBrowserKind, SeasonDetailRow,
+    get_media_item_info_json, EpisodeCardRow, MediaBrowserKind, SeasonDetailRow,
 };
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
@@ -43,33 +43,41 @@ pub fn SeasonPage() -> impl IntoView {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or_default()
     });
+    let season = load_season_detail_initial(id);
 
-    view! { <SeasonDetailIsland id/> }
+    match season {
+        Some(season) => view! { <SeasonDetailIsland season/> }.into_any(),
+        None => view! {
+            <div class=detail_style::not_found>
+                <h1>{tr(TextKey::SeasonNotFound)}</h1>
+                <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
+            </div>
+        }
+        .into_any(),
+    }
 }
 
 #[island]
-fn SeasonDetailIsland(id: i64) -> impl IntoView {
-    let data: Resource<Option<SeasonDetailRow>> = Resource::new_blocking(
-        move || id,
-        |id| async move { get_season_details(id).await.ok().flatten() },
-    );
+fn SeasonDetailIsland(season: SeasonDetailRow) -> impl IntoView {
+    view! { <SeasonDetailView season/> }
+}
 
-    view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                match data.get() {
-                    Some(Some(season)) => view! { <SeasonDetailView season/> }.into_any(),
-                    Some(None) => view! {
-                        <div class=detail_style::not_found>
-                            <h1>{tr(TextKey::SeasonNotFound)}</h1>
-                            <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
-                        </div>
-                    }
-                    .into_any(),
-                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
-                }
-            }}
-        </Suspense>
+fn load_season_detail_initial(id: i64) -> Option<SeasonDetailRow> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                crate::admin::server_fns::media_browser::get_season_details(id)
+                    .await
+                    .ok()
+                    .flatten()
+            })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
     }
 }
 

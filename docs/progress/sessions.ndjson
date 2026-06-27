@@ -1,4 +1,5 @@
 {"agent":"ersatzrs-daily-progress","date":"2026-06-27","summary":"Daily reconcile 6e0bc4b..bbee0fb: 2026-06-26 Docker/runtime hardening landed (dependency-layer cache, NVIDIA driver libraries kept resident, Docker UI/hydration asset packaging, maintenance health reuses managed FFmpeg paths); no parity status changes (gaps clear, all debt resolved); refreshed gap prompts to TSDuck troubleshooting, DATABASE_URL config, health module-split Tier 1."}
+{"agent":"Codex","date":"2026-06-27","summary":"Stabilized default Playwright E2E CI and hydrated admin route fallbacks."}
 {"agent":"Codex","date":"2026-06-26","summary":"Fixed automatic maintenance health probing to reuse startup-resolved managed FFmpeg paths instead of bare PATH defaults."}
 {"agent":"Codex","date":"2026-06-26","summary":"Fixed Docker image packaging so admin UI public assets, Leptos hydration bundle, and runtime assets ship with ersatzrs-web."}
 {"agent":"Codex","date":"2026-06-26","summary":"Implemented Docker dependency-layer caching with BuildKit Cargo cache mounts; runtime image still ships ersatzrs-web plus ersatzrs-healthcheck, and source-only rebuild proof dropped to 7.52s."}

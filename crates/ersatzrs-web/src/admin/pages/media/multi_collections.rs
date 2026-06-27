@@ -264,6 +264,7 @@ pub fn MultiCollectionEditorPage() -> impl IntoView {
     let params = use_params_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
     let default_name = tr(TextKey::NewMultiCollection).to_string();
+    let fallback_form = load_multi_collection_no_script_form(id, &default_name);
     let initial: Resource<(MultiCollectionForm, MultiCollectionEditorOptions)> =
         Resource::new_blocking(
             move || (id, default_name.clone()),
@@ -287,19 +288,88 @@ pub fn MultiCollectionEditorPage() -> impl IntoView {
         );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                initial.get().map(|(initial_form, editor_options)| {
-                    view! {
-                        <MultiCollectionEditorIsland
-                            initial_form=initial_form
-                            editor_options=editor_options
-                        />
-                    }
-                })
-            }}
-        </Suspense>
+        <style>".multi-collection-noscript { display: none; }"</style>
+        <noscript>
+            <style>".multi-collection-noscript { display: block; } .multi-collection-js { display: none; }"</style>
+            <div
+                class="multi-collection-noscript"
+                inner_html=multi_collection_editor_fallback_html(&fallback_form)
+            ></div>
+        </noscript>
+        <div class="multi-collection-js">
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+                {move || {
+                    initial.get().map(|(initial_form, editor_options)| {
+                        view! {
+                            <MultiCollectionEditorIsland
+                                initial_form=initial_form
+                                editor_options=editor_options
+                            />
+                        }
+                    })
+                }}
+            </Suspense>
+        </div>
     }
+}
+
+fn load_multi_collection_no_script_form(id: i64, default_name: &str) -> MultiCollectionForm {
+    if id == 0 {
+        return MultiCollectionForm {
+            name: default_name.to_string(),
+            ..MultiCollectionForm::default()
+        };
+    }
+
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                get_multi_collection(id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default()
+            })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        MultiCollectionForm::default()
+    }
+}
+
+fn multi_collection_editor_fallback_html(form: &MultiCollectionForm) -> String {
+    let button = if form.id == 0 {
+        tr(TextKey::AddMultiCollection)
+    } else {
+        tr(TextKey::SaveMultiCollection)
+    };
+    format!(
+        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{toolbar}"><h1 class="{page_title}">{heading}</h1><button type="submit" class="{btn_add}">{button}</button></div><div class="{editor}"><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div><div class="{form_actions}"><button type="submit" class="{btn_add}">{button}</button><a href="/media/multi-collections" class="{btn_add}">{back}</a></div></form>"#,
+        page = style::page,
+        toolbar = style::toolbar,
+        page_title = style::page_title,
+        heading = tr(TextKey::MultiCollection),
+        btn_add = style::btn_add,
+        id = form.id,
+        button = button,
+        editor = style::editor,
+        field_label = style::field_label,
+        name_label = tr(TextKey::Name),
+        name = escape_html(&form.name),
+        form_actions = style::form_actions,
+        back = tr(TextKey::Back),
+    )
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[island]

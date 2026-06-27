@@ -100,6 +100,11 @@ tr:last-child td {
     font-size: 0.875rem;
 }
 
+.scan-status {
+    margin: 0 0 1rem;
+    font-size: 0.875rem;
+}
+
 /* Scan progress ring. Mirrors MudProgressCircular: a circular track plus an
  * arc that either sweeps to a fraction (determinate, with a percentage
  * label) or spins indefinitely (indeterminate, when the scanner hasn't

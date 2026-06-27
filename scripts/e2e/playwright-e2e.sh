@@ -149,13 +149,26 @@ if [[ "${ERSATZRS_SKIP_PW_INSTALL:-0}" != "1" ]]; then
 fi
 
 log "running Playwright suite"
+PLAYWRIGHT_ARGS=("$@")
+HAS_WORKERS_ARG=0
+for arg in "${PLAYWRIGHT_ARGS[@]}"; do
+  case "$arg" in
+    --workers|--workers=*)
+      HAS_WORKERS_ARG=1
+      ;;
+  esac
+done
+if [[ "$HAS_WORKERS_ARG" != "1" ]]; then
+  PLAYWRIGHT_ARGS+=(--workers="${ERSATZRS_E2E_WORKERS:-1}")
+fi
+
 set +e
 ERSATZRS_BASE_URL="$BASE_URL" \
 E2E_BASE_URL="$BASE_URL" \
 E2E_DB_PATH="$DB_PATH" \
 ERSATZRS_DB_PATH="$DB_PATH" \
 PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULT_JSON" \
-  npx --yes playwright test "$@" --reporter=line,json
+  npx --yes playwright test "${PLAYWRIGHT_ARGS[@]}" --reporter=line,json
 STATUS=$?
 set -e
 

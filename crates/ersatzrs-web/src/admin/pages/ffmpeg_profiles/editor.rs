@@ -9,6 +9,8 @@
 //!   `Modal` wired to `copy_ffmpeg_profile`; on success it navigates to the
 //!   newly-created profile's editor at `/ffmpeg/{id}`.
 #![allow(clippy::too_many_lines)]
+use std::fmt::Write;
+
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
@@ -54,6 +56,8 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
         .unwrap_or(0);
     let none_label = tr(TextKey::NoneOption).to_string();
     let language = use_i18n();
+    let no_script_html =
+        ffmpeg_profile_no_script_html(load_ffmpeg_profile_no_script_data(profile_id));
 
     #[allow(clippy::type_complexity)]
     let data: Resource<Option<(FfmpegProfileForm, Vec<(i64, String)>, Vec<(i32, String)>)>> =
@@ -82,125 +86,186 @@ pub fn FfmpegProfileEditorPage() -> impl IntoView {
         );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                data.get().map(|maybe| match maybe {
-                    Some((form, resolutions, hw_accels)) => view! {
-                        <FfmpegProfileEditorIsland
-                            initial_form=form
-                            initial_resolutions=resolutions
-                            initial_hw_accels=hw_accels
-                        />
-                    }
-                    .into_any(),
-                    None => view! {
-                        <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
-                    }
-                    .into_any(),
-                })
-            }}
-        </Suspense>
-        <FfmpegProfileEditorNoScriptFallback profile_id=profile_id/>
-    }
-}
-
-#[component]
-fn FfmpegProfileEditorNoScriptFallback(profile_id: i64) -> impl IntoView {
-    let data: Resource<Option<FfmpegProfileForm>> = Resource::new_blocking(
-        move || profile_id,
-        move |id| async move {
-            if id == 0 {
-                Some(FfmpegProfileForm::new_defaults())
-            } else {
-                get_ffmpeg_profile_form(id).await.unwrap_or(None)
-            }
-        },
-    );
-
-    view! {
+        <style>".ffmpeg-profile-noscript { display: none; } .ffmpeg-profile-js { display: block; }"</style>
         <noscript>
+            <style>".ffmpeg-profile-noscript { display: block; } .ffmpeg-profile-js { display: none; }"</style>
+            <div class="ffmpeg-profile-noscript" inner_html=no_script_html></div>
+        </noscript>
+        <div class="ffmpeg-profile-js">
             <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
                 {move || {
                     data.get().map(|maybe| match maybe {
-                        Some(form) => view! { <FfmpegProfileNoScriptForm form=form/> }.into_any(),
-                        None => view! { <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p> }.into_any(),
+                        Some((form, resolutions, hw_accels)) => {
+                            view! {
+                                <FfmpegProfileEditorIsland
+                                    initial_form=form
+                                    initial_resolutions=resolutions
+                                    initial_hw_accels=hw_accels
+                                />
+                            }
+                            .into_any()
+                        }
+                        None => view! {
+                            <p class=style::empty>{tr(TextKey::ProfileNotFound)}</p>
+                        }
+                        .into_any(),
                     })
                 }}
             </Suspense>
-        </noscript>
+        </div>
     }
 }
 
-#[component]
-fn FfmpegProfileNoScriptForm(form: FfmpegProfileForm) -> impl IntoView {
+fn ffmpeg_profile_no_script_html(data: Option<FfmpegProfileForm>) -> String {
+    let Some(form) = data else {
+        return format!(
+            r#"<p class="{}">{}</p>"#,
+            style::empty,
+            escape_html(tr(TextKey::ProfileNotFound)),
+        );
+    };
     let profile_items = video_profile_options(form.hardware_acceleration, form.video_format);
     let save_label = if form.id == 0 {
         tr(TextKey::AddProfile)
     } else {
         tr(TextKey::SaveProfile)
     };
-
-    view! {
-        <form method="post" action="/api/ffmpeg/save" class=style::page>
-            <input type="hidden" name="id" value=form.id.to_string()/>
-            <div class=style::breadcrumb>
-                <a href="/ffmpeg" class=style::back_link>{format!("← {}", tr(TextKey::FfmpegProfiles))}</a>
-                <h1 class=style::page_title>{tr(TextKey::EditFfmpegProfile)}</h1>
-            </div>
-            <div class=style::action_bar>
-                <button class=style::btn_primary type="submit">{save_label}</button>
-                <a href="/ffmpeg" class=style::cancel_link>{tr(TextKey::Cancel)}</a>
-            </div>
-            <div class=style::section>
-                <h2 class=style::section_title>{tr(TextKey::Video)}</h2>
-                <div class=style::form_row>
-                    <div class=style::fallback_field>
-                        <label>{tr(TextKey::Name)}</label>
-                        <input name="name" value=form.name.clone()/>
-                    </div>
-                    <div class=style::fallback_field>
-                        <label>{tr(TextKey::AccelerationKind)}</label>
-                        <select name="hardware_acceleration">
-                            <option value="0" selected=form.hardware_acceleration == 0>{tr(TextKey::NoneOption)}</option>
-                            <option value="1" selected=form.hardware_acceleration == 1>"QSV"</option>
-                            <option value="2" selected=form.hardware_acceleration == 2>"NVENC"</option>
-                            <option value="3" selected=form.hardware_acceleration == 3>"VAAPI"</option>
-                            <option value="4" selected=form.hardware_acceleration == 4>"VideoToolbox"</option>
-                            <option value="5" selected=form.hardware_acceleration == 5>"AMF"</option>
-                            <option value="7" selected=form.hardware_acceleration == 7>"RKMPP"</option>
-                        </select>
-                    </div>
-                    <div class=style::fallback_field>
-                        <label>{tr(TextKey::VideoFormat)}</label>
-                        <select name="video_format">
-                            <option value="1" selected=form.video_format == 1>"H264"</option>
-                            <option value="2" selected=form.video_format == 2>"H265 (HEVC)"</option>
-                            <option value="3" selected=form.video_format == 3>"MPEG-2"</option>
-                            <option value="4" selected=form.video_format == 4>"AV1"</option>
-                            <option value="99" selected=form.video_format == 99>{tr(TextKey::Copy)}</option>
-                        </select>
-                    </div>
-                    <div class=style::fallback_field>
-                        <label>{tr(TextKey::VideoProfile)}</label>
-                        <select name="video_profile">
-                            <option value="" selected=form.video_profile.is_empty()>{tr(TextKey::NoneOption)}</option>
-                            {profile_items.into_iter().map(|profile| {
-                                let selected = form.video_profile == profile;
-                                view! { <option value=profile selected=selected>{profile}</option> }
-                            }).collect_view()}
-                        </select>
-                    </div>
-                    <div class=style::fallback_field>
-                        <label>{tr(TextKey::BitDepth)}</label>
-                        <select name="bit_depth">
-                            <option value="0" selected=form.bit_depth == 0>"8-bit"</option>
-                            <option value="1" selected=form.bit_depth == 1>"10-bit"</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </form>
+    let mut profile_options = format!(
+        r#"<option value=""{}>{}</option>"#,
+        selected_attr(form.video_profile.is_empty()),
+        escape_html(tr(TextKey::NoneOption)),
+    );
+    for profile in profile_items {
+        let _ = write!(
+            profile_options,
+            r#"<option value="{value}"{selected}>{label}</option>"#,
+            value = escape_html(profile),
+            selected = selected_attr(form.video_profile == profile),
+            label = escape_html(profile),
+        );
     }
+
+    format!(
+        r#"<form method="post" action="/api/ffmpeg/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{breadcrumb}"><a href="/ffmpeg" class="{back_link}">&#8592; {profiles}</a><h1 class="{page_title}">{title}</h1></div><div class="{action_bar}"><button class="{btn_primary}" type="submit">{save_label}</button><a href="/ffmpeg" class="{cancel_link}">{cancel}</a></div><div class="{section}"><h2 class="{section_title}">{video}</h2><div class="{form_row}"><div class="{fallback_field}"><label>{name_label}</label><input name="name" value="{name}"></div><div class="{fallback_field}"><label>{accel_label}</label><select name="hardware_acceleration">{hardware_options}</select></div><div class="{fallback_field}"><label>{format_label}</label><select name="video_format">{format_options}</select></div><div class="{fallback_field}"><label>{profile_label}</label><select name="video_profile">{profile_options}</select></div><div class="{fallback_field}"><label>{bit_depth_label}</label><select name="bit_depth">{bit_depth_options}</select></div></div></div></form>"#,
+        page = style::page,
+        id = form.id,
+        breadcrumb = style::breadcrumb,
+        back_link = style::back_link,
+        profiles = escape_html(tr(TextKey::FfmpegProfiles)),
+        page_title = style::page_title,
+        title = escape_html(tr(TextKey::EditFfmpegProfile)),
+        action_bar = style::action_bar,
+        btn_primary = style::btn_primary,
+        save_label = escape_html(save_label),
+        cancel_link = style::cancel_link,
+        cancel = escape_html(tr(TextKey::Cancel)),
+        section = style::section,
+        section_title = style::section_title,
+        video = escape_html(tr(TextKey::Video)),
+        form_row = style::form_row,
+        fallback_field = style::fallback_field,
+        name_label = escape_html(tr(TextKey::Name)),
+        name = escape_html(&form.name),
+        accel_label = escape_html(tr(TextKey::AccelerationKind)),
+        hardware_options = hardware_options_html(form.hardware_acceleration),
+        format_label = escape_html(tr(TextKey::VideoFormat)),
+        format_options = video_format_options_html(form.video_format),
+        profile_label = escape_html(tr(TextKey::VideoProfile)),
+        profile_options = profile_options,
+        bit_depth_label = escape_html(tr(TextKey::BitDepth)),
+        bit_depth_options = bit_depth_options_html(form.bit_depth),
+    )
+}
+
+fn load_ffmpeg_profile_no_script_data(profile_id: i64) -> Option<FfmpegProfileForm> {
+    if profile_id == 0 {
+        return Some(FfmpegProfileForm::new_defaults());
+    }
+
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { get_ffmpeg_profile_form(profile_id).await.ok().flatten() })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = profile_id;
+        None
+    }
+}
+
+fn hardware_options_html(selected: i32) -> String {
+    [
+        (0, tr(TextKey::NoneOption)),
+        (1, "QSV"),
+        (2, "NVENC"),
+        (3, "VAAPI"),
+        (4, "VideoToolbox"),
+        (5, "AMF"),
+        (7, "RKMPP"),
+    ]
+    .into_iter()
+    .fold(String::new(), |mut html, (value, label)| {
+        let _ = write!(
+            html,
+            r#"<option value="{value}"{}>{}</option>"#,
+            selected_attr(selected == value),
+            escape_html(label),
+        );
+        html
+    })
+}
+
+fn video_format_options_html(selected: i32) -> String {
+    [
+        (1, "H264"),
+        (2, "H265 (HEVC)"),
+        (3, "MPEG-2"),
+        (4, "AV1"),
+        (99, tr(TextKey::Copy)),
+    ]
+    .into_iter()
+    .fold(String::new(), |mut html, (value, label)| {
+        let _ = write!(
+            html,
+            r#"<option value="{value}"{}>{}</option>"#,
+            selected_attr(selected == value),
+            escape_html(label),
+        );
+        html
+    })
+}
+
+fn bit_depth_options_html(selected: i32) -> String {
+    [(0, "8-bit"), (1, "10-bit")]
+        .into_iter()
+        .fold(String::new(), |mut html, (value, label)| {
+            let _ = write!(
+                html,
+                r#"<option value="{value}"{}>{}</option>"#,
+                selected_attr(selected == value),
+                escape_html(label),
+            );
+            html
+        })
+}
+
+fn selected_attr(selected: bool) -> &'static str {
+    if selected {
+        " selected"
+    } else {
+        ""
+    }
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 // ---------------------------------------------------------------------------

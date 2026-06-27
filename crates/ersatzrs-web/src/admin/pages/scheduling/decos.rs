@@ -26,8 +26,7 @@ use crate::admin::ui::primitives::{
 #[cfg(feature = "ssr")]
 use crate::{
     admin::server_fns::decos::{
-        get_deco_template_items_with_pool, get_deco_template_with_pool, get_deco_with_pool,
-        list_deco_groups_with_pool, list_deco_template_groups_with_pool,
+        get_deco_with_pool, list_deco_groups_with_pool, list_deco_template_groups_with_pool,
         list_deco_templates_with_pool, list_decos_with_pool, load_deco_editor_options_with_pool,
     },
     host::state::AppState,
@@ -500,25 +499,9 @@ pub fn DecoEditorPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
-
-    view! {
-        <style>".deco-noscript-editor, main > form#deco-editor-form { display: none; }"</style>
-        <noscript>
-            <style>".deco-noscript-editor, main > form#deco-editor-form { display: block; } .deco-js-editor { display: none; }"</style>
-            <div class="deco-noscript-editor">
-                <DecoEditorNoScript deco_id=deco_id()/>
-            </div>
-        </noscript>
-        <div class="deco-js-editor">
-            <DecoEditorIsland deco_id=deco_id()/>
-        </div>
-    }
-}
-
-#[island]
-fn DecoEditorIsland(deco_id: i64) -> impl IntoView {
+    let deco_id_value = deco_id();
     let data: Resource<(Option<DecoForm>, DecoEditorOptions)> = Resource::new_blocking(
-        move || deco_id,
+        move || deco_id_value,
         |id| async move {
             let deco = get_deco(id).await.unwrap_or(None);
             let options = load_deco_editor_options().await.unwrap_or_default();
@@ -527,18 +510,32 @@ fn DecoEditorIsland(deco_id: i64) -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-            {move || data.get().map(|(deco, options)| match deco {
-                Some(deco) => view! { <DecoEditorForm initial=deco options=options/> }.into_any(),
-                None => view! {
-                    <p class=style::empty>
-                        {tr(TextKey::DecoNotFound)} " "
-                        <a href="/decos">{tr(TextKey::BackToDecos)}</a>
-                    </p>
-                }.into_any(),
-            })}
-        </Suspense>
+        <style>".deco-noscript-editor, main > form#deco-editor-form { display: none; }"</style>
+        <noscript>
+            <style>".deco-noscript-editor, main > form#deco-editor-form { display: block; } .deco-js-editor { display: none; }"</style>
+            <div class="deco-noscript-editor">
+                <DecoEditorNoScript deco_id=deco_id_value/>
+            </div>
+        </noscript>
+        <div class="deco-js-editor">
+            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+                {move || data.get().map(|(deco, options)| match deco {
+                    Some(deco) => view! { <DecoEditorIsland initial=deco options=options/> }.into_any(),
+                    None => view! {
+                        <p class=style::empty>
+                            {tr(TextKey::DecoNotFound)} " "
+                            <a href="/decos">{tr(TextKey::BackToDecos)}</a>
+                        </p>
+                    }.into_any(),
+                })}
+            </Suspense>
+        </div>
     }
+}
+
+#[island]
+fn DecoEditorIsland(initial: DecoForm, options: DecoEditorOptions) -> impl IntoView {
+    view! { <DecoEditorForm initial=initial options=options/> }
 }
 
 #[component]
@@ -1249,43 +1246,27 @@ pub fn DecoTemplateEditorPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
-
-    view! {
-        <style>".deco-template-noscript-editor, main > form#deco-template-editor-form { display: none; }"</style>
-        <noscript>
-            <style>".deco-template-noscript-editor, main > form#deco-template-editor-form { display: block; } .deco-template-js-editor { display: none; }"</style>
-            <div class="deco-template-noscript-editor">
-                <DecoTemplateEditorNoScript template_id=template_id()/>
-            </div>
-        </noscript>
-        <div class="deco-template-js-editor">
-            <DecoTemplateEditorIsland template_id=template_id()/>
-        </div>
-    }
-}
-
-#[island]
-fn DecoTemplateEditorIsland(template_id: i64) -> impl IntoView {
     let data: Resource<(
         Option<DecoTemplateForm>,
         Vec<DecoTemplateItemForm>,
         Vec<DecoGroupRow>,
-    )> = Resource::new_blocking(
-        move || template_id,
-        |id| async move {
-            let template = get_deco_template(id).await.unwrap_or(None);
-            let items = get_deco_template_items(id).await.unwrap_or_default();
-            let groups = list_deco_groups().await.unwrap_or_default();
-            (template, items, groups)
-        },
-    );
+    )> = Resource::new_blocking(template_id, |id| async move {
+        let template = get_deco_template(id).await.unwrap_or(None);
+        let items = get_deco_template_items(id).await.unwrap_or_default();
+        let groups = list_deco_groups().await.unwrap_or_default();
+        (template, items, groups)
+    });
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || data.get().map(|(template, items, groups)| {
                 match template {
                     Some(template) => view! {
-                        <DecoTemplateEditorForm template=template initial_items=items deco_groups=groups/>
+                        <DecoTemplateEditorIsland
+                            template=template
+                            initial_items=items
+                            deco_groups=groups
+                        />
                     }.into_any(),
                     None => view! {
                         <p class=style::empty>
@@ -1299,20 +1280,18 @@ fn DecoTemplateEditorIsland(template_id: i64) -> impl IntoView {
     }
 }
 
-#[component]
-fn DecoTemplateEditorNoScript(template_id: i64) -> impl IntoView {
-    match load_deco_template_editor_no_script_data(template_id) {
-        Some((template, items, groups)) => view! {
-            <DecoTemplateEditorForm template=template initial_items=items deco_groups=groups/>
-        }
-        .into_any(),
-        None => view! {
-            <p class=style::empty>
-                {tr(TextKey::DecoTemplateNotFound)} " "
-                <a href="/deco-templates">{tr(TextKey::BackToDecoTemplates)}</a>
-            </p>
-        }
-        .into_any(),
+#[island]
+fn DecoTemplateEditorIsland(
+    template: DecoTemplateForm,
+    initial_items: Vec<DecoTemplateItemForm>,
+    deco_groups: Vec<DecoGroupRow>,
+) -> impl IntoView {
+    view! {
+        <DecoTemplateEditorForm
+            template=template
+            initial_items=initial_items
+            deco_groups=deco_groups
+        />
     }
 }
 
@@ -1328,10 +1307,12 @@ fn DecoTemplateEditorForm(
     let name = RwSignal::new(template.name.clone());
     let items = RwSignal::new(initial_items);
     let selected_deco_group = RwSignal::new(0i64);
-    let decos: Resource<Vec<DecoRow>> = Resource::new(
-        move || selected_deco_group.get(),
-        |group_id| async move {
-            if group_id <= 0 {
+    let decos = RwSignal::new(Vec::<DecoRow>::new());
+    Effect::new(move |_| {
+        let group_id = selected_deco_group.get();
+        #[cfg(target_arch = "wasm32")]
+        leptos::task::spawn_local(async move {
+            let rows = if group_id <= 0 {
                 Vec::new()
             } else {
                 list_decos(String::new())
@@ -1340,9 +1321,14 @@ fn DecoTemplateEditorForm(
                     .into_iter()
                     .filter(|row| row.group_id == group_id && row.id >= 0)
                     .collect()
-            }
-        },
-    );
+            };
+            decos.set(rows);
+        });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = group_id;
+        }
+    });
     let selected_deco = RwSignal::new(None::<DecoRow>);
     let selected_start = RwSignal::new(0i32);
     let duration_hours = RwSignal::new(0i32);
@@ -1495,13 +1481,6 @@ fn DecoTemplateEditorForm(
                     </div>
                 </div>
 
-                <noscript>
-                    <form method="post" action="/api/deco-templates/items/save">
-                        <input type="hidden" name="template_id" value=template_id.to_string()/>
-                        <input type="hidden" name="group_id" value=group_id.to_string()/>
-                        <button type="submit" name="action" value="save">{tr(TextKey::SaveDecoTemplate)}</button>
-                    </form>
-                </noscript>
                 <form
                     id="deco-template-editor-form"
                     method="post"
@@ -1550,33 +1529,25 @@ fn DecoTemplateEditorForm(
                         </select>
 
                         <label class=style::label for="template-deco">{tr(TextKey::Deco)}</label>
-                        <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                            {move || decos.get().map(|rows| {
-                                let selected_value = selected_deco.get().map(|row| row.id).unwrap_or_default();
-                                view! {
-                                    <select
-                                        id="template-deco"
-                                        class=style::select
-                                        prop:value=selected_value.to_string()
-                                        on:change=move |event| {
-                                            if let Ok(id) = event_target_value(&event).parse::<i64>() {
-                                                let found = decos
-                                                    .get_untracked()
-                                                    .unwrap_or_default()
-                                                    .into_iter()
-                                                    .find(|row| row.id == id);
-                                                selected_deco.set(found);
-                                            }
-                                        }
-                                    >
-                                        <option value="0"></option>
-                                        {rows.into_iter().map(|deco| {
-                                            view! { <option value=deco.id.to_string()>{deco.name}</option> }
-                                        }).collect_view()}
-                                    </select>
+                        <select
+                            id="template-deco"
+                            class=style::select
+                            prop:value=move || selected_deco.get().map(|row| row.id).unwrap_or_default().to_string()
+                            on:change=move |event| {
+                                if let Ok(id) = event_target_value(&event).parse::<i64>() {
+                                    let found = decos
+                                        .get_untracked()
+                                        .into_iter()
+                                        .find(|row| row.id == id);
+                                    selected_deco.set(found);
                                 }
-                            })}
-                        </Suspense>
+                            }
+                        >
+                            <option value="0"></option>
+                            {move || decos.get().into_iter().map(|deco| {
+                                view! { <option value=deco.id.to_string()>{deco.name}</option> }
+                            }).collect_view()}
+                        </select>
 
                         <label class=style::label for="template-deco-start">{tr(TextKey::StartTimeOnOrAfter)}</label>
                         <select
@@ -1791,37 +1762,6 @@ fn load_deco_editor_no_script_data(deco_id: i64) -> Option<(DecoForm, DecoEditor
     #[cfg(not(feature = "ssr"))]
     {
         let _ = deco_id;
-        None
-    }
-}
-
-fn load_deco_template_editor_no_script_data(
-    template_id: i64,
-) -> Option<(
-    DecoTemplateForm,
-    Vec<DecoTemplateItemForm>,
-    Vec<DecoGroupRow>,
-)> {
-    #[cfg(feature = "ssr")]
-    {
-        let state = expect_context::<AppState>();
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let template = get_deco_template_with_pool(&state.pool, template_id)
-                    .await
-                    .ok()
-                    .flatten()?;
-                let items = get_deco_template_items_with_pool(&state.pool, template_id)
-                    .await
-                    .ok()?;
-                let groups = list_deco_groups_with_pool(&state.pool).await.ok()?;
-                Some((template, items, groups))
-            })
-        })
-    }
-    #[cfg(not(feature = "ssr"))]
-    {
-        let _ = template_id;
         None
     }
 }

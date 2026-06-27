@@ -606,11 +606,11 @@ pub fn ScheduleItemsPage() -> impl IntoView {
             <style>".schedule-items-noscript { display: block; } .schedule-items-js { display: none; }"</style>
             <div
                 class="schedule-items-noscript"
-                inner_html=schedule_items_fallback_html(id, fallback_data, &initial_error)
+                inner_html=schedule_items_fallback_html(id, fallback_data.clone(), &initial_error)
             ></div>
         </noscript>
         <div class="schedule-items-js">
-            <ScheduleItemsIsland id/>
+            <ScheduleItemsIsland id initial_data=fallback_data/>
         </div>
     }
 }
@@ -976,25 +976,55 @@ fn escape_html(value: &str) -> String {
 }
 
 #[island]
-fn ScheduleItemsIsland(id: i64) -> impl IntoView {
-    let schedule_name = RwSignal::new(String::new());
-    let shuffle_schedule_items = RwSignal::new(false);
-    let items = RwSignal::new(Vec::<ScheduleItemForm>::new());
-    let options = RwSignal::new(ScheduleItemsEditorOptions::default());
+fn ScheduleItemsIsland(id: i64, initial_data: Option<ScheduleItemsPageData>) -> impl IntoView {
+    let schedule_name = RwSignal::new(
+        initial_data
+            .as_ref()
+            .map(|data| data.schedule.name.clone())
+            .unwrap_or_default(),
+    );
+    let shuffle_schedule_items = RwSignal::new(
+        initial_data
+            .as_ref()
+            .is_some_and(|data| data.schedule.shuffle_schedule_items),
+    );
+    let items = RwSignal::new(
+        initial_data
+            .as_ref()
+            .map(|data| data.items.clone())
+            .unwrap_or_default(),
+    );
+    let options = RwSignal::new(
+        initial_data
+            .as_ref()
+            .map(|data| data.options.clone())
+            .unwrap_or_default(),
+    );
     let selected = RwSignal::new(None::<usize>);
     let error = RwSignal::new(String::new());
+    let loaded = RwSignal::new(true);
+    let found = RwSignal::new(initial_data.is_some());
 
     let data = Resource::new_blocking(
         move || id,
         |id| async move { get_schedule_items_page(id).await.ok().flatten() },
     );
     Effect::new(move |_| {
-        if let Some(Some(data)) = data.get() {
-            schedule_name.set(data.schedule.name);
-            shuffle_schedule_items.set(data.schedule.shuffle_schedule_items);
-            items.set(data.items);
-            options.set(data.options);
-            selected.set(None);
+        if let Some(result) = data.get() {
+            loaded.set(true);
+            if let Some(data) = result {
+                found.set(true);
+                schedule_name.set(data.schedule.name);
+                shuffle_schedule_items.set(data.schedule.shuffle_schedule_items);
+                items.set(data.items);
+                options.set(data.options);
+                selected.set(None);
+            } else if !found.get_untracked() {
+                found.set(false);
+                selected.set(None);
+                items.set(Vec::new());
+                options.set(ScheduleItemsEditorOptions::default());
+            }
         }
     });
 
@@ -1093,9 +1123,10 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                 <p class=style::error style:display=move || if error.get().is_empty() { "none" } else { "" }>
                     {move || error.get()}
                 </p>
-                <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                    {move || data.get().map(|data| {
-                        if data.is_some() {
+                {move || {
+                    if !loaded.get() {
+                        view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any()
+                    } else if found.get() {
                             view! {
                                 <div class=style::table_wrap>
                                     <table>
@@ -1114,36 +1145,38 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {let rows = items.get();
-                                            if rows.is_empty() {
-                                                view! { <tr><td colspan="4" class=style::empty>{tr(TextKey::NoScheduleItems)}</td></tr> }.into_any()
-                                            } else {
-                                                rows.into_iter().enumerate().map(|(index, item)| {
-                                                    let row = list_row_from_item(&item);
-                                                    view! {
-                                                        <tr class=move || if selected.get() == Some(index) { style::selected_row } else { "" } on:click=move |_| selected.set(Some(index))>
-                                                            <td>{start_label(&row)}</td>
-                                                            <td>{collection_name_display(&item)}</td>
-                                                            <td>{playout_label(&row)}</td>
-                                                            <td>
-                                                                <div class=style::actions>
-                                                                    <button type="button" class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
-                                                                        <span style=icon_style(IconName::Copy, "1.25rem") aria-hidden="true"></span>
-                                                                    </button>
-                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
-                                                                        <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                                                    </button>
-                                                                    <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
-                                                                        <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                                                    </button>
-                                                                    <button type="button" class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
-                                                                        <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                }).collect_view().into_any()
+                                            {move || {
+                                                let rows = items.get();
+                                                if rows.is_empty() {
+                                                    view! { <tr><td colspan="4" class=style::empty>{tr(TextKey::NoScheduleItems)}</td></tr> }.into_any()
+                                                } else {
+                                                    rows.into_iter().enumerate().map(|(index, item)| {
+                                                        let row = list_row_from_item(&item);
+                                                        view! {
+                                                            <tr class=move || if selected.get() == Some(index) { style::selected_row } else { "" } on:click=move |_| selected.set(Some(index))>
+                                                                <td>{start_label(&row)}</td>
+                                                                <td>{collection_name_display(&item)}</td>
+                                                                <td>{playout_label(&row)}</td>
+                                                                <td>
+                                                                    <div class=style::actions>
+                                                                        <button type="button" class=style::icon_button title=tr(TextKey::CopyScheduleItem) aria-label=tr(TextKey::CopyScheduleItem) on:click=move |_| copy_item(index)>
+                                                                            <span style=icon_style(IconName::Copy, "1.25rem") aria-hidden="true"></span>
+                                                                        </button>
+                                                                        <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || index == 0 } title=tr(TextKey::MoveUp) aria-label=tr(TextKey::MoveUp) on:click=move |_| move_item(index, index.saturating_sub(1))>
+                                                                            <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
+                                                                        </button>
+                                                                        <button type="button" class=style::icon_button disabled=move || { shuffle_schedule_items.get() || (index + 1) >= items.get().len() } title=tr(TextKey::MoveDown) aria-label=tr(TextKey::MoveDown) on:click=move |_| move_item(index, index + 1)>
+                                                                            <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
+                                                                        </button>
+                                                                        <button type="button" class=style::icon_button title=tr(TextKey::DeleteScheduleItem) aria-label=tr(TextKey::DeleteScheduleItem) on:click=move |_| delete_item(index)>
+                                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    }).collect_view().into_any()
+                                                }
                                             }}
                                         </tbody>
                                     </table>
@@ -1153,11 +1186,10 @@ fn ScheduleItemsIsland(id: i64) -> impl IntoView {
                                     schedule_item_editor(index, &item, items, &editor_options, shuffle_schedule_items.get())
                                 })).unwrap_or_else(|| view! { <p class=style::empty>{tr(TextKey::SelectScheduleItemPrompt)}</p> }.into_any())}
                             }.into_any()
-                        } else {
-                            view! { <p class=style::empty>{tr(TextKey::ScheduleNotFound)}</p> }.into_any()
-                        }
-                    })}
-                </Suspense>
+                    } else {
+                        view! { <p class=style::empty>{tr(TextKey::ScheduleNotFound)}</p> }.into_any()
+                    }
+                }}
             </section>
         </div>
     }

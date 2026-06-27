@@ -10,8 +10,8 @@ use crate::admin::i18n::{delete_failed, scheduling_content_error_message, tr, Te
 use crate::admin::server_fns::templates::{
     copy_template, create_template, create_template_group, delete_template, delete_template_group,
     format_short_time, get_template, get_template_items, list_template_block_groups,
-    list_template_blocks_for_group, list_template_groups, list_templates, TemplateBlockGroupOption,
-    TemplateBlockOption, TemplateForm, TemplateGroupRow, TemplateItemForm, TemplateRow,
+    list_template_groups, list_templates, TemplateBlockGroupOption, TemplateBlockOption,
+    TemplateForm, TemplateGroupRow, TemplateItemForm, TemplateRow,
 };
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
@@ -217,6 +217,7 @@ fn TemplatesIsland(
                             id="template-group-name"
                             class=style::input
                             name="name"
+                            required=true
                             prop:value=move || new_group_name.get()
                             on:input=move |event| new_group_name.set(event_target_value(&event))
                         />
@@ -224,7 +225,6 @@ fn TemplatesIsland(
                         <button
                             type="submit"
                             class=style::btn_primary
-                            disabled=move || new_group_name.get().trim().is_empty()
                             on:click=move |event| {
                                 event.prevent_default();
                                 let name = new_group_name.get_untracked().trim().to_string();
@@ -271,6 +271,7 @@ fn TemplatesIsland(
                             id="template-name"
                             class=style::input
                             name="name"
+                            required=true
                             prop:value=move || new_template_name.get()
                             on:input=move |event| new_template_name.set(event_target_value(&event))
                         />
@@ -278,10 +279,6 @@ fn TemplatesIsland(
                         <button
                             type="submit"
                             class=style::btn_primary
-                            disabled=move || {
-                                new_template_group_id.get() == 0
-                                    || new_template_name.get().trim().is_empty()
-                            }
                             on:click=move |event| {
                                 event.prevent_default();
                                 let group_id = new_template_group_id.get_untracked();
@@ -598,32 +595,23 @@ pub fn TemplateEditorPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
-
-    view! { <TemplateEditorIsland template_id=template_id()/> }
-}
-
-#[island]
-fn TemplateEditorIsland(template_id: i64) -> impl IntoView {
     let data: Resource<(
         Option<TemplateForm>,
         Vec<TemplateItemForm>,
         Vec<TemplateBlockGroupOption>,
-    )> = Resource::new_blocking(
-        move || template_id,
-        |id| async move {
-            let template = get_template(id).await.unwrap_or(None);
-            let items = get_template_items(id).await.unwrap_or_default();
-            let groups = list_template_block_groups().await.unwrap_or_default();
-            (template, items, groups)
-        },
-    );
+    )> = Resource::new_blocking(template_id, |id| async move {
+        let template = get_template(id).await.unwrap_or(None);
+        let items = get_template_items(id).await.unwrap_or_default();
+        let groups = list_template_block_groups().await.unwrap_or_default();
+        (template, items, groups)
+    });
 
     view! {
         <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
             {move || data.get().map(|(template, items, groups)| {
                 match template {
                     Some(template) => view! {
-                        <TemplateEditorForm template=template initial_items=items block_groups=groups/>
+                        <TemplateEditorIsland template=template initial_items=items block_groups=groups/>
                     }.into_any(),
                     None => view! {
                         <TemplateNotFoundRedirect/>
@@ -631,6 +619,21 @@ fn TemplateEditorIsland(template_id: i64) -> impl IntoView {
                 }
             })}
         </Suspense>
+    }
+}
+
+#[island]
+fn TemplateEditorIsland(
+    template: TemplateForm,
+    initial_items: Vec<TemplateItemForm>,
+    block_groups: Vec<TemplateBlockGroupOption>,
+) -> impl IntoView {
+    view! {
+        <TemplateEditorForm
+            template=template
+            initial_items=initial_items
+            block_groups=block_groups
+        />
     }
 }
 
@@ -664,18 +667,25 @@ fn TemplateEditorForm(
     let name = RwSignal::new(template.name.clone());
     let items = RwSignal::new(initial_items);
     let selected_block_group = RwSignal::new(0i64);
-    let blocks: Resource<Vec<TemplateBlockOption>> = Resource::new(
-        move || selected_block_group.get(),
-        |group_id| async move {
-            if group_id <= 0 {
+    let blocks = RwSignal::new(Vec::<TemplateBlockOption>::new());
+    Effect::new(move |_| {
+        let group_id = selected_block_group.get();
+        #[cfg(target_arch = "wasm32")]
+        leptos::task::spawn_local(async move {
+            let rows = if group_id <= 0 {
                 Vec::new()
             } else {
-                list_template_blocks_for_group(group_id)
+                crate::admin::server_fns::templates::list_template_blocks_for_group(group_id)
                     .await
                     .unwrap_or_default()
-            }
-        },
-    );
+            };
+            blocks.set(rows);
+        });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = group_id;
+        }
+    });
     let selected_block = RwSignal::new(None::<TemplateBlockOption>);
     let selected_start = RwSignal::new(0i32);
     let block_to_remove = RwSignal::new(None::<usize>);
@@ -732,13 +742,6 @@ fn TemplateEditorForm(
                 </div>
             </div>
             <div class=style::content>
-                <noscript>
-                    <form method="post" action="/api/templates/items/save">
-                        <input type="hidden" name="template_id" value=template_id.to_string()/>
-                        <input type="hidden" name="group_id" value=group_id.to_string()/>
-                        <button type="submit" name="action" value="save">{tr(TextKey::SaveTemplate)}</button>
-                    </form>
-                </noscript>
                 <form id="template-editor-form" method="post" action="/api/templates/items/save">
                     <input type="hidden" name="template_id" value=template_id.to_string()/>
                     <input type="hidden" name="group_id" value=group_id.to_string()/>
@@ -779,34 +782,29 @@ fn TemplateEditorForm(
                         </select>
 
                         <label class=style::label for="template-block">{tr(TextKey::Block)}</label>
-                        <Suspense fallback=move || view! { <select class=style::select disabled=true></select> }>
-                            {move || blocks.get().map(|block_rows| view! {
-                                <select
-                                    id="template-block"
-                                    class=style::select
-                                    prop:value=move || {
-                                        selected_block
-                                            .get()
-                                            .map_or_else(|| "0".to_string(), |block| block.id.to_string())
-                                    }
-                                    on:change=move |event| {
-                                        let selected_id = event_target_value(&event).parse::<i64>().unwrap_or_default();
-                                        selected_block.set(
-                                            blocks
-                                                .get_untracked()
-                                                .unwrap_or_default()
-                                                .into_iter()
-                                                .find(|block| block.id == selected_id),
-                                        );
-                                    }
-                                >
-                                    <option value="0"></option>
-                                    {block_rows.into_iter().map(|block| {
-                                        view! { <option value=block.id.to_string()>{block.name}</option> }
-                                    }).collect_view()}
-                                </select>
-                            })}
-                        </Suspense>
+                        <select
+                            id="template-block"
+                            class=style::select
+                            prop:value=move || {
+                                selected_block
+                                    .get()
+                                    .map_or_else(|| "0".to_string(), |block| block.id.to_string())
+                            }
+                            on:change=move |event| {
+                                let selected_id = event_target_value(&event).parse::<i64>().unwrap_or_default();
+                                selected_block.set(
+                                    blocks
+                                        .get_untracked()
+                                        .into_iter()
+                                        .find(|block| block.id == selected_id),
+                                );
+                            }
+                        >
+                            <option value="0"></option>
+                            {move || blocks.get().into_iter().map(|block| {
+                                view! { <option value=block.id.to_string()>{block.name}</option> }
+                            }).collect_view()}
+                        </select>
 
                         <label class=style::label for="template-start">{tr(TextKey::StartTimeOnOrAfter)}</label>
                         <select

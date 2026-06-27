@@ -217,6 +217,11 @@ configured Playwright suite by default through:
 scripts/e2e/playwright-e2e.sh
 ```
 
+The wrapper defaults Playwright to one worker because the full suite mutates
+shared application state in its isolated test database. Set
+`ERSATZRS_E2E_WORKERS=<n>` or pass an explicit `--workers` argument only for
+spec subsets that are known to be independent.
+
 For focused local probes against an already-running server, use
 `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test tests/e2e/<spec>.ts`.
 When no spec exists yet, use Playwright MCP or another attached browser tool
