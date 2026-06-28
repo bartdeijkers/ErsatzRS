@@ -18,8 +18,6 @@ use uuid::Uuid;
 
 use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
 
-const LISTEN_ADDR: &str = "0.0.0.0:8409";
-const LISTEN_PORT: u16 = 8409;
 /// Upper bound on how long shutdown waits for background tasks to drain before
 /// forcing exit, so a stuck task cannot hang the tray "Exit" / `docker stop`.
 const SHUTDOWN_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -111,6 +109,11 @@ pub async fn run() {
         .expect("database initialisation failed");
 
     init_logging(&startup.pool).await;
+    let listen_addr = super::config::leptos_configuration()
+        .leptos_options
+        .site_addr;
+    let listen_port = listen_addr.port();
+
     if let Err(error) = seed_default_mpegts_script().await {
         tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
     }
@@ -178,7 +181,7 @@ pub async fn run() {
         super::tasks::HdhrTaskInputs {
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
-            listen_port: LISTEN_PORT,
+            listen_port,
         },
         super::tasks::MaintenanceTaskInputs {
             pool: app_state.pool.clone(),
@@ -193,11 +196,11 @@ pub async fn run() {
     let pool = app_state.pool.clone();
     let app = super::router::build_app(app_state);
 
-    tracing::info!("ersatzrs-web listening on {LISTEN_ADDR}");
+    tracing::info!(%listen_addr, "ersatzrs-web listening");
 
-    let listener = tokio::net::TcpListener::bind(LISTEN_ADDR)
+    let listener = tokio::net::TcpListener::bind(listen_addr)
         .await
-        .unwrap_or_else(|e| panic!("failed to bind to {LISTEN_ADDR}: {e}"));
+        .unwrap_or_else(|e| panic!("failed to bind to {listen_addr}: {e}"));
 
     tokio::spawn(shutdown_signal(shutdown.clone()));
 
