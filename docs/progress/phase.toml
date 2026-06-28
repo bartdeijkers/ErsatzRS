@@ -69,9 +69,9 @@ Plex/Jellyfin/Emby movie-library sync reuses a shared `ersatzrs-domain`
 content-variant classifier after each provider page (including ETag-skipped
 rows), so server-reported extras become hidden `ContentKind=Extra` rows and
 provider alternate versions link to their canonical primary via
-`ParentMediaItemId`; `content-variants` is now fully `Ported` with every
-structured `[[debt]]` resolved and ADR 0018 marked implemented. The FFmpeg
-filter-graph opacity-expression live proof debt is now resolved, and the
+`ParentMediaItemId`; `content-variants` was marked fully `Ported` at that point
+with every structured `[[debt]]` resolved. The FFmpeg filter-graph
+opacity-expression live proof debt is now resolved, and the
 2026-06-25 healthcheck closeout replaced Docker's curl readiness probe with the
 purpose-built `ersatzrs-healthcheck` binary. The 2026-06-26 Docker/runtime
 hardening pass added manifest-keyed dependency-layer caching for local runtime
@@ -88,11 +88,22 @@ island boundary, and the FFmpeg profile no-JS fallback served from resolved SSR
 data with a hydration-resource-free `<noscript>`) and switched CI to run the
 full Playwright e2e suite by default, with the wrapper running serially unless
 `ERSATZRS_E2E_WORKERS`/`--workers` is set so shared-database specs no longer
-race. The next spec-backed candidates
-are ADR 0013 in-app TSDuck
-MPEG-TS troubleshooting (Proposed / Not implemented), the remaining startup
-configuration cleanup around direct `DATABASE_URL` environment access, and the
-module-split survey's first behavior-preserving refactor slice.
+race. The 2026-06-27 MTV dogfood pass
+reopened two parity surfaces as real progress gaps: schedule item fallback form
+deserialization and Classic scheduling quality around duration post-roll filler
+overlap, same-artist music-video shuffle proximity, and fixed-anchor schedules
+leaving no active pre-anchor playout rows. A follow-up admin-UI-only MTV
+Unplugged attempt found and resolved an ADR 0018 live-admin scanner gap:
+Music Videos scans now retry SQLite busy/locked contention around per-write
+import/link/finalization operations, the documented
+`content_kind:alternate_version AND sub_kind:unplugged` selector returns 38
+music videos in the admin UI, and the admin UI created the MTV Unplugged smart
+collection, Classic schedule, channel, existing MTV watermark assignment, and
+playout with one MTV Bumpers item after every three unplugged videos. The next
+spec-backed candidates are ADR 0013 in-app TSDuck MPEG-TS troubleshooting
+(Proposed / Not implemented), the remaining startup configuration cleanup
+around direct `DATABASE_URL` environment access, and the module-split survey's
+first behavior-preserving refactor slice.
 '''
 
 # Phase 0 checklist (all complete).

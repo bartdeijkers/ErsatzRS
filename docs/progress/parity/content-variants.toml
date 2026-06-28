@@ -38,6 +38,15 @@ same classifier after each provider page, including ETag-skipped rows, so
 server-reported extras from title/path/tag signals are imported as hidden
 `ContentKind=Extra` rows and provider alternate versions are linked back to
 their canonical primary through `ParentMediaItemId`.
+
+Dogfood on 2026-06-27 found and resolved the live-admin path for the documented
+Unplugged smart-collection example: Music Videos library scans launched from the
+admin UI now retry per-row SQLite busy/locked write contention long enough to
+complete classification/linking, the exact ADR 0018 selector
+`type:"music_video" AND content_kind:alternate_version AND sub_kind:unplugged`
+returns the expected 38 rows in the admin UI, and an admin-UI-created MTV
+Unplugged channel now runs from that smart collection with an MTV Bumpers item
+after every three unplugged videos.
 '''
 
 [[debt]]
@@ -86,4 +95,12 @@ adr         = '0018'
 description = 'Phase 5 remains open: templated smart collections and schedule/filler examples for unplugged renditions, commentary channels, and featurette-before-movie pre-roll are not shipped.'
 discovered  = '2026-06-23'
 evidence    = 'Resolved 2026-06-24: `ersatzrs-core::content_variants` now ships smart-collection examples for unplugged renditions, commentary movies, featurette pre-roll, and primary movies, plus builders for the featurette pre-roll filler preset and movie schedule item. `docs/reference/content-variant-scheduling-examples.md` documents the operator workflow. Covered by content_variants::tests::examples_use_variant_tokens_that_opt_into_hidden_rows, content_variants::tests::featurette_pre_roll_templates_do_not_attach_to_a_schedule_by_default, and scheduling_repository::scheduling_repository_content_variant_examples_resolve_and_drive_featurette_preroll; focused gates passed.'
+resolved    = true
+
+[[debt]]
+id          = 'live-admin-unplugged-classification'
+adr         = '0018'
+description = 'The documented ADR 0018 Unplugged smart-collection selector is implemented, but the live admin UI path can fail to classify existing Unplugged music-video inventory into `ContentKind=AlternateVersion` / `SubKind=unplugged`, leaving `type:"music_video" AND content_kind:alternate_version AND sub_kind:unplugged` empty and blocking channel creation from the admin UI.'
+discovered  = '2026-06-27'
+evidence    = 'Resolved 2026-06-27: the scanner now retries SQLite busy/locked contention around per-write import/link/finalization operations instead of replaying the whole scan; the live admin UI Music Videos scan completed, `/search?query=type%3A%22music_video%22%20AND%20content_kind%3Aalternate_version%20AND%20sub_kind%3Aunplugged` returned 38 Music Videos, Save As created the `MTV Unplugged` smart collection, and the admin UI created channel 3 `MTV Unplugged` with the existing `MTV` watermark, schedule item 19 `MTV Unplugged` as Multiple count 3, schedule item 20 `MTV Bumpers` as One, and Classic playout 5. Read-only live DB verification found 674 generated playout items, zero non-unplugged rows from schedule item 19, and the generated sequence repeats three unplugged items followed by one bumper item.'
 resolved    = true

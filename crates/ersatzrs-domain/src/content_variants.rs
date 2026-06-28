@@ -367,6 +367,16 @@ mod tests {
         assert_eq!(folder.base_title, "Once in a Lifetime");
         assert_eq!(folder.sub_kind.as_deref(), Some("unplugged"));
 
+        let mtv_unplugged = classify_alternate_version(
+            Path::new("/library"),
+            "Nirvana - About A Girl Live On MTV Unplugged 1993 Unedited",
+            Some(Path::new(
+                "/library/MTV Unplugged/Nirvana Unplugged in New York/Nirvana - About A Girl Live On MTV Unplugged 1993 Unedited.mkv",
+            )),
+        );
+        assert_eq!(mtv_unplugged.sub_kind.as_deref(), Some("unplugged"));
+        assert!(!mtv_unplugged.base_title.is_empty());
+
         let official =
             classify_alternate_version(Path::new("/library"), "Song (Official Video)", None);
         assert_eq!(official.base_title, "song");

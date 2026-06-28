@@ -74,6 +74,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Admin-triggered local library scans now keep retrying SQLite busy/locked
+  contention at each import/link/finalization write, so a long Music Videos
+  scan can finish ADR 0018 alternate-version classification instead of replaying
+  the whole scan and leaving documented smart-collection selectors empty.
 - Admin route-family Playwright coverage now has stable hydrated startup state:
   library scan actions expose queued/failure status, media collection editors
   keep their SSR data through hydration, and scheduling editors load their

@@ -11,13 +11,16 @@ by ADR NNNN | Deprecated. It must NOT be read as "the code exists".
 
 ## Implementation
 
-Implemented for the local scanner/search/UI/playback/scheduling scope tracked
-by `docs/progress/parity/content-variants.toml`: Phase 0 schema/search/health
-foundation, Phase 1 media UI surfacing, Phase 2 local scanner extra
-import/classification, Phase 3 alternate-version linking, Phase 4 commentary
-render acceptance, and Phase 5 scheduling examples are complete.
-Provider-specific Plex/Jellyfin/Emby extras or version imports remain deferred
-until a provider API mapping slice is selected.
+Implemented — the local/provider scanner/search/UI/playback/scheduling scope
+tracked by `docs/progress/parity/content-variants.toml` is implemented through
+Phase 5 plus provider-side Plex/Jellyfin/Emby content-variant import. A
+2026-06-27 live admin dogfood pass also proved the documented
+`content_kind:alternate_version AND sub_kind:unplugged` selector against
+admin-triggered Music Videos scans after the scanner learned to retry SQLite
+busy/locked write contention at the per-write import/link/finalization boundary.
+That pass created an MTV Unplugged smart collection, channel, Classic schedule,
+and playout from the admin UI, with the existing MTV watermark and a bumper
+after every three unplugged videos.
 
 <!--
 Tracked by `plans/extras-alternate-versions-and-stream-roles.md`. Parity slug

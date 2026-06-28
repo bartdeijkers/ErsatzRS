@@ -219,41 +219,63 @@ async fn scan_local_library_with_progress_once(
                             let parent_media_item_id =
                                 resolve_movie_extra_parent(pool, &library_path, &extra).await?;
                             let probed = extractor.extract(&path).await?;
-                            upsert_local_extra_video(
-                                pool,
-                                &library_path,
-                                &path,
-                                probed,
-                                &extra.sub_kind,
-                                parent_media_item_id,
-                            )
+                            retry_sqlite_busy(|| {
+                                let probed = probed.clone();
+                                async {
+                                    upsert_local_extra_video(
+                                        pool,
+                                        &library_path,
+                                        &path,
+                                        probed,
+                                        &extra.sub_kind,
+                                        parent_media_item_id,
+                                    )
+                                    .await
+                                }
+                            })
                             .await?;
                         }
                         LocalScanWork::MoviePrimary { path } | LocalScanWork::Generic { path } => {
                             let probed = extractor.extract(&path).await?;
-                            upsert_local_file(pool, &library_path, &path, probed).await?;
+                            retry_sqlite_busy(|| {
+                                let probed = probed.clone();
+                                async {
+                                    upsert_local_file(pool, &library_path, &path, probed).await
+                                }
+                            })
+                            .await?;
                         }
                         LocalScanWork::MusicVideo {
                             artist_folder,
                             file_path,
                         } => {
-                            let artist_id =
-                                upsert_artist_for_folder(pool, &library_path, &artist_folder)
-                                    .await?;
+                            let artist_id = retry_sqlite_busy(|| async {
+                                upsert_artist_for_folder(pool, &library_path, &artist_folder).await
+                            })
+                            .await?;
                             let artist_dir = Path::new(&library_path.path).join(&artist_folder);
                             let probed = extractor.extract(&file_path).await?;
-                            upsert_local_music_video(
-                                pool,
-                                &library_path,
-                                artist_id,
-                                &artist_dir,
-                                &file_path,
-                                probed,
-                            )
+                            retry_sqlite_busy(|| {
+                                let probed = probed.clone();
+                                async {
+                                    upsert_local_music_video(
+                                        pool,
+                                        &library_path,
+                                        artist_id,
+                                        &artist_dir,
+                                        &file_path,
+                                        probed,
+                                    )
+                                    .await
+                                }
+                            })
                             .await?;
                         }
                         LocalScanWork::RemoteStream { path } => {
-                            upsert_local_remote_stream(pool, &library_path, &path).await?;
+                            retry_sqlite_busy(|| async {
+                                upsert_local_remote_stream(pool, &library_path, &path).await
+                            })
+                            .await?;
                         }
                     }
                     report.scanned_files += 1;
@@ -264,7 +286,10 @@ async fn scan_local_library_with_progress_once(
                         }
                     }
                 }
-                link_alternate_versions_for_library_path(pool, &library_path).await?;
+                retry_sqlite_busy(|| async {
+                    link_alternate_versions_for_library_path(pool, &library_path).await
+                })
+                .await?;
             }
             LocalScanBucketKind::Shows { expected_episodes } => {
                 let mut local_processed = 0usize;
@@ -289,12 +314,15 @@ async fn scan_local_library_with_progress_once(
         }
         // Trailing pass: flag items whose backing file disappeared since the
         // last scan, mirroring ErsatzTV's per-FolderScanner FlagFileNotFound.
-        flag_missing_local_files(pool, library_path.id).await?;
+        retry_sqlite_busy(|| async { flag_missing_local_files(pool, library_path.id).await })
+            .await?;
         let now = Utc::now();
-        update_library_path_scan(pool, library_path.id, now).await?;
+        retry_sqlite_busy(|| async { update_library_path_scan(pool, library_path.id, now).await })
+            .await?;
     }
 
-    update_library_scan(pool, config.library_id, Utc::now()).await?;
+    retry_sqlite_busy(|| async { update_library_scan(pool, config.library_id, Utc::now()).await })
+        .await?;
     if let Some(sink) = progress {
         sink.report(1.0);
     }
@@ -2750,6 +2778,76 @@ mod tests {
 
         let repository = SqliteSchedulingContentRepository::new(pool.clone());
         assert_eq!(search_ids(&repository, "Once").await, vec![official_id]);
+        assert_eq!(
+            search_ids(
+                &repository,
+                "content_kind:alternate_version AND sub_kind:unplugged"
+            )
+            .await,
+            vec![unplugged_id]
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn mtv_unplugged_music_video_orphan_is_searchable_by_adr_selector() {
+        use super::{
+            link_alternate_versions_for_library_path, upsert_artist_for_folder,
+            upsert_local_music_video,
+        };
+        use ersatzrs_infra::repositories::SqliteSchedulingContentRepository;
+        use sqlx::Row;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().expect("temp dir");
+        let mtv_dir = temp.path().join("MTV Unplugged");
+        let unplugged_dir = mtv_dir.join("Alice in Chains Unplugged");
+        std::fs::create_dir_all(&unplugged_dir).expect("unplugged dir");
+        let unplugged_path =
+            unplugged_dir.join("Alice In Chains - Down in a Hole MTV Unplugged - HD Video.mkv");
+        std::fs::write(&unplugged_path, b"not probed").expect("unplugged video");
+
+        let pool = test_db().await;
+        let library_path = seed_music_video_library_path(temp.path());
+        seed_music_video_library(&pool, &library_path).await;
+        let artist_id = upsert_artist_for_folder(&pool, &library_path, "MTV Unplugged")
+            .await
+            .expect("artist");
+
+        upsert_local_music_video(
+            &pool,
+            &library_path,
+            artist_id,
+            &mtv_dir,
+            &unplugged_path,
+            probed_version(),
+        )
+        .await
+        .expect("unplugged upsert");
+        link_alternate_versions_for_library_path(&pool, &library_path)
+            .await
+            .expect("link versions");
+
+        let unplugged_id = media_item_id_for_path(&pool, &unplugged_path).await;
+        let row = sqlx::query(
+            r#"SELECT "ContentKind", "SubKind", "ParentMediaItemId"
+               FROM "MediaItem" WHERE "Id" = ?"#,
+        )
+        .bind(unplugged_id)
+        .fetch_one(&pool)
+        .await
+        .expect("unplugged row");
+        assert_eq!(
+            row.get::<i32, _>("ContentKind"),
+            ersatzrs_domain::ContentKind::AlternateVersion.db_value()
+        );
+        assert_eq!(
+            row.get::<Option<String>, _>("SubKind").as_deref(),
+            Some("unplugged")
+        );
+        assert!(row.get::<Option<i64>, _>("ParentMediaItemId").is_none());
+
+        let repository = SqliteSchedulingContentRepository::new(pool.clone());
         assert_eq!(
             search_ids(
                 &repository,

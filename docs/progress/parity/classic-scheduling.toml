@@ -1,7 +1,7 @@
 feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0010']
 
 summary    = '''
@@ -12,6 +12,8 @@ Continue-build continuation fixes (2026-06-08): `apply_build_result` now persist
 Continue-build seam fix (2026-06-14): the Classic engine now clamps the persisted continue anchor to the finish of the last generated item when an item overshoots a build hard-stop boundary. This preserves ErsatzTV's accepted future overshoot item while preventing the next Continue build from re-adding the same item at the boundary.
 
 Shuffled collection fix (2026-06-14): Classic shuffled media collections now mirror `ShuffledMediaCollectionEnumerator.MoveNext` by remembering the previous cycle's tail item and advancing the reshuffle seed until the next cycle starts with a different media item. Runtime localization with a direct cyclic calibration playout showed HLS Segmenter and the modern MPEG-TS wrapper can advance a 1->2->3 persisted timeline correctly; a separate fresh-HOME Classic HLS startup replay was tracked and fixed under `hls-variant-playlists-segmenter`.
+
+Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed remaining scheduling-quality gaps. Duration items with post-roll filler can overlap the next duration item, shuffled music-video multi-collection output does not currently enforce artist separation beyond the already-fixed same-item reshuffle guard, and a daily fixed block can become the first generated row even when dynamic programming is intended before it.
 '''
 
 [[debt]]
@@ -27,3 +29,24 @@ description = 'Classic shuffled music-video collection ordering can repeat the s
 discovered  = '2026-06-10'
 evidence    = "Runtime observation: MTV music-video channel played No Doubt - \"Don't Speak\" twice in a row, unlike ErsatzTV shuffled collection ordering."
 resolved    = true
+
+[[debt]]
+id          = 'duration-post-roll-filler-overlap'
+description = 'Classic Duration schedule items with count-based post-roll filler can schedule the filler at the same timestamp as the next primary item instead of advancing the duration block through the filler.'
+discovered  = '2026-06-27'
+evidence    = 'MTV dogfood Beavis and Butt-Head half-hour block: a Duration item with `PostRollFillerId=1` generated `PlayoutItem` rows where the MTV bumper and the next episode both started at 22:10:57. The live channel had to use explicit One items (`episode`, `bumper`, `episode`) to avoid overlapping playout rows.'
+resolved    = false
+
+[[debt]]
+id          = 'music-video-shuffle-artist-distance'
+description = 'Classic shuffled multi-collection scheduling does not prevent music videos from the same artist from being scheduled adjacent or too close together.'
+discovered  = '2026-06-27'
+evidence    = 'MTV dogfood playout generated adjacent Metallica videos in the three-music-video block (`Metallica - Inamorata Official Music Video` followed by `Metallica - Halo On Fire Official Music Video`). The previous duplicate-consecutive-shuffle-item fix prevents the same item repeating, but not same-artist proximity.'
+resolved    = false
+
+[[debt]]
+id          = 'fixed-anchor-before-dynamic-gap'
+description = 'Classic schedules that mix dynamic all-day programming before a daily fixed item can start generated playout rows at the fixed item, leaving no active item before the anchor.'
+discovered  = '2026-06-27'
+evidence    = 'MTV dogfood schedule with three music videos + bumper before a strict 22:00 Beavis block generated its first `PlayoutItem` at 20:00 UTC / 22:00 local. A live request at 18:01 UTC logged `hls segmenter did not produce initial playlist segments before timeout` and returned 503 because channel 2 had no active playout row. The live workaround changed the first item to a flexible midnight Flood item so HLS had active music-video rows immediately, but that is not the desired three-videos-then-bumper cadence.'
+resolved    = false
