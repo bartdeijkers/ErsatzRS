@@ -1,3 +1,4 @@
+{"agent":"codex","date":"2026-06-28","summary":"Hardened CI Playwright E2E to avoid port 8409 conflicts with a live admin server."}
 {"agent":"codex","date":"2026-06-28","summary":"Closed schedule item fallback vector-form deserialization parity debt for no-JS /api/schedules/items/save."}
 {"agent":"codex","date":"2026-06-28","summary":"Generated human parity gap report and refreshed it after the schedule fallback closeout."}
 {"agent":"codex","date":"2026-06-28","summary":"Closed Classic scheduling dogfood debts: duration post-roll advancement, dynamic pre-anchor rows, and music-video artist spacing."}

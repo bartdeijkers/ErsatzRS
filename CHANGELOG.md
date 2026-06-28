@@ -74,6 +74,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- CI Playwright E2E now runs on its own port so the self-hosted runner can
+  coexist with a live maintainer admin server on the default `8409` port.
 - Schedule item HTML fallback saves now parse repeated raw row fields before
   reconstructing schedule items, so no-JS `/api/schedules/items/save` submits
   preserve multiple rows and their filler, watermark, graphics, language, and

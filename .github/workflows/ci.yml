@@ -91,6 +91,9 @@ jobs:
     # Gate on the fast fmt job so formatting failures do not burn a browser
     # E2E build on the serial self-hosted runner.
     needs: fmt
+    env:
+      # Keep CI independent from the maintainer's live admin server on 8409.
+      ERSATZRS_E2E_PORT: "18409"
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
