@@ -2008,6 +2008,7 @@ impl SqliteSchedulingContentRepository {
                 ) AS "title",
                 (SELECT "s"."ShowId" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "show_id",
                 (SELECT "e"."SeasonId" FROM "Episode" AS "e" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_id",
+                (SELECT "mv"."ArtistId" FROM "MusicVideo" AS "mv" WHERE "mv"."Id" = "mi"."Id" LIMIT 1) AS "artist_id",
                 (SELECT "s"."SeasonNumber" FROM "Episode" AS "e" JOIN "Season" AS "s" ON "s"."Id" = "e"."SeasonId" WHERE "e"."Id" = "mi"."Id" LIMIT 1) AS "season_number",
                 (SELECT "em"."EpisodeNumber" FROM "EpisodeMetadata" AS "em" WHERE "em"."EpisodeId" = "mi"."Id" LIMIT 1) AS "episode_number",
                 COALESCE(
@@ -2898,6 +2899,7 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
         title: row.try_get("title")?,
         show_id: row.try_get("show_id")?,
         season_id: row.try_get("season_id")?,
+        artist_id: row.try_get("artist_id")?,
         season: row.try_get("season_number")?,
         episode: row.try_get("episode_number")?,
         release_date: row

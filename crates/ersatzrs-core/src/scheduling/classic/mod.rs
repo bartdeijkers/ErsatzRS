@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
@@ -1606,14 +1606,88 @@ fn prepare_enumerator_items(
                 .then(left.release_date.cmp(&right.release_date))
                 .then(left.id.cmp(&right.id))
         }),
-        PlaybackOrder::Random
-        | PlaybackOrder::Shuffle
+        PlaybackOrder::Shuffle
         | PlaybackOrder::ShuffleInOrder
-        | PlaybackOrder::RandomRotation
-        | PlaybackOrder::Marathon
-        | PlaybackOrder::MultiEpisodeShuffle => shuffle_with_seed(&mut enumerator.items, seed),
+        | PlaybackOrder::MultiEpisodeShuffle => {
+            shuffle_with_artist_distance(&mut enumerator.items, seed);
+        }
+        PlaybackOrder::Random | PlaybackOrder::RandomRotation | PlaybackOrder::Marathon => {
+            shuffle_with_seed(&mut enumerator.items, seed);
+        }
         PlaybackOrder::None => {}
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShuffleGroupKey {
+    Artist(EntityId),
+    Item(EntityId),
+}
+
+fn shuffle_group_key(item: &SchedulingMediaItem) -> ShuffleGroupKey {
+    item.artist_id
+        .map_or(ShuffleGroupKey::Item(item.id), ShuffleGroupKey::Artist)
+}
+
+fn shuffle_with_artist_distance(items: &mut Vec<SchedulingMediaItem>, seed: u64) {
+    shuffle_with_seed(items, seed);
+
+    let mut seen_artists = BTreeSet::new();
+    if !items
+        .iter()
+        .filter_map(|item| item.artist_id)
+        .any(|artist_id| !seen_artists.insert(artist_id))
+    {
+        return;
+    }
+
+    let mut groups: Vec<(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)> = Vec::new();
+    for item in items.drain(..) {
+        let key = shuffle_group_key(&item);
+        if let Some((_, group_items)) = groups.iter_mut().find(|(group_key, _)| *group_key == key) {
+            group_items.push_back(item);
+        } else {
+            groups.push((key, VecDeque::from([item])));
+        }
+    }
+
+    let total_len = groups.iter().map(|(_, group)| group.len()).sum();
+    let mut arranged = Vec::with_capacity(total_len);
+    let mut previous_key = None;
+    while arranged.len() < total_len {
+        let candidate = artist_distance_candidate(&groups, previous_key);
+        let Some(index) = candidate else {
+            break;
+        };
+        let key = groups[index].0;
+        if let Some(item) = groups[index].1.pop_front() {
+            arranged.push(item);
+            previous_key = Some(key);
+        }
+    }
+
+    *items = arranged;
+}
+
+fn artist_distance_candidate(
+    groups: &[(ShuffleGroupKey, VecDeque<SchedulingMediaItem>)],
+    previous_key: Option<ShuffleGroupKey>,
+) -> Option<usize> {
+    let mut candidate: Option<usize> = None;
+    for (index, (key, group_items)) in groups.iter().enumerate() {
+        if group_items.is_empty() || Some(*key) == previous_key {
+            continue;
+        }
+        if candidate.is_none_or(|best| group_items.len() > groups[best].1.len()) {
+            candidate = Some(index);
+        }
+    }
+
+    candidate.or_else(|| {
+        groups
+            .iter()
+            .position(|(_, group_items)| !group_items.is_empty())
+    })
 }
 
 fn prepare_next_cycle(
@@ -2115,6 +2189,59 @@ mod tests {
     }
 
     #[test]
+    fn classic_shuffle_spreads_same_artist_music_videos() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::Multiple, 1, Some("6"))
+        };
+        let key = item_key(&schedule_item);
+        let media_items = vec![
+            music_video(101, 1),
+            music_video(102, 1),
+            music_video(103, 1),
+            music_video(201, 2),
+            music_video(301, 3),
+            music_video(401, 4),
+        ];
+        let artists_by_id = media_items
+            .iter()
+            .map(|item| (item.id, item.artist_id))
+            .collect::<BTreeMap<_, _>>();
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(key, media_items);
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 2,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build");
+
+        let artists = result
+            .added_items
+            .iter()
+            .map(|item| artists_by_id.get(&item.media_item_id).copied().flatten())
+            .collect::<Vec<_>>();
+        assert_eq!(artists.len(), 6);
+        assert!(
+            artists.windows(2).all(|window| window[0] != window[1]),
+            "shuffled collection placed same-artist videos too closely: {artists:?}"
+        );
+    }
+
+    #[test]
     fn classic_continue_anchor_uses_last_item_finish_after_hard_stop_overshoot() {
         let start = Utc.with_ymd_and_hms(2026, 4, 26, 23, 50, 0).unwrap();
         let finish = Utc.with_ymd_and_hms(2026, 4, 27, 0, 0, 0).unwrap();
@@ -2383,6 +2510,13 @@ mod tests {
             pad_to_nearest_minute: None,
             allow_watermarks: true,
             media_items: Vec::new(),
+        }
+    }
+
+    fn music_video(id: EntityId, artist_id: EntityId) -> SchedulingMediaItem {
+        SchedulingMediaItem {
+            artist_id: Some(artist_id),
+            ..SchedulingMediaItem::new(id, Duration::minutes(5))
         }
     }
 

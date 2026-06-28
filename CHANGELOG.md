@@ -84,6 +84,9 @@ release section when tagging a release.
 - Classic schedules with dynamic programming before a future fixed block now
   start at the dynamic item, so channels have active playout rows before the
   fixed anchor instead of going offline until that block.
+- Classic shuffled music-video scheduling now carries artist IDs through
+  reference-data loading and spaces repeated artists when possible, preventing
+  same-artist videos from clustering in MTV-style blocks.
 - Admin route-family Playwright coverage now has stable hydrated startup state:
   library scan actions expose queued/failure status, media collection editors
   keep their SSR data through hydration, and scheduling editors load their

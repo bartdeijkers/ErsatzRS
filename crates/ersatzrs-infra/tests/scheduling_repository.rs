@@ -362,8 +362,11 @@ async fn scheduling_repository_searches_metadata_fields_and_expands_containers()
         .await
         .unwrap();
     assert_eq!(
-        artist.iter().map(|item| item.id).collect::<Vec<_>>(),
-        vec![31]
+        artist
+            .iter()
+            .map(|item| (item.id, item.artist_id))
+            .collect::<Vec<_>>(),
+        vec![(31, Some(30))]
     );
 
     let stream_fields = repos

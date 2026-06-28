@@ -1,7 +1,7 @@
 feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0010']
 
 summary    = '''
@@ -13,7 +13,7 @@ Continue-build seam fix (2026-06-14): the Classic engine now clamps the persiste
 
 Shuffled collection fix (2026-06-14): Classic shuffled media collections now mirror `ShuffledMediaCollectionEnumerator.MoveNext` by remembering the previous cycle's tail item and advancing the reshuffle seed until the next cycle starts with a different media item. Runtime localization with a direct cyclic calibration playout showed HLS Segmenter and the modern MPEG-TS wrapper can advance a 1->2->3 persisted timeline correctly; a separate fresh-HOME Classic HLS startup replay was tracked and fixed under `hls-variant-playlists-segmenter`.
 
-Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed remaining scheduling-quality gaps. Duration items with post-roll filler can overlap the next duration item, shuffled music-video multi-collection output does not currently enforce artist separation beyond the already-fixed same-item reshuffle guard, and a daily fixed block can become the first generated row even when dynamic programming is intended before it.
+Reopened 2026-06-27 from MTV channel dogfood: Classic can build and serve the channel, but the dogfood schedule exposed three remaining scheduling-quality gaps. Resolved 2026-06-28: Duration items with post-roll filler now advance through the full filler block, shuffled music-video output spreads repeated artist IDs when possible, and dynamic programming before a daily fixed block now starts before the fixed anchor.
 '''
 
 [[debt]]
@@ -41,8 +41,8 @@ resolved    = true
 id          = 'music-video-shuffle-artist-distance'
 description = 'Classic shuffled multi-collection scheduling does not prevent music videos from the same artist from being scheduled adjacent or too close together.'
 discovered  = '2026-06-27'
-evidence    = 'MTV dogfood playout generated adjacent Metallica videos in the three-music-video block (`Metallica - Inamorata Official Music Video` followed by `Metallica - Halo On Fire Official Music Video`). The previous duplicate-consecutive-shuffle-item fix prevents the same item repeating, but not same-artist proximity.'
-resolved    = false
+evidence    = 'Resolved 2026-06-28: `SchedulingMediaItem` now carries `artist_id` from `MusicVideo.ArtistId`, and Classic shuffled enumerator preparation spreads repeated artist groups when possible after the deterministic seed shuffle. Regression `classic_shuffle_spreads_same_artist_music_videos` uses the old seed-2 order that placed artist 1 adjacent and proves a six-item shuffled Multiple block has no adjacent equal artist IDs when enough other artists exist.'
+resolved    = true
 
 [[debt]]
 id          = 'fixed-anchor-before-dynamic-gap'

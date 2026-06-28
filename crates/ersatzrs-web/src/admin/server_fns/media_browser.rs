@@ -6061,6 +6061,7 @@ async fn playlist_preview_reference_data(
                     title: Some(media.title),
                     show_id: None,
                     season_id: None,
+                    artist_id: None,
                     season: None,
                     episode: None,
                     release_date: None,
