@@ -109,10 +109,7 @@ pub async fn run() {
         .expect("database initialisation failed");
 
     init_logging(&startup.pool).await;
-    let listen_addr = super::config::leptos_configuration()
-        .leptos_options
-        .site_addr;
-    let listen_port = listen_addr.port();
+    let listen_addr = configured_listen_addr();
 
     if let Err(error) = seed_default_mpegts_script().await {
         tracing::warn!(%error, "failed to seed default MPEG-TS script resources");
@@ -181,7 +178,7 @@ pub async fn run() {
         super::tasks::HdhrTaskInputs {
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
-            listen_port,
+            listen_port: listen_addr.port(),
         },
         super::tasks::MaintenanceTaskInputs {
             pool: app_state.pool.clone(),
@@ -234,6 +231,12 @@ pub async fn run() {
 
     pool.close().await;
     tracing::info!("shutdown complete");
+}
+
+fn configured_listen_addr() -> std::net::SocketAddr {
+    super::config::leptos_configuration()
+        .leptos_options
+        .site_addr
 }
 
 async fn resolve_and_check_startup_ffmpeg_runtime(
