@@ -8,236 +8,147 @@ rules: docs/automation/gap-prompt-rules.md
 
 # Top three chores to do - goal prompts
 
-Actionable paste-and-run goal prompts, each closing **one** ErsatzTV parity gap,
-ADR-backed runtime hardening gap, or **spec-backed chore** (the next slice of a
-`Proposed` / `Not implemented` ADR, an active plan, or an open phase TODO).
-Auto-prioritized across `docs/progress`, the ADR index, `plans/`, and
-`phase.toml` per the [rules](automation/gap-prompt-rules.md); regenerated daily
-by the [progress routine](automation/daily-progress-routine.md).
+Actionable paste-and-run goal prompts, each closing one ErsatzTV parity gap,
+ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
+selected from the current progress files, ADR index, active plans, and phase
+state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-`cargo xtask progress gaps` is **one** input, not the whole backlog: it inspects
-only whole-feature parity status and goes clear long before the specs are fully
-implemented. The chores below come from the wider spec sweep (open debt,
-unimplemented ADRs, active plans, and open phase TODOs) that the routine
-performs.
-
-**Parity baseline:** ErsatzTV *parity* chores are measured against ErsatzTV
-commit
-[`0d301df`](https://github.com/ErsatzTV/legacy/commit/0d301df5e8512fdfccf3a611188d27ab1690ee31).
-Spec-backed chores below are deliberate ErsatzRS decisions and may have no
-ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
-
-Selection (2026-06-28, current repo state plus change window
-[`bbee0fb..9ff5ca5`](https://github.com/bartdeijkers/ersatzrs/compare/bbee0fb...9ff5ca5)):
-the three non-merge commits in the window are all ErsatzRS-internal **testing
-and hydration hardening**, not ErsatzTV parity ports: `ea7725c`
-*"docs(status): daily reconcile + refresh gap prompts (6e0bc4b..bbee0fb)"* (the
-prior daily run's own docs-only commit), `744bad6` *"ci: run full playwright e2e
-by default"* (adds `scripts/e2e/playwright-e2e.sh` and switches CI to the full
-Playwright suite), and `9ff5ca5` *"fix(web): stabilize admin e2e hydration"*
-(stabilizes hydrated startup state across the admin route families — library
-scan queued/failure status, media-collection editors keeping SSR data through
-hydration, scheduling editors loading initial data before the island boundary,
-and the FFmpeg profile no-JS fallback served from resolved SSR data with a
-hydration-resource-free `<noscript>`; the wrapper also runs serially by default
-unless `ERSATZRS_E2E_WORKERS`/`--workers` is set). None opens a parity gap or new
-`[[debt]]`: `cargo xtask progress gaps` is clear, **every** tracked parity
-`[[debt]]` is `resolved = true`, ADR 0018 is `Implemented`, and ADR 0013 is the
-only `Not implemented` ADR. The hardening was recorded in `phase.toml`
-`next_steps`, the `WholeAppIslandHydrationSmokeGate` hydration note, and a daily
-session line; no parity status flipped. All three prior prompts target chores
-untouched by the window, so each is **carried over** unchanged and re-ranked
-below.
-
-Ranking: (1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 is the only
-`Proposed` / `Not implemented` ADR, it is the highest-value Support diagnostic,
-and `phase.toml` `next_steps` names "broaden health / troubleshooting coverage"
-as phase focus. (2) **startup configuration cleanup** — the remaining Phase 7
-hardening TODO (`phase.toml` `[[known_todo]]`) to replace direct `DATABASE_URL`
-environment access with the repository configuration layer. (3) **module split
-survey Tier 1 pilot** — the active-plan behavior-preserving health-check module
-split from `plans/module-split-survey.md`, a developer-experience refactor that
-validates the repo's scalable registry pattern on the lowest-risk oversized file
-before larger admin/server-function and YAML scheduling splits; it ranks last as
-cleanup behind the maintainer-requested ADR and the release-hardening TODO.
-
-Pin note (2026-06-28): the ErsatzTV `git clone` path is still blocked by the org
-egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
-was obtained via the `codeload.github.com` tarball at exactly
-`0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the
-extracted tree is the commit's tree) and `$ERSATZTV_SRC` was pointed at it. This
-run made no ErsatzTV-grounded parity edits (the window was pure ErsatzRS
-hardening); the baseline was **not** advanced.
+Current selection: `cargo xtask progress gaps` is clear, every tracked
+`[[debt]]` item is resolved, ADR 0013 is implemented, ADR 0018 is implemented
+and accepted, the startup `DATABASE_URL` cleanup is implemented, and the infra
+health module-split pilot is implemented. The remaining actionable spec source
+is the standing module-split survey. The prompts below continue that backlog in
+the documented order after the completed health pilot.
 
 ---
 
-## 1. Build the next ErsatzRS support tooling chore: in-app TSDuck MPEG-TS troubleshooting (slug `tsduck-mpeg-troubleshooting`)
+## 1. Build the next ErsatzRS spec chore: split media-browser server functions (slug `module-split-survey-media-browser`)
 
-Use the repo workflow from AGENTS.md. This is a **spec-backed diagnostic
-extension**, not an ErsatzTV parity port: it is governed by
-[ADR 0013](adr/0013-tsduck-mpeg-troubleshooting.md) and
-[`plans/mpeg-troubleshooting-tsduck.md`](../plans/mpeg-troubleshooting-tsduck.md).
-The manual `scripts/e2e/tsduck-playback-gate.sh` gate exists, but it does not
-satisfy the in-app Support tool. Normal IPTV, HLS, HDHomeRun, FFmpeg spawning,
-startup readiness, Docker, and `/healthz` must not depend on TSDuck.
-
-Scope v1 narrowly to channel-level MPEG-TS diagnostics at
-`/system/troubleshooting/mpeg`. Do not add repair/mutation tools, replace
-production streams, bundle TSDuck into Docker/release images, or implement
-non-MPEG-TS container analysis in this slice.
+Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
+chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
+not an ErsatzTV parity port. Scope this slice only to
+`crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`.
 
 Before editing:
-1. Read ADR 0013, `plans/mpeg-troubleshooting-tsduck.md`,
-   `docs/progress/phase.toml`, `plans/INDEX.md`, `ARCHITECTURE.md`, `STYLE.md`,
-   and `TEST.md`.
-2. Inspect the current IPTV/HLS MPEG-TS output paths, troubleshooting page
-   routes, archive/sample helpers, health-check engine, language modules, and
-   the existing manual TSDuck playback gate.
-3. Build a Source Map for command construction, bounded sample capture,
-   report parsing, archive writing, Support route rendering, health reporting,
-   and redaction boundaries.
-4. Identify which follow-ups remain out of scope: TSDuck packaging, raw sample
-   retention by default, repair tools, deeper HLS/fMP4 analysis, teletext
-   analysis, and any normal playback-path dependency.
+1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
+   `TEST.md`.
+2. Inspect `media_browser.rs`, all callers, and every `#[server]` function it
+   exposes.
+3. Build a Source Map for shared types, `MediaBrowserKind`, per-media-kind list
+   and detail functions, collection CRUD, trash, playlists, autocomplete,
+   collection detail, and test helpers.
+4. List every public item and every `#[server]` function name before moving
+   code. Function names must not change because Leptos derives endpoint URLs
+   from them.
 
 Implement the slice end-to-end:
-- Add a small TSDuck diagnostic service that detects `tsp --version`, builds
-  structured `tsp`/`tsbitrate` argv without a shell, and reports
-  `NotAvailable` without failing startup.
-- Capture bounded MPEG-TS samples for a selected channel/mode/duration, with a
-  20 second default, 120 second maximum, sample-size guard, unique run id, and
-  explicit raw-sample archive opt-in.
-- Run read-only analysis with `continuity`, `pcrverify`, and `analyze --json`;
-  parse PAT/PMT/service/PID summaries, continuity findings, PCR findings, and
-  optional bitrate estimates.
-- Produce a structured, redacted report and archive metadata, excluding raw
-  `.ts` samples unless the user opted in.
-- Add `/system/troubleshooting/mpeg`, link it from the Support Tools panel, and
-  render an SSR-safe form plus latest report tables/excerpts.
-- Localize every new visible label, status, help text, and error in all
-  supported cultures.
-- Add a non-blocking health-check row that reports TSDuck availability as
-  informational or not applicable.
-- Update docs/progress, plans/ADR implementation status if accepted, and
-  `CHANGELOG.md` when the tool is usable.
+- Convert `media_browser.rs` into `media_browser/mod.rs` plus per-kind modules,
+  `collections/*`, `trash.rs`, `playlists.rs`, `autocomplete.rs`,
+  `collection_detail.rs`, and test support behind `#[cfg(test)]`.
+- Keep public imports stable with `pub use` re-exports from `mod.rs`.
+- Move code mechanically first; do not combine this with deduplication, SQL
+  rewrites, route changes, or behavior cleanup.
+- Add or preserve a completeness check around `MediaBrowserKind` dispatch where
+  practical.
+- Update `plans/module-split-survey.md`, `CHANGELOG.md`, and progress/session
+  docs if the refactor materially changes maintainer workflow.
 
 Verification:
-- Focused tests for argv construction, detection, report parsing, redaction,
-  status mapping, and archive contents.
-- Focused web tests for the Support link, `/system/troubleshooting/mpeg` SSR
-  form, missing-TSDuck `NotAvailable`, and non-MPEG-TS `NotApplicable` states.
+- Focused `ersatzrs-web` tests for moved media-browser functions.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
-- A Playwright or browser proof for the troubleshooting route.
+- `(cd crates/ersatzrs-web && cargo leptos build)`.
+- Browser or Playwright proof for representative media-browser routes and
+  interactive buttons, with no 404, hydration, or console errors.
 - `cargo xtask progress check`.
 
-Report the Source Map, diagnostic behavior implemented, unsupported/missing
-TSDuck behavior, archive/redaction proof, verification run, remaining
-diagnostic follow-ups, and changed files.
+Report the Source Map, before/after layout and line counts, preserved server
+function names, verification run, remaining module-split follow-ups, and
+changed files.
 
 ---
 
-## 2. Build the next ErsatzRS startup chore: route `DATABASE_URL` through configuration (slug `startup-runtime-config`)
+## 2. Build the next ErsatzRS spec chore: split YAML scheduling instructions (slug `module-split-survey-yaml`)
 
-Use the repo workflow from AGENTS.md. This is a **spec-backed Phase 7 startup
-cleanup**, not an ErsatzTV parity port: it is governed by the open
-`docs/progress/phase.toml` TODO:
-`std::env::var("DATABASE_URL") in main.rs uses #[allow(clippy::disallowed_methods)]
-— replace with a config crate in Phase 1.` The goal is to remove the direct
-environment read from startup without changing default database resolution,
-Docker behavior, MySQL support, or local developer commands.
+Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
+chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
+not an ErsatzTV parity port. Scope this slice only to
+`crates/ersatzrs-core/src/scheduling/yaml.rs`.
 
 Before editing:
-1. Read `docs/progress/phase.toml`, `ARCHITECTURE.md`, `STYLE.md`, `BUILD.md`,
-   `docs/reference/configuration.md`, and `.cargo/config.toml`.
-2. Inspect startup database URL resolution in `crates/ersatzrs-web`,
-   `crates/ersatzrs-infra::db`, scanner startup, Docker `DATABASE_URL`, MySQL
-   feature handling, tests that cover database URL defaults, and logging/config
-   boundaries.
-3. Build a Source Map for config precedence: defaults, environment variables,
-   Docker defaults, CLI/binary startup, scanner startup, SQLite default home
-   path, and MySQL feature gates.
-4. Identify any user-visible config docs that must change, and decide whether a
-   dedicated progress slug is warranted for the startup-runtime config contract.
+1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
+   `docs/how-to/snapshot-tests.md`.
+2. Inspect `yaml.rs`, current instruction parsing, dispatch, handlers, tests,
+   and generated-playout snapshots.
+3. Build a Source Map for `YamlInstruction`, `YamlPlayoutEngine`, shared context
+   types, and every `handle_*` instruction function.
+4. Record the current serde wire shape. It must remain byte-compatible with
+   ErsatzTV YAML input.
 
 Implement the slice end-to-end:
-- Replace direct `std::env::var("DATABASE_URL")` startup access with the
-  repository configuration layer or a small shared config helper that preserves
-  the existing precedence and error messages.
-- Keep default SQLite resolution unchanged when `DATABASE_URL` is unset.
-- Keep Docker's `DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db` behavior
+- Convert `yaml.rs` into `yaml/mod.rs` plus `yaml/instructions/<name>.rs`, with
+  one instruction handler per file.
+- Keep `YamlInstruction` parsing shape unchanged. If an exhaustive
+  `YamlInstructionKind` enum is introduced, derive it after parse rather than
+  changing the serialized contract.
+- Keep generated playout behavior, timestamps, state transitions, and errors
   unchanged.
-- Keep MySQL/MariaDB URL recognition behind the existing feature behavior.
-- Remove the no-longer-needed `#[allow(clippy::disallowed_methods)]` for this
-  specific startup access, without weakening the lint globally.
-- Update configuration docs, `docs/progress`, and `CHANGELOG.md` if behavior or
-  documented startup semantics change.
+- Avoid new dependencies and unrelated cleanup.
+- Update the module-split survey and progress/session docs if the split changes
+  maintainer workflow.
 
 Verification:
-- Focused tests for SQLite default, env override, non-UTF-8/invalid override,
-  Docker-style URL, and MySQL/MariaDB URL mapping.
+- Focused YAML scheduling tests and generated-playout snapshot tests.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
+- `cargo insta review` or `cargo insta accept` only after confirming snapshot
+  changes are absent or intentionally reviewed.
 - `cargo xtask progress check`.
 
-Report the Source Map, preserved config precedence, removed lint allowance,
-Docker/Linux/Windows/macOS compatibility proof, verification run, remaining
-startup-runtime TODOs, and changed files.
+Report the Source Map, before/after layout and line counts, preserved YAML wire
+shape, snapshot result, remaining module-split follow-ups, and changed files.
 
 ---
 
-## 3. Build the next ErsatzRS refactor chore: split health checks into registry submodules (slug `module-split-survey`)
+## 3. Build the next ErsatzRS spec chore: split scripted scheduling Lua bindings (slug `module-split-survey-scripted`)
 
-Use the repo workflow from AGENTS.md. This is a **spec-backed
-behavior-preserving refactor chore**, not an ErsatzTV parity port: it is
-governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md).
-Scope this slice to the Tier 1 pilot only:
-`crates/ersatzrs-infra/src/health.rs` -> `crates/ersatzrs-infra/src/health/`.
-Do not bundle the much larger `media_browser.rs` or `yaml.rs` splits into this
-first PR.
+Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
+chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
+not an ErsatzTV parity port. Scope this slice only to
+`crates/ersatzrs-core/src/scheduling/scripted.rs`.
 
 Before editing:
 1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
    `docs/how-to/testing.md`.
-2. Inspect `crates/ersatzrs-infra/src/health.rs`,
-   `crates/ersatzrs-core/src/health.rs`, health-check tests, and all callers of
-   `make_health_check_service`.
-3. Build a Source Map for the service factory registry, shared helpers,
-   each concrete `HealthCheck` implementation, result persistence callers, and
-   test seams.
-4. List every public item and registered check before moving code so the
-   refactor can prove the public surface and registered set are unchanged.
+2. Inspect `scripted.rs`, `register_all()`, `ScriptState`, tests, and every
+   Lua global registered with `globals.set(...)`.
+3. Build a Source Map for content, timing, watermark, graphics, guide,
+   state-query, skipping, and pre-roll binding groups.
+4. List every Lua global name before moving code so the set can be proved
+   unchanged.
 
 Implement the slice end-to-end:
-- Convert `crates/ersatzrs-infra/src/health.rs` into
-  `crates/ersatzrs-infra/src/health/mod.rs` plus
-  `health/checks/<name>.rs`, with one concrete health-check struct and impl per
-  file.
-- Keep `make_health_check_service()` as the thin registry in `mod.rs`; preserve
-  all check titles, IDs, severities, ordering, repository calls, and result
-  mapping.
-- Keep `HealthCheck` and `HealthCheckService` in `ersatzrs-core`; do not move
-  trait or run-loop ownership across crate boundaries.
-- Add a focused completeness test that proves every registered check has a
-  non-empty title and that the registered set/order matches the pre-split
-  contract.
-- Avoid behavior changes, SQL changes, public import churn, new dependencies,
-  or unrelated cleanup.
-- Update docs/progress and `CHANGELOG.md` only if the refactor changes a tracked
-  contract or materially improves maintainer workflow.
+- Convert `scripted.rs` into `scripted/mod.rs` plus
+  `scripted/api/{content,timing,watermark,graphics,guide,state_queries,skipping,pre_roll}.rs`.
+- Keep `ScriptedSchedulingEngine`, `ScriptState`, and `register_all()` ownership
+  in `mod.rs`; `register_all()` should call category registrars.
+- Thread the same mutable `ScriptState` handle into each registrar.
+- Keep every Lua global name, argument shape, error message, and behavior
+  unchanged.
+- Avoid new dependencies and unrelated cleanup.
 
 Verification:
-- Focused `ersatzrs-infra` health-check tests.
+- Focused scripted scheduling tests.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
 - `cargo xtask progress check`.
 
-Report the Source Map, before/after layout and line counts, preserved registered
-health-check set, verification run, remaining Tier 1 split follow-ups, and
-changed files.
+Report the Source Map, `register_all()` before/after line count, proof the Lua
+global-name set is identical, verification run, remaining module-split
+follow-ups, and changed files.

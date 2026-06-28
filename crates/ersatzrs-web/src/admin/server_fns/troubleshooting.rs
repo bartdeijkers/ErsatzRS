@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+pub const MPEG_DEFAULT_SAMPLE_DURATION_SECONDS: u64 = 20;
+pub const MPEG_MAX_SAMPLE_DURATION_SECONDS: u64 = 120;
+
 #[cfg(feature = "ssr")]
 const SEQUENTIAL_SCHEDULE_SCHEMA: &str =
     include_str!("../../../resources/sequential-schedule.schema.json");
@@ -101,6 +104,85 @@ pub struct PlaybackTroubleshootingSubtitle {
     pub codec: String,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTroubleshootingContext {
+    pub channels: Vec<MpegTroubleshootingChannel>,
+    pub selected_channel_number: String,
+    pub selected_mode: String,
+    pub duration_seconds: u64,
+    pub retain_raw_sample: bool,
+    pub availability: MpegTsduckAvailability,
+    pub latest_report: Option<MpegTroubleshootingReport>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTsduckAvailability {
+    pub available: bool,
+    pub version: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTroubleshootingChannel {
+    pub number: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTroubleshootingReport {
+    pub run_id: String,
+    pub channel_number: String,
+    pub mode: String,
+    pub status: MpegTroubleshootingStatus,
+    pub summary: String,
+    pub duration_seconds: u64,
+    pub sample_bytes: u64,
+    pub retain_raw_sample: bool,
+    pub sample_path: Option<String>,
+    pub archive_path: String,
+    pub sample_url: String,
+    pub tsduck_version: Option<String>,
+    pub analysis: Option<MpegTsduckAnalysis>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTsduckAnalysis {
+    pub tsp_command: MpegTsduckCommandSpec,
+    pub tsbitrate_command: MpegTsduckCommandSpec,
+    pub status: MpegTsduckAnalysisStatus,
+    pub summary: String,
+    pub analysis_json_excerpt: String,
+    pub continuity_findings: Vec<String>,
+    pub pcr_findings: Vec<String>,
+    pub services: Vec<String>,
+    pub pids: Vec<String>,
+    pub bitrate_bps: Option<u64>,
+    pub stdout_excerpt: String,
+    pub stderr_excerpt: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTsduckCommandSpec {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MpegTsduckAnalysisStatus {
+    Completed,
+    Failed,
+    NotAvailable,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MpegTroubleshootingStatus {
+    NotAvailable,
+    NotApplicable,
+    Completed,
+    Failed,
+}
+
 #[server]
 pub async fn load_troubleshooting_report() -> Result<TroubleshootingReport, ServerFnError> {
     use crate::host::state::AppState;
@@ -158,6 +240,26 @@ pub async fn load_playback_troubleshooting_context(
 
     let state = expect_context::<AppState>();
     load_playback_troubleshooting_context_with_pool(&state.pool, media_item_id, channel_id).await
+}
+
+#[server]
+pub async fn load_mpeg_troubleshooting_context(
+    channel_number: String,
+    mode: String,
+    duration_seconds: u64,
+    retain_raw_sample: bool,
+) -> Result<MpegTroubleshootingContext, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    load_mpeg_troubleshooting_context_with_state(
+        &state,
+        channel_number,
+        mode,
+        duration_seconds,
+        retain_raw_sample,
+    )
+    .await
 }
 
 #[cfg(feature = "ssr")]
@@ -249,6 +351,447 @@ pub async fn load_troubleshooting_report_with_state(
         show_vaapi: cfg!(target_os = "linux"),
         show_video_toolbox: cfg!(target_os = "macos"),
     })
+}
+
+#[cfg(feature = "ssr")]
+pub async fn load_mpeg_troubleshooting_context_with_state(
+    state: &crate::host::state::AppState,
+    channel_number: String,
+    mode: String,
+    duration_seconds: u64,
+    retain_raw_sample: bool,
+) -> Result<MpegTroubleshootingContext, ServerFnError> {
+    let channels = load_mpeg_troubleshooting_channels(&state.pool).await?;
+    let selected_channel_number = channel_number.trim().to_owned();
+    let selected_mode = normalize_mpeg_mode(&mode);
+    let duration_seconds =
+        ersatzrs_infra::tsduck::normalize_sample_duration_seconds(duration_seconds);
+    let tsduck_availability = ersatzrs_infra::tsduck::detect_tsduck().await;
+
+    let latest_report = if selected_channel_number.is_empty() {
+        None
+    } else if !is_supported_mpeg_mode(&selected_mode) {
+        Some(mpeg_report_not_applicable(
+            &selected_channel_number,
+            &selected_mode,
+            duration_seconds,
+            retain_raw_sample,
+            tsduck_availability.version.clone(),
+            "Selected mode is not an MPEG-TS stream.",
+        ))
+    } else if !tsduck_availability.available {
+        Some(mpeg_report_not_available(
+            &selected_channel_number,
+            &selected_mode,
+            duration_seconds,
+            retain_raw_sample,
+            tsduck_availability.version.clone(),
+            tsduck_availability
+                .error
+                .clone()
+                .unwrap_or_else(|| "tsp was not found on PATH".to_owned()),
+        ))
+    } else {
+        Some(
+            run_mpeg_troubleshooting(
+                &selected_channel_number,
+                &selected_mode,
+                duration_seconds,
+                retain_raw_sample,
+                tsduck_availability.version.clone(),
+            )
+            .await?,
+        )
+    };
+
+    Ok(MpegTroubleshootingContext {
+        channels,
+        selected_channel_number,
+        selected_mode,
+        duration_seconds,
+        retain_raw_sample,
+        availability: tsduck_availability.into(),
+        latest_report,
+    })
+}
+
+#[cfg(all(not(feature = "ssr"), not(target_arch = "wasm32")))]
+pub async fn load_mpeg_troubleshooting_context_with_state(
+    _state: &crate::host::state::AppState,
+    _channel_number: String,
+    _mode: String,
+    _duration_seconds: u64,
+    _retain_raw_sample: bool,
+) -> Result<MpegTroubleshootingContext, ServerFnError> {
+    Ok(MpegTroubleshootingContext::default())
+}
+
+#[cfg(feature = "ssr")]
+async fn load_mpeg_troubleshooting_channels(
+    pool: &ersatzrs_infra::db::DbPool,
+) -> Result<Vec<MpegTroubleshootingChannel>, ServerFnError> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        r#"SELECT COALESCE("Number", '') AS "Number", COALESCE("Name", '') AS "Name"
+           FROM "Channel"
+           WHERE "IsEnabled" = 1
+           ORDER BY "SortNumber", "Number", "Id""#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| MpegTroubleshootingChannel {
+            number: row.try_get("Number").unwrap_or_default(),
+            name: row.try_get("Name").unwrap_or_default(),
+        })
+        .filter(|channel| !channel.number.trim().is_empty())
+        .collect())
+}
+
+#[cfg(feature = "ssr")]
+async fn run_mpeg_troubleshooting(
+    channel_number: &str,
+    mode: &str,
+    duration_seconds: u64,
+    retain_raw_sample: bool,
+    tsduck_version: Option<String>,
+) -> Result<MpegTroubleshootingReport, ServerFnError> {
+    let run_id = uuid::Uuid::new_v4();
+    let run_dir = ersatzrs_infra::tsduck::report_archive_dir(run_id);
+    tokio::fs::create_dir_all(&run_dir).await?;
+    let sample_path = run_dir.join("sample.ts");
+    let sample_url = local_mpeg_sample_url(channel_number, mode);
+    let redacted_sample_url = ersatzrs_infra::tsduck::redact_sensitive_text(&sample_url);
+
+    let sample_bytes = match capture_mpeg_sample(
+        &sample_url,
+        &sample_path,
+        std::time::Duration::from_secs(duration_seconds),
+        ersatzrs_infra::tsduck::MAX_SAMPLE_BYTES,
+    )
+    .await
+    {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let report = MpegTroubleshootingReport {
+                run_id: run_id.to_string(),
+                channel_number: channel_number.to_owned(),
+                mode: mode.to_owned(),
+                status: MpegTroubleshootingStatus::Failed,
+                summary: "MPEG-TS sample capture failed.".to_owned(),
+                duration_seconds,
+                sample_bytes: 0,
+                retain_raw_sample,
+                sample_path: None,
+                archive_path: run_dir.display().to_string(),
+                sample_url: redacted_sample_url,
+                tsduck_version,
+                analysis: None,
+                errors: vec![ersatzrs_infra::tsduck::redact_sensitive_text(
+                    &error.to_string(),
+                )],
+            };
+            write_mpeg_report(&run_dir, &report).await?;
+            return Ok(report);
+        }
+    };
+
+    let analysis = ersatzrs_infra::tsduck::analyze_sample(&sample_path, &run_dir).await;
+    let (status, summary, analysis, errors) = match analysis {
+        Ok(analysis) => {
+            let status = match analysis.status {
+                ersatzrs_infra::tsduck::TsduckAnalysisStatus::Completed => {
+                    MpegTroubleshootingStatus::Completed
+                }
+                ersatzrs_infra::tsduck::TsduckAnalysisStatus::Failed
+                | ersatzrs_infra::tsduck::TsduckAnalysisStatus::NotAvailable => {
+                    MpegTroubleshootingStatus::Failed
+                }
+            };
+            (
+                status,
+                analysis.summary.clone(),
+                Some(analysis.into()),
+                Vec::new(),
+            )
+        }
+        Err(error) => (
+            MpegTroubleshootingStatus::Failed,
+            "TSDuck analysis failed.".to_owned(),
+            None,
+            vec![ersatzrs_infra::tsduck::redact_sensitive_text(
+                &error.to_string(),
+            )],
+        ),
+    };
+
+    if !retain_raw_sample {
+        let _ = tokio::fs::remove_file(&sample_path).await;
+    }
+
+    let report = MpegTroubleshootingReport {
+        run_id: run_id.to_string(),
+        channel_number: channel_number.to_owned(),
+        mode: mode.to_owned(),
+        status,
+        summary,
+        duration_seconds,
+        sample_bytes,
+        retain_raw_sample,
+        sample_path: retain_raw_sample.then(|| sample_path.display().to_string()),
+        archive_path: run_dir.display().to_string(),
+        sample_url: redacted_sample_url,
+        tsduck_version,
+        analysis,
+        errors,
+    };
+    write_mpeg_report(&run_dir, &report).await?;
+    Ok(report)
+}
+
+#[cfg(feature = "ssr")]
+fn mpeg_report_not_available(
+    channel_number: &str,
+    mode: &str,
+    duration_seconds: u64,
+    retain_raw_sample: bool,
+    tsduck_version: Option<String>,
+    error: String,
+) -> MpegTroubleshootingReport {
+    let run_id = uuid::Uuid::new_v4();
+    MpegTroubleshootingReport {
+        run_id: run_id.to_string(),
+        channel_number: channel_number.to_owned(),
+        mode: mode.to_owned(),
+        status: MpegTroubleshootingStatus::NotAvailable,
+        summary: "TSDuck is not available.".to_owned(),
+        duration_seconds,
+        sample_bytes: 0,
+        retain_raw_sample,
+        sample_path: None,
+        archive_path: String::new(),
+        sample_url: String::new(),
+        tsduck_version,
+        analysis: None,
+        errors: vec![error],
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn mpeg_report_not_applicable(
+    channel_number: &str,
+    mode: &str,
+    duration_seconds: u64,
+    retain_raw_sample: bool,
+    tsduck_version: Option<String>,
+    reason: &str,
+) -> MpegTroubleshootingReport {
+    let run_id = uuid::Uuid::new_v4();
+    MpegTroubleshootingReport {
+        run_id: run_id.to_string(),
+        channel_number: channel_number.to_owned(),
+        mode: mode.to_owned(),
+        status: MpegTroubleshootingStatus::NotApplicable,
+        summary: reason.to_owned(),
+        duration_seconds,
+        sample_bytes: 0,
+        retain_raw_sample,
+        sample_path: None,
+        archive_path: String::new(),
+        sample_url: String::new(),
+        tsduck_version,
+        analysis: None,
+        errors: Vec::new(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn write_mpeg_report(
+    run_dir: &std::path::Path,
+    report: &MpegTroubleshootingReport,
+) -> Result<(), ServerFnError> {
+    let json = serde_json::to_vec_pretty(report)?;
+    tokio::fs::write(run_dir.join("report.json"), json).await?;
+    let summary_json = serde_json::to_vec_pretty(report)?;
+    tokio::fs::write(run_dir.join("summary.json"), summary_json).await?;
+
+    if let Some(analysis) = &report.analysis {
+        tokio::fs::write(
+            run_dir.join("commands.json"),
+            serde_json::to_vec_pretty(&[&analysis.tsp_command, &analysis.tsbitrate_command])?,
+        )
+        .await?;
+        tokio::fs::write(
+            run_dir.join("continuity.log"),
+            analysis.continuity_findings.join("\n"),
+        )
+        .await?;
+        tokio::fs::write(
+            run_dir.join("pcrverify.log"),
+            analysis.pcr_findings.join("\n"),
+        )
+        .await?;
+        if let Some(bitrate) = analysis.bitrate_bps {
+            tokio::fs::write(run_dir.join("tsbitrate.txt"), bitrate.to_string()).await?;
+        }
+        tokio::fs::write(run_dir.join("stdout.txt"), &analysis.stdout_excerpt).await?;
+        tokio::fs::write(run_dir.join("stderr.txt"), &analysis.stderr_excerpt).await?;
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckAvailability> for MpegTsduckAvailability {
+    fn from(value: ersatzrs_infra::tsduck::TsduckAvailability) -> Self {
+        Self {
+            available: value.available,
+            version: value.version,
+            error: value.error,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckCommandSpec> for MpegTsduckCommandSpec {
+    fn from(value: ersatzrs_infra::tsduck::TsduckCommandSpec) -> Self {
+        Self {
+            program: value.program,
+            args: value.args,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckAnalysisStatus> for MpegTsduckAnalysisStatus {
+    fn from(value: ersatzrs_infra::tsduck::TsduckAnalysisStatus) -> Self {
+        match value {
+            ersatzrs_infra::tsduck::TsduckAnalysisStatus::Completed => Self::Completed,
+            ersatzrs_infra::tsduck::TsduckAnalysisStatus::Failed => Self::Failed,
+            ersatzrs_infra::tsduck::TsduckAnalysisStatus::NotAvailable => Self::NotAvailable,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckAnalysis> for MpegTsduckAnalysis {
+    fn from(value: ersatzrs_infra::tsduck::TsduckAnalysis) -> Self {
+        Self {
+            tsp_command: value.tsp_command.into(),
+            tsbitrate_command: value.tsbitrate_command.into(),
+            status: value.status.into(),
+            summary: value.summary,
+            analysis_json_excerpt: value.analysis_json_excerpt,
+            continuity_findings: value.continuity_findings,
+            pcr_findings: value.pcr_findings,
+            services: value.services,
+            pids: value.pids,
+            bitrate_bps: value.bitrate_bps,
+            stdout_excerpt: value.stdout_excerpt,
+            stderr_excerpt: value.stderr_excerpt,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+async fn capture_mpeg_sample(
+    url: &str,
+    sample_path: &std::path::Path,
+    duration: std::time::Duration,
+    max_bytes: u64,
+) -> Result<u64, ServerFnError> {
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| ServerFnError::new(error.to_string()))?;
+    if !response.status().is_success() {
+        return Err(ServerFnError::new(format!(
+            "sample stream returned {}",
+            response.status()
+        )));
+    }
+
+    let mut stream = response.bytes_stream();
+    let mut file = tokio::fs::File::create(sample_path).await?;
+    let deadline = tokio::time::Instant::now() + duration;
+    let mut sleep = Box::pin(tokio::time::sleep_until(deadline));
+    let mut written = 0_u64;
+
+    loop {
+        tokio::select! {
+            () = &mut sleep => break,
+            chunk = stream.next() => {
+                let Some(chunk) = chunk else { break };
+                let chunk = chunk.map_err(|error| ServerFnError::new(error.to_string()))?;
+                if chunk.is_empty() {
+                    continue;
+                }
+                let remaining = max_bytes.saturating_sub(written);
+                if remaining == 0 {
+                    break;
+                }
+                let remaining_usize = usize::try_from(remaining).unwrap_or(usize::MAX);
+                let take = chunk.len().min(remaining_usize);
+                file.write_all(&chunk[..take]).await?;
+                written = written.saturating_add(u64::try_from(take).unwrap_or(u64::MAX));
+                if written >= max_bytes {
+                    break;
+                }
+            }
+        }
+    }
+
+    file.flush().await?;
+    if written == 0 {
+        return Err(ServerFnError::new("sample stream produced no bytes"));
+    }
+    Ok(written)
+}
+
+#[cfg(feature = "ssr")]
+fn normalize_mpeg_mode(mode: &str) -> String {
+    match mode.trim() {
+        "public-ts" => "public-ts".to_owned(),
+        "internal-legacy" | "" => "internal-legacy".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+#[cfg(feature = "ssr")]
+fn is_supported_mpeg_mode(mode: &str) -> bool {
+    matches!(mode, "internal-legacy" | "public-ts")
+}
+
+#[cfg(feature = "ssr")]
+fn local_mpeg_sample_url(channel_number: &str, mode: &str) -> String {
+    let address = crate::host::config::leptos_configuration()
+        .leptos_options
+        .site_addr;
+    let host = if address.ip().is_unspecified() {
+        "127.0.0.1".to_owned()
+    } else if address.ip().is_ipv6() {
+        format!("[{}]", address.ip())
+    } else {
+        address.ip().to_string()
+    };
+    let channel_number = urlencoding::encode(channel_number);
+    match mode {
+        "public-ts" => format!(
+            "http://{host}:{}/iptv/channel/{channel_number}.ts",
+            address.port()
+        ),
+        _ => format!(
+            "http://{host}:{}/ffmpeg/stream/{channel_number}",
+            address.port()
+        ),
+    }
 }
 
 #[cfg(feature = "ssr")]
@@ -1502,6 +2045,116 @@ mod tests {
     fn nvidia_probe_output_is_none_without_probe_data() {
         let capabilities = ersatzrs_ffmpeg::FfmpegCapabilityReport::default();
         assert!(nvidia_probe_output(&capabilities).is_none());
+    }
+
+    #[test]
+    fn mpeg_troubleshooting_mode_mapping_is_narrow() {
+        assert_eq!(normalize_mpeg_mode(""), "internal-legacy");
+        assert_eq!(normalize_mpeg_mode("public-ts"), "public-ts");
+        assert!(is_supported_mpeg_mode("internal-legacy"));
+        assert!(is_supported_mpeg_mode("public-ts"));
+        assert!(!is_supported_mpeg_mode("hls"));
+    }
+
+    #[test]
+    fn mpeg_not_available_report_does_not_capture_samples() {
+        let report = mpeg_report_not_available(
+            "7",
+            "internal-legacy",
+            20,
+            false,
+            None,
+            "tsp not found".to_owned(),
+        );
+
+        assert_eq!(report.status, MpegTroubleshootingStatus::NotAvailable);
+        assert_eq!(report.sample_bytes, 0);
+        assert!(report.sample_path.is_none());
+        assert!(report.analysis.is_none());
+        assert_eq!(report.errors, vec!["tsp not found"]);
+    }
+
+    #[test]
+    fn local_mpeg_sample_url_uses_mpeg_ts_routes() {
+        let internal = local_mpeg_sample_url("7", "internal-legacy");
+        let public = local_mpeg_sample_url("7", "public-ts");
+
+        assert!(internal.contains("/ffmpeg/stream/7"));
+        assert!(public.contains("/iptv/channel/7.ts"));
+        assert!(!internal.contains("access_token="));
+        assert!(!public.contains("access_token="));
+    }
+
+    #[cfg(feature = "ssr")]
+    #[tokio::test]
+    async fn mpeg_report_archive_writes_redacted_summary_and_analysis_artifacts() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let report = MpegTroubleshootingReport {
+            run_id: "run-1".to_owned(),
+            channel_number: "7".to_owned(),
+            mode: "public-ts".to_owned(),
+            status: MpegTroubleshootingStatus::Completed,
+            summary: "completed".to_owned(),
+            duration_seconds: 20,
+            sample_bytes: 1024,
+            retain_raw_sample: false,
+            sample_path: None,
+            archive_path: temp.path().display().to_string(),
+            sample_url: "http://127.0.0.1/iptv/channel/7.ts?access_token=<redacted>".to_owned(),
+            tsduck_version: Some("tsp version 3.44".to_owned()),
+            analysis: Some(MpegTsduckAnalysis {
+                tsp_command: MpegTsduckCommandSpec {
+                    program: "tsp".to_owned(),
+                    args: vec!["--realtime=off".to_owned()],
+                },
+                tsbitrate_command: MpegTsduckCommandSpec {
+                    program: "tsbitrate".to_owned(),
+                    args: vec!["sample.ts".to_owned()],
+                },
+                status: MpegTsduckAnalysisStatus::Completed,
+                summary: "analysis completed".to_owned(),
+                analysis_json_excerpt: "{}".to_owned(),
+                continuity_findings: vec!["PID 256 discontinuity".to_owned()],
+                pcr_findings: vec!["PCR warning".to_owned()],
+                services: vec!["1: ErsatzRS".to_owned()],
+                pids: vec!["256: video".to_owned()],
+                bitrate_bps: Some(123_456),
+                stdout_excerpt: "stdout access_token=<redacted>".to_owned(),
+                stderr_excerpt: "stderr token=<redacted>".to_owned(),
+            }),
+            errors: Vec::new(),
+        };
+
+        write_mpeg_report(temp.path(), &report)
+            .await
+            .expect("report archive");
+
+        let summary = tokio::fs::read_to_string(temp.path().join("summary.json"))
+            .await
+            .expect("summary");
+        assert!(summary.contains("\"sample_url\""));
+        assert!(summary.contains("access_token=<redacted>"));
+        assert!(!summary.contains("access_token=secret"));
+        assert_eq!(
+            tokio::fs::read_to_string(temp.path().join("continuity.log"))
+                .await
+                .expect("continuity"),
+            "PID 256 discontinuity"
+        );
+        assert_eq!(
+            tokio::fs::read_to_string(temp.path().join("pcrverify.log"))
+                .await
+                .expect("pcr"),
+            "PCR warning"
+        );
+        assert_eq!(
+            tokio::fs::read_to_string(temp.path().join("tsbitrate.txt"))
+                .await
+                .expect("bitrate"),
+            "123456"
+        );
+        assert!(temp.path().join("commands.json").exists());
+        assert!(!temp.path().join("sample.ts").exists());
     }
 
     #[test]

@@ -164,6 +164,12 @@ impl HealthCheckService {
         Self { checks }
     }
 
+    /// Return the registered check titles in execution order.
+    #[must_use]
+    pub fn titles(&self) -> Vec<&'static str> {
+        self.checks.iter().map(|check| check.title()).collect()
+    }
+
     /// Execute all health checks.
     ///
     /// If an individual check errors, the runner returns the same fallback

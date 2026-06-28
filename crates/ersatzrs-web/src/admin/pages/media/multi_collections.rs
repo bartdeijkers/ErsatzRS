@@ -341,13 +341,14 @@ fn load_multi_collection_no_script_form(id: i64, default_name: &str) -> MultiCol
 }
 
 fn multi_collection_editor_fallback_html(form: &MultiCollectionForm) -> String {
-    let button = if form.id == 0 {
-        tr(TextKey::AddMultiCollection)
+    let (button, icon) = if form.id == 0 {
+        (tr(TextKey::AddMultiCollection), IconName::Add)
     } else {
-        tr(TextKey::SaveMultiCollection)
+        (tr(TextKey::SaveMultiCollection), IconName::Save)
     };
+    let icon_style = escape_html(&icon_style(icon, "1.125rem"));
     format!(
-        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{editor_action_bar}"><button type="submit" class="{btn_add}">{button}</button></div><div class="{editor}"><h1 class="{page_title}">{heading}</h1><div class="{editor_full_row} {divider}"></div><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div></form>"#,
+        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{editor_action_bar}"><button type="submit" class="{btn_add}"><span style="{icon_style}" aria-hidden="true"></span>{button}</button></div><div class="{editor}"><h1 class="{page_title}">{heading}</h1><div class="{editor_full_row} {divider}"></div><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div></form>"#,
         page = style::page,
         editor_action_bar = style::editor_action_bar,
         page_title = style::page_title,
@@ -357,6 +358,7 @@ fn multi_collection_editor_fallback_html(form: &MultiCollectionForm) -> String {
         divider = style::divider,
         id = form.id,
         button = button,
+        icon_style = icon_style,
         editor = style::editor,
         field_label = style::field_label,
         name_label = tr(TextKey::Name),
@@ -470,6 +472,11 @@ fn MultiCollectionEditorIsland(
     } else {
         IconName::Save
     };
+    let save_label = if id_signal.get_untracked() == 0 {
+        tr(TextKey::AddMultiCollection)
+    } else {
+        tr(TextKey::SaveMultiCollection)
+    };
 
     view! {
         <form
@@ -485,11 +492,7 @@ fn MultiCollectionEditorIsland(
             <div class=style::editor_action_bar>
                 <button type="submit" class=style::btn_add>
                     <span style=icon_style(save_icon, "1.125rem") aria-hidden="true"></span>
-                    {move || if id_signal.get() == 0 {
-                        tr(TextKey::AddMultiCollection)
-                    } else {
-                        tr(TextKey::SaveMultiCollection)
-                    }}
+                    {save_label}
                 </button>
             </div>
 

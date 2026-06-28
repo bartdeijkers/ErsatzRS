@@ -25,9 +25,12 @@ ErsatzRS_FFMPEG__PATH=/usr/local/bin/ffmpeg
 ErsatzRS_FFPROBE__PATH=/usr/local/bin/ffprobe
 ```
 
-When `DATABASE_URL` / `ErsatzRS_DATABASE__URL` is not set, ErsatzRS currently
-defaults SQLite to `~/.ersatzrs/ErsatzRS.db` and creates the `~/.ersatzrs`
-directory on startup.
+Startup database URL resolution now goes through the startup configuration
+helper. `ErsatzRS_DATABASE__URL` is preferred, `ERSATZRS_DATABASE__URL` is
+accepted for shell/orchestrator environments, and legacy `DATABASE_URL` remains
+accepted so Docker keeps using `DATABASE_URL=sqlite:///data/.ersatzrs/ErsatzRS.db`.
+When none of those is set, ErsatzRS defaults SQLite to
+`~/.ersatzrs/ErsatzRS.db` and creates the `~/.ersatzrs` directory on startup.
 
 ## FFmpeg runtime
 

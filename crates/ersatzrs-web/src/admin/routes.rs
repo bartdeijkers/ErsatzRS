@@ -77,8 +77,8 @@ use crate::admin::pages::system::{
     health::HealthPage,
     logs::LogsPage,
     troubleshooting::{
-        BlockPlayoutHistoryPage, BlockPlayoutTroubleshootingPage, PlaybackTroubleshootingPage,
-        SequentialScheduleValidationPage, TroubleshootingPage,
+        BlockPlayoutHistoryPage, BlockPlayoutTroubleshootingPage, MpegTroubleshootingPage,
+        PlaybackTroubleshootingPage, SequentialScheduleValidationPage, TroubleshootingPage,
     },
 };
 use crate::admin::pages::watermarks::{editor::WatermarkEditorPage, list::WatermarksListPage};
@@ -238,6 +238,14 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("system"), StaticSegment("troubleshooting"))
                 view=TroubleshootingPage
+            />
+            <Route
+                path=(
+                    StaticSegment("system"),
+                    StaticSegment("troubleshooting"),
+                    StaticSegment("mpeg"),
+                )
+                view=MpegTroubleshootingPage
             />
             <Route
                 path=(

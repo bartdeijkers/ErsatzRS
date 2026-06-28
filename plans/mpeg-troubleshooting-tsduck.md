@@ -1,9 +1,9 @@
 # MPEG-TS troubleshooting with TSDuck
 
-> **Status: Active / proposed.** ADR 0013 is still `Proposed` /
-> `Not implemented` for the in-app `/system/troubleshooting/mpeg` Support tool.
-> The manual TSDuck playback gate (`scripts/e2e/tsduck-playback-gate.sh`) exists,
-> but it is separate tooling and does not satisfy this plan.
+> **Status: Implemented 2026-06-28.** ADR 0013 is `Accepted`, and the in-app
+> `/system/troubleshooting/mpeg` Support tool is built. The manual TSDuck
+> playback gate (`scripts/e2e/tsduck-playback-gate.sh`) still exists as separate
+> verification tooling.
 
 ## Summary
 
@@ -139,9 +139,9 @@ yields `NotAvailable` and never fails startup or `/healthz`.
     `crates/ersatzrs-web/src/admin/languages/` for `en-us`, `pl`, `pt-br`,
     and `nl`.
 - Add archive support.
-  - Include `summary.json`, `analysis.json`, `continuity.log`,
-    `pcrverify.log`, `tsbitrate.txt`, and sanitized command metadata when
-    present.
+  - Include `report.json`, `summary.json`, `analysis.json`, `continuity.log`,
+    `pcrverify.log`, `tsbitrate.txt`, bounded stdout/stderr excerpts, and
+    sanitized command metadata when present.
   - Exclude raw `.ts` samples unless the user explicitly selected the raw
     sample opt-in.
   - Delete expired sample/report directories through the existing

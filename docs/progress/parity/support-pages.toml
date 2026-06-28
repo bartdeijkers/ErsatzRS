@@ -4,7 +4,26 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-we
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: `/system/health` renders an ErsatzTV-style two-column health table from the live health service, filtering out `NotApplicable` rows like `GetAllHealthCheckResultsHandler.cs`, and the hydrated health island refreshes after scanner-updated media state changes so File Not Found warnings appear without a manual reload; the Support nav group now shows hydrated warning/error badge counts from the combined startup/runtime plus persisted health summary, matching the pinned `MainLayout.razor` health-badge behavior. `/system/logs` reads the newest OS-local app-data log file and exposes the ErsatzTV-visible heading, Search field with case-insensitive substring filtering on level/message, Timestamp/Level/Message table, localized visible level labels, sortable Timestamp/Level headers, page-size persistence through `pages.logs.page_size`, and first/previous/next/last paging controls. `/system/troubleshooting` exposes the ErsatzTV-visible Tools tab plus General and OS-specific hardware report tabs. The General report loads server-side ErsatzTV-shaped JSON from live ErsatzRS state: version, selected ErsatzRS/Rust environment variables with sensitive values redacted, Rust runtime paths, CPU summary, Warning/Fail health rows, FFmpeg settings, channels, and FFmpeg profiles. Hardware tabs are platform-aware (`VideoToolbox` on macOS, `NVIDIA`/`QSV` elsewhere, `VAAPI` on Linux) and report FFmpeg runtime capability availability plus the detailed startup device-probe results that gate hardware decode/encode decisions. The linked Sequential Schedule Validation tool route reads YAML/YML files, embeds the upstream full/import Draft 2020-12 schemas, renders ErsatzTV-style line-numbered JSON, and reports schema validation messages across YAML/JSON/Messages tabs; the linked Block Playout Troubleshooting tool route lists block playouts, template blocks, search filtering, and history detail rows from stored `PlayoutHistory`. These visible labels/statuses use the shared persisted-language i18n layer for `en-us`, `pl`, `pt-br`, and `nl`. Media-specific troubleshooting at `/system/troubleshooting/playback?mediaItem=ID` renders the ErsatzTV-shaped FFmpeg profile, stream selector, subtitle, watermark, graphics element, start-from-beginning, seek-seconds, preview, logs, and download-toolbar surface from live database/server state. `/api/troubleshoot/playback/archive` plus `/api/troubleshoot/playback/sample/{mediaItemId}` provide real ZIP download side effects for existing troubleshooting artifacts and 30-second FFmpeg stream-copy media samples. `/api/troubleshoot/playback.m3u8` starts real media-item and channel-mode troubleshooting HLS transcodes, writes `ffmpeg-*`, `logs.txt`, `media_info.json`, `troubleshooting_info.json`, optional `stream-selector.yml`, and hardware capability artifacts under the ErsatzTV-shaped `.troubleshooting` transcode folder, executes stream-selector YAML rules with ErsatzTV-style content/audio/subtitle conditions, then redirects to `/iptv/session/.troubleshooting/live.m3u8`; the IPTV session route serves that generated playlist and segments. Focused Rust tests cover log filtering/sort/paging behavior, and `tests/e2e/support-pages.spec.ts` proves the health/logs/troubleshooting/sequential/block/playback route-family surfaces in Chromium with hydrated controls and no console/runtime errors.
+Ported: `/system/health` renders an ErsatzTV-style two-column health table from
+the live health service, filters `NotApplicable` rows, refreshes after scanner
+state changes, and feeds the Support nav warning/error badge from persisted
+startup/runtime health summaries. `/system/logs` reads the newest OS-local
+app-data log file and exposes the ErsatzTV-visible search, sort, paging, and
+localized level labels. `/system/troubleshooting` exposes the Tools tab plus
+General and platform hardware report tabs; the General report is server-side
+JSON from live ErsatzRS state with selected environment values redacted,
+runtime paths, CPU summary, warning/fail health rows, FFmpeg settings,
+channels, and FFmpeg profiles. Tool routes cover Sequential Schedule
+Validation, Block Playout Troubleshooting, media-specific playback
+troubleshooting, and the ADR 0013 MPEG-TS tool at
+`/system/troubleshooting/mpeg`, which captures bounded channel samples, runs
+optional TSDuck continuity/PCR/analyze/bitrate checks, writes redacted report
+artifacts, and keeps raw `.ts` samples only when the user opts in. Playback
+troubleshooting archives and media samples have real download side effects, and
+the generated troubleshooting HLS session route serves the produced playlist
+and segments. Visible labels/statuses use the shared persisted-language i18n
+layer for `en-us`, `pl`, `pt-br`, and `nl`; focused Rust and e2e tests cover the
+health/logs/troubleshooting/sequential/block/playback route family.
 '''
 
 [[debt]]

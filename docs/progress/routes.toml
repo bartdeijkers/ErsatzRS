@@ -192,7 +192,7 @@ routed  = true
 
 [[route]]
 nav     = '/system/troubleshooting'
-backing = 'ErsatzTV-style Support troubleshooting tools/report tab surface; `/system/troubleshooting/playback?mediaItem=ID` for media-specific context'
+backing = 'ErsatzTV-style Support troubleshooting tools/report tab surface; `/system/troubleshooting/playback?mediaItem=ID` for media-specific context; `/system/troubleshooting/mpeg` for optional TSDuck MPEG-TS diagnostics'
 routed  = true
 
 [[route]]

@@ -103,11 +103,15 @@ The closest structural twin of `i18n.rs`: per-instruction dispatch.
 - **Risk / effort:** Medium. Parity-sensitive; guarded by `insta` snapshots of
   generated playout. The enum-dispatch refactor is the only non-mechanical part.
 
-#### 3. `crates/ersatzrs-infra/src/health.rs` — 1,530 lines
+#### 3. `crates/ersatzrs-infra/src/health.rs` — implemented 2026-06-28
 Purest match to the i18n registry shape, and AGENTS.md/CLAUDE.md explicitly make
 it a **port-completeness contract** that *must* grow as parity expands.
 
-- **Scaling axis:** health checks. 14 homogeneous structs (each `struct` +
+- **Scaling axis:** health checks. The implemented split now has one concrete
+  check module per health-check struct under `crates/ersatzrs-infra/src/health/checks/`.
+  The registry stays in `health/mod.rs`, and `HealthCheck` /
+  `HealthCheckService` remain in `ersatzrs-core`.
+- **Original scope:** 14 homogeneous structs (each `struct` +
   `impl HealthCheck`, ~28–81 lines) registered in the factory
   `make_health_check_service()` (L114–138). Trait `HealthCheck` and the
   `HealthCheckService` run-loop live in `crates/ersatzrs-core/src/health.rs`
@@ -125,15 +129,16 @@ it a **port-completeness contract** that *must* grow as parity expands.
 - **Risk / effort:** **Lowest** — homogeneous structs, single factory entry
   point, no public-path concerns. Best **pilot** to validate the split pattern.
 
-**`/goal` prompt for Tier 1** — body for a `/goal` task (ErsatzRS `prompt.md` style), ≤3950 chars:
+**`/goal` prompt for the remaining Tier 1 work** — body for a `/goal` task
+(ErsatzRS `prompt.md` style), ≤3950 chars. The health split pilot is already
+implemented and must not be redone.
 
 ```text
-Execute the Tier 1 "split for scaling" refactors in ErsatzRS: collapse three oversized files into per-dimension submodules, mirroring the i18n split (`admin/i18n.rs` + `admin/languages/*.rs`) — a thin orchestrator/registry in `mod.rs` that re-exports per-item submodules, plus a completeness gate. The goal is a behavior-preserving refactor with no stopgaps: zero logic, SQL, serialized-shape, or public-name changes.
+Execute the remaining Tier 1 "split for scaling" refactors in ErsatzRS: split the media-browser server functions and YAML scheduling instructions into per-dimension submodules, mirroring the i18n split (`admin/i18n.rs` + `admin/languages/*.rs`) — a thin orchestrator/registry in `mod.rs` that re-exports per-item submodules, plus a completeness gate where natural. The health split pilot is already implemented; do not move it again. The goal is a behavior-preserving refactor with no stopgaps: zero logic, SQL, serialized-shape, endpoint, or public-name changes.
 
-Use the repo workflow from AGENTS.md. The full per-file target layout is recorded in `plans/module-split-survey.md` (candidates 1–3) — treat that section as the spec. Do the three as separate commits, in this order:
-1. `crates/ersatzrs-infra/src/health.rs` → `infra/health/`: `mod.rs` keeps `make_health_check_service()` as the registry; `checks/<name>.rs` = one HealthCheck struct + impl each. Leave the `HealthCheck` trait + `HealthCheckService` loop in `crates/ersatzrs-core/src/health.rs` untouched.
-2. `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` (7,859 lines) → `media_browser/`: per-kind files, `collections/*`, trash/playlists/autocomplete/collection_detail, shared types + `MediaBrowserKind` in `mod.rs`, seed/test helpers behind `#[cfg(test)]`.
-3. `crates/ersatzrs-core/src/scheduling/yaml.rs` → `yaml/`: `mod.rs` = `YamlInstruction` + `YamlPlayoutEngine` + dispatcher; `instructions/<name>.rs` = one handler each.
+Use the repo workflow from AGENTS.md. The full per-file target layout is recorded in `plans/module-split-survey.md` (remaining Tier 1 candidates, with the implemented health pilot kept for reference) — treat that section as the spec. Do the two remaining splits as separate commits, in this order:
+1. `crates/ersatzrs-web/src/admin/server_fns/media_browser.rs` (7,859 lines) → `media_browser/`: per-kind files, `collections/*`, trash/playlists/autocomplete/collection_detail, shared types + `MediaBrowserKind` in `mod.rs`, seed/test helpers behind `#[cfg(test)]`.
+2. `crates/ersatzrs-core/src/scheduling/yaml.rs` → `yaml/`: `mod.rs` = `YamlInstruction` + `YamlPlayoutEngine` + dispatcher; `instructions/<name>.rs` = one handler each.
 
 Before editing:
 1. Read `plans/module-split-survey.md` (reference pattern + Tier 1 sections).

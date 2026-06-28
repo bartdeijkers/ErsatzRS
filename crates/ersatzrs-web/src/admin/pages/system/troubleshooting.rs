@@ -4,10 +4,12 @@ use leptos_router::hooks::use_query_map;
 use crate::admin::i18n::{tr, unable_to_load_playback_troubleshooting, TextKey};
 use crate::admin::server_fns::troubleshooting::{
     list_block_playout_history, list_block_playout_options, list_blocks_for_playout,
-    load_playback_troubleshooting_context, load_troubleshooting_report,
-    validate_sequential_schedule_file, BlockPlayoutHistoryRow, BlockPlayoutOption,
-    PlaybackTroubleshootingContext, PlaybackTroubleshootingMode, TroubleshootingBlockRow,
-    TroubleshootingReport, YamlValidationResult,
+    load_mpeg_troubleshooting_context, load_playback_troubleshooting_context,
+    load_troubleshooting_report, validate_sequential_schedule_file, BlockPlayoutHistoryRow,
+    BlockPlayoutOption, MpegTroubleshootingContext, MpegTroubleshootingReport,
+    MpegTroubleshootingStatus, MpegTsduckAnalysis, PlaybackTroubleshootingContext,
+    PlaybackTroubleshootingMode, TroubleshootingBlockRow, TroubleshootingReport,
+    YamlValidationResult, MPEG_DEFAULT_SAMPLE_DURATION_SECONDS, MPEG_MAX_SAMPLE_DURATION_SECONDS,
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/system/troubleshooting.module.css");
@@ -59,6 +61,9 @@ fn render_report(report: TroubleshootingReport) -> AnyView {
                     </a>
                     <a href="/system/troubleshooting/block-playout" class=style::toolLink>
                         {tr(TextKey::BlockPlayoutTroubleshooting)}
+                    </a>
+                    <a href="/system/troubleshooting/mpeg" class=style::toolLink>
+                        {tr(TextKey::MpegTsTroubleshooting)}
                     </a>
                 </div>
             </section>
@@ -118,6 +123,253 @@ fn render_report(report: TroubleshootingReport) -> AnyView {
         </div>
     }
     .into_any()
+}
+
+#[component]
+pub fn MpegTroubleshootingPage() -> impl IntoView {
+    let query = use_query_map();
+    let selected_channel = move || {
+        query.with(|params| {
+            params
+                .get("channel")
+                .or_else(|| params.get("channelNumber"))
+                .unwrap_or_default()
+        })
+    };
+    let selected_mode = move || {
+        query.with(|params| {
+            params
+                .get("mode")
+                .unwrap_or_else(|| "internal-legacy".to_owned())
+        })
+    };
+    let duration_seconds = move || {
+        query.with(|params| {
+            params
+                .get("duration")
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(MPEG_DEFAULT_SAMPLE_DURATION_SECONDS)
+        })
+    };
+    let retain_raw_sample = move || {
+        query.with(|params| {
+            params
+                .get("retainRawSample")
+                .is_some_and(|value| matches!(value.as_str(), "true" | "1" | "on"))
+        })
+    };
+
+    let context: Resource<Result<MpegTroubleshootingContext, ServerFnError>> =
+        Resource::new_blocking(
+            move || {
+                (
+                    selected_channel(),
+                    selected_mode(),
+                    duration_seconds(),
+                    retain_raw_sample(),
+                )
+            },
+            |(channel, mode, duration, retain)| async move {
+                load_mpeg_troubleshooting_context(channel, mode, duration, retain).await
+            },
+        );
+
+    view! {
+        <div class=style::page>
+            <header>
+                <h1 class=style::heading>{tr(TextKey::MpegTsTroubleshooting)}</h1>
+                <div class=style::divider></div>
+            </header>
+
+            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
+                {move || match context.get() {
+                    Some(Ok(context)) => render_mpeg_troubleshooting(context),
+                    Some(Err(error)) => view! {
+                        <p class=style::empty>{error.to_string()}</p>
+                    }.into_any(),
+                    None => view! { <p>{tr(TextKey::Loading)}</p> }.into_any(),
+                }}
+            </Suspense>
+        </div>
+    }
+}
+
+fn render_mpeg_troubleshooting(context: MpegTroubleshootingContext) -> AnyView {
+    let availability = if context.availability.available {
+        context
+            .availability
+            .version
+            .clone()
+            .unwrap_or_else(|| "available".to_owned())
+    } else {
+        context
+            .availability
+            .error
+            .clone()
+            .unwrap_or_else(|| "not available".to_owned())
+    };
+
+    view! {
+        <form method="get" action="/system/troubleshooting/mpeg" class=style::form>
+            <label class=style::field>
+                <span>{tr(TextKey::Channel)}</span>
+                <select class=style::select name="channel">
+                    <option value="">{tr(TextKey::DefaultOption)}</option>
+                    {context.channels.into_iter().map(|channel| {
+                        let selected = channel.number == context.selected_channel_number;
+                        let label = format!("{} - {}", channel.number, channel.name);
+                        view! {
+                            <option value=channel.number selected=selected>{label}</option>
+                        }
+                    }).collect_view()}
+                </select>
+            </label>
+            <label class=style::field>
+                <span>{tr(TextKey::Mode)}</span>
+                <select class=style::select name="mode">
+                    <option value="internal-legacy" selected=context.selected_mode == "internal-legacy">
+                        {tr(TextKey::InternalMpegTs)}
+                    </option>
+                    <option value="public-ts" selected=context.selected_mode == "public-ts">
+                        {tr(TextKey::PublicMpegTs)}
+                    </option>
+                </select>
+            </label>
+            <label class=style::field>
+                <span>{tr(TextKey::DurationSeconds)}</span>
+                <input
+                    class=style::input
+                    type="number"
+                    min="1"
+                    max=MPEG_MAX_SAMPLE_DURATION_SECONDS.to_string()
+                    name="duration"
+                    value=context.duration_seconds.to_string()
+                />
+            </label>
+            <label class=style::checkField>
+                <input
+                    type="checkbox"
+                    name="retainRawSample"
+                    value="true"
+                    checked=context.retain_raw_sample
+                />
+                <span>{tr(TextKey::RetainRawSample)}</span>
+            </label>
+            <button type="submit" class=style::primaryButton>{tr(TextKey::Check)}</button>
+        </form>
+
+        <dl class=style::detailsGrid>
+            <dt>{tr(TextKey::TsdDuckVersion)}</dt>
+            <dd>{availability}</dd>
+        </dl>
+
+        {context.latest_report.map(render_mpeg_report)}
+    }
+    .into_any()
+}
+
+fn render_mpeg_report(report: MpegTroubleshootingReport) -> AnyView {
+    let status = mpeg_status_label(report.status);
+    let sample_path = report
+        .sample_path
+        .clone()
+        .unwrap_or_else(|| tr(TextKey::No).to_owned());
+    let errors = report.errors.clone();
+    let analysis = report.analysis.clone();
+
+    view! {
+        <section>
+            <h2 class=style::subheading>{tr(TextKey::Report)}</h2>
+            <div class=style::divider></div>
+            <dl class=style::detailsGrid>
+                <dt>{tr(TextKey::RunId)}</dt>
+                <dd><code>{report.run_id}</code></dd>
+                <dt>{tr(TextKey::Status)}</dt>
+                <dd>{status}</dd>
+                <dt>{tr(TextKey::Summary)}</dt>
+                <dd>{report.summary}</dd>
+                <dt>{tr(TextKey::SampleBytes)}</dt>
+                <dd>{report.sample_bytes.to_string()}</dd>
+                <dt>{tr(TextKey::RawSampleArchived)}</dt>
+                <dd>{sample_path}</dd>
+                <dt>{tr(TextKey::ArchivePath)}</dt>
+                <dd><code>{report.archive_path}</code></dd>
+                <dt>{tr(TextKey::SampleUrl)}</dt>
+                <dd><code>{report.sample_url}</code></dd>
+            </dl>
+
+            {(!errors.is_empty()).then(|| view! {
+                <section>
+                    <h3 class=style::subheading>{tr(TextKey::Messages)}</h3>
+                    {report_block(errors.join("\n"), false)}
+                </section>
+            })}
+
+            {analysis.map(render_mpeg_analysis)}
+        </section>
+    }
+    .into_any()
+}
+
+fn render_mpeg_analysis(analysis: MpegTsduckAnalysis) -> AnyView {
+    view! {
+        <div class=style::historyStack>
+            {render_string_list(tr(TextKey::Services), analysis.services)}
+            {render_string_list(tr(TextKey::Pids), analysis.pids)}
+            {render_string_list(tr(TextKey::ContinuityFindings), analysis.continuity_findings)}
+            {render_string_list(tr(TextKey::PcrFindings), analysis.pcr_findings)}
+            <dl class=style::detailsGrid>
+                <dt>{tr(TextKey::Bitrate)}</dt>
+                <dd>{analysis.bitrate_bps.map_or_else(String::new, |value| value.to_string())}</dd>
+            </dl>
+            <section>
+                <h3 class=style::subheading>{tr(TextKey::AnalysisJson)}</h3>
+                {report_block(analysis.analysis_json_excerpt, true)}
+            </section>
+            <section>
+                <h3 class=style::subheading>{tr(TextKey::StandardOutput)}</h3>
+                {report_block(analysis.stdout_excerpt, true)}
+            </section>
+            <section>
+                <h3 class=style::subheading>{tr(TextKey::StandardError)}</h3>
+                {report_block(analysis.stderr_excerpt, true)}
+            </section>
+        </div>
+    }
+    .into_any()
+}
+
+fn render_string_list(label: &'static str, values: Vec<String>) -> AnyView {
+    view! {
+        <section>
+            <h3 class=style::subheading>{label}</h3>
+            {if values.is_empty() {
+                view! { <p class=style::empty>{tr(TextKey::NoMessages)}</p> }.into_any()
+            } else {
+                view! {
+                    <div class=style::tableWrap>
+                        <table class=style::table>
+                            <tbody>
+                                {values.into_iter().map(|value| view! {
+                                    <tr><td><code>{value}</code></td></tr>
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                }.into_any()
+            }}
+        </section>
+    }
+    .into_any()
+}
+
+fn mpeg_status_label(status: MpegTroubleshootingStatus) -> &'static str {
+    match status {
+        MpegTroubleshootingStatus::NotAvailable => tr(TextKey::NotAvailable),
+        MpegTroubleshootingStatus::NotApplicable => tr(TextKey::NotApplicable),
+        MpegTroubleshootingStatus::Completed => tr(TextKey::Completed),
+        MpegTroubleshootingStatus::Failed => tr(TextKey::Failed),
+    }
 }
 
 #[component]

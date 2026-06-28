@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Added
 
+- In-app MPEG-TS troubleshooting for ADR 0013 at
+  `/system/troubleshooting/mpeg`: the Support page can capture bounded
+  channel MPEG-TS samples, run optional read-only TSDuck `tsp`/`tsbitrate`
+  analysis, write a redacted report archive, and surface TSDuck availability
+  as a non-blocking health row.
 - A purpose-built `ersatzrs-healthcheck` binary now probes `/healthz` without
   curl or shell tooling, ships in release archives, and backs the Docker image
   `HEALTHCHECK`.
@@ -72,8 +77,20 @@ release section when tagging a release.
   Playwright admin E2E suite by default, booting `ersatzrs-web` against an
   isolated SQLite database with matched Leptos SSR/WASM assets.
 
+### Changed
+
+- Startup database URL resolution now flows through the startup configuration
+  helper, preferring `ErsatzRS_DATABASE__URL` / `ERSATZRS_DATABASE__URL` while
+  preserving the legacy Docker `DATABASE_URL` override and default SQLite path.
+- Infra health checks are split into registry submodules under
+  `crates/ersatzrs-infra/src/health/`, with a completeness test covering the
+  registered title set and order.
+
 ### Fixed
 
+- Multi-collection editor hydration now keeps the save button DOM stable while
+  preserving the ErsatzTV-style action bar icon in both hydrated and no-JS
+  fallback rendering.
 - Pending admin hydration gaps for Plex/Jellyfin/Emby source pages, Movies,
   Trash, Trakt lists, Filler Presets, and Rerun Collections now have durable
   seeded Playwright coverage; the affected islands resolve initial SSR data

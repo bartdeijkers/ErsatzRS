@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted 2026-06-28
 
 <!--
 Status records the DECISION lifecycle only: Proposed | Accepted | Superseded

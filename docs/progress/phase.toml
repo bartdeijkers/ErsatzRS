@@ -103,11 +103,12 @@ playout with one MTV Bumpers item after every three unplugged videos. The
 2026-06-28 follow-up closeout resolved those dogfood parity gaps: Classic now
 advances duration post-roll filler, spaces shuffled music-video artists, starts
 dynamic rows before fixed anchors, and schedule-item HTML fallback saves parse
-repeated row fields without dropping the schedule. The next
-spec-backed candidates are ADR 0013 in-app TSDuck MPEG-TS troubleshooting
-(Proposed / Not implemented), the remaining startup configuration cleanup
-around direct `DATABASE_URL` environment access, and the module-split survey's
-first behavior-preserving refactor slice.
+repeated row fields without dropping the schedule. The 2026-06-28 spec-backed
+closeout implemented ADR 0013 in-app TSDuck MPEG-TS troubleshooting, routed
+startup database URL resolution through the startup configuration helper while
+preserving Docker `DATABASE_URL`, and completed the module-split survey's infra
+health registry pilot. Remaining Phase 7 closeout work is broad verification
+and release-readiness proof, not tracked ErsatzTV feature parity debt.
 '''
 
 # Phase 0 checklist (all complete).
@@ -157,8 +158,6 @@ done = true
 # Known TODOs carried forward.
 [[known_todo]]
 note = 'Keep axum and leptos_axum on matching major versions; both are currently on 0.8.'
-[[known_todo]]
-note = 'std::env::var("DATABASE_URL") in main.rs uses #[allow(clippy::disallowed_methods)] — replace with a config crate in Phase 1.'
 [[known_todo]]
 note = 'ffmpeg module in ersatzrs-web migrated to ersatzrs-ffmpeg in Phase 2.'
 

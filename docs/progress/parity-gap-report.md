@@ -1,6 +1,6 @@
 # Human parity gap report
 
-Generated: 2026-06-28T14:11:23+02:00
+Generated: 2026-06-28T21:47:18+02:00
 
 This is a human-readable snapshot. The source of truth remains the structured
 progress files in this directory and the `cargo xtask progress ...` queries.
@@ -22,7 +22,7 @@ unresolved `[[debt]]` items in the parity files.
 | In-progress parity features | 0 | Features currently returned by `cargo xtask progress gaps`. |
 | Open parity debt items | 0 | `[[debt]]` records with `resolved = false`. |
 | Advertised-but-404 admin routes | 0 | `cargo xtask progress routes --unrouted` returned no rows. |
-| Pending hydration-proof rows | 16 | Coverage/proof TODOs in `hydration.toml`; these are not the current feature parity blocker. |
+| Pending hydration-proof rows | 0 | `hydration.toml` currently has no non-green rows. |
 
 ## Remaining tracked parity gaps
 
@@ -61,13 +61,14 @@ Closeout proof:
 
 ## Adjacent work not counted as this parity gap
 
-The daily prompt file and phase notes still identify useful follow-up work, but
-those items are not returned by `cargo xtask progress gaps` today:
+The phase notes still identify broad verification and release-hardening work,
+but those items are not returned by `cargo xtask progress gaps` today:
 
-- ADR 0013 in-app TSDuck MPEG-TS troubleshooting.
-- Startup configuration cleanup around direct `DATABASE_URL` environment access.
-- The first behavior-preserving module-split survey slice.
-- Pending hydration proof rows for selected admin UI pages.
+- Full closeout verification for the newly implemented ADR 0013 TSDuck
+  troubleshooting tool.
+- Full closeout verification for the startup config cleanup and infra health
+  module split.
+- Follow-up module-split work for the media-browser and YAML scheduling files.
 
 Those are hardening, spec, or proof chores. The current ErsatzTV parity tracker
 has no remaining feature/debt gaps.

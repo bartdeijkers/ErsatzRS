@@ -1,5 +1,5 @@
-use directories::BaseDirs;
 use sqlx::migrate::Migrator;
+#[cfg(test)]
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(feature = "mysql"))]
@@ -217,33 +217,42 @@ impl DatabaseSchemaStatus {
     }
 }
 
-/// Resolve the startup database URL, preferring `DATABASE_URL` and otherwise
-/// defaulting `SQLite` to `~/.ersatzrs/ErsatzRS.db`.
+/// Resolve the startup database URL through startup configuration and otherwise
+/// default `SQLite` to `~/.ersatzrs/ErsatzRS.db`.
 ///
 /// # Errors
 ///
-/// Returns an error when the configured `DATABASE_URL` is not valid UTF-8, the
+/// Returns an error when the configured database URL is not valid UTF-8, the
 /// current user's home directory cannot be determined, or the default `SQLite`
 /// data directory cannot be created.
-#[allow(clippy::disallowed_methods)]
 pub fn resolve_database_url() -> Result<String, DatabaseUrlError> {
-    resolve_database_url_from_parts(
-        std::env::var_os(DATABASE_URL_ENV_VAR),
-        BaseDirs::new().map(|base_dirs| base_dirs.home_dir().to_path_buf()),
-    )
+    let config = crate::startup_config::StartupConfig::load();
+    resolve_database_url_from_config(config)
 }
 
+#[cfg(test)]
 fn resolve_database_url_from_parts(
     database_url: Option<OsString>,
     home_dir: Option<PathBuf>,
 ) -> Result<String, DatabaseUrlError> {
-    if let Some(database_url) = database_url {
+    resolve_database_url_from_config(crate::startup_config::StartupConfig {
+        database_url,
+        home_dir,
+    })
+}
+
+fn resolve_database_url_from_config(
+    config: crate::startup_config::StartupConfig,
+) -> Result<String, DatabaseUrlError> {
+    if let Some(database_url) = config.database_url {
         return database_url
             .into_string()
             .map_err(|_| DatabaseUrlError::NonUtf8EnvVar);
     }
 
-    let home_dir = home_dir.ok_or(DatabaseUrlError::HomeDirectoryUnavailable)?;
+    let home_dir = config
+        .home_dir
+        .ok_or(DatabaseUrlError::HomeDirectoryUnavailable)?;
     let sqlite_dir = default_sqlite_data_dir(&home_dir);
     std::fs::create_dir_all(&sqlite_dir).map_err(|source| {
         DatabaseUrlError::CreateSqliteDirectory {
@@ -964,6 +973,18 @@ mod tests {
         .expect("use env override");
 
         assert_eq!(resolved, "mysql://root@localhost:3306/ersatzrs");
+    }
+
+    #[test]
+    fn resolve_database_url_preserves_docker_sqlite_override() {
+        let resolved = resolve_database_url_from_parts(
+            Some(OsString::from("sqlite:///data/.ersatzrs/ErsatzRS.db")),
+            None,
+        )
+        .expect("use docker database url override");
+
+        assert_eq!(resolved, "sqlite:///data/.ersatzrs/ErsatzRS.db");
+        assert_eq!(database_backend(&resolved), DatabaseBackend::Sqlite);
     }
 
     #[test]

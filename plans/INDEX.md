@@ -111,21 +111,10 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
-- `extras-alternate-versions-and-stream-roles.md` — implements ADR 0018
-  (special features/extras, alternate versions, and stream-role/commentary
-  selection): additive `MediaItem` content-variant columns, new search tokens
-  (`content_kind`/`sub_kind`/`parent_title`/`audio_title`/`subtitle_title`),
-  default `content_kind:primary` exclusion, `/media/*` surfacing, and scanner
-  import of extras ErsatzTV discards. Parity slug `content-variants` will be
-  created at the first implementation slice.
-- `mpeg-troubleshooting-tsduck.md` — implements ADR 0013's **in-app** optional
-  TSDuck Support tool for MPEG-TS troubleshooting at
-  `/system/troubleshooting/mpeg`. The manual
-  `scripts/e2e/tsduck-playback-gate.sh` gate exists, but the ADR-backed
-  Support surface is still proposed / not implemented.
 - `module-split-survey.md` — standing refactoring backlog: large files to split,
-  with ready-to-run prompts. Lift items one at a time and keep each refactor
-  behavior-preserving.
+  with ready-to-run prompts. The infra health pilot is implemented; lift the
+  remaining media-browser, YAML scheduling, scripted scheduling, and provider
+  dedup items one at a time and keep each refactor behavior-preserving.
 
 ## Deferred Contract Work
 
