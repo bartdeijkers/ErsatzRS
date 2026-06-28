@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::{Form, State},
     response::Redirect,
 };
@@ -196,10 +197,8 @@ pub async fn copy_schedule_form(
     }
 }
 
-pub async fn save_schedule_items_form(
-    State(state): State<AppState>,
-    Form(input): Form<ScheduleItemsSaveForm>,
-) -> Redirect {
+pub async fn save_schedule_items_form(State(state): State<AppState>, body: Bytes) -> Redirect {
+    let input = ScheduleItemsSaveForm::from_urlencoded_bytes(&body);
     let schedule_id = input.schedule_id;
     let mut items = input.to_items();
     let (action, embedded_index) = parse_action(&input.action);
@@ -245,6 +244,79 @@ pub async fn save_schedule_items_form(
 }
 
 impl ScheduleItemsSaveForm {
+    fn from_urlencoded_bytes(body: &[u8]) -> Self {
+        let mut form = Self::default();
+        let body = String::from_utf8_lossy(body);
+        for pair in body.split('&').filter(|pair| !pair.is_empty()) {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            let value = decode_form_value(value);
+            match key {
+                "schedule_id" => form.schedule_id = value.trim().parse().unwrap_or_default(),
+                "action" => form.action = value,
+                "action_index" => form.action_index = value,
+                "item_index" => form.item_index.push(value),
+                "item_id" => form.item_id.push(value),
+                "item_start_type" => form.item_start_type.push(value),
+                "item_start_time" => form.item_start_time.push(value),
+                "item_fixed_start_time_behavior" => {
+                    form.item_fixed_start_time_behavior.push(value);
+                }
+                "item_collection_type" => form.item_collection_type.push(value),
+                "item_collection_id" => form.item_collection_id.push(value),
+                "item_media_item_id" => form.item_media_item_id.push(value),
+                "item_multi_collection_id" => form.item_multi_collection_id.push(value),
+                "item_smart_collection_id" => form.item_smart_collection_id.push(value),
+                "item_rerun_collection_id" => form.item_rerun_collection_id.push(value),
+                "item_playlist_id" => form.item_playlist_id.push(value),
+                "item_search_title" => form.item_search_title.push(value),
+                "item_search_query" => form.item_search_query.push(value),
+                "item_collection_name" => form.item_collection_name.push(value),
+                "item_playback_order" => form.item_playback_order.push(value),
+                "item_marathon_group_by" => form.item_marathon_group_by.push(value),
+                "item_marathon_shuffle_groups_index" => {
+                    form.item_marathon_shuffle_groups_index.push(value);
+                }
+                "item_marathon_shuffle_items_index" => {
+                    form.item_marathon_shuffle_items_index.push(value);
+                }
+                "item_marathon_batch_size" => form.item_marathon_batch_size.push(value),
+                "item_fill_with_group_mode" => form.item_fill_with_group_mode.push(value),
+                "item_playout_mode" => form.item_playout_mode.push(value),
+                "item_multiple_mode" => form.item_multiple_mode.push(value),
+                "item_multiple_count" => form.item_multiple_count.push(value),
+                "item_duration_hours" => form.item_duration_hours.push(value),
+                "item_duration_minutes" => form.item_duration_minutes.push(value),
+                "item_tail_mode" => form.item_tail_mode.push(value),
+                "item_discard_to_fill_attempts" => {
+                    form.item_discard_to_fill_attempts.push(value);
+                }
+                "item_custom_title" => form.item_custom_title.push(value),
+                "item_guide_mode" => form.item_guide_mode.push(value),
+                "item_pre_roll_filler_id" => form.item_pre_roll_filler_id.push(value),
+                "item_mid_roll_filler_id" => form.item_mid_roll_filler_id.push(value),
+                "item_post_roll_filler_id" => form.item_post_roll_filler_id.push(value),
+                "item_tail_filler_id" => form.item_tail_filler_id.push(value),
+                "item_fallback_filler_id" => form.item_fallback_filler_id.push(value),
+                "item_watermark_ids" => form.item_watermark_ids.push(value),
+                "item_graphics_element_ids" => form.item_graphics_element_ids.push(value),
+                "item_preferred_audio_language_code" => {
+                    form.item_preferred_audio_language_code.push(value);
+                }
+                "item_preferred_audio_title" => form.item_preferred_audio_title.push(value),
+                "item_preferred_subtitle_language_code" => {
+                    form.item_preferred_subtitle_language_code.push(value);
+                }
+                "item_subtitle_mode" => form.item_subtitle_mode.push(value),
+                "new_collection_type" => form.new_collection_type = value,
+                "new_collection_id" => form.new_collection_id = value,
+                "new_playback_order" => form.new_playback_order = value,
+                "new_playout_mode" => form.new_playout_mode = value,
+                _ => {}
+            }
+        }
+        form
+    }
+
     fn to_items(&self) -> Vec<ScheduleItemForm> {
         let marathon_shuffle_groups = parse_index_set(&self.item_marathon_shuffle_groups_index);
         let marathon_shuffle_items = parse_index_set(&self.item_marathon_shuffle_items_index);
@@ -391,9 +463,101 @@ fn parse_id_list(value: Option<&String>) -> Vec<i64> {
         .collect()
 }
 
+fn decode_form_value(value: &str) -> String {
+    let value = value.replace('+', " ");
+    urlencoding::decode(&value)
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn schedule_items_form_deserializes_repeated_scalar_fields_from_raw_body() {
+        let form = ScheduleItemsSaveForm::from_urlencoded_bytes(
+            b"schedule_id=9&action=save\
+              &item_index=0&item_id=11&item_start_type=1&item_start_time=\
+              &item_fixed_start_time_behavior=&item_collection_type=0&item_collection_id=5\
+              &item_media_item_id=&item_multi_collection_id=&item_smart_collection_id=\
+              &item_rerun_collection_id=&item_playlist_id=&item_search_title=\
+              &item_search_query=&item_collection_name=MTV+Block&item_playback_order=3\
+              &item_marathon_group_by=0&item_marathon_shuffle_items_index=0\
+              &item_marathon_batch_size=&item_fill_with_group_mode=0&item_playout_mode=2\
+              &item_multiple_mode=0&item_multiple_count=1&item_duration_hours=1\
+              &item_duration_minutes=0&item_tail_mode=0&item_discard_to_fill_attempts=0\
+              &item_custom_title=MTV+Unplugged&item_guide_mode=0\
+              &item_pre_roll_filler_id=&item_mid_roll_filler_id=&item_post_roll_filler_id=42\
+              &item_tail_filler_id=&item_fallback_filler_id=92&item_watermark_ids=7%2C8\
+              &item_graphics_element_ids=9&item_preferred_audio_language_code=eng\
+              &item_preferred_audio_title=Director%20Commentary\
+              &item_preferred_subtitle_language_code=spa&item_subtitle_mode=3\
+              &item_index=1&item_id=12&item_start_type=2&item_start_time=08%3A30%3A00\
+              &item_fixed_start_time_behavior=1&item_collection_type=9&item_collection_id=\
+              &item_media_item_id=&item_multi_collection_id=&item_smart_collection_id=15\
+              &item_rerun_collection_id=&item_playlist_id=&item_search_title=Morning\
+              &item_search_query=content_kind%3Aalternate_version+AND+sub_kind%3Aunplugged\
+              &item_collection_name=Morning&item_playback_order=1&item_marathon_group_by=0\
+              &item_marathon_shuffle_groups_index=1&item_marathon_batch_size=4\
+              &item_fill_with_group_mode=0&item_playout_mode=3&item_multiple_mode=0\
+              &item_multiple_count=count+%2B+1&item_duration_hours=2&item_duration_minutes=15\
+              &item_tail_mode=0&item_discard_to_fill_attempts=3&item_custom_title=\
+              &item_guide_mode=1&item_pre_roll_filler_id=&item_mid_roll_filler_id=\
+              &item_post_roll_filler_id=&item_tail_filler_id=&item_fallback_filler_id=\
+              &item_watermark_ids=&item_graphics_element_ids=&item_preferred_audio_language_code=\
+              &item_preferred_audio_title=&item_preferred_subtitle_language_code=&item_subtitle_mode=",
+        );
+
+        assert_eq!(form.schedule_id, 9);
+        assert_eq!(form.action, "save");
+        assert_eq!(form.item_index, vec!["0", "1"]);
+
+        let parsed = form.to_items();
+
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].id, 11);
+        assert_eq!(parsed[0].collection_id, Some(5));
+        assert_eq!(parsed[0].collection_name, "MTV Block");
+        assert_eq!(parsed[0].custom_title, "MTV Unplugged");
+        assert_eq!(parsed[0].post_roll_filler_id, Some(42));
+        assert_eq!(parsed[0].fallback_filler_id, Some(92));
+        assert_eq!(parsed[0].watermark_ids, vec![7, 8]);
+        assert_eq!(parsed[0].graphics_element_ids, vec![9]);
+        assert_eq!(parsed[0].preferred_audio_title, "Director Commentary");
+        assert!(parsed[0].marathon_shuffle_items);
+        assert!(!parsed[0].marathon_shuffle_groups);
+        assert_eq!(parsed[1].id, 12);
+        assert_eq!(parsed[1].start_time.as_deref(), Some("08:30:00"));
+        assert_eq!(parsed[1].smart_collection_id, Some(15));
+        assert_eq!(
+            parsed[1].search_query.as_deref(),
+            Some("content_kind:alternate_version AND sub_kind:unplugged")
+        );
+        assert_eq!(parsed[1].multiple_count, "count + 1");
+        assert_eq!(parsed[1].duration_minutes, 15);
+        assert_eq!(parsed[1].discard_to_fill_attempts, Some(3));
+        assert!(parsed[1].marathon_shuffle_groups);
+        assert!(!parsed[1].marathon_shuffle_items);
+    }
+
+    #[test]
+    fn schedule_items_form_builds_new_item_from_raw_body() {
+        let form = ScheduleItemsSaveForm::from_urlencoded_bytes(
+            b"schedule_id=9&action=add&new_collection_type=0&new_collection_id=44\
+              &new_playback_order=4&new_playout_mode=3",
+        );
+
+        assert_eq!(form.schedule_id, 9);
+        assert_eq!(form.action, "add");
+
+        let item = form.new_item();
+
+        assert_eq!(item.collection_type, COLLECTION_TYPE_COLLECTION);
+        assert_eq!(item.collection_id, Some(44));
+        assert_eq!(item.playback_order, 4);
+        assert_eq!(item.playout_mode, 3);
+    }
 
     #[test]
     fn schedule_items_parser_aligns_indexed_fields_and_checkbox_indexes() {

@@ -74,6 +74,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Schedule item HTML fallback saves now parse repeated raw row fields before
+  reconstructing schedule items, so no-JS `/api/schedules/items/save` submits
+  preserve multiple rows and their filler, watermark, graphics, language, and
+  playback fields instead of rejecting repeated `item_index` values.
 - Admin-triggered local library scans now keep retrying SQLite busy/locked
   contention at each import/link/finalization write, so a long Music Videos
   scan can finish ADR 0018 alternate-version classification instead of replaying

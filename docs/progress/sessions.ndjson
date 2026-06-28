@@ -1,3 +1,5 @@
+{"agent":"codex","date":"2026-06-28","summary":"Closed schedule item fallback vector-form deserialization parity debt for no-JS /api/schedules/items/save."}
+{"agent":"codex","date":"2026-06-28","summary":"Generated human parity gap report and refreshed it after the schedule fallback closeout."}
 {"agent":"codex","date":"2026-06-28","summary":"Closed Classic scheduling dogfood debts: duration post-roll advancement, dynamic pre-anchor rows, and music-video artist spacing."}
 {"agent":"Codex (GPT-5)","date":"2026-06-28","summary":"Resolved ADR 0018 live-admin Unplugged dogfood gap, created and verified MTV Unplugged channel through the admin UI with existing MTV watermark and bumper cadence, and restarted the live admin host after accidental stop."}
 {"agent":"Codex (GPT-5)","date":"2026-06-27","summary":"MTV Unplugged admin-UI dogfood stopped before channel creation: ADR 0018 Unplugged selector stayed empty after UI library scans failed or completed without variants, so content-variants now tracks live-admin-unplugged-classification."}

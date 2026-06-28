@@ -99,7 +99,11 @@ import/link/finalization operations, the documented
 `content_kind:alternate_version AND sub_kind:unplugged` selector returns 38
 music videos in the admin UI, and the admin UI created the MTV Unplugged smart
 collection, Classic schedule, channel, existing MTV watermark assignment, and
-playout with one MTV Bumpers item after every three unplugged videos. The next
+playout with one MTV Bumpers item after every three unplugged videos. The
+2026-06-28 follow-up closeout resolved those dogfood parity gaps: Classic now
+advances duration post-roll filler, spaces shuffled music-video artists, starts
+dynamic rows before fixed anchors, and schedule-item HTML fallback saves parse
+repeated row fields without dropping the schedule. The next
 spec-backed candidates are ADR 0013 in-app TSDuck MPEG-TS troubleshooting
 (Proposed / Not implemented), the remaining startup configuration cleanup
 around direct `DATABASE_URL` environment access, and the module-split survey's
