@@ -21,7 +21,7 @@ notes  = 'Search result `Save As` smart collection server fn smoke clean.'
 [[page]]
 name   = 'PlexSourcesPage'
 status = '✅'
-notes  = 'OAuth PIN island.'
+notes  = 'OAuth PIN controls. 2026-06-28: seeded Plex source list now resolves initial source/token state before the island boundary; Playwright MCP desktop/mobile sweeps on `/media/sources/plex` were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'WatermarksEditorPage'
@@ -50,8 +50,8 @@ notes  = 'Autocomplete island; add route hydrated save and no-JS POST fallback c
 
 [[page]]
 name   = 'MoviesPage'
-status = 'TODO'
-notes  = 'Item overflow menu wired; Playwright smoke pending.'
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded movie search, item overflow menu, Add To Collection dialog, Media Info/Troubleshoot actions, and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'RemoteStreamsPage'
@@ -95,13 +95,13 @@ notes  = 'Delete dialog server fn smoke clean; static HTML add-form unchanged.'
 
 [[page]]
 name   = 'JellyfinSourcesPage` etc.'
-status = '⏳'
-notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded source list links, connection validation, library preference persistence, and path replacement persistence; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'EmbySourcesPage` etc.'
-status = '⏳'
-notes  = 'Awaits Plex pattern + jellyfin/emby mock helper (Slice E).'
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded source list, connection save persistence, library preference persistence, and path replacement persistence; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'PlayoutsPage` row selection'
@@ -150,23 +150,23 @@ notes  = 'List island; hydrated copy/delete smoke clean.'
 
 [[page]]
 name   = 'TraktListsPage'
-status = 'TODO'
-notes  = 'Browser smoke covered Add dialog, Search/Match/Delete row actions, pager geometry, and console check; add durable E2E spec when automated admin coverage is broadened.'
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Add dialog, Search/Match/Delete row actions, delete persistence, editor fallback save POST, and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'TraktListEditorPage'
-status = 'TODO'
-notes  = 'Browser smoke covered editor layout, checkbox state, save POST fallback form, and console check; add durable E2E spec when automated admin coverage is broadened.'
+status = '✅'
+notes  = '2026-06-28: editor initial form resolves before island emission; `tests/e2e/hydration-pending-routes.spec.ts` covers seeded form render plus save POST fallback persistence; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'FillerPresetsPage'
-status = '⏳'
-notes  = 'List/editor islands with POST fallback save/delete paths.'
+status = '✅'
+notes  = '2026-06-28: list/editor initial data resolves before island emission; `tests/e2e/hydration-pending-routes.spec.ts` covers add-editor render plus POST save/delete fallback persistence; direct Playwright MCP list/editor desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'RerunCollectionsPage'
-status = '⏳'
-notes  = 'List/editor islands with POST fallback save/delete paths.'
+status = '✅'
+notes  = '2026-06-28: list/editor initial data resolves before island emission; `tests/e2e/hydration-pending-routes.spec.ts` covers add-editor render plus POST save/delete fallback persistence; direct Playwright MCP list/editor desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and console-clean.'
 
 [[page]]
 name   = 'SmartCollectionsPage'
@@ -175,45 +175,45 @@ notes  = 'List/editor island and HTML save fallback route covered by `tests/e2e/
 
 [[page]]
 name   = 'TrashPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded trash item selection, Delete Selected dialog cancel, Empty Trash confirmation, delete persistence, and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'PlexLibrariesPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Plex library preference toggle/save persistence and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'PlexPathsPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Plex path replacement add/save persistence and no hydration/page errors; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and no clipped controls.'
 
 [[page]]
 name   = 'JellyfinConnectionPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers required-address validation on the seeded connection editor and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'JellyfinLibrariesPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Jellyfin library preference toggle/save persistence and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'JellyfinPathsPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Jellyfin path replacement add/save persistence and no hydration/page errors; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and no clipped controls.'
 
 [[page]]
 name   = 'EmbyConnectionPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded connection save persistence and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'EmbyLibrariesPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Emby library preference toggle/save persistence and no hydration/page errors; Playwright MCP desktop sweep was 200, hydrated, no 404, no overflow.'
 
 [[page]]
 name   = 'EmbyPathsPage'
-status = '⏳'
-notes  = ''
+status = '✅'
+notes  = '2026-06-28: `tests/e2e/hydration-pending-routes.spec.ts` covers seeded Emby path replacement add/save persistence and no hydration/page errors; Playwright MCP desktop/mobile sweeps were 200, hydrated, no 404, no overflow, and no clipped controls.'

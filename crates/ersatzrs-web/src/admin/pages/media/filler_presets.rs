@@ -75,6 +75,23 @@ fn FillerPresetsIsland(
     initial_rows: Vec<FillerPresetListRow>,
     initial_total: u64,
 ) -> impl IntoView {
+    view! {
+        <FillerPresetsList
+            initial_error=initial_error
+            initial_page_size=initial_page_size
+            initial_rows=initial_rows
+            initial_total=initial_total
+        />
+    }
+}
+
+#[component]
+fn FillerPresetsList(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<FillerPresetListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
     let current_data = RwSignal::new((initial_rows, initial_total));
@@ -327,6 +344,23 @@ pub fn FillerPresetEditorPage() -> impl IntoView {
 
 #[island]
 fn FillerPresetEditorIsland(
+    id: i64,
+    initial_error: String,
+    initial_form: FillerPresetForm,
+    editor_options: FillerPresetEditorOptions,
+) -> impl IntoView {
+    view! {
+        <FillerPresetEditorForm
+            id=id
+            initial_error=initial_error
+            initial_form=initial_form
+            editor_options=editor_options
+        />
+    }
+}
+
+#[component]
+fn FillerPresetEditorForm(
     id: i64,
     initial_error: String,
     initial_form: FillerPresetForm,
@@ -743,17 +777,22 @@ fn collection_type_select(
                 <option value=COLLECTION_TYPE_ARTIST.to_string()>{tr(TextKey::Artist)}</option>
                 <option value=COLLECTION_TYPE_MULTI_COLLECTION.to_string()>{tr(TextKey::MultiCollection)}</option>
                 <option value=COLLECTION_TYPE_SMART_COLLECTION.to_string()>{tr(TextKey::SmartCollection)}</option>
-                {move || {
-                    (!matches!(
+                <option
+                    value=COLLECTION_TYPE_PLAYLIST.to_string()
+                    disabled=move || matches!(
                         filler_kind.get(),
                         FILLER_KIND_FALLBACK | FILLER_KIND_TAIL
-                    ))
-                    .then(|| {
-                        view! {
-                            <option value=COLLECTION_TYPE_PLAYLIST.to_string()>{tr(TextKey::Playlist)}</option>
+                    )
+                    style:display=move || {
+                        if matches!(filler_kind.get(), FILLER_KIND_FALLBACK | FILLER_KIND_TAIL) {
+                            "none"
+                        } else {
+                            ""
                         }
-                    })
-                }}
+                    }
+                >
+                    {tr(TextKey::Playlist)}
+                </option>
             </select>
         </label>
     }

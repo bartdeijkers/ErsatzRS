@@ -177,6 +177,43 @@
     align-items: flex-end;
 }
 
+.path-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.path-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.path-table th,
+.path-table td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.path-action-cell {
+    width: 5.5rem;
+    text-align: right;
+}
+
+@media (max-width: 640px) {
+    .path-add-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .path-add-row > button {
+        align-self: flex-start;
+    }
+
+    .path-action-cell {
+        width: 4.75rem;
+    }
+}
+
 /* Sign-in / status cards */
 
 .pin-waiting {
@@ -213,4 +250,3 @@
     gap: 0.25rem;
 }
 .back-link:hover { color: var(--color-on-surface); }
-

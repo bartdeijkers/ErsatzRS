@@ -32,10 +32,32 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn EmbySourcesPage() -> impl IntoView {
-    let rows: Resource<Vec<RemoteSourceRow>> = Resource::new(
+    let initial: Resource<Vec<RemoteSourceRow>> = Resource::new_blocking(
         || (),
         |()| async { list_emby_sources().await.unwrap_or_default() },
     );
+
+    view! {
+        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|initial_rows| {
+                    view! { <EmbySourcesIsland initial_rows=initial_rows/> }
+                })
+            }}
+        </Suspense>
+    }
+}
+
+#[island]
+fn EmbySourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
+    let current_rows = RwSignal::new(initial_rows);
+    let rows: LocalResource<Vec<RemoteSourceRow>> =
+        LocalResource::new(|| async { list_emby_sources().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(next_rows) = rows.get() {
+            current_rows.set(next_rows);
+        }
+    });
 
     let delete_action = Action::new(|id: &i64| delete_emby_source(*id));
     let delete_target: RwSignal<Option<RemoteSourceRow>> = RwSignal::new(None);
@@ -61,51 +83,53 @@ pub fn EmbySourcesPage() -> impl IntoView {
 
             <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
-                    let list = rows.get().unwrap_or_default();
-                    if list.is_empty() {
-                        view! {
-                            <p class=style::cell_muted>
-                                {no_media_source_configured("Emby")}
-                            </p>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <table style="width:100%;border-collapse:collapse">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
-                                        <th/>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {list.into_iter().map(|r| {
-                                        let id = r.id;
-                                        let r_clone = r.clone();
-                                        view! {
-                                            <tr>
-                                                <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
-                                                <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
-                                                <td style="padding:0.5rem;text-align:right">
-                                                    <div class=style::row_actions>
-                                                        <a href=format!("/media/sources/emby/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
-                                                        <a href=format!("/media/sources/emby/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
-                                                        <a href="/media/sources/emby/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
-                                                        <button
-                                                            class=style::row_btn_del
-                                                            on:click=move |_| {
-                                                                delete_target.set(Some(r_clone.clone()));
-                                                                delete_open.set(true);
-                                                            }
-                                                        >{tr(TextKey::Delete)}</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        }
-                                    }).collect::<Vec<_>>()}
-                                </tbody>
-                            </table>
-                        }.into_any()
+                    let list = current_rows.get();
+                    let show_sources = !list.is_empty();
+                    view! {
+                        <p
+                            class=style::cell_muted
+                            style:display=move || if show_sources { "none" } else { "" }
+                        >
+                            {no_media_source_configured("Emby")}
+                        </p>
+                        <table
+                            style:display=move || if show_sources { "" } else { "none" }
+                            style="width:100%;border-collapse:collapse"
+                        >
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {list.into_iter().map(|r| {
+                                    let id = r.id;
+                                    let r_clone = r.clone();
+                                    view! {
+                                        <tr>
+                                            <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
+                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
+                                            <td style="padding:0.5rem;text-align:right">
+                                                <div class=style::row_actions>
+                                                    <a href=format!("/media/sources/emby/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                    <a href=format!("/media/sources/emby/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                                    <a href="/media/sources/emby/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
+                                                    <button
+                                                        class=style::row_btn_del
+                                                        on:click=move |_| {
+                                                            delete_target.set(Some(r_clone.clone()));
+                                                            delete_open.set(true);
+                                                        }
+                                                    >{tr(TextKey::Delete)}</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </tbody>
+                        </table>
                     }
                 }}
             </Suspense>
@@ -247,12 +271,16 @@ fn EmbyConnectionEditorForm(initial_form: ConnectionForm) -> impl IntoView {
 #[component]
 pub fn EmbyLibrariesPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <EmbyLibrariesIsland source_id=source_id/> }
+}
 
-    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(source_id, |id| async move {
-        list_emby_libraries(id).await.unwrap_or_default()
-    });
+#[island]
+fn EmbyLibrariesIsland(source_id: i64) -> impl IntoView {
+    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_emby_libraries(id).await.unwrap_or_default() },
+    );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -335,8 +363,18 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
                 }}
             </Suspense>
 
-            {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
+            <p
+                class=style::form_error
+                style:display=move || if err.get().is_some() { "" } else { "none" }
+            >
+                {move || err.get().unwrap_or_default()}
+            </p>
+            <p
+                class=style::success_msg
+                style:display=move || if saved.get() { "" } else { "none" }
+            >
+                {tr(TextKey::Saved)}
+            </p>
         </div>
     }
 }
@@ -346,12 +384,16 @@ pub fn EmbyLibrariesPage() -> impl IntoView {
 #[component]
 pub fn EmbyPathsPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <EmbyPathsIsland source_id=source_id/> }
+}
 
-    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(source_id, |id| async move {
-        list_emby_paths(id).await.unwrap_or_default()
-    });
+#[island]
+fn EmbyPathsIsland(source_id: i64) -> impl IntoView {
+    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_emby_paths(id).await.unwrap_or_default() },
+    );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -405,7 +447,7 @@ pub fn EmbyPathsPage() -> impl IntoView {
                         class=style::btn_primary
                         on:click=move |_| {
                             saved.set(false);
-                            save_action.dispatch((source_id(), paths.get_untracked()));
+                            save_action.dispatch((source_id, paths.get_untracked()));
                         }
                     >{tr(TextKey::Save)}</button>
                 </div>
@@ -419,8 +461,18 @@ pub fn EmbyPathsPage() -> impl IntoView {
                 remote_label=provider_path_label("Emby")
             />
 
-            {move || err.get().map(|e| view! { <p class=style::form_error>{e}</p> })}
-            {move || saved.get().then(|| view! { <p class=style::success_msg>{tr(TextKey::Saved)}</p> })}
+            <p
+                class=style::form_error
+                style:display=move || if err.get().is_some() { "" } else { "none" }
+            >
+                {move || err.get().unwrap_or_default()}
+            </p>
+            <p
+                class=style::success_msg
+                style:display=move || if saved.get() { "" } else { "none" }
+            >
+                {tr(TextKey::Saved)}
+            </p>
         </div>
     }
 }

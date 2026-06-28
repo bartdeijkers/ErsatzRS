@@ -36,15 +36,26 @@ pub fn PlexSourcesPage() -> impl IntoView {
 
 #[island]
 fn PlexSourcesIsland() -> impl IntoView {
-    let rows: Resource<Vec<PlexSourceRow>> = Resource::new(
-        || (),
-        |()| async { list_plex_sources().await.unwrap_or_default() },
-    );
-
-    let has_token: Resource<bool> = Resource::new(
-        || (),
-        |()| async { has_plex_token().await.unwrap_or(false) },
-    );
+    let current_sources = RwSignal::new(Vec::<PlexSourceRow>::new());
+    let current_authorized = RwSignal::new(false);
+    let sources_loaded = RwSignal::new(false);
+    let token_loaded = RwSignal::new(false);
+    let rows: LocalResource<Vec<PlexSourceRow>> =
+        LocalResource::new(|| async { list_plex_sources().await.unwrap_or_default() });
+    let has_token: LocalResource<bool> =
+        LocalResource::new(|| async { has_plex_token().await.unwrap_or(false) });
+    Effect::new(move |_| {
+        if let Some(next_rows) = rows.get() {
+            current_sources.set(next_rows);
+            sources_loaded.set(true);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(next_authorized) = has_token.get() {
+            current_authorized.set(next_authorized);
+            token_loaded.set(true);
+        }
+    });
 
     let sign_out_action = Action::new(|()| sign_out_plex());
     let sign_out_open = RwSignal::new(false);
@@ -63,72 +74,73 @@ fn PlexSourcesIsland() -> impl IntoView {
                 <h1 class=style::page_title>"Plex"</h1>
             </div>
 
-            <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
-                {move || {
-                    // Evaluate both resources together so the view closure is reactive to both.
-                    let sources = rows.get().unwrap_or_default();
-                    let authorized = has_token.get().unwrap_or(false);
-                    let show_sign_in = sources.is_empty() || !authorized;
-                    let show_sources = !sources.is_empty();
+            {move || {
+                let sources = current_sources.get();
+                let authorized = current_authorized.get();
+                let loaded = sources_loaded.get() && token_loaded.get();
+                let show_sign_in = loaded && (sources.is_empty() || !authorized);
+                let show_sources = loaded && !sources.is_empty();
+                let show_loading = !loaded;
 
-                    view! {
-                        <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
-                            // Sign-in island — always rendered; shown when not yet authorized.
-                            <div style:display=move || if show_sign_in { "" } else { "none" }>
-                                <PlexSignInIsland/>
-                            </div>
-                            // Sign-out button — always rendered; hidden when sign-in is shown.
-                            <button
-                                class=style::btn_danger
-                                style:display=move || if show_sign_in { "none" } else { "" }
-                                disabled=move || show_sign_in
-                                on:click=move |_| sign_out_open.set(true)
-                            >
-                                {tr(TextKey::SignOutOfPlex)}
-                            </button>
+                view! {
+                    <p
+                        class=style::cell_muted
+                        style:display=move || if show_loading { "" } else { "none" }
+                    >
+                        {tr(TextKey::Loading)}
+                    </p>
+                    <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+                        <div style:display=move || if show_sign_in { "" } else { "none" }>
+                            <PlexSignInControls/>
                         </div>
-
-                        // Empty state — always rendered; shown when no sources exist.
-                        <p
-                            class=style::cell_muted
-                            style:display=move || if show_sources { "none" } else { "" }
+                        <button
+                            class=style::btn_danger
+                            style:display=move || if show_sign_in { "none" } else { "" }
+                            disabled=move || show_sign_in
+                            on:click=move |_| sign_out_open.set(true)
                         >
-                            {tr(TextKey::PlexSignInHelp)}
-                        </p>
+                            {tr(TextKey::SignOutOfPlex)}
+                        </button>
+                    </div>
 
-                        // Sources table — always rendered; hidden when empty.
-                        <table
-                            style:display=move || if show_sources { "" } else { "none" }
-                            style="width:100%;border-collapse:collapse"
-                        >
-                            <thead>
-                                <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
-                                    <th/>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sources.into_iter().map(|r| {
-                                    let id = r.id;
-                                    view! {
-                                        <tr>
-                                            <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
-                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
-                                            <td style="padding:0.5rem;text-align:right">
-                                                <div class=style::row_actions>
-                                                    <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
-                                                    <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
-                                }).collect::<Vec<_>>()}
-                            </tbody>
-                        </table>
-                    }
-                }}
-            </Suspense>
+                    <p
+                        class=style::cell_muted
+                        style:display=move || if show_sources { "none" } else { "" }
+                    >
+                        {tr(TextKey::PlexSignInHelp)}
+                    </p>
+
+                    <table
+                        style:display=move || if show_sources { "" } else { "none" }
+                        style="width:100%;border-collapse:collapse"
+                    >
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
+                                <th/>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sources.into_iter().map(|r| {
+                                let id = r.id;
+                                view! {
+                                    <tr>
+                                        <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
+                                        <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
+                                        <td style="padding:0.5rem;text-align:right">
+                                            <div class=style::row_actions>
+                                                <a href=format!("/media/sources/plex/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                <a href=format!("/media/sources/plex/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </tbody>
+                    </table>
+                }
+            }}
 
             <DeleteDialog
                 open=sign_out_open
@@ -142,15 +154,15 @@ fn PlexSourcesIsland() -> impl IntoView {
     }
 }
 
-// ─── Plex sign-in island ──────────────────────────────────────────────────────
+// ─── Plex sign-in controls ────────────────────────────────────────────────────
 
 /// Island for the Plex OAuth PIN flow (no web_sys — uses navigate on success).
 ///
 /// Calls `start_plex_pin_flow`, renders the plex.tv URL as a link the user
 /// clicks, then polls `check_plex_pin` every 2 s via `spawn_local` +
 /// `gloo-timers`. On success navigates to `/media/sources/plex` to reload.
-#[island]
-pub fn PlexSignInIsland() -> impl IntoView {
+#[component]
+fn PlexSignInControls() -> impl IntoView {
     #[derive(Clone)]
     enum State {
         Idle,
@@ -265,12 +277,16 @@ pub fn PlexSignInIsland() -> impl IntoView {
 #[component]
 pub fn PlexLibrariesPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <PlexLibrariesIsland source_id=source_id/> }
+}
 
-    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(source_id, |id| async move {
-        list_plex_libraries(id).await.unwrap_or_default()
-    });
+#[island]
+fn PlexLibrariesIsland(source_id: i64) -> impl IntoView {
+    let libs: Resource<Vec<LibraryPrefRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_plex_libraries(id).await.unwrap_or_default() },
+    );
 
     let prefs: RwSignal<Vec<LibraryPrefRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -374,12 +390,16 @@ pub fn PlexLibrariesPage() -> impl IntoView {
 #[component]
 pub fn PlexPathsPage() -> impl IntoView {
     let params = use_params_map();
-    let source_id =
-        move || params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    let source_id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
+    view! { <PlexPathsIsland source_id=source_id/> }
+}
 
-    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(source_id, |id| async move {
-        list_plex_paths(id).await.unwrap_or_default()
-    });
+#[island]
+fn PlexPathsIsland(source_id: i64) -> impl IntoView {
+    let loaded: Resource<Vec<PathReplacementRow>> = Resource::new(
+        move || source_id,
+        |id| async move { list_plex_paths(id).await.unwrap_or_default() },
+    );
 
     let paths: RwSignal<Vec<PathReplacementRow>> = RwSignal::new(vec![]);
     Effect::new(move |_| {
@@ -433,7 +453,7 @@ pub fn PlexPathsPage() -> impl IntoView {
                         class=style::btn_primary
                         on:click=move |_| {
                             saved.set(false);
-                            save_action.dispatch((source_id(), paths.get_untracked()));
+                            save_action.dispatch((source_id, paths.get_untracked()));
                         }
                     >{tr(TextKey::Save)}</button>
                 </div>

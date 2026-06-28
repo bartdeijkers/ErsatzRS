@@ -85,6 +85,23 @@ fn RerunCollectionsIsland(
     initial_rows: Vec<RerunCollectionListRow>,
     initial_total: u64,
 ) -> impl IntoView {
+    view! {
+        <RerunCollectionsList
+            initial_error=initial_error
+            initial_page_size=initial_page_size
+            initial_rows=initial_rows
+            initial_total=initial_total
+        />
+    }
+}
+
+#[component]
+fn RerunCollectionsList(
+    initial_error: String,
+    initial_page_size: u32,
+    initial_rows: Vec<RerunCollectionListRow>,
+    initial_total: u64,
+) -> impl IntoView {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
@@ -339,6 +356,21 @@ pub fn RerunCollectionEditorPage() -> impl IntoView {
 
 #[island]
 fn RerunCollectionEditorIsland(
+    initial_error: String,
+    initial_form: RerunCollectionForm,
+    editor_options: RerunCollectionEditorOptions,
+) -> impl IntoView {
+    view! {
+        <RerunCollectionEditorForm
+            initial_error=initial_error
+            initial_form=initial_form
+            editor_options=editor_options
+        />
+    }
+}
+
+#[component]
+fn RerunCollectionEditorForm(
     initial_error: String,
     initial_form: RerunCollectionForm,
     editor_options: RerunCollectionEditorOptions,

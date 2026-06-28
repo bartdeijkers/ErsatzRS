@@ -74,6 +74,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Pending admin hydration gaps for Plex/Jellyfin/Emby source pages, Movies,
+  Trash, Trakt lists, Filler Presets, and Rerun Collections now have durable
+  seeded Playwright coverage; the affected islands resolve initial SSR data
+  before hydration and provider path replacement tables stay within mobile
+  layouts.
 - CI Playwright E2E now runs on its own port, and `ersatzrs-web` honors the
   configured Leptos bind address so the self-hosted runner can coexist with a
   live maintainer admin server on the default `8409` port.

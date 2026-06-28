@@ -15,9 +15,9 @@ use crate::admin::server_fns::media_browser::{
     MultiCollectionListRow, MultiCollectionSelectOption,
 };
 use crate::admin::ui::primitives::{
-    button::{ButtonVariant, LinkButton},
     dialog::DeleteDialog,
     form::TextField,
+    icon::{icon_style, IconName},
     toast::{use_toast, ToastSeverity},
 };
 
@@ -347,20 +347,20 @@ fn multi_collection_editor_fallback_html(form: &MultiCollectionForm) -> String {
         tr(TextKey::SaveMultiCollection)
     };
     format!(
-        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{toolbar}"><h1 class="{page_title}">{heading}</h1><button type="submit" class="{btn_add}">{button}</button></div><div class="{editor}"><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div><div class="{form_actions}"><button type="submit" class="{btn_add}">{button}</button><a href="/media/multi-collections" class="{btn_add}">{back}</a></div></form>"#,
+        r#"<form method="post" action="/api/multi-collections/save" class="{page}"><input type="hidden" name="id" value="{id}"><div class="{editor_action_bar}"><button type="submit" class="{btn_add}">{button}</button></div><div class="{editor}"><h1 class="{page_title}">{heading}</h1><div class="{editor_full_row} {divider}"></div><label class="{field_label}" for="multi-collection-name">{name_label}</label><input id="multi-collection-name" name="name" value="{name}" required maxlength="50"></div></form>"#,
         page = style::page,
-        toolbar = style::toolbar,
+        editor_action_bar = style::editor_action_bar,
         page_title = style::page_title,
         heading = tr(TextKey::MultiCollection),
         btn_add = style::btn_add,
+        editor_full_row = style::editor_full_row,
+        divider = style::divider,
         id = form.id,
         button = button,
         editor = style::editor,
         field_label = style::field_label,
         name_label = tr(TextKey::Name),
         name = escape_html(&form.name),
-        form_actions = style::form_actions,
-        back = tr(TextKey::Back),
     )
 }
 
@@ -465,6 +465,12 @@ fn MultiCollectionEditorIsland(
         });
     });
 
+    let save_icon = if id_signal.get_untracked() == 0 {
+        IconName::Add
+    } else {
+        IconName::Save
+    };
+
     view! {
         <form
             method="post"
@@ -476,9 +482,9 @@ fn MultiCollectionEditorIsland(
             }
         >
             <input type="hidden" name="id" value=move || id_signal.get().to_string()/>
-            <div class=style::toolbar>
-                <h1 class=style::page_title>{tr(TextKey::MultiCollection)}</h1>
+            <div class=style::editor_action_bar>
                 <button type="submit" class=style::btn_add>
+                    <span style=icon_style(save_icon, "1.125rem") aria-hidden="true"></span>
                     {move || if id_signal.get() == 0 {
                         tr(TextKey::AddMultiCollection)
                     } else {
@@ -488,18 +494,23 @@ fn MultiCollectionEditorIsland(
             </div>
 
             <div class=style::editor>
+                <h1 class=style::page_title>{tr(TextKey::MultiCollection)}</h1>
+                <div class=format!("{} {}", style::editor_full_row, style::divider)></div>
+
                 <TextField
                     label=tr(TextKey::Name)
                     value=name
                     name=Some("name")
+                    required=true
+                    max_length=Some(50)
                     error=Some(name_err_signal)
                 />
 
                 {
                     let options = editor_options.clone();
                     view! {
-                                <div class=style::field_group>
                                     <label class=style::field_label>{tr(TextKey::Collections)}</label>
+                                    <div class=style::selector_control>
                                     <select
                                         class=style::select
                                         prop:value=move || selected_collection.get().to_string()
@@ -512,11 +523,15 @@ fn MultiCollectionEditorIsland(
                                         <option value="0">{tr(TextKey::SelectCollection)}</option>
                                         {options.collections.iter().map(|option| {
                                             let id = option.id;
-                                            let disabled = items.with(|items| {
-                                                items.iter().any(|item| item.collection_id == Some(id))
-                                            });
                                             view! {
-                                                <option value=id.to_string() disabled=disabled>
+                                                <option
+                                                    value=id.to_string()
+                                                    disabled=move || {
+                                                        items.with(|items| {
+                                                            items.iter().any(|item| item.collection_id == Some(id))
+                                                        })
+                                                    }
+                                                >
                                                     {option.name.clone()}
                                                 </option>
                                             }
@@ -525,9 +540,11 @@ fn MultiCollectionEditorIsland(
                                     <p class=style::help_text>
                                         {tr(TextKey::DisabledCollectionsAlreadyPresent)}
                                     </p>
+                                    </div>
+                                    <div class=style::field_spacer aria-hidden="true"></div>
                                     <button
                                         type="button"
-                                        class=style::btn_add
+                                        class=format!("{} {}", style::btn_add, style::selector_action)
                                         disabled=move || selected_collection.get() == 0
                                         on:click={
                                             let options = options.collections.clone();
@@ -539,12 +556,12 @@ fn MultiCollectionEditorIsland(
                                             }
                                         }
                                     >
+                                        <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                                         {tr(TextKey::AddCollection)}
                                     </button>
-                                </div>
 
-                                <div class=style::field_group>
                                     <label class=style::field_label>{tr(TextKey::SmartCollections)}</label>
+                                    <div class=style::selector_control>
                                     <select
                                         class=style::select
                                         prop:value=move || selected_smart_collection.get().to_string()
@@ -557,11 +574,15 @@ fn MultiCollectionEditorIsland(
                                         <option value="0">{tr(TextKey::SelectSmartCollection)}</option>
                                         {options.smart_collections.iter().map(|option| {
                                             let id = option.id;
-                                            let disabled = items.with(|items| {
-                                                items.iter().any(|item| item.smart_collection_id == Some(id))
-                                            });
                                             view! {
-                                                <option value=id.to_string() disabled=disabled>
+                                                <option
+                                                    value=id.to_string()
+                                                    disabled=move || {
+                                                        items.with(|items| {
+                                                            items.iter().any(|item| item.smart_collection_id == Some(id))
+                                                        })
+                                                    }
+                                                >
                                                     {option.name.clone()}
                                                 </option>
                                             }
@@ -570,9 +591,11 @@ fn MultiCollectionEditorIsland(
                                     <p class=style::help_text>
                                         {tr(TextKey::DisabledCollectionsAlreadyPresent)}
                                     </p>
+                                    </div>
+                                    <div class=style::field_spacer aria-hidden="true"></div>
                                     <button
                                         type="button"
-                                        class=style::btn_add
+                                        class=format!("{} {}", style::btn_add, style::selector_action)
                                         disabled=move || selected_smart_collection.get() == 0
                                         on:click={
                                             let options = options.smart_collections.clone();
@@ -584,13 +607,13 @@ fn MultiCollectionEditorIsland(
                                             }
                                         }
                                     >
+                                        <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                                         {tr(TextKey::AddSmartCollection)}
                                     </button>
-                                </div>
                     }
                 }
 
-                <section>
+                <section class=format!("{} {}", style::editor_full_row, style::items_section)>
                     <h2 class=style::section_title>
                         {move || {
                             let current = name.get();
@@ -601,25 +624,10 @@ fn MultiCollectionEditorIsland(
                             }
                         }}
                     </h2>
+                    <div class=style::divider></div>
                     {move || multi_collection_item_hidden_fields(items.get())}
                     <MultiCollectionItemsTable items=items/>
                 </section>
-
-                <div class=style::form_actions>
-                    <button type="submit" class=style::btn_add>
-                        {move || if id_signal.get() == 0 {
-                            tr(TextKey::AddMultiCollection)
-                        } else {
-                            tr(TextKey::SaveMultiCollection)
-                        }}
-                    </button>
-                    <LinkButton
-                        href="/media/multi-collections".to_string()
-                        variant=ButtonVariant::Text
-                    >
-                        {tr(TextKey::Back)}
-                    </LinkButton>
-                </div>
             </div>
         </form>
     }
@@ -664,6 +672,12 @@ fn MultiCollectionItemsTable(items: RwSignal<Vec<MultiCollectionItemForm>>) -> i
     view! {
         <div class=style::table_wrap>
             <table>
+                <colgroup>
+                    <col/>
+                    <col style="width: 20%"/>
+                    <col style="width: 30%"/>
+                    <col style="width: 60px"/>
+                </colgroup>
                 <thead>
                     <tr>
                         <th>{tr(TextKey::Collection)}</th>

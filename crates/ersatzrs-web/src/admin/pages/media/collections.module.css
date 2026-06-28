@@ -275,6 +275,36 @@ tbody tr:hover {
     display: contents;
 }
 
+.editor > .editor-full-row {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+}
+
+.editor > .selector-control {
+    grid-column: 2;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.editor > .selector-control .select {
+    width: 100%;
+}
+
+.editor > .field-spacer {
+    grid-column: 1;
+    display: block;
+    min-height: 2.25rem;
+}
+
+.editor > .selector-action {
+    grid-column: 2;
+    justify-self: start;
+    align-self: center;
+}
+
 .editor label > span {
     color: var(--color-gray-100);
     font-size: 0.875rem;
@@ -379,6 +409,10 @@ tbody tr:hover {
     margin: 0 0 0.5rem 0;
 }
 
+.items-section {
+    margin-top: 1rem;
+}
+
 .form-actions {
     display: flex;
     gap: 0.5rem;
@@ -424,6 +458,14 @@ tbody tr:hover {
 
     .expression-help {
         font-size: 0.9rem;
+    }
+
+    .editor > .field-spacer {
+        display: none;
+    }
+
+    .editor > .selector-action {
+        align-self: flex-start;
     }
 }
 

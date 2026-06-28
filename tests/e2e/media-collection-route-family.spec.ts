@@ -143,6 +143,74 @@ async function expectCollectionPagerTypography(page: Page): Promise<void> {
   expect(styles?.buttonLineHeight).toBe(styles?.selectLineHeight);
 }
 
+async function expectMultiCollectionEditorGeometry(page: Page): Promise<void> {
+  await expect(page.getByRole('button', { name: /save multi collection/i })).toHaveCount(1);
+
+  const metrics = await page.locator('main').evaluate((main) => {
+    const rect = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        bottom: box.bottom,
+        left: box.left,
+        top: box.top,
+        width: box.width,
+      };
+    };
+    const text = (element: Element) => element.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    const actionBar = main.querySelector('[class*="editor-action-bar"]');
+    const heading = Array.from(main.querySelectorAll('h1')).find(
+      (element) => text(element) === 'Multi Collection',
+    );
+    const editor = heading?.parentElement;
+    const itemsSection = Array.from(main.querySelectorAll('section')).find((element) =>
+      text(element).includes('E2E Multi Collection Items'),
+    );
+    const table = itemsSection?.querySelector('table');
+    const collectionSelect = Array.from(main.querySelectorAll('select')).find((element) =>
+      Array.from(element.options).some((option) => option.textContent === 'E2E Manual Collection'),
+    );
+    const collectionAddButton = Array.from(main.querySelectorAll('button')).find(
+      (element) => text(element) === 'Add Collection',
+    );
+    const smartAddButton = Array.from(main.querySelectorAll('button')).find(
+      (element) => text(element) === 'Add Smart Collection',
+    );
+
+    if (
+      !actionBar ||
+      !heading ||
+      !editor ||
+      !itemsSection ||
+      !table ||
+      !collectionSelect ||
+      !collectionAddButton ||
+      !smartAddButton
+    ) {
+      return null;
+    }
+
+    return {
+      actionBar: rect(actionBar),
+      addButton: rect(collectionAddButton),
+      editor: rect(editor),
+      heading: rect(heading),
+      itemsSection: rect(itemsSection),
+      select: rect(collectionSelect),
+      smartAddButton: rect(smartAddButton),
+      table: rect(table),
+    };
+  });
+
+  expect(metrics).not.toBeNull();
+  expect(metrics?.actionBar.width).toBeGreaterThan(metrics?.editor.width ?? 0);
+  expect(metrics?.heading.top).toBeGreaterThan(metrics?.actionBar.bottom ?? 0);
+  expect(metrics?.itemsSection.top).toBeGreaterThan(metrics?.smartAddButton.bottom ?? 0);
+  expect(metrics?.itemsSection.width).toBeGreaterThan((metrics?.editor.width ?? 0) * 0.9);
+  expect(metrics?.table.width).toBeGreaterThan((metrics?.editor.width ?? 0) * 0.9);
+  expect(metrics?.addButton.left).toBeGreaterThanOrEqual((metrics?.select.left ?? 0) - 1);
+  expect(metrics?.addButton.width).toBeLessThan((metrics?.select.width ?? 0) * 0.9);
+}
+
 test.describe('media collection route-family parity', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed collection routes');
 
@@ -195,6 +263,11 @@ SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)
     await expect(page.getByRole('heading', { name: 'Multi Collection', exact: true })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'E2E Manual Collection' })).toBeVisible();
     await expect(page.getByText('Schedule As Group').first()).toBeVisible();
+    await expectMultiCollectionEditorGeometry(page);
+    await page.screenshot({
+      path: screenshotPath(testInfo, 'media-route-family-multi-collection-editor'),
+      fullPage: true,
+    });
 
     await page.goto('/media/rerun-collections');
     await expectContentGeometry(page, 'Rerun Collections');

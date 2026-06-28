@@ -283,11 +283,11 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/libraries`       | ✅     | Stable DOM shape, no `<Show>` in island.                                |
 | `/search`                | ✅     | Stable DOM shape, no `<Show>` in island.                                |
 | `/media/playlists`       | TODO   | Browser smoke covered add group, add playlist, edit/save redirect, preview empty state, delete playlist/group, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
-| `/media/rerun-collections` | TODO | Browser smoke covered list render, add/save redirect, delete dialog, cleanup, route geometry screenshot, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
+| `/media/rerun-collections` | ✅ | List route desktop/mobile hydration and overflow checked with Playwright MCP; add-editor POST save/delete fallback covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/channels`              | ✅     | Stable DOM shape, `DeleteDialog` always rendered. Stop-transcode button always in DOM, visibility toggled via `style:visibility` from the live HLS-session poll. |
 | `/channels/numbers`      | ✅     | SSR channel-number editor; `tests/e2e/channels-edit-numbers.spec.ts` covers Edit Numbers navigation, validation, atomic swap persistence, mobile actions, and no-JS POST fallback. |
 | `/channels/:id`          | ✅     | SSR multipart form; mode-specific fields visible without hydration.     |
-| `/media/trakt/lists`     | TODO   | Browser smoke should cover Add dialog, row Search/Match/Delete, pager, editor save POST fallback, visual geometry, and console warning/error check; see `plans/trakt-lists-parity-slice.md`. |
+| `/media/trakt/lists`     | ✅     | Add dialog, row Search/Match/Delete, delete persistence, editor save POST fallback, and console check covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/channels/add`          | ✅     | Same SSR form as `/channels/:id` (id=0), with logo upload/remove smoke. |
 | `/ffmpeg/profiles`       | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/ffmpeg/profiles/:id`   | ✅     | Island owns blocking resource, no Suspense wrapper.                     |
@@ -298,7 +298,13 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/schedules`             | TODO   | Browser smoke covered list/add/items route geometry, screenshots, no-JS schedule and item form POST fallbacks, and hydrated item editing; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/templates`             | TODO   | Browser smoke covered list geometry, template group/template add/copy/delete confirmations, and console warning/error check; add a durable Playwright spec when the route gets automated admin UI coverage. |
 | `/templates/:id`         | TODO   | Browser smoke covered editor geometry, browser-navigation edit link, block add/remove/drag/save, and no-JS item form POST fallback; add a durable Playwright spec when the route gets automated admin UI coverage. |
-| `/media/sources/plex`    | ✅     | Stable DOM shape, `PlexSignInIsland` all-arms always rendered.          |
+| `/media/sources/plex`    | ✅     | Initial source/token state resolves before the island boundary; seeded desktop/mobile hydration and console sweep clean. |
+| `/media/sources/plex/:id/libraries` | ✅ | Seeded library preference toggle/save persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/sources/plex/:id/paths` | ✅ | Seeded path add/save persistence plus desktop/mobile overflow checks covered by `tests/e2e/hydration-pending-routes.spec.ts` and Playwright MCP. |
+| `/media/sources/jellyfin/:id/libraries` | ✅ | Seeded library preference toggle/save persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/sources/jellyfin/:id/paths` | ✅ | Seeded path add/save persistence plus desktop/mobile overflow checks covered by `tests/e2e/hydration-pending-routes.spec.ts` and Playwright MCP. |
+| `/media/sources/emby/:id/libraries` | ✅ | Seeded library preference toggle/save persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/sources/emby/:id/paths` | ✅ | Seeded path add/save persistence plus desktop/mobile overflow checks covered by `tests/e2e/hydration-pending-routes.spec.ts` and Playwright MCP. |
 | `/blocks`                | ✅     | Stable DOM shape, two `DeleteDialog`s always rendered; copy modal, copy redirect, and 3840x1918 visual comparison covered in `plans/blocks-parity-slice.md`. |
 | `/blocks/:id`            | ✅     | Stable DOM shape, preview modal via `style:display`; hydrated add-item/preview/save plus no-JS item fallback verified in `plans/blocks-parity-slice.md`. |
 | `/playouts/sequential/:id`| ✅    | Stable DOM shape, validation error banner always rendered.              |
@@ -307,14 +313,15 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/media/collections`     | ✅     | Stable DOM shape, `DeleteDialog` always rendered.                       |
 | `/media/collections/:id` | TODO   | Detail page port: poster grid, hover-checkbox multi-select, per-card trashcan, inline rename pencil, "Use Custom Playback Order" toggle with Move Up/Down (drag-and-drop deferred). Island owns blocking resource; sections rendered conditionally over stable signal state. |
 | `/media/collections/:id/edit` | ✅ | Rename-only form (port of `CollectionEditor.razor`).                  |
-| `/media/filler/presets` | TODO | Stable DOM shape, `DeleteDialog` always rendered; HTML POST fallback delete route. |
-| `/media/filler/presets/:id/edit` | TODO | Editor island owns blocking resources; save also posts to `/api/filler-presets/save` without hydration. |
+| `/media/filler/presets` | ✅ | List route desktop/mobile hydration and overflow checked with Playwright MCP; add-editor POST save/delete fallback covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/filler/presets/:id/edit` | ✅ | Editor initial form/options resolve before island emission; save posts to `/api/filler-presets/save` without hydration and is covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
 | `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |
 | `/media/tv/shows/:id`   | TODO   | Detail page renders metadata facts including Languages; Plex Scan buttons call targeted `scan_show`, Jellyfin/Emby/Local fall back to library scan; needs manual Add-To/Scan hydration smoke. |
 | `/media/tv/seasons/:id` | TODO   | Detail page renders fanart/poster header plus vertical episode cards; needs manual Add-To, Show Media Info, and Troubleshoot Playback hydration smoke. |
-| `/media/movies`          | TODO   | URL-driven pager (`?query=…&page=N`) + Jellyfin/Emby artwork proxy; item overflow menu opens Add To Collection, Show Media Info, and Troubleshoot Playback. |
+| `/media/movies`          | ✅     | Seeded URL-driven query plus item overflow menu, Add To Collection dialog, Show Media Info, and Troubleshoot Playback covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/trash`           | ✅     | Seeded Delete Selected dialog cancel, Empty Trash confirmation, and delete persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/media/movies/:id`      | ✅     | Blocking resource details page with fanart, poster, plot, metadata.       |
 | `/media/remote/streams`  | ✅     | Dedicated `RemoteStreamList.razor` parity route; card geometry, Add To Collection persistence, no-JS SSR HTML, and mobile menu covered by `tests/e2e/remote-streams.spec.ts`. |
 | `/media/music/artists/:id` | ✅ | Detail page renders fanart/thumbnail header, linked facts, artist Add-To actions, and first 100 music videos; modal-open hydration smoke clean. |

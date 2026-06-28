@@ -441,30 +441,46 @@ pub fn TraktListEditorPage() -> impl IntoView {
             .unwrap_or(0)
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    view! { <TraktListEditorIsland id initial_error=error/> }
-}
-
-#[island]
-fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
-    let has_initial_error = !initial_error.is_empty();
     let initial: Resource<Option<TraktListForm>> = Resource::new_blocking(
         move || id,
         |id| async move { get_trakt_list_form(id).await.unwrap_or_default() },
     );
 
-    let form_id = RwSignal::new(id);
-    let slug = RwSignal::new(String::new());
-    let auto_refresh = RwSignal::new(false);
-    let generate_playlist = RwSignal::new(false);
+    view! {
+        <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                let error = error.clone();
+                initial.get().map(move |initial_form| {
+                    view! {
+                        <TraktListEditorIsland
+                            id=id
+                            initial_error=error.clone()
+                            initial_form=initial_form
+                        />
+                    }
+                })
+            }}
+        </Suspense>
+    }
+}
 
-    Effect::new(move |_| {
-        if let Some(Some(form)) = initial.get() {
-            form_id.set(form.id);
-            slug.set(form.slug);
-            auto_refresh.set(form.auto_refresh);
-            generate_playlist.set(form.generate_playlist);
-        }
-    });
+#[island]
+fn TraktListEditorIsland(
+    id: i64,
+    initial_error: String,
+    initial_form: Option<TraktListForm>,
+) -> impl IntoView {
+    let has_initial_error = !initial_error.is_empty();
+    let form = initial_form.unwrap_or_default();
+    let form_found = form.id != 0 || id == 0;
+    let form_id = RwSignal::new(form.id);
+    let slug = RwSignal::new(form.slug.clone());
+    let auto_refresh = RwSignal::new(form.auto_refresh);
+    let generate_playlist = RwSignal::new(form.generate_playlist);
+    let hidden_slug = form.slug.clone();
+    let display_slug = form.slug.clone();
+    let checked_auto_refresh = form.auto_refresh;
+    let checked_generate_playlist = form.generate_playlist;
 
     let save_action = Action::new(|form: &TraktListForm| {
         let form = form.clone();
@@ -512,27 +528,25 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                 </button>
             </div>
 
-            <Suspense fallback=move || view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }>
-                {move || match initial.get() {
-                    Some(Some(form)) => view! {
-                        <form
-                            id="trakt-list-editor-form"
-                            method="post"
-                            action="/api/trakt-lists/save"
-                            class=style::editor
-                        >
+            <form
+                id="trakt-list-editor-form"
+                method="post"
+                action="/api/trakt-lists/save"
+                class=style::editor
+                style:display=move || if form_found { "" } else { "none" }
+            >
                             <h1 class=style::page_title>{tr(TextKey::TraktList)}</h1>
                             <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                                 {tr(TextKey::TraktListSaveFailed)}
                             </p>
-                            <input type="hidden" name="id" value=form.id.to_string()/>
-                            <input type="hidden" name="slug" value=form.slug.clone()/>
+                            <input type="hidden" name="id" value=move || form_id.get().to_string()/>
+                            <input type="hidden" name="slug" value=hidden_slug/>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Id)}</div>
                                 <input
                                     class=style::text_input
                                     type="text"
-                                    value=form.slug.clone()
+                                    value=display_slug
                                     prop:value=move || slug.get()
                                     disabled
                                 />
@@ -544,7 +558,7 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                         type="checkbox"
                                         name="auto_refresh"
                                         value="true"
-                                        checked=form.auto_refresh
+                                        checked=checked_auto_refresh
                                         prop:checked=move || auto_refresh.get()
                                         on:change=move |event| {
                                             auto_refresh.set(event_target_checked(&event));
@@ -560,7 +574,7 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                         type="checkbox"
                                         name="generate_playlist"
                                         value="true"
-                                        checked=form.generate_playlist
+                                        checked=checked_generate_playlist
                                         prop:checked=move || generate_playlist.get()
                                         on:change=move |event| {
                                             generate_playlist.set(event_target_checked(&event));
@@ -569,12 +583,13 @@ fn TraktListEditorIsland(id: i64, initial_error: String) -> impl IntoView {
                                     <small>{tr(TextKey::GeneratePlaylistFromSortedTraktItems)}</small>
                                 </label>
                             </div>
-                        </form>
-                    }.into_any(),
-                    Some(None) => view! { <p class=style::empty>{tr(TextKey::TraktListNotFound)}</p> }.into_any(),
-                    None => view! { <p class=style::empty>{tr(TextKey::Loading)}</p> }.into_any(),
-                }}
-            </Suspense>
+            </form>
+            <p
+                class=style::empty
+                style:display=move || if form_found { "none" } else { "" }
+            >
+                {tr(TextKey::TraktListNotFound)}
+            </p>
         </div>
     }
 }

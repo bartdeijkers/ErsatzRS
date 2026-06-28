@@ -30,15 +30,32 @@ fn set_browser_location(_path: &str) {}
 
 #[component]
 pub fn JellyfinSourcesPage() -> impl IntoView {
-    view! { <JellyfinSourcesIsland/> }
-}
-
-#[island]
-fn JellyfinSourcesIsland() -> impl IntoView {
-    let rows: Resource<Vec<RemoteSourceRow>> = Resource::new(
+    let initial: Resource<Vec<RemoteSourceRow>> = Resource::new_blocking(
         || (),
         |()| async { list_jellyfin_sources().await.unwrap_or_default() },
     );
+
+    view! {
+        <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
+            {move || {
+                initial.get().map(|initial_rows| {
+                    view! { <JellyfinSourcesIsland initial_rows=initial_rows/> }
+                })
+            }}
+        </Suspense>
+    }
+}
+
+#[island]
+fn JellyfinSourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
+    let current_rows = RwSignal::new(initial_rows);
+    let rows: LocalResource<Vec<RemoteSourceRow>> =
+        LocalResource::new(|| async { list_jellyfin_sources().await.unwrap_or_default() });
+    Effect::new(move |_| {
+        if let Some(next_rows) = rows.get() {
+            current_rows.set(next_rows);
+        }
+    });
 
     let delete_action = Action::new(|id: &i64| delete_jellyfin_source(*id));
     let delete_target: RwSignal<Option<RemoteSourceRow>> = RwSignal::new(None);
@@ -64,51 +81,53 @@ fn JellyfinSourcesIsland() -> impl IntoView {
 
             <Suspense fallback=|| view! { <p class=style::cell_muted>{tr(TextKey::Loading)}</p> }>
                 {move || {
-                    let list = rows.get().unwrap_or_default();
-                    if list.is_empty() {
-                        view! {
-                            <p class=style::cell_muted>
-                                {no_media_source_configured("Jellyfin")}
-                            </p>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <table style="width:100%;border-collapse:collapse">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
-                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
-                                        <th/>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {list.into_iter().map(|r| {
-                                        let id = r.id;
-                                        let r_clone = r.clone();
-                                        view! {
-                                            <tr>
-                                                <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
-                                                <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
-                                                <td style="padding:0.5rem;text-align:right">
-                                                    <div class=style::row_actions>
-                                                        <a href=format!("/media/sources/jellyfin/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
-                                                        <a href=format!("/media/sources/jellyfin/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
-                                                        <a href="/media/sources/jellyfin/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
-                                                        <button
-                                                            class=style::row_btn_del
-                                                            on:click=move |_| {
-                                                                delete_target.set(Some(r_clone.clone()));
-                                                                delete_open.set(true);
-                                                            }
-                                                        >{tr(TextKey::Delete)}</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        }
-                                    }).collect::<Vec<_>>()}
-                                </tbody>
-                            </table>
-                        }.into_any()
+                    let list = current_rows.get();
+                    let show_sources = !list.is_empty();
+                    view! {
+                        <p
+                            class=style::cell_muted
+                            style:display=move || if show_sources { "none" } else { "" }
+                        >
+                            {no_media_source_configured("Jellyfin")}
+                        </p>
+                        <table
+                            style:display=move || if show_sources { "" } else { "none" }
+                            style="width:100%;border-collapse:collapse"
+                        >
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Name)}</th>
+                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Address)}</th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {list.into_iter().map(|r| {
+                                    let id = r.id;
+                                    let r_clone = r.clone();
+                                    view! {
+                                        <tr>
+                                            <td style="padding:0.5rem;font-size:0.875rem">{r.name.clone()}</td>
+                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{r.address.clone()}</td>
+                                            <td style="padding:0.5rem;text-align:right">
+                                                <div class=style::row_actions>
+                                                    <a href=format!("/media/sources/jellyfin/{id}/libraries") class=style::row_btn>{tr(TextKey::Libraries)}</a>
+                                                    <a href=format!("/media/sources/jellyfin/{id}/paths") class=style::row_btn>{tr(TextKey::Paths)}</a>
+                                                    <a href="/media/sources/jellyfin/edit" class=style::row_btn>{tr(TextKey::Edit)}</a>
+                                                    <button
+                                                        class=style::row_btn_del
+                                                        on:click=move |_| {
+                                                            delete_target.set(Some(r_clone.clone()));
+                                                            delete_open.set(true);
+                                                        }
+                                                    >{tr(TextKey::Delete)}</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </tbody>
+                        </table>
                     }
                 }}
             </Suspense>
@@ -453,7 +472,7 @@ pub fn PathsEditor(
 ) -> impl IntoView {
     view! {
         <div class=style::editor_form>
-            <div style="display:flex;gap:0.5rem;align-items:flex-end">
+            <div class=style::path_add_row>
                 <div class=style::form_row style="flex:1">
                     <label class=style::form_label>{remote_label}</label>
                     <input
@@ -483,33 +502,35 @@ pub fn PathsEditor(
                     view! { <p class=style::cell_muted>{tr(TextKey::NoPathReplacements)}</p> }.into_any()
                 } else {
                     view! {
-                        <table style="width:100%;border-collapse:collapse">
-                            <thead>
-                                <tr>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Remote)}</th>
-                                    <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Local)}</th>
-                                    <th/>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {list.into_iter().enumerate().map(|(i, p)| {
-                                    view! {
-                                        <tr>
-                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{p.remote_path.clone()}</td>
-                                            <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{p.local_path.clone()}</td>
-                                            <td style="padding:0.5rem;text-align:right">
-                                                <button
-                                                    class=style::row_btn_del
-                                                    on:click=move |_| {
-                                                        paths.update(|list| { list.remove(i); });
-                                                    }
-                                                >{tr(TextKey::Remove)}</button>
-                                            </td>
-                                        </tr>
-                                    }
-                                }).collect::<Vec<_>>()}
-                            </tbody>
-                        </table>
+                        <div class=style::path_table_wrap>
+                            <table class=style::path_table>
+                                <thead>
+                                    <tr>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Remote)}</th>
+                                        <th style="text-align:left;padding:0.5rem;font-weight:600;font-size:0.875rem">{tr(TextKey::Local)}</th>
+                                        <th class=style::path_action_cell/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {list.into_iter().enumerate().map(|(i, p)| {
+                                        view! {
+                                            <tr>
+                                                <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{p.remote_path.clone()}</td>
+                                                <td style="padding:0.5rem;font-size:0.875rem" class=style::cell_muted>{p.local_path.clone()}</td>
+                                                <td style="padding:0.5rem" class=style::path_action_cell>
+                                                    <button
+                                                        class=style::row_btn_del
+                                                        on:click=move |_| {
+                                                            paths.update(|list| { list.remove(i); });
+                                                        }
+                                                    >{tr(TextKey::Remove)}</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </tbody>
+                            </table>
+                        </div>
                     }.into_any()
                 }
             }}

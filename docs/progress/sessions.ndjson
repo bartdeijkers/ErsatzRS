@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-06-28","summary":"Fixed the multi-collection editor visual parity regression: restored the ErsatzTV-style action bar, full-width items table, intrinsic selector add buttons, and added route-family geometry coverage."}
+{"agent":"codex","date":"2026-06-28","summary":"Closed pending admin hydration rows with seeded Playwright coverage, SSR-before-island fixes, and desktop/mobile visual sweeps."}
 {"agent":"codex","date":"2026-06-28","summary":"Fixed ersatzrs-web startup to honor the Leptos bind address so CI Playwright E2E actually starts on its isolated port."}
 {"agent":"codex","date":"2026-06-28","summary":"Hardened CI Playwright E2E to avoid port 8409 conflicts with a live admin server."}
 {"agent":"codex","date":"2026-06-28","summary":"Closed schedule item fallback vector-form deserialization parity debt for no-JS /api/schedules/items/save."}
