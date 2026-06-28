@@ -34,8 +34,8 @@ resolved    = true
 id          = 'duration-post-roll-filler-overlap'
 description = 'Classic Duration schedule items with count-based post-roll filler can schedule the filler at the same timestamp as the next primary item instead of advancing the duration block through the filler.'
 discovered  = '2026-06-27'
-evidence    = 'MTV dogfood Beavis and Butt-Head half-hour block: a Duration item with `PostRollFillerId=1` generated `PlayoutItem` rows where the MTV bumper and the next episode both started at 22:10:57. The live channel had to use explicit One items (`episode`, `bumper`, `episode`) to avoid overlapping playout rows.'
-resolved    = false
+evidence    = 'Resolved 2026-06-28: Duration scheduling now advances `CurrentTime` to the end of the full scheduled block, including post-roll filler, mirroring ErsatzTV `PlayoutModeSchedulerDuration` using `itemEndTimeWithFiller`. Regression `classic_duration_post_roll_advances_before_next_primary` proves a 30-minute duration block schedules 10-minute content + 5-minute post-roll filler, then starts the next primary after the filler instead of at the same timestamp.'
+resolved    = true
 
 [[debt]]
 id          = 'music-video-shuffle-artist-distance'

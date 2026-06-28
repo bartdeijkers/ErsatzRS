@@ -427,6 +427,7 @@ impl ClassicContext {
                 self.advance_schedule_item();
                 break;
             }
+            let block_start_len = self.result.added_items.len();
             if self.schedule_media_item(
                 schedule_item,
                 &media_item,
@@ -435,7 +436,11 @@ impl ClassicContext {
                 "Duration",
             ) {
                 self.advance_media(schedule_item);
-                self.state.current_time = item_start_time + media_item.duration;
+                self.state.current_time = self.result.added_items[block_start_len..]
+                    .iter()
+                    .map(|item| item.finish)
+                    .max()
+                    .unwrap_or(item_start_time + media_item.duration);
                 if schedule_item
                     .custom_title
                     .as_deref()
@@ -1787,6 +1792,87 @@ mod tests {
         assert_eq!(
             result.anchor.and_then(|anchor| anchor.duration_finish),
             None
+        );
+    }
+
+    #[test]
+    fn classic_duration_post_roll_advances_before_next_primary() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let duration_item = ProgramScheduleItem {
+            duration: Some(Duration::minutes(30)),
+            post_roll_filler_id: Some(92),
+            ..schedule_item(1, PlayoutMode::Duration, 1, None)
+        };
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![duration_item],
+            classic_filler_presets: BTreeMap::from([(
+                92,
+                filler_preset(92, FillerKind::PostRoll, FillerMode::Count, Some(1), None),
+            )]),
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            item_key(&reference_data.classic_schedule_items[0]),
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(10)),
+                SchedulingMediaItem::new(102, Duration::minutes(10)),
+                SchedulingMediaItem::new(103, Duration::minutes(10)),
+            ],
+        );
+        reference_data
+            .classic_filler_presets
+            .get_mut(&92)
+            .expect("post-roll preset")
+            .media_items
+            .push(SchedulingMediaItem::new(892, Duration::minutes(5)));
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic duration schedule should build");
+
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| (
+                    item.media_item_id,
+                    item.start,
+                    item.finish,
+                    item.filler_kind
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (101, start, start + Duration::minutes(10), FillerKind::None,),
+                (
+                    892,
+                    start + Duration::minutes(10),
+                    start + Duration::minutes(15),
+                    FillerKind::PostRoll,
+                ),
+                (
+                    102,
+                    start + Duration::minutes(15),
+                    start + Duration::minutes(25),
+                    FillerKind::None,
+                ),
+                (
+                    892,
+                    start + Duration::minutes(25),
+                    start + Duration::minutes(30),
+                    FillerKind::PostRoll,
+                ),
+            ]
         );
     }
 
