@@ -1428,12 +1428,9 @@ impl ClassicContext {
 }
 
 fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
-    let index = items
-        .iter()
-        .position(|item| item.start_type == StartType::Fixed)
-        .unwrap_or(0);
+    let index = 0;
     let next_start = items
-        .get(index)
+        .first()
         .map_or(request.start, |item| match item.start_type {
             StartType::Fixed => {
                 midnight(request.start) + item.start_time.unwrap_or_else(Duration::zero)
@@ -1445,7 +1442,7 @@ fn start_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> Cl
         current_time: next_start.max(request.start),
         schedule_state: CollectionEnumeratorState {
             seed: request.playout.seed,
-            index: i32::try_from(index).unwrap_or_default(),
+            index,
         },
         multiple_remaining: None,
         duration_finish: None,
@@ -1755,6 +1752,76 @@ mod tests {
         );
 
         assert_eq!(next, Utc.with_ymd_and_hms(2026, 4, 27, 8, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn classic_dynamic_item_before_fixed_anchor_fills_pre_anchor_window() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 18, 0, 0).unwrap();
+        let fixed_start = Utc.with_ymd_and_hms(2026, 4, 26, 22, 0, 0).unwrap();
+        let mut reference_data = SchedulingReferenceData {
+            classic_fixed_start_time_behavior: FixedStartTimeBehavior::Strict,
+            classic_schedule_items: vec![
+                schedule_item(1, PlayoutMode::Flood, 1, None),
+                ProgramScheduleItem {
+                    start_type: StartType::Fixed,
+                    start_time: Some(Duration::hours(22)),
+                    ..schedule_item(2, PlayoutMode::One, 2, None)
+                },
+            ],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            item_key(&reference_data.classic_schedule_items[0]),
+            vec![
+                SchedulingMediaItem::new(101, Duration::minutes(10)),
+                SchedulingMediaItem::new(102, Duration::minutes(10)),
+                SchedulingMediaItem::new(103, Duration::minutes(10)),
+            ],
+        );
+        reference_data.media_by_key.insert(
+            item_key(&reference_data.classic_schedule_items[1]),
+            vec![SchedulingMediaItem::new(201, Duration::minutes(10))],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::minutes(30),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("classic schedule should build dynamic pre-anchor rows");
+
+        assert_eq!(
+            result
+                .added_items
+                .iter()
+                .map(|item| (item.media_item_id, item.start, item.finish))
+                .collect::<Vec<_>>(),
+            vec![
+                (101, start, start + Duration::minutes(10)),
+                (
+                    102,
+                    start + Duration::minutes(10),
+                    start + Duration::minutes(20),
+                ),
+                (
+                    103,
+                    start + Duration::minutes(20),
+                    start + Duration::minutes(30),
+                ),
+            ]
+        );
+        assert!(result
+            .added_items
+            .iter()
+            .all(|item| item.start < fixed_start));
     }
 
     #[test]

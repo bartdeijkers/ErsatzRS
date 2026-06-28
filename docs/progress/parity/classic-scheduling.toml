@@ -48,5 +48,5 @@ resolved    = false
 id          = 'fixed-anchor-before-dynamic-gap'
 description = 'Classic schedules that mix dynamic all-day programming before a daily fixed item can start generated playout rows at the fixed item, leaving no active item before the anchor.'
 discovered  = '2026-06-27'
-evidence    = 'MTV dogfood schedule with three music videos + bumper before a strict 22:00 Beavis block generated its first `PlayoutItem` at 20:00 UTC / 22:00 local. A live request at 18:01 UTC logged `hls segmenter did not produce initial playlist segments before timeout` and returned 503 because channel 2 had no active playout row. The live workaround changed the first item to a flexible midnight Flood item so HLS had active music-video rows immediately, but that is not the desired three-videos-then-bumper cadence.'
-resolved    = false
+evidence    = 'Resolved 2026-06-28: Classic start-state bootstrapping now mirrors ErsatzTV `FindStartAnchor` by starting from the first ordered schedule item instead of pre-seeking to the first fixed item. Regression `classic_dynamic_item_before_fixed_anchor_fills_pre_anchor_window` proves a dynamic Flood item before a strict 22:00 fixed item fills a pre-anchor build window instead of generating no rows until the fixed block.'
+resolved    = true
