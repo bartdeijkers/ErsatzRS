@@ -80,7 +80,15 @@ layout), kept NVIDIA CUDA/NVENC driver libraries resident so the native
 hardware probe no longer crashes container startup via `dlclose`, shipped the
 admin UI public assets and Leptos hydration bundle inside the Docker image, and
 made automatic maintenance health runs reuse the startup-resolved managed
-FFmpeg paths instead of bare `PATH` defaults. The next spec-backed candidates
+FFmpeg paths instead of bare `PATH` defaults. The 2026-06-27 admin e2e
+hardening pass stabilized hydrated startup state across the Playwright route
+families (library scan queued/failure status, media-collection editors keeping
+SSR data through hydration, scheduling editors loading initial data before the
+island boundary, and the FFmpeg profile no-JS fallback served from resolved SSR
+data with a hydration-resource-free `<noscript>`) and switched CI to run the
+full Playwright e2e suite by default, with the wrapper running serially unless
+`ERSATZRS_E2E_WORKERS`/`--workers` is set so shared-database specs no longer
+race. The next spec-backed candidates
 are ADR 0013 in-app TSDuck
 MPEG-TS troubleshooting (Proposed / Not implemented), the remaining startup
 configuration cleanup around direct `DATABASE_URL` environment access, and the

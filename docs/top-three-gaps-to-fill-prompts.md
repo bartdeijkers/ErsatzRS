@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-27
-last_processed_commit: bbee0fb2d16e8617eb2bb6f7c577db67f4e24a20
+generated: 2026-06-28
+last_processed_commit: 9ff5ca5ec27c1bdbe8fdbd2008a46b8c5f7a7aa4
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -27,27 +27,27 @@ commit
 Spec-backed chores below are deliberate ErsatzRS decisions and may have no
 ErsatzTV equivalent; each cites its governing ADR/plan/TODO.
 
-Selection (2026-06-27, current repo state plus change window
-[`6e0bc4b..bbee0fb`](https://github.com/bartdeijkers/ersatzrs/compare/6e0bc4b...bbee0fb)):
-the prior run's `last_processed_commit` front-matter held a corrupted SHA
-(`6e0bc4bc196d230…`, which exists in no object; only its 7-char prefix matches
-the real `6e0bc4b` *"chore(docs): enforce contributing content guard"*), so the
-effective baseline for this run is `6e0bc4b`. The three non-merge commits in the
-window are all ErsatzRS-internal release/runtime **hardening fixes**, not
-ErsatzTV parity ports: `65f0e95` *"fix(release): cache Docker runtime image
-builds"* (manifest-keyed dependency-layer caching; it also pre-reconciled its
-own `phase.toml` / `plans/INDEX.md` TODO and rewrote this file), `a60805b`
-*"fix(ffmpeg): keep NVIDIA driver libraries resident"* (drops `dlclose`/
-`FreeLibrary` on the CUDA/NVENC hardware probe so containers no longer crash at
-startup), and `4590216` *"fix(release): ship Docker web assets and health
-paths"* (Docker image now carries the admin UI public assets + Leptos hydration
-bundle, and automatic maintenance health runs reuse the startup-resolved managed
-FFmpeg paths). None opens a parity gap or new `[[debt]]`: `cargo xtask progress
-gaps` is clear, **every** tracked parity `[[debt]]` is `resolved = true`, ADR
-0018 is `Implemented`, and ADR 0013 is the only `Not implemented` ADR. The
-hardening was recorded in `phase.toml` `current_focus` and a daily session line;
-no parity status flipped. All three prior prompts target chores untouched by the
-window, so each is **carried over** unchanged and re-ranked below.
+Selection (2026-06-28, current repo state plus change window
+[`bbee0fb..9ff5ca5`](https://github.com/bartdeijkers/ersatzrs/compare/bbee0fb...9ff5ca5)):
+the three non-merge commits in the window are all ErsatzRS-internal **testing
+and hydration hardening**, not ErsatzTV parity ports: `ea7725c`
+*"docs(status): daily reconcile + refresh gap prompts (6e0bc4b..bbee0fb)"* (the
+prior daily run's own docs-only commit), `744bad6` *"ci: run full playwright e2e
+by default"* (adds `scripts/e2e/playwright-e2e.sh` and switches CI to the full
+Playwright suite), and `9ff5ca5` *"fix(web): stabilize admin e2e hydration"*
+(stabilizes hydrated startup state across the admin route families — library
+scan queued/failure status, media-collection editors keeping SSR data through
+hydration, scheduling editors loading initial data before the island boundary,
+and the FFmpeg profile no-JS fallback served from resolved SSR data with a
+hydration-resource-free `<noscript>`; the wrapper also runs serially by default
+unless `ERSATZRS_E2E_WORKERS`/`--workers` is set). None opens a parity gap or new
+`[[debt]]`: `cargo xtask progress gaps` is clear, **every** tracked parity
+`[[debt]]` is `resolved = true`, ADR 0018 is `Implemented`, and ADR 0013 is the
+only `Not implemented` ADR. The hardening was recorded in `phase.toml`
+`next_steps`, the `WholeAppIslandHydrationSmokeGate` hydration note, and a daily
+session line; no parity status flipped. All three prior prompts target chores
+untouched by the window, so each is **carried over** unchanged and re-ranked
+below.
 
 Ranking: (1) **in-app TSDuck MPEG-TS troubleshooting** — ADR 0013 is the only
 `Proposed` / `Not implemented` ADR, it is the highest-value Support diagnostic,
@@ -61,7 +61,7 @@ validates the repo's scalable registry pattern on the lowest-risk oversized file
 before larger admin/server-function and YAML scheduling splits; it ranks last as
 cleanup behind the maintainer-requested ADR and the release-hardening TODO.
 
-Pin note (2026-06-27): the ErsatzTV `git clone` path is still blocked by the org
+Pin note (2026-06-28): the ErsatzTV `git clone` path is still blocked by the org
 egress policy (`403` for `github.com/ErsatzTV/legacy`), but the pinned snapshot
 was obtained via the `codeload.github.com` tarball at exactly
 `0d301df5e8512fdfccf3a611188d27ab1690ee31` (the SHA is in the URL, so the

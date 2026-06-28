@@ -6,7 +6,7 @@
 [[page]]
 name   = 'WholeAppIslandHydrationSmokeGate'
 status = '✅'
-notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard.'
+notes  = 'Closed 2026-06-23: clean cargo-leptos build plus `scripts/e2e/hydration-smoke.sh` passed all 56 listed island routes with `window.__ersatzrs_hydrated === true`, no marker-mismatch console errors, no page errors, and no 404 fallback. The stale boxed-`AnyView`/`PagedTable` hypothesis did not reproduce from current HEAD; browser smoke remains the durable guard. 2026-06-27: CI now runs the full Playwright e2e suite by default (`scripts/e2e/playwright-e2e.sh`), and the admin route-family specs were stabilized so library scan, media-collection editor, scheduling editor, and FFmpeg-profile no-JS fallback routes hold hydrated startup state instead of racing or panicking on marker-node mismatches.'
 
 [[page]]
 name   = 'LibrariesPage'
