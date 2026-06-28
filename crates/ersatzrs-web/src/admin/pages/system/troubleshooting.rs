@@ -7,9 +7,10 @@ use crate::admin::server_fns::troubleshooting::{
     load_mpeg_troubleshooting_context, load_playback_troubleshooting_context,
     load_troubleshooting_report, validate_sequential_schedule_file, BlockPlayoutHistoryRow,
     BlockPlayoutOption, MpegTroubleshootingContext, MpegTroubleshootingReport,
-    MpegTroubleshootingStatus, MpegTsduckAnalysis, PlaybackTroubleshootingContext,
-    PlaybackTroubleshootingMode, TroubleshootingBlockRow, TroubleshootingReport,
-    YamlValidationResult, MPEG_DEFAULT_SAMPLE_DURATION_SECONDS, MPEG_MAX_SAMPLE_DURATION_SECONDS,
+    MpegTroubleshootingStatus, MpegTsduckAnalysis, MpegTsduckStabilityLevel,
+    MpegTsduckStabilitySample, PlaybackTroubleshootingContext, PlaybackTroubleshootingMode,
+    TroubleshootingBlockRow, TroubleshootingReport, YamlValidationResult,
+    MPEG_DEFAULT_SAMPLE_DURATION_SECONDS, MPEG_MAX_SAMPLE_DURATION_SECONDS,
 };
 
 stylance::import_crate_style!(style, "src/admin/pages/system/troubleshooting.module.css");
@@ -312,31 +313,154 @@ fn render_mpeg_report(report: MpegTroubleshootingReport) -> AnyView {
 }
 
 fn render_mpeg_analysis(analysis: MpegTsduckAnalysis) -> AnyView {
+    let MpegTsduckAnalysis {
+        stability_summary,
+        stability_samples,
+        analysis_json_excerpt,
+        continuity_findings,
+        pcr_findings,
+        services,
+        pids,
+        bitrate_bps,
+        stdout_excerpt,
+        stderr_excerpt,
+        ..
+    } = analysis;
+
     view! {
         <div class=style::historyStack>
-            {render_string_list(tr(TextKey::Services), analysis.services)}
-            {render_string_list(tr(TextKey::Pids), analysis.pids)}
-            {render_string_list(tr(TextKey::ContinuityFindings), analysis.continuity_findings)}
-            {render_string_list(tr(TextKey::PcrFindings), analysis.pcr_findings)}
+            {render_stability_meter(stability_summary, &stability_samples)}
+            {render_string_list(tr(TextKey::Services), services)}
+            {render_string_list(tr(TextKey::Pids), pids)}
+            {render_string_list(tr(TextKey::ContinuityFindings), continuity_findings)}
+            {render_string_list(tr(TextKey::PcrFindings), pcr_findings)}
             <dl class=style::detailsGrid>
                 <dt>{tr(TextKey::Bitrate)}</dt>
-                <dd>{analysis.bitrate_bps.map_or_else(String::new, |value| value.to_string())}</dd>
+                <dd>{bitrate_bps.map_or_else(String::new, |value| value.to_string())}</dd>
             </dl>
             <section>
                 <h3 class=style::subheading>{tr(TextKey::AnalysisJson)}</h3>
-                {report_block(analysis.analysis_json_excerpt, true)}
+                {report_block(analysis_json_excerpt, true)}
             </section>
             <section>
                 <h3 class=style::subheading>{tr(TextKey::StandardOutput)}</h3>
-                {report_block(analysis.stdout_excerpt, true)}
+                {report_block(stdout_excerpt, true)}
             </section>
             <section>
                 <h3 class=style::subheading>{tr(TextKey::StandardError)}</h3>
-                {report_block(analysis.stderr_excerpt, true)}
+                {report_block(stderr_excerpt, true)}
             </section>
         </div>
     }
     .into_any()
+}
+
+fn render_stability_meter(summary: String, samples: &[MpegTsduckStabilitySample]) -> AnyView {
+    if samples.is_empty() {
+        return view! {
+            <section class=style::stabilityMeter>
+                <h3 class=style::subheading>{tr(TextKey::StabilityMeter)}</h3>
+                <p class=style::empty>{tr(TextKey::NoMessages)}</p>
+            </section>
+        }
+        .into_any();
+    }
+
+    let max_bitrate = samples
+        .iter()
+        .map(|sample| sample.bitrate_bps)
+        .max()
+        .unwrap_or_default();
+    let aria_label = summary.clone();
+
+    view! {
+        <section class=style::stabilityMeter>
+            <h3 class=style::subheading>{tr(TextKey::StabilityMeter)}</h3>
+            <p class=style::meterSummary>{summary}</p>
+            <div class=style::stabilityBars role="img" aria-label=aria_label>
+                {samples.iter().map(|sample| {
+                    render_stability_sample(sample, max_bitrate)
+                }).collect_view()}
+            </div>
+            <div class=style::stabilityLegend aria-hidden="true">
+                {render_stability_legend_item(MpegTsduckStabilityLevel::Stable)}
+                {render_stability_legend_item(MpegTsduckStabilityLevel::Warning)}
+                {render_stability_legend_item(MpegTsduckStabilityLevel::Error)}
+            </div>
+        </section>
+    }
+    .into_any()
+}
+
+fn render_stability_sample(sample: &MpegTsduckStabilitySample, max_bitrate: u64) -> AnyView {
+    let label = stability_level_label(sample.level);
+    let tooltip = format!(
+        "{}-{}s: {}; {} {}; {} bit/s. {}",
+        sample.second_start,
+        sample.second_end,
+        label,
+        sample.packet_count,
+        tr(TextKey::Packets),
+        sample.bitrate_bps,
+        sample.note
+    );
+    let class = format!(
+        "{} {}",
+        style::stabilitySegment,
+        stability_level_class(sample.level)
+    );
+    let height = format!(
+        "height: {}%;",
+        stability_bar_height(sample.bitrate_bps, max_bitrate)
+    );
+
+    view! {
+        <div class=style::stabilitySecond>
+            <span class=class style=height title=tooltip.clone() aria-label=tooltip></span>
+            <span class=style::stabilityTick>{sample.second_end.to_string()}</span>
+        </div>
+    }
+    .into_any()
+}
+
+fn render_stability_legend_item(level: MpegTsduckStabilityLevel) -> AnyView {
+    let class = format!(
+        "{} {}",
+        style::stabilityLegendSwatch,
+        stability_level_class(level)
+    );
+
+    view! {
+        <span class=style::stabilityLegendItem>
+            <span class=class></span>
+            <span>{stability_level_label(level)}</span>
+        </span>
+    }
+    .into_any()
+}
+
+fn stability_level_class(level: MpegTsduckStabilityLevel) -> &'static str {
+    match level {
+        MpegTsduckStabilityLevel::Stable => style::stabilityStable,
+        MpegTsduckStabilityLevel::Warning => style::stabilityWarning,
+        MpegTsduckStabilityLevel::Error => style::stabilityError,
+    }
+}
+
+fn stability_level_label(level: MpegTsduckStabilityLevel) -> &'static str {
+    match level {
+        MpegTsduckStabilityLevel::Stable => tr(TextKey::Stable),
+        MpegTsduckStabilityLevel::Warning => tr(TextKey::Warning),
+        MpegTsduckStabilityLevel::Error => tr(TextKey::Error),
+    }
+}
+
+fn stability_bar_height(bitrate_bps: u64, max_bitrate_bps: u64) -> u64 {
+    if max_bitrate_bps == 0 {
+        return 20;
+    }
+
+    20 + bitrate_bps.saturating_mul(80) / max_bitrate_bps
 }
 
 fn render_string_list(label: &'static str, values: Vec<String>) -> AnyView {

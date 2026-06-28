@@ -152,6 +152,8 @@ pub struct MpegTsduckAnalysis {
     pub tsbitrate_command: MpegTsduckCommandSpec,
     pub status: MpegTsduckAnalysisStatus,
     pub summary: String,
+    pub stability_summary: String,
+    pub stability_samples: Vec<MpegTsduckStabilitySample>,
     pub analysis_json_excerpt: String,
     pub continuity_findings: Vec<String>,
     pub pcr_findings: Vec<String>,
@@ -160,6 +162,23 @@ pub struct MpegTsduckAnalysis {
     pub bitrate_bps: Option<u64>,
     pub stdout_excerpt: String,
     pub stderr_excerpt: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MpegTsduckStabilitySample {
+    pub second_start: u64,
+    pub second_end: u64,
+    pub level: MpegTsduckStabilityLevel,
+    pub packet_count: u64,
+    pub bitrate_bps: u64,
+    pub note: String,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MpegTsduckStabilityLevel {
+    Stable,
+    Warning,
+    Error,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -499,7 +518,8 @@ async fn run_mpeg_troubleshooting(
         }
     };
 
-    let analysis = ersatzrs_infra::tsduck::analyze_sample(&sample_path, &run_dir).await;
+    let analysis =
+        ersatzrs_infra::tsduck::analyze_sample(&sample_path, &run_dir, duration_seconds).await;
     let (status, summary, analysis, errors) = match analysis {
         Ok(analysis) => {
             let status = match analysis.status {
@@ -634,6 +654,11 @@ async fn write_mpeg_report(
             analysis.pcr_findings.join("\n"),
         )
         .await?;
+        tokio::fs::write(
+            run_dir.join("stability.json"),
+            serde_json::to_vec_pretty(&analysis.stability_samples)?,
+        )
+        .await?;
         if let Some(bitrate) = analysis.bitrate_bps {
             tokio::fs::write(run_dir.join("tsbitrate.txt"), bitrate.to_string()).await?;
         }
@@ -677,6 +702,31 @@ impl From<ersatzrs_infra::tsduck::TsduckAnalysisStatus> for MpegTsduckAnalysisSt
 }
 
 #[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckStabilityLevel> for MpegTsduckStabilityLevel {
+    fn from(value: ersatzrs_infra::tsduck::TsduckStabilityLevel) -> Self {
+        match value {
+            ersatzrs_infra::tsduck::TsduckStabilityLevel::Stable => Self::Stable,
+            ersatzrs_infra::tsduck::TsduckStabilityLevel::Warning => Self::Warning,
+            ersatzrs_infra::tsduck::TsduckStabilityLevel::Error => Self::Error,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_infra::tsduck::TsduckStabilitySample> for MpegTsduckStabilitySample {
+    fn from(value: ersatzrs_infra::tsduck::TsduckStabilitySample) -> Self {
+        Self {
+            second_start: value.second_start,
+            second_end: value.second_end,
+            level: value.level.into(),
+            packet_count: value.packet_count,
+            bitrate_bps: value.bitrate_bps,
+            note: value.note,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
 impl From<ersatzrs_infra::tsduck::TsduckAnalysis> for MpegTsduckAnalysis {
     fn from(value: ersatzrs_infra::tsduck::TsduckAnalysis) -> Self {
         Self {
@@ -684,6 +734,12 @@ impl From<ersatzrs_infra::tsduck::TsduckAnalysis> for MpegTsduckAnalysis {
             tsbitrate_command: value.tsbitrate_command.into(),
             status: value.status.into(),
             summary: value.summary,
+            stability_summary: value.stability_summary,
+            stability_samples: value
+                .stability_samples
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             analysis_json_excerpt: value.analysis_json_excerpt,
             continuity_findings: value.continuity_findings,
             pcr_findings: value.pcr_findings,
@@ -2113,6 +2169,15 @@ mod tests {
                 },
                 status: MpegTsduckAnalysisStatus::Completed,
                 summary: "analysis completed".to_owned(),
+                stability_summary: "Stable for 1/1 sampled seconds.".to_owned(),
+                stability_samples: vec![MpegTsduckStabilitySample {
+                    second_start: 0,
+                    second_end: 1,
+                    level: MpegTsduckStabilityLevel::Stable,
+                    packet_count: 10,
+                    bitrate_bps: 15_040,
+                    note: "TSDuck reported no continuity or PCR findings.".to_owned(),
+                }],
                 analysis_json_excerpt: "{}".to_owned(),
                 continuity_findings: vec!["PID 256 discontinuity".to_owned()],
                 pcr_findings: vec!["PCR warning".to_owned()],
@@ -2153,6 +2218,11 @@ mod tests {
                 .expect("bitrate"),
             "123456"
         );
+        let stability = tokio::fs::read_to_string(temp.path().join("stability.json"))
+            .await
+            .expect("stability");
+        assert!(stability.contains("\"level\": \"Stable\""));
+        assert!(stability.contains("\"packet_count\": 10"));
         assert!(temp.path().join("commands.json").exists());
         assert!(!temp.path().join("sample.ts").exists());
     }

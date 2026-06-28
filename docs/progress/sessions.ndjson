@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-06-28","summary":"Added MPEG-TS troubleshooting stability meter and verified hydration e2e stayed green."}
 {"agent":"Codex","date":"2026-06-28","summary":"Implemented the spec-backed closeout chores: ADR 0013 MPEG-TS troubleshooting, startup config database URL routing, infra health module split pilot, and fixed the multi-collection editor hydration regression found during browser proof."}
 {"agent":"Codex","date":"2026-06-28","summary":"Fixed the multi-collection editor visual parity regression: restored the ErsatzTV-style action bar, full-width items table, intrinsic selector add buttons, and added route-family geometry coverage."}
 {"agent":"codex","date":"2026-06-28","summary":"Closed pending admin hydration rows with seeded Playwright coverage, SSR-before-island fixes, and desktop/mobile visual sweeps."}

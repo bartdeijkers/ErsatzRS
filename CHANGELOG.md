@@ -88,6 +88,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- MPEG-TS troubleshooting reports now include a per-second stability meter and
+  persist the same samples as `stability.json`, making the 20-second TSDuck
+  analysis usable for spotting empty captures, continuity failures, and PCR
+  warnings without reading raw logs first.
 - Multi-collection editor hydration now keeps the save button DOM stable while
   preserving the ErsatzTV-style action bar icon in both hydrated and no-JS
   fallback rendering.
