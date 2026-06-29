@@ -7,7 +7,9 @@ Accepted (2026-06-13).
 ## Implementation
 
 Implemented — MPEG-TS HLS segmenter continuity normalization (2026-06-13),
-extended with PCR normalization and wrapper PCR stabilization (2026-06-24).
+extended with PCR normalization and wrapper PCR stabilization (2026-06-24),
+then broadened to shared MPEG-TS mux timing and adaptation-only counter
+normalization (2026-06-29).
 
 ## Context
 
@@ -34,9 +36,13 @@ Deep review showed two independent runtime issues:
    continuous for tools and players that validate the concatenated segment
    payloads.
 3. Even after counters are normalized, separate MPEG-TS outputs can restart or
-   jump PCR values at appended FFmpeg generation boundaries. FFmpeg's hybrid
-   `.ts` wrapper remux can also introduce PCR leaps unless its MPEG-TS muxer is
-   given a constant mux rate.
+   jump PCR values at appended FFmpeg generation boundaries. FFmpeg's MPEG-TS
+   muxer can also emit PCR with enough packet-position jitter to upset strict
+   clients unless it is given a constant mux rate and explicit PCR period.
+4. CBR MPEG-TS muxing can insert PCR-only adaptation packets on the PCR PID.
+   Those packets do not carry payload and therefore do not advance the
+   continuity counter; normalization must preserve that rule when rewriting
+   retained segment files.
 
 ## Decision
 
@@ -52,10 +58,12 @@ step for MPEG-TS HLS output:
   files in media sequence order. The first retained segment keeps its starting
   counters and PCR clock; later packets are rewritten per PID so PAT, SDT/BAT,
   PMT, video, audio counters, and PCR remain continuous across appended FFmpeg
-  process boundaries.
-- The built-in MPEG-TS hybrid wrapper and the bundled default wrapper script use
-  a channel-profile-derived constant `-muxrate` for their stream-copy remux.
-  This intentionally keeps ErsatzTV's copy/readrate/script shape while
+  process boundaries. Adaptation-only packets keep the previous payload
+  counter while preserving the next payload counter advance.
+- Direct MPEG-TS output, legacy concat, MPEG-TS HLS segments, the built-in
+  MPEG-TS hybrid wrapper, and the bundled default wrapper script use a
+  channel-profile-derived constant mux rate plus a 20 ms PCR period for their
+  MPEG-TS muxers. This intentionally keeps ErsatzTV's command shape while
   stabilizing PCR emission for strict MPEG-TS clients.
 - fMP4 HLS output is not touched by this rule because it does not use MPEG-TS
   continuity counters or PCR.
@@ -75,11 +83,11 @@ The worker now mutates generated `.ts` segment files before advertising them
 through the served playlist. This adds a small file rewrite cost for MPEG-TS
 HLS segments and requires the continuity/PCR-normalization state to stay scoped
 to the live session. The operation is intentionally tied to playlist trimming so
-clients do not fetch newly retained segments before they are normalized. The
-hybrid `.ts` wrapper's default CBR mux rate adds null-packet stuffing relative
-to the VBR HLS source; this is limited to the MPEG-TS wrapper output and is
-derived from the configured channel profile bitrate with the same 1.2 overhead
-used for the HLS variant playlist bandwidth.
+clients do not fetch newly retained segments before they are normalized.
+Profile-derived CBR muxing adds null-packet stuffing relative to VBR output;
+the mux rate uses the configured channel profile bitrate with the same 1.2
+overhead used for the HLS variant playlist bandwidth, capped by the shared
+MPEG-TS muxing helper.
 
 ## Alternatives Considered
 

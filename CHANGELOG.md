@@ -158,11 +158,11 @@ release section when tagging a release.
   new editable row reliably.
 - Remote stream placeholders with zero duration no longer trigger Zero Duration
   warnings on `/system/health`.
-- HLS segmenter playback is smooth across normalized FFmpeg generation
-  boundaries: same-item appends now omit only unjustified discontinuities,
-  retained MPEG-TS HLS segments normalize PCR as well as continuity counters,
-  and the default MPEG-TS hybrid wrapper emits profile-derived CBR output so
-  strict clients no longer see PCR leaps.
+- MPEG-TS playback timing is stable across direct `.ts`, legacy concat, hybrid
+  wrapper, HLS-direct, and MPEG-TS HLS segmenter paths: FFmpeg outputs now share
+  profile-derived `-muxrate` / 20 ms PCR-period settings, bundled wrapper
+  scripts render the same PCR period, and the HLS segment normalizer preserves
+  continuity-counter rules for PCR-only adaptation packets.
 - Windows launcher builds made from Linux/WSL now embed the tray icon resources
   correctly, preventing `ErsatzRS.exe` from failing at startup with
   `Error setting icon from resource: 1812`.

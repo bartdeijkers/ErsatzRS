@@ -1,5 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 1036
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i /media/movie.mkv -map 0:0 -map 0:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -codec:v copy -codec:a copy -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i /media/movie.mkv -map 0:0 -map 0:1 -muxdelay 0 -muxpreload 0 -movflags +faststart -codec:v copy -codec:a copy -muxrate 12000000 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

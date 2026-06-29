@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EnvironmentVariable {
     pub name: String,
@@ -262,6 +264,78 @@ pub fn no_scene_detect(value: u32) -> PipelineStep {
     )
 }
 
+const MPEGTS_FALLBACK_MUXRATE_KBPS: i64 = 10_000;
+const MPEGTS_MUXRATE_OVERHEAD_NUMERATOR: i64 = 12;
+const MPEGTS_MUXRATE_OVERHEAD_DENOMINATOR: i64 = 10;
+const MPEGTS_MAX_MUXRATE_BPS: i64 = 1_500_000_000;
+
+/// PCR emission period used for MPEG-TS outputs with profile-derived CBR muxing.
+pub const MPEGTS_PCR_PERIOD_MS: u32 = 20;
+
+/// MPEG-TS muxer timing options shared by direct streams, HLS segments, and wrappers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MpegTsMuxingOptions {
+    /// Constant mux rate in bits per second.
+    pub muxrate_bps: i64,
+    /// PCR period in milliseconds.
+    pub pcr_period_ms: u32,
+}
+
+impl MpegTsMuxingOptions {
+    /// Derive a CBR mux rate from profile bitrates with enough overhead for TS packets.
+    #[must_use]
+    pub fn from_bitrates(video_kbps: Option<u32>, audio_kbps: Option<u32>) -> Self {
+        let total_kbps = video_kbps
+            .map(i64::from)
+            .unwrap_or_default()
+            .saturating_add(audio_kbps.map(i64::from).unwrap_or_default());
+        let total_kbps = if total_kbps > 0 {
+            total_kbps
+        } else {
+            MPEGTS_FALLBACK_MUXRATE_KBPS
+        };
+        let muxrate_bps = total_kbps
+            .saturating_mul(1_000)
+            .saturating_mul(MPEGTS_MUXRATE_OVERHEAD_NUMERATOR)
+            / MPEGTS_MUXRATE_OVERHEAD_DENOMINATOR;
+
+        Self {
+            muxrate_bps: muxrate_bps.min(MPEGTS_MAX_MUXRATE_BPS),
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+        }
+    }
+
+    /// Render FFmpeg HLS `-hls_segment_options` for MPEG-TS segment muxing.
+    #[must_use]
+    pub fn hls_segment_options(self, existing: Option<&str>) -> String {
+        let mut options = Vec::new();
+        if let Some(existing) = existing.filter(|value| !value.trim().is_empty()) {
+            options.push(existing.to_owned());
+        }
+        options.push(format!("muxrate={}", self.muxrate_bps));
+        options.push(format!("pcr_period={}", self.pcr_period_ms));
+        options.join(":")
+    }
+}
+
+/// Render the FFmpeg `-muxrate` output option.
+#[must_use]
+pub fn mpegts_muxrate(options: MpegTsMuxingOptions) -> PipelineStep {
+    PipelineStep::generic(
+        "mpegts_muxrate",
+        ["-muxrate".to_owned(), options.muxrate_bps.to_string()],
+    )
+}
+
+/// Render the FFmpeg `-pcr_period` output option.
+#[must_use]
+pub fn mpegts_pcr_period(options: MpegTsMuxingOptions) -> PipelineStep {
+    PipelineStep::generic(
+        "mpegts_pcr_period",
+        ["-pcr_period".to_owned(), options.pcr_period_ms.to_string()],
+    )
+}
+
 #[must_use]
 pub fn time_limit(duration: Duration) -> PipelineStep {
     PipelineStep::generic("time_limit", ["-t".to_owned(), format_time_limit(duration)])
@@ -298,4 +372,27 @@ pub fn mpegts_output(initial_discontinuity: bool) -> PipelineStep {
 pub fn pipe_output() -> PipelineStep {
     PipelineStep::generic("pipe", ["pipe:1"])
 }
-use std::time::Duration;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mpegts_muxing_uses_profile_bitrates_with_overhead() {
+        let options = MpegTsMuxingOptions::from_bitrates(Some(8_000), Some(192));
+
+        assert_eq!(options.muxrate_bps, 9_830_400);
+        assert_eq!(options.pcr_period_ms, 20);
+        assert_eq!(
+            options.hls_segment_options(Some("mpegts_flags=+initial_discontinuity")),
+            "mpegts_flags=+initial_discontinuity:muxrate=9830400:pcr_period=20"
+        );
+    }
+
+    #[test]
+    fn mpegts_muxing_uses_fallback_when_bitrates_are_absent() {
+        let options = MpegTsMuxingOptions::from_bitrates(None, None);
+
+        assert_eq!(options.muxrate_bps, 12_000_000);
+    }
+}

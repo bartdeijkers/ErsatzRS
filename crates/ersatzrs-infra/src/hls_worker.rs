@@ -3645,11 +3645,11 @@ async fn normalize_ts_file_continuity(
         let has_adaptation = matches!(adaptation_field_control, 0x02 | 0x03);
         let has_payload = matches!(adaptation_field_control, 0x01 | 0x03);
         let original_counter = packet[3] & 0x0f;
-        let counter = state
-            .next_counters
-            .get(&pid)
-            .copied()
-            .unwrap_or(original_counter);
+        let counter = match (state.next_counters.get(&pid).copied(), has_payload) {
+            (Some(next_counter), true) => next_counter,
+            (Some(next_counter), false) => next_counter.wrapping_sub(1) & 0x0f,
+            (None, _) => original_counter,
+        };
         if counter != original_counter {
             packet[3] = (packet[3] & 0xf0) | counter;
             changed = true;
@@ -3658,7 +3658,7 @@ async fn normalize_ts_file_continuity(
         if has_payload {
             state.next_counters.insert(pid, (counter + 1) & 0x0f);
         } else {
-            state.next_counters.insert(pid, counter);
+            state.next_counters.insert(pid, (counter + 1) & 0x0f);
         }
 
         if let Some(pcr) = packet_pcr(packet, has_adaptation) {
@@ -5672,6 +5672,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn normalize_hls_ts_continuity_preserves_adaptation_only_counter_rule() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+
+        tokio::fs::write(
+            working_dir.join("live000010.ts"),
+            [
+                ts_packet(0x0100, 4),
+                ts_adaptation_only_packet(0x0100, 9),
+                ts_packet(0x0100, 0),
+            ]
+            .concat(),
+        )
+        .await
+        .expect("write first segment");
+        tokio::fs::write(
+            working_dir.join("live000011.ts"),
+            [ts_adaptation_only_packet(0x0100, 0), ts_packet(0x0100, 0)].concat(),
+        )
+        .await
+        .expect("write second segment");
+
+        let trim_result = test_trim_result(10, None, ["live000010.ts", "live000011.ts"]);
+        let mut state = TsContinuityState::default();
+        normalize_hls_ts_continuity(&working_dir, &trim_result, &mut state)
+            .await
+            .expect("normalize continuity");
+
+        let first = tokio::fs::read(working_dir.join("live000010.ts"))
+            .await
+            .expect("read first segment");
+        let second = tokio::fs::read(working_dir.join("live000011.ts"))
+            .await
+            .expect("read second segment");
+        assert_eq!(packet_continuity_counters(&first, 0x0100), vec![4, 4, 5]);
+        assert_eq!(packet_continuity_counters(&second, 0x0100), vec![5, 6]);
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
+    #[tokio::test]
     async fn normalize_hls_ts_continuity_rewrites_restart_pcr() {
         let working_dir =
             std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
@@ -6850,6 +6894,14 @@ mod tests {
         packet[4] = 7;
         packet[5] = 0x10;
         write_packet_pcr(&mut packet, pcr);
+        packet
+    }
+
+    fn ts_adaptation_only_packet(pid: u16, continuity_counter: u8) -> Vec<u8> {
+        let mut packet = ts_packet(pid, continuity_counter);
+        packet[3] = 0x20 | (continuity_counter & 0x0f);
+        packet[4] = 183;
+        packet[5] = 0;
         packet
     }
 

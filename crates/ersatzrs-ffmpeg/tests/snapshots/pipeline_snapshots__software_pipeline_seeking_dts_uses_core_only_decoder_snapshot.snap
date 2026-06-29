@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
-assertion_line: 496
+assertion_line: 809
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -ss 00:02:00.0000000 -c:a dts -core_only true -i /media/movie.mkv -filter_complex [0:0]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:1]aresample=async=1,apad[a] -map [vpf] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v libx264 -profile:v high -preset:v veryfast -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 30000/1001 -vsync cfr -video_track_timescale 90000 -b:v 8000k -maxrate:v 8000k -bufsize:v 16000k -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1
+-nostdin -hide_banner -nostats -progress pipe:1 -loglevel error -fflags +genpts+discardcorrupt+igndts -c:v h264 -ss 00:02:00.0000000 -c:a dts -core_only true -i /media/movie.mkv -filter_complex [0:0]setparams=range=tv:colorspace=bt709:color_trc=bt709:color_primaries=bt709[vpf];[0:1]aresample=async=1,apad[a] -map [vpf] -map [a] -muxdelay 0 -muxpreload 0 -movflags +faststart -flags cgop -bf 0 -sc_threshold 0 -codec:v libx264 -profile:v high -preset:v veryfast -codec:a aac -b:a 192k -maxrate:a 192k -bufsize:a 384k -ar 48k -r 30000/1001 -vsync cfr -video_track_timescale 90000 -b:v 8000k -maxrate:v 8000k -bufsize:v 16000k -muxrate 9830400 -pcr_period 20 -map_metadata -1 -f mpegts -mpegts_flags +initial_discontinuity pipe:1

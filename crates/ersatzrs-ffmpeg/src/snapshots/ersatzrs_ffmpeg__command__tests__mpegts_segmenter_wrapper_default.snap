@@ -1,6 +1,6 @@
 ---
 source: crates/ersatzrs-ffmpeg/src/command.rs
-assertion_line: 263
+assertion_line: 322
 expression: "command.arguments.join(\" \")"
 ---
--nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter -map 0 -c copy -muxrate 9830400 -metadata service_provider="ErsatzTV" -metadata service_name="Channel One" -f mpegts pipe:1
+-nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter -map 0 -c copy -muxrate 9830400 -pcr_period 20 -metadata service_provider="ErsatzTV" -metadata service_name="Channel One" -f mpegts pipe:1

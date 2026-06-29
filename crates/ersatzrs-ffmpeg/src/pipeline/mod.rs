@@ -9,21 +9,22 @@ use crate::{
     audio_pad_filter, audio_resample_filter, closed_gop, colorspace_filter, crop_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter, fast_start,
     graphics_overlay_vaapi_filter, hardware_download_filter, hardware_upload_filter,
-    hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_output, no_autoscale,
-    no_b_frames, no_demux_decode_delay, no_scene_detect, no_standard_input, no_stats,
-    normalize_loudness_filter, pad_filter, pad_vaapi_filter, pipe_output, progress_to_stdout,
-    realtime_filter, reset_pts_filter, scale_subtitle_image_filter,
-    select_forced_software_video_decoder, select_software_video_decoder, select_video_decoder,
-    standard_format_flags, still_image_loop_filter, subtitle_overlay_cuda_filter,
-    subtitle_overlay_filter, subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter,
-    subtitles_filter, time_limit, tonemap_filter_for, vaapi_subtitle_pixel_format_filter,
-    watermark_alpha_format_filter, watermark_opacity_expression_filter_with_clock,
-    watermark_opacity_filter, watermark_overlay_cuda_filter, watermark_overlay_filter,
-    watermark_scale_filter, yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator,
-    ComplexFilter, FfmpegCapability, FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate,
-    FrameSize, FrameState, GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile,
-    InputKind, PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod,
-    TonemapAlgorithm, VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
+    hardware_upload_vaapi_filter, hide_banner, loglevel_error, mpegts_muxrate, mpegts_output,
+    mpegts_pcr_period, no_autoscale, no_b_frames, no_demux_decode_delay, no_scene_detect,
+    no_standard_input, no_stats, normalize_loudness_filter, pad_filter, pad_vaapi_filter,
+    pipe_output, progress_to_stdout, realtime_filter, reset_pts_filter,
+    scale_subtitle_image_filter, select_forced_software_video_decoder,
+    select_software_video_decoder, select_video_decoder, standard_format_flags,
+    still_image_loop_filter, subtitle_overlay_cuda_filter, subtitle_overlay_filter,
+    subtitle_overlay_vaapi_filter, subtitle_scale_npp_filter, subtitles_filter, time_limit,
+    tonemap_filter_for, vaapi_subtitle_pixel_format_filter, watermark_alpha_format_filter,
+    watermark_opacity_expression_filter_with_clock, watermark_opacity_filter,
+    watermark_overlay_cuda_filter, watermark_overlay_filter, watermark_scale_filter,
+    yadif_cuda_filter, AudioFilter, ColorParams, CommandGenerator, ComplexFilter, FfmpegCapability,
+    FfmpegCapabilityReport, FfmpegCommand, FilterChain, FrameRate, FrameSize, FrameState,
+    GraphicsOverlayFilter, HardwareCapabilitiesFactory, InputFile, InputKind, MpegTsMuxingOptions,
+    PipelineStep, PixelFormat, SourceVideoCodec, StreamKind, SubtitleMethod, TonemapAlgorithm,
+    VaapiProfileEntrypoint, WatermarkOpacityClock, WatermarkOverlay,
 };
 
 const QSV_EXTRA_HARDWARE_FRAMES: u32 = 64;
@@ -3096,6 +3097,10 @@ fn video_bitrate_option(bitrate: u32) -> PipelineStep {
     )
 }
 
+fn mpegts_muxing_options(desired: &DesiredVideoState) -> MpegTsMuxingOptions {
+    MpegTsMuxingOptions::from_bitrates(desired.video_bitrate, desired.audio_bitrate)
+}
+
 fn frame_rate_output_option(frame_rate: FrameRate) -> PipelineStep {
     PipelineStep::generic(
         "frame_rate_output",
@@ -3156,6 +3161,12 @@ fn add_output_options(
                 ["-bufsize:v".to_owned(), format!("{buffer_size}k")],
             ));
         }
+    }
+
+    if state.output_format == OutputFormat::MpegTs {
+        let muxing = mpegts_muxing_options(desired);
+        steps.push(mpegts_muxrate(muxing));
+        steps.push(mpegts_pcr_period(muxing));
     }
 
     if let Some(step) = output_ts_offset_option(state, desired) {
@@ -3332,7 +3343,15 @@ fn hls_output(
         OutputFormat::MpegTs | OutputFormat::Mp4 | OutputFormat::Mkv | OutputFormat::Nut => {}
     }
 
-    if let Some(segment_options) = &hls.segment_options {
+    let segment_options = match format {
+        OutputFormat::Hls => {
+            Some(mpegts_muxing_options(desired).hls_segment_options(hls.segment_options.as_deref()))
+        }
+        OutputFormat::HlsMp4 => hls.segment_options.clone(),
+        OutputFormat::MpegTs | OutputFormat::Mp4 | OutputFormat::Mkv | OutputFormat::Nut => None,
+    };
+
+    if let Some(segment_options) = &segment_options {
         options.extend(["-hls_segment_options".to_owned(), segment_options.clone()]);
     }
 

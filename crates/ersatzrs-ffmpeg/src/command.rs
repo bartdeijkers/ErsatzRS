@@ -1,8 +1,9 @@
 use crate::{
     closed_gop, copy_all_streams, fast_start, format_time_limit, hide_banner, loglevel_error,
-    map_all_streams, mpegts_output, no_demux_decode_delay, no_scene_detect, no_standard_input,
-    no_stats, pipe_output, standard_format_flags, EnvironmentVariable, InputFile, InputKind,
-    OutputMetadata, PipelineStep,
+    map_all_streams, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_demux_decode_delay,
+    no_scene_detect, no_standard_input, no_stats, pipe_output, standard_format_flags,
+    EnvironmentVariable, InputFile, InputKind, MpegTsMuxingOptions, OutputMetadata, PipelineStep,
+    MPEGTS_PCR_PERIOD_MS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,10 +72,12 @@ pub fn build_mpegts_segmenter_wrapper_command(
         copy_all_streams(),
     ];
     if let Some(muxrate_bps) = muxrate_bps {
-        steps.push(PipelineStep::generic(
-            "muxrate",
-            ["-muxrate".to_owned(), muxrate_bps.to_string()],
-        ));
+        let muxing = MpegTsMuxingOptions {
+            muxrate_bps,
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+        };
+        steps.push(mpegts_muxrate(muxing));
+        steps.push(mpegts_pcr_period(muxing));
     }
     add_service_metadata_steps(&mut steps, metadata);
     steps.push(mpegts_output(false));
@@ -93,6 +96,7 @@ pub fn build_mpegts_segmenter_wrapper_command(
 pub fn build_mpegts_concat_command(
     concat_url: impl Into<String>,
     metadata: &OutputMetadata,
+    muxrate_bps: Option<i64>,
 ) -> FfmpegCommand {
     let mut input = InputFile::concat(concat_url);
     input.add_readrate("1.0");
@@ -114,6 +118,14 @@ pub fn build_mpegts_concat_command(
         PipelineStep::generic("no_metadata", ["-map_metadata", "-1"]),
     ];
     add_service_metadata_steps(&mut steps, metadata);
+    if let Some(muxrate_bps) = muxrate_bps {
+        let muxing = MpegTsMuxingOptions {
+            muxrate_bps,
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+        };
+        steps.push(mpegts_muxrate(muxing));
+        steps.push(mpegts_pcr_period(muxing));
+    }
     steps.push(mpegts_output(true));
     steps.push(pipe_output());
 
@@ -331,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn mpegts_concat_matches_upstream_default_shape() {
+    fn mpegts_concat_uses_cbr_muxrate_for_pcr_stability() {
         let metadata = OutputMetadata {
             service_provider: Some("ErsatzTV".to_owned()),
             service_name: Some("Channel One".to_owned()),
@@ -340,6 +352,7 @@ mod tests {
         let command = build_mpegts_concat_command(
             "http://localhost:8409/ffmpeg/concat/1?mode=ts-legacy",
             &metadata,
+            Some(9_830_400),
         );
 
         insta::assert_snapshot!("mpegts_concat_default", command.arguments.join(" "));

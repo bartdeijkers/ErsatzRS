@@ -18,36 +18,32 @@ channel streaming setting, HLS-configured channels redirect to `.m3u8`,
 `mode=ts` selects the modern hybrid wrapper, and `mode=ts-legacy` selects the
 legacy concat branch. The modern wrapper starts/touches the HLS segmenter,
 reads `/iptv/channel/{n}.m3u8?mode=segmenter[&access_token=...]`, emits the
-upstream copy-all/readrate/mpegts stdout shape with an ErsatzRS CBR mux-rate
-hardening so FFmpeg emits regular PCR, and selects the AAC-LATM decoder when
+upstream copy-all/readrate/mpegts stdout shape with ErsatzRS CBR mux-rate and
+20 ms PCR-period hardening so FFmpeg emits regular PCR, and selects the AAC-LATM decoder when
 the profile requires it. The legacy branch ports ErsatzTV's
 `ConcatChannel` model with a realtime concat-demuxer command over internal
 `/ffmpeg/concat/{n}` and `/ffmpeg/stream/{n}` routes, preserving the upstream
-initial-discontinuity output shape. Command snapshots prove the wrapper and
-legacy concat paths stay observably different.
+initial-discontinuity output shape while applying the same mux-rate/PCR-period
+hardening. Direct transcode-to-MPEG-TS output shares that muxing helper, so the
+`.ts` routes do not rely on HLS-specific stabilization. Command snapshots prove
+the wrapper and legacy concat paths stay observably different.
 
 The MPEG-TS script hook mirrors ErsatzTV for the modern wrapper path. Packaged
-`assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed
-`<AppDataFolder>/scripts/mpegts/default` without overwriting user edits;
-`ffmpeg.default_mpegts_script` resolves
-`<AppDataFolder>/scripts/mpegts/{id}/mpegts.yml`; the ErsatzTV YAML shape is
-parsed with `serde_yaml`; `HlsUrl`, `ChannelName`, `FFmpegPath`, and `MuxRate`
-render into the platform script; Unix executes through `bash`; Windows executes
-the rendered `.bat`; invalid scripts warn and fall back to the default wrapper.
-Startup upgrades only byte-for-byte unchanged legacy default `run.sh`/`run.bat`
-files to the mux-rate-aware script, preserving user edits.
+`assets/Scripts/MpegTs/{mpegts.yml,run.sh,run.bat}` resources seed the default
+script without overwriting user edits; custom script YAML uses the ErsatzTV
+field names and renders `HlsUrl`, `ChannelName`, `FFmpegPath`, `MuxRate`, and
+`PcrPeriod`. Invalid scripts warn and fall back to the built-in wrapper.
 
-Runtime proof: 2026-06-08 bounded 65-second captures of channel 1 modern
-wrapper (`mode=ts`) and legacy concat (`mode=ts-legacy`) each produced readable
-HEVC video plus AAC audio under ffprobe. 2026-06-15 TSDuck proof verified the
-legacy concat/internal stream bounds `StreamingMode.TransportStream` FFmpeg
-processes to the selected `PlayoutItem` remaining duration, capped by persisted
-`Finish` and `OutPoint`: `scripts/e2e/tsduck-playback-gate.sh --seconds 24
---item-seconds 6 --frames --keep gate` passed all 85 TSDuck/container checks
-across `mode=ts-legacy`, `mode=ts`, HLS Segmenter, and HLS Direct, with kept
-legacy frames advancing from clip 1 to clips 2 and 3 at 6-second boundaries.
-On 2026-06-24, after adding the profile-derived default wrapper mux rate,
-`scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks: the hybrid
-wrapper reported zero continuity-counter/PTS/DTS/PCR faults and `pcrverify`
-reported 1,030 PCR OK / 0 jitter faults.
+Runtime proof: On 2026-06-29, after broadening the MPEG-TS mux timing helper to
+direct `.ts`, legacy concat, HLS-direct, and the configured/fallback hybrid
+wrapper, `scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks. The
+legacy concat path reported 875 PCR samples, zero
+continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 874 OK / 0 jitter
+faults; the hybrid wrapper path reported 1,030 PCR samples, zero
+continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 1,029 OK / 0 jitter
+faults; HLS-direct reported 904 PCR samples, zero
+continuity-counter/PTS/DTS/PCR-leap faults, and `pcrverify` 903 OK / 0 jitter
+faults. HLS Segmenter also had zero continuity-counter/PTS/DTS/PCR-leap faults;
+its HLS-stitched `pcrverify` jitter remains informational per the manual gate
+because the playlist contains real discontinuity markers.
 '''

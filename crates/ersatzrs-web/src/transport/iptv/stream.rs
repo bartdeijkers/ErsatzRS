@@ -24,8 +24,9 @@ use ersatzrs_domain::{
 use ersatzrs_ffmpeg::{
     build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
     build_pipeline_for_acceleration, ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport,
-    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, OutputFormat,
-    OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream, WatermarkOpacityClock,
+    FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions,
+    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
+    WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
@@ -65,10 +66,6 @@ const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const DEFAULT_MPEG_TS_SCRIPT_ID: &str = "default";
 const MPEG_TS_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const MPEG_TS_CAPACITY_RETRY_INTERVAL: Duration = Duration::from_millis(250);
-const MPEG_TS_WRAPPER_FALLBACK_MUXRATE_KBPS: i64 = 10_000;
-const MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_NUMERATOR: i64 = 12;
-const MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_DENOMINATOR: i64 = 10;
-const MPEG_TS_WRAPPER_MAX_MUXRATE_BPS: i64 = 1_500_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct MpegTsScriptDefinition {
@@ -92,6 +89,7 @@ struct MpegTsScriptRenderData {
     channel_name: String,
     ffmpeg_path: String,
     muxrate_bps: i64,
+    pcr_period_ms: u32,
 }
 
 pub async fn serve_transport_stream(
@@ -758,7 +756,8 @@ async fn serve_legacy_concat_stream(
             Ok(context) => context,
             Err(response) => return response,
         };
-    let command = build_mpegts_concat_command(concat_url, &metadata);
+    let wrapper_muxrate_bps = mpeg_ts_wrapper_muxrate_bps(&playback_profile);
+    let command = build_mpegts_concat_command(concat_url, &metadata, Some(wrapper_muxrate_bps));
 
     let capacity_reservation = match reserve_mpeg_ts_capacity(state, &channel.number).await {
         Some(reservation) => Some(reservation),
@@ -957,17 +956,9 @@ fn mpeg_ts_capacity_slate_dir(channel_id: i64) -> PathBuf {
 }
 
 fn mpeg_ts_wrapper_muxrate_bps(playback_profile: &PlaybackProfile) -> i64 {
-    let video_kbps = i64::from(playback_profile.profile.video_bitrate).max(0);
-    let audio_kbps = i64::from(playback_profile.profile.audio_bitrate).max(0);
-    let total_kbps = video_kbps
-        .checked_add(audio_kbps)
-        .filter(|total| *total > 0)
-        .unwrap_or(MPEG_TS_WRAPPER_FALLBACK_MUXRATE_KBPS);
-    let bps = total_kbps
-        .saturating_mul(1_000)
-        .saturating_mul(MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_NUMERATOR)
-        / MPEG_TS_WRAPPER_MUXRATE_OVERHEAD_DENOMINATOR;
-    bps.min(MPEG_TS_WRAPPER_MAX_MUXRATE_BPS)
+    let video_kbps = u32::try_from(playback_profile.profile.video_bitrate).ok();
+    let audio_kbps = u32::try_from(playback_profile.profile.audio_bitrate).ok();
+    MpegTsMuxingOptions::from_bitrates(video_kbps, audio_kbps).muxrate_bps
 }
 
 async fn configured_mpegts_script_command(
@@ -1011,6 +1002,7 @@ async fn configured_mpegts_script_command(
             channel_name: channel.name.clone(),
             ffmpeg_path: ersatzrs_ffmpeg::ffmpeg_path(),
             muxrate_bps,
+            pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
         },
     )
     .await
@@ -1124,6 +1116,7 @@ fn temp_mpegts_script_path(windows: bool) -> PathBuf {
 
 fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) -> String {
     let muxrate = data.muxrate_bps.to_string();
+    let pcr_period = data.pcr_period_ms.to_string();
     template
         .replace("{{ HlsUrl }}", &data.hls_url)
         .replace("{{HlsUrl}}", &data.hls_url)
@@ -1133,6 +1126,8 @@ fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) 
         .replace("{{FFmpegPath}}", &data.ffmpeg_path)
         .replace("{{ MuxRate }}", &muxrate)
         .replace("{{MuxRate}}", &muxrate)
+        .replace("{{ PcrPeriod }}", &pcr_period)
+        .replace("{{PcrPeriod}}", &pcr_period)
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -2634,18 +2629,19 @@ mod tests {
     #[test]
     fn mpegts_script_renderer_substitutes_known_scriban_variables() {
         let rendered = render_mpegts_script_template(
-            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -metadata service_name="{{ ChannelName }}""#,
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_name="{{ ChannelName }}""#,
             &MpegTsScriptRenderData {
                 hls_url: "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter".to_owned(),
                 channel_name: "Channel One".to_owned(),
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
                 muxrate_bps: 9_830_400,
+                pcr_period_ms: 20,
             },
         );
 
         assert_eq!(
             rendered,
-            r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -muxrate 9830400 -metadata service_name="Channel One""#
+            r#""/opt/ffmpeg/bin/ffmpeg" -i "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter" -muxrate 9830400 -pcr_period 20 -metadata service_name="Channel One""#
         );
     }
 
@@ -2730,7 +2726,7 @@ mod tests {
         let script_name = if cfg!(windows) { "run.bat" } else { "run.sh" };
         std::fs::write(
             folder.join(script_name),
-            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -metadata service_name="{{ ChannelName }}""#,
+            r#""{{ FFmpegPath }}" -i "{{ HlsUrl }}" -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_name="{{ ChannelName }}""#,
         )
         .expect("write script template");
         let script = MpegTsScript {
@@ -2750,6 +2746,7 @@ mod tests {
                 channel_name: "Channel One".to_owned(),
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
                 muxrate_bps: 9_830_400,
+                pcr_period_ms: 20,
             },
         )
         .await
@@ -2760,6 +2757,7 @@ mod tests {
         assert!(rendered.contains("/opt/ffmpeg/bin/ffmpeg"));
         assert!(rendered.contains("Channel One"));
         assert!(rendered.contains("-muxrate 9830400"));
+        assert!(rendered.contains("-pcr_period 20"));
         if cfg!(windows) {
             assert_eq!(
                 command.executable,
