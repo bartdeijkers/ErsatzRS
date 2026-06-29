@@ -373,10 +373,10 @@ fn hls_direct_target_duration(time_remaining: &str) -> u64 {
     time_remaining
         .parse::<f64>()
         .ok()
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.ceil() as u64)
-        .unwrap_or(10)
-        .max(10)
+        .and_then(|value| Duration::try_from_secs_f64(value).ok())
+        .map_or(10, |duration| {
+            (duration.as_secs() + u64::from(duration.subsec_nanos() > 0)).max(10)
+        })
 }
 
 fn parse_hls_direct_file(file: &str) -> &str {

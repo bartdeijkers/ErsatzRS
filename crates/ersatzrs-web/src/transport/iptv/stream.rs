@@ -584,7 +584,6 @@ fn resolve_transport_stream_mode(
             }
         },
         "ts" | "mpegts" | "mpeg-ts" | "ts-legacy" => TransportStreamMode::Legacy,
-        "hybrid" | "ts-hybrid" | "hybrid-wrapper" => TransportStreamMode::HybridWrapper,
         _ => TransportStreamMode::HybridWrapper,
     }
 }

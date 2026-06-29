@@ -2130,6 +2130,7 @@ fn hls_output_discontinuity(
     }
 
     if output_format == OutputFormat::Hls
+        && !append_requires_discontinuity
         && output_ts_offset.is_some_and(|offset| !offset.is_zero())
     {
         return false;
@@ -2735,7 +2736,7 @@ async fn last_playlist_segment(working_dir: &Path) -> io::Result<Option<PathBuf>
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .filter(|line| {
+        .rfind(|line| {
             matches!(
                 Path::new(line)
                     .extension()
@@ -2743,7 +2744,6 @@ async fn last_playlist_segment(working_dir: &Path) -> io::Result<Option<PathBuf>
                 Some("ts" | "m4s")
             )
         })
-        .last()
         .map(|file_name| working_dir.join(file_name)))
 }
 
@@ -3323,9 +3323,8 @@ impl TsContinuityState {
             return None;
         }
 
-        Some(Duration::from_secs_f64(
-            ticks as f64 / PCR_TICKS_PER_SECOND as f64,
-        ))
+        let nanos = ticks.saturating_mul(1_000_000_000) / PCR_TICKS_PER_SECOND;
+        u64::try_from(nanos).ok().map(Duration::from_nanos)
     }
 }
 
@@ -3713,11 +3712,7 @@ async fn normalize_ts_file_continuity(
             changed = true;
         }
 
-        if has_payload {
-            state.next_counters.insert(pid, (counter + 1) & 0x0f);
-        } else {
-            state.next_counters.insert(pid, (counter + 1) & 0x0f);
-        }
+        state.next_counters.insert(pid, (counter + 1) & 0x0f);
 
         if let Some(pcr) = packet_pcr(packet, has_adaptation) {
             let normalized = normalize_pcr(pid, pcr, state);
@@ -4785,7 +4780,7 @@ mod tests {
             Some(Duration::ZERO),
             false
         ));
-        assert!(!hls_output_discontinuity(
+        assert!(hls_output_discontinuity(
             OutputFormat::Hls,
             false,
             Some(Duration::from_secs(12)),

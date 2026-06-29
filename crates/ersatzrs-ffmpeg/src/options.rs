@@ -305,7 +305,7 @@ impl MpegTsMuxingOptions {
         }
     }
 
-    /// Render FFmpeg HLS `-hls_segment_options` for MPEG-TS segment muxing.
+    /// Render `FFmpeg` HLS `-hls_segment_options` for MPEG-TS segment muxing.
     #[must_use]
     pub fn hls_segment_options(self, existing: Option<&str>) -> String {
         let mut options = Vec::new();
@@ -318,7 +318,7 @@ impl MpegTsMuxingOptions {
     }
 }
 
-/// Render the FFmpeg `-muxrate` output option.
+/// Render the `FFmpeg` `-muxrate` output option.
 #[must_use]
 pub fn mpegts_muxrate(options: MpegTsMuxingOptions) -> PipelineStep {
     PipelineStep::generic(
@@ -327,7 +327,7 @@ pub fn mpegts_muxrate(options: MpegTsMuxingOptions) -> PipelineStep {
     )
 }
 
-/// Render the FFmpeg `-pcr_period` output option.
+/// Render the `FFmpeg` `-pcr_period` output option.
 #[must_use]
 pub fn mpegts_pcr_period(options: MpegTsMuxingOptions) -> PipelineStep {
     PipelineStep::generic(
