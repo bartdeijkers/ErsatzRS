@@ -19,8 +19,6 @@ pub struct LetterJump {
     pub base_uri: String,
     /// Optional `query` parameter to preserve through the jump.
     pub query: String,
-    /// Preserve the content-variant browse toggle through cross-page jumps.
-    pub show_variants: bool,
     /// 27-element vector of 1-based page numbers; index 0 is '#', 1..=26 is
     /// 'a'..='z'.
     pub page_map: LetterPageMap,
@@ -157,9 +155,6 @@ fn build_jump_href(jump: &LetterJump, letter: char) -> String {
     }
     if page > 1 {
         params.push(format!("page={page}"));
-    }
-    if jump.show_variants {
-        params.push("show_variants=1".to_string());
     }
     if !params.is_empty() {
         url.push('?');

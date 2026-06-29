@@ -90,10 +90,12 @@ Constraints:
 - **Parity-safe and additive.** Existing ErsatzTV JSON shapes, table/column
   casing, `PK_/FK_/IX_` names, and the established search field names must not
   change. New persisted state must default existing rows to today's behavior.
-- **Default-invisible.** Importing extras/versions must not silently change what
-  existing channels, playlists, manual/smart collections, or media browse pages
-  already select. ErsatzTV behaves as if only primaries exist; that must remain
-  the default.
+- **Default-invisible outside media management.** Importing extras/versions must
+  not silently change what existing channels, playlists, manual/smart
+  collections, searches, or schedules select. ErsatzTV behaves as if only
+  primaries exist there; that must remain the default. Admin media browse pages
+  are the management exception and intentionally show variants so users can see
+  what was imported.
 - **Single-binary, in-process search** (ADR 0009): the selection surface is the
   existing SQL-backed Lucene-like search, not a new service.
 
@@ -172,22 +174,24 @@ robust to title spelling variations.
 
 ### 4. Default-exclusion keystone
 
-Search-query evaluation and the media browse listings implicitly add
-`content_kind:primary` **unless** the query already references `content_kind`,
-`sub_kind`, or `parent_title`. This single rule is the parity-safety mechanism:
+Search-query evaluation implicitly adds `content_kind:primary` **unless** the
+query already references `content_kind`, `sub_kind`, or `parent_title`. This
+rule is the parity-safety mechanism:
 extras and alternate versions stay invisible to every existing primary-only
-collection, channel, and browse page, exactly as if ErsatzTV had skipped them,
-while an author who *wants* them opts in explicitly. Manual collections (which
-reference items by id) are unaffected.
+collection and channel, exactly as if ErsatzTV had skipped them, while an
+author who *wants* them opts in explicitly. Manual collections (which reference
+items by id) are unaffected. Media browse server functions retain an explicit
+variant-inclusive flag for callers that need management visibility; admin media
+browse pages pass that flag and always show variants.
 
 ### 5. UI and scheduling consumers
 
-- `/media/*` browse pages default to primaries with a persisted "Show special
-  features / versions" toggle (same pattern as the playouts "Show Filler"
-  preference) and a badge on variant cards.
+- `/media/*` browse pages always include special features / versions and show a
+  badge on variant cards.
 - Movie/show/season detail pages gain an **Extras / Special Features** section
-  grouped by `SubKind`; music-video/song/artist detail pages gain a **Versions**
-  section. Each card supports the usual add-to-collection/playlist actions.
+  grouped by `SubKind`; TV show/season specials render as episode-style rows,
+  while music-video/song/artist detail pages gain a **Versions** section. Each
+  item supports the usual add-to-collection/playlist actions.
 - The smart-collection / playlist search field reference (and any in-UI help)
   documents the new tokens.
 - Extras become schedulable as **pre-roll filler** (featurette before a movie)
@@ -219,8 +223,9 @@ an accurate port-completeness indicator.
   collections plus existing channel/filler features.
 - **Parity preserved by default**: additive columns default existing rows to
   `Primary`/no-parent; the implicit `content_kind:primary` filter keeps existing
-  collections, channels, browse pages, and playouts byte-for-byte unchanged
-  until an author opts in.
+  collections, channels, searches, schedules, and playouts byte-for-byte
+  unchanged until an author opts in. Admin media browse pages intentionally show
+  variants for management visibility.
 - **Bounded schema change**: one migration (`MediaItem` + indexes; SQLite and
   MySQL variants) under the "collapse then evolve" rule (ADR 0004). No new
   media-kind table; extras/versions reuse `OtherVideo`/`MusicVideo`/`Song`.

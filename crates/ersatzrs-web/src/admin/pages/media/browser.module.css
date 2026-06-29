@@ -35,44 +35,6 @@
 }
 .search:focus { outline: none; border-color: var(--color-primary); }
 
-.variant-toggle {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.variant-toggle-label {
-    min-height: 2rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    color: var(--color-gray-200);
-    font-size: 0.8125rem;
-}
-
-.variant-toggle-label input {
-    margin: 0;
-    accent-color: var(--color-primary, #4caf50);
-}
-
-.variant-apply {
-    min-height: 2rem;
-    padding: 0 0.7rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-surface);
-    color: var(--color-gray-100);
-    font-size: 0.8125rem;
-    cursor: pointer;
-}
-
-.variant-apply:hover,
-.variant-apply:focus-visible {
-    border-color: var(--color-primary);
-    outline: none;
-}
-
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));

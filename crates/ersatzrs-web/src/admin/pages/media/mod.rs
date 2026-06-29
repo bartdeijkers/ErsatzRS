@@ -19,3 +19,4 @@ pub mod smart_collections;
 pub mod songs;
 pub mod trakt_lists;
 pub mod trash;
+pub mod tv_specials;

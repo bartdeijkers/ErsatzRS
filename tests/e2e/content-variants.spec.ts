@@ -13,6 +13,8 @@ type Seed = {
   movieExtraMetadataId: number;
   showId: number;
   seasonId: number;
+  showExtraId: number;
+  showExtraMetadataId: number;
   showMetadataId: number;
   seasonMetadataId: number;
   seasonExtraId: number;
@@ -52,6 +54,8 @@ function seedForProject(testInfo: TestInfo): Seed {
     movieExtraMetadataId: base + 13,
     showId: base + 20,
     seasonId: base + 21,
+    showExtraId: base + 26,
+    showExtraMetadataId: base + 27,
     showMetadataId: base + 22,
     seasonMetadataId: base + 23,
     seasonExtraId: base + 24,
@@ -73,6 +77,7 @@ function seedContentVariants(testInfo: TestInfo): Seed {
     seed.movieExtraId,
     seed.showId,
     seed.seasonId,
+    seed.showExtraId,
     seed.seasonExtraId,
     seed.artistId,
     seed.musicVideoId,
@@ -81,13 +86,12 @@ function seedContentVariants(testInfo: TestInfo): Seed {
 
   sqlite(`
 PRAGMA foreign_keys=OFF;
-DELETE FROM "ConfigElement" WHERE "Key" = 'pages.media.show_content_variants';
 DELETE FROM "MusicVideoMetadata" WHERE "Id" IN (${seed.musicVideoMetadataId}, ${seed.musicVideoVersionMetadataId});
 DELETE FROM "MusicVideo" WHERE "Id" IN (${seed.musicVideoId}, ${seed.musicVideoVersionId});
 DELETE FROM "ArtistMetadata" WHERE "Id" = ${seed.artistMetadataId};
 DELETE FROM "Artist" WHERE "Id" = ${seed.artistId};
-DELETE FROM "OtherVideoMetadata" WHERE "Id" IN (${seed.movieExtraMetadataId}, ${seed.seasonExtraMetadataId});
-DELETE FROM "OtherVideo" WHERE "Id" IN (${seed.movieExtraId}, ${seed.seasonExtraId});
+DELETE FROM "OtherVideoMetadata" WHERE "Id" IN (${seed.movieExtraMetadataId}, ${seed.showExtraMetadataId}, ${seed.seasonExtraMetadataId});
+DELETE FROM "OtherVideo" WHERE "Id" IN (${seed.movieExtraId}, ${seed.showExtraId}, ${seed.seasonExtraId});
 DELETE FROM "SeasonMetadata" WHERE "Id" = ${seed.seasonMetadataId};
 DELETE FROM "ShowMetadata" WHERE "Id" = ${seed.showMetadataId};
 DELETE FROM "Season" WHERE "Id" = ${seed.seasonId};
@@ -116,6 +120,7 @@ INSERT INTO "MediaItem" (
   (${seed.movieExtraId}, ${seed.libraryPathId}, 0, 1, 'featurette', ${seed.movieId}),
   (${seed.showId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.seasonId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
+  (${seed.showExtraId}, ${seed.libraryPathId}, 0, 1, 'trailer', ${seed.showId}),
   (${seed.seasonExtraId}, ${seed.libraryPathId}, 0, 1, 'behind_the_scenes', ${seed.seasonId}),
   (${seed.artistId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
   (${seed.musicVideoId}, ${seed.libraryPathId}, 0, 0, NULL, NULL),
@@ -129,11 +134,12 @@ INSERT INTO "MovieMetadata" (
   2026, 'Movie with special features.', '${now}', '${now}'
 );
 
-INSERT INTO "OtherVideo" ("Id") VALUES (${seed.movieExtraId}), (${seed.seasonExtraId});
+INSERT INTO "OtherVideo" ("Id") VALUES (${seed.movieExtraId}), (${seed.showExtraId}), (${seed.seasonExtraId});
 INSERT INTO "OtherVideoMetadata" (
   "Id", "OtherVideoId", "MetadataKind", "Title", "OriginalTitle", "SortTitle", "Year", "DateAdded", "DateUpdated"
 ) VALUES
   (${seed.movieExtraMetadataId}, ${seed.movieExtraId}, 0, 'E2E Variant Featurette', 'Movie extra', 'e2e variant featurette', 2026, '${now}', '${now}'),
+  (${seed.showExtraMetadataId}, ${seed.showExtraId}, 0, 'E2E Variant Show Extra', 'Show extra', 'e2e variant show extra', 2026, '${now}', '${now}'),
   (${seed.seasonExtraMetadataId}, ${seed.seasonExtraId}, 0, 'E2E Variant Season Extra', 'Season extra', 'e2e variant season extra', 2026, '${now}', '${now}');
 
 INSERT INTO "Show" ("Id") VALUES (${seed.showId});
@@ -188,7 +194,7 @@ function screenshotPath(testInfo: TestInfo, name: string): string {
 test.describe('content variants UI surfacing', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed content variants');
 
-  test('browse opt-in, detail sections, search help, and no-JS rendering stay usable', async ({
+  test('browse visibility, detail sections, search help, and no-JS rendering stay usable', async ({
     browser,
     baseURL,
     page,
@@ -199,10 +205,7 @@ test.describe('content variants UI surfacing', () => {
     await page.setViewportSize({ width: 2048, height: 1024 });
     await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette');
     await expect(page.getByRole('heading', { name: 'Other Videos' })).toBeVisible();
-    await expect(page.getByLabel('Show special features / versions')).toBeVisible();
-    await expect(page.getByText('E2E Variant Featurette')).toHaveCount(0);
-
-    await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette&show_variants=1');
+    await expect(page.getByLabel('Show special features / versions')).toHaveCount(0);
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
     await page.screenshot({
@@ -215,10 +218,21 @@ test.describe('content variants UI surfacing', () => {
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
 
+    await page.goto(`/media/tv/shows/${seed.showId}`);
+    await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
+    const showSpecialRow = page.locator('[data-media-special-row]', {
+      hasText: 'E2E Variant Show Extra',
+    });
+    await expect(showSpecialRow).toBeVisible();
+    await expect(showSpecialRow.getByText('Extra: Trailer')).toBeVisible();
+
     await page.goto(`/media/tv/seasons/${seed.seasonId}`);
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
-    await expect(page.getByText('E2E Variant Season Extra').first()).toBeVisible();
-    await expect(page.getByText('Extra: Behind the Scenes').first()).toBeVisible();
+    const seasonSpecialRow = page.locator('[data-media-special-row]', {
+      hasText: 'E2E Variant Season Extra',
+    });
+    await expect(seasonSpecialRow).toBeVisible();
+    await expect(seasonSpecialRow.getByText('Extra: Behind the Scenes')).toBeVisible();
 
     await page.goto(`/media/music/artists/${seed.artistId}`);
     await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
@@ -230,7 +244,7 @@ test.describe('content variants UI surfacing', () => {
     await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette&show_variants=1');
+    await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette');
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await page.screenshot({
       path: screenshotPath(testInfo, 'content-variants-browse-mobile'),
@@ -239,7 +253,7 @@ test.describe('content variants UI surfacing', () => {
 
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
     const noJsPage = await context.newPage();
-    const response = await noJsPage.goto('/media/other/videos?query=E2E%20Variant%20Featurette&show_variants=1');
+    const response = await noJsPage.goto('/media/other/videos?query=E2E%20Variant%20Featurette');
     expect(await response?.text()).toContain('E2E Variant Featurette');
     await context.close();
   });

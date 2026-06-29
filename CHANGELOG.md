@@ -34,15 +34,15 @@ release section when tagging a release.
   smart-collection/search evaluation can query `content_kind`, `sub_kind`,
   `parent_title`, `audio_title`, `subtitle_title`, and `has_commentary` while
   defaulting existing searches to primary items.
-- Content-variant UI surfacing for ADR 0018: media browse pages keep variants
-  hidden by default but can persistently show special features / versions,
-  variant cards show localized badges, detail pages expose linked Extras /
-  Special Features and Versions sections, and search/smart-collection editing
-  shows the new token reference.
+- Content-variant UI surfacing for ADR 0018: media browse pages now always show
+  special features / versions with localized badges, TV show/season specials
+  render as episode-style rows, detail pages expose linked Extras / Special
+  Features and Versions sections, and search/smart-collection editing shows the
+  new token reference.
 - Content-variant local scanner import for ADR 0018: movie/show library extras
   matching ErsatzTV's extra suffix and directory taxonomy are now imported as
   typed `OtherVideo` rows with normalized sub-kinds and parent linkage while
-  remaining hidden from default browse/search behavior.
+  remaining hidden from default search/scheduling behavior.
 - Content-variant alternate-version linking for ADR 0018: local music-video,
   song, and movie scans now classify live, unplugged, acoustic, remix,
   remaster, extended, and director-cut renditions, keep deterministic canonical

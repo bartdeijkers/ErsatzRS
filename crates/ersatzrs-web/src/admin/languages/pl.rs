@@ -1101,7 +1101,6 @@ pub fn text(key: TextKey) -> &'static str {
             "Tokeny wariantów: content_kind:extra, content_kind:alternate_version, sub_kind:featurette, sub_kind:unplugged, parent_title:\"Tytuł filmu\", audio_title:commentary, subtitle_title:commentary, has_commentary:true"
         }
         TextKey::ContentVariantShort => "Krótki materiał",
-        TextKey::ContentVariantShowToggle => "Pokaż dodatki / wersje",
         TextKey::ContentVariantSpecialFeatures => "Dodatki / materiały specjalne",
         TextKey::ContentVariantTrailer => "Zwiastun",
         TextKey::ContentVariantUnplugged => "Unplugged",

@@ -12,27 +12,21 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{content_variant_badge_label, season_display_name, tr, TextKey};
+use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
 };
+use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::media_browser::{
     get_media_item_info_json, EpisodeCardRow, MediaBrowserKind, SeasonDetailRow,
 };
-use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
-#[allow(dead_code)]
-mod detail_style {
-    stylance::import_crate_style!(s, "src/admin/pages/media/movie_detail.module.css");
-    pub use s::*;
-}
-#[allow(dead_code)]
-mod show_style {
-    stylance::import_crate_style!(s, "src/admin/pages/media/show_detail.module.css");
-    pub use s::*;
-}
+stylance::import_crate_style!(
+    shell_style,
+    "src/admin/pages/media/season_detail_shell.module.css"
+);
 stylance::import_crate_style!(style, "src/admin/pages/media/season_detail.module.css");
 
 #[component]
@@ -48,7 +42,7 @@ pub fn SeasonPage() -> impl IntoView {
     match season {
         Some(season) => view! { <SeasonDetailIsland season/> }.into_any(),
         None => view! {
-            <div class=detail_style::not_found>
+            <div class=shell_style::not_found>
                 <h1>{tr(TextKey::SeasonNotFound)}</h1>
                 <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
             </div>
@@ -137,6 +131,12 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
             }
         }
     });
+    let show_media_info = Callback::new(move |(media_item_id, title): (i64, String)| {
+        media_info_title.set(title.clone());
+        media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
+        media_info_open.set(true);
+        media_info_action.dispatch((media_item_id, title));
+    });
 
     let show_href = format!("/media/tv/shows/{show_id}");
     let show_href_for_back = show_href.clone();
@@ -144,30 +144,30 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
     let poster_alt = format!("{show_title} {localized_season_name}");
 
     view! {
-        <div class=detail_style::page>
-            <div class=detail_style::fanart_container>
-                <div class=detail_style::fanart_tint/>
+        <div class=shell_style::page>
+            <div class=shell_style::fanart_container>
+                <div class=shell_style::fanart_tint/>
                 {fanart_url.map(|src| view! {
-                    <img class=detail_style::fanart src=src alt=tr(TextKey::FanArt)/>
+                    <img class=shell_style::fanart src=src alt=tr(TextKey::FanArt)/>
                 })}
             </div>
 
-            <div class=detail_style::content>
-                <div class=detail_style::hero>
+            <div class=shell_style::content>
+                <div class=shell_style::hero>
                     {poster_url.map(move |src| view! {
-                        <div class=detail_style::poster_wrap>
-                            <img class=detail_style::poster src=src alt=poster_alt/>
+                        <div class=shell_style::poster_wrap>
+                            <img class=shell_style::poster src=src alt=poster_alt/>
                         </div>
                     })}
-                    <div class=detail_style::header>
+                    <div class=shell_style::header>
                         <a class=style::show_link href=show_href>
-                            <h1 class=detail_style::title>{show_title.clone()}</h1>
+                            <h1 class=shell_style::title>{show_title.clone()}</h1>
                         </a>
-                        <p class=detail_style::year>{localized_season_name.clone()}</p>
-                        <div class=show_style::action_bar>
+                        <p class=shell_style::year>{localized_season_name.clone()}</p>
+                        <div class=shell_style::action_bar>
                             <button
                                 type="button"
-                                class=show_style::action_btn
+                                class=shell_style::action_btn
                                 on:click=move |_| {
                                     season_collection_selected.set(HashSet::from([id]));
                                     season_collection_open.set(true);
@@ -177,7 +177,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                             </button>
                             <button
                                 type="button"
-                                class=show_style::action_btn
+                                class=shell_style::action_btn
                                 on:click=move |_| {
                                     season_playlist_selected.set(HashSet::from([id]));
                                     season_playlist_open.set(true);
@@ -187,12 +187,12 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                             </button>
                             <button
                                 type="button"
-                                class=show_style::action_btn
+                                class=shell_style::action_btn
                                 on:click=move |_| schedule_open.set(true)
                             >
                                 {tr(TextKey::AddToSchedule)}
                             </button>
-                            <a class=detail_style::btn_back href=show_href_for_back>{tr(TextKey::Back)}</a>
+                            <a class=shell_style::btn_back href=show_href_for_back>{tr(TextKey::Back)}</a>
                         </div>
                     </div>
                 </div>
@@ -230,34 +230,22 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                 </div>
 
                 {(!extras.is_empty()).then(|| view! {
-                    <h2 class=show_style::section_title>{tr(TextKey::ContentVariantSpecialFeatures)}</h2>
-                    <div class=show_style::divider/>
-                    <div class=show_style::grid>
+                    <h2 class=shell_style::section_title>{tr(TextKey::ContentVariantSpecialFeatures)}</h2>
+                    <div class=shell_style::divider/>
+                    <div class=style::episode_stack>
                         {extras.into_iter().map(|extra| {
-                            let extra_id = extra.id;
-                            let title = extra.title.clone();
-                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
                             view! {
-                                <MediaCard
-                                    title=title
-                                    subtitle=extra.subtitle
-                                    artwork_url=extra.artwork_path
-                                    href=Some(format!("/media/other/videos/{extra_id}"))
-                                    placeholder=placeholder
-                                    state=MediaItemState::Normal
-                                    badge=content_variant_badge_label(
-                                        extra.variant.content_kind,
-                                        extra.variant.sub_kind.as_deref(),
-                                    )
-                                    on_add_to_collection=Some(Callback::new(move |()| {
+                                <TvSpecialFeatureRow
+                                    extra=extra
+                                    on_add_collection=Callback::new(move |extra_id: i64| {
                                         extra_selected.set(HashSet::from([extra_id]));
                                         extra_collection_open.set(true);
-                                    }))
-                                    on_add_to_playlist=Some(Callback::new(move |()| {
+                                    })
+                                    on_add_playlist=Callback::new(move |extra_id: i64| {
                                         extra_selected.set(HashSet::from([extra_id]));
                                         extra_playlist_open.set(true);
-                                    }))
-                                    menu_media_item_id=Some(extra_id)
+                                    })
+                                    on_show_info=show_media_info
                                 />
                             }
                         }).collect_view()}
@@ -330,14 +318,14 @@ fn EpisodeRow(
                     <div class=style::episode_actions>
                         <button
                             type="button"
-                            class=show_style::action_btn
+                            class=shell_style::action_btn
                             on:click=move |_| on_add_collection.run(episode_id)
                         >
                             {tr(TextKey::AddToCollection)}
                         </button>
                         <button
                             type="button"
-                            class=show_style::action_btn
+                            class=shell_style::action_btn
                             on:click=move |_| on_add_playlist.run(episode_id)
                         >
                             {tr(TextKey::AddToPlaylist)}

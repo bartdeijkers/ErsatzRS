@@ -29,8 +29,6 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
-const SHOW_CONTENT_VARIANTS_PREF_KEY: &str = "pages.media.show_content_variants";
-
 #[cfg(feature = "ssr")]
 async fn inserted_id<'e, E>(
     executor: E,
@@ -6707,41 +6705,6 @@ impl MediaBrowserKind {
     }
 }
 
-/// Reads the persisted ADR 0018 media-browse variant preference.
-#[server]
-pub async fn get_show_content_variants_pref() -> Result<bool, ServerFnError> {
-    use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ConfigRepository;
-
-    let state = expect_context::<AppState>();
-    let value = state
-        .repositories
-        .config
-        .get(SHOW_CONTENT_VARIANTS_PREF_KEY)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(value.is_some_and(|value| value.trim().eq_ignore_ascii_case("true")))
-}
-
-/// Persists the ADR 0018 media-browse variant preference.
-#[server]
-pub async fn set_show_content_variants_pref(show_variants: bool) -> Result<(), ServerFnError> {
-    use crate::host::state::AppState;
-    use ersatzrs_core::repositories::ConfigRepository;
-
-    let state = expect_context::<AppState>();
-    state
-        .repositories
-        .config
-        .set(
-            SHOW_CONTENT_VARIANTS_PREF_KEY,
-            if show_variants { "true" } else { "false" },
-        )
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(())
-}
-
 /// Page map for any browser kind. Ports the
 /// `LuceneSearchIndex.GetSearchPageMap` algorithm:
 ///
@@ -7414,7 +7377,7 @@ mod season_detail_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn linked_extras_load_on_detail_and_stay_hidden_until_browse_opt_in() {
+    async fn linked_extras_load_on_detail_and_server_filter_supports_primary_only() {
         let (_db_file, pool) = test_pool().await;
         seed_season_detail_fixture(&pool).await;
 

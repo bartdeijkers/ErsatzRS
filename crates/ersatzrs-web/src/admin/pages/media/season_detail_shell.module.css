@@ -1,0 +1,148 @@
+.page {
+    position: relative;
+    color: var(--color-gray-100);
+    min-height: calc(100vh - 4rem);
+}
+
+.not-found {
+    padding: 3rem;
+    text-align: center;
+    color: var(--color-muted);
+}
+
+.fanart-container {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 31rem;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.fanart {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    filter: brightness(0.72) saturate(0.88);
+}
+
+.fanart-tint {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,
+        rgba(15, 15, 18, 0.16) 0%,
+        rgba(15, 15, 18, 0.58) 58%,
+        var(--color-bg) 100%);
+    z-index: 1;
+}
+
+.content {
+    position: relative;
+    z-index: 2;
+    padding: 4.4rem 1.5rem 2.5rem;
+    max-width: 68rem;
+    margin: 0 auto;
+}
+
+.hero {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+    align-items: flex-start;
+}
+
+.poster-wrap {
+    position: relative;
+    flex: 0 0 12rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    min-height: 18rem;
+    background: rgba(12, 12, 14, 0.55);
+}
+
+.poster {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 20.4rem;
+    object-fit: cover;
+}
+
+.header {
+    flex: 1 1 24rem;
+    min-width: 0;
+}
+
+.title {
+    font-size: 2.8rem;
+    line-height: 1.08;
+    font-weight: 400;
+    margin: 0 0 0.65rem;
+    color: var(--color-gray-50);
+    text-shadow: 0 2px 7px rgba(0, 0, 0, 0.8);
+}
+
+.year {
+    margin: 0 0 1.6rem;
+    color: var(--color-gray-100);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+
+.action-btn {
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--radius);
+    background: var(--color-primary);
+    color: var(--color-bg);
+    border: 1px solid var(--color-primary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.action-btn:hover {
+    filter: brightness(1.1);
+}
+
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.1rem;
+    padding: 0.42rem 0.8rem;
+    border-radius: 2px;
+    background: var(--color-surface);
+    color: var(--color-gray-100);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.btn-back:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.section-title {
+    margin: 2rem 0 0.25rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-gray-100);
+}
+
+.divider {
+    height: 1px;
+    background-color: var(--color-border);
+    margin: 0.25rem 0 1rem 0;
+}

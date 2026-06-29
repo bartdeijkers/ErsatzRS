@@ -30,11 +30,16 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{content_variant_badge_label, season_display_name, tr, TextKey};
+use crate::admin::i18n::{season_display_name, tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
-use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
+use crate::admin::pages::media::multi_select_browser::{
+    AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
+};
+use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::libraries::scan_show;
-use crate::admin::server_fns::media_browser::{get_show_details, MediaBrowserKind, ShowDetailRow};
+use crate::admin::server_fns::media_browser::{
+    get_media_item_info_json, get_show_details, MediaBrowserKind, ShowDetailRow,
+};
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
 
@@ -133,6 +138,9 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
     let extra_collection_open = RwSignal::new(false);
     let extra_playlist_open = RwSignal::new(false);
     let schedule_open = RwSignal::new(false);
+    let media_info_open = RwSignal::new(false);
+    let media_info_title = RwSignal::new(String::new());
+    let media_info_body = RwSignal::new(String::new());
 
     let open_with_selection = move |target: RwSignal<bool>| {
         selected.set(HashSet::from([id]));
@@ -140,6 +148,35 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
     };
 
     let toast = use_toast();
+    let media_info_action = Action::new(move |target: &(i64, String)| {
+        let (media_item_id, title) = target.clone();
+        async move {
+            get_media_item_info_json(media_item_id)
+                .await
+                .map(|json| (title, json))
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = media_info_action.value().get() {
+            match result {
+                Ok((title, json)) => {
+                    media_info_title.set(title);
+                    media_info_body.set(json);
+                }
+                Err(error) => {
+                    media_info_body.set(format!("{}: {error}", tr(TextKey::UnableToLoadMediaInfo)));
+                    toast.push(tr(TextKey::UnableToLoadMediaInfo), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+    let show_media_info = Callback::new(move |(media_item_id, title): (i64, String)| {
+        media_info_title.set(title.clone());
+        media_info_body.set(tr(TextKey::LoadingMediaInfo).to_string());
+        media_info_open.set(true);
+        media_info_action.dispatch((media_item_id, title));
+    });
+
     let scan_action = Action::new(move |deep: &bool| {
         let deep = *deep;
         let kind = media_source_kind.clone();
@@ -273,32 +310,20 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                 {(!extras.is_empty()).then(|| view! {
                     <h2 class=style::section_title>{tr(TextKey::ContentVariantSpecialFeatures)}</h2>
                     <div class=style::divider/>
-                    <div class=style::grid>
+                    <div class=style::special_stack>
                         {extras.into_iter().map(|extra| {
-                            let extra_id = extra.id;
-                            let title = extra.title.clone();
-                            let placeholder = crate::admin::ui::primitives::card::first_letter_placeholder(&extra.sort_title);
                             view! {
-                                <MediaCard
-                                    title=title
-                                    subtitle=extra.subtitle
-                                    artwork_url=extra.artwork_path
-                                    href=Some(format!("/media/other/videos/{extra_id}"))
-                                    placeholder=placeholder
-                                    state=MediaItemState::Normal
-                                    badge=content_variant_badge_label(
-                                        extra.variant.content_kind,
-                                        extra.variant.sub_kind.as_deref(),
-                                    )
-                                    on_add_to_collection=Some(Callback::new(move |()| {
+                                <TvSpecialFeatureRow
+                                    extra=extra
+                                    on_add_collection=Callback::new(move |extra_id: i64| {
                                         extra_selected.set(HashSet::from([extra_id]));
                                         extra_collection_open.set(true);
-                                    }))
-                                    on_add_to_playlist=Some(Callback::new(move |()| {
+                                    })
+                                    on_add_playlist=Callback::new(move |extra_id: i64| {
                                         extra_selected.set(HashSet::from([extra_id]));
                                         extra_playlist_open.set(true);
-                                    }))
-                                    menu_media_item_id=Some(extra_id)
+                                    })
+                                    on_show_info=show_media_info
                                 />
                             }
                         }).collect_view()}
@@ -341,6 +366,7 @@ fn ShowDetailView(show: ShowDetailRow) -> impl IntoView {
                 collection_type=1
                 success_label=tr(TextKey::AddedShowToSchedule)
             />
+            <MediaInfoModal open=media_info_open title=media_info_title body=media_info_body/>
         </div>
     }
 }

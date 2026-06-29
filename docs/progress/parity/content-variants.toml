@@ -17,10 +17,10 @@ Search and scheduling projection understand `content_kind`, `sub_kind`,
 implicit `content_kind:primary` filter unless a query opts into variant fields.
 The health engine reports Search Projection readiness for these fields.
 
-The admin media UI preserves hidden-by-default behavior behind a persisted
-"Show special features / versions" toggle, renders localized variant badges,
-links Extras / Special Features or Versions sections from detail pages, and
-surfaces the search tokens. The local scanner imports movie/show extras as
+The admin media UI always shows variants in media browse pages, renders
+localized variant badges, renders TV show/season specials as episode-style
+rows, links Extras / Special Features or Versions sections from detail pages,
+and surfaces the search tokens. The local scanner imports movie/show extras as
 typed `OtherVideo` rows, links owner folders/stems when unambiguous, and
 classifies local music-video, song, and movie alternates such as unplugged,
 live, acoustic, remix, remaster, extended, and director-cut renditions while
@@ -60,9 +60,9 @@ resolved    = true
 [[debt]]
 id          = 'media-browse-ui-surfacing'
 adr         = '0018'
-description = 'Phase 1 `/media/*` browse/detail pages needed to expose the persisted "Show special features / versions" toggle, variant badges, Extras / Special Features sections, Versions sections, and localized smart-collection search-field reference for the new tokens.'
+description = 'Phase 1 `/media/*` browse/detail pages needed to expose content variants in media browsing, variant badges, Extras / Special Features sections, Versions sections, and localized smart-collection search-field reference for the new tokens.'
 discovered  = '2026-06-23'
-evidence    = 'Resolved 2026-06-24: media browse server functions default-filter primary content unless the persisted/URL toggle opts into variants; shared media cards render localized variant badges; movie/show/season/artist detail pages render linked Extras / Special Features or Versions sections; search and smart-collection editing surface variant-token help. Covered by admin::server_fns::media_browser::season_detail_tests::linked_extras_load_on_detail_and_stay_hidden_until_browse_opt_in and tests/e2e/content-variants.spec.ts across Chromium and Firefox, including desktop/mobile screenshots and no-JS route rendering.'
+evidence    = 'Resolved 2026-06-24 and refined 2026-06-29: media browse pages now always pass the variant-inclusive browse flag with no persisted toggle; shared media cards render localized variant badges; TV show/season special features render as episode-style rows; movie/show/season/artist detail pages render linked Extras / Special Features or Versions sections; search and smart-collection editing surface variant-token help. Covered by admin::server_fns::media_browser::season_detail_tests::linked_extras_load_on_detail_and_server_filter_supports_primary_only and tests/e2e/content-variants.spec.ts across Chromium and Firefox, including desktop/mobile screenshots and no-JS route rendering.'
 resolved    = true
 
 [[debt]]
