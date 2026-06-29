@@ -29,6 +29,8 @@ const DEFAULT_TUNER_COUNT: i32 = 2;
 const PLAYOUT_BUILD_QUEUE_CAPACITY: usize = 256;
 const LEGACY_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const LEGACY_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
+const MUXRATE_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
+const MUXRATE_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
     DefaultMpegTsScriptFile {
         name: "mpegts.yml",
@@ -38,12 +40,15 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
     DefaultMpegTsScriptFile {
         name: "run.sh",
         contents: include_bytes!("../../../../assets/Scripts/MpegTs/run.sh"),
-        legacy_contents: &[LEGACY_DEFAULT_MPEGTS_RUN_SH],
+        legacy_contents: &[LEGACY_DEFAULT_MPEGTS_RUN_SH, MUXRATE_DEFAULT_MPEGTS_RUN_SH],
     },
     DefaultMpegTsScriptFile {
         name: "run.bat",
         contents: include_bytes!("../../../../assets/Scripts/MpegTs/run.bat"),
-        legacy_contents: &[LEGACY_DEFAULT_MPEGTS_RUN_BAT],
+        legacy_contents: &[
+            LEGACY_DEFAULT_MPEGTS_RUN_BAT,
+            MUXRATE_DEFAULT_MPEGTS_RUN_BAT,
+        ],
     },
 ];
 
@@ -1065,6 +1070,7 @@ mod tests {
         let run_bat = String::from_utf8_lossy(&run_bat);
         assert!(run_bat.contains("FFmpegPath"));
         assert!(run_bat.contains("MuxRate"));
+        assert!(run_bat.contains("PcrPeriod"));
     }
 
     #[tokio::test]
@@ -1093,7 +1099,40 @@ mod tests {
             .expect("read batch script");
 
         assert!(run_sh.contains("MuxRate"));
+        assert!(run_sh.contains("PcrPeriod"));
         assert!(run_bat.contains("MuxRate"));
+        assert!(run_bat.contains("PcrPeriod"));
+    }
+
+    #[tokio::test]
+    async fn seed_default_mpegts_script_upgrades_muxrate_only_defaults() {
+        let root = tempfile::tempdir().expect("temp script root");
+        let folder = root.path().join("default");
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .expect("create script folder");
+        tokio::fs::write(folder.join("run.sh"), MUXRATE_DEFAULT_MPEGTS_RUN_SH)
+            .await
+            .expect("write muxrate shell script");
+        tokio::fs::write(folder.join("run.bat"), MUXRATE_DEFAULT_MPEGTS_RUN_BAT)
+            .await
+            .expect("write muxrate batch script");
+
+        seed_default_mpegts_script_in(&folder)
+            .await
+            .expect("seed scripts");
+
+        let run_sh = tokio::fs::read_to_string(folder.join("run.sh"))
+            .await
+            .expect("read shell script");
+        let run_bat = tokio::fs::read_to_string(folder.join("run.bat"))
+            .await
+            .expect("read batch script");
+
+        assert!(run_sh.contains("MuxRate"));
+        assert!(run_sh.contains("PcrPeriod"));
+        assert!(run_bat.contains("MuxRate"));
+        assert!(run_bat.contains("PcrPeriod"));
     }
 
     #[test]

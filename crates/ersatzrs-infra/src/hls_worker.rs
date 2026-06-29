@@ -65,6 +65,7 @@ const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 const TS_PACKET_SIZE: usize = 188;
 const TS_SYNC_BYTE: u8 = 0x47;
 const TS_NULL_PID: u16 = 0x1fff;
+const PCR_TICKS_PER_SECOND: i128 = 27_000_000;
 const PCR_MODULUS_TICKS: i128 = (1_i128 << 33) * 300;
 const PCR_LEAP_TOLERANCE_TICKS: i128 = 27_000_000;
 
@@ -426,21 +427,7 @@ impl HlsSessionWorker {
                 let channel_name = load_channel_name(&pool, self.channel_id)
                     .await
                     .unwrap_or_else(|| self.channel_number.clone());
-                let target_frame_rate = if playback_profile.profile.normalize_framerate {
-                    match load_channel_target_frame_rate(&pool, self.channel_id).await {
-                        Ok(frame_rate) => frame_rate,
-                        Err(error) => {
-                            tracing::warn!(
-                                %error,
-                                channel_number = %self.channel_number,
-                                "failed to load channel target frame rate for hls slug"
-                            );
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
+                let target_frame_rate = self.load_target_frame_rate(&pool, "hls slug").await;
                 let output_ts_offset = self.probe_output_ts_offset(is_first).await;
                 let discontinuity =
                     hls_output_discontinuity(self.output_format, is_first, output_ts_offset, true);
@@ -560,21 +547,7 @@ impl HlsSessionWorker {
                 &active.media_path,
             )
             .await;
-            let target_frame_rate = if playback_profile.profile.normalize_framerate {
-                match load_channel_target_frame_rate(&pool, self.channel_id).await {
-                    Ok(frame_rate) => frame_rate,
-                    Err(error) => {
-                        tracing::warn!(
-                            %error,
-                            channel_number = %self.channel_number,
-                            "failed to load channel target frame rate"
-                        );
-                        None
-                    }
-                }
-            } else {
-                None
-            };
+            let target_frame_rate = self.load_target_frame_rate(&pool, "hls worker").await;
             let subtitle_mode = active.subtitle_mode.unwrap_or(active.channel_subtitle_mode);
             let preferred_subtitle_language = active
                 .preferred_subtitle_language_code
@@ -945,21 +918,7 @@ impl HlsSessionWorker {
         let channel_name = load_channel_name(pool, self.channel_id)
             .await
             .unwrap_or_else(|| self.channel_number.clone());
-        let target_frame_rate = if playback_profile.profile.normalize_framerate {
-            match load_channel_target_frame_rate(pool, self.channel_id).await {
-                Ok(frame_rate) => frame_rate,
-                Err(error) => {
-                    tracing::warn!(
-                        %error,
-                        channel_number = %self.channel_number,
-                        "failed to load channel target frame rate for capacity slate"
-                    );
-                    None
-                }
-            }
-        } else {
-            None
-        };
+        let target_frame_rate = self.load_target_frame_rate(pool, "capacity slate").await;
         let output_ts_offset = self.probe_output_ts_offset(is_first_transcode).await;
         let discontinuity = hls_output_discontinuity(
             self.output_format,
@@ -1029,7 +988,10 @@ impl HlsSessionWorker {
             tokio::select! {
                 result = child.wait() => {
                     match result {
-                        Ok(status) if status.success() => return HlsProcessOutcome::Success,
+                        Ok(status) if status.success() => {
+                            let _ = self.trim_playlist_inner().await;
+                            return HlsProcessOutcome::Success;
+                        }
                         Ok(status) => {
                             let stderr = await_stderr_tail(stderr_task.take()).await;
                             let error_message = if stderr.trim().is_empty() {
@@ -1173,6 +1135,21 @@ impl HlsSessionWorker {
         self.idle_for_duration() < HLS_ACTIVE_WATCH_WINDOW
     }
 
+    async fn load_target_frame_rate(&self, pool: &DbPool, context: &str) -> Option<FrameRate> {
+        match load_channel_target_frame_rate(pool, self.channel_id).await {
+            Ok(frame_rate) => frame_rate,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    channel_number = %self.channel_number,
+                    context,
+                    "failed to load channel target frame rate for hls segmenter"
+                );
+                None
+            }
+        }
+    }
+
     fn active_transcode_reacquire_delay(&self) -> Option<Duration> {
         active_transcode_reacquire_delay(
             &self.reclaim_reacquire_deferred_until_ms,
@@ -1230,18 +1207,20 @@ impl HlsSessionWorker {
                 }
             }
         } else {
-            match probe_last_pts_offset(&self.working_dir, None).await {
-                Ok(offset) => offset,
-                Err(error) => {
-                    tracing::warn!(
-                        %error,
-                        channel_number = %self.channel_number,
-                        "failed to probe last HLS segment PTS offset"
-                    );
-                    None
-                }
-            }
+            self.mpegts_output_ts_offset().await
         }
+    }
+
+    async fn mpegts_output_ts_offset(&self) -> Option<Duration> {
+        if self.output_format != OutputFormat::Hls {
+            return None;
+        }
+
+        if let Some(offset) = self.ts_continuity.lock().await.pcr_output_ts_offset() {
+            return Some(offset);
+        }
+
+        playlist_duration(&self.working_dir).await.ok().flatten()
     }
 
     async fn trim_playlist_inner(&self) -> Option<TrimmedPlaylist> {
@@ -2150,6 +2129,12 @@ fn hls_output_discontinuity(
         return false;
     }
 
+    if output_format == OutputFormat::Hls
+        && output_ts_offset.is_some_and(|offset| !offset.is_zero())
+    {
+        return false;
+    }
+
     append_requires_discontinuity
         || output_format != OutputFormat::Hls
         || output_ts_offset.is_none_or(|offset| offset.is_zero())
@@ -2720,6 +2705,10 @@ async fn probe_last_pts_offset(
 }
 
 async fn last_hls_segment(working_dir: &Path) -> io::Result<Option<PathBuf>> {
+    if let Some(segment) = last_playlist_segment(working_dir).await? {
+        return Ok(Some(segment));
+    }
+
     let mut entries = tokio::fs::read_dir(working_dir).await?;
     let mut segments = Vec::new();
     while let Some(entry) = entries.next_entry().await? {
@@ -2733,6 +2722,51 @@ async fn last_hls_segment(working_dir: &Path) -> io::Result<Option<PathBuf>> {
     }
     segments.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
     Ok(segments.pop())
+}
+
+async fn last_playlist_segment(working_dir: &Path) -> io::Result<Option<PathBuf>> {
+    let playlist = match tokio::fs::read_to_string(working_dir.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+
+    Ok(playlist
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter(|line| {
+            matches!(
+                Path::new(line)
+                    .extension()
+                    .and_then(|extension| extension.to_str()),
+                Some("ts" | "m4s")
+            )
+        })
+        .last()
+        .map(|file_name| working_dir.join(file_name)))
+}
+
+async fn playlist_duration(working_dir: &Path) -> io::Result<Option<Duration>> {
+    let playlist = match tokio::fs::read_to_string(working_dir.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+
+    let mut duration = chrono::Duration::zero();
+    for line in playlist.lines().map(str::trim) {
+        if line.starts_with("#EXTINF:") {
+            if let Some(extinf_duration) = parse_extinf_duration(line) {
+                duration += extinf_duration;
+            }
+        }
+    }
+
+    Ok(duration
+        .to_std()
+        .ok()
+        .filter(|duration| !duration.is_zero()))
 }
 
 async fn concatenate_fmp4_init_and_segment(
@@ -3270,8 +3304,29 @@ struct TrimmedPlaylist {
 struct TsContinuityState {
     next_counters: HashMap<u16, u8>,
     pcr_offsets: HashMap<u16, i128>,
+    first_pcr: HashMap<u16, i128>,
     last_pcr: HashMap<u16, i128>,
     normalized_sequences: HashSet<u64>,
+}
+
+impl TsContinuityState {
+    fn pcr_output_ts_offset(&self) -> Option<Duration> {
+        let ticks = self
+            .last_pcr
+            .iter()
+            .filter_map(|(pid, last)| {
+                let first = self.first_pcr.get(pid)?;
+                Some(last.saturating_sub(*first))
+            })
+            .max()?;
+        if ticks <= 0 {
+            return None;
+        }
+
+        Some(Duration::from_secs_f64(
+            ticks as f64 / PCR_TICKS_PER_SECOND as f64,
+        ))
+    }
 }
 
 fn trim_playlist_contents(
@@ -3368,14 +3423,14 @@ fn render_trimmed_playlist(
     let _ = writeln!(out, "#EXT-X-VERSION:{}", parsed.version);
     let _ = writeln!(out, "#EXT-X-TARGETDURATION:{}", parsed.target_duration);
     let _ = writeln!(out, "#EXT-X-MEDIA-SEQUENCE:{}", first_segment.sequence);
-    if leading_discontinuities > 1 {
+    if output_format != OutputFormat::Hls && leading_discontinuities > 1 {
         let _ = writeln!(
             out,
             "#EXT-X-DISCONTINUITY-SEQUENCE:{leading_discontinuities}"
         );
     }
     out.push_str("#EXT-X-INDEPENDENT-SEGMENTS\n");
-    if leading_discontinuities == 1 {
+    if output_format != OutputFormat::Hls && leading_discontinuities == 1 {
         out.push_str("#EXT-X-DISCONTINUITY\n");
     }
 
@@ -3390,6 +3445,9 @@ fn render_trimmed_playlist(
     for (index, item) in parsed.items[first_index..=last_index].iter().enumerate() {
         match item {
             PlaylistItem::Discontinuity => {
+                if output_format == OutputFormat::Hls {
+                    continue;
+                }
                 let next_retained = parsed.items[first_index + index + 1..=last_index]
                     .iter()
                     .find_map(|next_item| match next_item {
@@ -3731,6 +3789,7 @@ fn normalize_pcr(pid: u16, pcr: u64, state: &mut TsContinuityState) -> u64 {
         }
     }
 
+    state.first_pcr.entry(pid).or_insert(adjusted);
     state.last_pcr.insert(pid, adjusted);
     u64::try_from(adjusted.rem_euclid(PCR_MODULUS_TICKS)).expect("PCR remainder fits in u64")
 }
@@ -4726,7 +4785,7 @@ mod tests {
             Some(Duration::ZERO),
             false
         ));
-        assert!(hls_output_discontinuity(
+        assert!(!hls_output_discontinuity(
             OutputFormat::Hls,
             false,
             Some(Duration::from_secs(12)),
@@ -4738,6 +4797,62 @@ mod tests {
             Some(Duration::from_secs(12)),
             false
         ));
+    }
+
+    #[tokio::test]
+    async fn mpegts_output_ts_offset_uses_last_normalized_pcr() {
+        let worker = HlsSessionWorker::new(
+            "7".to_owned(),
+            7,
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4())),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+        {
+            let mut continuity = worker.ts_continuity.lock().await;
+            continuity
+                .first_pcr
+                .insert(0x0100, PCR_TICKS_PER_SECOND * 7_200);
+            continuity
+                .last_pcr
+                .insert(0x0100, PCR_TICKS_PER_SECOND * 7_212);
+        }
+
+        assert_eq!(
+            worker.mpegts_output_ts_offset().await,
+            Some(Duration::from_secs(12))
+        );
+    }
+
+    #[tokio::test]
+    async fn mpegts_output_ts_offset_falls_back_to_playlist_duration_before_pcr() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(
+            working_dir.join("live.m3u8"),
+            "#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXTINF:4.800000,\nlive000000.ts\n#EXTINF:2.400000,\nlive000001.ts\n",
+        )
+        .await
+        .expect("write playlist");
+        let worker = HlsSessionWorker::new(
+            "7".to_owned(),
+            7,
+            working_dir.clone(),
+            OutputFormat::Hls,
+            Vec::new(),
+            FfmpegCapabilityReport::default(),
+        );
+
+        assert_eq!(
+            worker.mpegts_output_ts_offset().await,
+            Some(Duration::from_millis(7_200))
+        );
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }
 
     #[test]
@@ -5527,7 +5642,7 @@ mod tests {
         .expect("trimmed playlist");
 
         assert!(!trimmed.playlist.contains("seg00001.ts"));
-        assert!(trimmed.playlist.contains("#EXT-X-DISCONTINUITY"));
+        assert!(!trimmed.playlist.contains("#EXT-X-DISCONTINUITY"));
         assert!(trimmed.playlist.contains("seg00002.ts"));
         assert!(trimmed.playlist.contains("seg00003.ts"));
         assert_eq!(trimmed.referenced_files.len(), 2);
@@ -5577,6 +5692,7 @@ mod tests {
         assert!(trimmed
             .playlist
             .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.507+0000\nlive000043.ts"));
+        assert!(!trimmed.playlist.contains("#EXT-X-DISCONTINUITY"));
         assert!(!trimmed
             .playlist
             .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:11.869+0200"));
@@ -6692,6 +6808,41 @@ mod tests {
 
         assert!(working_dir.exists());
         assert!(!working_dir.join("seg00001.ts").exists());
+
+        let _ = tokio::fs::remove_dir_all(&working_dir).await;
+    }
+
+    #[tokio::test]
+    async fn last_hls_segment_prefers_completed_playlist_segment() {
+        let working_dir =
+            std::env::temp_dir().join(format!("ersatzrs-hls-test-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&working_dir)
+            .await
+            .expect("create temp dir");
+        tokio::fs::write(working_dir.join("live000010.ts"), b"complete")
+            .await
+            .expect("write completed segment");
+        tokio::fs::write(working_dir.join("live000011.ts"), b"in-progress")
+            .await
+            .expect("write newer in-progress segment");
+        tokio::fs::write(
+            working_dir.join("live.m3u8"),
+            concat!(
+                "#EXTM3U\n",
+                "#EXT-X-TARGETDURATION:4\n",
+                "#EXTINF:4.000000,\n",
+                "live000010.ts\n"
+            ),
+        )
+        .await
+        .expect("write playlist");
+
+        let segment = last_hls_segment(&working_dir)
+            .await
+            .expect("find segment")
+            .expect("segment");
+
+        assert_eq!(segment, working_dir.join("live000010.ts"));
 
         let _ = tokio::fs::remove_dir_all(&working_dir).await;
     }

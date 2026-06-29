@@ -19,14 +19,15 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository, MediaSourceRepository};
 use ersatzrs_domain::{
     Channel, ChannelStreamSelectorMode, ChannelSubtitleMode, EmbyMediaSource,
-    FFmpegProfileAudioFormat, JellyfinMediaSource, PlexMediaSource, StreamingMode,
+    FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, JellyfinMediaSource, PlexMediaSource,
+    StreamingMode,
 };
 use ersatzrs_ffmpeg::{
     build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
     build_pipeline_for_acceleration, ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport,
     FfmpegCommand, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions,
-    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioStream, SourceVideoStream,
-    WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
+    OutputFormat, OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream,
+    SourceVideoCodec, SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::ffmpeg_capabilities::{
@@ -47,8 +48,8 @@ use ersatzrs_infra::playback::{
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
-    load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeReservation,
-    ActiveTranscodeSlot,
+    load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
+    ActiveTranscodeReservation, ActiveTranscodeSlot,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -66,6 +67,10 @@ const FFMPEG_STDERR_TAIL_BYTES: usize = 16 * 1024;
 const DEFAULT_MPEG_TS_SCRIPT_ID: &str = "default";
 const MPEG_TS_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const MPEG_TS_CAPACITY_RETRY_INTERVAL: Duration = Duration::from_millis(250);
+const MPEG_TS_HLS_RECLAIM_WATCH_WINDOW: Duration = Duration::from_secs(30);
+const MPEG_TS_HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(5);
+const MPEG_TS_HLS_RECLAIM_GRACE: Duration = Duration::from_secs(6);
+const MPEG_TS_HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct MpegTsScriptDefinition {
@@ -474,17 +479,26 @@ async fn serve_channel_stream_with_channel(
         rebuild: {
             let resolved = resolved.clone();
             let channel_number = channel.number.clone();
-            Box::new(move |capabilities| {
+            Box::new(move |mode| {
+                let (capabilities, force_software_encode) = match mode {
+                    StreamRetryMode::HardwareDecodeDenied(capabilities) => (capabilities, false),
+                    StreamRetryMode::HardwareEncodeDenied(capabilities) => (capabilities, true),
+                };
+                let mut playback_profile = retry_playback_profile;
+                if force_software_encode {
+                    force_software_h264_encoding(&mut playback_profile);
+                }
                 tracing::debug!(
                     channel_number = %channel_number,
-                    "rebuilding channel stream command with learned hardware decode denial"
+                    force_software_encode,
+                    "rebuilding channel stream command after runtime hardware rejection"
                 );
                 build_stream_command_with_opacity_clock(
                     &resolved,
                     output_format,
                     start_position,
                     stream_duration,
-                    &retry_playback_profile,
+                    &playback_profile,
                     target_frame_rate,
                     effective_streaming_mode,
                     metadata,
@@ -562,13 +576,15 @@ fn resolve_transport_stream_mode(
 ) -> TransportStreamMode {
     match requested_mode.unwrap_or_default().trim() {
         "" | "mixed" => match channel_streaming_mode {
-            StreamingMode::TransportStream => TransportStreamMode::Legacy,
-            StreamingMode::TransportStreamHybrid => TransportStreamMode::HybridWrapper,
+            StreamingMode::TransportStream | StreamingMode::TransportStreamHybrid => {
+                TransportStreamMode::Legacy
+            }
             StreamingMode::HttpLiveStreamingDirect | StreamingMode::HttpLiveStreamingSegmenter => {
                 TransportStreamMode::RedirectToHls
             }
         },
-        "ts-legacy" => TransportStreamMode::Legacy,
+        "ts" | "mpegts" | "mpeg-ts" | "ts-legacy" => TransportStreamMode::Legacy,
+        "hybrid" | "ts-hybrid" | "hybrid-wrapper" => TransportStreamMode::HybridWrapper,
         _ => TransportStreamMode::HybridWrapper,
     }
 }
@@ -833,6 +849,34 @@ async fn reserve_mpeg_ts_capacity(
     let limit = load_active_transcode_limit(&state.pool).await;
     let reservation =
         try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number));
+    if reservation.is_some() {
+        return reservation;
+    }
+
+    let reclaim_deadline = tokio::time::Instant::now() + MPEG_TS_HLS_RECLAIM_GRACE;
+    loop {
+        if request_hls_capacity_reclaim_for_mpeg_ts(channel_number) {
+            tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
+            let reservation = try_reserve_active_transcode(
+                limit,
+                ActiveTranscodeSlot::new_mpeg_ts(channel_number),
+            );
+            if reservation.is_some() {
+                return reservation;
+            }
+        }
+
+        if tokio::time::Instant::now() >= reclaim_deadline {
+            break;
+        }
+        tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
+        let reservation =
+            try_reserve_active_transcode(limit, ActiveTranscodeSlot::new_mpeg_ts(channel_number));
+        if reservation.is_some() {
+            return reservation;
+        }
+    }
+
     if reservation.is_none() {
         tracing::warn!(
             channel_number,
@@ -841,6 +885,27 @@ async fn reserve_mpeg_ts_capacity(
         );
     }
     reservation
+}
+
+fn request_hls_capacity_reclaim_for_mpeg_ts(channel_number: &str) -> bool {
+    let Some(reclaim) = request_active_transcode_reclaim(
+        channel_number,
+        MPEG_TS_HLS_RECLAIM_WATCH_WINDOW,
+        MPEG_TS_HLS_STALE_WATCHED_PREEMPTION_THRESHOLD,
+        MPEG_TS_HLS_RECLAIMED_REACQUIRE_DELAY,
+    ) else {
+        return false;
+    };
+
+    tracing::info!(
+        channel_number,
+        target_channel = %reclaim.channel_number,
+        target_slot_id = reclaim.slot_id,
+        reason = ?reclaim.reason,
+        "requesting HLS transcode slot reclaim for MPEG-TS stream admission"
+    );
+    reclaim.notify.notify_one();
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1458,13 +1523,37 @@ fn build_stream_command_with_opacity_clock(
     opacity_clock: Option<WatermarkOpacityClock>,
 ) -> FfmpegCommand {
     let input = InputFile::video(path.to_string());
-    let desired = DesiredVideoState::from_profile(
+    let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
+        output_format,
+        streaming_mode,
+        source_stream.as_ref(),
+        &source_audio_streams,
+        selected_audio_stream_index,
+    );
+    let desired_streaming_mode = if needs_hls_direct_mpegts_transcode {
+        StreamingMode::TransportStream
+    } else {
+        streaming_mode
+    };
+    let mut desired = DesiredVideoState::from_profile(
         &playback_profile.profile,
         &playback_profile.resolution,
         source_stream.as_ref(),
         target_frame_rate,
-        streaming_mode,
+        desired_streaming_mode,
     );
+    if needs_hls_direct_mpegts_transcode {
+        if matches!(
+            desired.video_format,
+            FFmpegProfileVideoFormat::Copy | FFmpegProfileVideoFormat::None
+        ) {
+            desired.video_format = FFmpegProfileVideoFormat::H264;
+        }
+        if desired.audio_format == FFmpegProfileAudioFormat::Copy {
+            desired.audio_format = FFmpegProfileAudioFormat::Ac3;
+        }
+        normalize_hls_direct_mpegts_h264_preset(&mut desired);
+    }
     let mut request =
         PipelineRequest::new(input, desired).with_runtime_capabilities(runtime_capabilities);
     if let Some(clock) = opacity_clock {
@@ -1513,6 +1602,92 @@ fn build_stream_command_with_opacity_clock(
     };
     let pipeline = build_pipeline_for_acceleration(acceleration, request.clone());
     pipeline.command(&request.inputs)
+}
+
+fn hls_direct_mpegts_needs_transcode(
+    output_format: OutputFormat,
+    streaming_mode: StreamingMode,
+    source_stream: Option<&SourceVideoStream>,
+    source_audio_streams: &[SourceAudioStream],
+    selected_audio_stream_index: Option<usize>,
+) -> bool {
+    if output_format != OutputFormat::MpegTs
+        || streaming_mode != StreamingMode::HttpLiveStreamingDirect
+    {
+        return false;
+    }
+
+    !hls_direct_mpegts_video_copy_safe(source_stream)
+        || !hls_direct_mpegts_audio_copy_safe(source_audio_streams, selected_audio_stream_index)
+}
+
+fn hls_direct_mpegts_video_copy_safe(source_stream: Option<&SourceVideoStream>) -> bool {
+    source_stream.is_some_and(|stream| stream.codec == SourceVideoCodec::H264)
+}
+
+fn hls_direct_mpegts_audio_copy_safe(
+    source_audio_streams: &[SourceAudioStream],
+    selected_audio_stream_index: Option<usize>,
+) -> bool {
+    let Some(stream) = selected_audio_stream_index
+        .and_then(|index| {
+            source_audio_streams
+                .iter()
+                .find(|stream| stream.index == index)
+        })
+        .or_else(|| source_audio_streams.first())
+    else {
+        return true;
+    };
+
+    matches!(
+        stream.codec,
+        SourceAudioCodec::Aac | SourceAudioCodec::AacLatm | SourceAudioCodec::Ac3
+    )
+}
+
+fn normalize_hls_direct_mpegts_h264_preset(desired: &mut DesiredVideoState) {
+    if desired.video_format != FFmpegProfileVideoFormat::H264 {
+        return;
+    }
+
+    let has_x264_preset = desired.video_preset.as_deref().is_some_and(is_x264_preset);
+    if !has_x264_preset {
+        desired.video_preset = Some("veryfast".to_owned());
+    }
+}
+
+fn force_software_h264_encoding(playback_profile: &mut PlaybackProfile) {
+    playback_profile.profile.hardware_acceleration =
+        ersatzrs_domain::HardwareAccelerationKind::None;
+    if playback_profile.profile.video_format != FFmpegProfileVideoFormat::H264 {
+        return;
+    }
+
+    if !playback_profile
+        .profile
+        .video_preset
+        .as_deref()
+        .is_some_and(is_x264_preset)
+    {
+        playback_profile.profile.video_preset = Some("veryfast".to_owned());
+    }
+}
+
+fn is_x264_preset(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "ultrafast"
+            | "superfast"
+            | "veryfast"
+            | "faster"
+            | "fast"
+            | "medium"
+            | "slow"
+            | "slower"
+            | "veryslow"
+            | "placebo"
+    )
 }
 
 fn watermark_opacity_clock_at_spawn(
@@ -1692,16 +1867,21 @@ fn playback_graphics_dir(channel_id: i64, playout_item_id: i64) -> PathBuf {
 }
 
 /// Context for the ADR 0014 runtime-learned denial loop on direct IPTV
-/// spawns: when the first `FFmpeg` process exits with a classified
-/// hardware-decode-unsupported stderr signature, the supervisor persists a
-/// denial row and restarts the stream exactly once with the rebuilt command,
-/// which selects software input decode while preserving the hardware encoder.
+/// spawns: when the first `FFmpeg` process exits with a classified hardware
+/// rejection, the supervisor restarts the stream exactly once with the rebuilt
+/// command. Decode denials persist a negative capability row; encoder-open
+/// failures force software encoding for this stream.
 struct StreamDenialRetry {
     pool: DbPool,
     runtime_capabilities: FfmpegCapabilityReport,
     acceleration: ersatzrs_domain::HardwareAccelerationKind,
     source_stream: Option<SourceVideoStream>,
-    rebuild: Box<dyn FnOnce(FfmpegCapabilityReport) -> FfmpegCommand + Send>,
+    rebuild: Box<dyn FnOnce(StreamRetryMode) -> FfmpegCommand + Send>,
+}
+
+enum StreamRetryMode {
+    HardwareDecodeDenied(FfmpegCapabilityReport),
+    HardwareEncodeDenied(FfmpegCapabilityReport),
 }
 
 const STREAM_BODY_BUFFER_BYTES: usize = 256 * 1024;
@@ -1837,6 +2017,11 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
                 break;
             }
 
+            if request_hls_capacity_reclaim_for_mpeg_ts(&channel_number) {
+                tokio::time::sleep(MPEG_TS_CAPACITY_RETRY_INTERVAL).await;
+                continue;
+            }
+
             tracing::debug!(
                 channel_number = %channel_number,
                 limit,
@@ -1893,39 +2078,66 @@ async fn supervise_stream_command_with_retry(
         let DirectStreamOutcome::Failed(stderr) = outcome else {
             return outcome;
         };
-        let denial = retry.take().and_then(|context| {
-            learned_hardware_decode_denial(
-                false,
-                context.acceleration,
-                context.source_stream.as_ref(),
-                &stderr,
-            )
-            .map(|denial| (context, denial))
-        });
-        let Some((context, denial)) = denial else {
+        let Some(context) = retry.take() else {
             return DirectStreamOutcome::Failed(stderr);
         };
-        tracing::warn!(
-            channel_number = %channel_number,
-            acceleration = ?denial.acceleration,
-            codec = %denial.codec,
-            bit_depth = denial.bit_depth,
-            "retrying channel stream once with software input decode after runtime hardware decode rejection"
-        );
-        let mut capabilities = context.runtime_capabilities;
-        if let Err(error) =
-            persist_hardware_decode_denial(&context.pool, &mut capabilities, denial).await
+        let StreamDenialRetry {
+            pool,
+            runtime_capabilities,
+            acceleration,
+            source_stream,
+            rebuild,
+        } = context;
+
+        if let Some(denial) =
+            learned_hardware_decode_denial(false, acceleration, source_stream.as_ref(), &stderr)
         {
             tracing::warn!(
-                %error,
                 channel_number = %channel_number,
-                "failed to persist runtime-learned hardware decode denial"
+                acceleration = ?denial.acceleration,
+                codec = %denial.codec,
+                bit_depth = denial.bit_depth,
+                "retrying channel stream once with software input decode after runtime hardware decode rejection"
             );
+            let mut capabilities = runtime_capabilities;
+            if let Err(error) =
+                persist_hardware_decode_denial(&pool, &mut capabilities, denial).await
+            {
+                tracing::warn!(
+                    %error,
+                    channel_number = %channel_number,
+                    "failed to persist runtime-learned hardware decode denial"
+                );
+            }
+            match spawn_stream_process(&rebuild(StreamRetryMode::HardwareDecodeDenied(
+                capabilities,
+            ))) {
+                Ok(next) => child = next,
+                Err(error) => {
+                    tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
+                    return DirectStreamOutcome::Failed(error.to_string());
+                }
+            }
+            continue;
         }
-        match spawn_stream_process(&(context.rebuild)(capabilities)) {
+
+        if acceleration == ersatzrs_domain::HardwareAccelerationKind::None
+            || !ffmpeg_stderr_is_hardware_encoder_open_failure(&stderr)
+        {
+            return DirectStreamOutcome::Failed(stderr);
+        }
+
+        tracing::warn!(
+            channel_number = %channel_number,
+            acceleration = ?acceleration,
+            "retrying channel stream once with software video encode after runtime hardware encoder rejection"
+        );
+        match spawn_stream_process(&rebuild(StreamRetryMode::HardwareEncodeDenied(
+            runtime_capabilities,
+        ))) {
             Ok(next) => child = next,
             Err(error) => {
-                tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
+                tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
                 return DirectStreamOutcome::Failed(error.to_string());
             }
         }
@@ -2109,6 +2321,14 @@ fn ffmpeg_stderr_is_client_disconnect(stderr: &str) -> bool {
     stderr.contains("Broken pipe")
 }
 
+fn ffmpeg_stderr_is_hardware_encoder_open_failure(stderr: &str) -> bool {
+    let lower = stderr.to_ascii_lowercase();
+    lower.contains("openencodesessionex failed")
+        || lower.contains("error while opening encoder")
+        || lower.contains("could not open encoder before eof")
+        || lower.contains("no capable devices found")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2118,7 +2338,7 @@ mod tests {
     };
     use ersatzrs_ffmpeg::{FfmpegCapabilityReport, GraphicsPipelineOverlay, WatermarkOverlay};
     use std::path::{Path, PathBuf};
-    use std::sync::OnceLock;
+    use std::sync::{Arc, OnceLock};
     use std::time::Duration;
 
     const TESTDATA_CANDIDATES: &[&str] = &[
@@ -2247,6 +2467,71 @@ mod tests {
     }
 
     #[test]
+    fn hardware_encoder_open_failure_is_classified_for_retry() {
+        let stderr = "[h264_nvenc @ 0x5c328a96cf80] OpenEncodeSessionEx failed: incompatible client key (21): (no details)\n[vost#0:0/h264_nvenc @ 0x5c328a2f8f00] [enc:h264_nvenc @ 0x5c3288cf02c0] Error while opening encoder";
+
+        assert!(ffmpeg_stderr_is_hardware_encoder_open_failure(stderr));
+        assert!(!ffmpeg_stderr_is_hardware_encoder_open_failure(
+            "Error opening input file /media/missing.mkv"
+        ));
+    }
+
+    #[test]
+    fn hardware_encode_retry_profile_selects_software_h264() {
+        let mut profile = playback_profile();
+        profile.profile.hardware_acceleration = ersatzrs_domain::HardwareAccelerationKind::Nvenc;
+        profile.profile.video_preset = Some("llhq".to_owned());
+        let source = SourceVideoStream::new(ersatzrs_ffmpeg::SourceVideoCodec::H264);
+        let report = ersatzrs_ffmpeg::capability_report_for_tests();
+
+        let first = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            report.clone(),
+            Some(source.clone()),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .arguments
+        .join(" ");
+        assert!(first.contains("-codec:v h264_nvenc"), "{first}");
+        assert!(first.contains("-preset:v llhq"), "{first}");
+
+        force_software_h264_encoding(&mut profile);
+        let second = build_stream_command(
+            "/media/movie.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &profile,
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            report,
+            Some(source),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .arguments
+        .join(" ");
+        assert!(second.contains("-codec:v libx264"), "{second}");
+        assert!(second.contains("-preset:v veryfast"), "{second}");
+        assert!(!second.contains("h264_nvenc"), "{second}");
+        assert!(!second.contains("llhq"), "{second}");
+        assert!(!second.contains("-hwaccel cuda"), "{second}");
+    }
+
+    #[test]
     fn build_stream_command_can_target_mp4() {
         let profile = playback_profile();
         let command = build_stream_command(
@@ -2268,6 +2553,69 @@ mod tests {
         let arguments = command.arguments.join(" ");
         assert!(arguments.contains("-f mp4"));
         assert!(arguments.ends_with("pipe:1"));
+    }
+
+    #[test]
+    fn hls_direct_mpegts_transcodes_unsafe_copy_codecs() {
+        let mut profile = playback_profile();
+        profile.profile.video_preset = Some("llhp".to_owned());
+        let video = SourceVideoStream::new(SourceVideoCodec::Vp9);
+        let audio = SourceAudioStream::new(SourceAudioCodec::Unknown).with_index(1);
+
+        let command = build_stream_command(
+            "/media/unplugged.webm",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &profile,
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(video),
+            vec![audio],
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-codec:v libx264"), "{arguments}");
+        assert!(arguments.contains("-preset:v veryfast"), "{arguments}");
+        assert!(!arguments.contains("-preset:v llhp"), "{arguments}");
+        assert!(arguments.contains("-codec:a aac"), "{arguments}");
+        assert!(!arguments.contains("-codec:v copy"), "{arguments}");
+        assert!(!arguments.contains("-codec:a copy"), "{arguments}");
+        assert!(arguments.contains("-f mpegts"), "{arguments}");
+    }
+
+    #[test]
+    fn hls_direct_mpegts_keeps_copy_for_ts_safe_codecs() {
+        let profile = playback_profile();
+        let video = SourceVideoStream::new(SourceVideoCodec::H264);
+        let audio = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+
+        let command = build_stream_command(
+            "/media/movie.mp4",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &profile,
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(video),
+            vec![audio],
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        );
+        let arguments = command.arguments.join(" ");
+
+        assert!(arguments.contains("-codec:v copy"), "{arguments}");
+        assert!(arguments.contains("-codec:a copy"), "{arguments}");
+        assert!(arguments.contains("-f mpegts"), "{arguments}");
     }
 
     #[test]
@@ -2574,8 +2922,12 @@ mod tests {
             TransportStreamMode::Legacy
         );
         assert_eq!(
+            resolve_transport_stream_mode(None, StreamingMode::TransportStreamHybrid),
+            TransportStreamMode::Legacy
+        );
+        assert_eq!(
             resolve_transport_stream_mode(Some("mixed"), StreamingMode::TransportStreamHybrid),
-            TransportStreamMode::HybridWrapper
+            TransportStreamMode::Legacy
         );
         assert_eq!(
             resolve_transport_stream_mode(None, StreamingMode::HttpLiveStreamingSegmenter),
@@ -2591,6 +2943,10 @@ mod tests {
         );
         assert_eq!(
             resolve_transport_stream_mode(Some("ts"), StreamingMode::TransportStream),
+            TransportStreamMode::Legacy
+        );
+        assert_eq!(
+            resolve_transport_stream_mode(Some("hybrid"), StreamingMode::TransportStream),
             TransportStreamMode::HybridWrapper
         );
     }
@@ -2977,6 +3333,70 @@ mod tests {
             ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).peak,
             1,
             "slate loop must not increment active capacity beyond the occupied real slot"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mpegts_capacity_wait_reclaims_hls_work_ahead_before_slate() {
+        let _guard = active_transcode_stream_test_guard().await;
+        ersatzrs_infra::transcode_capacity::reset_active_transcode_state_for_tests();
+        let pool = capacity_test_pool(1).await;
+        let registry: Arc<dyn HlsSessionRegistry> =
+            Arc::new(ersatzrs_infra::hls::InMemoryHlsSessionRegistry::new());
+        let notify = Arc::new(Notify::new());
+        let requested_slot_id = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let reacquire_deferred_until_ms = Arc::new(std::sync::atomic::AtomicI64::new(0));
+        let occupied = try_reserve_active_transcode(
+            1,
+            ersatzrs_infra::transcode_capacity::ActiveTranscodeSlot::new_hls(
+                "hls",
+                ersatzrs_infra::transcode_capacity::ActiveTranscodeKind::HlsWorkAhead,
+                Arc::new(std::sync::atomic::AtomicI64::new(
+                    (chrono::Utc::now() - chrono::Duration::seconds(10)).timestamp_millis(),
+                )),
+                ersatzrs_infra::transcode_capacity::ActiveTranscodeReclaimHandle::new(
+                    Arc::clone(&notify),
+                    Arc::clone(&requested_slot_id),
+                    Arc::clone(&reacquire_deferred_until_ms),
+                    true,
+                ),
+            ),
+        )
+        .expect("occupy the only MPEG-TS slot with HLS work-ahead");
+
+        let release = tokio::spawn(async move {
+            tokio::time::timeout(Duration::from_secs(2), notify.notified())
+                .await
+                .expect("MPEG-TS admission should request HLS reclaim");
+            drop(occupied);
+        });
+
+        let body = spawn_stream_body_waiting_for_mpegts_capacity(
+            shell_command("printf content", "echo content"),
+            shell_command("printf slate", "echo slate"),
+            Vec::new(),
+            "94".to_owned(),
+            registry,
+            pool,
+            None,
+        );
+
+        let bytes = axum::body::to_bytes(body, 64 * 1024)
+            .await
+            .expect("read MPEG-TS wait body");
+        release.await.expect("release occupied HLS capacity");
+        let output = String::from_utf8_lossy(&bytes);
+
+        assert_eq!(output, "content");
+        assert!(!output.contains("slate"));
+        assert_ne!(
+            requested_slot_id.load(std::sync::atomic::Ordering::Acquire),
+            0,
+            "reclaim request should identify the HLS slot"
+        );
+        assert_eq!(
+            ersatzrs_infra::transcode_capacity::active_transcode_snapshot(1).active,
+            0
         );
     }
 

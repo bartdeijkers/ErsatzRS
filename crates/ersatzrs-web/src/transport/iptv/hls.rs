@@ -36,8 +36,10 @@ const HLS_CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/vnd.
 const CONFIG_KEY_HLS_DIRECT_OUTPUT_FORMAT: &str = "ffmpeg.hls_direct.output_format";
 const DEFAULT_SEGMENTER_TIMEOUT_SECONDS_USIZE: usize = 60;
 const DEFAULT_INITIAL_SEGMENT_COUNT: usize = 1;
+const MIN_STABLE_INITIAL_SEGMENT_COUNT: usize = 3;
 const INITIAL_SEGMENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub(crate) const HLS_AT_CAPACITY_MESSAGE: &str = "all HLS transcode slots are in use";
+const HLS_DIRECT_LOOKAHEAD_SEGMENTS: u64 = 6;
 
 pub(crate) fn request_scheme(headers: &HeaderMap) -> String {
     headers
@@ -149,13 +151,18 @@ pub(crate) async fn load_segmenter_startup_timeout(state: &AppState) -> Duration
 }
 
 pub(crate) async fn load_initial_segment_count(state: &AppState) -> usize {
-    load_config_usize(
-        state,
-        ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
-        DEFAULT_INITIAL_SEGMENT_COUNT,
+    normalize_initial_segment_count(
+        load_config_usize(
+            state,
+            ersatzrs_domain::CONFIG_KEY_FFMPEG_INITIAL_SEGMENT_COUNT,
+            DEFAULT_INITIAL_SEGMENT_COUNT,
+        )
+        .await,
     )
-    .await
-    .max(1)
+}
+
+fn normalize_initial_segment_count(segment_count: usize) -> usize {
+    segment_count.max(MIN_STABLE_INITIAL_SEGMENT_COUNT)
 }
 
 async fn load_config_usize(state: &AppState, key: &str, default: usize) -> usize {
@@ -339,10 +346,37 @@ fn build_hls_direct_playlist(
     time_remaining: &str,
     access_token: &AccessToken,
 ) -> String {
-    format!(
-        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:{index}\n#EXT-X-DISCONTINUITY\n#EXTINF:{time_remaining},\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={index}{}\n",
-        access_token.query_amp()
-    )
+    let target_duration = hls_direct_target_duration(time_remaining);
+    let mut playlist = format!(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:{target_duration}\n#EXT-X-MEDIA-SEQUENCE:{index}\n#EXT-X-DISCONTINUITY\n"
+    );
+    let token = access_token.query_amp();
+    let _ = std::fmt::Write::write_fmt(
+        &mut playlist,
+        format_args!(
+            "#EXTINF:{time_remaining},\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={index}{token}\n"
+        ),
+    );
+    for offset in 1..=HLS_DIRECT_LOOKAHEAD_SEGMENTS {
+        let next_index = index + offset;
+        let _ = std::fmt::Write::write_fmt(
+            &mut playlist,
+            format_args!(
+                "#EXTINF:10.00,\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={next_index}{token}\n"
+            ),
+        );
+    }
+    playlist
+}
+
+fn hls_direct_target_duration(time_remaining: &str) -> u64 {
+    time_remaining
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.ceil() as u64)
+        .unwrap_or(10)
+        .max(10)
 }
 
 fn parse_hls_direct_file(file: &str) -> &str {
@@ -357,7 +391,7 @@ fn parse_hls_direct_file(file: &str) -> &str {
 /// Ports `IptvController.GetHttpLiveStreamingVideo`: resolves `mode=mixed`
 /// against the channel's configured streaming mode, then either:
 ///  * returns the multi-variant playlist for `segmenter`,
-///  * returns the single-entry direct playlist for `hls-direct`,
+///  * returns a segmenter-backed playlist for `hls-direct`,
 ///  * or redirects to the MPEG-TS variant for TS modes.
 pub async fn serve_channel_m3u8(
     state: &AppState,
@@ -406,10 +440,23 @@ pub async fn serve_channel_m3u8(
                 &channel,
                 &access_token,
                 output_format,
+                DEFAULT_INITIAL_SEGMENT_COUNT,
             )
             .await
         }
         "hls-direct" => {
+            serve_hls_segmenter_playlist(
+                state,
+                channel_number,
+                headers,
+                &channel,
+                &access_token,
+                OutputFormat::Hls,
+                MIN_STABLE_INITIAL_SEGMENT_COUNT,
+            )
+            .await
+        }
+        "hls-direct-raw" => {
             let scheme = request_scheme(headers);
             let host = request_host(headers);
             serve_hls_direct_playlist(
@@ -436,6 +483,7 @@ async fn serve_hls_segmenter_playlist(
     channel: &Channel,
     access_token: &AccessToken,
     output_format: OutputFormat,
+    min_initial_segment_count: usize,
 ) -> Response {
     let scheme = request_scheme(headers);
     let host = request_host(headers);
@@ -471,7 +519,9 @@ async fn serve_hls_segmenter_playlist(
     )
     .await;
 
-    let initial_segment_count = load_initial_segment_count(state).await;
+    let initial_segment_count = load_initial_segment_count(state)
+        .await
+        .max(min_initial_segment_count);
     let startup_timeout = load_segmenter_startup_timeout(state).await;
     match wait_for_initial_segments(
         &*state.hls_sessions,
@@ -830,6 +880,13 @@ mod tests {
         assert_eq!(parse_positive_usize("-1"), None);
         assert_eq!(parse_positive_usize(""), None);
         assert_eq!(parse_positive_usize("abc"), None);
+    }
+
+    #[test]
+    fn initial_segment_count_is_clamped_to_stable_floor() {
+        assert_eq!(normalize_initial_segment_count(1), 3);
+        assert_eq!(normalize_initial_segment_count(2), 3);
+        assert_eq!(normalize_initial_segment_count(4), 4);
     }
 
     #[test]

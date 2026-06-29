@@ -88,6 +88,21 @@ release section when tagging a release.
 
 ### Fixed
 
+- Existing app-data MPEG-TS wrapper defaults that were seeded with `MuxRate` but
+  without `PcrPeriod` now upgrade on startup, so direct `.ts` playback uses the
+  same 20 ms PCR cadence as the current bundled script after a restart.
+- HLS Direct MPEG-TS output now transcodes TS-incompatible copy sources such as
+  WebM/Opus to the channel profile instead of emitting private/data streams,
+  and normalizes hardware-only H.264 presets when falling back to software x264.
+- Default `.ts` requests for MPEG-TS hybrid channels now use the continuous
+  MPEG-TS path unless the hybrid wrapper is requested explicitly, avoiding
+  HLS-wrapper segment resets in VLC.
+- HLS segmenter startup now waits for a stable media-segment floor and serves
+  normalized MPEG-TS playlists without ordinary item-boundary discontinuity
+  tags, so VLC no longer turns item changes into PCR resets or rebuffer stalls.
+- Foreground MPEG-TS viewers now reclaim stale HLS transcode slots before
+  emitting the all-streams-in-use slate, preventing a recently closed HLS
+  session from injecting a slate into direct channel playback.
 - MPEG-TS troubleshooting reports now include a per-second stability meter and
   persist the same samples as `stability.json`, making the 20-second TSDuck
   analysis usable for spotting empty captures, continuity failures, and PCR
