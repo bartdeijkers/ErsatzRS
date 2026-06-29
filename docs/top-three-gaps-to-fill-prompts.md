@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-28
-last_processed_commit: 9ff5ca5ec27c1bdbe8fdbd2008a46b8c5f7a7aa4
+generated: 2026-06-29
+last_processed_commit: 6c075fd5c3487e5443fc8b10264da23e3241096f
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,12 +13,23 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: `cargo xtask progress gaps` is clear, every tracked
-`[[debt]]` item is resolved, ADR 0013 is implemented, ADR 0018 is implemented
-and accepted, the startup `DATABASE_URL` cleanup is implemented, and the infra
-health module-split pilot is implemented. The remaining actionable spec source
-is the standing module-split survey. The prompts below continue that backlog in
-the documented order after the completed health pilot.
+Current selection: the `9ff5ca5..6c075fd` window merged the 2026-06-28
+spec-backed closeouts (ADR 0013 in-app TSDuck MPEG-TS troubleshooting plus the
+follow-up stability meter, startup `DATABASE_URL` routing through the startup
+configuration helper, and the module-split survey's infra `health.rs` registry
+pilot), the Classic scheduling dogfood fixes (duration post-roll advancement,
+dynamic pre-anchor rows, shuffled music-video artist spacing), schedule-item
+HTML fallback row parsing, and admin hydration/CI hardening. After it,
+`cargo xtask progress gaps` is clear, every tracked `[[debt]]` item is resolved,
+and every ADR (0001–0018) is `Accepted` and `Implemented` — so parity gaps,
+open debt, and unimplemented ADRs are all exhausted. The remaining actionable
+spec source is the standing [`plans/module-split-survey.md`](../plans/module-split-survey.md)
+backlog. Its health pilot is done, so the prompts below continue that backlog in
+the documented suggested order: the two remaining Tier 1 splits
+(`media_browser.rs`, then `yaml.rs`) followed by the Tier 2 split
+(`scripted.rs`). None of these three files was split in the window
+(c16728a only added a one-line completeness check to `media_browser.rs`), so all
+three are carried over with their scope still fully open.
 
 ---
 
