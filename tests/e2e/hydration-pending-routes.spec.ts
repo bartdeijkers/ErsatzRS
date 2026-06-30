@@ -52,9 +52,18 @@ function sqlite(sql: string): string {
   }).trim();
 }
 
+function isBenignAbortError(text: string): boolean {
+  return text.includes('AbortError') && text.toLowerCase().includes('operation was aborted');
+}
+
 function watchRuntimeErrors(page: Page): string[] {
   const runtimeErrors: string[] = [];
-  page.on('pageerror', (error) => runtimeErrors.push(error.stack ?? error.message));
+  page.on('pageerror', (error) => {
+    const text = error.stack ?? error.message;
+    if (!isBenignAbortError(text)) {
+      runtimeErrors.push(text);
+    }
+  });
   page.on('console', (message) => {
     if (message.type() !== 'error') {
       return;
