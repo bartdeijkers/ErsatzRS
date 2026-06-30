@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-29
-last_processed_commit: 6c075fd5c3487e5443fc8b10264da23e3241096f
+generated: 2026-06-30
+last_processed_commit: a6b63f54696655c4c267a60d572a1cb0dc69acde
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,23 +13,24 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: the `9ff5ca5..6c075fd` window merged the 2026-06-28
-spec-backed closeouts (ADR 0013 in-app TSDuck MPEG-TS troubleshooting plus the
-follow-up stability meter, startup `DATABASE_URL` routing through the startup
-configuration helper, and the module-split survey's infra `health.rs` registry
-pilot), the Classic scheduling dogfood fixes (duration post-roll advancement,
-dynamic pre-anchor rows, shuffled music-video artist spacing), schedule-item
-HTML fallback row parsing, and admin hydration/CI hardening. After it,
-`cargo xtask progress gaps` is clear, every tracked `[[debt]]` item is resolved,
-and every ADR (0001–0018) is `Accepted` and `Implemented` — so parity gaps,
-open debt, and unimplemented ADRs are all exhausted. The remaining actionable
-spec source is the standing [`plans/module-split-survey.md`](../plans/module-split-survey.md)
-backlog. Its health pilot is done, so the prompts below continue that backlog in
-the documented suggested order: the two remaining Tier 1 splits
-(`media_browser.rs`, then `yaml.rs`) followed by the Tier 2 split
-(`scripted.rs`). None of these three files was split in the window
-(c16728a only added a one-line completeness check to `media_browser.rs`), so all
-three are carried over with their scope still fully open.
+Current selection: the `6c075fd..a6b63f5` window merged streaming-runtime
+stabilization (MPEG-TS PCR timing, live HLS and MPEG-TS playback hardening, and
+preserving real HLS discontinuities — all reconciled into ADR 0015 and the
+`hls-variant-playlists-segmenter` / `mpeg-ts-channel-streaming` parity files),
+the ADR 0018 Phase 1 refinement that always shows media specials and renders TV
+show/season specials as episode-style rows (reconciled into `content-variants`
+and `phase.toml`), and an `anyhow` advisory dependency bump. Each feature commit
+self-reconciled its own parity TOMLs, so `cargo xtask progress gaps` stays
+clear, every tracked `[[debt]]` item is resolved, and every ADR (0001–0018) is
+`Accepted` and `Implemented` — parity gaps, open debt, and unimplemented ADRs
+are all exhausted. The remaining actionable spec source is the standing
+[`plans/module-split-survey.md`](../plans/module-split-survey.md) backlog. Its
+health pilot is done, so the prompts below continue that backlog in the
+documented suggested order: the two remaining Tier 1 splits (`media_browser.rs`,
+then `yaml.rs`) followed by the Tier 2 split (`scripted.rs`). None of these
+three files was split in the window (`f172d17`'s media-specials work edited
+`media_browser.rs` but only grew it to 8,973 lines, not a split), so all three
+are carried over with their scope still fully open.
 
 ---
 
