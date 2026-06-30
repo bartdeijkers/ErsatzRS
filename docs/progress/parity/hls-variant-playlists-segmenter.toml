@@ -41,6 +41,11 @@ faults, and audio pip cadence max gap deviation 30 ms. Its HLS-stitched
 `pcrverify` jitter remains informational per the manual gate because the
 playlist contains real discontinuity markers; direct MPEG-TS, hybrid wrapper,
 and HLS-direct each reported zero `pcrverify` jitter faults in the same run.
+On 2026-06-30, the 60-second TSDuck playback gate reproduced the real
+cross-player freeze as 4 HLS Segmenter PTS leaps before the fix; after switching
+MPEG-TS HLS appends to a monotonic worker-owned output timestamp offset, the
+same gate passed 64 checks with zero continuity-counter/PTS/DTS/PCR-leap faults
+and audio pip cadence max gap deviation 30 ms.
 Slice history lives in `sessions.ndjson`/git.
 '''
 
@@ -102,4 +107,11 @@ id          = 'segmenter-normalized-append-stutter'
 description = 'HLS segmenter video playback can visibly stutter after roughly 40-50 seconds; segment transitions are sometimes noticeable at the first independently spawned FFmpeg generation boundary.'
 discovered  = '2026-06-22'
 evidence    = 'Resolved 2026-06-24 and hardened 2026-06-29: `crates/ersatzrs-infra/src/hls_worker.rs` now distinguishes same-playout-item normalized respawns from real content/slate/error/slug boundaries, so non-first MPEG-TS appends with a non-zero `-output_ts_offset` omit `discont_start` only when they continue the same PlayoutItem; real boundaries still preserve `#EXT-X-DISCONTINUITY`. The retained MPEG-TS HLS segment files normalize PCR and continuity counters across appended FFmpeg generations, including PCR-only adaptation packets inserted by CBR muxing. The bundled/default MPEG-TS wrapper script, fallback wrapper, direct MPEG-TS output, legacy concat, and MPEG-TS HLS segments use profile-derived `-muxrate` plus a 20 ms PCR period so FFmpeg emits regular PCR. Focused tests cover seamless normalized appends, forced real discontinuities, PCR normalization, adaptation-only counter normalization, wrapper mux-rate math, script rendering, and legacy default-script upgrade. Runtime proof: `scripts/e2e/tsduck-playback-gate.sh gate` passed all 86 checks on 2026-06-29, including zero continuity-counter/PTS/DTS/PCR-leap faults on `mode=ts-legacy`, `mode=ts`, HLS Segmenter, and HLS Direct, plus HLS Segmenter audio pip cadence max gap deviation 30 ms.'
+resolved    = true
+
+[[debt]]
+id          = 'hls-mpegts-append-pts-rewind'
+description = 'HLS Segmenter MPEG-TS appends could replay the previous 4-second timestamp range when the next append offset was derived from lagging PCR state instead of the worker-owned successful append duration.'
+discovered  = '2026-06-30'
+evidence    = 'User reproduced freezes in VLC, Kodi, and MPC-HC. `scripts/e2e/tsduck-playback-gate.sh --seconds 60 --item-seconds 8 --frames --keep gate` reproduced 4 HLS Segmenter PTS leaps while legacy and hybrid MPEG-TS remained clean; per-segment probing showed adjacent HLS segments overlapping by one 4-second range. Fixed in `crates/ersatzrs-infra/src/hls_worker.rs` by advancing MPEG-TS HLS output timestamps from successful append duration and keeping PCR normalization only for packet continuity. The same 60-second gate then passed 64 checks with zero HLS Segmenter continuity-counter/PTS/DTS/PCR-leap faults and audio pip cadence max gap deviation 30 ms.'
 resolved    = true

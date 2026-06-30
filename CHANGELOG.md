@@ -100,6 +100,9 @@ release section when tagging a release.
 - HLS segmenter startup now waits for a stable media-segment floor and serves
   normalized MPEG-TS playlists without ordinary item-boundary discontinuity
   tags, so VLC no longer turns item changes into PCR resets or rebuffer stalls.
+- HLS Segmenter MPEG-TS appends now advance from the worker's successful append
+  duration instead of a lagging PCR probe, preventing overlapping 4-second
+  timestamp ranges that made VLC, Kodi, and MPC-HC freeze until pause/resume.
 - Foreground MPEG-TS viewers now reclaim stale HLS transcode slots before
   emitting the all-streams-in-use slate, preventing a recently closed HLS
   session from injecting a slate into direct channel playback.

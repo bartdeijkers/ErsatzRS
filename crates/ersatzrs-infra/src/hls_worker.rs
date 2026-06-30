@@ -256,6 +256,7 @@ impl HlsSessionWorker {
         let mut is_first = true;
         let mut last_playout_item_id = None::<i64>;
         let mut transcoded_until = Utc::now();
+        let mut next_mpegts_output_ts_offset = None::<Duration>;
         *self.playlist_start.lock().await = transcoded_until;
         let mut runtime_capabilities = self.runtime_capabilities.clone();
         let mut learned_decode_retry_used = false;
@@ -369,12 +370,18 @@ impl HlsSessionWorker {
                         &mut cleanup_interval,
                         idle_timeout,
                         is_first,
+                        next_mpegts_output_ts_offset,
                         runtime_capabilities.clone(),
                     )
                     .await
                 {
                     HlsProcessOutcome::Success => {
                         is_first = false;
+                        next_mpegts_output_ts_offset = advance_mpegts_output_ts_offset(
+                            self.output_format,
+                            next_mpegts_output_ts_offset,
+                            HLS_AT_CAPACITY_SLATE_DURATION,
+                        );
                         last_playout_item_id = None;
                     }
                     HlsProcessOutcome::Cancelled => break,
@@ -428,7 +435,9 @@ impl HlsSessionWorker {
                     .await
                     .unwrap_or_else(|| self.channel_number.clone());
                 let target_frame_rate = self.load_target_frame_rate(&pool, "hls slug").await;
-                let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+                let output_ts_offset = self
+                    .next_output_ts_offset(is_first, next_mpegts_output_ts_offset)
+                    .await;
                 let discontinuity =
                     hls_output_discontinuity(self.output_format, is_first, output_ts_offset, true);
                 let command = build_hls_slug_command(
@@ -475,6 +484,11 @@ impl HlsSessionWorker {
                             has_slug,
                         ));
                         is_first = false;
+                        next_mpegts_output_ts_offset = advance_mpegts_output_ts_offset(
+                            self.output_format,
+                            next_mpegts_output_ts_offset,
+                            duration,
+                        );
                         last_playout_item_id = None;
                         continue;
                     }
@@ -706,7 +720,9 @@ impl HlsSessionWorker {
                     Vec::new()
                 }
             };
-            let output_ts_offset = self.probe_output_ts_offset(is_first).await;
+            let output_ts_offset = self
+                .next_output_ts_offset(is_first, next_mpegts_output_ts_offset)
+                .await;
             let append_requires_discontinuity =
                 last_playout_item_id != Some(active.playout_item_id);
             let discontinuity = hls_output_discontinuity(
@@ -783,6 +799,11 @@ impl HlsSessionWorker {
                             item_complete(&active, transcoded_until),
                             has_slug,
                         ));
+                        next_mpegts_output_ts_offset = advance_mpegts_output_ts_offset(
+                            self.output_format,
+                            next_mpegts_output_ts_offset,
+                            duration,
+                        );
                         last_playout_item_id = Some(active.playout_item_id);
                     }
                 }
@@ -866,6 +887,11 @@ impl HlsSessionWorker {
                                 false,
                                 has_slug,
                             ));
+                            next_mpegts_output_ts_offset = advance_mpegts_output_ts_offset(
+                                self.output_format,
+                                next_mpegts_output_ts_offset,
+                                duration,
+                            );
                             last_playout_item_id = None;
                         }
                         HlsProcessOutcome::Reclaimed => {
@@ -900,6 +926,7 @@ impl HlsSessionWorker {
         cleanup_interval: &mut tokio::time::Interval,
         idle_timeout: Option<Duration>,
         is_first_transcode: bool,
+        next_mpegts_output_ts_offset: Option<Duration>,
         runtime_capabilities: FfmpegCapabilityReport,
     ) -> HlsProcessOutcome {
         let playback_profile = match load_channel_playback_profile(pool, self.channel_id).await {
@@ -919,7 +946,9 @@ impl HlsSessionWorker {
             .await
             .unwrap_or_else(|| self.channel_number.clone());
         let target_frame_rate = self.load_target_frame_rate(pool, "capacity slate").await;
-        let output_ts_offset = self.probe_output_ts_offset(is_first_transcode).await;
+        let output_ts_offset = self
+            .next_output_ts_offset(is_first_transcode, next_mpegts_output_ts_offset)
+            .await;
         let discontinuity = hls_output_discontinuity(
             self.output_format,
             is_first_transcode,
@@ -1209,6 +1238,22 @@ impl HlsSessionWorker {
         } else {
             self.mpegts_output_ts_offset().await
         }
+    }
+
+    async fn next_output_ts_offset(
+        &self,
+        is_first: bool,
+        next_mpegts_output_ts_offset: Option<Duration>,
+    ) -> Option<Duration> {
+        if is_first {
+            return None;
+        }
+
+        if self.output_format == OutputFormat::Hls {
+            return next_mpegts_output_ts_offset;
+        }
+
+        self.probe_output_ts_offset(false).await
     }
 
     async fn mpegts_output_ts_offset(&self) -> Option<Duration> {
@@ -2139,6 +2184,22 @@ fn hls_output_discontinuity(
     append_requires_discontinuity
         || output_format != OutputFormat::Hls
         || output_ts_offset.is_none_or(|offset| offset.is_zero())
+}
+
+fn advance_mpegts_output_ts_offset(
+    output_format: OutputFormat,
+    current: Option<Duration>,
+    appended_duration: Duration,
+) -> Option<Duration> {
+    if output_format != OutputFormat::Hls {
+        return current;
+    }
+
+    Some(
+        current
+            .unwrap_or(Duration::ZERO)
+            .saturating_add(appended_duration),
+    )
 }
 
 #[allow(clippy::match_same_arms)]
@@ -4792,6 +4853,30 @@ mod tests {
             Some(Duration::from_secs(12)),
             false
         ));
+    }
+
+    #[test]
+    fn mpegts_output_ts_offset_advances_by_successful_append_duration() {
+        assert_eq!(
+            advance_mpegts_output_ts_offset(OutputFormat::Hls, None, Duration::from_secs(4)),
+            Some(Duration::from_secs(4))
+        );
+        assert_eq!(
+            advance_mpegts_output_ts_offset(
+                OutputFormat::Hls,
+                Some(Duration::from_secs(4)),
+                Duration::from_secs(8),
+            ),
+            Some(Duration::from_secs(12))
+        );
+        assert_eq!(
+            advance_mpegts_output_ts_offset(
+                OutputFormat::HlsMp4,
+                Some(Duration::from_secs(4)),
+                Duration::from_secs(8),
+            ),
+            Some(Duration::from_secs(4))
+        );
     }
 
     #[tokio::test]
