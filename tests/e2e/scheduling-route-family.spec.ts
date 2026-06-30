@@ -18,6 +18,20 @@ async function forceEnglish(page: Page): Promise<void> {
   });
 }
 
+async function waitForHydration(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as Window & { __ersatzrs_hydrated?: boolean })
+              .__ersatzrs_hydrated === true,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
 async function expectNoRuntimeErrors(page: Page, runtimeErrors: string[]): Promise<void> {
   await expect(page.locator('[role="alert"]')).toHaveCount(0);
   expect(runtimeErrors).toEqual([]);
@@ -53,6 +67,7 @@ async function expectNoJsForm(
 
 async function createSchedule(page: Page, name: string): Promise<string> {
   await page.goto('/schedules/add');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Schedule' })).toBeVisible();
   await page.locator('input[name="name"]').fill(name);
   await page.getByRole('button', { name: /add schedule/i }).click();
@@ -62,6 +77,7 @@ async function createSchedule(page: Page, name: string): Promise<string> {
 
 async function createBlock(page: Page, groupName: string, blockName: string): Promise<string> {
   await page.goto('/blocks');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Block Groups' })).toBeVisible();
   await fillStable(page.getByPlaceholder('Group Name'), groupName);
   const addGroup = page.getByRole('button', { name: /add block group/i });
@@ -83,6 +99,7 @@ async function createBlock(page: Page, groupName: string, blockName: string): Pr
 
 async function createTemplate(page: Page, groupName: string, templateName: string): Promise<string> {
   await page.goto('/templates');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Template Groups' })).toBeVisible();
   await fillStable(page.locator('#template-group-name'), groupName);
   const addGroup = page.getByRole('button', { name: /add template group/i });
@@ -104,6 +121,7 @@ async function createTemplate(page: Page, groupName: string, templateName: strin
 
 async function createDeco(page: Page, groupName: string, decoName: string): Promise<string> {
   await page.goto('/decos');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Deco Groups' })).toBeVisible();
   await fillStable(page.locator('#deco-group-name'), groupName);
   const addGroup = page.getByRole('button', { name: /add deco group/i });
@@ -129,6 +147,7 @@ async function createDecoTemplate(
   templateName: string,
 ): Promise<string> {
   await page.goto('/deco-templates');
+  await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Deco Template Groups' })).toBeVisible();
   await fillStable(page.locator('#deco-template-group-name'), groupName);
   const addGroup = page.getByRole('button', { name: /add deco template group/i });

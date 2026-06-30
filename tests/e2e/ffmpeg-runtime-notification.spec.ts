@@ -1,6 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 
-const INSTALLED_TAG = 'e2e-v1.0.0';
+const INSTALLED_TAG = process.env.ERSATZRS_E2E_FFMPEG_RUNTIME_NOTIFICATION ?? '';
 
 async function waitForHydration(page: Page): Promise<void> {
   await expect
@@ -24,6 +24,11 @@ test.describe('FFmpeg runtime startup notification', () => {
   test('does not replay the same downloaded-runtime toast after page switches', async ({
     page,
   }) => {
+    test.skip(
+      INSTALLED_TAG.length === 0,
+      'ERSATZRS_E2E_FFMPEG_RUNTIME_NOTIFICATION must be set before the E2E server starts',
+    );
+
     await page.request.post('/api/settings/ui/save', {
       form: { is_dark_mode: 'true', language: 'en-us' },
       maxRedirects: 0,
