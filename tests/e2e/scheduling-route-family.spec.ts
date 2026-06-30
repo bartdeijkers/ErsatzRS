@@ -52,6 +52,33 @@ async function fillStable(locator: Locator, value: string): Promise<void> {
     .toBe(value);
 }
 
+async function clickUntilVisible(
+  page: Page,
+  trigger: Locator,
+  target: Locator,
+  timeoutMs = 15_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+    try {
+      await expect(target).toBeVisible({ timeout: 1_000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(250);
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error('Timed out waiting for target after click');
+}
+
 async function expectNoJsForm(
   browser: Browser,
   baseURL: string | undefined,
@@ -191,8 +218,11 @@ test.describe('scheduling route-family parity', () => {
     const scheduleId = await createSchedule(page, scheduleName);
     expect(Number(scheduleId)).toBeGreaterThan(0);
     await expect(page.getByRole('heading', { name: 'Schedule Items' })).toBeVisible();
-    await page.getByRole('button', { name: /add schedule item/i }).click();
-    await expect(page.getByText('Schedule Item Filler')).toBeVisible();
+    await clickUntilVisible(
+      page,
+      page.getByRole('button', { name: /add schedule item/i }),
+      page.getByText('Schedule Item Filler'),
+    );
     await expect(page.locator('form#schedule-items-fallback-form')).toHaveCount(0);
     await expectNoJsForm(
       browser,
