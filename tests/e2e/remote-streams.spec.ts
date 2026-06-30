@@ -1,4 +1,4 @@
-import { expect, Page, TestInfo, test } from '@playwright/test';
+import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
@@ -30,6 +30,7 @@ type RemoteStreamSeed = {
   otherMediaSourceId: number;
   mediaItemId: number;
   otherMediaItemId: number;
+  collectionId: number;
 };
 
 function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
@@ -47,6 +48,7 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
     otherMediaSourceId: base + 800,
     mediaItemId: base + 7_001,
     otherMediaItemId: base + 8_001,
+    collectionId: base + 9_001,
   };
 }
 
@@ -54,6 +56,8 @@ function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
   const seed = seedForProject(testInfo);
   sqlite(`
 DELETE FROM "CollectionItem" WHERE "MediaItemId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
+DELETE FROM "CollectionItem" WHERE "CollectionId" = ${seed.collectionId};
+DELETE FROM "Collection" WHERE "Id" = ${seed.collectionId};
 DELETE FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "RemoteStream" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
 DELETE FROM "MediaItem" WHERE "Id" IN (${seed.mediaItemId}, ${seed.otherMediaItemId});
@@ -100,6 +104,9 @@ INSERT OR IGNORE INTO "RemoteStreamMetadata" (
   ${seed.otherMediaItemId}, 0, 'Visdeurbel', 'Vis',
   'visdeurbel', '2026-06-14T00:00:00Z', '2026-06-14T00:00:00Z'
 );
+
+INSERT OR IGNORE INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+  VALUES (${seed.collectionId}, 'E2E Existing Remote Stream Collection ${testInfo.project.name}', 0);
 `);
   return seed;
 }
@@ -122,6 +129,20 @@ async function clickFirstCardAddToCollection(page: Page): Promise<void> {
     await itemMenu.locator('summary[aria-label="Item actions"]').click();
   }
   await itemMenu.getByRole('menuitem', { name: /^add to collection$/i }).click();
+}
+
+async function selectNewCollection(
+  collectionSelect: Locator,
+  collectionNameInput: Locator,
+  existingCollectionId: number,
+): Promise<void> {
+  await expect(collectionSelect.locator(`option[value="${existingCollectionId}"]`)).toHaveCount(1, {
+    timeout: 10_000,
+  });
+  await expect.poll(async () => collectionSelect.inputValue(), { timeout: 10_000 }).not.toBe('-1');
+  await collectionSelect.selectOption('-1');
+  await collectionSelect.dispatchEvent('change');
+  await expect(collectionNameInput).toBeEnabled({ timeout: 10_000 });
 }
 
 test.describe('remote streams browser parity', () => {
@@ -161,9 +182,7 @@ test.describe('remote streams browser parity', () => {
     await expect(collectionModal.getByText('1 selected items')).toBeVisible();
     const collectionSelect = collectionModal.locator('select').first();
     const collectionNameInput = collectionModal.locator('input[type="text"]').last();
-    await expect.poll(async () => collectionSelect.locator('option').count()).toBeGreaterThan(0);
-    await collectionSelect.selectOption('-1');
-    await expect(collectionNameInput).toBeEnabled();
+    await selectNewCollection(collectionSelect, collectionNameInput, seed.collectionId);
 
     await collectionModal.getByRole('button', { name: /^cancel$/i }).click();
     await expect(collectionModal.getByRole('heading', { name: /^add to collection$/i })).toBeHidden();
@@ -171,9 +190,7 @@ test.describe('remote streams browser parity', () => {
     await clickFirstCardAddToCollection(page);
     await expect(collectionModal.getByRole('heading', { name: /^add to collection$/i })).toBeVisible();
     await expect(collectionModal.getByText('1 selected items')).toBeVisible();
-    await expect.poll(async () => collectionSelect.locator('option').count()).toBeGreaterThan(0);
-    await collectionSelect.selectOption('-1');
-    await expect(collectionNameInput).toBeEnabled();
+    await selectNewCollection(collectionSelect, collectionNameInput, seed.collectionId);
     const collectionName = uniqueName('Remote Stream Collection');
     await collectionNameInput.fill(collectionName);
     await collectionModal.getByRole('button', { name: /^add to collection$/i }).click();
