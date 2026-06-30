@@ -4,7 +4,7 @@ rs_target  = '`.github/workflows/{ci,release}.yml`, `Cross.toml`, `rust-toolchai
 status     = 'Ported'
 adr        = []
 summary    = '''
-Ported: every PR/push runs a 6-cell `platforms` matrix that builds the workspace for each ErsatzTV-parity RID and runs the test suite on the four natively-built cells (linux-x64 + ubuntu-latest, osx-arm64 + macos-latest, osx-x64 cross-compiled from macos-latest, win-x64 + windows-latest); the two ARM Linux cells build via cross-rs. Tag pushes attach only the active Linux/Windows archives: `ersatzrs-<tag>-linux-x64.tar.gz`, `ersatzrs-<tag>-linux-arm64.tar.gz`, `ersatzrs-<tag>-linux-arm.tar.gz`, and `ersatzrs-<tag>-win-x64.zip`. As of 2026-06-21 the release matrix intentionally omits the two macOS archives (`osx-x64`, `osx-arm64`) until a future macOS-targeted release, and as of 2026-06-24 the release workflow no longer carries a Docker/GHCR publication job. The active release line is Linux/Windows archive-only; the 6-cell CI `platforms` matrix still builds and tests all six RIDs. Windows contributors use `run.cmd` / `run.ps1` mirroring `run.sh`. Only platform-specific code lives behind documented `cfg` guards (Leptos `wasm32` islands, Unix-only ffmpeg test helpers). Per-RID archives ship the parity binaries `ersatzrs-web`, `ersatzrs-scanner`, and `ersatzrs-healthcheck`; the maintenance scheduler runs as an in-process tokio task inside `ersatzrs-web` (ErsatzTV hosted-service parity).
+Ported: every PR/push runs a 6-cell `platforms` matrix that builds the workspace for each ErsatzTV-parity RID and runs the test suite on the four natively-built cells (linux-x64 + ubuntu-latest, osx-arm64 + macos-latest, osx-x64 cross-compiled from macos-latest, win-x64 + windows-latest); the two ARM Linux cells build via cross-rs. Tag pushes attach the active Linux/Windows archives: `ersatzrs-<tag>-linux-x64.tar.gz`, `ersatzrs-<tag>-linux-arm64.tar.gz`, `ersatzrs-<tag>-linux-arm.tar.gz`, and `ersatzrs-<tag>-win-x64.zip`; the release workflow also publishes the GHCR Docker image as `ghcr.io/bartdeijkers/ersatzrs:<tag>` plus the matching channel tag. As of 2026-06-21 the release matrix intentionally omits the two macOS archives (`osx-x64`, `osx-arm64`) until a future macOS-targeted release; the 6-cell CI `platforms` matrix still builds and tests all six RIDs. Windows contributors use `run.cmd` / `run.ps1` mirroring `run.sh`. Only platform-specific code lives behind documented `cfg` guards (Leptos `wasm32` islands, Unix-only ffmpeg test helpers). Per-RID archives ship the parity binaries `ersatzrs-web`, `ersatzrs-scanner`, and `ersatzrs-healthcheck`; the maintenance scheduler runs as an in-process tokio task inside `ersatzrs-web` (ErsatzTV hosted-service parity).
 '''
 
 [[debt]]
@@ -12,11 +12,4 @@ id          = 'macos-release-archives-omitted'
 description = 'Accepted intentional deferral, not unfinished work: tagged release archives ship four RIDs only; the two macOS archives (osx-x64, osx-arm64) are intentionally omitted from the active release line to preserve GitHub-hosted runner credits. CI still builds and tests all six RIDs (build/run parity intact). Revisit by re-adding the osx-arm64/osx-x64 matrix entries to release.yml when a macOS-targeted release line returns.'
 discovered  = '2026-06-21'
 evidence    = 'cc9556a "ci(release): omit macos archives for now" removed the osx-arm64/osx-x64 entries from .github/workflows/release.yml; CHANGELOG [1.0.14-alpha] Changed.'
-resolved    = true
-
-[[debt]]
-id          = 'docker-release-publication-omitted'
-description = 'Accepted intentional deferral, not unfinished work: tagged releases no longer publish Docker/GHCR images. The active release line ships Linux and Windows GitHub archives only; Docker remains available as local/runtime infrastructure and can be restored as a separate release-prep task when image publishing is wanted again.'
-discovered  = '2026-06-24'
-evidence    = '.github/workflows/release.yml removed the disabled Docker publication job; release docs now state there is no Docker/GHCR image for this release line.'
 resolved    = true

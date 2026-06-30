@@ -31,8 +31,8 @@ paths so managed acquisition runs instead of failing before download. As of
 2026-06-21 the release line intentionally omits the two macOS archives
 (osx-x64/osx-arm64) to preserve GitHub-hosted runner credits (tracked in
 `platform-support.toml`; CI still builds/tests all six RIDs), and as of
-2026-06-24 Docker/GHCR image publication is also omitted so releases focus on
-Linux and Windows GitHub archives. The 2026-06-22
+2026-06-30 the first beta release line restores GHCR Docker image publication
+beside the Linux and Windows GitHub archives. The 2026-06-22
 regression pass fixed managed FFmpeg Windows path surfacing, fresh-database
 channel branding, serialized library scan queueing, schedule item add-button
 hydration, and remote-stream zero-duration health noise. The 2026-06-23 island

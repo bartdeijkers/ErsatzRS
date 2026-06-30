@@ -1,17 +1,19 @@
 # Publish a full release
 
 Use this guide to publish a release through the release workflow. The active
-matrix currently produces the GitHub release archives:
+matrix currently produces the GitHub release archives and Docker image:
 
 - `ersatzrs-<tag>-linux-x64.tar.gz`
 - `ersatzrs-<tag>-linux-arm64.tar.gz`
 - `ersatzrs-<tag>-linux-arm.tar.gz`
 - `ersatzrs-<tag>-win-x64.zip`
+- `ghcr.io/bartdeijkers/ersatzrs:<tag>`
+- `ghcr.io/bartdeijkers/ersatzrs:beta` for beta tags
 - GitHub-generated source archives
 
-macOS archives and Docker/GHCR images are intentionally omitted for now. Keep
-this release line focused on Linux and Windows archives; restore the two
-`osx-*` matrix entries only in a future macOS-targeted release.
+macOS archives are intentionally omitted for now. Keep this release line focused
+on Linux and Windows archives plus GHCR Docker images; restore the two `osx-*`
+matrix entries only in a future macOS-targeted release.
 
 Do not use `./run.ps1 build` for release packaging. That command is a local dev
 one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create a
@@ -37,14 +39,15 @@ requires them.
 Create and push an annotated tag:
 
 ```bash
-tag=v0.0.6-alpha
+tag=v1.0.15-beta.1
 git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 ```
 
 The tag push is the release command. It starts `.github/workflows/release.yml`,
 which creates the GitHub release, builds the web assets once, builds each active
-platform archive, and uploads the archives.
+platform archive, uploads the archives, and publishes the multi-arch Docker
+image to GHCR.
 
 ## Watch the workflow
 
@@ -70,14 +73,19 @@ Confirm the release has the active binary archives:
 gh release view "$tag" --json tagName,assets,url
 ```
 
-There is no Docker/GHCR image for this release line.
+Confirm the GHCR image exists and carries the expected Linux platforms:
+
+```bash
+docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:$tag"
+docker buildx imagetools inspect "ghcr.io/bartdeijkers/ersatzrs:beta"
+```
 
 ## When GitHub-hosted minutes are exhausted
 
 If you need to restore macOS archives for a future release, re-add the two
 `osx-*` matrix entries and use GitHub-hosted macOS runners or a macOS
-self-hosted runner. The current Linux/Windows matrix avoids GitHub-hosted
-minutes.
+self-hosted runner. The current Linux/Windows/Docker matrix avoids
+GitHub-hosted minutes.
 
 ## When GitHub Actions cannot build everything
 

@@ -6,8 +6,8 @@ Accepted 2026-06-21
 
 ## Implementation
 
-Implemented — ErsatzRS release archives ship without FFmpeg/ffprobe, and any
-future Docker image publishing must follow the same managed-runtime model.
+Implemented — ErsatzRS release archives and Docker images ship without
+FFmpeg/ffprobe and follow the same managed-runtime model.
 Startup resolves explicit overrides first, then validates the managed runtime,
 auto-updates it from `ErsatzRS-ffmpeg` releases when a newer release is
 available, downloads a managed runtime when none is usable, and only then falls
@@ -74,9 +74,9 @@ enable `--enable-nonfree`, bundle the CUDA toolkit, include libnpp, or rely on
 non-redistributable FFmpeg components. That repository remains the source of
 truth for the official FFmpeg 8.1 source pin and its SHA-256.
 
-**Application packaging.** ErsatzRS release archives ship **without**
-FFmpeg/ffprobe. If Docker image publishing returns, container images must also
-ship without FFmpeg/ffprobe and rely on the same startup runtime manager.
+**Application packaging.** ErsatzRS release archives and Docker images ship
+**without** FFmpeg/ffprobe. Container images rely on the same startup runtime
+manager.
 
 **Startup runtime manager.** On startup ErsatzRS resolves an FFmpeg/ffprobe
 runtime in this order:

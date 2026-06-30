@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.1] - 2026-06-30
+
 ### Added
 
 - In-app MPEG-TS troubleshooting for ADR 0013 at
@@ -79,6 +81,9 @@ release section when tagging a release.
 
 ### Changed
 
+- ErsatzRS is now a beta-stage project, and the release line publishes Linux
+  and Windows archives plus GHCR Docker images while still intentionally
+  omitting macOS archives for now.
 - Startup database URL resolution now flows through the startup configuration
   helper, preferring `ErsatzRS_DATABASE__URL` / `ERSATZRS_DATABASE__URL` while
   preserving the legacy Docker `DATABASE_URL` override and default SQLite path.
@@ -103,6 +108,9 @@ release section when tagging a release.
 - HLS Segmenter MPEG-TS appends now advance from the worker's successful append
   duration instead of a lagging PCR probe, preventing overlapping 4-second
   timestamp ranges that made VLC, Kodi, and MPC-HC freeze until pause/resume.
+- The startup FFmpeg runtime downloaded/updated toast now appears once per
+  browser tab for a specific runtime event instead of reappearing on every admin
+  page switch.
 - Foreground MPEG-TS viewers now reclaim stale HLS transcode slots before
   emitting the all-streams-in-use slate, preventing a recently closed HLS
   session from injecting a slate into direct channel playback.
@@ -163,9 +171,8 @@ release section when tagging a release.
 - The `/channels` Edit Numbers action now opens a real `/channels/numbers`
   editor with localized desktop/mobile actions, SSR/no-JS save fallback,
   validation, and atomic channel-number swaps that preserve `SortNumber`.
-- Release publishing now focuses on Linux and Windows archives only: the
-  inactive Docker/GHCR publication job was removed, matching the existing
-  macOS archive omission for the active release line.
+- Release publishing now restores GHCR Docker images for the beta line while
+  keeping the macOS archive omission in place for the active release line.
 - Managed FFmpeg startup on Windows now copies downloaded first-party
   ffmpeg/ffprobe files next to `ErsatzRS.exe` and persists those paths so
   `/settings/ffmpeg` shows the acquired runtime instead of a generic PATH tool.
@@ -649,7 +656,9 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.13-alpha...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.15-beta.1...HEAD
+[1.0.15-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.14-alpha...v1.0.15-beta.1
+[1.0.14-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.13-alpha...v1.0.14-alpha
 [1.0.13-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.12-alpha...v1.0.13-alpha
 [1.0.12-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.11-alpha...v1.0.12-alpha
 [1.0.11-alpha]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.10-alpha...v1.0.11-alpha

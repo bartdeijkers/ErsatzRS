@@ -125,8 +125,6 @@ documents:
 - macOS release archives (`osx-x64`, `osx-arm64`) are intentionally omitted from
   the active release line to preserve hosted-runner credits; CI still builds and
   tests the six-RID platform matrix.
-- Docker/GHCR image publication is intentionally omitted from the active release
-  line; releases currently ship Linux and Windows GitHub archives only.
 - Claude hook automation in `.claude/settings.json`; hook schema should be
   validated before enabling it.
 

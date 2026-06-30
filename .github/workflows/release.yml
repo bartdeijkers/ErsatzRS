@@ -65,8 +65,9 @@ jobs:
 
   binaries:
     # Build active Linux/Windows release binaries and attach them as archives
-    # to the GitHub release. macOS and Docker publication are intentionally
-    # outside the active release line for now.
+    # to the GitHub release. macOS publication is intentionally outside the
+    # active release line for now; Docker/GHCR publication is handled by the
+    # docker job below.
     name: Release archive (${{ matrix.rid }})
     needs: [release, web-assets]
     runs-on: ${{ fromJSON(matrix.runner) }}
@@ -265,3 +266,68 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh release upload "$VERSION" "$ARCHIVE_PATH" --clobber --repo "$REPO"
+
+  docker:
+    name: Publish Docker image
+    needs: release
+    runs-on: [self-hosted, ersatzrs-linux-release]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Normalize image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          channel_tag=""
+          case "$GITHUB_REF_NAME" in
+            *-beta*) channel_tag="beta" ;;
+            *-alpha*) channel_tag="alpha" ;;
+            *) channel_tag="latest" ;;
+          esac
+          echo "REGISTRY_IMAGE=$registry_image" >> "$GITHUB_ENV"
+          echo "VERSION=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          echo "CHANNEL_TAG=$channel_tag" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        uses: docker/bake-action@v7
+        with:
+          files: docker-bake.hcl
+          targets: ersatzrs-release
+          push: true
+
+      - name: Publish channel tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "$REGISTRY_IMAGE:$CHANNEL_TAG" \
+            "$REGISTRY_IMAGE:$VERSION"
+
+      - name: Verify multi-arch manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$REGISTRY_IMAGE:$VERSION" > manifest.txt
+          grep -q 'linux/amd64' manifest.txt
+          grep -q 'linux/arm64' manifest.txt
+          grep -q 'linux/arm/v7' manifest.txt
+
+      - name: Upload Docker manifest report
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-manifest
+          path: manifest.txt

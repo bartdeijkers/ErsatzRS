@@ -12,7 +12,7 @@ group "default" {
 
 target "ersatzrs" {
   context = "."
-  dockerfile = "docker/Dockerfile"
+  dockerfile = "Dockerfile"
   platforms = [
     "linux/amd64",
     "linux/arm64",
@@ -25,7 +25,7 @@ target "ersatzrs" {
 
 target "ersatzrs-release" {
   inherits = ["ersatzrs"]
-  target = "runtime-release"
+  target = "runtime"
 }
 
 target "docker-check" {

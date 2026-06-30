@@ -21,9 +21,9 @@ repository. ErsatzRS intentionally keeps FFmpeg and ffprobe packaging in this
 repository so the application binaries, migrations, admin UI assets, FFmpeg
 8.1 build, and startup runtime checks are released together.
 
-The active release line currently omits Docker/GHCR images and ships Linux and
-Windows GitHub archives only. If Docker image publishing returns, release images
-must follow the managed FFmpeg runtime model and must not enable
+The active release line publishes Linux and Windows GitHub archives plus GHCR
+Docker images, while macOS archives remain intentionally omitted for now.
+Release images follow the managed FFmpeg runtime model and must not enable
 `--enable-nonfree`, bundle the CUDA toolkit, include libnpp, or include
 non-redistributable codecs such as libfdk_aac.
 

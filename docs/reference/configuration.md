@@ -41,8 +41,8 @@ normal path is the managed runtime under the ErsatzRS state directory
 (`~/.ersatzrs/ffmpeg` by default). Startup downloads the matching
 [`ErsatzRS-ffmpeg`](https://github.com/bartdeijkers/ErsatzRS-ffmpeg) release
 when no managed runtime exists, and updates a managed runtime when a newer
-release is available. Release archives do not bundle FFmpeg/ffprobe; any future
-Docker image publishing should follow the same managed-runtime model.
+release is available. Release archives and Docker images do not bundle
+FFmpeg/ffprobe; both follow the same managed-runtime model.
 
 The startup resolution order is:
 

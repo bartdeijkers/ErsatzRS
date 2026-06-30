@@ -140,6 +140,10 @@ pub async fn load_ffmpeg_runtime_notification(
     use crate::host::state::AppState;
     use ersatzrs_ffmpeg::FfmpegRuntimeSource;
 
+    if let Some(notification) = e2e_ffmpeg_runtime_notification_override() {
+        return Ok(Some(notification));
+    }
+
     let state = expect_context::<AppState>();
     let runtime = state.ffmpeg_runtime.read().await;
     if let Some(error) = runtime.acquisition.update_check_error.clone() {
@@ -163,6 +167,28 @@ pub async fn load_ffmpeg_runtime_notification(
         update_failed: false,
         error: None,
     }))
+}
+
+#[cfg(debug_assertions)]
+fn e2e_ffmpeg_runtime_notification_override() -> Option<AdminFfmpegRuntimeNotification> {
+    #[allow(clippy::disallowed_methods)] // Debug-only Playwright hook, not runtime configuration.
+    let installed_tag = std::env::var("ERSATZRS_E2E_FFMPEG_RUNTIME_NOTIFICATION").ok()?;
+    if installed_tag.trim().is_empty() {
+        return None;
+    }
+
+    Some(AdminFfmpegRuntimeNotification {
+        previous_tag: None,
+        asset_name: Some(format!("ersatzrs-ffmpeg-{installed_tag}-e2e.tar.gz")),
+        installed_tag: Some(installed_tag),
+        update_failed: false,
+        error: None,
+    })
+}
+
+#[cfg(not(debug_assertions))]
+fn e2e_ffmpeg_runtime_notification_override() -> Option<AdminFfmpegRuntimeNotification> {
+    None
 }
 
 /// Cheap revision token for admin media views that need to notice scanner

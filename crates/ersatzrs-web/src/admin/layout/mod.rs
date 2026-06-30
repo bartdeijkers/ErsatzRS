@@ -13,6 +13,9 @@ mod nav;
 
 stylance::import_crate_style!(style, "src/admin/layout/layout.module.css");
 
+#[cfg(target_arch = "wasm32")]
+const FFMPEG_RUNTIME_NOTIFICATION_SESSION_KEY: &str = "ersatzrs.ffmpeg-runtime-notification";
+
 #[component]
 pub fn AppShell(children: Children) -> impl IntoView {
     let theme = load_shell_theme_initial();
@@ -62,7 +65,15 @@ fn StartupNotifications() -> impl IntoView {
         let Some(Some(notification)) = notification.get() else {
             return;
         };
+
+        let event_key = ffmpeg_runtime_notification_event_key(&notification);
+        if ffmpeg_runtime_notification_was_shown(&event_key) {
+            shown.set(true);
+            return;
+        }
+
         shown.set(true);
+        remember_ffmpeg_runtime_notification(&event_key);
 
         if notification.update_failed {
             let message = notification.error.as_deref().map_or_else(
@@ -99,6 +110,48 @@ fn ffmpeg_runtime_notification_message(notification: &AdminFfmpegRuntimeNotifica
     }
 }
 
+fn ffmpeg_runtime_notification_event_key(notification: &AdminFfmpegRuntimeNotification) -> String {
+    format!(
+        "failed={};previous={};installed={};asset={};error={}",
+        notification.update_failed,
+        notification.previous_tag.as_deref().unwrap_or_default(),
+        notification.installed_tag.as_deref().unwrap_or_default(),
+        notification.asset_name.as_deref().unwrap_or_default(),
+        notification.error.as_deref().unwrap_or_default()
+    )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn ffmpeg_runtime_notification_was_shown(event_key: &str) -> bool {
+    web_sys::window()
+        .and_then(|window| window.session_storage().ok().flatten())
+        .and_then(|storage| {
+            storage
+                .get_item(FFMPEG_RUNTIME_NOTIFICATION_SESSION_KEY)
+                .ok()
+                .flatten()
+        })
+        .as_deref()
+        == Some(event_key)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn ffmpeg_runtime_notification_was_shown(_event_key: &str) -> bool {
+    false
+}
+
+#[cfg(target_arch = "wasm32")]
+fn remember_ffmpeg_runtime_notification(event_key: &str) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.session_storage().ok().flatten())
+    {
+        let _ = storage.set_item(FFMPEG_RUNTIME_NOTIFICATION_SESSION_KEY, event_key);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn remember_ffmpeg_runtime_notification(_event_key: &str) {}
+
 fn load_shell_theme_initial() -> String {
     #[cfg(feature = "ssr")]
     {
@@ -134,6 +187,63 @@ fn load_shell_theme_initial() -> String {
     #[cfg(all(not(feature = "ssr"), not(target_arch = "wasm32")))]
     {
         "dark".to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ffmpeg_runtime_notification_event_key, AdminFfmpegRuntimeNotification};
+
+    fn downloaded_notification(installed_tag: &str) -> AdminFfmpegRuntimeNotification {
+        AdminFfmpegRuntimeNotification {
+            previous_tag: None,
+            installed_tag: Some(installed_tag.to_owned()),
+            asset_name: Some(format!("ersatzrs-ffmpeg-{installed_tag}-linux-x64.tar.gz")),
+            update_failed: false,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn ffmpeg_runtime_notification_event_key_is_stable_for_same_event() {
+        let first = downloaded_notification("v1.0.1");
+        let second = downloaded_notification("v1.0.1");
+
+        assert_eq!(
+            ffmpeg_runtime_notification_event_key(&first),
+            ffmpeg_runtime_notification_event_key(&second)
+        );
+    }
+
+    #[test]
+    fn ffmpeg_runtime_notification_event_key_changes_for_new_event() {
+        let first = downloaded_notification("v1.0.1");
+        let second = downloaded_notification("v1.0.2");
+
+        assert_ne!(
+            ffmpeg_runtime_notification_event_key(&first),
+            ffmpeg_runtime_notification_event_key(&second)
+        );
+    }
+
+    #[test]
+    fn ffmpeg_runtime_notification_event_key_includes_update_error() {
+        let first = AdminFfmpegRuntimeNotification {
+            previous_tag: Some("v1.0.0".to_owned()),
+            installed_tag: Some("v1.0.0".to_owned()),
+            asset_name: None,
+            update_failed: true,
+            error: Some("checksum mismatch".to_owned()),
+        };
+        let second = AdminFfmpegRuntimeNotification {
+            error: Some("download timeout".to_owned()),
+            ..first.clone()
+        };
+
+        assert_ne!(
+            ffmpeg_runtime_notification_event_key(&first),
+            ffmpeg_runtime_notification_event_key(&second)
+        );
     }
 }
 
