@@ -25,6 +25,7 @@ target "ersatzrs" {
 
 target "ersatzrs-release" {
   inherits = ["ersatzrs"]
+  dockerfile = "Dockerfile.release"
   target = "runtime"
 }
 

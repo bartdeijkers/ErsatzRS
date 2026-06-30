@@ -269,7 +269,7 @@ jobs:
 
   docker:
     name: Publish Docker image
-    needs: release
+    needs: [release, web-assets]
     runs-on: [self-hosted, ersatzrs-linux-release]
     permissions:
       contents: read
@@ -302,9 +302,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download web assets
+        uses: actions/download-artifact@v8
+        with:
+          name: web-assets
+          path: release-web-assets
+
       - name: Build and push multi-arch image
         uses: docker/bake-action@v7
         with:
+          source: .
           files: docker-bake.hcl
           targets: ersatzrs-release
           push: true

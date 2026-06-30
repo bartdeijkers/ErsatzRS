@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.15-beta.2] - 2026-06-30
+
+### Fixed
+
+- Release Docker image builds now reuse the prebuilt Leptos web-assets artifact
+  instead of compiling `cargo-leptos` inside every target image, avoiding ARMv7
+  QEMU out-of-memory failures during GHCR publication.
+
 ## [1.0.15-beta.1] - 2026-06-30
 
 ### Added
