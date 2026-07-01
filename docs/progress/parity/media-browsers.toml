@@ -1,7 +1,7 @@
 feature    = 'Media browsers (movies, shows, images, music, other videos, songs)'
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0048']
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
@@ -15,6 +15,13 @@ track cards appear near the top of `/media/movies/:id`, can seed Add To
 Collection/Add To Playlist dialogs with selected audio/subtitle preferences,
 and collection/playlist inspection surfaces display saved playback override
 summaries.
+
+Reopened 2026-07-02: Add To Collection/Add To Playlist actions from media pages
+always navigate away to the target collection or playlist after adding items,
+even when the likely workflow is to keep browsing and add more items.
+`/media/music/artists/:id` also needs multi-select checkboxes/action toolbar
+for the artist's music-video rows so admins can add several music videos to a
+collection or playlist in one action.
 '''
 
 [[debt]]
@@ -51,3 +58,17 @@ description = 'On `/media/music/songs` and `/media/browser/images`, the action t
 discovered  = '2026-07-01'
 evidence    = 'Resolved 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` verifies the songs and images Select All toolbar is right-aligned relative to the page heading/main content while the routes are hydrated and console-clean; the shared `MultiSelectBrowserPage` layout provides the same responsive toolbar behavior as the movie and TV show browser lists.'
 resolved    = true
+
+[[debt]]
+id          = 'add-to-collection-playlist-stay-in-context'
+description = 'After adding one or more media items to a collection or playlist from a media page, the admin UI should keep the user in the current browsing/detail context by default instead of always navigating to the target collection or playlist page.'
+discovered  = '2026-07-02'
+evidence    = 'Maintainer request on 2026-07-02. Most add-to-collection/add-to-playlist sessions are iterative curation sessions where the user wants to continue adding items to collections or playlists. Reclose only after the media browse/detail Add To Collection and Add To Playlist flows show a clear success state, preserve the current page/selection context by default, still offer an explicit View Collection/View Playlist navigation path, and focused browser coverage proves bulk and single-item flows for collections and playlists.'
+resolved    = false
+
+[[debt]]
+id          = 'artist-detail-music-video-multi-select-actions'
+description = 'On `/media/music/artists/{artist_id}`, the artist detail page should allow selecting multiple music-video rows with checkboxes and adding the selected videos to collections or playlists in bulk.'
+discovered  = '2026-07-02'
+evidence    = 'Maintainer request on 2026-07-02. The current artist detail page restored artist-level Add To Collection and music-video preview artwork, but the listed music videos still lack a multi-select checkbox/action toolbar for bulk Add To Collection and Add To Playlist. Reclose only after `/media/music/artists/{artist_id}` supports checkbox selection for artist music videos, bulk collection/playlist dialogs persist the selected music-video items, individual row actions still work, the route remains hydrated and console-clean, and focused browser coverage proves the bulk flow.'
+resolved    = false

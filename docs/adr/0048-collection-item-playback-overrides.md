@@ -6,7 +6,11 @@ Accepted
 
 ## Implementation
 
-Implemented
+Partial. Item-level audio/subtitle overrides are implemented for collection and
+playlist rows, but collection rows are still unique by `(CollectionId,
+MediaItemId)`. A follow-up is needed so the same movie can appear more than
+once in the same collection when each row carries a different playback override,
+such as multiple commentary tracks.
 
 ## Context
 
@@ -43,8 +47,11 @@ ErsatzTV-compatible row shape.
 ## Consequences
 
 Admins can add the same movie to different ErsatzRS collections or playlists
-with different named audio-track preferences. Collection detail pages must make
-saved overrides visible so the item no longer looks identical to a default
+with different named audio-track preferences. The next implementation slice must
+also allow the same movie to appear multiple times in one collection when the
+audio/subtitle override differs, so an admin can curate every commentary track
+from one movie into a single collection. Collection detail pages must make saved
+overrides visible so duplicate movie rows no longer look identical to a default
 playback entry.
 
 This intentionally extends the ErsatzTV schema. Import/export or parity tooling

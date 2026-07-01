@@ -125,9 +125,16 @@ media remain warning candidates. ADR 0019 is now proposed for an opt-in
 similar-video cooldown scheduling extension; it is tracked separately and is
 not implemented. `/channels/add` default group selection, ADR 0017 default
 FFmpeg profile video bitrate targets, and FFmpeg profile editor section spacing
-are also reopened. Remaining Phase 7 closeout work is broad verification,
-release-readiness proof, and those tracked channel/FFmpeg-profile regressions
-plus the ADR 0017 default-profile bitrate retune.
+are also reopened. On 2026-07-02, additional media curation tasks were
+registered: ADR 0048 collection items must allow the same movie to appear more
+than once in one collection when each row has a different commentary or
+alternate-audio override, and Add To Collection/Add To Playlist should keep the
+admin in the current media browsing/detail context by default after adding
+items; `/media/music/artists/:id` also needs checkbox multi-select actions for
+bulk adding multiple artist music videos to collections or playlists. Remaining
+Phase 7 closeout work is broad verification, release-readiness proof, the
+tracked channel/FFmpeg-profile regressions, ADR 0017's default-profile bitrate
+retune, and those media curation follow-ups.
 '''
 
 # Phase 0 checklist (all complete).

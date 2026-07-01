@@ -1,6 +1,6 @@
 <!--
-generated: 2026-07-01
-last_processed_commit: 7696320cde7a1db543dff185950933961b4a277e
+generated: 2026-07-02
+last_processed_commit: 4ce96714dae25c3731f05dad52c070ca3524be3a
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,214 +13,209 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: maintainer-reported regressions reopened six parity
-features on 2026-07-01, and ADR 0019 added one Not started scheduling
-extension. Closed 2026-07-01: the movie-detail gap spanning `media-browsers`
-and `content-variants` now renders `/media/movies/{movie_id}` extras as
-episode-style rows, restores movie-extra collection/playlist actions, and
-surfaces playable alternate-edition plus persistable commentary/alternate-audio
-and subtitle options through ADR 0048 collection/playlist item overrides.
-Closed 2026-07-01: the remaining `media-browsers` action/toolbar gap now gives
-songs/images the shared right-side selection toolbar and item action menu,
-restores artist-detail Add To Collection plus preview artwork, and fixes the
-show-detail hydration shape found by focused browser proof. Closed 2026-07-01:
-the `ersatzrs-healthcheck` Zero Duration check now ignores ordinary static
-image media versions while preserving warnings for animated-capable image paths
-and duration-bearing media. The next tracked follow-ups cover `/channels/add`
-defaulting to `ErsatzTV` instead of `ErsatzRS`, ADR 0017 default FFmpeg profile
-video bitrate halving with buffer sizes untouched, inconsistent Video/Audio
-section spacing on `/ffmpeg/{ffmpeg_profile_id}`, and the proposed
-`similar-video-cooldown` scheduling feature.
+Current selection: regenerated 2026-07-02 from `cargo xtask progress gaps`,
+open `[[debt]]` items, `cargo xtask progress adr list`, active plans, and
+`docs/progress/phase.toml`. The completed movie-detail, media-browser action,
+and static-image health-check prompts were removed. The top three are the
+remaining in-progress Phase 7 items: `/channels/add` default group,
+`/ffmpeg/{id}` profile-editor section spacing, and ADR 0017 default FFmpeg
+profile video bitrate retune. Newly registered media curation follow-ups cover
+same-collection duplicate movie rows with distinct ADR 0048 playback overrides
+and stay-in-context Add To Collection/Add To Playlist behavior, plus
+artist-detail music-video checkbox multi-select for bulk collection/playlist
+adds. ADR 0020 playout rebuild, ADR 0019 similar-video cooldown, proposed
+localization ADRs, active Docker release plans, and module split work remain
+candidates, but rank behind the selected phase-focus regressions in this pass.
 
 ---
 
-## 1. Fix reopened movie-detail extras and content-variant cards (slugs `media-browsers`, `content-variants`)
+## 1. Fix the next ErsatzTV parity gap in ErsatzRS: `/channels/add` default group (slug `channels-admin-ui`)
 
-Status: closed 2026-07-01 by `fix(web): restore movie detail extras and variant cards`.
-Evidence: focused Rust tests for movie detail projection/action persistence,
-`cargo xtask hydration-lint -p ersatzrs-web`, and focused Chromium
-`tests/e2e/content-variants.spec.ts` proof, including commentary subtitle
-selection preservation in the playback troubleshooting form.
+Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV parity without stopgaps.
 
-Use the repo workflow from AGENTS.md. This is a parity regression fix for
-`/media/movies/{movie_id}`, tracked by these debts:
-`movie-detail-extras-row-layout-regression` and
-`movie-detail-extra-collection-playlist-actions` in
-[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml),
-and `movie-detail-commentary-edition-cards` in
-[`docs/progress/parity/content-variants.toml`](progress/parity/content-variants.toml).
+Tracked debt: `channels-add-default-group-ersatzrs` in
+[`docs/progress/parity/channels-admin-ui.toml`](progress/parity/channels-admin-ui.toml).
+Current debt text: creating a channel at `/channels/add` shows `ErsatzTV` as
+the default channel group instead of `ErsatzRS`; closeout requires browser
+proof that `/channels/add` pre-fills `Group` with `ErsatzRS`, saving a new
+channel persists that value, and existing channel edit behavior is unchanged.
 
 Before editing:
-1. Read `docs/progress/parity/media-browsers.toml`,
-   `docs/progress/parity/content-variants.toml`,
-   `docs/adr/0018-extras-alternate-versions-and-stream-roles.md`,
-   `plans/extras-alternate-versions-and-stream-roles.md`, `TEST.md`,
-   `PORTING.md`, and `STYLE.md`.
-2. Inspect the ErsatzTV movie detail baseline and the ErsatzRS TV show/season
-   extras implementation first. Build a Source Map for movie detail extras,
-   TV extras row cards, Add To Collection/Playlist action plumbing, ADR 0018
-   alternate-version projection, and commentary stream-selection surfaces.
-3. Build a Visual Source Map for `/media/movies/{movie_id}` covering the main
-   movie header, Extras / Special Features, Versions / alternate editions,
-   commentary-track options, and action menus.
-4. Identify the seeded or live movie fixture that proves extras, commentary
-   stream metadata, and alternate editions without recording private media paths
-   in source, fixtures, logs, or snapshots.
+1. Read `docs/progress/parity/channels-admin-ui.toml`,
+   `docs/automation/parity-baseline.md`, `TEST.md`, `PORTING.md`, and `STYLE.md`.
+2. Ensure `$ERSATZTV_SRC` is at the pinned parity baseline, then inspect
+   `ErsatzTV/Pages/Channel*.razor`,
+   `ErsatzTV/ViewModels/ChannelEditViewModel.cs`,
+   `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, and
+   `ErsatzTV/Locals/Pages/Channels*.resx`.
+3. Inspect the current ErsatzRS channel editor/default path in
+   `crates/ersatzrs-core/src/repositories/channel.rs`,
+   `crates/ersatzrs-infra/src/repositories/channel.rs`,
+   `crates/ersatzrs-web/src/admin/pages/channels/`,
+   `crates/ersatzrs-web/src/admin/server_fns/channels.rs`, and
+   `crates/ersatzrs-web/src/api/channels.rs`.
+4. Build a Source Map covering default construction, editor form binding,
+   validation, multipart/no-JS save fallback, repository persistence, and
+   side effects.
+5. Build a Visual Source Map for `/channels/add` and `/channels/{id}`,
+   including the Group field, surrounding form geometry, save actions,
+   validation surfaces, and mobile layout.
 
-Implement the slice end-to-end:
-- Reproduce the movie detail regressions in browser/runtime proof.
-- Render movie extras with the same episode-card/row treatment used for TV
-  show/season extras instead of poster-style cards.
-- Add movie-extra Add To Collection and Add To Playlist actions through the
-  same validated action paths used by TV episode extras.
-- Surface playable cards/options for commentary-track viewing and alternate
-  movie editions such as theatrical, remastered, director's cut,
-  black-and-white, and related `SubKind` values.
-- Keep ADR 0018 default-exclusion behavior intact: normal searches and
-  schedules remain primary-only unless variant fields are requested.
-- Add focused regression coverage for layout/projection and action persistence.
-- When browser proof passes, mark all three structured debts resolved, return
-  `media-browsers` and `content-variants` to `Ported`, restore ADR 0018's
-  implementation marker to `Implemented`, refresh `docs/progress/hydration.toml`,
-  `TEST.md`, `docs/progress/phase.toml`, this prompt file, and add a session
-  log entry.
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Reproduce the current `/channels/add` default value before editing.
+- Make fresh Add Channel forms default `Group` to `ErsatzRS`.
+- Preserve existing-channel edit behavior and user-saved group values.
+- Preserve SSR, hydrated, and multipart/no-JS save paths.
+- Add focused regression coverage for default form projection and save
+  persistence.
+- Update `docs/progress/parity/channels-admin-ui.toml`,
+  `docs/progress/phase.toml`, `CHANGELOG.md` if the user-visible behavior needs
+  a release note, this prompt file, and the session log when the debt closes.
+
+Visual verification for UI routes:
+- Start the app with `./run.sh serve` after rebuilding Leptos assets.
+- Browser-proof `/channels/add` in desktop and mobile viewports.
+- Save a new channel and verify the persisted Group remains `ErsatzRS`.
+- Open an existing channel and verify its saved group is not overwritten.
+- Inspect the console/page errors and confirm the form hydrates.
 
 Verification:
-- Focused Rust tests for changed media-browser/content-variant projections and
-  action server functions.
+- Focused Rust tests for channel default projection/save behavior.
 - `cargo xtask hydration-lint -p ersatzrs-web`.
-- Browser or Playwright proof for `/media/movies/{movie_id}` showing extras use
-  episode-style rows, movie-extra Add To Collection/Playlist works,
-  commentary/edition cards render and select the intended variant/stream, the
-  page hydrates, and there are no console/page errors.
+- `npx playwright test tests/e2e/channels-edit-numbers.spec.ts` plus the
+  focused channel-add spec or test case added for this regression.
 - `cargo xtask progress check`.
-- Run broader web parity/e2e gates if the fix touches shared media cards,
-  collection/playlist action APIs, playback selection, or search projection.
 
-Report the Source Map, Visual Source Map, ErsatzTV baseline files consulted,
-root cause, verification run, changed files, and any remaining parity debt.
+When done, report the Source Map, Visual Source Map, ErsatzTV baseline files
+consulted, behavior implemented, any remaining `ParityDebt`, verification run,
+and changed files.
 
 ---
 
-## 2. Fix media-browser action, toolbar, and artist-detail regressions (slug `media-browsers`)
+## 2. Fix the next ErsatzTV parity gap in ErsatzRS: FFmpeg profile editor spacing (slug `ffmpeg-profile-editor`)
 
-Status: closed 2026-07-01 by `fix(web): restore media browser actions and artist detail parity`.
-Evidence: focused Rust test for song/image playlist type projection,
-`cargo xtask hydration-lint -p ersatzrs-web`, focused Chromium
-`tests/e2e/media-browser-actions.spec.ts` proof for songs/images toolbar,
-item actions, Add To Collection/Playlist persistence, and artist artwork/action
-parity, plus focused Chromium `tests/e2e/content-variants.spec.ts` proof for
-hydrated movie/show/season/artist detail action surfaces and no console/page
-errors.
+Use the repo workflow from AGENTS.md plus `skills/parity-slice.md`.
+The goal is fully functional ErsatzTV visual/editor parity without stopgaps.
 
-Use the repo workflow from AGENTS.md. This is a parity regression fix for the
-remaining media-browser action and layout debts, tracked as
-`artist-detail-add-to-collection-and-previews-regression`,
-`media-detail-bulk-overflow-actions`, and `songs-images-toolbar-placement` in
-[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
+Tracked debt: `profile-editor-video-audio-section-spacing` in
+[`docs/progress/parity/ffmpeg-profile-editor.toml`](progress/parity/ffmpeg-profile-editor.toml).
+Current debt text: on `/ffmpeg/{ffmpeg_profile_id}`, the Video and Audio
+sections use different vertical spacing between elements than the General
+section; closeout requires desktop and mobile browser proof that General,
+Video, and Audio render with consistent vertical rhythm without regressing
+hydrated save/edit behavior.
 
 Before editing:
-1. Read `docs/progress/parity/media-browsers.toml`,
-   `docs/progress/hydration.toml`, `TEST.md`, `PORTING.md`, `STYLE.md`, and
-   the admin UI hydration rules in `TEST.md`.
-2. Inspect the ErsatzTV baselines for the affected routes first, including the
-   movie browser action layout, TV show/season detail actions, artist detail,
-   songs browser, and images browser.
-3. Build a Source Map for shared media selection state, per-item overflow
-   menus, collection/playlist/schedule/media-info/troubleshoot actions, artist
-   artwork URL generation, and the relevant server functions/API endpoints.
-4. Build a Visual Source Map for `/media/movies`, `/media/movies/{movie_id}`,
-   `/media/tv/shows/{tvshow_id}`, `/media/tv/seasons/{season_id}`,
-   `/media/music/artists/{artist_id}`, `/media/music/songs`, and
-   `/media/browser/images`.
+1. Read `docs/progress/parity/ffmpeg-profile-editor.toml`,
+   `docs/progress/hydration.toml`, `docs/automation/parity-baseline.md`,
+   `TEST.md`, `PORTING.md`, and `STYLE.md`.
+2. Ensure `$ERSATZTV_SRC` is at the pinned parity baseline, then inspect
+   `ErsatzTV/Pages/FFmpegProfile*.razor` for the actual section structure,
+   form containers, dividers, labels, and spacing.
+3. Inspect the current ErsatzRS implementation in
+   `crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.rs`,
+   `crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/editor.module.css`,
+   `crates/ersatzrs-web/src/admin/server_fns/ffmpeg_profiles.rs`,
+   `crates/ersatzrs-web/src/api/ffmpeg_profiles.rs`, and
+   `tests/e2e/ffmpeg-profiles.spec.ts`.
+4. Build a Source Map covering SSR data load, island state, no-JS fallback,
+   save/copy actions, section rendering, CSS modules, and route aliases.
+5. Build a Visual Source Map for `/ffmpeg/profiles/{id}` and `/ffmpeg/{id}`,
+   including General, Video, Audio, Hardware Acceleration, dividers, labels,
+   inputs, row gaps, and mobile stacking.
 
-Implement the slice end-to-end:
-- Reproduce the missing action menus/toolbars, top-positioned songs/images
-  toolbars, broken artist Add To Collection button, and missing preview images
-  against seeded or live pages.
-- Restore the artist-level Add To Collection interaction so it opens the
-  expected dialog and persists collection membership through the same validated
-  path used by related media detail pages.
-- Restore preview artwork on `/media/music/artists/{artist_id}` for the artist
-  header and music-video cards, preserving ErsatzTV's thumbnail/fanart/fallback
-  ordering and avoiding private absolute media paths in source, fixtures, logs,
-  or snapshots.
-- Add the relevant multi-select toolbar and per-item three-dots overflow menus
-  to `/media/movies/{movie_id}`, `/media/tv/shows/{tvshow_id}`,
-  `/media/tv/seasons/{season_id}`, `/media/music/artists/{artist_id}`,
-  `/media/music/songs`, and `/media/browser/images`, matching the actions that
-  `/media/movies` exposes where they are valid for the media type.
-- Align `/media/music/songs` and `/media/browser/images` action toolbar
-  placement with the right-side movie/TV browser layout, including responsive
-  behavior.
-- Add focused regression coverage for actions, rendered artwork, and toolbar
-  geometry.
-- When browser proof passes, mark the three structured debts resolved, return
-  `media-browsers` to `Ported` if no other media-browser debt remains, refresh
-  `docs/progress/hydration.toml`, `TEST.md`, `docs/progress/phase.toml`, this
-  prompt file, and add a session log entry.
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Reproduce the spacing mismatch in a running browser before editing.
+- Align Video and Audio section vertical rhythm with General without changing
+  the field contract or hiding controls.
+- Keep the hydrated editor, no-JS edit fallback, Copy Profile, validation, and
+  save behavior intact.
+- Prefer existing CSS-module patterns and shared form primitives over ad hoc
+  route-only layout hacks.
+- Add focused regression coverage that checks the section geometry or stable
+  class structure in desktop and mobile layouts.
+- Update `docs/progress/parity/ffmpeg-profile-editor.toml`,
+  `docs/progress/hydration.toml` if proof state changes,
+  `docs/progress/phase.toml`, `TEST.md` if the Playwright playbook changes,
+  this prompt file, and the session log when the debt closes.
+
+Visual verification for UI routes:
+- Start the app with `./run.sh serve` after rebuilding Leptos assets.
+- Browser-proof `/ffmpeg/profiles/{id}` and the `/ffmpeg/{id}` alias in desktop
+  and mobile viewports.
+- Capture or inspect same-viewport geometry for General, Video, and Audio:
+  row gaps, label/input alignment, divider placement, clipped text, and page
+  overflow.
+- Save an edit after the layout change and confirm no console/page errors.
 
 Verification:
-- Focused Rust tests for the changed server functions/projections.
+- Focused Rust tests only if projection, server functions, or save behavior
+  changes.
 - `cargo xtask hydration-lint -p ersatzrs-web`.
-- Browser or Playwright proof for every affected route showing the expected
-  toolbar/overflow actions, right-side songs/images toolbar placement,
-  functional artist Add To Collection, rendered artist/music-video preview
-  images, hydrated pages, and no console/page errors.
+- `npx playwright test tests/e2e/ffmpeg-profiles.spec.ts`.
 - `cargo xtask progress check`.
-- Run broader web parity/e2e gates if the fix touches shared media-card,
-  artwork, collection-action, or server-function plumbing.
 
-Report the Source Map, Visual Source Map, ErsatzTV baseline files consulted,
-root cause, verification run, changed files, and any remaining parity debt.
+When done, report the Source Map, Visual Source Map, ErsatzTV baseline files
+consulted, behavior implemented, any remaining `ParityDebt`, verification run,
+and changed files.
 
 ---
 
-## 3. Fix static-image Zero Duration health warnings (slug `ersatzrs-healthcheck`)
+## 3. Fix the next ErsatzRS parity-infrastructure gap: ADR 0017 default FFmpeg profile bitrate retune (slug `ffmpeg-command-generation`)
 
-Status: closed 2026-07-01 by `fix(health): ignore static images in zero-duration health checks`.
-Evidence: focused `ersatzrs-infra` health tests prove a zero-duration `.jpg`
-image passes, a zero-duration movie plus `.gif` animated-image candidate still
-warn, and remote-stream placeholders remain ignored.
+Use the repo workflow from AGENTS.md and the governing ADRs. This is an
+ADR-backed runtime/default-profile hardening slice; do not force an ErsatzTV
+parity workflow where ADR 0017 intentionally deviates from ErsatzTV defaults.
+The goal is the complete ADR 0017 v3 behavior without stopgaps.
 
-Use the repo workflow from AGENTS.md. This is a health parity regression fix
-for `zero-duration-healthcheck-static-images` in
-[`docs/progress/parity/ersatzrs-healthcheck.toml`](progress/parity/ersatzrs-healthcheck.toml).
+Tracked debt: `default-profile-video-bitrate-halving` in
+[`docs/progress/parity/ffmpeg-command-generation.toml`](progress/parity/ffmpeg-command-generation.toml),
+backed by [ADR 0017](adr/0017-default-ffmpeg-profile-1080p60.md). Current debt
+text: fresh-database default profile video bitrates should change from 8000,
+16000, 20000, 45000, and 60000 kbit/s to 4000, 8000, 10000, 22500, and 30000
+kbit/s while video buffer sizes remain 8000, 16000, 20000, 45000, and 60000
+kbit.
 
 Before editing:
-1. Read `docs/progress/parity/ersatzrs-healthcheck.toml`, `docs/progress/phase.toml`,
-   `STYLE.md`, and `docs/how-to/testing.md`.
-2. Inspect `crates/ersatzrs-infra/src/health/checks/zero_duration.rs`, the
-   health registry in `crates/ersatzrs-infra/src/health/mod.rs`, and existing
-   zero-duration health tests.
-3. Build a Source Map for `MediaVersion` image linkage, remote-stream
-   placeholder exclusion, static image rows, animated/timed image rows, and the
-   `/system/health` result rendering path.
+1. Read `docs/progress/parity/ffmpeg-command-generation.toml`,
+   `docs/adr/0017-default-ffmpeg-profile-1080p60.md`,
+   `docs/adr/0014-runtime-learned-hardware-capability-fallback.md`,
+   `docs/how-to/testing.md`, and `STYLE.md`.
+2. Inspect the current default-profile seed and hardware update paths in
+   `crates/ersatzrs-infra/src/db.rs`,
+   `crates/ersatzrs-web/src/host/bootstrap.rs`,
+   `crates/ersatzrs-domain/src/ffmpeg.rs`, and the existing focused seed tests.
+3. Build a Source Map covering fresh database bootstrap, default profile ID
+   selection, seeded-profile idempotence, seed-time hardware acceleration
+   update, existing database non-rewrite behavior, and command-generation use of
+   profile bitrate/buffer fields.
+4. Reproduce or prove the current seed values before editing with a focused
+   test, temp-database query, or direct failing assertion.
 
-Implement the slice end-to-end:
-- Make the Zero Duration health check ignore ordinary static image media
-  versions whose `Duration` is `00:00:00`.
-- Keep the existing remote-stream placeholder exclusion.
-- Preserve warnings for duration-bearing media with missing duration, including
-  movies, episodes, music videos, other videos, songs where applicable, and
-  animated/timed image formats that should carry duration metadata.
-- Add focused regression coverage for a static image row and at least one
-  zero-duration duration-bearing media row.
+Implement the coherent end-to-end slice that genuinely closes the gap:
+- Retune only the seeded `VideoBitrate` values to 4000, 8000, 10000, 22500, and
+  30000 kbit/s.
+- Keep `VideoBufferSize` exactly at 8000, 16000, 20000, 45000, and 60000 kbit.
+- Do not rewrite existing saved profile tables.
+- Preserve the five-profile seed, default profile pointer, AC-3 6ch audio
+  defaults, hardware-acceleration seed update, and ADR 0014 fallback behavior.
+- Add focused regression coverage for fresh database seeding and idempotence.
 - When proof passes, mark the structured debt resolved, return
-  `ersatzrs-healthcheck` to `Ported` if no other health debt remains, refresh
-  `docs/progress/phase.toml`, this prompt file, and add a session log entry.
+  `ffmpeg-command-generation` to `Ported` if no open debt remains, update ADR
+  0017's Implementation text if it is now complete, refresh
+  `docs/progress/phase.toml`, `CHANGELOG.md` if needed, this prompt file, and
+  the session log.
 
 Verification:
-- Focused `ersatzrs-infra` health tests for `ZeroDurationHealthCheck`.
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
+- `cargo test -p ersatzrs-infra media_server_initializer_seeds_upstream_defaults`.
+- `cargo test -p ersatzrs-infra media_server_initializer_is_idempotent`.
+- `cargo test -p ersatzrs-infra default_ffmpeg_profile_hardware_update_targets_seeded_profiles`.
+- Run any additional focused `ersatzrs-ffmpeg` command-generation tests if the
+  command layer or profile mapping changes.
 - `cargo xtask progress check`.
-- Browser or API proof for `/system/health` if the rendering or persisted
-  result path changes.
 
-Report the Source Map, query/classification change, verification run, changed
-files, and any remaining health parity debt.
+When done, report the Source Map, ADR 0017 fields changed, verification run,
+changed files, and any remaining FFmpeg/profile parity debt.
 
 ---
