@@ -1,6 +1,6 @@
 <!--
-generated: 2026-06-30
-last_processed_commit: a6b63f54696655c4c267a60d572a1cb0dc69acde
+generated: 2026-07-01
+last_processed_commit: 7696320cde7a1db543dff185950933961b4a277e
 parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
 generator: docs/automation/daily-progress-routine.md (ersatzrs-daily-progress)
 rules: docs/automation/gap-prompt-rules.md
@@ -13,24 +13,25 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: the `6c075fd..a6b63f5` window merged streaming-runtime
-stabilization (MPEG-TS PCR timing, live HLS and MPEG-TS playback hardening, and
-preserving real HLS discontinuities — all reconciled into ADR 0015 and the
-`hls-variant-playlists-segmenter` / `mpeg-ts-channel-streaming` parity files),
-the ADR 0018 Phase 1 refinement that always shows media specials and renders TV
-show/season specials as episode-style rows (reconciled into `content-variants`
-and `phase.toml`), and an `anyhow` advisory dependency bump. Each feature commit
-self-reconciled its own parity TOMLs, so `cargo xtask progress gaps` stays
-clear, every tracked `[[debt]]` item is resolved, and every ADR (0001–0018) is
-`Accepted` and `Implemented` — parity gaps, open debt, and unimplemented ADRs
-are all exhausted. The remaining actionable spec source is the standing
+Current selection: the `a6b63f5..7696320` window merged first-beta-release
+preparation (GHCR Docker image publication restored on tag pushes, Docker
+target-cache isolation, and web-asset reuse in the Docker images — reconciled
+into `platform-support.toml` and `phase.toml` by the release commits), a batch
+of e2e/browser test stabilizations, and an HLS segmenter MPEG-TS append
+PTS-rewind fix (`53c6d5d`, self-reconciled and closed as the resolved
+`hls-mpegts-append-pts-rewind` debt in `hls-variant-playlists-segmenter`). Each
+feature/release commit self-reconciled its own parity TOMLs, so
+`cargo xtask progress gaps` stays clear, all 38 tracked `[[debt]]` items are
+resolved, and every ADR (0001–0018) is `Accepted` and `Implemented` — parity
+gaps, open debt, and unimplemented ADRs are all exhausted. The remaining
+actionable spec source is the standing
 [`plans/module-split-survey.md`](../plans/module-split-survey.md) backlog. Its
 health pilot is done, so the prompts below continue that backlog in the
 documented suggested order: the two remaining Tier 1 splits (`media_browser.rs`,
 then `yaml.rs`) followed by the Tier 2 split (`scripted.rs`). None of these
-three files was split in the window (`f172d17`'s media-specials work edited
-`media_browser.rs` but only grew it to 8,973 lines, not a split), so all three
-are carried over with their scope still fully open.
+three files was split in the window — `media_browser.rs` (8,973 lines),
+`yaml.rs` (3,169 lines), and `scripted.rs` (1,977 lines) are all still single
+files — so all three prompts carry over with their scope still fully open.
 
 ---
 
