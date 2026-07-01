@@ -335,7 +335,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                                 (3, tr(TextKey::Any).to_string()),
                             ]),
                             None,
-                            "",
+                            tr(TextKey::SubtitleModeHelp),
                         )}
                     </div>
 
