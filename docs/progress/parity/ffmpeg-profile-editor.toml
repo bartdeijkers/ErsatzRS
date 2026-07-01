@@ -1,9 +1,21 @@
 feature    = 'FFmpeg Profile editor'
 etv_source = '`ErsatzTV/Pages/FFmpegProfile*.razor`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/ffmpeg_profiles/`, `crates/ersatzrs-web/src/admin/languages/`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 
 summary    = '''
 Ported: list at `/ffmpeg/profiles` (alias `/ffmpeg`), editor `#[island]` at `/ffmpeg/profiles/add` and `/ffmpeg/profiles/:id` with all 31 fields, hardware accordion driven by `normalize_video`, video-preset parity via `presets_for_profile`, LoudNorm parity, startup-report-backed HW acceleration list using hwaccels and encoder names, preservation of a saved unavailable HW value for edit prefill, Copy Profile via `Modal`, H.264 `VideoProfile` select options (`main`, `high`, `high10`, and NVENC `high444p`) with save/load normalization, and the upstream hardware-format validation warning for unsupported NVENC MPEG-2 (`NVENC supports formats (h264, hevc, av1)`). Visible labels, generated copy-name defaults, and validation messages use the persisted-language i18n layer with per-culture translation modules. Browser coverage now proves the hydrated editor state transitions in Chromium and Firefox plus the no-JS edit fallback in Chromium.
+
+Reopened 2026-07-01: the profile edit page has inconsistent vertical spacing
+between form elements in the Video and Audio sections compared with the General
+section, so the visual editor parity remains open until `/ffmpeg/{id}` and
+`/ffmpeg/profiles/{id}` render those sections with matching vertical rhythm.
 '''
+
+[[debt]]
+id          = 'profile-editor-video-audio-section-spacing'
+description = 'On `/ffmpeg/{ffmpeg_profile_id}`, the Video and Audio sections use different vertical spacing between elements than the General section.'
+discovered  = '2026-07-01'
+evidence    = 'Maintainer report on 2026-07-01. Reclose only with browser proof that the existing profile editor route renders the General, Video, and Audio sections with consistent vertical spacing in desktop and mobile layouts, without regressing hydrated save/edit behavior.'
+resolved    = false

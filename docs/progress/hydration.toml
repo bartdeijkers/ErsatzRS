@@ -60,13 +60,13 @@ notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, car
 
 [[page]]
 name   = 'MoviePage` (`/media/movies/:id`)'
-status = '✅'
-notes  = 'SSR detail page with JSON-backed Add To and Media Info actions; Playwright smoke clean.'
+status = 'TODO'
+notes  = 'Reopened 2026-07-01: maintainer reported movie extras render as poster cards, movie extra Add To Collection/Playlist actions are missing, and commentary/alternate-edition cards are absent on `/media/movies/{movie_id}`. Pending browser proof for the corrected movie detail actions and variant cards.'
 
 [[page]]
 name   = 'ArtistPage` (`/media/music/artists/:id`)'
-status = '✅'
-notes  = 'Detail page island wired; `/media/music/artists/2355` modal-open smoke clean.'
+status = 'TODO'
+notes  = 'Reopened 2026-07-01: maintainer reported `/media/music/artists/{artist_id}` Add To Collection button and preview images broken; prior `/media/music/artists/2355` modal-open smoke is stale. Pending browser proof for hydrated artist Add To Collection action and rendered artist/music-video preview images.'
 
 [[page]]
 name   = 'ChannelsListPage'

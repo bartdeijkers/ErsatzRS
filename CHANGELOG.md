@@ -13,6 +13,28 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
+  shuffling, covering artist/show/franchise-like grouping and custom filters.
+- ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or
+  referenced library content change, so already-scheduled items pick up new
+  settings (e.g. subtitle mode) instead of only being appended past — including
+  porting ErsatzTV's item-clearing `Refresh` semantics to the classic engine.
+
+### Changed
+
+- The channel editor's Subtitle Mode dropdown now shows helper text (all
+  locales) clarifying that "Forced" only selects forced-narrative tracks and
+  that "Any" is the mode to always show subtitles in the preferred language,
+  reducing a common misconfiguration where sidecar subtitles never appear.
+- Progress tracking now keeps reopened media-browser, ADR 0018 movie-detail, and
+  Zero Duration health-check parity debts visible for follow-up work.
+- Progress tracking now also records reopened channel-add default group, ADR
+  0017 default FFmpeg profile bitrate, and FFmpeg profile editor spacing debts.
+- Dutch admin UI now translates "watermark" as "zenderlogo" (station logo)
+  instead of the literal "watermerk", matching common Dutch broadcast usage.
+
 ### Fixed
 
 - Release Docker image builds now compile the native `ersatzrs-web` crate as an

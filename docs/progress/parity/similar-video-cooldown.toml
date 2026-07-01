@@ -1,0 +1,21 @@
+feature    = 'Similar video cooldown scheduling'
+etv_source = 'ErsatzRS ADR 0019 scheduling extension; no ErsatzTV equivalent'
+rs_target  = '`crates/ersatzrs-core::scheduling`, `crates/ersatzrs-infra::repositories::scheduling`, admin schedule editors'
+status     = 'Not started'
+adr        = ['0019']
+summary    = '''
+Proposed by ADR 0019: add an opt-in, shared cooldown-aware shuffle policy for
+schedules so groupable media can be diversified by artist, TV show, season,
+ADR 0018 parent/variant lineage, collection/smart-collection/tag metadata, or
+operator-defined search filters. The feature is intentionally disabled by
+default so imported ErsatzTV schedules keep parity behavior until an operator
+enables cooldowns.
+'''
+
+[[debt]]
+id          = 'similar-video-cooldown-scheduling'
+adr         = '0019'
+description = 'Scheduling has no shared opt-in cooldown-aware shuffle policy that can keep groupable media, such as the same artist, TV show, movie franchise, parent variant, collection, tag, or operator-defined filter, apart for a configured number of videos or playout duration.'
+discovered  = '2026-07-01'
+evidence    = 'Maintainer request on 2026-07-01. Reclose only after ADR 0019 is implemented with deterministic cooldown-aware selection, persisted Continue-build state, disabled-by-default ErsatzTV parity behavior, focused scheduler tests, and admin or schedule-definition controls for item-count and duration cooldown thresholds.'
+resolved    = false

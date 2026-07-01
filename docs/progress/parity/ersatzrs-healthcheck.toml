@@ -1,7 +1,7 @@
-feature    = 'ErsatzRS healthcheck binary'
+feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
-rs_target  = '`crates/ersatzrs-healthcheck`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
-status     = 'Ported'
+rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
+status     = 'In progress'
 adr        = []
 summary    = '''
 Ported: ErsatzRS now includes a dedicated `ersatzrs-healthcheck` binary that
@@ -14,4 +14,16 @@ configuration. The Docker runtime image copies the binary and uses it for
 `HEALTHCHECK`, so the runtime stage no longer installs curl solely for
 readiness probing. Release archives build and stage the binary beside
 `ersatzrs-web` and `ersatzrs-scanner` for Linux and Windows.
+
+Reopened 2026-07-01: the in-app Zero Duration health check warns for image
+media versions whose duration is `00:00:00`. Static images are expected to have
+no playback duration; only animated/timed image formats should be treated as
+duration-bearing media for this warning.
 '''
+
+[[debt]]
+id          = 'zero-duration-healthcheck-static-images'
+description = 'The in-app Zero Duration health check warns for static images even though zero duration is expected for still image media; it should ignore ordinary image rows and only treat animated/timed images as candidates for missing-duration warnings.'
+discovered  = '2026-07-01'
+evidence    = 'Maintainer report on 2026-07-01. Current check in `crates/ersatzrs-infra/src/health/checks/zero_duration.rs` filters remote streams but not image media versions. Reclose only with health-check proof that static image rows pass without warnings while timed video/audio media, and animated image formats that should carry duration, still report missing duration when appropriate.'
+resolved    = false

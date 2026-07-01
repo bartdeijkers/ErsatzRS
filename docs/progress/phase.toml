@@ -108,8 +108,22 @@ repeated row fields without dropping the schedule. The 2026-06-28 spec-backed
 closeout implemented ADR 0013 in-app TSDuck MPEG-TS troubleshooting, routed
 startup database URL resolution through the startup configuration helper while
 preserving Docker `DATABASE_URL`, and completed the module-split survey's infra
-health registry pilot. Remaining Phase 7 closeout work is broad verification
-and release-readiness proof, not tracked ErsatzTV feature parity debt.
+health registry pilot. As of 2026-07-01, media-browser detail/list action
+parity, ADR 0018 movie-detail surfacing, and the in-app Zero Duration health
+check are reopened: the artist detail page has a broken Add To Collection
+button and broken preview images; the movie detail page renders extras as
+poster cards, lacks movie-extra Add To Collection/Playlist actions, and lacks
+commentary-track / alternate-edition cards; several media routes lack the
+`/media/movies` multi-select or three-dots action menus; songs/images place the
+toolbar at the top instead of the right side; and static images incorrectly
+produce Zero Duration health warnings. ADR 0019 is now proposed for an opt-in
+similar-video cooldown scheduling extension; it is tracked separately and is
+not implemented. `/channels/add` default group selection, ADR 0017 default
+FFmpeg profile video bitrate targets, and FFmpeg profile editor section spacing
+are also reopened. Remaining Phase 7 closeout work is broad verification,
+release-readiness proof, and those tracked
+media-browser/content-variant/channel/FFmpeg-profile/health regressions plus
+the ADR 0017 default-profile bitrate retune.
 '''
 
 # Phase 0 checklist (all complete).

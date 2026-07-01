@@ -1,7 +1,7 @@
 feature    = 'FFmpeg command generation'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/CommandGenerator.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0003', '0014', '0017']
 
 summary    = '''
@@ -49,6 +49,11 @@ only for multichannel AC-3. Focused tests cover seeded DB rows/default pointer/
 idempotence, seed hardware update, hardware preference selection, and AC-3
 max-delay gating.
 
+Reopened 2026-07-01: the ADR 0017 seeded default profile video bitrate targets
+need to be halved while the existing video buffer-size values remain unchanged.
+For example, the 1080p default video bitrate should move from 16000 kbit/s to
+8000 kbit/s while its video buffer size stays 16000 kbit.
+
 The 2026-06-19 HDR proof slice added a live HDR -> SDR calibration gate that
 generates HDR10 PQ and HLG masters, boots ErsatzRS on a throwaway database,
 streams each clip through the real MPEG-TS endpoint, probes the captured output
@@ -73,6 +78,14 @@ description = 'Resolved 2026-06-19: fresh database bootstrap now seeds five ADR 
 discovered  = '2026-06-17'
 evidence    = '`crates/ersatzrs-infra/src/db.rs` table-driven seed plus tests `media_server_initializer_seeds_upstream_defaults`, `media_server_initializer_is_idempotent`, and `default_ffmpeg_profile_hardware_update_targets_seeded_profiles`; `crates/ersatzrs-ffmpeg/src/version.rs` tests `default_profile_acceleration_prefers_nvenc_then_qsv_then_vaapi` and `default_profile_acceleration_handles_platform_specific_encoders`; web startup calls the update only when `seeded_default_ffmpeg_profiles` is true; `cargo xtask smoke` passed on 2026-06-19 with NVENC detection after the seed updater selected an NVENC-compatible preset.'
 resolved    = true
+
+[[debt]]
+id          = 'default-profile-video-bitrate-halving'
+adr         = '0017'
+description = 'The ADR 0017 fresh-database default FFmpeg profiles still use the earlier video bitrate targets; their video bitrates should be halved, e.g. 16000 kbit/s to 8000 kbit/s for the 1080p default, while video buffer-size values remain untouched.'
+discovered  = '2026-07-01'
+evidence    = 'Maintainer report on 2026-07-01. Current seeded values in `crates/ersatzrs-infra/src/db.rs` include 8000, 16000, 20000, 45000, and 60000 kbit/s video bitrates with matching buffer sizes. Reclose only after fresh DB seeding and tests prove video bitrates are 4000, 8000, 10000, 22500, and 30000 kbit/s respectively while video buffer sizes stay 8000, 16000, 20000, 45000, and 60000 kbit.'
+resolved    = false
 
 [[debt]]
 id          = 'ac3-segmenter-max-delay'

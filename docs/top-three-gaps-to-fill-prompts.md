@@ -13,155 +13,194 @@ ADR-backed runtime hardening gap, or spec-backed chore. These prompts are
 selected from the current progress files, ADR index, active plans, and phase
 state per [gap-prompt-rules.md](automation/gap-prompt-rules.md).
 
-Current selection: the `a6b63f5..7696320` window merged first-beta-release
-preparation (GHCR Docker image publication restored on tag pushes, Docker
-target-cache isolation, and web-asset reuse in the Docker images — reconciled
-into `platform-support.toml` and `phase.toml` by the release commits), a batch
-of e2e/browser test stabilizations, and an HLS segmenter MPEG-TS append
-PTS-rewind fix (`53c6d5d`, self-reconciled and closed as the resolved
-`hls-mpegts-append-pts-rewind` debt in `hls-variant-playlists-segmenter`). Each
-feature/release commit self-reconciled its own parity TOMLs, so
-`cargo xtask progress gaps` stays clear, all 38 tracked `[[debt]]` items are
-resolved, and every ADR (0001–0018) is `Accepted` and `Implemented` — parity
-gaps, open debt, and unimplemented ADRs are all exhausted. The remaining
-actionable spec source is the standing
-[`plans/module-split-survey.md`](../plans/module-split-survey.md) backlog. Its
-health pilot is done, so the prompts below continue that backlog in the
-documented suggested order: the two remaining Tier 1 splits (`media_browser.rs`,
-then `yaml.rs`) followed by the Tier 2 split (`scripted.rs`). None of these
-three files was split in the window — `media_browser.rs` (8,973 lines),
-`yaml.rs` (3,169 lines), and `scripted.rs` (1,977 lines) are all still single
-files — so all three prompts carry over with their scope still fully open.
+Current selection: maintainer-reported regressions reopened six parity
+features on 2026-07-01, and ADR 0019 added one Not started scheduling
+extension. The movie-detail gap spans `media-browsers` and `content-variants`:
+`/media/movies/{movie_id}` renders movie extras like poster cards, does not let
+movie extras be added to collections/playlists, and lacks playable
+commentary-track / alternate-edition cards for theatrical, remastered,
+director's cut, black-and-white, and related versions. `media-browsers` also
+tracks missing multi-select / three-dots action menus on movie, TV show,
+season, artist, song, and image routes, top-positioned songs/images toolbars
+that should match the right-side browser layout, and the artist-detail Add To
+Collection / preview-image regression. `ersatzrs-healthcheck` tracks Zero
+Duration warnings for static images, which should be ignored unless the image
+is an animated/timed format that needs duration metadata. Additional tracked
+follow-ups cover `/channels/add` defaulting to `ErsatzTV` instead of
+`ErsatzRS`, ADR 0017 default FFmpeg profile video bitrate halving with buffer
+sizes untouched, and inconsistent Video/Audio section spacing on
+`/ffmpeg/{ffmpeg_profile_id}`. The new `similar-video-cooldown` scheduling
+feature remains below these immediate regressions in the prompt order.
 
 ---
 
-## 1. Build the next ErsatzRS spec chore: split media-browser server functions (slug `module-split-survey-media-browser`)
+## 1. Fix reopened movie-detail extras and content-variant cards (slugs `media-browsers`, `content-variants`)
 
-Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
-chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
-not an ErsatzTV parity port. Scope this slice only to
-`crates/ersatzrs-web/src/admin/server_fns/media_browser.rs`.
+Use the repo workflow from AGENTS.md. This is a parity regression fix for
+`/media/movies/{movie_id}`, tracked by these debts:
+`movie-detail-extras-row-layout-regression` and
+`movie-detail-extra-collection-playlist-actions` in
+[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml),
+and `movie-detail-commentary-edition-cards` in
+[`docs/progress/parity/content-variants.toml`](progress/parity/content-variants.toml).
 
 Before editing:
-1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
-   `TEST.md`.
-2. Inspect `media_browser.rs`, all callers, and every `#[server]` function it
-   exposes.
-3. Build a Source Map for shared types, `MediaBrowserKind`, per-media-kind list
-   and detail functions, collection CRUD, trash, playlists, autocomplete,
-   collection detail, and test helpers.
-4. List every public item and every `#[server]` function name before moving
-   code. Function names must not change because Leptos derives endpoint URLs
-   from them.
+1. Read `docs/progress/parity/media-browsers.toml`,
+   `docs/progress/parity/content-variants.toml`,
+   `docs/adr/0018-extras-alternate-versions-and-stream-roles.md`,
+   `plans/extras-alternate-versions-and-stream-roles.md`, `TEST.md`,
+   `PORTING.md`, and `STYLE.md`.
+2. Inspect the ErsatzTV movie detail baseline and the ErsatzRS TV show/season
+   extras implementation first. Build a Source Map for movie detail extras,
+   TV extras row cards, Add To Collection/Playlist action plumbing, ADR 0018
+   alternate-version projection, and commentary stream-selection surfaces.
+3. Build a Visual Source Map for `/media/movies/{movie_id}` covering the main
+   movie header, Extras / Special Features, Versions / alternate editions,
+   commentary-track options, and action menus.
+4. Identify the seeded or live movie fixture that proves extras, commentary
+   stream metadata, and alternate editions without recording private media paths
+   in source, fixtures, logs, or snapshots.
 
 Implement the slice end-to-end:
-- Convert `media_browser.rs` into `media_browser/mod.rs` plus per-kind modules,
-  `collections/*`, `trash.rs`, `playlists.rs`, `autocomplete.rs`,
-  `collection_detail.rs`, and test support behind `#[cfg(test)]`.
-- Keep public imports stable with `pub use` re-exports from `mod.rs`.
-- Move code mechanically first; do not combine this with deduplication, SQL
-  rewrites, route changes, or behavior cleanup.
-- Add or preserve a completeness check around `MediaBrowserKind` dispatch where
-  practical.
-- Update `plans/module-split-survey.md`, `CHANGELOG.md`, and progress/session
-  docs if the refactor materially changes maintainer workflow.
+- Reproduce the movie detail regressions in browser/runtime proof.
+- Render movie extras with the same episode-card/row treatment used for TV
+  show/season extras instead of poster-style cards.
+- Add movie-extra Add To Collection and Add To Playlist actions through the
+  same validated action paths used by TV episode extras.
+- Surface playable cards/options for commentary-track viewing and alternate
+  movie editions such as theatrical, remastered, director's cut,
+  black-and-white, and related `SubKind` values.
+- Keep ADR 0018 default-exclusion behavior intact: normal searches and
+  schedules remain primary-only unless variant fields are requested.
+- Add focused regression coverage for layout/projection and action persistence.
+- When browser proof passes, mark all three structured debts resolved, return
+  `media-browsers` and `content-variants` to `Ported`, restore ADR 0018's
+  implementation marker to `Implemented`, refresh `docs/progress/hydration.toml`,
+  `TEST.md`, `docs/progress/phase.toml`, this prompt file, and add a session
+  log entry.
 
 Verification:
-- Focused `ersatzrs-web` tests for moved media-browser functions.
+- Focused Rust tests for changed media-browser/content-variant projections and
+  action server functions.
+- `cargo xtask hydration-lint -p ersatzrs-web`.
+- Browser or Playwright proof for `/media/movies/{movie_id}` showing extras use
+  episode-style rows, movie-extra Add To Collection/Playlist works,
+  commentary/edition cards render and select the intended variant/stream, the
+  page hydrates, and there are no console/page errors.
+- `cargo xtask progress check`.
+- Run broader web parity/e2e gates if the fix touches shared media cards,
+  collection/playlist action APIs, playback selection, or search projection.
+
+Report the Source Map, Visual Source Map, ErsatzTV baseline files consulted,
+root cause, verification run, changed files, and any remaining parity debt.
+
+---
+
+## 2. Fix media-browser action, toolbar, and artist-detail regressions (slug `media-browsers`)
+
+Use the repo workflow from AGENTS.md. This is a parity regression fix for the
+remaining media-browser action and layout debts, tracked as
+`artist-detail-add-to-collection-and-previews-regression`,
+`media-detail-bulk-overflow-actions`, and `songs-images-toolbar-placement` in
+[`docs/progress/parity/media-browsers.toml`](progress/parity/media-browsers.toml).
+
+Before editing:
+1. Read `docs/progress/parity/media-browsers.toml`,
+   `docs/progress/hydration.toml`, `TEST.md`, `PORTING.md`, `STYLE.md`, and
+   the admin UI hydration rules in `TEST.md`.
+2. Inspect the ErsatzTV baselines for the affected routes first, including the
+   movie browser action layout, TV show/season detail actions, artist detail,
+   songs browser, and images browser.
+3. Build a Source Map for shared media selection state, per-item overflow
+   menus, collection/playlist/schedule/media-info/troubleshoot actions, artist
+   artwork URL generation, and the relevant server functions/API endpoints.
+4. Build a Visual Source Map for `/media/movies`, `/media/movies/{movie_id}`,
+   `/media/tv/shows/{tvshow_id}`, `/media/tv/seasons/{season_id}`,
+   `/media/music/artists/{artist_id}`, `/media/music/songs`, and
+   `/media/browser/images`.
+
+Implement the slice end-to-end:
+- Reproduce the missing action menus/toolbars, top-positioned songs/images
+  toolbars, broken artist Add To Collection button, and missing preview images
+  against seeded or live pages.
+- Restore the artist-level Add To Collection interaction so it opens the
+  expected dialog and persists collection membership through the same validated
+  path used by related media detail pages.
+- Restore preview artwork on `/media/music/artists/{artist_id}` for the artist
+  header and music-video cards, preserving ErsatzTV's thumbnail/fanart/fallback
+  ordering and avoiding private absolute media paths in source, fixtures, logs,
+  or snapshots.
+- Add the relevant multi-select toolbar and per-item three-dots overflow menus
+  to `/media/movies/{movie_id}`, `/media/tv/shows/{tvshow_id}`,
+  `/media/tv/seasons/{season_id}`, `/media/music/artists/{artist_id}`,
+  `/media/music/songs`, and `/media/browser/images`, matching the actions that
+  `/media/movies` exposes where they are valid for the media type.
+- Align `/media/music/songs` and `/media/browser/images` action toolbar
+  placement with the right-side movie/TV browser layout, including responsive
+  behavior.
+- Add focused regression coverage for actions, rendered artwork, and toolbar
+  geometry.
+- When browser proof passes, mark the three structured debts resolved, return
+  `media-browsers` to `Ported` if no other media-browser debt remains, refresh
+  `docs/progress/hydration.toml`, `TEST.md`, `docs/progress/phase.toml`, this
+  prompt file, and add a session log entry.
+
+Verification:
+- Focused Rust tests for the changed server functions/projections.
+- `cargo xtask hydration-lint -p ersatzrs-web`.
+- Browser or Playwright proof for every affected route showing the expected
+  toolbar/overflow actions, right-side songs/images toolbar placement,
+  functional artist Add To Collection, rendered artist/music-video preview
+  images, hydrated pages, and no console/page errors.
+- `cargo xtask progress check`.
+- Run broader web parity/e2e gates if the fix touches shared media-card,
+  artwork, collection-action, or server-function plumbing.
+
+Report the Source Map, Visual Source Map, ErsatzTV baseline files consulted,
+root cause, verification run, changed files, and any remaining parity debt.
+
+---
+
+## 3. Fix static-image Zero Duration health warnings (slug `ersatzrs-healthcheck`)
+
+Use the repo workflow from AGENTS.md. This is a health parity regression fix
+for `zero-duration-healthcheck-static-images` in
+[`docs/progress/parity/ersatzrs-healthcheck.toml`](progress/parity/ersatzrs-healthcheck.toml).
+
+Before editing:
+1. Read `docs/progress/parity/ersatzrs-healthcheck.toml`, `docs/progress/phase.toml`,
+   `STYLE.md`, and `docs/how-to/testing.md`.
+2. Inspect `crates/ersatzrs-infra/src/health/checks/zero_duration.rs`, the
+   health registry in `crates/ersatzrs-infra/src/health/mod.rs`, and existing
+   zero-duration health tests.
+3. Build a Source Map for `MediaVersion` image linkage, remote-stream
+   placeholder exclusion, static image rows, animated/timed image rows, and the
+   `/system/health` result rendering path.
+
+Implement the slice end-to-end:
+- Make the Zero Duration health check ignore ordinary static image media
+  versions whose `Duration` is `00:00:00`.
+- Keep the existing remote-stream placeholder exclusion.
+- Preserve warnings for duration-bearing media with missing duration, including
+  movies, episodes, music videos, other videos, songs where applicable, and
+  animated/timed image formats that should carry duration metadata.
+- Add focused regression coverage for a static image row and at least one
+  zero-duration duration-bearing media row.
+- When proof passes, mark the structured debt resolved, return
+  `ersatzrs-healthcheck` to `Ported` if no other health debt remains, refresh
+  `docs/progress/phase.toml`, this prompt file, and add a session log entry.
+
+Verification:
+- Focused `ersatzrs-infra` health tests for `ZeroDurationHealthCheck`.
 - `cargo fmt --all -- --check`.
 - `cargo clippy --workspace --all-targets -- -D warnings`.
 - `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
 - `cargo test --workspace --all-features`.
-- `(cd crates/ersatzrs-web && cargo leptos build)`.
-- Browser or Playwright proof for representative media-browser routes and
-  interactive buttons, with no 404, hydration, or console errors.
 - `cargo xtask progress check`.
+- Browser or API proof for `/system/health` if the rendering or persisted
+  result path changes.
 
-Report the Source Map, before/after layout and line counts, preserved server
-function names, verification run, remaining module-split follow-ups, and
-changed files.
+Report the Source Map, query/classification change, verification run, changed
+files, and any remaining health parity debt.
 
 ---
-
-## 2. Build the next ErsatzRS spec chore: split YAML scheduling instructions (slug `module-split-survey-yaml`)
-
-Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
-chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
-not an ErsatzTV parity port. Scope this slice only to
-`crates/ersatzrs-core/src/scheduling/yaml.rs`.
-
-Before editing:
-1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
-   `docs/how-to/snapshot-tests.md`.
-2. Inspect `yaml.rs`, current instruction parsing, dispatch, handlers, tests,
-   and generated-playout snapshots.
-3. Build a Source Map for `YamlInstruction`, `YamlPlayoutEngine`, shared context
-   types, and every `handle_*` instruction function.
-4. Record the current serde wire shape. It must remain byte-compatible with
-   ErsatzTV YAML input.
-
-Implement the slice end-to-end:
-- Convert `yaml.rs` into `yaml/mod.rs` plus `yaml/instructions/<name>.rs`, with
-  one instruction handler per file.
-- Keep `YamlInstruction` parsing shape unchanged. If an exhaustive
-  `YamlInstructionKind` enum is introduced, derive it after parse rather than
-  changing the serialized contract.
-- Keep generated playout behavior, timestamps, state transitions, and errors
-  unchanged.
-- Avoid new dependencies and unrelated cleanup.
-- Update the module-split survey and progress/session docs if the split changes
-  maintainer workflow.
-
-Verification:
-- Focused YAML scheduling tests and generated-playout snapshot tests.
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
-- `cargo insta review` or `cargo insta accept` only after confirming snapshot
-  changes are absent or intentionally reviewed.
-- `cargo xtask progress check`.
-
-Report the Source Map, before/after layout and line counts, preserved YAML wire
-shape, snapshot result, remaining module-split follow-ups, and changed files.
-
----
-
-## 3. Build the next ErsatzRS spec chore: split scripted scheduling Lua bindings (slug `module-split-survey-scripted`)
-
-Use the repo workflow from AGENTS.md. This is a behavior-preserving refactor
-chore governed by [`plans/module-split-survey.md`](../plans/module-split-survey.md),
-not an ErsatzTV parity port. Scope this slice only to
-`crates/ersatzrs-core/src/scheduling/scripted.rs`.
-
-Before editing:
-1. Read `plans/module-split-survey.md`, `ARCHITECTURE.md`, `STYLE.md`, and
-   `docs/how-to/testing.md`.
-2. Inspect `scripted.rs`, `register_all()`, `ScriptState`, tests, and every
-   Lua global registered with `globals.set(...)`.
-3. Build a Source Map for content, timing, watermark, graphics, guide,
-   state-query, skipping, and pre-roll binding groups.
-4. List every Lua global name before moving code so the set can be proved
-   unchanged.
-
-Implement the slice end-to-end:
-- Convert `scripted.rs` into `scripted/mod.rs` plus
-  `scripted/api/{content,timing,watermark,graphics,guide,state_queries,skipping,pre_roll}.rs`.
-- Keep `ScriptedSchedulingEngine`, `ScriptState`, and `register_all()` ownership
-  in `mod.rs`; `register_all()` should call category registrars.
-- Thread the same mutable `ScriptState` handle into each registrar.
-- Keep every Lua global name, argument shape, error message, and behavior
-  unchanged.
-- Avoid new dependencies and unrelated cleanup.
-
-Verification:
-- Focused scripted scheduling tests.
-- `cargo fmt --all -- --check`.
-- `cargo clippy --workspace --all-targets -- -D warnings`.
-- `cargo clippy --workspace --all-targets --features mysql -- -D warnings`.
-- `cargo test --workspace --all-features`.
-- `cargo xtask progress check`.
-
-Report the Source Map, `register_all()` before/after line count, proof the Lua
-global-name set is identical, verification run, remaining module-split
-follow-ups, and changed files.

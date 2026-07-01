@@ -1,7 +1,7 @@
 feature    = 'Channels admin UI'
 etv_source = '`ErsatzTV/Pages/Channel*.razor`, `ErsatzTV/ViewModels/ChannelEditViewModel.cs`, `ErsatzTV/Validators/ChannelEditViewModelValidator.cs`, `ErsatzTV/Locals/Pages/Channels*.resx`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/channels/`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-core/src/repositories/channel.rs`, `crates/ersatzrs-infra/src/repositories/channel.rs`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = []
 
 summary    = '''
@@ -14,6 +14,10 @@ persistence that preserves the unique `Channel.Number` constraint while updating
 clicks Edit Numbers from `/channels`, rejects invalid input without mutating the
 database, saves a swap, verifies mobile actions, and proves the no-JS POST
 fallback.
+
+Reopened 2026-07-01: creating a new channel through `/channels/add` shows the
+default group as `ErsatzTV` again; fresh ErsatzRS channels should default to
+the `ErsatzRS` group.
 '''
 
 [[debt]]
@@ -22,3 +26,10 @@ description = 'The `/channels` Edit Numbers button should open the channel-numbe
 discovered  = '2026-06-23'
 evidence    = 'Resolved 2026-06-24: `/channels/numbers` is routed before `/channels/:id` and renders `ChannelNumbersPage`; `SqliteChannelRepository::save_number_updates` uses temporary negative numbers before applying requested values, mirroring ErsatzTV swap safety. Focused tests cover list/swap/validation and form parsing, `scripts/e2e/hydration-smoke.sh` passed 56 island routes, and `tests/e2e/channels-edit-numbers.spec.ts` passed in Chromium with desktop, mobile, validation, swap, and no-JS fallback proof.'
 resolved    = true
+
+[[debt]]
+id          = 'channels-add-default-group-ersatzrs'
+description = 'Creating a channel at `/channels/add` shows `ErsatzTV` as the default channel group instead of `ErsatzRS`.'
+discovered  = '2026-07-01'
+evidence    = 'Maintainer report on 2026-07-01. Current default construction still points at `crates/ersatzrs-core/src/repositories/channel.rs`. Reclose only with browser proof that `/channels/add` pre-fills `Group` with `ErsatzRS`, save persistence keeps that value for a new channel, and existing channel edit behavior is unchanged.'
+resolved    = false
