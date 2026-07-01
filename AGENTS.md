@@ -7,6 +7,11 @@ This file provides guidance to AI coding agents when working in this repository.
 
 ErsatzRS is a from-scratch Rust reimplementation of [ErsatzTV](https://github.com/ErsatzTV/legacy) - a mediaserver that turns personal media libraries (Plex/Jellyfin/Emby/Local) into linear TV channels served over IPTV (M3U/HLS) and HDHomeRun. The goal is full feature parity with ErsatzTV on a simpler deployment (single static binary) while exploiting FFmpeg 8.1 features that ErsatzTV does not yet use.
 
+ErsatzRS is internationally oriented. Subtitle and alternate-audio track
+handling, selection, metadata, health reporting, and admin management are
+high-priority parity surfaces; preserve them carefully when changing scanning,
+media metadata, playback selection, scheduling, troubleshooting, or UI flows.
+
 The authoritative project state lives across these sources - read the
 relevant ones before starting non-trivial work:
 
