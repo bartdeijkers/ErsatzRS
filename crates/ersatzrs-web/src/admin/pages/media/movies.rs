@@ -157,7 +157,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         media_info_open.set(true);
         media_info_action.dispatch((media_item_id, title));
     });
-    let show_movie_info = show_media_info.clone();
+    let show_movie_info = show_media_info;
 
     let title_for_poster = title.clone();
     let title_for_info = title.clone();
@@ -326,7 +326,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     </h2>
                     <div class=detail_style::special_stack>
                         {extras.into_iter().map(|extra| {
-                            let show_extra_info = show_media_info.clone();
+                            let show_extra_info = show_media_info;
                             view! {
                                 <TvSpecialFeatureRow
                                     extra=extra
