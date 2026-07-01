@@ -6,10 +6,12 @@ Accepted (2026-06-17; revised — see Revision history).
 
 ## Implementation
 
-Implemented — fresh database bootstrap seeds the five default profiles, web
-startup applies seed-time hardware-acceleration detection from the captured
-FFmpeg runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
-multichannel AC-3.
+Partial — fresh database bootstrap seeds the five default profiles, web startup
+applies seed-time hardware-acceleration detection from the captured FFmpeg
+runtime report, and HLS segmenter output emits AC-3 `-max_delay` for
+multichannel AC-3. The 2026-07-01 bitrate revision is not implemented yet:
+seeded profile video bitrates must be halved while existing video buffer-size
+values remain unchanged.
 
 ## Context
 
@@ -50,11 +52,12 @@ stands against it:
   source's framerate.
 - **Scene-cut must be disabled** so segment lengths stay uniform. Already
   effectively done: `keyint_min == keyint` disables scene-cut keyframes.
-- **Rate control should be CBR-ish with a tight VBV** (`maxrate` = target,
-  `bufsize` ≈ 1× the bitrate; avoid 5 s+ buffers that defeat HLS smoothing).
-  Wiring already present: `-b:v`/`-maxrate:v` plus `-bufsize:v`, and the audio
-  equivalents, are emitted from the profile — the *values* are what this ADR
-  sets.
+- **Rate control should be CBR-ish with a bounded VBV** (`maxrate` = target,
+  `bufsize` from the profile; avoid very large buffers that defeat HLS
+  smoothing). Wiring already present: `-b:v`/`-maxrate:v` plus `-bufsize:v`, and
+  the audio equivalents, are emitted from the profile — the *values* are what
+  this ADR sets. The 2026-07-01 revision intentionally changes only video
+  bitrate targets; existing video buffer sizes stay unchanged.
 - **Multichannel AC-3 needs tight A/V interleaving** (`-max_delay`) or audio can
   pop/drift at segment boundaries. **Missing today** — a genuine code gap.
 - **`-muxrate` / `pkt_size`** belong to a constant UDP push to an external
@@ -71,23 +74,26 @@ and keep the AC-3 segmenter fix. All five share AC-3 6-channel audio.
 
 Common to every profile: **AC-3, 640 kbps, 640 kbit buffer (≈1 s), 6 channels,
 48 kHz**; deinterlace on (mixed library sources); framerate normalization off;
-B-frames off (simple, predictable segment alignment); VBV buffer ≈ 1× the video
-bitrate (the HLS-smooth sweet spot); software fallback preset `veryfast`.
+B-frames off (simple, predictable segment alignment); video buffer sizes remain
+at the original v2 values and are intentionally not halved with the video
+bitrate targets; software fallback preset `veryfast`.
 
 | # | Name | Resolution | Codec / profile | Bit depth | Dynamic range | Video bitrate | VBV buffer |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `1280x720 x264 ac3 6ch` | 1280×720 | H.264 High | 8-bit | SDR (BT.709) | 8 000 kbps | 8 000 kbit |
-| 2 | `1920x1080 x264 ac3 6ch` **(default)** | 1920×1080 | H.264 High | 8-bit | SDR (BT.709) | 16 000 kbps | 16 000 kbit |
-| 3 | `1920x1080 x265 10-bit hdr ac3 6ch` | 1920×1080 | HEVC Main 10 | 10-bit | HDR10 (BT.2020 / PQ) | 20 000 kbps | 20 000 kbit |
-| 4 | `3840x2160 x265 ac3 6ch` | 3840×2160 | HEVC Main | 8-bit | SDR (BT.709) | 45 000 kbps | 45 000 kbit |
-| 5 | `3840x2160 x265 10-bit hdr ac3 6ch` | 3840×2160 | HEVC Main 10 | 10-bit | HDR10 (BT.2020 / PQ) | 60 000 kbps | 60 000 kbit |
+| 1 | `1280x720 x264 ac3 6ch` | 1280×720 | H.264 High | 8-bit | SDR (BT.709) | 4 000 kbps | 8 000 kbit |
+| 2 | `1920x1080 x264 ac3 6ch` **(default)** | 1920×1080 | H.264 High | 8-bit | SDR (BT.709) | 8 000 kbps | 16 000 kbit |
+| 3 | `1920x1080 x265 10-bit hdr ac3 6ch` | 1920×1080 | HEVC Main 10 | 10-bit | HDR10 (BT.2020 / PQ) | 10 000 kbps | 20 000 kbit |
+| 4 | `3840x2160 x265 ac3 6ch` | 3840×2160 | HEVC Main | 8-bit | SDR (BT.709) | 22 500 kbps | 45 000 kbit |
+| 5 | `3840x2160 x265 10-bit hdr ac3 6ch` | 3840×2160 | HEVC Main 10 | 10-bit | HDR10 (BT.2020 / PQ) | 30 000 kbps | 60 000 kbit |
 
 - **Codec split:** H.264 for 720p/1080p SDR (broad client compatibility); HEVC
   for everything 10-bit/HDR and for 4K (H.264 at 4K is impractical). HDR
   profiles are HEVC **Main 10**, 10-bit, BT.2020 + SMPTE-2084 (PQ) and must
   preserve HDR rather than tonemap to SDR; SDR profiles normalize to BT.709.
-- **Bitrates are tuned for 25 fps** content and biased toward quality, not the
-  network — see Consequences for the headroom math.
+- **Bitrates are tuned for 25 fps** content and biased toward balanced quality
+  and smoother resource use. The 2026-07-01 revision halves the v2 video
+  bitrate targets while preserving the v2 video buffer sizes exactly — see
+  Consequences for the headroom math.
 - **The default-of-defaults** (the profile the single
   `ffmpeg.default_profile` config points at, used as the fallback when a channel
   has no explicit profile) is profile **#2** (`1920x1080 x264 ac3 6ch`). The
@@ -125,9 +131,9 @@ starting points an admin can edit or delete per channel.
 ## Consequences
 
 - **Network (1 Gbps unicast, `N = 2`):** per-stream payload ranges from
-  ≈8.3 Mbps (720p) to ≈61 Mbps (4K HDR) including TS overhead. The worst case,
-  two 4K HDR streams, is ≈130 Mbps — about **14 % of a 1 Gbps link**. Every
-  other combination is well under that. Network is not the constraint.
+  ≈4.3 Mbps (720p) to ≈31 Mbps (4K HDR) including TS overhead. The worst case,
+  two 4K HDR streams, is ≈66 Mbps — about **7 % of a 1 Gbps link**. Every other
+  combination is well under that. Network is not the constraint.
 - **Compute:** with hardware acceleration auto-enabled, even two 4K HDR streams
   are comfortable on a modern GPU. On a **software-only** host the 4K profiles
   are heavy; such hosts should prefer the ≤1080p profiles or accept high CPU,
@@ -139,13 +145,14 @@ starting points an admin can edit or delete per channel.
   encode paths for the detected accelerator. Where that is not yet wired, it is
   implementation work tracked under the linked debts — the ADR sets the target,
   not a claim that the pipeline already supports every cell.
-- **Correctness:** VBV ≈ 1× makes `-maxrate` effective instead of decorative;
-  `-max_delay` removes a real multichannel-AC-3 seam artifact.
-- **Implemented:** `ensure_default_ffmpeg_profile` seeds the five profiles and
-  points `ffmpeg.default_profile_id` at #2; web startup applies the detected
-  encoder choice to that fresh seed only; HLS output emits `-max_delay 500000`
-  for multichannel AC-3; focused DB and command-generation tests cover the
-  behavior.
+- **Correctness:** `-maxrate` remains effective while video buffer sizes keep
+  the known v2 values; `-max_delay` removes a real multichannel-AC-3 seam
+  artifact.
+- **Partial implementation:** `ensure_default_ffmpeg_profile` seeds the five
+  profiles and points `ffmpeg.default_profile_id` at #2; web startup applies the
+  detected encoder choice to that fresh seed only; HLS output emits
+  `-max_delay 500000` for multichannel AC-3. The seeded video bitrate values
+  still need the 2026-07-01 halving retune while preserving video buffer sizes.
 
 ## Alternatives Considered
 
@@ -166,7 +173,12 @@ starting points an admin can edit or delete per channel.
 
 ## Revision history
 
-- **2026-06-17 (v2 — this revision).** Replaced the single CPU-only
+- **2026-07-01 (v3 — pending implementation).** Halve every seeded default
+  profile video bitrate from the v2 targets while leaving `VideoBufferSize`
+  untouched: 8000→4000, 16000→8000, 20000→10000, 45000→22500, and 60000→30000.
+  The 1080p default therefore becomes 8000 kbit/s video with the existing
+  16000 kbit video buffer.
+- **2026-06-17 (v2).** Replaced the single CPU-only
   `1920×1080 x264 ac3 6ch` default (framed for a 100 Mbps LAN, smoothness on
   CPU) with **five** seeded profiles (720p / 1080p / 1080p HDR / 2160p /
   2160p HDR), all AC-3 6ch 640 kbps, with **bitrates optimised for 25 fps over
