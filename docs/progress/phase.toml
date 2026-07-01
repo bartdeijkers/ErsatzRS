@@ -111,20 +111,19 @@ preserving Docker `DATABASE_URL`, and completed the module-split survey's infra
 health registry pilot. As of 2026-07-01, the movie-detail ADR 0018 surfacing
 regression is closed again: `/media/movies/:id` renders extras as TV-style
 rows, supports movie-extra collection/playlist actions, and exposes
-alternate-edition plus commentary audio/subtitle playback options. Remaining
-reopened media-browser detail/list action parity and in-app Zero Duration
-health work stays visible: the artist detail page has a broken Add To
-Collection button and broken preview images; several media routes lack the
-`/media/movies` multi-select or three-dots action menus; songs/images place the
-toolbar at the top instead of the right side; and static images incorrectly
-produce Zero Duration health warnings. ADR 0019 is now proposed for an opt-in
+alternate-edition plus commentary audio/subtitle playback options. The
+2026-07-01 media-browser action/toolbar regression is also closed: songs and
+images use the shared right-side selection toolbar and item action menu, artist
+detail collection/artwork proof is restored, and show detail now uses the same
+SSR-loaded island shape as movie and season details. Remaining in-app Zero
+Duration health work stays visible because static images incorrectly produce
+Zero Duration health warnings. ADR 0019 is now proposed for an opt-in
 similar-video cooldown scheduling extension; it is tracked separately and is
 not implemented. `/channels/add` default group selection, ADR 0017 default
 FFmpeg profile video bitrate targets, and FFmpeg profile editor section spacing
 are also reopened. Remaining Phase 7 closeout work is broad verification,
-release-readiness proof, and those tracked
-media-browser/channel/FFmpeg-profile/health regressions plus the ADR 0017
-default-profile bitrate retune.
+release-readiness proof, and those tracked channel/FFmpeg-profile/health
+regressions plus the ADR 0017 default-profile bitrate retune.
 '''
 
 # Phase 0 checklist (all complete).

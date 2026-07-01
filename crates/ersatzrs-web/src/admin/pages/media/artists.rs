@@ -21,9 +21,9 @@ use crate::admin::i18n::{tr, TextKey};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::AddToCollectionModal;
 use crate::admin::pages::media::multi_select_browser::{BrowserKindConfig, MultiSelectBrowserPage};
-use crate::admin::server_fns::media_browser::{
-    get_artist_details, ArtistDetailRow, ArtistMusicVideoRow,
-};
+#[cfg(feature = "ssr")]
+use crate::admin::server_fns::media_browser::get_artist_details;
+use crate::admin::server_fns::media_browser::{ArtistDetailRow, ArtistMusicVideoRow};
 
 #[allow(dead_code)]
 mod detail_style {
@@ -45,33 +45,37 @@ pub fn ArtistPage() -> impl IntoView {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or_default()
     });
+    let artist = load_artist_detail_initial(id);
 
-    view! { <ArtistDetailIsland id/> }
+    match artist {
+        Some(artist) => view! { <ArtistDetailIsland artist/> }.into_any(),
+        None => view! {
+            <div class=detail_style::not_found>
+                <h1>{tr(TextKey::ArtistNotFound)}</h1>
+                <a href="/media/music/artists">{tr(TextKey::BackToArtists)}</a>
+            </div>
+        }
+        .into_any(),
+    }
 }
 
 #[island]
-fn ArtistDetailIsland(id: i64) -> impl IntoView {
-    let data: Resource<Option<ArtistDetailRow>> = Resource::new_blocking(
-        move || id,
-        |id| async move { get_artist_details(id).await.ok().flatten() },
-    );
+fn ArtistDetailIsland(artist: ArtistDetailRow) -> impl IntoView {
+    view! { <ArtistDetailView artist/> }
+}
 
-    view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                match data.get() {
-                    Some(Some(artist)) => view! { <ArtistDetailView artist/> }.into_any(),
-                    Some(None) => view! {
-                        <div class=detail_style::not_found>
-                            <h1>{tr(TextKey::ArtistNotFound)}</h1>
-                            <a href="/media/music/artists">{tr(TextKey::BackToArtists)}</a>
-                        </div>
-                    }
-                    .into_any(),
-                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
-                }
-            }}
-        </Suspense>
+fn load_artist_detail_initial(id: i64) -> Option<ArtistDetailRow> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { get_artist_details(id).await.ok().flatten() })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
     }
 }
 

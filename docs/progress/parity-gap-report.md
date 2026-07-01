@@ -45,23 +45,6 @@ Closeout requires browser proof that `/channels/add` pre-fills `Group` with
 `ErsatzRS`, save persistence keeps that value for a new channel, and existing
 channel edit behavior is unchanged.
 
-### Content variants, alternate versions, and stream roles
-
-- Slug: `content-variants`
-- Status: `In progress`
-- Open debt: `movie-detail-commentary-edition-cards`
-- Discovered: 2026-07-01
-
-The movie detail page does not provide playable cards/options for watching the
-movie with a specific commentary track or choosing alternate movie editions
-such as theatrical, remastered, director's cut, black-and-white, and related
-version subtypes.
-
-Closeout requires browser/runtime proof on `/media/movies/:id` that
-commentary-track viewing and alternate edition cards are visible, select the
-intended stream or alternate version, and stay compatible with ADR 0018 search
-and playback behavior.
-
 ### ErsatzRS healthcheck binary and health engine
 
 - Slug: `ersatzrs-healthcheck`
@@ -106,30 +89,6 @@ in the Video and Audio sections compared with the General section.
 Closeout requires desktop and mobile browser proof that `/ffmpeg/{id}` and
 `/ffmpeg/profiles/{id}` render General, Video, and Audio with consistent
 vertical rhythm without regressing hydrated save/edit behavior.
-
-### Media browsers (movies, shows, images, music, other videos, songs)
-
-- Slug: `media-browsers`
-- Status: `In progress`
-- Open debts:
-  - `artist-detail-add-to-collection-and-previews-regression`
-  - `media-detail-bulk-overflow-actions`
-  - `movie-detail-extra-collection-playlist-actions`
-  - `movie-detail-extras-row-layout-regression`
-  - `songs-images-toolbar-placement`
-- Discovered: 2026-07-01
-
-The artist detail page has a broken artist-level Add To Collection button and
-broken preview images. Movie extras render like poster cards instead of
-season/episode-style rows and cannot be added to collections or playlists like
-TV episode extras. Several media detail/list surfaces are missing the
-multi-select toolbar and/or per-item three-dots overflow menus that
-`/media/movies` provides. Songs and images show the toolbar at the top instead
-of the right-side movie/TV browser layout.
-
-Closeout requires browser/runtime proof for the affected movie, TV show, TV
-season, artist, songs, and images routes, plus focused coverage for the action,
-artwork, layout, and persistence paths that change.
 
 ### Similar video cooldown scheduling
 

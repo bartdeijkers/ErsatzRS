@@ -65,8 +65,8 @@ notes  = 'Closed 2026-07-01: focused Chromium `tests/e2e/content-variants.spec.t
 
 [[page]]
 name   = 'ArtistPage` (`/media/music/artists/:id`)'
-status = 'TODO'
-notes  = 'Reopened 2026-07-01: maintainer reported `/media/music/artists/{artist_id}` Add To Collection button and preview images broken; prior `/media/music/artists/2355` modal-open smoke is stale. Pending browser proof for hydrated artist Add To Collection action and rendered artist/music-video preview images.'
+status = '✅'
+notes  = 'Closed 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` seeds artist thumbnail/fanart and a music-video thumbnail, proves `/media/music/artists/:id` hydrates without console/page errors, renders the artist and music-video preview images, opens artist Add To Collection, redirects to the selected collection, and persists collection membership; `cargo xtask hydration-lint -p ersatzrs-web` reports no new findings.'
 
 [[page]]
 name   = 'ChannelsListPage'

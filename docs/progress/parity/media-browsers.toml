@@ -1,22 +1,22 @@
 feature    = 'Media browsers (movies, shows, images, music, other videos, songs)'
 etv_source = '`ErsatzTV/Pages/Movies.razor`, etc.'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/media/`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
 Ported list/detail coverage exists for `/media/movies`, `/media/tv/shows`, `/media/images`, `/media/music/artists`, `/media/music/songs`, `/media/other/videos`, and `/media/trash` through the shared media browser primitives, localized labels, SQL-backed card/detail loaders, media-info JSON, and scanner refresh behavior. TV show and season details include the ErsatzTV linked fact rows, season/episode action surfaces, schedule refresh side effects, special-feature rows, and playback troubleshooting links. Other-video detail mirrors ErsatzTV card metadata/artwork precedence plus Add To Collection, Show Media Info, Troubleshoot Playback, linked facts, actors, and media-info JSON.
 
 Closed 2026-07-01 for the movie-detail extras regression: `/media/movies/:id` now renders linked extras with the same episode-style row treatment as TV extras and exposes Add To Collection, Add To Playlist, Show Media Info, and Troubleshoot Playback actions. Movie detail also keeps its localized labels and shared modal/action plumbing.
 
-Reopened 2026-07-01: the artist detail route has a reported broken artist Add To Collection button and preview images, several media detail/list action surfaces are missing the multi-select toolbar and/or per-item overflow menu that `/media/movies` exposes, and `/media/music/songs` plus `/media/browser/images` place the action toolbar at the top instead of the right side used by the movie and TV show browsers.
+Closed 2026-07-01 for the remaining action/toolbar regression: `/media/music/songs` and `/media/browser/images` now reuse the shared multi-select browser shell, right-side toolbar placement, item overflow menu, media-info/troubleshooting links, and correct song/image playlist collection-type stamps. `/media/music/artists/:id` now resolves initial detail data before the island boundary, restoring the artist Add To Collection dialog/persistence path and rendered artist/music-video preview images. `/media/tv/shows/:id` also resolves detail data before its island boundary after focused browser proof exposed a Suspense hydration mismatch. Movie, show, season, and artist detail routes were rechecked against the ErsatzTV-valid header/row action model.
 '''
 
 [[debt]]
 id          = 'artist-detail-add-to-collection-and-previews-regression'
 description = 'On `/media/music/artists/{artist_id}`, the artist Add To Collection button is broken and preview images do not render, contradicting the claimed artist-detail action/artwork parity.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Reclose only with browser/runtime proof for the artist-level Add To Collection interaction and rendered artist/music-video preview images on `/media/music/artists/:id`.'
-resolved    = false
+evidence    = 'Resolved 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` seeds artist thumbnail/fanart and a music-video thumbnail, proves `/media/music/artists/:id` hydrates, renders all three images, opens artist Add To Collection, redirects to the selected collection, and persists the `CollectionItem`. Covered with `cargo xtask hydration-lint -p ersatzrs-web` and `ERSATZRS_SKIP_LEPTOS_BUILD=1 ERSATZRS_SKIP_PW_INSTALL=1 scripts/e2e/playwright-e2e.sh tests/e2e/media-browser-actions.spec.ts --project=chromium --workers=1` after a fresh matched Leptos build.'
+resolved    = true
 
 [[debt]]
 id          = 'movie-detail-extras-row-layout-regression'
@@ -36,12 +36,12 @@ resolved    = true
 id          = 'media-detail-bulk-overflow-actions'
 description = 'The media action surfaces on `/media/movies/{movie_id}`, `/media/tv/shows/{tvshow_id}`, `/media/tv/seasons/{season_id}`, `/media/music/artists/{artist_id}`, `/media/music/songs`, and `/media/browser/images` are missing the multi-select toolbar and/or per-item three-dots overflow menus that `/media/movies` provides.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Reclose only with browser proof that each listed route exposes the same relevant bulk-select and per-item overflow actions as the movie browser, with unavailable actions intentionally omitted or documented.'
-resolved    = false
+evidence    = 'Resolved 2026-07-01: `/media/music/songs` and `/media/browser/images` use the shared multi-select browser action shell with per-item Add To Collection, Show Media Info, Troubleshoot Playback, and bulk Add To Playlist proof in `tests/e2e/media-browser-actions.spec.ts`. Movie, show, season, and artist detail routes were rechecked in `tests/e2e/content-variants.spec.ts` with hydrated Add To Collection/Playlist/Schedule, media-info, troubleshooting, and special-feature row actions where valid; ErsatzTV detail baselines use header/row actions rather than a list-page bulk toolbar.'
+resolved    = true
 
 [[debt]]
 id          = 'songs-images-toolbar-placement'
 description = 'On `/media/music/songs` and `/media/browser/images`, the action toolbar is shown at the top instead of on the right side like the movie and TV show browser layouts.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Reclose only with desktop and mobile browser proof that the songs and images action toolbar placement matches the movie/TV browser layout or a documented ErsatzTV exception.'
-resolved    = false
+evidence    = 'Resolved 2026-07-01: `tests/e2e/media-browser-actions.spec.ts` verifies the songs and images Select All toolbar is right-aligned relative to the page heading/main content while the routes are hydrated and console-clean; the shared `MultiSelectBrowserPage` layout provides the same responsive toolbar behavior as the movie and TV show browser lists.'
+resolved    = true

@@ -8,11 +8,10 @@
 //!   seasons grid, the cast grid, and the "Add To" (Collection / Playlist /
 //!   Schedule) + "Scan" (Quick / Deep) actions.
 //!
-//! Hydration shape mirrors the proven movies/collection-detail pattern
-//! (`TEST.md`): the page wrapper is a plain `#[component]` that reads the
-//! `:id` route param and renders the interactive [`ShowDetailIsland`] with
-//! that scalar prop; the island owns a `Resource::new_blocking` and renders
-//! `<Suspense>` internally so no prop-bearing island crosses a Suspense.
+//! Hydration shape mirrors the proven movie/season detail pattern (`TEST.md`):
+//! the page wrapper is a plain `#[component]` that reads the `:id` route param
+//! and loads the initial row on the server, then renders the interactive
+//! [`ShowDetailIsland`] with the stable detail payload.
 //!
 //! Parity notes / deferred from the C# behaviour:
 //!
@@ -37,8 +36,10 @@ use crate::admin::pages::media::multi_select_browser::{
 };
 use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::libraries::scan_show;
+#[cfg(feature = "ssr")]
+use crate::admin::server_fns::media_browser::get_show_details;
 use crate::admin::server_fns::media_browser::{
-    get_media_item_info_json, get_show_details, MediaBrowserKind, ShowDetailRow,
+    get_media_item_info_json, MediaBrowserKind, ShowDetailRow,
 };
 use crate::admin::ui::primitives::card::{MediaCard, MediaItemState};
 use crate::admin::ui::primitives::toast::{use_toast, ToastSeverity};
@@ -75,33 +76,37 @@ pub fn ShowPage() -> impl IntoView {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or_default()
     });
+    let show = load_show_detail_initial(id);
 
-    view! { <ShowDetailIsland id/> }
+    match show {
+        Some(show) => view! { <ShowDetailIsland show/> }.into_any(),
+        None => view! {
+            <div class=detail_style::not_found>
+                <h1>{tr(TextKey::ShowNotFound)}</h1>
+                <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
+            </div>
+        }
+        .into_any(),
+    }
 }
 
 #[island]
-fn ShowDetailIsland(id: i64) -> impl IntoView {
-    let data: Resource<Option<ShowDetailRow>> = Resource::new_blocking(
-        move || id,
-        |id| async move { get_show_details(id).await.ok().flatten() },
-    );
+fn ShowDetailIsland(show: ShowDetailRow) -> impl IntoView {
+    view! { <ShowDetailView show/> }
+}
 
-    view! {
-        <Suspense fallback=move || view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }>
-            {move || {
-                match data.get() {
-                    Some(Some(show)) => view! { <ShowDetailView show/> }.into_any(),
-                    Some(None) => view! {
-                        <div class=detail_style::not_found>
-                            <h1>{tr(TextKey::ShowNotFound)}</h1>
-                            <a href="/media/tv/shows">{tr(TextKey::BackToTvShows)}</a>
-                        </div>
-                    }
-                    .into_any(),
-                    None => view! { <p class=detail_style::loading>{tr(TextKey::Loading)}</p> }.into_any(),
-                }
-            }}
-        </Suspense>
+fn load_show_detail_initial(id: i64) -> Option<ShowDetailRow> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { get_show_details(id).await.ok().flatten() })
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        None
     }
 }
 

@@ -32,10 +32,10 @@ use crate::admin::i18n::{
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist, create_collection,
-    get_media_item_info_json, list_artists, list_episodes, list_movies, list_music_videos,
-    list_other_videos, list_remote_streams, list_seasons, list_shows, media_page_map,
-    CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow, PlaylistGroupOption,
-    PlaylistOption,
+    get_media_item_info_json, list_artists, list_episodes, list_images, list_movies,
+    list_music_videos, list_other_videos, list_remote_streams, list_seasons, list_shows,
+    list_songs, media_page_map, CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow,
+    PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -78,6 +78,9 @@ pub struct BrowserKindConfig {
     /// Base URL for search/pager links and per-card detail navigation,
     /// without a trailing slash (e.g. "/media/movies").
     pub base_path: &'static str,
+    /// Base URL for per-card detail links. Empty when the upstream page has no
+    /// card detail route, e.g. song and image lists use `Href=""`.
+    pub card_base_path: &'static str,
     /// Whether per-card "Show Media Info" should be shown. Maps to
     /// `MediaCardViewModel.HasMediaInfo` on the C# side.
     pub has_media_info: bool,
@@ -91,6 +94,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Movie,
         title: TextKey::Movies,
         base_path: "/media/movies",
+        card_base_path: "/media/movies",
         has_media_info: true,
         placeholder_icon: "🎬",
     };
@@ -98,6 +102,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Show,
         title: TextKey::TvShows,
         base_path: "/media/tv/shows",
+        card_base_path: "/media/tv/shows",
         has_media_info: false,
         placeholder_icon: "📺",
     };
@@ -105,6 +110,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Artist,
         title: TextKey::Artists,
         base_path: "/media/music/artists",
+        card_base_path: "/media/music/artists",
         has_media_info: false,
         placeholder_icon: "🎤",
     };
@@ -112,6 +118,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::OtherVideo,
         title: TextKey::OtherVideos,
         base_path: "/media/other/videos",
+        card_base_path: "/media/other/videos",
         has_media_info: true,
         placeholder_icon: "🎞️",
     };
@@ -119,6 +126,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Season,
         title: TextKey::Seasons,
         base_path: "/media/tv/seasons",
+        card_base_path: "/media/tv/seasons",
         has_media_info: false,
         placeholder_icon: "📺",
     };
@@ -126,6 +134,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::Episode,
         title: TextKey::Episodes,
         base_path: "/media/tv/episodes",
+        card_base_path: "/media/tv/episodes",
         has_media_info: true,
         placeholder_icon: "📺",
     };
@@ -133,6 +142,7 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::MusicVideo,
         title: TextKey::MusicVideos,
         base_path: "/media/music/videos",
+        card_base_path: "/media/music/videos",
         has_media_info: true,
         placeholder_icon: "🎵",
     };
@@ -140,8 +150,25 @@ impl BrowserKindConfig {
         kind: MediaBrowserKind::RemoteStream,
         title: TextKey::RemoteStreams,
         base_path: "/media/remote/streams",
+        card_base_path: "/media/remote/streams",
         has_media_info: false,
         placeholder_icon: "📡",
+    };
+    pub const SONGS: Self = Self {
+        kind: MediaBrowserKind::Song,
+        title: TextKey::Songs,
+        base_path: "/media/music/songs",
+        card_base_path: "",
+        has_media_info: true,
+        placeholder_icon: "♪",
+    };
+    pub const IMAGES: Self = Self {
+        kind: MediaBrowserKind::Image,
+        title: TextKey::Images,
+        base_path: "/media/browser/images",
+        card_base_path: "",
+        has_media_info: true,
+        placeholder_icon: "▣",
     };
 
     fn kind_code(self) -> i32 {
@@ -154,6 +181,8 @@ impl BrowserKindConfig {
             MediaBrowserKind::Episode => 5,
             MediaBrowserKind::MusicVideo => 6,
             MediaBrowserKind::RemoteStream => 7,
+            MediaBrowserKind::Song => 8,
+            MediaBrowserKind::Image => 9,
         }
     }
 
@@ -166,6 +195,8 @@ impl BrowserKindConfig {
             5 => Self::EPISODES,
             6 => Self::MUSIC_VIDEOS,
             7 => Self::REMOTE_STREAMS,
+            8 => Self::SONGS,
+            9 => Self::IMAGES,
             _ => Self::MOVIES,
         }
     }
@@ -360,6 +391,8 @@ async fn load_browser_rows(
         MediaBrowserKind::Episode => list_episodes(query, page, PAGE_SIZE, true).await,
         MediaBrowserKind::MusicVideo => list_music_videos(query, page, PAGE_SIZE, true).await,
         MediaBrowserKind::RemoteStream => list_remote_streams(query, page, PAGE_SIZE).await,
+        MediaBrowserKind::Song => list_songs(query, page, PAGE_SIZE, true).await,
+        MediaBrowserKind::Image => list_images(query, page, PAGE_SIZE, true).await,
     }
     .unwrap_or_default()
 }
@@ -588,7 +621,11 @@ fn SelectableCard(
     let subtitle_text = subtitle.unwrap_or_default();
     let has_subtitle = !subtitle_text.is_empty();
     let artwork = row.artwork_path.clone();
-    let href = format!("{}/{}", config.base_path, item_id);
+    let href = if config.card_base_path.is_empty() {
+        None
+    } else {
+        Some(format!("{}/{}", config.card_base_path, item_id))
+    };
     let placeholder = config.placeholder_icon;
 
     let is_selected = Signal::derive(move || selected.with(|s| s.contains(&item_id)));
@@ -628,32 +665,38 @@ fn SelectableCard(
                 />
             </label>
 
-            <a href=href>
-                <div class=card_style::card>
-                    <div class=card_style::poster>
-                        {match artwork {
-                            Some(url) => view! {
-                                <img src=url loading="lazy" class=card_style::poster_img alt=title_for_link/>
-                            }.into_any(),
-                            None => view! {
-                                <div class=card_style::poster_placeholder>{placeholder}</div>
-                            }.into_any(),
-                        }}
-                        {variant_badge.map(|label| view! {
-                            <span class=style::variant_badge>{label}</span>
-                        })}
+            {
+                let card_body = view! {
+                    <div class=card_style::card>
+                        <div class=card_style::poster>
+                            {match artwork {
+                                Some(url) => view! {
+                                    <img src=url loading="lazy" class=card_style::poster_img alt=title_for_link/>
+                                }.into_any(),
+                                None => view! {
+                                    <div class=card_style::poster_placeholder>{placeholder}</div>
+                                }.into_any(),
+                            }}
+                            {variant_badge.map(|label| view! {
+                                <span class=style::variant_badge>{label}</span>
+                            })}
+                        </div>
+                        <div class=card_style::caption>
+                            <p class=card_style::caption_title>{title}</p>
+                            <p
+                                class=card_style::caption_sub
+                                style:display=move || if has_subtitle { "" } else { "none" }
+                            >
+                                {subtitle_text}
+                            </p>
+                        </div>
                     </div>
-                    <div class=card_style::caption>
-                        <p class=card_style::caption_title>{title}</p>
-                        <p
-                            class=card_style::caption_sub
-                            style:display=move || if has_subtitle { "" } else { "none" }
-                        >
-                            {subtitle_text}
-                        </p>
-                    </div>
-                </div>
-            </a>
+                };
+                match href {
+                    Some(href) => view! { <a href=href>{card_body}</a> }.into_any(),
+                    None => view! { <div>{card_body}</div> }.into_any(),
+                }
+            }
             <ItemMenu
                 item_id=item_id
                 title_for_collection=title_for_collection

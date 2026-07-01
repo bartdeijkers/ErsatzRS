@@ -252,6 +252,54 @@ function screenshotPath(testInfo: TestInfo, name: string): string {
   return `test-results/${name}-${testInfo.project.name}.png`;
 }
 
+function isBenignAbortError(text: string): boolean {
+  return text.includes('AbortError') && text.toLowerCase().includes('operation was aborted');
+}
+
+function watchRuntimeErrors(page: Page): string[] {
+  const runtimeErrors: string[] = [];
+  page.on('pageerror', (error) => {
+    const text = error.stack ?? error.message;
+    if (!isBenignAbortError(text)) {
+      runtimeErrors.push(text);
+    }
+  });
+  page.on('console', (message) => {
+    if (message.type() !== 'error') {
+      return;
+    }
+    const text = message.text();
+    if (
+      text.includes('failed_to_cast_marker_node') ||
+      text.includes('rust_panic') ||
+      text.includes('unreachable executed') ||
+      text.toLowerCase().includes('hydration')
+    ) {
+      runtimeErrors.push(text);
+    }
+  });
+  return runtimeErrors;
+}
+
+async function waitForHydration(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
+async function gotoHydrated(page: Page, route: string): Promise<void> {
+  const response = await page.goto(route);
+  expect(response?.status(), `GET ${route}`).toBe(200);
+  await expect(page.locator('[data-not-found]')).toHaveCount(0);
+  await waitForHydration(page);
+}
+
 test.describe('content variants UI surfacing', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed content variants');
 
@@ -260,11 +308,12 @@ test.describe('content variants UI surfacing', () => {
     baseURL,
     page,
   }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedContentVariants(testInfo);
     await forceEnglish(page);
 
     await page.setViewportSize({ width: 2048, height: 1024 });
-    await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette');
+    await gotoHydrated(page, '/media/other/videos?query=E2E%20Variant%20Featurette');
     await expect(page.getByRole('heading', { name: 'Other Videos' })).toBeVisible();
     await expect(page.getByLabel('Show special features / versions')).toHaveCount(0);
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
@@ -274,7 +323,14 @@ test.describe('content variants UI surfacing', () => {
       fullPage: true,
     });
 
-    await page.goto(`/media/movies/${seed.movieId}`);
+    await gotoHydrated(page, `/media/movies/${seed.movieId}`);
+    await expect(page.getByRole('button', { name: 'Add To Collection' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Playlist' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show Media Info' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Troubleshoot Playback' }).first()).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.movieId}`,
+    );
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
     const movieSpecialRow = page.locator('[data-media-special-row]', {
       hasText: 'E2E Variant Featurette',
@@ -283,6 +339,11 @@ test.describe('content variants UI surfacing', () => {
     await expect(movieSpecialRow.getByText('Extra: Featurette')).toBeVisible();
     await expect(movieSpecialRow.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
     await expect(movieSpecialRow.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
+    await expect(movieSpecialRow.getByRole('button', { name: 'Show Media Info' })).toBeVisible();
+    await expect(movieSpecialRow.getByRole('link', { name: 'Troubleshoot Playback' })).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.movieExtraId}`,
+    );
     await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
     const movieVersionCard = page.locator('[data-movie-version-card]', {
       hasText: "E2E Variant Movie Director's Cut",
@@ -317,38 +378,61 @@ test.describe('content variants UI surfacing', () => {
       String(seed.movieCommentarySubtitleId),
     );
 
-    await page.goto(`/media/tv/shows/${seed.showId}`);
+    await gotoHydrated(page, `/media/tv/shows/${seed.showId}`);
+    await expect(page.getByRole('button', { name: 'Add To Collection' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Playlist' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Schedule' }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
     const showSpecialRow = page.locator('[data-media-special-row]', {
       hasText: 'E2E Variant Show Extra',
     });
     await expect(showSpecialRow).toBeVisible();
     await expect(showSpecialRow.getByText('Extra: Trailer')).toBeVisible();
+    await expect(showSpecialRow.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
+    await expect(showSpecialRow.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
+    await expect(showSpecialRow.getByRole('button', { name: 'Show Media Info' })).toBeVisible();
+    await expect(showSpecialRow.getByRole('link', { name: 'Troubleshoot Playback' })).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.showExtraId}`,
+    );
 
-    await page.goto(`/media/tv/seasons/${seed.seasonId}`);
+    await gotoHydrated(page, `/media/tv/seasons/${seed.seasonId}`);
+    await expect(page.getByRole('button', { name: 'Add To Collection' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Playlist' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Schedule' }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Extras / Special Features' })).toBeVisible();
     const seasonSpecialRow = page.locator('[data-media-special-row]', {
       hasText: 'E2E Variant Season Extra',
     });
     await expect(seasonSpecialRow).toBeVisible();
     await expect(seasonSpecialRow.getByText('Extra: Behind the Scenes')).toBeVisible();
+    await expect(seasonSpecialRow.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
+    await expect(seasonSpecialRow.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
+    await expect(seasonSpecialRow.getByRole('button', { name: 'Show Media Info' })).toBeVisible();
+    await expect(seasonSpecialRow.getByRole('link', { name: 'Troubleshoot Playback' })).toHaveAttribute(
+      'href',
+      `/system/troubleshooting/playback?mediaItem=${seed.seasonExtraId}`,
+    );
 
-    await page.goto(`/media/music/artists/${seed.artistId}`);
+    await gotoHydrated(page, `/media/music/artists/${seed.artistId}`);
+    await expect(page.getByRole('button', { name: 'Add To Collection' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add To Schedule' }).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Versions' })).toBeVisible();
     await expect(page.getByText('E2E Variant Song Unplugged').first()).toBeVisible();
 
-    await page.goto(`/search?query=${encodeURIComponent('content_kind:extra AND sub_kind:featurette')}`);
+    await gotoHydrated(page, `/search?query=${encodeURIComponent('content_kind:extra AND sub_kind:featurette')}`);
     await expect(page.getByText('Variant tokens: content_kind:extra')).toBeVisible();
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/media/other/videos?query=E2E%20Variant%20Featurette');
+    await gotoHydrated(page, '/media/other/videos?query=E2E%20Variant%20Featurette');
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await page.screenshot({
       path: screenshotPath(testInfo, 'content-variants-browse-mobile'),
       fullPage: true,
     });
+    expect(runtimeErrors).toEqual([]);
 
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
     const noJsPage = await context.newPage();

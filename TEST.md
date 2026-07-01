@@ -318,13 +318,15 @@ sync with [STATUS.md](STATUS.md)'s Admin UI Hydration Parity table.
 | `/system/health`         | ✅     | Live/persisted health rows match scripted Support parity criteria.       |
 | `/system/logs`           | ✅     | Newest OS-local app-data log file renders in ErsatzTV-style table surface. |
 | `/system/troubleshooting`| ✅     | ErsatzTV-style tools/report tabs match scripted Support parity criteria. |
-| `/media/tv/shows/:id`   | TODO   | Detail page renders metadata facts including Languages; Plex Scan buttons call targeted `scan_show`, Jellyfin/Emby/Local fall back to library scan; needs manual Add-To/Scan hydration smoke. |
-| `/media/tv/seasons/:id` | TODO   | Detail page renders fanart/poster header plus vertical episode cards; needs manual Add-To, Show Media Info, and Troubleshoot Playback hydration smoke. |
+| `/media/tv/shows/:id`   | ✅     | Detail page renders metadata facts and hydrated Add To Collection/Playlist/Schedule plus special-feature row actions without console/page errors; covered by `tests/e2e/content-variants.spec.ts`. Plex Scan buttons call targeted `scan_show`, Jellyfin/Emby/Local fall back to library scan. |
+| `/media/tv/seasons/:id` | ✅     | Detail page renders fanart/poster header and hydrated Add To Collection/Playlist/Schedule plus special-feature row media-info/troubleshooting actions without console/page errors; covered by `tests/e2e/content-variants.spec.ts`. |
 | `/media/movies`          | ✅     | Seeded URL-driven query plus item overflow menu, Add To Collection dialog, Show Media Info, and Troubleshoot Playback covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
+| `/media/music/songs`     | ✅     | Shared media-browser shell with right-aligned Select All toolbar, item overflow menu, Add To Collection dialog persistence, Show Media Info, Troubleshoot Playback, and bulk Add To Playlist collection-type stamping covered by `tests/e2e/media-browser-actions.spec.ts`. |
+| `/media/browser/images`  | ✅     | Shared media-browser shell with right-aligned Select All toolbar, item overflow menu, Show Media Info, Troubleshoot Playback, and bulk Add To Playlist image collection-type stamping covered by `tests/e2e/media-browser-actions.spec.ts`. |
 | `/media/trash`           | ✅     | Seeded Delete Selected dialog cancel, Empty Trash confirmation, and delete persistence covered by `tests/e2e/hydration-pending-routes.spec.ts`. |
 | `/media/movies/:id`      | ✅     | Movie extras row treatment, Add To Collection/Playlist extra actions, alternate-edition cards, commentary audio/subtitle cards, and troubleshooting form selection preservation covered by `tests/e2e/content-variants.spec.ts`. |
 | `/media/remote/streams`  | ✅     | Dedicated `RemoteStreamList.razor` parity route; card geometry, Add To Collection persistence, no-JS SSR HTML, and mobile menu covered by `tests/e2e/remote-streams.spec.ts`. |
-| `/media/music/artists/:id` | TODO | Reopened 2026-07-01: artist Add To Collection and preview images reported broken; needs browser proof for the hydrated action and rendered artist/music-video preview images. |
+| `/media/music/artists/:id` | ✅   | Artist detail resolves initial data before the island boundary; artist thumbnail/fanart, music-video thumbnail rendering, hydrated artist Add To Collection persistence/redirect, and no console/page errors are covered by `tests/e2e/media-browser-actions.spec.ts`. |
 | `/system/troubleshooting/playback` | TODO | Media-item entry route accepts `?mediaItem=ID` and loads backend media-info context. |
 
 ## Fixture strategy

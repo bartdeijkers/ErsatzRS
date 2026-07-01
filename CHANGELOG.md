@@ -43,6 +43,10 @@ release section when tagging a release.
 - Movie detail pages now render linked extras as TV-style action rows, allow
   those extras to be added to collections and playlists, and expose alternate
   movie editions plus commentary audio/subtitle playback options.
+- Songs and images now use the shared media-browser action shell with the
+  right-side selection toolbar, item actions, media-info/troubleshooting links,
+  and correct playlist item types; artist and show detail pages now hydrate
+  reliably with restored artist collection and preview-artwork behavior.
 
 ## [1.0.15-beta.4] - 2026-07-01
 

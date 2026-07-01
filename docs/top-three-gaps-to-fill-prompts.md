@@ -19,11 +19,11 @@ extension. Closed 2026-07-01: the movie-detail gap spanning `media-browsers`
 and `content-variants` now renders `/media/movies/{movie_id}` extras as
 episode-style rows, restores movie-extra collection/playlist actions, and
 surfaces playable alternate-edition plus commentary audio/subtitle options.
-`media-browsers` still tracks missing multi-select / three-dots action menus on
-movie, TV show, season, artist, song, and image routes, top-positioned
-songs/images toolbars that should match the right-side browser layout, and the
-artist-detail Add To Collection / preview-image regression.
-`ersatzrs-healthcheck` tracks Zero Duration warnings for static images, which
+Closed 2026-07-01: the remaining `media-browsers` action/toolbar gap now gives
+songs/images the shared right-side selection toolbar and item action menu,
+restores artist-detail Add To Collection plus preview artwork, and fixes the
+show-detail hydration shape found by focused browser proof. The next active
+prompt is `ersatzrs-healthcheck`: Zero Duration warnings for static images
 should be ignored unless the image is an animated/timed format that needs
 duration metadata. Additional tracked follow-ups cover `/channels/add`
 defaulting to `ErsatzTV` instead of `ErsatzRS`, ADR 0017 default FFmpeg profile
@@ -103,6 +103,15 @@ root cause, verification run, changed files, and any remaining parity debt.
 ---
 
 ## 2. Fix media-browser action, toolbar, and artist-detail regressions (slug `media-browsers`)
+
+Status: closed 2026-07-01 by `fix(web): restore media browser actions and artist detail parity`.
+Evidence: focused Rust test for song/image playlist type projection,
+`cargo xtask hydration-lint -p ersatzrs-web`, focused Chromium
+`tests/e2e/media-browser-actions.spec.ts` proof for songs/images toolbar,
+item actions, Add To Collection/Playlist persistence, and artist artwork/action
+parity, plus focused Chromium `tests/e2e/content-variants.spec.ts` proof for
+hydrated movie/show/season/artist detail action surfaces and no console/page
+errors.
 
 Use the repo workflow from AGENTS.md. This is a parity regression fix for the
 remaining media-browser action and layout debts, tracked as

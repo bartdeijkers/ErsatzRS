@@ -2517,7 +2517,7 @@ pub async fn list_images(
             artwork_path: r
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -2594,7 +2594,7 @@ pub async fn list_artists(
             artwork_path: r
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -3305,7 +3305,7 @@ pub async fn list_music_videos(
             artwork_path: r
                 .try_get::<Option<String>, _>("Thumb")
                 .unwrap_or(None)
-                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Poster)),
+                .and_then(|p| artwork_url(&p, ArtworkUrlKind::Thumbnail)),
             season_number: None,
             variant: content_variant_from_row(r),
         })
@@ -6839,6 +6839,8 @@ pub enum MediaBrowserKind {
     Episode,
     MusicVideo,
     RemoteStream,
+    Song,
+    Image,
 }
 
 #[cfg(feature = "ssr")]
@@ -6855,6 +6857,8 @@ impl MediaBrowserKind {
             Self::Episode => ("Episode", "EpisodeMetadata", "EpisodeId"),
             Self::MusicVideo => ("MusicVideo", "MusicVideoMetadata", "MusicVideoId"),
             Self::RemoteStream => ("RemoteStream", "RemoteStreamMetadata", "RemoteStreamId"),
+            Self::Song => ("Song", "SongMetadata", "SongId"),
+            Self::Image => ("Image", "ImageMetadata", "ImageId"),
         }
     }
 
@@ -6870,6 +6874,8 @@ impl MediaBrowserKind {
             Self::Episode => 20,
             Self::MusicVideo => 30,
             Self::RemoteStream => 70,
+            Self::Song => 50,
+            Self::Image => 60,
         }
     }
 }
@@ -8675,6 +8681,12 @@ mod tests {
                 (70, 1001), // RemoteStream
             ]
         );
+    }
+
+    #[test]
+    fn media_browser_kind_stamps_song_and_image_playlist_types() {
+        assert_eq!(MediaBrowserKind::Song.collection_type(), 50);
+        assert_eq!(MediaBrowserKind::Image.collection_type(), 60);
     }
 
     #[test]
