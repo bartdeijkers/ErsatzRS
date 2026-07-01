@@ -22,15 +22,14 @@ surfaces playable alternate-edition plus commentary audio/subtitle options.
 Closed 2026-07-01: the remaining `media-browsers` action/toolbar gap now gives
 songs/images the shared right-side selection toolbar and item action menu,
 restores artist-detail Add To Collection plus preview artwork, and fixes the
-show-detail hydration shape found by focused browser proof. The next active
-prompt is `ersatzrs-healthcheck`: Zero Duration warnings for static images
-should be ignored unless the image is an animated/timed format that needs
-duration metadata. Additional tracked follow-ups cover `/channels/add`
+show-detail hydration shape found by focused browser proof. Closed 2026-07-01:
+the `ersatzrs-healthcheck` Zero Duration check now ignores ordinary static
+image media versions while preserving warnings for animated-capable image paths
+and duration-bearing media. The next tracked follow-ups cover `/channels/add`
 defaulting to `ErsatzTV` instead of `ErsatzRS`, ADR 0017 default FFmpeg profile
-video bitrate halving with buffer sizes untouched, and inconsistent Video/Audio
-section spacing on `/ffmpeg/{ffmpeg_profile_id}`. The new
-`similar-video-cooldown` scheduling feature remains below these immediate
-regressions in the prompt order.
+video bitrate halving with buffer sizes untouched, inconsistent Video/Audio
+section spacing on `/ffmpeg/{ffmpeg_profile_id}`, and the proposed
+`similar-video-cooldown` scheduling feature.
 
 ---
 
@@ -177,6 +176,11 @@ root cause, verification run, changed files, and any remaining parity debt.
 ---
 
 ## 3. Fix static-image Zero Duration health warnings (slug `ersatzrs-healthcheck`)
+
+Status: closed 2026-07-01 by `fix(health): ignore static images in zero-duration health checks`.
+Evidence: focused `ersatzrs-infra` health tests prove a zero-duration `.jpg`
+image passes, a zero-duration movie plus `.gif` animated-image candidate still
+warn, and remote-stream placeholders remain ignored.
 
 Use the repo workflow from AGENTS.md. This is a health parity regression fix
 for `zero-duration-healthcheck-static-images` in

@@ -45,22 +45,6 @@ Closeout requires browser proof that `/channels/add` pre-fills `Group` with
 `ErsatzRS`, save persistence keeps that value for a new channel, and existing
 channel edit behavior is unchanged.
 
-### ErsatzRS healthcheck binary and health engine
-
-- Slug: `ersatzrs-healthcheck`
-- Status: `In progress`
-- Open debt: `zero-duration-healthcheck-static-images`
-- Discovered: 2026-07-01
-
-The in-app Zero Duration health check warns for static images even though zero
-duration is expected for still image media. Ordinary image rows should be
-ignored; animated/timed images remain candidates for missing-duration warnings
-when they should carry duration metadata.
-
-Closeout requires health-check proof that static image rows pass without
-warnings while duration-bearing media, including animated image formats where
-applicable, still report missing duration when appropriate.
-
 ### FFmpeg command generation
 
 - Slug: `ffmpeg-command-generation`

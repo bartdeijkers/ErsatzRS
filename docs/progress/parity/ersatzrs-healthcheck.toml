@@ -1,7 +1,7 @@
 feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = []
 summary    = '''
 Ported: ErsatzRS now includes a dedicated `ersatzrs-healthcheck` binary that
@@ -15,15 +15,15 @@ configuration. The Docker runtime image copies the binary and uses it for
 readiness probing. Release archives build and stage the binary beside
 `ersatzrs-web` and `ersatzrs-scanner` for Linux and Windows.
 
-Reopened 2026-07-01: the in-app Zero Duration health check warns for image
-media versions whose duration is `00:00:00`. Static images are expected to have
-no playback duration; only animated/timed image formats should be treated as
-duration-bearing media for this warning.
+Closed 2026-07-01: the in-app Zero Duration health check ignores static image
+media versions with conventional still-image file extensions while preserving
+warnings for zero-duration videos, audio-backed media, and animated-capable
+image paths that still need duration metadata.
 '''
 
 [[debt]]
 id          = 'zero-duration-healthcheck-static-images'
 description = 'The in-app Zero Duration health check warns for static images even though zero duration is expected for still image media; it should ignore ordinary image rows and only treat animated/timed images as candidates for missing-duration warnings.'
 discovered  = '2026-07-01'
-evidence    = 'Maintainer report on 2026-07-01. Current check in `crates/ersatzrs-infra/src/health/checks/zero_duration.rs` filters remote streams but not image media versions. Reclose only with health-check proof that static image rows pass without warnings while timed video/audio media, and animated image formats that should carry duration, still report missing duration when appropriate.'
-resolved    = false
+evidence    = 'Resolved 2026-07-01: `ZeroDurationHealthCheck` now fetches `MediaVersion.ImageId` and ignores zero-duration image rows only when the `MediaFile.Path` has a conventional still-image extension (`jpg`, `jpeg`, `png`, `bmp`, `tif`, `tiff`, `heic`, `heif`, `ico`). Animated-capable image paths such as `gif`, `webp`, `apng`, and `avif`, unknown image paths, remote-stream placeholders, and duration-bearing video/audio media keep their prior behavior. Covered by focused `cargo test -p ersatzrs-infra zero_duration_check_ignores_static_image_versions`, `cargo test -p ersatzrs-infra zero_duration_check_warns_for_video_and_animated_image_candidates`, and `cargo test -p ersatzrs-infra zero_duration_check_ignores_remote_stream_placeholders`.'
+resolved    = true

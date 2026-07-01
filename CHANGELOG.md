@@ -47,6 +47,9 @@ release section when tagging a release.
   right-side selection toolbar, item actions, media-info/troubleshooting links,
   and correct playlist item types; artist and show detail pages now hydrate
   reliably with restored artist collection and preview-artwork behavior.
+- The Zero Duration health check now ignores ordinary static image media while
+  continuing to warn for zero-duration video/audio media and animated-capable
+  image paths that still need duration metadata.
 
 ## [1.0.15-beta.4] - 2026-07-01
 

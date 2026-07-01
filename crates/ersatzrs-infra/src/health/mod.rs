@@ -758,6 +758,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn zero_duration_check_ignores_static_image_versions() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_image_with_zero_duration(&pool, 23, "/media/stills/title-card.jpg").await;
+
+        let check = ZeroDurationHealthCheck::new(pool);
+        let result = check.check().await.expect("zero duration check");
+
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn zero_duration_check_warns_for_video_and_animated_image_candidates() {
+        let pool = test_pool().await;
+        seed_library_path(&pool).await;
+        seed_movie_with_zero_duration_and_missing_metadata(&pool).await;
+        seed_image_with_zero_duration(&pool, 23, "/media/animated/countdown.gif").await;
+
+        let check = ZeroDurationHealthCheck::new(pool);
+        let result = check.check().await.expect("zero duration check");
+
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(result.brief_message, "There are 2 files with zero duration");
+        assert!(result.message.contains("/media/missing/movie.mkv"));
+        assert!(result.message.contains("/media/animated/countdown.gif"));
+    }
+
+    #[tokio::test]
     async fn vaapi_device_check_fails_when_device_is_missing() {
         let pool = test_pool().await;
         seed_library_path(&pool).await;
@@ -941,6 +969,45 @@ mod tests {
         )
         .await
         .expect("seed remote stream media file");
+    }
+
+    async fn seed_image_with_zero_duration(pool: &Pool<Db>, id: i64, path: &str) {
+        sqlx::query(
+            r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, 10, 0)"#,
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("seed image media item");
+        sqlx::query(r#"INSERT INTO "Image" ("Id") VALUES (?)"#)
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("seed image");
+        sqlx::query(
+            r#"INSERT INTO "MediaVersion" (
+                "Id", "DateAdded", "DateUpdated", "Duration", "Height", "ImageId",
+                "VideoScanKind", "Width"
+               ) VALUES (
+                ?, '2026-04-26T00:00:00Z', '2026-04-26T00:00:00Z',
+                '00:00:00', 1080, ?, 1, 1920
+               )"#,
+        )
+        .bind(id)
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("seed image media version");
+        sqlx::query(
+            r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(id)
+        .bind(path)
+        .bind(format!("hash{id}"))
+        .execute(pool)
+        .await
+        .expect("seed image media file");
     }
 
     async fn seed_empty_schedule(pool: &Pool<Db>) {

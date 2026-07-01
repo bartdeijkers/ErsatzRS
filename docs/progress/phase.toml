@@ -115,15 +115,16 @@ alternate-edition plus commentary audio/subtitle playback options. The
 2026-07-01 media-browser action/toolbar regression is also closed: songs and
 images use the shared right-side selection toolbar and item action menu, artist
 detail collection/artwork proof is restored, and show detail now uses the same
-SSR-loaded island shape as movie and season details. Remaining in-app Zero
-Duration health work stays visible because static images incorrectly produce
-Zero Duration health warnings. ADR 0019 is now proposed for an opt-in
+SSR-loaded island shape as movie and season details. The in-app Zero Duration
+health warning for static images is closed as well; ordinary still-image media
+versions no longer warn while animated-capable image paths and duration-bearing
+media remain warning candidates. ADR 0019 is now proposed for an opt-in
 similar-video cooldown scheduling extension; it is tracked separately and is
 not implemented. `/channels/add` default group selection, ADR 0017 default
 FFmpeg profile video bitrate targets, and FFmpeg profile editor section spacing
 are also reopened. Remaining Phase 7 closeout work is broad verification,
-release-readiness proof, and those tracked channel/FFmpeg-profile/health
-regressions plus the ADR 0017 default-profile bitrate retune.
+release-readiness proof, and those tracked channel/FFmpeg-profile regressions
+plus the ADR 0017 default-profile bitrate retune.
 '''
 
 # Phase 0 checklist (all complete).
