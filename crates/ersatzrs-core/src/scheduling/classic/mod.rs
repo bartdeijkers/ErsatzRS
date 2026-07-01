@@ -770,13 +770,21 @@ impl ClassicContext {
             schedule_item.graphics_element_ids.clone(),
             scheduling_context,
         );
-        item.preferred_audio_language_code
-            .clone_from(&schedule_item.preferred_audio_language_code);
-        item.preferred_audio_title
-            .clone_from(&schedule_item.preferred_audio_title);
-        item.preferred_subtitle_language_code
-            .clone_from(&schedule_item.preferred_subtitle_language_code);
-        item.subtitle_mode = schedule_item.subtitle_mode;
+        if schedule_item.preferred_audio_language_code.is_some() {
+            item.preferred_audio_language_code
+                .clone_from(&schedule_item.preferred_audio_language_code);
+        }
+        if schedule_item.preferred_audio_title.is_some() {
+            item.preferred_audio_title
+                .clone_from(&schedule_item.preferred_audio_title);
+        }
+        if schedule_item.preferred_subtitle_language_code.is_some() {
+            item.preferred_subtitle_language_code
+                .clone_from(&schedule_item.preferred_subtitle_language_code);
+        }
+        if schedule_item.subtitle_mode.is_some() {
+            item.subtitle_mode = schedule_item.subtitle_mode;
+        }
         item
     }
 

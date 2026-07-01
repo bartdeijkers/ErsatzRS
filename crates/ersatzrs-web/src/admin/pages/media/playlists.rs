@@ -498,6 +498,7 @@ fn PlaylistEditorIsland(
                                                     <th>{tr(TextKey::ItemType)}</th>
                                                     <th>{tr(TextKey::Item)}</th>
                                                     <th>{tr(TextKey::PlaybackOrder)}</th>
+                                                    <th>{tr(TextKey::Playback)}</th>
                                                     <th>{tr(TextKey::Count)}</th>
                                                     <th>{tr(TextKey::PlayAll)}</th>
                                                     <th>{tr(TextKey::ShowInEpg)}</th>
@@ -514,6 +515,7 @@ fn PlaylistEditorIsland(
                                                     let include_in_program_guide = item.include_in_program_guide;
                                                     let collection_type = item.collection_type;
                                                     let playback_order = item.playback_order;
+                                                    let playback_override = playlist_item_playback_summary(&item);
                                                     view! {
                                                         <tr
                                                             class=if selected_row { style::selected_row } else { "" }
@@ -526,6 +528,7 @@ fn PlaylistEditorIsland(
                                                             <td>{item_type_label_i18n(collection_type)}</td>
                                                             <td>{item_name}</td>
                                                             <td>{playback_order_label_i18n(playback_order)}</td>
+                                                            <td>{playback_override.unwrap_or_default()}</td>
                                                             <td>{count_label}</td>
                                                             <td>
                                                                 {if readonly {
@@ -1012,6 +1015,26 @@ fn playlist_item_hidden_fields(items: Vec<PlaylistItemForm>) -> impl IntoView {
                     name="item_count"
                     value=item.count.map_or_else(String::new, |count| count.to_string())
                 />
+                <input
+                    type="hidden"
+                    name="item_preferred_audio_language_code"
+                    value=item.preferred_audio_language_code.unwrap_or_default()
+                />
+                <input
+                    type="hidden"
+                    name="item_preferred_audio_title"
+                    value=item.preferred_audio_title.unwrap_or_default()
+                />
+                <input
+                    type="hidden"
+                    name="item_preferred_subtitle_language_code"
+                    value=item.preferred_subtitle_language_code.unwrap_or_default()
+                />
+                <input
+                    type="hidden"
+                    name="item_subtitle_mode"
+                    value=item.subtitle_mode.map_or_else(String::new, |mode| mode.to_string())
+                />
             }
         })
         .collect_view()
@@ -1044,6 +1067,47 @@ fn playback_order_label_i18n(playback_order: i32) -> &'static str {
         PLAYBACK_ORDER_SHUFFLE_IN_ORDER => tr(TextKey::ShuffleInOrder),
         PLAYBACK_ORDER_SEASON_EPISODE => tr(TextKey::SeasonEpisode),
         _ => "",
+    }
+}
+
+fn playlist_item_playback_summary(item: &PlaylistItemForm) -> Option<String> {
+    let mut parts = Vec::new();
+    let audio = item
+        .preferred_audio_title
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            item.preferred_audio_language_code
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+        });
+    if let Some(audio) = audio {
+        parts.push(format!("{}: {audio}", tr(TextKey::Audio)));
+    }
+
+    let subtitle = item
+        .preferred_subtitle_language_code
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    if let Some(subtitle) = subtitle {
+        if let Some(mode) = item.subtitle_mode.and_then(subtitle_mode_label) {
+            parts.push(format!("{}: {subtitle} ({mode})", tr(TextKey::Subtitle)));
+        } else {
+            parts.push(format!("{}: {subtitle}", tr(TextKey::Subtitle)));
+        }
+    } else if let Some(mode) = item.subtitle_mode.and_then(subtitle_mode_label) {
+        parts.push(format!("{}: {mode}", tr(TextKey::SubtitleMode)));
+    }
+
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+fn subtitle_mode_label(mode: i32) -> Option<&'static str> {
+    match mode {
+        1 => Some(tr(TextKey::Forced)),
+        2 => Some(tr(TextKey::DefaultOption)),
+        3 => Some(tr(TextKey::Any)),
+        _ => None,
     }
 }
 

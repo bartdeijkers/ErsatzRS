@@ -20,10 +20,10 @@ use ersatzrs_core::search::{
     SearchProviderGuid,
 };
 use ersatzrs_domain::{
-    normalize_sub_kind_token, CollectionEnumeratorState, CollectionType, DecoMode, EntityId,
-    PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    ProgramScheduleAlternate, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    normalize_sub_kind_token, ChannelSubtitleMode, CollectionEnumeratorState, CollectionType,
+    DecoMode, EntityId, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate, ProgramScheduleItem,
+    CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
 
@@ -682,17 +682,17 @@ impl SqliteSchedulingContentRepository {
         &self,
         collection_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let ids = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "MediaItemId"
+        let rows = sqlx::query(
+            r#"SELECT *
              FROM "CollectionItem"
              WHERE "CollectionId" = ?
-             ORDER BY "MediaItemId""#,
+             ORDER BY COALESCE("CustomIndex", "MediaItemId"), "MediaItemId""#,
         )
         .bind(collection_id)
         .fetch_all(&self.0)
         .await?;
 
-        self.expand_media_ids(ids, 0).await
+        self.expand_collection_item_rows(rows, 0).await
     }
 
     async fn multi_collection_items_by_name(&self, name: &str) -> Result<Vec<SchedulingMediaItem>> {
@@ -846,7 +846,9 @@ impl SqliteSchedulingContentRepository {
 
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
-            let media_items = Box::pin(self.items_for_collection_key_row(&row, 0)).await?;
+            let playback = playback_override_from_row(&row)?;
+            let mut media_items = Box::pin(self.items_for_collection_key_row(&row, 0)).await?;
+            apply_playback_override(&mut media_items, &playback);
             result.push(SchedulingPlaylistItem {
                 collection_key: collection_key_from_row(&row)?,
                 playback_order: decode_enum_column(
@@ -918,9 +920,9 @@ impl SqliteSchedulingContentRepository {
         .await
     }
 
-    async fn expand_media_ids(
+    async fn expand_collection_item_rows(
         &self,
-        ids: Vec<EntityId>,
+        rows: Vec<DbRow>,
         depth: usize,
     ) -> Result<Vec<SchedulingMediaItem>> {
         if depth > 16 {
@@ -929,8 +931,10 @@ impl SqliteSchedulingContentRepository {
 
         let mut result = Vec::new();
         let mut seen = BTreeSet::new();
-        for id in ids {
-            let items = if self.is_show(id).await? {
+        for row in rows {
+            let id: EntityId = row.try_get("MediaItemId")?;
+            let playback = playback_override_from_row(&row)?;
+            let mut items = if self.is_show(id).await? {
                 self.items_for_show_id(id).await?
             } else if self.is_season(id).await? {
                 self.items_for_season_id(id).await?
@@ -939,6 +943,7 @@ impl SqliteSchedulingContentRepository {
             } else {
                 self.media_item_by_id(id).await?
             };
+            apply_playback_override(&mut items, &playback);
             append_unique(&mut result, &mut seen, items);
         }
         Ok(result)
@@ -2907,6 +2912,10 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
             .filter(|value| !value.trim().is_empty())
             .map(|value| parse_datetime("media item release_date", &value))
             .transpose()?,
+        preferred_audio_language_code: None,
+        preferred_audio_title: None,
+        preferred_subtitle_language_code: None,
+        subtitle_mode: None,
     })
 }
 
@@ -3134,6 +3143,71 @@ fn append_unique(
         if seen.insert(item.id) {
             target.push(item);
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct PlaybackOverride {
+    preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
+    preferred_subtitle_language_code: Option<String>,
+    subtitle_mode: Option<ChannelSubtitleMode>,
+}
+
+fn playback_override_from_row(row: &DbRow) -> Result<PlaybackOverride> {
+    Ok(PlaybackOverride {
+        preferred_audio_language_code: optional_string_column(row, "PreferredAudioLanguageCode")?,
+        preferred_audio_title: optional_string_column(row, "PreferredAudioTitle")?,
+        preferred_subtitle_language_code: optional_string_column(
+            row,
+            "PreferredSubtitleLanguageCode",
+        )?,
+        subtitle_mode: optional_subtitle_mode_column(row, "SubtitleMode")?,
+    })
+}
+
+fn optional_string_column(row: &DbRow, column: &'static str) -> Result<Option<String>> {
+    match row.try_get::<Option<String>, _>(column) {
+        Ok(value) => Ok(value.filter(|value| !value.trim().is_empty())),
+        Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn optional_subtitle_mode_column(
+    row: &DbRow,
+    column: &'static str,
+) -> Result<Option<ChannelSubtitleMode>> {
+    match row.try_get::<Option<i32>, _>(column) {
+        Ok(Some(0) | None) | Err(sqlx::Error::ColumnNotFound(_)) => Ok(None),
+        Ok(Some(1)) => Ok(Some(ChannelSubtitleMode::Forced)),
+        Ok(Some(2)) => Ok(Some(ChannelSubtitleMode::Default)),
+        Ok(Some(3)) => Ok(Some(ChannelSubtitleMode::Any)),
+        Ok(Some(value)) => Err(decode_message(
+            "playback override subtitle_mode",
+            &format!("unknown enum value {value}"),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn apply_playback_override(items: &mut [SchedulingMediaItem], playback: &PlaybackOverride) {
+    if playback.preferred_audio_language_code.is_none()
+        && playback.preferred_audio_title.is_none()
+        && playback.preferred_subtitle_language_code.is_none()
+        && playback.subtitle_mode.is_none()
+    {
+        return;
+    }
+
+    for item in items {
+        item.preferred_audio_language_code
+            .clone_from(&playback.preferred_audio_language_code);
+        item.preferred_audio_title
+            .clone_from(&playback.preferred_audio_title);
+        item.preferred_subtitle_language_code
+            .clone_from(&playback.preferred_subtitle_language_code);
+        item.subtitle_mode = playback.subtitle_mode;
     }
 }
 

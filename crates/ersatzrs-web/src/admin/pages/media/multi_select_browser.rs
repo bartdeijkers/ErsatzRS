@@ -31,11 +31,11 @@ use crate::admin::i18n::{
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
 use crate::admin::server_fns::media_browser::{
-    add_media_items_to_collection, add_media_items_to_playlist, create_collection,
-    get_media_item_info_json, list_artists, list_episodes, list_images, list_movies,
-    list_music_videos, list_other_videos, list_remote_streams, list_seasons, list_shows,
-    list_songs, media_page_map, CollectionOption, LetterPageMap, MediaBrowserKind, MediaCardRow,
-    PlaylistGroupOption, PlaylistOption,
+    add_media_items_to_collection_with_playback, add_media_items_to_playlist_with_playback,
+    create_collection, get_media_item_info_json, list_artists, list_episodes, list_images,
+    list_movies, list_music_videos, list_other_videos, list_remote_streams, list_seasons,
+    list_shows, list_songs, media_page_map, CollectionOption, LetterPageMap, MediaBrowserKind,
+    MediaCardRow, PlaybackOverrideForm, PlaylistGroupOption, PlaylistOption,
 };
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::media_browser::{
@@ -824,6 +824,7 @@ const NEW_COLLECTION_ID: i64 = -1;
 pub(crate) fn AddToCollectionModal(
     open: RwSignal<bool>,
     selected: RwSignal<HashSet<i64>>,
+    #[prop(optional)] playback: Option<RwSignal<Option<PlaybackOverrideForm>>>,
     #[prop(optional)] redirect_after_add: bool,
 ) -> impl IntoView {
     let refresh: RwSignal<u32> = RwSignal::new(0);
@@ -858,6 +859,7 @@ pub(crate) fn AddToCollectionModal(
         let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());
         let chosen_id = collection_id.get_untracked();
         let new_collection_name = new_name.get_untracked();
+        let playback = playback.and_then(|signal| signal.get_untracked());
         async move {
             let target_id = if chosen_id == NEW_COLLECTION_ID {
                 let name = new_collection_name.trim();
@@ -868,7 +870,9 @@ pub(crate) fn AddToCollectionModal(
             } else {
                 chosen_id
             };
-            let added = add_media_items_to_collection(target_id, ids.clone()).await?;
+            let added =
+                add_media_items_to_collection_with_playback(target_id, ids.clone(), playback)
+                    .await?;
             Ok::<(usize, u64, i64), ServerFnError>((ids.len(), added, target_id))
         }
     });
@@ -980,6 +984,7 @@ pub(crate) fn AddToPlaylistModal(
     open: RwSignal<bool>,
     selected: RwSignal<HashSet<i64>>,
     kind: MediaBrowserKind,
+    #[prop(optional)] playback: Option<RwSignal<Option<PlaybackOverrideForm>>>,
 ) -> impl IntoView {
     let group_id: RwSignal<i64> = RwSignal::new(0);
     let playlist_id: RwSignal<i64> = RwSignal::new(0);
@@ -1022,11 +1027,13 @@ pub(crate) fn AddToPlaylistModal(
     let submit_action = Action::new(move |(): &()| {
         let ids: Vec<i64> = selected.with_untracked(|s| s.iter().copied().collect());
         let pid = playlist_id.get_untracked();
+        let playback = playback.and_then(|signal| signal.get_untracked());
         async move {
             if pid == 0 {
                 return Err(ServerFnError::new(tr(TextKey::PleaseChoosePlaylist)));
             }
-            let added = add_media_items_to_playlist(kind, pid, ids.clone()).await?;
+            let added =
+                add_media_items_to_playlist_with_playback(kind, pid, ids.clone(), playback).await?;
             Ok::<(usize, u64), ServerFnError>((ids.len(), added))
         }
     });

@@ -354,12 +354,14 @@ test.describe('content variants UI surfacing', () => {
       'href',
       `/media/movies/${seed.movieVersionId}`,
     );
-    await expect(page.getByRole('heading', { name: 'Commentary Tracks' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Playback' })).toBeVisible();
     const commentaryCard = page.locator('[data-commentary-track-card]', {
       hasText: 'Director Commentary',
     });
     await expect(commentaryCard).toBeVisible();
     await expect(commentaryCard.getByText('Subtitle: Director Commentary Subtitles')).toBeVisible();
+    await expect(commentaryCard.getByRole('button', { name: 'Add To Collection' })).toBeVisible();
+    await expect(commentaryCard.getByRole('button', { name: 'Add To Playlist' })).toBeVisible();
     await expect(commentaryCard.getByRole('link', { name: 'Play' })).toHaveAttribute(
       'href',
       new RegExp(`/system/troubleshooting/playback\\?mediaItem=${seed.movieId}&preferredAudioTitle=Director%20Commentary&subtitleId=${seed.movieCommentarySubtitleId}`),

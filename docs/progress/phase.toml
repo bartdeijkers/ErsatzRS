@@ -111,7 +111,10 @@ preserving Docker `DATABASE_URL`, and completed the module-split survey's infra
 health registry pilot. As of 2026-07-01, the movie-detail ADR 0018 surfacing
 regression is closed again: `/media/movies/:id` renders extras as TV-style
 rows, supports movie-extra collection/playlist actions, and exposes
-alternate-edition plus commentary audio/subtitle playback options. The
+alternate-edition plus commentary audio/subtitle playback options. ADR 0048 now
+adds persisted collection/playlist item playback overrides for those audio and
+subtitle choices, with collection/playlist inspection summaries and scheduling
+propagation into generated playout items. The
 2026-07-01 media-browser action/toolbar regression is also closed: songs and
 images use the shared right-side selection toolbar and item action menu, artist
 detail collection/artwork proof is restored, and show detail now uses the same

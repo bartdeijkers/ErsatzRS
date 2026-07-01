@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Added
 
+- Collection and playlist items can now persist item-level audio/subtitle
+  playback overrides, so admins can add a movie with a commentary or alternate
+  audio track and see the saved override on collection/playlist inspection.
 - ADR 0019 proposes an opt-in similar-video cooldown policy for schedule
   shuffling, covering artist/show/franchise-like grouping and custom filters.
 - ADR 0020 proposes rebuilding impacted playouts when channels, schedules, or

@@ -20,8 +20,8 @@ use crate::admin::pages::media::multi_select_browser::{
 };
 use crate::admin::pages::media::tv_specials::TvSpecialFeatureRow;
 use crate::admin::server_fns::media_browser::{
-    get_media_item_info_json, CommentarySubtitleRow, CommentaryTrackRow, MediaBrowserKind,
-    MediaCardRow, MovieDetailRow,
+    get_media_item_info_json, AudioTrackRow, CommentarySubtitleRow, MediaBrowserKind, MediaCardRow,
+    MovieDetailRow, PlaybackOverrideForm,
 };
 use crate::admin::ui::primitives::card::{first_letter_placeholder, MediaCard, MediaItemState};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
@@ -112,12 +112,14 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
         actors,
         extras,
         alternate_versions,
-        commentary_tracks,
+        audio_tracks,
         commentary_subtitles,
     } = movie;
 
     let movie_collection_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
     let movie_playlist_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::from([id]));
+    let movie_collection_playback: RwSignal<Option<PlaybackOverrideForm>> = RwSignal::new(None);
+    let movie_playlist_playback: RwSignal<Option<PlaybackOverrideForm>> = RwSignal::new(None);
     let extra_selected: RwSignal<HashSet<i64>> = RwSignal::new(HashSet::new());
 
     let movie_collection_open = RwSignal::new(false);
@@ -229,12 +231,22 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
     } else {
         ""
     };
-    let commentary_style = if commentary_tracks.is_empty() && commentary_subtitles.is_empty() {
+    let playback_style = if audio_tracks.is_empty() && commentary_subtitles.is_empty() {
         "display:none"
     } else {
         ""
     };
     let troubleshoot_href = playback_troubleshooting_href(id, None, None);
+    let add_playback_to_collection = Callback::new(move |playback: PlaybackOverrideForm| {
+        movie_collection_selected.set(HashSet::from([id]));
+        movie_collection_playback.set(Some(playback));
+        movie_collection_open.set(true);
+    });
+    let add_playback_to_playlist = Callback::new(move |playback: PlaybackOverrideForm| {
+        movie_playlist_selected.set(HashSet::from([id]));
+        movie_playlist_playback.set(Some(playback));
+        movie_playlist_open.set(true);
+    });
 
     view! {
         <div class=detail_style::page>
@@ -276,6 +288,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                         class=detail_style::btn_add
                         on:click=move |_| {
                             movie_collection_selected.set(HashSet::from([id]));
+                            movie_collection_playback.set(None);
                             movie_collection_open.set(true);
                         }
                     >
@@ -286,6 +299,7 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                         class=detail_style::btn_add
                         on:click=move |_| {
                             movie_playlist_selected.set(HashSet::from([id]));
+                            movie_playlist_playback.set(None);
                             movie_playlist_open.set(true);
                         }
                     >
@@ -319,6 +333,37 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     {linked_fact_row(tr(TextKey::Genres), "genre", &genres, true)}
                     {linked_fact_row(tr(TextKey::Tags), "tag", &tags, true)}
                 </dl>
+
+                <section class=detail_style::actors_section style=playback_style>
+                    <h2 class=detail_style::section_title>{tr(TextKey::Playback)}</h2>
+                    <div class=detail_style::commentary_grid>
+                        {audio_tracks.into_iter().map(|track| {
+                            let subtitle = best_commentary_subtitle_for_track(
+                                &track,
+                                &commentary_subtitles,
+                            );
+                            view! {
+                                <AudioTrackCard
+                                    movie_id=id
+                                    track=track
+                                    subtitle=subtitle
+                                    on_add_collection=add_playback_to_collection
+                                    on_add_playlist=add_playback_to_playlist
+                                />
+                            }
+                        }).collect_view()}
+                        {commentary_subtitles.iter().cloned().map(|subtitle| {
+                            view! {
+                                <CommentarySubtitleCard
+                                    movie_id=id
+                                    subtitle=subtitle
+                                    on_add_collection=add_playback_to_collection
+                                    on_add_playlist=add_playback_to_playlist
+                                />
+                            }
+                        }).collect_view()}
+                    </div>
+                </section>
 
                 <section class=detail_style::actors_section style=extras_style>
                     <h2 class=detail_style::section_title>
@@ -354,22 +399,6 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
                     </div>
                 </section>
 
-                <section class=detail_style::actors_section style=commentary_style>
-                    <h2 class=detail_style::section_title>{tr(TextKey::CommentaryTracks)}</h2>
-                    <div class=detail_style::commentary_grid>
-                        {commentary_tracks.into_iter().map(|track| {
-                            let subtitle = best_commentary_subtitle_for_track(
-                                &track,
-                                &commentary_subtitles,
-                            );
-                            view! { <CommentaryTrackCard movie_id=id track=track subtitle=subtitle/> }
-                        }).collect_view()}
-                        {commentary_subtitles.iter().cloned().map(|subtitle| {
-                            view! { <CommentarySubtitleCard movie_id=id subtitle=subtitle/> }
-                        }).collect_view()}
-                    </div>
-                </section>
-
                 <section class=detail_style::actors_section style=actors_style>
                     <h2 class=detail_style::section_title>{tr(TextKey::Actors)}</h2>
                     <div class=detail_style::actor_grid>
@@ -393,12 +422,14 @@ fn MovieDetailView(movie: MovieDetailRow) -> impl IntoView {
             <AddToCollectionModal
                 open=movie_collection_open
                 selected=movie_collection_selected
+                playback=movie_collection_playback
                 redirect_after_add=true
             />
             <AddToPlaylistModal
                 open=movie_playlist_open
                 selected=movie_playlist_selected
                 kind=MediaBrowserKind::Movie
+                playback=movie_playlist_playback
             />
             <AddToCollectionModal open=extra_collection_open selected=extra_selected/>
             <AddToPlaylistModal
@@ -467,13 +498,26 @@ fn MovieVersionCard(version: MediaCardRow) -> impl IntoView {
 }
 
 #[component]
-fn CommentaryTrackCard(
+fn AudioTrackCard(
     movie_id: i64,
-    track: CommentaryTrackRow,
+    track: AudioTrackRow,
     subtitle: Option<CommentarySubtitleRow>,
+    on_add_collection: Callback<PlaybackOverrideForm>,
+    on_add_playlist: Callback<PlaybackOverrideForm>,
 ) -> impl IntoView {
-    let title = track.title;
+    let override_form = playback_override_for_track(&track, subtitle.as_ref());
+    let collection_override = override_form.clone();
+    let playlist_override = override_form;
+    let title = track.title.clone();
     let language = track.language.filter(|value| !value.trim().is_empty());
+    let codec = track.codec.filter(|value| !value.trim().is_empty());
+    let channels = track.channels;
+    let default_style = if track.is_default { "" } else { "display:none" };
+    let commentary_style = if track.is_commentary {
+        ""
+    } else {
+        "display:none"
+    };
     let subtitle_id = subtitle.as_ref().map(|subtitle| subtitle.id);
     let subtitle_label = subtitle
         .as_ref()
@@ -486,28 +530,64 @@ fn CommentaryTrackCard(
         <article
             class=detail_style::commentary_card
             aria-label=card_label
+            data-audio-track-card="true"
             data-commentary-track-card="true"
         >
             <div>
-                <h3 class=detail_style::variant_title>{title.clone()}</h3>
-                {language.map(|value| view! {
-                    <p class=detail_style::variant_meta>{value}</p>
-                })}
+                <div class=detail_style::variant_heading>
+                    <h3 class=detail_style::variant_title>{title.clone()}</h3>
+                    <span class=detail_style::variant_badge style=default_style>
+                        {tr(TextKey::DefaultOption)}
+                    </span>
+                    <span class=detail_style::variant_badge style=commentary_style>
+                        {tr(TextKey::CommentaryTracks)}
+                    </span>
+                </div>
+                <p class=detail_style::variant_meta>
+                    {audio_track_meta(language, codec, channels)}
+                </p>
                 {subtitle_label.map(|value| view! {
                     <p class=detail_style::variant_meta>
                         {format!("{}: {value}", tr(TextKey::Subtitle))}
                     </p>
                 })}
             </div>
-            <a class=detail_style::btn_secondary href=preview_href>
-                {tr(TextKey::Play)}
-            </a>
+            <div class=detail_style::variant_actions>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_collection.run(collection_override.clone())
+                >
+                    <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToCollection)}</span>
+                </button>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_playlist.run(playlist_override.clone())
+                >
+                    <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToPlaylist)}</span>
+                </button>
+                <a class=detail_style::btn_secondary href=preview_href>
+                    <span style=icon_style(IconName::Play, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::Play)}</span>
+                </a>
+            </div>
         </article>
     }
 }
 
 #[component]
-fn CommentarySubtitleCard(movie_id: i64, subtitle: CommentarySubtitleRow) -> impl IntoView {
+fn CommentarySubtitleCard(
+    movie_id: i64,
+    subtitle: CommentarySubtitleRow,
+    on_add_collection: Callback<PlaybackOverrideForm>,
+    on_add_playlist: Callback<PlaybackOverrideForm>,
+) -> impl IntoView {
+    let override_form = playback_override_for_subtitle(&subtitle);
+    let collection_override = override_form.clone();
+    let playlist_override = override_form;
     let title = commentary_subtitle_label(&subtitle);
     let href = playback_troubleshooting_href(movie_id, None, Some(subtitle.id));
     let card_label = title.clone();
@@ -522,9 +602,28 @@ fn CommentarySubtitleCard(movie_id: i64, subtitle: CommentarySubtitleRow) -> imp
                 <h3 class=detail_style::variant_title>{title}</h3>
                 <p class=detail_style::variant_meta>{tr(TextKey::Subtitle)}</p>
             </div>
-            <a class=detail_style::btn_secondary href=href>
-                {tr(TextKey::Play)}
-            </a>
+            <div class=detail_style::variant_actions>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_collection.run(collection_override.clone())
+                >
+                    <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToCollection)}</span>
+                </button>
+                <button
+                    type="button"
+                    class=detail_style::btn_add
+                    on:click=move |_| on_add_playlist.run(playlist_override.clone())
+                >
+                    <span style=icon_style(IconName::Add, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::AddToPlaylist)}</span>
+                </button>
+                <a class=detail_style::btn_secondary href=href>
+                    <span style=icon_style(IconName::Play, "0.95rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::Play)}</span>
+                </a>
+            </div>
         </article>
     }
 }
@@ -549,21 +648,78 @@ fn playback_troubleshooting_href(
     href
 }
 
+fn playback_override_for_track(
+    track: &AudioTrackRow,
+    subtitle: Option<&CommentarySubtitleRow>,
+) -> PlaybackOverrideForm {
+    let mut playback = PlaybackOverrideForm {
+        preferred_audio_language_code: clean_optional_text(track.language.clone()),
+        preferred_audio_title: preferred_audio_title_for_override(&track.title),
+        preferred_subtitle_language_code: None,
+        subtitle_mode: None,
+    };
+    if let Some(subtitle) = subtitle {
+        playback.preferred_subtitle_language_code = clean_optional_text(subtitle.language.clone());
+        playback.subtitle_mode = Some(3);
+    }
+    playback
+}
+
+fn playback_override_for_subtitle(subtitle: &CommentarySubtitleRow) -> PlaybackOverrideForm {
+    PlaybackOverrideForm {
+        preferred_audio_language_code: None,
+        preferred_audio_title: None,
+        preferred_subtitle_language_code: clean_optional_text(subtitle.language.clone()),
+        subtitle_mode: Some(3),
+    }
+}
+
+fn preferred_audio_title_for_override(title: &str) -> Option<String> {
+    clean_optional_text(Some(title.to_owned())).filter(|value| value != "Default Audio")
+}
+
+fn clean_optional_text(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn audio_track_meta(language: Option<String>, codec: Option<String>, channels: i64) -> String {
+    let mut parts = Vec::new();
+    if let Some(language) = language {
+        parts.push(language);
+    }
+    if let Some(codec) = codec {
+        parts.push(codec);
+    }
+    if channels > 0 {
+        parts.push(format!("{channels}ch"));
+    }
+    parts.join(" · ")
+}
+
 fn best_commentary_subtitle_for_track(
-    track: &CommentaryTrackRow,
+    track: &AudioTrackRow,
     subtitles: &[CommentarySubtitleRow],
 ) -> Option<CommentarySubtitleRow> {
-    subtitles
+    let exact_title_match = subtitles
         .iter()
-        .find(|subtitle| subtitle.title.eq_ignore_ascii_case(&track.title))
-        .or_else(|| {
-            track.language.as_deref().and_then(|language| {
-                subtitles.iter().find(|subtitle| {
-                    subtitle
-                        .language
-                        .as_deref()
-                        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(language))
-                })
+        .find(|subtitle| subtitle.title.eq_ignore_ascii_case(&track.title));
+    if exact_title_match.is_some() {
+        return exact_title_match.cloned();
+    }
+    if !track.is_commentary {
+        return None;
+    }
+    track
+        .language
+        .as_deref()
+        .and_then(|language| {
+            subtitles.iter().find(|subtitle| {
+                subtitle
+                    .language
+                    .as_deref()
+                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case(language))
             })
         })
         .or_else(|| subtitles.first())

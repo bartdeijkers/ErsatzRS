@@ -415,8 +415,8 @@
 }
 
 .commentary-card {
-    grid-template-columns: 1fr auto;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
 }
 
 .variant-thumb-wrap {

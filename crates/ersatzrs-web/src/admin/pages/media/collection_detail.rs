@@ -548,6 +548,7 @@ fn SelectableCollectionCard(
     let subtitle = card.subtitle.clone();
     let artwork = card.artwork_path.clone();
     let href = card.href.clone();
+    let playback_summary = collection_item_playback_summary(&card);
 
     let is_selected = Signal::derive(move || selected.with(|s| s.contains(&item_id)));
 
@@ -605,6 +606,9 @@ fn SelectableCollectionCard(
                 <p class=card_style::caption_title>{title}</p>
                 {subtitle.map(|s| view! {
                     <p class=card_style::caption_sub>{s}</p>
+                })}
+                {playback_summary.map(|s| view! {
+                    <p class=card_style::caption_sub data-playback-override="true">{s}</p>
                 })}
             </div>
         </div>
@@ -704,5 +708,46 @@ fn SelectableCollectionCard(
                 None => card_inner.into_any(),
             }}
         </div>
+    }
+}
+
+fn collection_item_playback_summary(card: &CollectionItemCard) -> Option<String> {
+    let mut parts = Vec::new();
+    let audio = card
+        .preferred_audio_title
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            card.preferred_audio_language_code
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+        });
+    if let Some(audio) = audio {
+        parts.push(format!("{}: {audio}", tr(TextKey::Audio)));
+    }
+
+    let subtitle = card
+        .preferred_subtitle_language_code
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    if let Some(subtitle) = subtitle {
+        if let Some(mode) = card.subtitle_mode.and_then(subtitle_mode_label) {
+            parts.push(format!("{}: {subtitle} ({mode})", tr(TextKey::Subtitle)));
+        } else {
+            parts.push(format!("{}: {subtitle}", tr(TextKey::Subtitle)));
+        }
+    } else if let Some(mode) = card.subtitle_mode.and_then(subtitle_mode_label) {
+        parts.push(format!("{}: {mode}", tr(TextKey::SubtitleMode)));
+    }
+
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+fn subtitle_mode_label(mode: i32) -> Option<&'static str> {
+    match mode {
+        1 => Some(tr(TextKey::Forced)),
+        2 => Some(tr(TextKey::DefaultOption)),
+        3 => Some(tr(TextKey::Any)),
+        _ => None,
     }
 }

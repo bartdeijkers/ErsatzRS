@@ -58,6 +58,10 @@ pub struct SchedulingMediaItem {
     pub season: Option<i32>,
     pub episode: Option<i32>,
     pub release_date: Option<DateTime<Utc>>,
+    pub preferred_audio_language_code: Option<String>,
+    pub preferred_audio_title: Option<String>,
+    pub preferred_subtitle_language_code: Option<String>,
+    pub subtitle_mode: Option<ersatzrs_domain::ChannelSubtitleMode>,
 }
 
 impl SchedulingMediaItem {
@@ -73,6 +77,10 @@ impl SchedulingMediaItem {
             season: None,
             episode: None,
             release_date: None,
+            preferred_audio_language_code: None,
+            preferred_audio_title: None,
+            preferred_subtitle_language_code: None,
+            subtitle_mode: None,
         }
     }
 }
@@ -808,6 +816,10 @@ fn playout_item(
         custom_title,
         disable_watermarks,
         watermark_ids,
+        preferred_audio_language_code: media_item.preferred_audio_language_code.clone(),
+        preferred_audio_title: media_item.preferred_audio_title.clone(),
+        preferred_subtitle_language_code: media_item.preferred_subtitle_language_code.clone(),
+        subtitle_mode: media_item.subtitle_mode,
         graphics_element_ids,
         graphics_elements,
         scheduling_context,

@@ -629,16 +629,54 @@ fn csharp_playback_order_value(playback_order: PlaybackOrder) -> i32 {
 fn collection_etag_for_items(items: &[SchedulingMediaItem]) -> String {
     let mut value: u64 = 14_695_981_039_346_656_037;
     for item in items {
-        for byte in item.id.to_le_bytes() {
-            value ^= u64::from(byte);
-            value = value.wrapping_mul(1_099_511_628_211);
-        }
-        for byte in item.duration.num_milliseconds().to_le_bytes() {
-            value ^= u64::from(byte);
-            value = value.wrapping_mul(1_099_511_628_211);
+        hash_bytes(&mut value, &item.id.to_le_bytes());
+        hash_bytes(&mut value, &item.duration.num_milliseconds().to_le_bytes());
+        if item.preferred_audio_language_code.is_some()
+            || item.preferred_audio_title.is_some()
+            || item.preferred_subtitle_language_code.is_some()
+            || item.subtitle_mode.is_some()
+        {
+            hash_bytes(&mut value, &[1]);
+            hash_optional_string(&mut value, item.preferred_audio_language_code.as_deref());
+            hash_optional_string(&mut value, item.preferred_audio_title.as_deref());
+            hash_optional_string(&mut value, item.preferred_subtitle_language_code.as_deref());
+            hash_bytes(
+                &mut value,
+                &item
+                    .subtitle_mode
+                    .map(csharp_subtitle_mode_value)
+                    .unwrap_or_default()
+                    .to_le_bytes(),
+            );
         }
     }
     format!("{value:016x}")
+}
+
+fn hash_optional_string(value: &mut u64, item: Option<&str>) {
+    match item {
+        Some(item) => {
+            hash_bytes(value, &[1]);
+            hash_bytes(value, item.as_bytes());
+        }
+        None => hash_bytes(value, &[0]),
+    }
+}
+
+fn hash_bytes(value: &mut u64, bytes: &[u8]) {
+    for byte in bytes {
+        *value ^= u64::from(*byte);
+        *value = value.wrapping_mul(1_099_511_628_211);
+    }
+}
+
+fn csharp_subtitle_mode_value(mode: ersatzrs_domain::ChannelSubtitleMode) -> i32 {
+    match mode {
+        ersatzrs_domain::ChannelSubtitleMode::None => 0,
+        ersatzrs_domain::ChannelSubtitleMode::Forced => 1,
+        ersatzrs_domain::ChannelSubtitleMode::Default => 2,
+        ersatzrs_domain::ChannelSubtitleMode::Any => 3,
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1146,6 +1184,23 @@ mod tests {
     use crate::scheduling::{
         PlayoutBuildMode, SchedulingMediaItem, SchedulingReferenceData, SchedulingRequest,
     };
+
+    #[test]
+    fn collection_etag_changes_only_when_playback_override_is_present() {
+        let base_item = SchedulingMediaItem::new(1, Duration::minutes(10));
+        let base_etag = collection_etag_for_items(std::slice::from_ref(&base_item));
+
+        let mut commentary_item = base_item.clone();
+        commentary_item.preferred_audio_title = Some("Director Commentary".to_owned());
+        let commentary_etag = collection_etag_for_items(&[commentary_item.clone()]);
+
+        let mut alternate_item = commentary_item;
+        alternate_item.preferred_audio_title = Some("Isolated Score".to_owned());
+        let alternate_etag = collection_etag_for_items(&[alternate_item]);
+
+        assert_ne!(base_etag, commentary_etag);
+        assert_ne!(commentary_etag, alternate_etag);
+    }
 
     #[test]
     fn block_scheduling_matches_ersatztv_one_item_per_block_item_snapshot() {

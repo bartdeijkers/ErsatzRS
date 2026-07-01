@@ -89,11 +89,27 @@ impl ContentVariantInfo {
 
 /// Audio stream option surfaced on movie detail pages for commentary preview.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommentaryTrackRow {
+pub struct AudioTrackRow {
     pub media_version_id: i64,
     pub stream_index: i64,
     pub title: String,
     pub language: Option<String>,
+    pub codec: Option<String>,
+    pub channels: i64,
+    pub is_default: bool,
+    pub is_commentary: bool,
+}
+
+/// Backward-compatible alias for callers that still refer to commentary rows.
+pub type CommentaryTrackRow = AudioTrackRow;
+
+/// Playback preferences persisted on collection/playlist item rows.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlaybackOverrideForm {
+    pub preferred_audio_language_code: Option<String>,
+    pub preferred_audio_title: Option<String>,
+    pub preferred_subtitle_language_code: Option<String>,
+    pub subtitle_mode: Option<i32>,
 }
 
 /// Subtitle option intended for commentary playback.
@@ -156,7 +172,7 @@ pub struct MovieDetailRow {
     pub actors: Vec<ActorCardRow>,
     pub extras: Vec<MediaCardRow>,
     pub alternate_versions: Vec<MediaCardRow>,
-    pub commentary_tracks: Vec<CommentaryTrackRow>,
+    pub audio_tracks: Vec<AudioTrackRow>,
     pub commentary_subtitles: Vec<CommentarySubtitleRow>,
 }
 
@@ -530,6 +546,10 @@ pub struct PlaylistItemForm {
     pub count: Option<i32>,
     pub play_all: bool,
     pub include_in_program_guide: bool,
+    pub preferred_audio_language_code: Option<String>,
+    pub preferred_audio_title: Option<String>,
+    pub preferred_subtitle_language_code: Option<String>,
+    pub subtitle_mode: Option<i32>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -753,22 +773,24 @@ async fn load_movie_alternate_version_cards(
 }
 
 #[cfg(feature = "ssr")]
-async fn load_movie_commentary_tracks(
+async fn load_movie_audio_tracks(
     pool: &ersatzrs_infra::db::DbPool,
     movie_id: i64,
-) -> Result<Vec<CommentaryTrackRow>, ServerFnError> {
+) -> Result<Vec<AudioTrackRow>, ServerFnError> {
     use sqlx::Row;
 
     let rows = sqlx::query(
         r#"SELECT mv."Id" AS "MediaVersionId",
                   ms."Index" AS "StreamIndex",
-                  COALESCE(NULLIF(ms."Title", ''), 'Commentary') AS "Title",
-                  ms."Language" AS "Language"
+                  COALESCE(NULLIF(ms."Title", ''), 'Default Audio') AS "Title",
+                  ms."Language" AS "Language",
+                  ms."Codec" AS "Codec",
+                  ms."Channels" AS "Channels",
+                  ms."Default" AS "Default"
            FROM "MediaVersion" mv
            JOIN "MediaStream" ms ON ms."MediaVersionId" = mv."Id"
            WHERE mv."MovieId" = ?
              AND ms."MediaStreamKind" = 2
-             AND LOWER(COALESCE(ms."Title", '')) LIKE '%commentary%'
            ORDER BY mv."Id", ms."Index""#,
     )
     .bind(movie_id)
@@ -777,11 +799,18 @@ async fn load_movie_commentary_tracks(
 
     Ok(rows
         .iter()
-        .map(|r| CommentaryTrackRow {
-            media_version_id: r.try_get("MediaVersionId").unwrap_or(0),
-            stream_index: r.try_get("StreamIndex").unwrap_or(0),
-            title: r.try_get("Title").unwrap_or_default(),
-            language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+        .map(|r| {
+            let title: String = r.try_get("Title").unwrap_or_default();
+            AudioTrackRow {
+                media_version_id: r.try_get("MediaVersionId").unwrap_or(0),
+                stream_index: r.try_get("StreamIndex").unwrap_or(0),
+                is_commentary: title.to_ascii_lowercase().contains("commentary"),
+                title,
+                language: r.try_get::<Option<String>, _>("Language").unwrap_or(None),
+                codec: r.try_get::<Option<String>, _>("Codec").unwrap_or(None),
+                channels: r.try_get("Channels").unwrap_or_default(),
+                is_default: r.try_get::<i64, _>("Default").unwrap_or_default() != 0,
+            }
         })
         .collect())
 }
@@ -1053,7 +1082,7 @@ pub async fn get_movie_details_with_pool(
         .collect();
     let extras = load_extra_cards(pool, id).await?;
     let alternate_versions = load_movie_alternate_version_cards(pool, id).await?;
-    let commentary_tracks = load_movie_commentary_tracks(pool, id).await?;
+    let audio_tracks = load_movie_audio_tracks(pool, id).await?;
     let commentary_subtitles = load_movie_commentary_subtitles(pool, id).await?;
 
     Ok(Some(MovieDetailRow {
@@ -1080,7 +1109,7 @@ pub async fn get_movie_details_with_pool(
         actors,
         extras,
         alternate_versions,
-        commentary_tracks,
+        audio_tracks,
         commentary_subtitles,
     }))
 }
@@ -5677,6 +5706,15 @@ fn playlist_playback_order(value: i32) -> ersatzrs_domain::PlaybackOrder {
     }
 }
 
+fn channel_subtitle_mode_from_i32(value: i32) -> Option<ersatzrs_domain::ChannelSubtitleMode> {
+    match value {
+        1 => Some(ersatzrs_domain::ChannelSubtitleMode::Forced),
+        2 => Some(ersatzrs_domain::ChannelSubtitleMode::Default),
+        3 => Some(ersatzrs_domain::ChannelSubtitleMode::Any),
+        _ => None,
+    }
+}
+
 #[server]
 pub async fn get_playlist_page() -> Result<PlaylistPageData, ServerFnError> {
     use crate::host::state::AppState;
@@ -6077,8 +6115,10 @@ pub async fn save_playlist_with_pool(
             r#"INSERT INTO "PlaylistItem"
                    ("Index", "PlaylistId", "CollectionType", "CollectionId",
                     "MediaItemId", "MultiCollectionId", "SmartCollectionId",
-                    "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide")
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                    "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide",
+                    "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                    "PreferredSubtitleLanguageCode", "SubtitleMode")
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(item.index)
         .bind(form.id)
@@ -6091,6 +6131,10 @@ pub async fn save_playlist_with_pool(
         .bind(item.count)
         .bind(item.play_all)
         .bind(item.include_in_program_guide)
+        .bind(item.preferred_audio_language_code)
+        .bind(item.preferred_audio_title)
+        .bind(item.preferred_subtitle_language_code)
+        .bind(item.subtitle_mode)
         .execute(&mut *tx)
         .await?;
     }
@@ -6206,6 +6250,10 @@ async fn playlist_preview_reference_data(
             .fold(Duration::zero(), |duration, media| {
                 duration + media.duration
             });
+        let preferred_audio_language_code = item.preferred_audio_language_code.clone();
+        let preferred_audio_title = item.preferred_audio_title.clone();
+        let preferred_subtitle_language_code = item.preferred_subtitle_language_code.clone();
+        let subtitle_mode = item.subtitle_mode.and_then(channel_subtitle_mode_from_i32);
         playlist_items.push(SchedulingPlaylistItem {
             collection_key: SchedulingCollectionKey {
                 collection_type: playlist_collection_type(item.collection_type),
@@ -6232,6 +6280,10 @@ async fn playlist_preview_reference_data(
                     season: None,
                     episode: None,
                     release_date: None,
+                    preferred_audio_language_code: preferred_audio_language_code.clone(),
+                    preferred_audio_title: preferred_audio_title.clone(),
+                    preferred_subtitle_language_code: preferred_subtitle_language_code.clone(),
+                    subtitle_mode,
                 })
                 .collect(),
         });
@@ -6392,6 +6444,8 @@ async fn load_playlist_items(
         r#"SELECT pi."Id", pi."Index", pi."CollectionType", pi."CollectionId",
                   pi."MediaItemId", pi."MultiCollectionId", pi."SmartCollectionId",
                   pi."PlaybackOrder", pi."Count", pi."PlayAll", pi."IncludeInProgramGuide",
+                  pi."PreferredAudioLanguageCode", pi."PreferredAudioTitle",
+                  pi."PreferredSubtitleLanguageCode", pi."SubtitleMode",
                   c."Name" AS "CollectionName",
                   mc."Name" AS "MultiCollectionName",
                   sc."Name" AS "SmartCollectionName",
@@ -6467,6 +6521,14 @@ async fn load_playlist_items(
                 count: row.try_get("Count").unwrap_or_default(),
                 play_all: row.try_get("PlayAll").unwrap_or(false),
                 include_in_program_guide: row.try_get("IncludeInProgramGuide").unwrap_or(false),
+                preferred_audio_language_code: row
+                    .try_get("PreferredAudioLanguageCode")
+                    .unwrap_or_default(),
+                preferred_audio_title: row.try_get("PreferredAudioTitle").unwrap_or_default(),
+                preferred_subtitle_language_code: row
+                    .try_get("PreferredSubtitleLanguageCode")
+                    .unwrap_or_default(),
+                subtitle_mode: row.try_get("SubtitleMode").unwrap_or_default(),
             }
         })
         .collect())
@@ -6984,12 +7046,25 @@ pub async fn add_media_items_to_collection(
     collection_id: i64,
     media_item_ids: Vec<i64>,
 ) -> Result<u64, ServerFnError> {
+    add_media_items_to_collection_with_playback(collection_id, media_item_ids, None).await
+}
+
+/// Add media items to a collection and optionally persist item-level playback
+/// overrides. ErsatzTV `CollectionItem` has no such fields; this is the ADR
+/// 0048 ErsatzRS extension.
+#[server]
+pub async fn add_media_items_to_collection_with_playback(
+    collection_id: i64,
+    media_item_ids: Vec<i64>,
+    playback: Option<PlaybackOverrideForm>,
+) -> Result<u64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
     if media_item_ids.is_empty() {
         return Ok(0);
     }
+    let playback = normalize_playback_override(playback);
 
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Collection" WHERE "Id" = ?"#)
         .bind(collection_id)
@@ -7012,13 +7087,57 @@ pub async fn add_media_items_to_collection(
             )));
         }
 
-        let result = sqlx::query(
-            r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#,
-        )
-        .bind(collection_id)
-        .bind(id)
-        .execute(&state.pool)
-        .await?;
+        let result = if playback_has_value(&playback) {
+            let sql = match state.database_backend {
+                ersatzrs_infra::db::DatabaseBackend::Sqlite => {
+                    r#"INSERT INTO "CollectionItem" (
+                           "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
+                           "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode"
+                       ) VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT("CollectionId", "MediaItemId") DO UPDATE SET
+                           "PreferredAudioLanguageCode" = excluded."PreferredAudioLanguageCode",
+                           "PreferredAudioTitle" = excluded."PreferredAudioTitle",
+                           "PreferredSubtitleLanguageCode" = excluded."PreferredSubtitleLanguageCode",
+                           "SubtitleMode" = excluded."SubtitleMode""#
+                }
+                #[cfg(feature = "mysql")]
+                ersatzrs_infra::db::DatabaseBackend::MySql => {
+                    r"INSERT INTO `CollectionItem` (
+                           `CollectionId`, `MediaItemId`, `PreferredAudioLanguageCode`,
+                           `PreferredAudioTitle`, `PreferredSubtitleLanguageCode`, `SubtitleMode`
+                       ) VALUES (?, ?, ?, ?, ?, ?)
+                       ON DUPLICATE KEY UPDATE
+                           `PreferredAudioLanguageCode` = VALUES(`PreferredAudioLanguageCode`),
+                           `PreferredAudioTitle` = VALUES(`PreferredAudioTitle`),
+                           `PreferredSubtitleLanguageCode` = VALUES(`PreferredSubtitleLanguageCode`),
+                           `SubtitleMode` = VALUES(`SubtitleMode`)"
+                }
+            };
+            sqlx::query(sql)
+                .bind(collection_id)
+                .bind(id)
+                .bind(&playback.preferred_audio_language_code)
+                .bind(&playback.preferred_audio_title)
+                .bind(&playback.preferred_subtitle_language_code)
+                .bind(playback.subtitle_mode)
+                .execute(&state.pool)
+                .await?
+        } else {
+            let sql = match state.database_backend {
+                ersatzrs_infra::db::DatabaseBackend::Sqlite => {
+                    r#"INSERT OR IGNORE INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (?, ?)"#
+                }
+                #[cfg(feature = "mysql")]
+                ersatzrs_infra::db::DatabaseBackend::MySql => {
+                    r"INSERT IGNORE INTO `CollectionItem` (`CollectionId`, `MediaItemId`) VALUES (?, ?)"
+                }
+            };
+            sqlx::query(sql)
+                .bind(collection_id)
+                .bind(id)
+                .execute(&state.pool)
+                .await?
+        };
         added += result.rows_affected();
     }
     if added > 0 {
@@ -7039,6 +7158,18 @@ pub async fn add_media_items_to_playlist(
     playlist_id: i64,
     media_item_ids: Vec<i64>,
 ) -> Result<u64, ServerFnError> {
+    add_media_items_to_playlist_with_playback(kind, playlist_id, media_item_ids, None).await
+}
+
+/// Add media items to a playlist and optionally persist item-level playback
+/// overrides. ADR 0048 extends `PlaylistItem` with these nullable fields.
+#[server]
+pub async fn add_media_items_to_playlist_with_playback(
+    kind: MediaBrowserKind,
+    playlist_id: i64,
+    media_item_ids: Vec<i64>,
+    playback: Option<PlaybackOverrideForm>,
+) -> Result<u64, ServerFnError> {
     // PlaybackOrder.Shuffle = 1 (see `ErsatzTV.Core/Domain/PlaybackOrder.cs`).
     const PLAYLIST_PLAYBACK_ORDER_SHUFFLE: i32 = 1;
 
@@ -7048,6 +7179,7 @@ pub async fn add_media_items_to_playlist(
     if media_item_ids.is_empty() {
         return Ok(0);
     }
+    let playback = normalize_playback_override(playback);
 
     let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
         .bind(playlist_id)
@@ -7070,19 +7202,53 @@ pub async fn add_media_items_to_playlist(
         let result = sqlx::query(
             r#"INSERT INTO "PlaylistItem"
                    ("Index", "PlaylistId", "CollectionType", "MediaItemId",
-                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll")
-               VALUES (?, ?, ?, ?, 1, ?, 0)"#,
+                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll",
+                    "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                    "PreferredSubtitleLanguageCode", "SubtitleMode")
+               VALUES (?, ?, ?, ?, 1, ?, 0, ?, ?, ?, ?)"#,
         )
         .bind(next_index)
         .bind(playlist_id)
         .bind(collection_type)
         .bind(id)
         .bind(PLAYLIST_PLAYBACK_ORDER_SHUFFLE)
+        .bind(&playback.preferred_audio_language_code)
+        .bind(&playback.preferred_audio_title)
+        .bind(&playback.preferred_subtitle_language_code)
+        .bind(playback.subtitle_mode)
         .execute(&state.pool)
         .await?;
         added += result.rows_affected();
     }
     Ok(added)
+}
+
+fn normalize_playback_override(playback: Option<PlaybackOverrideForm>) -> PlaybackOverrideForm {
+    let Some(mut playback) = playback else {
+        return PlaybackOverrideForm::default();
+    };
+    playback.preferred_audio_language_code =
+        normalize_optional_text(playback.preferred_audio_language_code);
+    playback.preferred_audio_title = normalize_optional_text(playback.preferred_audio_title);
+    playback.preferred_subtitle_language_code =
+        normalize_optional_text(playback.preferred_subtitle_language_code);
+    playback.subtitle_mode = playback
+        .subtitle_mode
+        .filter(|mode| channel_subtitle_mode_from_i32(*mode).is_some());
+    playback
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn playback_has_value(playback: &PlaybackOverrideForm) -> bool {
+    playback.preferred_audio_language_code.is_some()
+        || playback.preferred_audio_title.is_some()
+        || playback.preferred_subtitle_language_code.is_some()
+        || playback.subtitle_mode.is_some()
 }
 
 /// One row to be inserted into `PlaylistItem` by
@@ -7826,6 +7992,10 @@ pub struct CollectionItemCard {
     pub artwork_path: Option<String>,
     pub href: Option<String>,
     pub custom_index: i64,
+    pub preferred_audio_language_code: Option<String>,
+    pub preferred_audio_title: Option<String>,
+    pub preferred_subtitle_language_code: Option<String>,
+    pub subtitle_mode: Option<i32>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -7878,6 +8048,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
         r#"
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'movie' AS "Kind",
                COALESCE(mm."Title", '') AS "Title",
                COALESCE(mm."SortTitle", mm."Title", '') AS "SortTitle",
@@ -7894,6 +8068,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'show' AS "Kind",
                COALESCE(sm."Title", '') AS "Title",
                COALESCE(sm."SortTitle", sm."Title", '') AS "SortTitle",
@@ -7910,6 +8088,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'season' AS "Kind",
                COALESCE(sh_meta."Title", '') AS "Title",
                COALESCE(sh_meta."SortTitle", sh_meta."Title", '') AS "SortTitle",
@@ -7928,6 +8110,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'episode' AS "Kind",
                COALESCE(em."Title", '') AS "Title",
                COALESCE(em."SortTitle", em."Title", '') AS "SortTitle",
@@ -7948,6 +8134,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'artist' AS "Kind",
                COALESCE(am."Title", '') AS "Title",
                COALESCE(am."SortTitle", am."Title", '') AS "SortTitle",
@@ -7964,6 +8154,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'music_video' AS "Kind",
                COALESCE(mvm."Title", '') AS "Title",
                COALESCE(mvm."SortTitle", mvm."Title", '') AS "SortTitle",
@@ -7980,6 +8174,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'other_video' AS "Kind",
                COALESCE(ovm."Title", '') AS "Title",
                COALESCE(ovm."SortTitle", ovm."Title", '') AS "SortTitle",
@@ -7996,6 +8194,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'song' AS "Kind",
                COALESCE(sgm."Title", '') AS "Title",
                COALESCE(sgm."SortTitle", sgm."Title", '') AS "SortTitle",
@@ -8012,6 +8214,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'image' AS "Kind",
                COALESCE(im."Title", '') AS "Title",
                COALESCE(im."SortTitle", im."Title", '') AS "SortTitle",
@@ -8028,6 +8234,10 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
 
         SELECT ci."MediaItemId" AS "Id",
                ci."CustomIndex" AS "CustomIndex",
+               ci."PreferredAudioLanguageCode" AS "PreferredAudioLanguageCode",
+               ci."PreferredAudioTitle" AS "PreferredAudioTitle",
+               ci."PreferredSubtitleLanguageCode" AS "PreferredSubtitleLanguageCode",
+               ci."SubtitleMode" AS "SubtitleMode",
                'remote_stream' AS "Kind",
                COALESCE(rsm."Title", '') AS "Title",
                COALESCE(rsm."SortTitle", rsm."Title", '') AS "SortTitle",
@@ -8089,6 +8299,14 @@ pub async fn get_collection_detail(id: i64) -> Result<Option<CollectionDetail>, 
                 artwork_path,
                 href,
                 custom_index: r.try_get("CustomIndex").unwrap_or(0),
+                preferred_audio_language_code: r
+                    .try_get("PreferredAudioLanguageCode")
+                    .unwrap_or_default(),
+                preferred_audio_title: r.try_get("PreferredAudioTitle").unwrap_or_default(),
+                preferred_subtitle_language_code: r
+                    .try_get("PreferredSubtitleLanguageCode")
+                    .unwrap_or_default(),
+                subtitle_mode: r.try_get("SubtitleMode").unwrap_or_default(),
             }
         })
         .collect();
@@ -8426,7 +8644,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn movie_detail_loads_extras_versions_and_commentary_tracks() {
+    async fn movie_detail_loads_extras_versions_and_audio_tracks() {
         let (_database_dir, pool) = collection_test_pool("movie-detail-variants.db").await;
         seed_movie_detail_variant_fixture(&pool).await;
 
@@ -8467,11 +8685,17 @@ mod tests {
             Some("Example Movie")
         );
 
-        assert_eq!(movie.commentary_tracks.len(), 1);
-        assert_eq!(movie.commentary_tracks[0].media_version_id, 1000);
-        assert_eq!(movie.commentary_tracks[0].stream_index, 2);
-        assert_eq!(movie.commentary_tracks[0].title, "Director Commentary");
-        assert_eq!(movie.commentary_tracks[0].language.as_deref(), Some("eng"));
+        assert_eq!(movie.audio_tracks.len(), 2);
+        assert_eq!(movie.audio_tracks[0].media_version_id, 1000);
+        assert_eq!(movie.audio_tracks[0].stream_index, 1);
+        assert_eq!(movie.audio_tracks[0].title, "Main Audio");
+        assert!(movie.audio_tracks[0].is_default);
+        assert!(!movie.audio_tracks[0].is_commentary);
+        assert_eq!(movie.audio_tracks[1].media_version_id, 1000);
+        assert_eq!(movie.audio_tracks[1].stream_index, 2);
+        assert_eq!(movie.audio_tracks[1].title, "Director Commentary");
+        assert_eq!(movie.audio_tracks[1].language.as_deref(), Some("eng"));
+        assert!(movie.audio_tracks[1].is_commentary);
 
         assert_eq!(movie.commentary_subtitles.len(), 1);
         assert_eq!(movie.commentary_subtitles[0].id, 1200);
@@ -8524,6 +8748,107 @@ mod tests {
         assert_eq!(collection_type, 40);
 
         owner.cleanup();
+    }
+
+    #[tokio::test]
+    async fn media_item_collection_and_playlist_actions_persist_playback_overrides() {
+        let (_database_dir, pool) = collection_test_pool("movie-playback-overrides.db").await;
+        seed_movie_detail_variant_fixture(&pool).await;
+        let state = collection_test_state(pool.clone());
+        let owner = leptos::prelude::Owner::new();
+        owner.with(|| leptos::prelude::provide_context(state));
+        owner.set();
+
+        let playback = PlaybackOverrideForm {
+            preferred_audio_language_code: Some("eng".to_string()),
+            preferred_audio_title: Some("Director Commentary".to_string()),
+            preferred_subtitle_language_code: Some("eng".to_string()),
+            subtitle_mode: Some(3),
+        };
+        let collection_added =
+            add_media_items_to_collection_with_playback(900, vec![10], Some(playback.clone()))
+                .await
+                .expect("add movie to collection with playback override");
+        let playlist_added = add_media_items_to_playlist_with_playback(
+            MediaBrowserKind::Movie,
+            902,
+            vec![10],
+            Some(playback),
+        )
+        .await
+        .expect("add movie to playlist with playback override");
+
+        let collection_row = sqlx::query(
+            r#"SELECT "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                      "PreferredSubtitleLanguageCode", "SubtitleMode"
+               FROM "CollectionItem"
+               WHERE "CollectionId" = 900 AND "MediaItemId" = 10"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load collection item override");
+        let playlist_row = sqlx::query(
+            r#"SELECT "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                      "PreferredSubtitleLanguageCode", "SubtitleMode"
+               FROM "PlaylistItem"
+               WHERE "PlaylistId" = 902 AND "MediaItemId" = 10"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load playlist item override");
+
+        assert_eq!(collection_added, 1);
+        assert_eq!(playlist_added, 1);
+        assert_playback_override_row(&collection_row);
+        assert_playback_override_row(&playlist_row);
+
+        let collection_detail = get_collection_detail(900)
+            .await
+            .expect("load collection detail")
+            .expect("collection exists");
+        let collection_card = collection_detail
+            .items
+            .iter()
+            .find(|item| item.media_item_id == 10)
+            .expect("collection item card exists");
+        assert_eq!(
+            collection_card.preferred_audio_title.as_deref(),
+            Some("Director Commentary")
+        );
+        assert_eq!(
+            collection_card.preferred_subtitle_language_code.as_deref(),
+            Some("eng")
+        );
+        assert_eq!(collection_card.subtitle_mode, Some(3));
+
+        owner.cleanup();
+    }
+
+    fn assert_playback_override_row(row: &ersatzrs_infra::db::DbRow) {
+        use sqlx::Row;
+
+        assert_eq!(
+            row.try_get::<Option<String>, _>("PreferredAudioLanguageCode")
+                .unwrap()
+                .as_deref(),
+            Some("eng")
+        );
+        assert_eq!(
+            row.try_get::<Option<String>, _>("PreferredAudioTitle")
+                .unwrap()
+                .as_deref(),
+            Some("Director Commentary")
+        );
+        assert_eq!(
+            row.try_get::<Option<String>, _>("PreferredSubtitleLanguageCode")
+                .unwrap()
+                .as_deref(),
+            Some("eng")
+        );
+        assert_eq!(
+            row.try_get::<Option<i32>, _>("SubtitleMode").unwrap(),
+            Some(3)
+        );
     }
 
     #[tokio::test]

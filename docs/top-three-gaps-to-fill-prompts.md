@@ -18,7 +18,8 @@ features on 2026-07-01, and ADR 0019 added one Not started scheduling
 extension. Closed 2026-07-01: the movie-detail gap spanning `media-browsers`
 and `content-variants` now renders `/media/movies/{movie_id}` extras as
 episode-style rows, restores movie-extra collection/playlist actions, and
-surfaces playable alternate-edition plus commentary audio/subtitle options.
+surfaces playable alternate-edition plus persistable commentary/alternate-audio
+and subtitle options through ADR 0048 collection/playlist item overrides.
 Closed 2026-07-01: the remaining `media-browsers` action/toolbar gap now gives
 songs/images the shared right-side selection toolbar and item action menu,
 restores artist-detail Add To Collection plus preview artwork, and fixes the

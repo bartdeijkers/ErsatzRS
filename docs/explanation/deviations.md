@@ -72,6 +72,16 @@ ErsatzTV's experimental Elasticsearch backend.
 
 ADR: [0009](../adr/0009-sql-backed-search-and-no-elasticsearch.md)
 
+## Collection and playlist item playback overrides
+
+ErsatzTV stores preferred audio and subtitle settings on channels, program
+schedule items, and generated playout items, but not on `CollectionItem` or
+`PlaylistItem`. ErsatzRS adds optional playback override columns to those rows so
+an admin can save a movie in a reusable collection or playlist with a specific
+named audio track, such as commentary.
+
+ADR: [0048](../adr/0048-collection-item-playback-overrides.md)
+
 ## Leptos instead of Blazor
 
 ErsatzRS uses Leptos for the admin UI because the project is Rust-native.

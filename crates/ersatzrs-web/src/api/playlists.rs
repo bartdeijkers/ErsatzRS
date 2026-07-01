@@ -54,6 +54,14 @@ pub struct PlaylistSaveForm {
     #[serde(default)]
     item_count: Vec<String>,
     #[serde(default)]
+    item_preferred_audio_language_code: Vec<String>,
+    #[serde(default)]
+    item_preferred_audio_title: Vec<String>,
+    #[serde(default)]
+    item_preferred_subtitle_language_code: Vec<String>,
+    #[serde(default)]
+    item_subtitle_mode: Vec<String>,
+    #[serde(default)]
     item_play_all_index: Vec<String>,
     #[serde(default)]
     item_include_in_program_guide_index: Vec<String>,
@@ -151,6 +159,14 @@ impl PlaylistSaveForm {
                 "item_media_item_id" => form.item_media_item_id.push(value),
                 "item_playback_order" => form.item_playback_order.push(value),
                 "item_count" => form.item_count.push(value),
+                "item_preferred_audio_language_code" => {
+                    form.item_preferred_audio_language_code.push(value);
+                }
+                "item_preferred_audio_title" => form.item_preferred_audio_title.push(value),
+                "item_preferred_subtitle_language_code" => {
+                    form.item_preferred_subtitle_language_code.push(value);
+                }
+                "item_subtitle_mode" => form.item_subtitle_mode.push(value),
                 "item_play_all_index" => form.item_play_all_index.push(value),
                 "item_include_in_program_guide_index" => {
                     form.item_include_in_program_guide_index.push(value);
@@ -181,6 +197,16 @@ impl PlaylistSaveForm {
                 count: parse_i32(self.item_count.get(pos).cloned()),
                 play_all: play_all_indexes.contains(&form_index),
                 include_in_program_guide: epg_indexes.contains(&form_index),
+                preferred_audio_language_code: parse_string(
+                    self.item_preferred_audio_language_code.get(pos).cloned(),
+                ),
+                preferred_audio_title: parse_string(
+                    self.item_preferred_audio_title.get(pos).cloned(),
+                ),
+                preferred_subtitle_language_code: parse_string(
+                    self.item_preferred_subtitle_language_code.get(pos).cloned(),
+                ),
+                subtitle_mode: parse_i32(self.item_subtitle_mode.get(pos).cloned()),
             });
         }
 
@@ -211,6 +237,12 @@ fn parse_i64(value: Option<String>) -> Option<i64> {
         .filter(|value| *value != 0)
 }
 
+fn parse_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
 fn decode_form_value(value: &str) -> String {
     let value = value.replace('+', " ");
     urlencoding::decode(&value)
@@ -234,6 +266,10 @@ mod tests {
             item_media_item_id: vec![String::new(), "42".to_string()],
             item_playback_order: vec!["1".to_string(), "2".to_string()],
             item_count: vec!["3".to_string(), String::new()],
+            item_preferred_audio_language_code: vec![String::new(), "eng".to_string()],
+            item_preferred_audio_title: vec![String::new(), "Director Commentary".to_string()],
+            item_preferred_subtitle_language_code: vec![String::new(), "eng".to_string()],
+            item_subtitle_mode: vec![String::new(), "3".to_string()],
             item_play_all_index: vec!["1".to_string()],
             item_include_in_program_guide_index: vec!["0".to_string(), "1".to_string()],
             ..PlaylistSaveForm::default()
@@ -251,6 +287,15 @@ mod tests {
         assert_eq!(parsed.items[1].count, None);
         assert!(parsed.items[1].play_all);
         assert!(parsed.items[1].include_in_program_guide);
+        assert_eq!(
+            parsed.items[1].preferred_audio_title.as_deref(),
+            Some("Director Commentary")
+        );
+        assert_eq!(
+            parsed.items[1].preferred_subtitle_language_code.as_deref(),
+            Some("eng")
+        );
+        assert_eq!(parsed.items[1].subtitle_mode, Some(3));
     }
 
     #[test]

@@ -2,7 +2,7 @@ feature    = 'Content variants, alternate versions, and stream roles'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/LocalFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Scanner/Core/Metadata/MovieFolderScanner.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/CustomStreamSelector.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`, ADR 0018'
 rs_target  = '`migrations/0004_content_variants.sql`, `crates/ersatzrs-domain`, `crates/ersatzrs-core::search`, `crates/ersatzrs-infra::repositories::scheduling`, `crates/ersatzrs-infra::playback`, `crates/ersatzrs-web::transport::iptv`, `crates/ersatzrs-infra::hls_worker`, `crates/ersatzrs-infra::health`'
 status     = 'Ported'
-adr        = ['0018']
+adr        = ['0018', '0048']
 
 summary    = '''
 ADR 0018's local/provider search/UI/playback/scheduling scope is implemented
@@ -53,6 +53,12 @@ as actionable version cards and commentary audio/subtitle options as playable
 troubleshooting-preview cards. The commentary links preserve
 `preferredAudioTitle` and commentary `subtitleId` selections so playback uses
 the intended stream role instead of only showing a cosmetic label.
+
+ADR 0048 extends that surface with persisted collection/playlist item playback
+overrides: movie-detail audio cards can open the Add To Collection/Add To
+Playlist dialogs with the selected audio title/language plus matched commentary
+subtitle language/mode, and scheduling copies those item preferences into
+generated `PlayoutItem` rows.
 '''
 
 [[debt]]

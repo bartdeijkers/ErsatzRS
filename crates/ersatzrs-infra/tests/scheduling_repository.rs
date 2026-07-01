@@ -10,9 +10,10 @@ use ersatzrs_core::scheduling::{
     SchedulingContentSource, SchedulingRequest,
 };
 use ersatzrs_domain::{
-    CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode, PlayoutScheduleKind,
-    ProgramSchedule, ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID, CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
+    ChannelSubtitleMode, CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutMode,
+    PlayoutScheduleKind, ProgramSchedule, ProgramScheduleItem,
+    CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use sqlx::{Executor, SqlitePool};
@@ -237,6 +238,79 @@ async fn scheduling_repository_resolves_playlist_children_and_overlays() {
             .await
             .unwrap(),
         Some(601)
+    );
+}
+
+#[tokio::test]
+async fn scheduling_repository_applies_collection_and_playlist_playback_overrides() {
+    let pool = common::test_db().await;
+    seed_scheduling_fixture(&pool).await;
+
+    pool.execute(
+        r#"UPDATE "CollectionItem"
+              SET "PreferredAudioLanguageCode" = 'eng',
+                  "PreferredAudioTitle" = 'Director Commentary',
+                  "PreferredSubtitleLanguageCode" = 'eng',
+                  "SubtitleMode" = 3
+            WHERE "CollectionId" = 1 AND "MediaItemId" = 10"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"UPDATE "PlaylistItem"
+              SET "PreferredAudioLanguageCode" = 'jpn',
+                  "PreferredAudioTitle" = 'Isolated Score',
+                  "PreferredSubtitleLanguageCode" = 'eng',
+                  "SubtitleMode" = 2
+            WHERE "Id" = 402"#,
+    )
+    .await
+    .unwrap();
+
+    let repos = make_repositories(pool.clone());
+    let collection = repos
+        .scheduling
+        .media_items_for_source(&SchedulingContentSource::Collection("prime".to_owned()))
+        .await
+        .unwrap();
+    let pilot = collection.iter().find(|item| item.id == 12).unwrap();
+    let finale = collection.iter().find(|item| item.id == 13).unwrap();
+    let feature = collection.iter().find(|item| item.id == 20).unwrap();
+
+    assert_eq!(
+        pilot.preferred_audio_title.as_deref(),
+        Some("Director Commentary")
+    );
+    assert_eq!(finale.preferred_audio_language_code.as_deref(), Some("eng"));
+    assert_eq!(pilot.subtitle_mode, Some(ChannelSubtitleMode::Any));
+    assert_eq!(feature.preferred_audio_title, None);
+
+    let playlist_items = repos
+        .scheduling
+        .playlist_items_for_source(&SchedulingContentSource::Playlist {
+            group: Some("prime".to_owned()),
+            name: "nightly".to_owned(),
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let playlist_bonus = playlist_items[1]
+        .media_items
+        .iter()
+        .find(|item| item.id == 21)
+        .unwrap();
+
+    assert_eq!(
+        playlist_bonus.preferred_audio_title.as_deref(),
+        Some("Isolated Score")
+    );
+    assert_eq!(
+        playlist_bonus.preferred_audio_language_code.as_deref(),
+        Some("jpn")
+    );
+    assert_eq!(
+        playlist_bonus.subtitle_mode,
+        Some(ChannelSubtitleMode::Default)
     );
 }
 
